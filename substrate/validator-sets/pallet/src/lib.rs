@@ -713,7 +713,7 @@ pub mod pallet {
         }))
     }
 
-    fn new_session() {
+    pub fn new_session() {
       for network in serai_primitives::NETWORKS {
         // If this network hasn't started sessions yet, don't start one now
         let Some(current_session) = Self::session(network) else { continue };

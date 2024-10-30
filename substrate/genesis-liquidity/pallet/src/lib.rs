@@ -1,5 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
 #[allow(
   unreachable_patterns,
   clippy::cast_possible_truncation,
@@ -64,6 +70,7 @@ pub mod pallet {
 
   /// Keeps shares and the amount of coins per account.
   #[pallet::storage]
+  #[pallet::getter(fn liquidity)]
   pub(crate) type Liquidity<T: Config> = StorageDoubleMap<
     _,
     Identity,
@@ -76,6 +83,7 @@ pub mod pallet {
 
   /// Keeps the total shares and the total amount of coins per coin.
   #[pallet::storage]
+  #[pallet::getter(fn supply)]
   pub(crate) type Supply<T: Config> =
     StorageMap<_, Identity, ExternalCoin, LiquidityAmount, OptionQuery>;
 
@@ -89,14 +97,8 @@ pub mod pallet {
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-      #[cfg(feature = "fast-epoch")]
-      let final_block = 10u64;
-
-      #[cfg(not(feature = "fast-epoch"))]
-      let final_block = MONTHS;
-
       // Distribute the genesis sri to pools after a month
-      if (n.saturated_into::<u64>() >= final_block) &&
+      if (n.saturated_into::<u64>() >= MONTHS) &&
         Self::oraclization_is_done() &&
         GenesisCompleteBlock::<T>::get().is_none()
       {
@@ -285,15 +287,18 @@ pub mod pallet {
       let (new_liquidity, new_supply) = if Self::genesis_ended() {
         // see how much liq tokens we have
         let total_liq_tokens =
-          LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), Coin::Serai).0;
+          LiquidityTokens::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), Coin::from(balance.coin))
+            .0;
 
         // get how much user wants to remove
         let LiquidityAmount { shares, coins } =
           Liquidity::<T>::get(balance.coin, account).unwrap_or(LiquidityAmount::zero());
         let total_shares = Supply::<T>::get(balance.coin).unwrap_or(LiquidityAmount::zero()).shares;
         let user_liq_tokens = Self::mul_div(total_liq_tokens, shares, total_shares)?;
-        let amount_to_remove =
+        let amount_to_remove_liq_tokens =
           Self::mul_div(user_liq_tokens, balance.amount.0, INITIAL_GENESIS_LP_SHARES)?;
+        let amount_to_remove_shares =
+          Self::mul_div(shares, balance.amount.0, INITIAL_GENESIS_LP_SHARES)?;
 
         // remove liquidity from pool
         let prev_sri = Coins::<T>::balance(GENESIS_LIQUIDITY_ACCOUNT.into(), Coin::Serai);
@@ -301,7 +306,7 @@ pub mod pallet {
         Dex::<T>::remove_liquidity(
           origin.clone().into(),
           balance.coin,
-          amount_to_remove,
+          amount_to_remove_liq_tokens,
           1,
           1,
           GENESIS_LIQUIDITY_ACCOUNT.into(),
@@ -315,14 +320,7 @@ pub mod pallet {
         let mut sri: u64 = current_sri.0.saturating_sub(prev_sri.0);
         let distance_to_full_pay =
           GENESIS_SRI_TRICKLE_FEED.saturating_sub(Self::blocks_since_ec_security().unwrap_or(0));
-        let burn_sri_amount = u64::try_from(
-          u128::from(sri)
-            .checked_mul(u128::from(distance_to_full_pay))
-            .ok_or(Error::<T>::AmountOverflowed)?
-            .checked_div(u128::from(GENESIS_SRI_TRICKLE_FEED))
-            .ok_or(Error::<T>::AmountOverflowed)?,
-        )
-        .map_err(|_| Error::<T>::AmountOverflowed)?;
+        let burn_sri_amount = Self::mul_div(sri, distance_to_full_pay, GENESIS_SRI_TRICKLE_FEED)?;
         Coins::<T>::burn(
           origin.clone().into(),
           Balance { coin: Coin::Serai, amount: Amount(burn_sri_amount) },
@@ -345,13 +343,15 @@ pub mod pallet {
         // return new amounts
         (
           LiquidityAmount {
-            shares: shares.checked_sub(amount_to_remove).ok_or(Error::<T>::AmountOverflowed)?,
+            shares: shares
+              .checked_sub(amount_to_remove_shares)
+              .ok_or(Error::<T>::AmountOverflowed)?,
             coins: coins.checked_sub(coin_out).ok_or(Error::<T>::AmountOverflowed)?,
           },
           LiquidityAmount {
             shares: supply
               .shares
-              .checked_sub(amount_to_remove)
+              .checked_sub(amount_to_remove_shares)
               .ok_or(Error::<T>::AmountOverflowed)?,
             coins: supply.coins.checked_sub(coin_out).ok_or(Error::<T>::AmountOverflowed)?,
           },
@@ -437,9 +437,7 @@ pub mod pallet {
             Err(InvalidTransaction::Custom(1))?;
           }
 
-          // make sure signers settings the value at the end of the genesis period.
-          // we don't need this check for tests.
-          #[cfg(not(feature = "fast-epoch"))]
+          // check we waited for a month before setting the values
           if <frame_system::Pallet<T>>::block_number().saturated_into::<u64>() < MONTHS {
             Err(InvalidTransaction::Custom(2))?;
           }
