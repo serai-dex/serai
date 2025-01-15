@@ -424,7 +424,7 @@ impl<D: Db> Cosigning<D> {
     // Since we verified this cosign's signature, and have a chain sufficiently long, handle the
     // cosign
 
-    let mut txn = self.db.txn();
+    let mut txn = self.db.unsafe_txn();
 
     if !faulty {
       // If this is for a future global session, we don't acknowledge this cosign at this time
@@ -478,5 +478,32 @@ impl<D: Db> Cosigning<D> {
       res.push(intent);
     }
     res
+  }
+}
+
+mod tests {
+  use super::*;
+
+  struct RNC;
+  impl RequestNotableCosigns for RNC {
+    /// The error type which may be encountered when requesting notable cosigns.
+    type Error = ();
+
+    /// Request the notable cosigns for this global session.
+    fn request_notable_cosigns(
+      &self,
+      global_session: [u8; 32],
+    ) -> impl Send + Future<Output = Result<(), Self::Error>> {
+      async move { Ok(()) }
+    }
+  }
+  #[tokio::test]
+  async fn test() {
+    let db: serai_db::MemDb = serai_db::MemDb::new();
+    let serai = unsafe { core::mem::transmute(0u64) };
+    let request = RNC;
+    let tasks = vec![];
+    let _ = Cosigning::spawn(db, serai, request, tasks);
+    core::future::pending().await
   }
 }

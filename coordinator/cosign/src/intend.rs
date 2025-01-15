@@ -70,7 +70,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         self.serai.latest_finalized_block().await.map_err(|e| format!("{e:?}"))?.number();
 
       for block_number in start_block_number ..= latest_block_number {
-        let mut txn = self.db.txn();
+        let mut txn = self.db.unsafe_txn();
 
         let (block, mut has_events) =
           block_has_events_justifying_a_cosign(&self.serai, block_number)

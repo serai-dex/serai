@@ -74,7 +74,7 @@ impl Get for MemDb {
 }
 impl Db for MemDb {
   type Transaction<'a> = MemDbTxn<'a>;
-  fn txn(&mut self) -> MemDbTxn<'_> {
+  fn unsafe_txn(&mut self) -> MemDbTxn<'_> {
     MemDbTxn(self, HashMap::new(), HashSet::new())
   }
 }

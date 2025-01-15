@@ -39,7 +39,7 @@ impl<T: ThreadMode> Get for Arc<OptimisticTransactionDB<T>> {
 }
 impl<T: Send + ThreadMode + 'static> Db for Arc<OptimisticTransactionDB<T>> {
   type Transaction<'a> = Transaction<'a, T>;
-  fn txn(&mut self) -> Self::Transaction<'_> {
+  fn unsafe_txn(&mut self) -> Self::Transaction<'_> {
     let mut opts = WriteOptions::default();
     opts.set_sync(true);
     Transaction(self.transaction_opt(&opts, &Default::default()), &**self)

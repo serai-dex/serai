@@ -37,7 +37,7 @@ impl Get for Arc<ParityDb> {
 }
 impl Db for Arc<ParityDb> {
   type Transaction<'a> = Transaction<'a>;
-  fn txn(&mut self) -> Self::Transaction<'_> {
+  fn unsafe_txn(&mut self) -> Self::Transaction<'_> {
     Transaction(self, vec![])
   }
 }

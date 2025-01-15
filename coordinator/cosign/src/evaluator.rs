@@ -87,7 +87,7 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
       let mut known_cosign = None;
       let mut made_progress = false;
       loop {
-        let mut txn = self.db.txn();
+        let mut txn = self.db.unsafe_txn();
         let Some(BlockEventData { block_number, has_events }) = BlockEvents::try_recv(&mut txn)
         else {
           break;
