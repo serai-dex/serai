@@ -16,8 +16,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-const-hex = { version = "1", default-features = false, features = ["std", "core-error"] }
-
 subtle = { version = "2", default-features = false, features = ["std"] }
 sha3 = { version = "0.10", default-features = false, features = ["std"] }
 group = { version = "0.13", default-features = false, features = ["alloc"] }

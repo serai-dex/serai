@@ -2656,7 +2656,6 @@ dependencies = [
  "alloy-simple-request-transport",
  "alloy-sol-types",
  "build-solidity-contracts",
- "const-hex",
  "group",
  "k256",
  "rand_core",
