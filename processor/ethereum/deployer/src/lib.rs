@@ -27,15 +27,15 @@ mod abi {
   alloy_sol_macro::sol!("contracts/Deployer.sol");
 }
 
-const BYTECODE: &[u8] = {
-  const BYTECODE_HEX: &[u8] =
+const INITCODE: &[u8] = {
+  const INITCODE_HEX: &[u8] =
     include_bytes!(concat!(env!("OUT_DIR"), "/serai-processor-ethereum-deployer/Deployer.bin"));
-  const BYTECODE: [u8; BYTECODE_HEX.len() / 2] =
-    match hex::const_decode_to_array::<{ BYTECODE_HEX.len() / 2 }>(BYTECODE_HEX) {
-      Ok(bytecode) => bytecode,
+  const INITCODE: [u8; INITCODE_HEX.len() / 2] =
+    match hex::const_decode_to_array::<{ INITCODE_HEX.len() / 2 }>(INITCODE_HEX) {
+      Ok(initcode) => initcode,
       Err(_) => panic!("Deployer.bin did not contain valid hex"),
     };
-  &BYTECODE
+  &INITCODE
 };
 
 /// The Deployer contract for the Serai Router contract.
@@ -52,7 +52,7 @@ impl Deployer {
   /// funded for this transaction to be submitted. This account has no known private key to anyone
   /// so ETH sent can be neither misappropriated nor returned.
   pub fn deployment_tx() -> Signed<TxLegacy> {
-    let bytecode = Bytes::from_static(BYTECODE);
+    let initcode = Bytes::from_static(INITCODE);
 
     // Legacy transactions are used to ensure the widest possible degree of support across EVMs
     let tx = TxLegacy {
@@ -87,7 +87,7 @@ impl Deployer {
       gas_limit: 300_698,
       to: TxKind::Create,
       value: U256::ZERO,
-      input: bytecode,
+      input: initcode,
     };
 
     ethereum_primitives::deterministically_sign(tx)

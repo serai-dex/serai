@@ -40,7 +40,7 @@ async fn test_deployer() {
     }
 
     // Deploy the deployer with the deployer
-    let mut deploy_tx = Deployer::deploy_tx(crate::BYTECODE.to_vec());
+    let mut deploy_tx = Deployer::deploy_tx(crate::INITCODE.to_vec());
     deploy_tx.gas_price = 100_000_000_000u128;
     deploy_tx.gas_limit = 1_000_000;
     {
@@ -53,7 +53,7 @@ async fn test_deployer() {
     {
       let deployer = Deployer::new(provider.clone()).await.unwrap().unwrap();
       let deployed_deployer = deployer
-        .find_deployment(ethereum_primitives::keccak256(crate::BYTECODE))
+        .find_deployment(ethereum_primitives::keccak256(crate::INITCODE))
         .await
         .unwrap()
         .unwrap();
