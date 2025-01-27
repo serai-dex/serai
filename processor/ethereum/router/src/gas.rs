@@ -225,6 +225,8 @@ impl Router {
   }
 
   /// The worst-case gas cost for a legacy transaction which executes this batch.
+  ///
+  /// This assumes the fee will be non-zero.
   pub fn execute_gas(&self, coin: Coin, fee_per_gas: U256, outs: &OutInstructions) -> u64 {
     // Unfortunately, we can't cache this in self, despite the following code being written such
     // that a common EVM instance could be used, as revm's types aren't Send/Sync and we expect the

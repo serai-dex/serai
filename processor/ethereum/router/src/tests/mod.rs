@@ -836,6 +836,7 @@ async fn fuzz_test_out_instructions_gas() {
         out_instructions.push((SeraiEthereumAddress::Address(address), amount_out));
       }
     }
+    let out_instructions_original = out_instructions.clone();
     let out_instructions = OutInstructions::from(out_instructions.as_slice());
 
     // Randomly decide the coin
@@ -852,13 +853,17 @@ async fn fuzz_test_out_instructions_gas() {
       Coin::Erc20(erc20.address())
     };
 
-    let fee_per_gas = U256::from(OsRng.next_u64() % 10);
+    let fee_per_gas = U256::from(1) + U256::from(OsRng.next_u64() % 10);
     let gas = test.router.execute_gas(coin, fee_per_gas, &out_instructions);
     let fee = U256::from(gas) * fee_per_gas;
     // All of these should have succeeded
     let (tx, gas_used) =
       test.execute(coin, fee, out_instructions.clone(), vec![true; out_instructions.0.len()]).await;
     let unused_gas = test.gas_unused_by_calls(&tx).await;
-    assert_eq!(gas_used + unused_gas, gas);
+    assert_eq!(
+      gas_used + unused_gas,
+      gas,
+      "{coin:?} {fee_per_gas:?} {out_instructions_original:?}"
+    );
   }
 }

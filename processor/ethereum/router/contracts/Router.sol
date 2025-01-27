@@ -441,6 +441,8 @@ contract Router is IRouterWithoutCollisions {
     unchecked {
       // The amount of bytes needed to represent the nonce
       uint256 bitsNeeded = 0;
+      // This only iterates up to 64-bits as this will never exceed 2**64 as a matter of
+      // practicality
       for (uint256 bits = 0; bits <= 64; bits += 8) {
         bool valueFits = nonce < (uint256(1) << bits);
         bool notPriorSet = bitsNeeded == 0;

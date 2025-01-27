@@ -11,3 +11,5 @@ fn selector_collisions() {
     crate::abi::SeraiIERC20::transferFromWithInInstruction00081948E0Call::SELECTOR
   );
 }
+
+// This is primarily tested via serai-processor-ethereum-router
