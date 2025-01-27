@@ -456,9 +456,12 @@ impl Test {
       let gas_provided = trace.action.as_call().as_ref().unwrap().gas;
       let gas_spent = trace.result.as_ref().unwrap().gas_used();
       unused_gas += gas_provided - gas_spent;
-      for _ in 0 .. trace.subtraces {
-        // Skip the subtraces for this call (such as CREATE)
-        traces.next().unwrap();
+
+      let mut subtraces = trace.subtraces;
+      while subtraces != 0 {
+        // Skip the subtraces (and their subtraces) for this call (such as CREATE)
+        subtraces += traces.next().unwrap().trace.subtraces;
+        subtraces -= 1;
       }
     }
 
@@ -774,9 +777,6 @@ async fn test_empty_execute() {
   }
 }
 
-// TODO: Test order, length of results
-// TODO: Test reentrancy
-
 #[tokio::test]
 async fn test_eth_address_out_instruction() {
   let mut test = Test::new().await;
@@ -922,6 +922,31 @@ async fn test_erc20_code_out_instruction() {
 }
 
 #[tokio::test]
+async fn test_result_decoding() {
+  let mut test = Test::new().await;
+  test.confirm_next_serai_key().await;
+
+  // Create three OutInstructions, where the last one errors
+  let out_instructions = OutInstructions::from(
+    [
+      (SeraiEthereumAddress::Address([0; 20]), U256::from(0)),
+      (SeraiEthereumAddress::Address([0; 20]), U256::from(0)),
+      (SeraiEthereumAddress::Contract(ContractDeployment::new(0, vec![]).unwrap()), U256::from(0)),
+    ]
+    .as_slice(),
+  );
+
+  let gas = test.router.execute_gas(Coin::Ether, U256::from(0), &out_instructions);
+
+  // We should decode these in the correct order (not `false, true, true`)
+  let (_tx, gas_used) =
+    test.execute(Coin::Ether, U256::from(0), out_instructions, vec![true, true, false]).await;
+  // We don't check strict equality as we don't know how much gas was used by the reverted call
+  // (even with the trace), solely that it used less than or equal to the limit
+  assert!(gas_used <= gas);
+}
+
+#[tokio::test]
 async fn test_escape_hatch() {
   let mut test = Test::new().await;
   test.confirm_next_serai_key().await;
@@ -1038,10 +1063,41 @@ async fn test_escape_hatch() {
   }
 }
 
-/* TODO
-  event Batch(uint256 indexed nonce, bytes32 indexed messageHash, bytes results);
-  error Reentered();
-  error EscapeFailed();
-  function executeArbitraryCode(bytes memory code) external payable;
-  function createAddress(uint256 nonce) private view returns (address);
-*/
+#[tokio::test]
+async fn test_reentrancy() {
+  let mut test = Test::new().await;
+  test.confirm_next_serai_key().await;
+
+  const BYTECODE: &[u8] = {
+    const BYTECODE_HEX: &[u8] = include_bytes!(concat!(
+      env!("OUT_DIR"),
+      "/serai-processor-ethereum-router/tests/Reentrancy.bin"
+    ));
+    const BYTECODE: [u8; BYTECODE_HEX.len() / 2] =
+      match alloy_core::primitives::hex::const_decode_to_array::<{ BYTECODE_HEX.len() / 2 }>(
+        BYTECODE_HEX,
+      ) {
+        Ok(bytecode) => bytecode,
+        Err(_) => panic!("Reentrancy.bin did not contain valid hex"),
+      };
+    &BYTECODE
+  };
+
+  let out_instructions = OutInstructions::from(
+    [(
+      // The Reentrancy contract, in its constructor, will re-enter and verify the proper error is
+      // returned
+      SeraiEthereumAddress::Contract(ContractDeployment::new(50_000, BYTECODE.to_vec()).unwrap()),
+      U256::from(0),
+    )]
+    .as_slice(),
+  );
+
+  let gas = test.router.execute_gas(Coin::Ether, U256::from(0), &out_instructions);
+  let (_tx, gas_used) =
+    test.execute(Coin::Ether, U256::from(0), out_instructions, vec![true]).await;
+  // Even though this doesn't have failed `OutInstruction`s, our logic is incomplete upon any
+  // failed internal calls for some reason. That's fine, as the gas yielded is still the worst-case
+  // (which this isn't a counter-example to) and is validated to be the worst-case, but is peculiar
+  assert!(gas_used <= gas);
+}

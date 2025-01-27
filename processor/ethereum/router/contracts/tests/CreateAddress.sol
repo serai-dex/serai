@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import "Router.sol";
 
-// Wrap the Router with a contract which exposes the address
+// Wrap the Router with a contract which exposes the createAddress function
 contract CreateAddress is Router {
   constructor() Router(bytes32(uint256(1))) { }
 
