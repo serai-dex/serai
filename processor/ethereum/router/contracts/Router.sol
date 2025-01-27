@@ -8,9 +8,9 @@ import "Schnorr.sol";
 import "IRouter.sol";
 
 /*
-  The Router directly performs low-level calls in order to fine-tune the gas settings. Since this
-  contract is meant to relay an entire batch of transactions, the ability to exactly meter
-  individual transactions is critical.
+  The Router directly performs low-level calls in order to have direct control over gas. Since this
+  contract is meant to relay an entire batch of outs in a single transaction, the ability to exactly
+  meter individual outs is critical.
 
   We don't check the return values as we don't care if the calls succeeded. We solely care we made
   them. If someone configures an external contract in a way which borks, we explicitly define that
@@ -19,18 +19,12 @@ import "IRouter.sol";
   If an actual invariant within Serai exists, an escape hatch exists to move to a new contract. Any
   improperly handled actions can be re-signed and re-executed at that point in time.
 
+  Historically, the call-stack-depth limit would've made this design untenable. Due to EIP-150, even
+  with 1 billion gas transactions, the call-stack-depth limit remains unreachable.
+
   The `execute` function pays a relayer, as expected for use in the account-abstraction model. Other
   functions also expect relayers, yet do not explicitly pay fees. Those calls are expected to be
   justified via the backpressure of transactions with fees.
-
-  We do transfer ERC20s to contracts before their successful deployment. The usage of CREATE should
-  prevent deployment failures premised on address collisions, leaving failures to be failures with
-  the user-provided code/gas limit. Those failures are deemed to be the user's fault. Alternative
-  designs not only have increased overhead yet their own concerns around complexity (the Router
-  calling itself via msg.sender), justifying this as acceptable.
-
-  Historically, the call-stack-depth limit would've made this design untenable. Due to EIP-150, even
-  with 1 billion gas transactions, the call-stack-depth limit remains unreachable.
 */
 // slither-disable-start low-level-calls,unchecked-lowlevel
 
@@ -43,6 +37,28 @@ contract Router is IRouterWithoutCollisions {
 
   /// @dev The address in transient storage used for the reentrancy guard
   bytes32 constant REENTRANCY_GUARD_SLOT = bytes32(uint256(keccak256("ReentrancyGuard Router")) - 1);
+
+  /**
+   * @dev The amount of gas to use when interacting with ERC20s
+   *
+   *  The ERC20s integrated are presumed to have a constant gas cost, meaning this fixed gas cost
+   *  can only be insufficient if:
+   *
+   *    A) An integrated ERC20 uses more gas than this limit (presumed not to be the case)
+   *    B) An integrated ERC20 is upgraded (integrated ERC20s are presumed to not be upgradeable)
+   *    C) The ERC20 call has a variable gas cost and the user set a hook on receive which caused
+   *       this (in which case, we accept such interactions failing)
+   *    D) The user was blacklisted and any transfers to them cause out of gas errors (in which
+   *       case, we again accept dropping this)
+   *    E) Other extreme edge cases, for which such tokens are assumed to not be integrated
+   *    F) Ethereum opcodes are repriced in a sufficiently breaking fashion
+   *
+   *  This should be in such excess of the gas requirements of integrated tokens we'll survive
+   *  repricing, so long as the repricing doesn't revolutionize EVM gas costs as we know it. In such
+   *  a case, Serai would have to migrate to a new smart contract using `escapeHatch`. That also
+   *  covers all other potential exceptional cases.
+   */
+  uint256 constant ERC20_GAS = 100_000;
 
   /**
    * @dev The next nonce used to determine the address of contracts deployed with CREATE. This is
@@ -135,6 +151,7 @@ contract Router is IRouterWithoutCollisions {
    *  calldata should be signed with the nonce taking the place of the signature's commitment to
    *  its nonce, and the signature solution zeroed.
    */
+  /// @param key The key to verify the signature with
   function verifySignature(bytes32 key)
     private
     returns (uint256 nonceUsed, bytes memory message, bytes32 messageHash)
@@ -274,7 +291,7 @@ contract Router is IRouterWithoutCollisions {
    * @param instruction The Shorthand-encoded InInstruction for Serai to associate with this
    *  transfer in
    */
-  // Re-entrancy doesn't bork this function
+  // This function doesn't require nonReentrant as re-entrancy isn't an issue with this function
   // slither-disable-next-line reentrancy-events
   function inInstruction(address coin, uint256 amount, bytes memory instruction) external payable {
     // Check there is an active key
@@ -329,65 +346,21 @@ contract Router is IRouterWithoutCollisions {
     emit InInstruction(msg.sender, coin, amount, instruction);
   }
 
-  /// @dev Perform an ERC20 transfer out
-  /// @param to The address to transfer the coins to
-  /// @param coin The coin to transfer
-  /// @param amount The amount of the coin to transfer
-  /**
-   * @return success If the coins were successfully transferred out. This is defined as if the
-   *  call succeeded and returned true or nothing.
-   */
-  // execute has this annotation yet this still flags (even when it doesn't have its own loop)
-  // slither-disable-next-line calls-loop
-  function erc20TransferOut(address to, address coin, uint256 amount)
-    private
-    returns (bool success)
-  {
-    /*
-      The ERC20s integrated are presumed to have a constant gas cost, meaning this can only be
-      insufficient:
-
-        A) An integrated ERC20 uses more gas than this limit (presumed not to be the case)
-        B) An integrated ERC20 is upgraded (integrated ERC20s are presumed to not be upgradeable)
-        C) This has a variable gas cost and the user set a hook on receive which caused this (in
-           which case, we accept dropping this)
-        D) The user was blacklisted (in which case, we again accept dropping this)
-        E) Other extreme edge cases, for which such tokens are assumed to not be integrated
-        F) Ethereum opcodes are repriced in a sufficiently breaking fashion
-
-      This should be in such excess of the gas requirements of integrated tokens we'll survive
-      repricing, so long as the repricing doesn't revolutionize EVM gas costs as we know it. In such
-      a case, Serai would have to migrate to a new smart contract using `escapeHatch`. That also
-      covers all other potential exceptional cases.
-    */
-    uint256 _gas = 100_000;
-
-    /*
-      `coin` is either signed (from `execute`) or called from `escape` (which can safely be
-      arbitrarily called). We accordingly don't need to be worried about return bombs here.
-    */
-    // slither-disable-next-line return-bomb
-    (bool erc20Success, bytes memory res) =
-      address(coin).call{ gas: _gas }(abi.encodeWithSelector(IERC20.transfer.selector, to, amount));
-
-    /*
-      Require there was nothing returned, which is done by some non-standard tokens, or that the
-      ERC20 contract did in fact return true.
-    */
-    // slither-disable-next-line incorrect-equality
-    bool nonStandardResOrTrue = (res.length == 0) || ((res.length == 32) && abi.decode(res, (bool)));
-    success = erc20Success && nonStandardResOrTrue;
-  }
-
-  /// @dev Perform an ETH/ERC20 transfer out
+  /// @dev Perform an Ether/ERC20 transfer out
   /// @param to The address to transfer the coins to
   /// @param coin The coin to transfer (address(0) if Ether)
   /// @param amount The amount of the coin to transfer
+  /// @param contractDestination If we're transferring to a contract we just deployed
   /**
    * @return success If the coins were successfully transferred out. For Ethereum, this is if the
    *  call succeeded. For the ERC20, it's if the call succeeded and returned true or nothing.
    */
-  function transferOut(address to, address coin, uint256 amount) private returns (bool success) {
+  // execute has this annotation yet this still flags (even when it doesn't have its own loop)
+  // slither-disable-next-line calls-loop
+  function transferOut(address to, address coin, uint256 amount, bool contractDestination)
+    private
+    returns (bool success)
+  {
     if (coin == address(0)) {
       // This uses assembly to prevent return bombs
       // slither-disable-next-line assembly
@@ -407,7 +380,44 @@ contract Router is IRouterWithoutCollisions {
           )
       }
     } else {
-      success = erc20TransferOut(to, coin, amount);
+      bytes4 selector;
+      if (contractDestination) {
+        /*
+          If this is an out of DestinationType::Contract, we only grant an approval. We don't
+          perform a transfer. This allows the contract, or our expectation of the contract as far as
+          our obligation to it, to be borked and for Serai to potentially it accordingly.
+
+          Unfortunately, this isn't a feasible flow for Ether unless we set Ether approvals within
+          our contract (for entities to collect later) which is of sufficient complexity to not be
+          worth the effort. We also don't have the `CREATE` complexity when transferring Ether to
+          contracts we deploy.
+        */
+        selector = IERC20.approve.selector;
+      } else {
+        /*
+          For non-contracts, we don't place the burden of the transferFrom flow and directly
+          transfer.
+        */
+        selector = IERC20.transfer.selector;
+      }
+
+      /*
+        `coin` is either signed (from `execute`) or called from `escape` (which can safely be
+        arbitrarily called). We accordingly don't need to be worried about return bombs here.
+      */
+      // slither-disable-next-line return-bomb
+      (bool erc20Success, bytes memory res) = address(coin).call{ gas: ERC20_GAS }(
+        abi.encodeWithSelector(selector, to, amount)
+      );
+
+      /*
+        Require there was nothing returned, which is done by some non-standard tokens, or that the
+        ERC20 contract did in fact return true.
+      */
+      // slither-disable-next-line incorrect-equality
+      bool nonStandardResOrTrue =
+        (res.length == 0) || ((res.length == 32) && abi.decode(res, (bool)));
+      success = erc20Success && nonStandardResOrTrue;
     }
   }
 
@@ -427,6 +437,7 @@ contract Router is IRouterWithoutCollisions {
    *
    *  This has undefined behavior when `nonce` is zero (EIP-161 makes this irrelevant).
    */
+  /// @param nonce The nonce to use for CREATE
   function createAddress(uint256 nonce) internal view returns (address) {
     unchecked {
       // The amount of bytes needed to represent the nonce
@@ -441,7 +452,7 @@ contract Router is IRouterWithoutCollisions {
           shouldSet := and(valueFits, notPriorSet)
         }
         // Carry the existing bitsNeeded value, set bits if should set
-        bitsNeeded = bitsNeeded + (shouldSet * bits);
+        bitsNeeded += (shouldSet * bits);
       }
       uint256 bytesNeeded = bitsNeeded / 8;
 
@@ -452,9 +463,11 @@ contract Router is IRouterWithoutCollisions {
       assembly {
         nonceIsNotString := nonceIsNotStringBool
       }
+      // slither-disable-next-line incorrect-exp This is meant to be a xor
       uint256 nonceIsString = nonceIsNotString ^ 1;
 
       // Define the RLP length
+      // slither-disable-next-line divide-before-multiply
       uint256 rlpEncodingLen = 23 + (nonceIsString * bytesNeeded);
 
       uint256 rlpEncoding =
@@ -539,17 +552,17 @@ contract Router is IRouterWithoutCollisions {
       // If the destination is an address, we perform a direct transfer
       if (outs[i].destinationType == IRouter.DestinationType.Address) {
         /*
-          This may cause a revert  if the destination isn't actually a valid address. Serai is
+          This may cause a revert if the destination isn't actually a valid address. Serai is
           trusted to not pass a malformed destination, yet if it ever did, it could simply re-sign a
           corrected batch using this nonce.
         */
         address destination = abi.decode(outs[i].destination, (address));
-        success = transferOut(destination, coin, outs[i].amount);
+        success = transferOut(destination, coin, outs[i].amount, false);
       } else {
         // Prepare the transfer
         uint256 ethValue = 0;
         if (coin == address(0)) {
-          // If it's ETH, we transfer the amount with the call
+          // If it's Ether, we transfer the amount with the call
           ethValue = outs[i].amount;
         } else {
           /*
@@ -559,9 +572,11 @@ contract Router is IRouterWithoutCollisions {
 
             We use CREATE, not CREATE2, despite the difficulty in calculating the address
             in-contract, for reasons explained within `createAddress`'s documentation.
+
+            If this is ever borked, the fact we only set an approval allows recovery.
           */
           address nextAddress = createAddress(_smartContractNonce);
-          success = erc20TransferOut(nextAddress, coin, outs[i].amount);
+          success = transferOut(nextAddress, coin, outs[i].amount, true);
         }
 
         /*
@@ -571,10 +586,10 @@ contract Router is IRouterWithoutCollisions {
           entire isn't put into a halted state.
 
           Since the recipient is a fresh account, this presumably isn't the recipient being
-          blacklisted (the most likely invariant upon the integration of a popular, standard ERC20).
-          That means there likely is some invariant with this integration to be resolved later.
-          Since reaching this invariant state requires an invariant, and for the reasons above, this
-          is accepted.
+          blacklisted (the most likely invariant upon the integration of a popular,
+          otherwise-standard ERC20). That means there likely is some invariant with this integration
+          to be resolved later. Given our ability to sign new batches with the necessary
+          corrections, this is accepted.
         */
         if (success) {
           (IRouter.CodeDestination memory destination) =
@@ -609,7 +624,7 @@ contract Router is IRouterWithoutCollisions {
     emit Batch(nonceUsed, message, outs.length, results);
 
     // Transfer the fee to the relayer
-    transferOut(msg.sender, coin, fee);
+    transferOut(msg.sender, coin, fee, false);
   }
 
   /// @notice Escapes to a new smart contract
@@ -666,6 +681,7 @@ contract Router is IRouterWithoutCollisions {
 
   /// @notice Escape coins after the escape hatch has been invoked
   /// @param coin The coin to escape
+  // slither-disable-next-line reentrancy-events Out-of-order events aren't an issue here
   function escape(address coin) external {
     if (_escapedTo == address(0)) {
       revert EscapeHatchNotInvoked();
@@ -679,7 +695,12 @@ contract Router is IRouterWithoutCollisions {
 
     // Perform the transfer
     // While this can be re-entered to try escaping our balance twice, the outer call will fail
-    if (!transferOut(_escapedTo, coin, amount)) {
+    /*
+      We don't flag the escape hatch as a contract destination, despite being a contract, as the
+      escape hatch's invocation is permanent. If the coins do not go through the escape hatch, they
+      will never go anywhere (ignoring any unspent approvals voided by this action).
+    */
+    if (!transferOut(_escapedTo, coin, amount, false)) {
       revert EscapeFailed();
     }
 

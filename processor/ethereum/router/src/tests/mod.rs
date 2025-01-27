@@ -914,10 +914,10 @@ async fn test_erc20_code_out_instruction() {
   let unused_gas = test.gas_unused_by_calls(&tx).await;
   assert_eq!(gas_used + unused_gas, gas);
 
-  assert_eq!(erc20.balance_of(&test, test.router.address()).await, U256::from(0));
+  assert_eq!(erc20.balance_of(&test, test.router.address()).await, U256::from(amount_out));
   assert_eq!(erc20.balance_of(&test, tx.recover_signer().unwrap()).await, U256::from(fee));
   let deployed = test.router.address().create(1);
-  assert_eq!(erc20.balance_of(&test, deployed).await, amount_out);
+  assert_eq!(erc20.router_approval(&test, deployed).await, amount_out);
   assert_eq!(test.provider.get_code_at(deployed).await.unwrap().to_vec(), true.abi_encode());
 }
 

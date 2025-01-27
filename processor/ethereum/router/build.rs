@@ -33,16 +33,14 @@ fn main() {
   )
   .unwrap();
   // These are detected multiple times and distinguished, hence their renaming to canonical forms
-  fs::rename(
-    artifacts_path.clone() + "/Router_sol_Router.bin",
-    artifacts_path.clone() + "/Router.bin",
-  )
-  .unwrap();
-  fs::rename(
-    artifacts_path.clone() + "/Router_sol_Router.bin-runtime",
-    artifacts_path.clone() + "/Router.bin-runtime",
-  )
-  .unwrap();
+  let router_bin = artifacts_path.clone() + "/Router.bin";
+  let _ = fs::remove_file(&router_bin); // Remove the file if it already exists, if we can
+  fs::rename(artifacts_path.clone() + "/Router_sol_Router.bin", &router_bin).unwrap();
+
+  let router_bin_runtime = artifacts_path.clone() + "/Router.bin-runtime";
+  let _ = fs::remove_file(&router_bin_runtime);
+  fs::rename(artifacts_path.clone() + "/Router_sol_Router.bin-runtime", router_bin_runtime)
+    .unwrap();
 
   // This cannot be handled with the sol! macro. The Router requires an import
   // https://github.com/alloy-rs/core/issues/602
