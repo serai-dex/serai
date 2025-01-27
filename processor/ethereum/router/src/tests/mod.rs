@@ -1,4 +1,4 @@
-use std::{sync::Arc, collections::HashSet};
+use std::sync::Arc;
 
 use rand_core::{RngCore, OsRng};
 
@@ -20,16 +20,8 @@ use alloy_provider::{
 
 use alloy_node_bindings::{Anvil, AnvilInstance};
 
-use scale::Encode;
-use serai_client::{
-  networks::ethereum::{ContractDeployment, Address as SeraiEthereumAddress},
-  primitives::SeraiAddress,
-  in_instructions::primitives::{
-    InInstruction as SeraiInInstruction, RefundableInInstruction, Shorthand,
-  },
-};
+use serai_client::networks::ethereum::{ContractDeployment, Address as SeraiEthereumAddress};
 
-use ethereum_primitives::LogIndex;
 use ethereum_schnorr::{PublicKey, Signature};
 use ethereum_deployer::Deployer;
 
@@ -37,15 +29,17 @@ use crate::{
   _irouter_abi::IRouterWithoutCollisions::{
     self as IRouter, IRouterWithoutCollisionsErrors as IRouterErrors,
   },
-  Coin, InInstruction, OutInstructions, Router, Executed, Escape,
+  Coin, OutInstructions, Router, Executed, Escape,
 };
 
 mod constants;
 
-mod create_address;
-
 mod erc20;
 use erc20::Erc20;
+
+mod create_address;
+mod in_instruction;
+mod escape_hatch;
 
 pub(crate) fn test_key() -> (Scalar, PublicKey) {
   loop {
@@ -126,7 +120,13 @@ impl Test {
 
   async fn new() -> Self {
     // The following is explicitly only evaluated against the cancun network upgrade at this time
-    let anvil = Anvil::new().arg("--hardfork").arg("cancun").arg("--tracing").spawn();
+    let anvil = Anvil::new()
+      .arg("--hardfork")
+      .arg("cancun")
+      .arg("--tracing")
+      .arg("--no-request-size-limit")
+      .arg("--disable-block-gas-limit")
+      .spawn();
 
     let provider = Arc::new(RootProvider::new(
       ClientBuilder::default().transport(SimpleRequest::new(anvil.endpoint()), true),
@@ -267,74 +267,6 @@ impl Test {
     self.verify_state().await;
   }
 
-  fn in_instruction() -> Shorthand {
-    Shorthand::Raw(RefundableInInstruction {
-      origin: None,
-      instruction: SeraiInInstruction::Transfer(SeraiAddress([0xff; 32])),
-    })
-  }
-
-  fn eth_in_instruction_tx(&self) -> (Coin, U256, Shorthand, TxLegacy) {
-    let coin = Coin::Ether;
-    let amount = U256::from(1);
-    let shorthand = Self::in_instruction();
-
-    let mut tx = self.router.in_instruction(coin, amount, &shorthand);
-    tx.gas_limit = 1_000_000;
-    tx.gas_price = 100_000_000_000;
-
-    (coin, amount, shorthand, tx)
-  }
-
-  async fn publish_in_instruction_tx(
-    &self,
-    tx: Signed<TxLegacy>,
-    coin: Coin,
-    amount: U256,
-    shorthand: &Shorthand,
-  ) {
-    let receipt = ethereum_test_primitives::publish_tx(&self.provider, tx.clone()).await;
-    assert!(receipt.status());
-
-    let block = receipt.block_number.unwrap();
-
-    if matches!(coin, Coin::Erc20(_)) {
-      // If we don't whitelist this token, we shouldn't be yielded an InInstruction
-      let in_instructions =
-        self.router.in_instructions_unordered(block ..= block, &HashSet::new()).await.unwrap();
-      assert!(in_instructions.is_empty());
-    }
-
-    let in_instructions = self
-      .router
-      .in_instructions_unordered(
-        block ..= block,
-        &if let Coin::Erc20(token) = coin { HashSet::from([token]) } else { HashSet::new() },
-      )
-      .await
-      .unwrap();
-    assert_eq!(in_instructions.len(), 1);
-
-    let in_instruction_log_index = receipt.inner.logs().iter().find_map(|log| {
-      (log.topics().first() == Some(&crate::InInstructionEvent::SIGNATURE_HASH))
-        .then(|| log.log_index.unwrap())
-    });
-    // If this isn't an InInstruction event, it'll be a top-level transfer event
-    let log_index = in_instruction_log_index.unwrap_or(0);
-
-    assert_eq!(
-      in_instructions[0],
-      InInstruction {
-        id: LogIndex { block_hash: *receipt.block_hash.unwrap(), index_within_block: log_index },
-        transaction_hash: **tx.hash(),
-        from: tx.recover_signer().unwrap(),
-        coin,
-        amount,
-        data: shorthand.encode(),
-      }
-    );
-  }
-
   fn execute_tx(
     &self,
     coin: Coin,
@@ -371,7 +303,7 @@ impl Test {
     results: Vec<bool>,
   ) -> (Signed<TxLegacy>, u64) {
     let (message_hash, mut tx) = self.execute_tx(coin, fee, out_instructions);
-    tx.gas_limit = 1_000_000;
+    tx.gas_limit = 100_000_000;
     tx.gas_price = 100_000_000_000;
     let tx = ethereum_primitives::deterministically_sign(tx);
     let receipt = ethereum_test_primitives::publish_tx(&self.provider, tx.clone()).await;
@@ -394,52 +326,6 @@ impl Test {
     self.verify_state().await;
 
     (tx.clone(), receipt.gas_used)
-  }
-
-  fn escape_hatch_tx(&self, escape_to: Address) -> TxLegacy {
-    let msg = Router::escape_hatch_message(self.chain_id, self.state.next_nonce, escape_to);
-    let sig = sign(self.state.key.unwrap(), &msg);
-    let mut tx = self.router.escape_hatch(escape_to, &sig);
-    tx.gas_limit = Router::ESCAPE_HATCH_GAS + 5_000;
-    tx
-  }
-
-  async fn escape_hatch(&mut self) {
-    let mut escape_to = [0; 20];
-    OsRng.fill_bytes(&mut escape_to);
-    let escape_to = Address(escape_to.into());
-
-    // Set the code of the address to escape to so it isn't flagged as a non-contract
-    let () = self.provider.raw_request("anvil_setCode".into(), (escape_to, [0])).await.unwrap();
-
-    let mut tx = self.escape_hatch_tx(escape_to);
-    tx.gas_price = 100_000_000_000;
-    let tx = ethereum_primitives::deterministically_sign(tx);
-    let receipt = ethereum_test_primitives::publish_tx(&self.provider, tx.clone()).await;
-    assert!(receipt.status());
-    // This encodes an address which has 12 bytes of padding
-    assert_eq!(
-      CalldataAgnosticGas::calculate(tx.tx().input.as_ref(), 12, receipt.gas_used),
-      Router::ESCAPE_HATCH_GAS
-    );
-
-    {
-      let block = receipt.block_number.unwrap();
-      let executed = self.router.executed(block ..= block).await.unwrap();
-      assert_eq!(executed.len(), 1);
-      assert_eq!(executed[0], Executed::EscapeHatch { nonce: self.state.next_nonce, escape_to });
-    }
-
-    self.state.next_nonce += 1;
-    self.state.escaped_to = Some(escape_to);
-    self.verify_state().await;
-  }
-
-  fn escape_tx(&self, coin: Coin) -> TxLegacy {
-    let mut tx = self.router.escape(coin);
-    tx.gas_limit = 100_000;
-    tx.gas_price = 100_000_000_000;
-    tx
   }
 
   async fn gas_unused_by_calls(&self, tx: &Signed<TxLegacy>) -> u64 {
@@ -610,100 +496,6 @@ async fn test_update_serai_key() {
 
   // Once we update to a new key, we should, of course, be able to continue to rotate keys
   test.confirm_next_serai_key().await;
-}
-
-#[tokio::test]
-async fn test_no_in_instruction_before_key() {
-  let test = Test::new().await;
-
-  // We shouldn't be able to publish `InInstruction`s before publishing a key
-  let (_coin, _amount, _shorthand, tx) = test.eth_in_instruction_tx();
-  assert!(matches!(
-    test.call_and_decode_err(tx).await,
-    IRouterErrors::SeraiKeyWasNone(IRouter::SeraiKeyWasNone {})
-  ));
-}
-
-#[tokio::test]
-async fn test_eth_in_instruction() {
-  let mut test = Test::new().await;
-  test.confirm_next_serai_key().await;
-
-  let (coin, amount, shorthand, tx) = test.eth_in_instruction_tx();
-
-  // This should fail if the value mismatches the amount
-  {
-    let mut tx = tx.clone();
-    tx.value = U256::ZERO;
-    assert!(matches!(
-      test.call_and_decode_err(tx).await,
-      IRouterErrors::AmountMismatchesMsgValue(IRouter::AmountMismatchesMsgValue {})
-    ));
-  }
-
-  let tx = ethereum_primitives::deterministically_sign(tx);
-  test.publish_in_instruction_tx(tx, coin, amount, &shorthand).await;
-}
-
-#[tokio::test]
-async fn test_erc20_router_in_instruction() {
-  let mut test = Test::new().await;
-  test.confirm_next_serai_key().await;
-
-  let erc20 = Erc20::deploy(&test).await;
-
-  let coin = Coin::Erc20(erc20.address());
-  let amount = U256::from(1);
-  let shorthand = Test::in_instruction();
-
-  // The provided `in_instruction` function will use a top-level transfer for ERC20 InInstructions,
-  // so we have to manually write this call
-  let tx = TxLegacy {
-    chain_id: None,
-    nonce: 0,
-    gas_price: 100_000_000_000,
-    gas_limit: 1_000_000,
-    to: test.router.address().into(),
-    value: U256::ZERO,
-    input: crate::abi::inInstructionCall::new((coin.into(), amount, shorthand.encode().into()))
-      .abi_encode()
-      .into(),
-  };
-
-  // If no `approve` was granted, this should fail
-  assert!(matches!(
-    test.call_and_decode_err(tx.clone()).await,
-    IRouterErrors::TransferFromFailed(IRouter::TransferFromFailed {})
-  ));
-
-  let tx = ethereum_primitives::deterministically_sign(tx);
-  {
-    let signer = tx.recover_signer().unwrap();
-    erc20.mint(&test, signer, amount).await;
-    erc20.approve(&test, signer, test.router.address(), amount).await;
-  }
-
-  test.publish_in_instruction_tx(tx, coin, amount, &shorthand).await;
-}
-
-#[tokio::test]
-async fn test_erc20_top_level_transfer_in_instruction() {
-  let mut test = Test::new().await;
-  test.confirm_next_serai_key().await;
-
-  let erc20 = Erc20::deploy(&test).await;
-
-  let coin = Coin::Erc20(erc20.address());
-  let amount = U256::from(1);
-  let shorthand = Test::in_instruction();
-
-  let mut tx = test.router.in_instruction(coin, amount, &shorthand);
-  tx.gas_price = 100_000_000_000;
-  tx.gas_limit = 1_000_000;
-
-  let tx = ethereum_primitives::deterministically_sign(tx);
-  erc20.mint(&test, tx.recover_signer().unwrap(), amount).await;
-  test.publish_in_instruction_tx(tx, coin, amount, &shorthand).await;
 }
 
 #[tokio::test]
@@ -967,123 +759,6 @@ async fn test_result_decoding() {
 }
 
 #[tokio::test]
-async fn test_escape_hatch() {
-  let mut test = Test::new().await;
-  test.confirm_next_serai_key().await;
-
-  // Queue another key so the below test cases can run
-  test.update_serai_key().await;
-
-  {
-    // The zero address should be invalid to escape to
-    assert!(matches!(
-      test.call_and_decode_err(test.escape_hatch_tx([0; 20].into())).await,
-      IRouterErrors::InvalidEscapeAddress(IRouter::InvalidEscapeAddress {})
-    ));
-    // Empty addresses should be invalid to escape to
-    assert!(matches!(
-      test.call_and_decode_err(test.escape_hatch_tx([1; 20].into())).await,
-      IRouterErrors::EscapeAddressWasNotAContract(IRouter::EscapeAddressWasNotAContract {})
-    ));
-    // Non-empty addresses without code should be invalid to escape to
-    let tx = ethereum_primitives::deterministically_sign(TxLegacy {
-      to: Address([1; 20].into()).into(),
-      gas_limit: 21_000,
-      gas_price: 100_000_000_000,
-      value: U256::from(1),
-      ..Default::default()
-    });
-    let receipt = ethereum_test_primitives::publish_tx(&test.provider, tx.clone()).await;
-    assert!(receipt.status());
-    assert!(matches!(
-      test.call_and_decode_err(test.escape_hatch_tx([1; 20].into())).await,
-      IRouterErrors::EscapeAddressWasNotAContract(IRouter::EscapeAddressWasNotAContract {})
-    ));
-
-    // Escaping at this point in time should fail
-    assert!(matches!(
-      test.call_and_decode_err(test.router.escape(Coin::Ether)).await,
-      IRouterErrors::EscapeHatchNotInvoked(IRouter::EscapeHatchNotInvoked {})
-    ));
-  }
-
-  // Invoke the escape hatch
-  test.escape_hatch().await;
-
-  // Now that the escape hatch has been invoked, all of the following calls should fail
-  {
-    assert!(matches!(
-      test.call_and_decode_err(test.update_serai_key_tx().1).await,
-      IRouterErrors::EscapeHatchInvoked(IRouter::EscapeHatchInvoked {})
-    ));
-    assert!(matches!(
-      test.call_and_decode_err(test.confirm_next_serai_key_tx()).await,
-      IRouterErrors::EscapeHatchInvoked(IRouter::EscapeHatchInvoked {})
-    ));
-    assert!(matches!(
-      test.call_and_decode_err(test.eth_in_instruction_tx().3).await,
-      IRouterErrors::EscapeHatchInvoked(IRouter::EscapeHatchInvoked {})
-    ));
-    assert!(matches!(
-      test
-        .call_and_decode_err(test.execute_tx(Coin::Ether, U256::from(0), [].as_slice().into()).1)
-        .await,
-      IRouterErrors::EscapeHatchInvoked(IRouter::EscapeHatchInvoked {})
-    ));
-    // We reject further attempts to update the escape hatch to prevent the last key from being
-    // able to switch from the honest escape hatch to siphoning via a malicious escape hatch (such
-    // as after the validators represented unstake)
-    assert!(matches!(
-      test.call_and_decode_err(test.escape_hatch_tx(test.state.escaped_to.unwrap())).await,
-      IRouterErrors::EscapeHatchInvoked(IRouter::EscapeHatchInvoked {})
-    ));
-  }
-
-  // Check the escape fn itself
-
-  // ETH
-  {
-    let () = test
-      .provider
-      .raw_request("anvil_setBalance".into(), (test.router.address(), 1))
-      .await
-      .unwrap();
-    let tx = ethereum_primitives::deterministically_sign(test.escape_tx(Coin::Ether));
-    let receipt = ethereum_test_primitives::publish_tx(&test.provider, tx.clone()).await;
-    assert!(receipt.status());
-
-    let block = receipt.block_number.unwrap();
-    assert_eq!(
-      test.router.escapes(block ..= block).await.unwrap(),
-      vec![Escape { coin: Coin::Ether, amount: U256::from(1) }],
-    );
-
-    assert_eq!(test.provider.get_balance(test.router.address()).await.unwrap(), U256::from(0));
-    assert_eq!(
-      test.provider.get_balance(test.state.escaped_to.unwrap()).await.unwrap(),
-      U256::from(1)
-    );
-  }
-
-  // ERC20
-  {
-    let erc20 = Erc20::deploy(&test).await;
-    let coin = Coin::Erc20(erc20.address());
-    let amount = U256::from(1);
-    erc20.mint(&test, test.router.address(), amount).await;
-
-    let tx = ethereum_primitives::deterministically_sign(test.escape_tx(coin));
-    let receipt = ethereum_test_primitives::publish_tx(&test.provider, tx.clone()).await;
-    assert!(receipt.status());
-
-    let block = receipt.block_number.unwrap();
-    assert_eq!(test.router.escapes(block ..= block).await.unwrap(), vec![Escape { coin, amount }],);
-    assert_eq!(erc20.balance_of(&test, test.router.address()).await, U256::from(0));
-    assert_eq!(erc20.balance_of(&test, test.state.escaped_to.unwrap()).await, amount);
-  }
-}
-
-#[tokio::test]
 async fn test_reentrancy() {
   let mut test = Test::new().await;
   test.confirm_next_serai_key().await;
@@ -1120,4 +795,70 @@ async fn test_reentrancy() {
   // failed internal calls for some reason. That's fine, as the gas yielded is still the worst-case
   // (which this isn't a counter-example to) and is validated to be the worst-case, but is peculiar
   assert!(gas_used <= gas);
+}
+
+#[tokio::test]
+async fn fuzz_test_out_instructions_gas() {
+  for _ in 0 .. 10 {
+    let mut test = Test::new().await;
+    test.confirm_next_serai_key().await;
+
+    // Generate a random OutInstructions
+    let mut out_instructions = vec![];
+    let mut prior_addresses = vec![];
+    for _ in 0 .. (OsRng.next_u64() % 50) {
+      let amount_out = U256::from(OsRng.next_u64() % 2);
+      if (OsRng.next_u64() % 2) == 1 {
+        let mut code = return_true_code();
+
+        // Extend this with random data to make it somewhat random, despite the constant returned
+        // code (though the estimator will never run the initcode and realize that)
+        let ext = vec![0; usize::try_from(OsRng.next_u64() % 400).unwrap()];
+        code.extend(&ext);
+
+        out_instructions.push((
+          SeraiEthereumAddress::Contract(ContractDeployment::new(100_000, ext).unwrap()),
+          amount_out,
+        ));
+      } else {
+        // Occasionally reuse addresses (cold/warm slots)
+        let address = if (!prior_addresses.is_empty()) && ((OsRng.next_u64() % 2) == 1) {
+          prior_addresses[usize::try_from(
+            OsRng.next_u64() % u64::try_from(prior_addresses.len()).unwrap(),
+          )
+          .unwrap()]
+        } else {
+          let mut rand_address = [0; 20];
+          OsRng.fill_bytes(&mut rand_address);
+          prior_addresses.push(rand_address);
+          rand_address
+        };
+        out_instructions.push((SeraiEthereumAddress::Address(address), amount_out));
+      }
+    }
+    let out_instructions = OutInstructions::from(out_instructions.as_slice());
+
+    // Randomly decide the coin
+    let coin = if (OsRng.next_u64() % 2) == 1 {
+      let () = test
+        .provider
+        .raw_request("anvil_setBalance".into(), (test.router.address(), 1_000_000_000))
+        .await
+        .unwrap();
+      Coin::Ether
+    } else {
+      let erc20 = Erc20::deploy(&test).await;
+      erc20.mint(&test, test.router.address(), U256::from(1_000_000_000)).await;
+      Coin::Erc20(erc20.address())
+    };
+
+    let fee_per_gas = U256::from(OsRng.next_u64() % 10);
+    let gas = test.router.execute_gas(coin, fee_per_gas, &out_instructions);
+    let fee = U256::from(gas) * fee_per_gas;
+    // All of these should have succeeded
+    let (tx, gas_used) =
+      test.execute(coin, fee, out_instructions.clone(), vec![true; out_instructions.0.len()]).await;
+    let unused_gas = test.gas_unused_by_calls(&tx).await;
+    assert_eq!(gas_used + unused_gas, gas);
+  }
 }
