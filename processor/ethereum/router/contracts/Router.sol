@@ -406,9 +406,8 @@ contract Router is IRouterWithoutCollisions {
         arbitrarily called). We accordingly don't need to be worried about return bombs here.
       */
       // slither-disable-next-line return-bomb
-      (bool erc20Success, bytes memory res) = address(coin).call{ gas: ERC20_GAS }(
-        abi.encodeWithSelector(selector, to, amount)
-      );
+      (bool erc20Success, bytes memory res) =
+        address(coin).call{ gas: ERC20_GAS }(abi.encodeWithSelector(selector, to, amount));
 
       /*
         Require there was nothing returned, which is done by some non-standard tokens, or that the
@@ -504,6 +503,25 @@ contract Router is IRouterWithoutCollisions {
    */
   /// @param code The code to execute
   function executeArbitraryCode(bytes memory code) external payable {
+    /*
+      execute assumes that from the time it reads `_smartContractNonce` until the time it calls this
+      function, no mutations to it will occur. If any mutations could occur, it'd lead to a fault
+      where tokens could be sniped by:
+
+      1) An out occurring, transferring tokens to an about-to-be-deployed smart contract
+      2) The token contract re-entering the Router to deploy a new smart contract which claims the
+         tokens
+      3) The Router then deploying the intended smart contract (ignoring whatever result it may
+         have)
+
+      This does assume a malicious token, or a token with callbacks which can be set by a malicious
+      adversary, yet the way to ensure it's a non-issue is to not allow other entities to mutate
+      `_smartContractNonce`.
+    */
+    if (msg.sender != address(this)) {
+      revert CodeNotBySelf();
+    }
+
     // Because we're creating a contract, increment our nonce
     _smartContractNonce += 1;
 

@@ -63,6 +63,8 @@ interface IRouterWithoutCollisions {
   /// @notice The call to an ERC20's `transferFrom` failed
   error TransferFromFailed();
 
+  /// @notice The code wasn't to-be-executed by self
+  error CodeNotBySelf();
   /// @notice A non-reentrant function was re-entered
   error Reentered();
 

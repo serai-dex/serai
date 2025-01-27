@@ -706,6 +706,26 @@ async fn test_erc20_top_level_transfer_in_instruction() {
   test.publish_in_instruction_tx(tx, coin, amount, &shorthand).await;
 }
 
+#[tokio::test]
+async fn test_execute_arbitrary_code() {
+  let test = Test::new().await;
+
+  assert!(matches!(
+    test
+      .call_and_decode_err(TxLegacy {
+        chain_id: None,
+        nonce: 0,
+        gas_price: 100_000_000_000,
+        gas_limit: 1_000_000,
+        to: test.router.address().into(),
+        value: U256::ZERO,
+        input: crate::abi::executeArbitraryCodeCall::new((vec![].into(),)).abi_encode().into(),
+      })
+      .await,
+    IRouterErrors::CodeNotBySelf(IRouter::CodeNotBySelf {})
+  ));
+}
+
 // Code which returns true
 #[rustfmt::skip]
 fn return_true_code() -> Vec<u8> {
