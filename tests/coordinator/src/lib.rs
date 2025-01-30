@@ -21,7 +21,7 @@ use ciphersuite::{
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 
-use serai_client::primitives::NetworkId;
+use serai_client::primitives::ExternalNetworkId;
 
 use messages::{
   coordinator::{SubstrateSignableId, SubstrateSignId, cosign_block_msg},
@@ -110,7 +110,7 @@ pub struct Handles {
 }
 
 pub struct Processor {
-  network: NetworkId,
+  network: ExternalNetworkId,
 
   serai_rpc: String,
   #[allow(unused)]
@@ -136,7 +136,7 @@ impl Drop for Processor {
 impl Processor {
   pub async fn new(
     name: &'static str,
-    network: NetworkId,
+    network: ExternalNetworkId,
     ops: &DockerOperations,
     handles: Handles,
     processor_key: <Ristretto as Ciphersuite>::F,

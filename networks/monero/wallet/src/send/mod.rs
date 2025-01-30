@@ -29,6 +29,7 @@ use crate::{
 };
 
 mod tx_keys;
+pub use tx_keys::TransactionKeys;
 mod tx;
 mod eventuality;
 pub use eventuality::Eventuality;

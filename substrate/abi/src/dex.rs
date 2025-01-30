@@ -2,7 +2,7 @@ use sp_runtime::BoundedVec;
 
 use serai_primitives::*;
 
-type PoolId = Coin;
+type PoolId = ExternalCoin;
 type MaxSwapPathLength = sp_core::ConstU32<3>;
 
 #[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
@@ -10,7 +10,7 @@ type MaxSwapPathLength = sp_core::ConstU32<3>;
 #[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Call {
   add_liquidity {
-    coin: Coin,
+    coin: ExternalCoin,
     coin_desired: SubstrateAmount,
     sri_desired: SubstrateAmount,
     coin_min: SubstrateAmount,
@@ -18,7 +18,7 @@ pub enum Call {
     mint_to: SeraiAddress,
   },
   remove_liquidity {
-    coin: Coin,
+    coin: ExternalCoin,
     lp_token_burn: SubstrateAmount,
     coin_min_receive: SubstrateAmount,
     sri_min_receive: SubstrateAmount,

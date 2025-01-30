@@ -10,9 +10,8 @@ use ciphersuite::{
 use dkg::Participant;
 
 use serai_client::{
-  primitives::NetworkId,
+  validator_sets::primitives::{ExternalValidatorSet, KeyPair, Session},
   Public,
-  validator_sets::primitives::{Session, ValidatorSet, KeyPair},
 };
 use messages::CoordinatorMessage;
 
@@ -25,7 +24,7 @@ pub async fn key_gen<C: Ciphersuite>(
   let coordinators = processors.len();
   let mut participant_is = vec![];
 
-  let set = ValidatorSet { session, network: NetworkId::Bitcoin };
+  let set = ExternalValidatorSet { session, network: ExternalNetworkId::Bitcoin };
 
   // This is distinct from the result of evrf_public_keys for each processor, as there'll have some
   // ordering algorithm on-chain which won't match our ordering

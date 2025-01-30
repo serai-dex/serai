@@ -3,8 +3,8 @@ use std::time::SystemTime;
 use dkg::Participant;
 
 use serai_client::{
-  primitives::{NetworkId, BlockHash, PublicKey},
-  validator_sets::primitives::{Session, KeyPair},
+  primitives::{BlockHash, PublicKey, EXTERNAL_NETWORKS},
+  validator_sets::primitives::{KeyPair, Session},
 };
 
 use messages::{SubstrateContext, CoordinatorMessage, ProcessorMessage};
@@ -122,7 +122,7 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator]) -> KeyPair {
 
 #[test]
 fn key_gen_test() {
-  for network in [NetworkId::Bitcoin, NetworkId::Ethereum, NetworkId::Monero] {
+  for network in EXTERNAL_NETWORKS {
     let (coordinators, test) = new_test(network);
 
     test.run(|ops| async move {

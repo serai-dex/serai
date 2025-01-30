@@ -1,7 +1,7 @@
 use core::ops::Deref;
 use std_shims::{vec, vec::Vec};
 
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -15,28 +15,61 @@ use crate::{
   send::{ChangeEnum, InternalPayment, SignableTransaction, key_image_sort},
 };
 
+fn seeded_rng(
+  dst: &'static [u8],
+  outgoing_view_key: &[u8; 32],
+  mut input_keys: Vec<EdwardsPoint>,
+) -> ChaCha20Rng {
+  // Apply the DST
+  let mut transcript = Zeroizing::new(vec![u8::try_from(dst.len()).unwrap()]);
+  transcript.extend(dst);
+
+  // Bind to the outgoing view key to prevent foreign entities from rebuilding the transcript
+  transcript.extend(outgoing_view_key);
+
+  // We sort the inputs here to ensure a consistent order
+  // We use the key image sort as it's applicable and well-defined, not because these are key
+  // images
+  input_keys.sort_by(key_image_sort);
+
+  // Ensure uniqueness across transactions by binding to a use-once object
+  // The keys for the inputs is binding to their key images, making them use-once
+  for key in input_keys {
+    transcript.extend(key.compress().to_bytes());
+  }
+
+  let res = ChaCha20Rng::from_seed(keccak256(&transcript));
+  transcript.zeroize();
+  res
+}
+
+/// An iterator yielding an endless amount of ephemeral keys to use within a transaction.
+///
+/// This is used when sending and can be used after sending to re-derive the keys used, as
+/// necessary for payment proofs.
+pub struct TransactionKeys(ChaCha20Rng);
+impl TransactionKeys {
+  /// Construct a new `TransactionKeys`.
+  ///
+  /// `input_keys` is the list of keys from the outputs spent within this transaction.
+  pub fn new(outgoing_view_key: &Zeroizing<[u8; 32]>, input_keys: Vec<EdwardsPoint>) -> Self {
+    Self(seeded_rng(b"transaction_keys", outgoing_view_key, input_keys))
+  }
+}
+impl Iterator for TransactionKeys {
+  type Item = Zeroizing<Scalar>;
+  fn next(&mut self) -> Option<Self::Item> {
+    Some(Zeroizing::new(Scalar::random(&mut self.0)))
+  }
+}
+
 impl SignableTransaction {
+  fn input_keys(&self) -> Vec<EdwardsPoint> {
+    self.inputs.iter().map(OutputWithDecoys::key).collect()
+  }
+
   pub(crate) fn seeded_rng(&self, dst: &'static [u8]) -> ChaCha20Rng {
-    // Apply the DST
-    let mut transcript = Zeroizing::new(vec![u8::try_from(dst.len()).unwrap()]);
-    transcript.extend(dst);
-
-    // Bind to the outgoing view key to prevent foreign entities from rebuilding the transcript
-    transcript.extend(self.outgoing_view_key.as_slice());
-
-    // Ensure uniqueness across transactions by binding to a use-once object
-    // The keys for the inputs is binding to their key images, making them use-once
-    let mut input_keys = self.inputs.iter().map(OutputWithDecoys::key).collect::<Vec<_>>();
-    // We sort the inputs mid-way through TX construction, so apply our own sort to ensure a
-    // consistent order
-    // We use the key image sort as it's applicable and well-defined, not because these are key
-    // images
-    input_keys.sort_by(key_image_sort);
-    for key in input_keys {
-      transcript.extend(key.compress().to_bytes());
-    }
-
-    ChaCha20Rng::from_seed(keccak256(&transcript))
+    seeded_rng(dst, &self.outgoing_view_key, self.input_keys())
   }
 
   fn has_payments_to_subaddresses(&self) -> bool {
@@ -81,14 +114,14 @@ impl SignableTransaction {
 
   // Calculate the transaction keys used as randomness.
   fn transaction_keys(&self) -> (Zeroizing<Scalar>, Vec<Zeroizing<Scalar>>) {
-    let mut rng = self.seeded_rng(b"transaction_keys");
+    let mut tx_keys = TransactionKeys::new(&self.outgoing_view_key, self.input_keys());
 
-    let tx_key = Zeroizing::new(Scalar::random(&mut rng));
+    let tx_key = tx_keys.next().unwrap();
 
     let mut additional_keys = vec![];
     if self.should_use_additional_keys() {
       for _ in 0 .. self.payments.len() {
-        additional_keys.push(Zeroizing::new(Scalar::random(&mut rng)));
+        additional_keys.push(tx_keys.next().unwrap());
       }
     }
     (tx_key, additional_keys)

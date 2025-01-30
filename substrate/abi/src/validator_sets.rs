@@ -10,7 +10,7 @@ use serai_validator_sets_primitives::*;
 #[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Call {
   set_keys {
-    network: NetworkId,
+    network: ExternalNetworkId,
     key_pair: KeyPair,
     signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
     signature: Signature,
@@ -20,7 +20,7 @@ pub enum Call {
     key: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
   },
   report_slashes {
-    network: NetworkId,
+    network: ExternalNetworkId,
     slashes: SlashReport,
     signature: Signature,
   },
@@ -51,7 +51,7 @@ pub enum Event {
     removed: SeraiAddress,
   },
   KeyGen {
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     key_pair: KeyPair,
   },
   AcceptedHandover {

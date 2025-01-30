@@ -3,11 +3,11 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::NetworkId;
+use serai_primitives::ExternalNetworkId;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Service {
-  Processor(NetworkId),
+  Processor(ExternalNetworkId),
   Coordinator,
 }
 

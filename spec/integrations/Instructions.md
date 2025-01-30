@@ -23,7 +23,7 @@ instructed to act on invalid data, it will drop the entire instruction.
 
 ### Serialization
 
-Instructions are SCALE encoded.
+Instructions are [SCALE](https://docs.substrate.io/reference/scale-codec/) encoded.
 
 ### In Instruction
 

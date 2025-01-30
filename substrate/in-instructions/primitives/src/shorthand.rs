@@ -9,7 +9,7 @@ use serde::{Serialize, Deserialize};
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
-use serai_primitives::{Coin, Amount, SeraiAddress, ExternalAddress};
+use serai_primitives::{Amount, ExternalAddress, ExternalCoin, SeraiAddress};
 
 use coins_primitives::OutInstruction;
 
@@ -25,7 +25,7 @@ pub enum Shorthand {
   Raw(RefundableInInstruction),
   Swap {
     origin: Option<ExternalAddress>,
-    coin: Coin,
+    coin: ExternalCoin,
     minimum: Amount,
     out: OutInstruction,
   },

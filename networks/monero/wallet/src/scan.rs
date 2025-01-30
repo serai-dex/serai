@@ -41,9 +41,9 @@ impl Timelocked {
   ///
   /// `block` is the block number of the block the additional timelock must be satsified by.
   ///
-  /// `time` is represented in seconds since the epoch. Please note Monero uses an on-chain
-  /// deterministic clock for time which is subject to variance from the real world time. This time
-  /// argument will be evaluated against Monero's clock, not the local system's clock.
+  /// `time` is represented in seconds since the epoch and is in terms of Monero's on-chain clock.
+  /// That means outputs whose additional timelocks are statisfied by `Instant::now()` (the time
+  /// according to the local system clock) may still be locked due to variance with Monero's clock.
   #[must_use]
   pub fn additional_timelock_satisfied_by(self, block: usize, time: u64) -> Vec<WalletOutput> {
     let mut res = vec![];

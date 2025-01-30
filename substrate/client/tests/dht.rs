@@ -1,4 +1,4 @@
-use serai_client::{primitives::NetworkId, Serai};
+use serai_client::{primitives::ExternalNetworkId, Serai};
 
 #[tokio::test]
 async fn dht() {
@@ -44,7 +44,7 @@ async fn dht() {
       assert!(!Serai::new(serai_rpc.clone())
         .await
         .unwrap()
-        .p2p_validators(NetworkId::Bitcoin)
+        .p2p_validators(ExternalNetworkId::Bitcoin.into())
         .await
         .unwrap()
         .is_empty());

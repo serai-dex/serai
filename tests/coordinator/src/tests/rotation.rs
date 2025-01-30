@@ -175,7 +175,7 @@ async fn set_rotation_test() {
         1,
       )
       .await;
-      allocate_stake(&serai, network, amount, &pair5, 2).await;
+      allocate_stake(&serai, network.into(), amount, &pair5, 2).await;
 
       // genesis keygen
       let _ = key_gen::<Secp256k1>(&mut processors, Session(0)).await;
@@ -188,12 +188,14 @@ async fn set_rotation_test() {
       }
 
       // wait until next session to see the effect on coordinator
-      wait_till_session_1(&serai, network).await;
+      wait_till_session_1(&serai, network.into()).await;
 
       // Ensure the new validator was included in the new set
       assert_eq!(
-        most_recent_new_set_event(&serai, network).await,
-        ValidatorSetsEvent::NewSet { set: ValidatorSet { session: Session(1), network } },
+        most_recent_new_set_event(&serai, network.into()).await,
+        ValidatorSetsEvent::NewSet {
+          set: ValidatorSet { session: Session(1), network: network.into() }
+        },
       );
 
       // add the last participant & do the keygen

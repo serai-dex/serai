@@ -10,7 +10,7 @@ use ciphersuite::{
 };
 use dkg::evrf::*;
 
-use serai_client::primitives::{NetworkId, insecure_arbitrary_key_from_name};
+use serai_client::primitives::{ExternalNetworkId, insecure_arbitrary_key_from_name};
 use messages::{ProcessorMessage, CoordinatorMessage};
 use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
@@ -36,7 +36,7 @@ pub struct EvrfPublicKeys {
 
 pub fn processor_instance(
   name: &str,
-  network: NetworkId,
+  network: ExternalNetworkId,
   port: u32,
   message_queue_key: <Ristretto as Ciphersuite>::F,
 ) -> (Vec<TestBodySpecification>, EvrfPublicKeys) {
@@ -65,10 +65,9 @@ pub fn processor_instance(
   };
 
   let network_str = match network {
-    NetworkId::Serai => panic!("starting a processor for Serai"),
-    NetworkId::Bitcoin => "bitcoin",
-    NetworkId::Ethereum => "ethereum",
-    NetworkId::Monero => "monero",
+    ExternalNetworkId::Bitcoin => "bitcoin",
+    ExternalNetworkId::Ethereum => "ethereum",
+    ExternalNetworkId::Monero => "monero",
   };
   let image = format!("{network_str}-processor");
   serai_docker_tests::build(image.clone());
@@ -90,7 +89,7 @@ pub fn processor_instance(
     .into(),
   )];
 
-  if network == NetworkId::Ethereum {
+  if network == ExternalNetworkId::Ethereum {
     serai_docker_tests::build("ethereum-relayer".to_string());
     res.push(
       TestBodySpecification::with_image(
@@ -119,7 +118,7 @@ pub struct ProcessorKeys {
 pub type Handles = (String, String, String, String);
 pub fn processor_stack(
   name: &str,
-  network: NetworkId,
+  network: ExternalNetworkId,
   network_hostname_override: Option<String>,
 ) -> (Handles, ProcessorKeys, Vec<TestBodySpecification>) {
   let (network_composition, network_rpc_port) = network_instance(network);
@@ -145,10 +144,9 @@ pub fn processor_stack(
   for (name, composition) in [
     Some((
       match network {
-        NetworkId::Serai => unreachable!(),
-        NetworkId::Bitcoin => "bitcoin",
-        NetworkId::Ethereum => "ethereum",
-        NetworkId::Monero => "monero",
+        ExternalNetworkId::Bitcoin => "bitcoin",
+        ExternalNetworkId::Ethereum => "ethereum",
+        ExternalNetworkId::Monero => "monero",
       },
       network_composition,
     )),
@@ -200,7 +198,7 @@ pub fn processor_stack(
 }
 
 pub struct Coordinator {
-  network: NetworkId,
+  network: ExternalNetworkId,
 
   network_handle: String,
   #[allow(unused)]
@@ -218,7 +216,7 @@ pub struct Coordinator {
 
 impl Coordinator {
   pub fn new(
-    network: NetworkId,
+    network: ExternalNetworkId,
     ops: &DockerOperations,
     handles: Handles,
     keys: ProcessorKeys,
@@ -256,7 +254,7 @@ impl Coordinator {
         let mut iters = 0;
         while iters < 60 {
           match network {
-            NetworkId::Bitcoin => {
+            ExternalNetworkId::Bitcoin => {
               use bitcoin_serai::rpc::Rpc;
 
               // Bitcoin's Rpc::new will test the connection
@@ -264,7 +262,7 @@ impl Coordinator {
                 break;
               }
             }
-            NetworkId::Ethereum => {
+            ExternalNetworkId::Ethereum => {
               use std::sync::Arc;
               use ethereum_serai::{
                 alloy::{
@@ -293,7 +291,7 @@ impl Coordinator {
                   provider
                     .raw_request::<_, ()>(
                       "anvil_setBalance".into(),
-                      [signer.to_string(), (tx.gas_limit * tx.gas_price).to_string()],
+                      [signer.to_string(), (u128::from(tx.gas_limit) * tx.gas_price).to_string()],
                     )
                     .await
                     .unwrap();
@@ -313,7 +311,7 @@ impl Coordinator {
                 break;
               }
             }
-            NetworkId::Monero => {
+            ExternalNetworkId::Monero => {
               use monero_simple_request_rpc::SimpleRequestRpc;
               use monero_wallet::rpc::Rpc;
 
@@ -327,7 +325,6 @@ impl Coordinator {
                 break;
               }
             }
-            NetworkId::Serai => panic!("processor is booting with external network of Serai"),
           }
 
           println!("external network RPC has yet to boot, waiting 1 sec, attempt {iters}");
@@ -385,7 +382,7 @@ impl Coordinator {
   pub async fn add_block(&self, ops: &DockerOperations) -> ([u8; 32], Vec<u8>) {
     let rpc_url = network_rpc(self.network, ops, &self.network_handle);
     match self.network {
-      NetworkId::Bitcoin => {
+      ExternalNetworkId::Bitcoin => {
         use bitcoin_serai::{
           bitcoin::{consensus::Encodable, network::Network, Script, Address},
           rpc::Rpc,
@@ -408,7 +405,7 @@ impl Coordinator {
         block.consensus_encode(&mut block_buf).unwrap();
         (hash, block_buf)
       }
-      NetworkId::Ethereum => {
+      ExternalNetworkId::Ethereum => {
         use ethereum_serai::alloy::{
           simple_request_transport::SimpleRequest,
           rpc_types::{BlockTransactionsKind, BlockNumberOrTag},
@@ -445,7 +442,7 @@ impl Coordinator {
           .into_bytes();
         (hash.into(), state)
       }
-      NetworkId::Monero => {
+      ExternalNetworkId::Monero => {
         use curve25519_dalek::{constants::ED25519_BASEPOINT_POINT, scalar::Scalar};
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::{rpc::Rpc, address::Network, ViewPair};
@@ -463,14 +460,13 @@ impl Coordinator {
         let hash = rpc.get_block_hash(rpc.get_height().await.unwrap() - 1).await.unwrap();
         (hash, rpc.get_block(hash).await.unwrap().serialize())
       }
-      NetworkId::Serai => panic!("processor tests adding block to Serai"),
     }
   }
 
   pub async fn sync(&self, ops: &DockerOperations, others: &[Coordinator]) {
     let rpc_url = network_rpc(self.network, ops, &self.network_handle);
     match self.network {
-      NetworkId::Bitcoin => {
+      ExternalNetworkId::Bitcoin => {
         use bitcoin_serai::{bitcoin::consensus::Encodable, rpc::Rpc};
 
         let rpc = Rpc::new(rpc_url).await.expect("couldn't connect to the Bitcoin RPC");
@@ -500,7 +496,7 @@ impl Coordinator {
           }
         }
       }
-      NetworkId::Ethereum => {
+      ExternalNetworkId::Ethereum => {
         use ethereum_serai::alloy::{
           simple_request_transport::SimpleRequest,
           rpc_types::{BlockTransactionsKind, BlockNumberOrTag},
@@ -551,7 +547,7 @@ impl Coordinator {
           //assert_eq!(expected_number, new_number);
         }
       }
-      NetworkId::Monero => {
+      ExternalNetworkId::Monero => {
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::rpc::Rpc;
 
@@ -582,14 +578,13 @@ impl Coordinator {
           }
         }
       }
-      NetworkId::Serai => panic!("processors tests syncing Serai nodes"),
     }
   }
 
   pub async fn publish_transaction(&self, ops: &DockerOperations, tx: &[u8]) {
     let rpc_url = network_rpc(self.network, ops, &self.network_handle);
     match self.network {
-      NetworkId::Bitcoin => {
+      ExternalNetworkId::Bitcoin => {
         use bitcoin_serai::{
           bitcoin::{consensus::Decodable, Transaction},
           rpc::Rpc,
@@ -599,7 +594,7 @@ impl Coordinator {
           Rpc::new(rpc_url).await.expect("couldn't connect to the coordinator's Bitcoin RPC");
         rpc.send_raw_transaction(&Transaction::consensus_decode(&mut &*tx).unwrap()).await.unwrap();
       }
-      NetworkId::Ethereum => {
+      ExternalNetworkId::Ethereum => {
         use ethereum_serai::alloy::{
           simple_request_transport::SimpleRequest,
           rpc_client::ClientBuilder,
@@ -612,7 +607,7 @@ impl Coordinator {
         );
         let _ = provider.send_raw_transaction(tx).await.unwrap();
       }
-      NetworkId::Monero => {
+      ExternalNetworkId::Monero => {
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::{transaction::Transaction, rpc::Rpc};
 
@@ -621,15 +616,15 @@ impl Coordinator {
           .expect("couldn't connect to the coordinator's Monero RPC");
         rpc.publish_transaction(&Transaction::read(&mut &*tx).unwrap()).await.unwrap();
       }
-      NetworkId::Serai => panic!("processor tests broadcasting block to Serai"),
     }
   }
 
   pub async fn publish_eventuality_completion(&self, ops: &DockerOperations, tx: &[u8]) {
     match self.network {
-      NetworkId::Bitcoin | NetworkId::Monero => self.publish_transaction(ops, tx).await,
-      NetworkId::Ethereum => (),
-      NetworkId::Serai => panic!("processor tests broadcasting block to Serai"),
+      ExternalNetworkId::Bitcoin | ExternalNetworkId::Monero => {
+        self.publish_transaction(ops, tx).await
+      }
+      ExternalNetworkId::Ethereum => (),
     }
   }
 
@@ -640,7 +635,7 @@ impl Coordinator {
   ) -> Option<Vec<u8>> {
     let rpc_url = network_rpc(self.network, ops, &self.network_handle);
     match self.network {
-      NetworkId::Bitcoin => {
+      ExternalNetworkId::Bitcoin => {
         use bitcoin_serai::{bitcoin::consensus::Encodable, rpc::Rpc};
 
         let rpc =
@@ -662,7 +657,7 @@ impl Coordinator {
           None
         }
       }
-      NetworkId::Ethereum => {
+      ExternalNetworkId::Ethereum => {
         /*
         let provider = RootProvider::<_, Ethereum>::new(
           ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
@@ -712,7 +707,7 @@ impl Coordinator {
 
         None
       }
-      NetworkId::Monero => {
+      ExternalNetworkId::Monero => {
         use monero_simple_request_rpc::SimpleRequestRpc;
         use monero_wallet::rpc::Rpc;
 
@@ -727,7 +722,6 @@ impl Coordinator {
           None
         }
       }
-      NetworkId::Serai => panic!("processor tests broadcasting block to Serai"),
     }
   }
 }

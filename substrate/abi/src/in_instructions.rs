@@ -17,7 +17,7 @@ pub enum Call {
 #[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Event {
   Batch {
-    network: NetworkId,
+    network: ExternalNetworkId,
     publishing_session: Session,
     id: u32,
     external_network_block_hash: BlockHash,
@@ -25,6 +25,6 @@ pub enum Event {
     in_instruction_results: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
   },
   Halt {
-    network: NetworkId,
+    network: ExternalNetworkId,
   },
 }

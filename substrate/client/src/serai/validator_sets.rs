@@ -3,12 +3,12 @@ use scale::Encode;
 use sp_core::sr25519::{Public, Signature};
 use sp_runtime::BoundedVec;
 
-use serai_abi::primitives::Amount;
+use serai_abi::{primitives::Amount, validator_sets::primitives::ExternalValidatorSet};
 pub use serai_abi::validator_sets::primitives;
 use primitives::{MAX_KEY_LEN, Session, ValidatorSet, KeyPair, SlashReport};
 
 use crate::{
-  primitives::{EmbeddedEllipticCurve, NetworkId},
+  primitives::{NetworkId, ExternalNetworkId, EmbeddedEllipticCurve, SeraiAddress},
   Transaction, Serai, TemporalSerai, SeraiError,
 };
 
@@ -183,13 +183,13 @@ impl SeraiValidatorSets<'_> {
   }
 
   // TODO: Store these separately since we almost never need both at once?
-  pub async fn keys(&self, set: ValidatorSet) -> Result<Option<KeyPair>, SeraiError> {
+  pub async fn keys(&self, set: ExternalValidatorSet) -> Result<Option<KeyPair>, SeraiError> {
     self.0.storage(PALLET, "Keys", (sp_core::hashing::twox_64(&set.encode()), set)).await
   }
 
   pub async fn key_pending_slash_report(
     &self,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> Result<Option<Public>, SeraiError> {
     self.0.storage(PALLET, "PendingSlashReport", network).await
   }

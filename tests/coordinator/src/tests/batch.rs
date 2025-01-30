@@ -16,7 +16,7 @@ use dkg::Participant;
 use scale::Encode;
 
 use serai_client::{
-  primitives::{NetworkId, BlockHash, Signature},
+  primitives::{BlockHash, Signature},
   in_instructions::{
     primitives::{Batch, SignedBatch, batch_message},
     InInstructionsEvent,
@@ -274,7 +274,7 @@ async fn batch_test() {
         Session(0),
         &substrate_key,
         Batch {
-          network: NetworkId::Bitcoin,
+          network: ExternalNetworkId::Bitcoin,
           id: 0,
           block: BlockHash([0x22; 32]),
           instructions: vec![],

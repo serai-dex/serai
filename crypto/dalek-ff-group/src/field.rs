@@ -244,7 +244,16 @@ impl FieldElement {
             res *= res;
           }
         }
-        res *= table[usize::from(bits)];
+
+        let mut scale_by = FieldElement::ONE;
+        #[allow(clippy::needless_range_loop)]
+        for i in 0 .. 16 {
+          #[allow(clippy::cast_possible_truncation)] // Safe since 0 .. 16
+          {
+            scale_by = <_>::conditional_select(&scale_by, &table[i], bits.ct_eq(&(i as u8)));
+          }
+        }
+        res *= scale_by;
         bits = 0;
       }
     }

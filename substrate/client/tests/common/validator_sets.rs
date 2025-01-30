@@ -18,7 +18,7 @@ use schnorrkel::Schnorrkel;
 use serai_client::{
   primitives::EmbeddedEllipticCurve,
   validator_sets::{
-    primitives::{MAX_KEY_LEN, ValidatorSet, KeyPair, musig_context, set_keys_message},
+    primitives::{MAX_KEY_LEN, ExternalValidatorSet, KeyPair, musig_context, set_keys_message},
     ValidatorSetsEvent,
   },
   Amount, Serai, SeraiValidatorSets,
@@ -29,7 +29,7 @@ use crate::common::tx::publish_tx;
 #[allow(dead_code)]
 pub async fn set_keys(
   serai: &Serai,
-  set: ValidatorSet,
+  set: ExternalValidatorSet,
   key_pair: KeyPair,
   pairs: &[Pair],
 ) -> [u8; 32] {
@@ -49,7 +49,8 @@ pub async fn set_keys(
     assert_eq!(Ristretto::generator() * secret_key, pub_keys[i]);
 
     threshold_keys.push(
-      musig::<Ristretto>(&musig_context(set), &Zeroizing::new(secret_key), &pub_keys).unwrap(),
+      musig::<Ristretto>(&musig_context(set.into()), &Zeroizing::new(secret_key), &pub_keys)
+        .unwrap(),
     );
   }
 

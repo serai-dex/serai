@@ -19,7 +19,7 @@ use sp_core::{ConstU32, bounded::BoundedVec, sr25519::Public};
 #[cfg(not(feature = "std"))]
 use sp_std::vec::Vec;
 
-use serai_primitives::NetworkId;
+use serai_primitives::{ExternalNetworkId, NetworkId};
 
 mod slash_points;
 pub use slash_points::*;
@@ -55,6 +55,33 @@ pub struct Session(pub u32);
 pub struct ValidatorSet {
   pub session: Session,
   pub network: NetworkId,
+}
+
+/// The type used to identify a specific validator set during a specific session.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct ExternalValidatorSet {
+  pub session: Session,
+  pub network: ExternalNetworkId,
+}
+
+impl From<ExternalValidatorSet> for ValidatorSet {
+  fn from(set: ExternalValidatorSet) -> Self {
+    ValidatorSet { session: set.session, network: set.network.into() }
+  }
+}
+
+impl TryFrom<ValidatorSet> for ExternalValidatorSet {
+  type Error = ();
+
+  fn try_from(set: ValidatorSet) -> Result<Self, Self::Error> {
+    match set.network {
+      NetworkId::Serai => Err(())?,
+      NetworkId::External(network) => Ok(ExternalValidatorSet { session: set.session, network }),
+    }
+  }
 }
 
 /// The type representing a Key from an external network.

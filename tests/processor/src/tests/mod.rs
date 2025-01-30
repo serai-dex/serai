@@ -15,7 +15,7 @@ mod send;
 pub(crate) const COORDINATORS: usize = 4;
 pub(crate) const THRESHOLD: usize = ((COORDINATORS * 2) / 3) + 1;
 
-fn new_test(network: NetworkId) -> (Vec<(Handles, ProcessorKeys)>, DockerTest) {
+fn new_test(network: ExternalNetworkId) -> (Vec<(Handles, ProcessorKeys)>, DockerTest) {
   let mut coordinators = vec![];
   let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   let mut eth_handle = None;
@@ -26,7 +26,7 @@ fn new_test(network: NetworkId) -> (Vec<(Handles, ProcessorKeys)>, DockerTest) {
       processor_stack(&i.to_string(), network, eth_handle.clone());
     // TODO: Remove this once https://github.com/foundry-rs/foundry/issues/7955
     // This has all processors share an Ethereum node until we can sync controlled nodes
-    if network == NetworkId::Ethereum {
+    if network == ExternalNetworkId::Ethereum {
       eth_handle = eth_handle.or_else(|| Some(handles.0.clone()));
     }
     coordinators.push((handles, keys));

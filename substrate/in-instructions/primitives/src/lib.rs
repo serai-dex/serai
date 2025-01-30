@@ -97,7 +97,7 @@ pub struct RefundableInInstruction {
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct InInstructionWithBalance {
   pub instruction: InInstruction,
-  pub balance: Balance,
+  pub balance: ExternalBalance,
 }
 
 #[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
@@ -105,7 +105,7 @@ pub struct InInstructionWithBalance {
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Batch {
-  pub network: NetworkId,
+  pub network: ExternalNetworkId,
   pub id: u32,
   pub external_network_block_hash: BlockHash,
   pub instructions: Vec<InInstructionWithBalance>,
