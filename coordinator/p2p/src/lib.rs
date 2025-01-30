@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{primitives::NetworkId, validator_sets::primitives::ValidatorSet};
+use serai_client::{primitives::ExternalNetworkId, validator_sets::primitives::ExternalValidatorSet};
 
 use serai_db::Db;
 use tributary_sdk::{ReadWrite, TransactionTrait, Tributary, TributaryReader};
@@ -25,7 +25,7 @@ use crate::heartbeat::HeartbeatTask;
 #[derive(Clone, Copy, BorshSerialize, BorshDeserialize, Debug)]
 pub struct Heartbeat {
   /// The Tributary this is the heartbeat of.
-  pub set: ValidatorSet,
+  pub set: ExternalValidatorSet,
   /// The hash of the latest block added to the Tributary.
   pub latest_block_hash: [u8; 32],
 }
@@ -56,7 +56,7 @@ pub trait P2p:
   type Peer<'a>: Peer<'a>;
 
   /// Fetch the peers for this network.
-  fn peers(&self, network: NetworkId) -> impl Send + Future<Output = Vec<Self::Peer<'_>>>;
+  fn peers(&self, network: ExternalNetworkId) -> impl Send + Future<Output = Vec<Self::Peer<'_>>>;
 
   /// Broadcast a cosign.
   fn publish_cosign(&self, cosign: SignedCosign) -> impl Send + Future<Output = ()>;
@@ -131,13 +131,13 @@ fn handle_heartbeat<D: Db, T: TransactionTrait>(
 pub async fn run<TD: Db, Tx: TransactionTrait, P: P2p>(
   db: impl Db,
   p2p: P,
-  mut add_tributary: mpsc::UnboundedReceiver<(ValidatorSet, Tributary<TD, Tx, P>)>,
-  mut retire_tributary: mpsc::UnboundedReceiver<ValidatorSet>,
+  mut add_tributary: mpsc::UnboundedReceiver<(ExternalValidatorSet, Tributary<TD, Tx, P>)>,
+  mut retire_tributary: mpsc::UnboundedReceiver<ExternalValidatorSet>,
   send_cosigns: mpsc::UnboundedSender<SignedCosign>,
 ) {
-  let mut readers = HashMap::<ValidatorSet, TributaryReader<TD, Tx>>::new();
+  let mut readers = HashMap::<ExternalValidatorSet, TributaryReader<TD, Tx>>::new();
   let mut tributaries = HashMap::<[u8; 32], mpsc::UnboundedSender<Vec<u8>>>::new();
-  let mut heartbeat_tasks = HashMap::<ValidatorSet, _>::new();
+  let mut heartbeat_tasks = HashMap::<ExternalValidatorSet, _>::new();
 
   loop {
     tokio::select! {

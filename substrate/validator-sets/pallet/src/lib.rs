@@ -1154,8 +1154,8 @@ pub mod pallet {
           // session on this assumption
           assert_eq!(Pallet::<T>::latest_decided_session(network.into()), Some(current_session));
 
-          let participants =
-            Participants::<T>::get(network).expect("session existed without participants");
+          let participants = Participants::<T>::get(NetworkId::from(network))
+            .expect("session existed without participants");
 
           // Check the bitvec is of the proper length
           if participants.len() != signature_participants.len() {
@@ -1189,7 +1189,7 @@ pub mod pallet {
           // Verify the signature with the MuSig key of the signers
           // We theoretically don't need set_keys_message to bind to removed_participants, as the
           // key we're signing with effectively already does so, yet there's no reason not to
-          if !musig_key(set, &signers).verify(&set_keys_message(&set, key_pair), signature) {
+          if !musig_key(set.into(), &signers).verify(&set_keys_message(&set, key_pair), signature) {
             Err(InvalidTransaction::BadProof)?;
           }
 
@@ -1207,8 +1207,10 @@ pub mod pallet {
           };
 
           // There must have been a previous session is PendingSlashReport is populated
-          let set =
-            ExternalValidatorSet { network, session: Session(Self::session(network).unwrap().0 - 1) };
+          let set = ExternalValidatorSet {
+            network,
+            session: Session(Self::session(NetworkId::from(network)).unwrap().0 - 1),
+          };
           if !key.verify(&slashes.report_slashes_message(), signature) {
             Err(InvalidTransaction::BadProof)?;
           }

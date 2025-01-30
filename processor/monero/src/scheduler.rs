@@ -9,7 +9,7 @@ use ciphersuite::{Ciphersuite, Ed25519};
 use monero_wallet::rpc::{FeeRate, RpcError};
 
 use serai_client::{
-  primitives::{Coin, Amount},
+  primitives::{ExternalCoin, Amount},
   networks::monero::Address,
 };
 
@@ -106,7 +106,7 @@ async fn signable_transaction(
     .map(|payment| {
       (MoneroAddress::from(*payment.address()), {
         let balance = payment.balance();
-        assert_eq!(balance.coin, Coin::Monero);
+        assert_eq!(balance.coin, ExternalCoin::Monero);
         balance.amount.0
       })
     })

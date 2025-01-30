@@ -2,7 +2,7 @@ use core::future::Future;
 
 use bitcoin_serai::rpc::{RpcError, Rpc as BRpc};
 
-use serai_client::primitives::{NetworkId, Coin, Amount};
+use serai_client::primitives::{ExternalNetworkId, ExternalCoin, Amount};
 
 use serai_db::Db;
 use scanner::ScannerFeed;
@@ -21,7 +21,7 @@ pub(crate) struct Rpc<D: Db> {
 }
 
 impl<D: Db> ScannerFeed for Rpc<D> {
-  const NETWORK: NetworkId = NetworkId::Bitcoin;
+  const NETWORK: ExternalNetworkId = ExternalNetworkId::Bitcoin;
   // 6 confirmations is widely accepted as secure and shouldn't occur
   const CONFIRMATIONS: u64 = 6;
   // The window length should be roughly an hour
@@ -118,8 +118,8 @@ impl<D: Db> ScannerFeed for Rpc<D> {
     }
   }
 
-  fn dust(coin: Coin) -> Amount {
-    assert_eq!(coin, Coin::Bitcoin);
+  fn dust(coin: ExternalCoin) -> Amount {
+    assert_eq!(coin, ExternalCoin::Bitcoin);
 
     /*
       A Taproot input is:
@@ -158,11 +158,11 @@ impl<D: Db> ScannerFeed for Rpc<D> {
 
   fn cost_to_aggregate(
     &self,
-    coin: Coin,
+    coin: ExternalCoin,
     _reference_block: &Self::Block,
   ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>> {
     async move {
-      assert_eq!(coin, Coin::Bitcoin);
+      assert_eq!(coin, ExternalCoin::Bitcoin);
       // TODO
       Ok(Amount(0))
     }

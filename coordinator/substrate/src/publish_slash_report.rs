@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serai_db::{DbTxn, Db};
 
-use serai_client::{primitives::NetworkId, validator_sets::primitives::Session, Serai};
+use serai_client::{primitives::ExternalNetworkId, validator_sets::primitives::Session, Serai};
 
 use serai_task::ContinuallyRan;
 
@@ -24,7 +24,7 @@ impl<D: Db> PublishSlashReportTask<D> {
 
 impl<D: Db> PublishSlashReportTask<D> {
   // Returns if a slash report was successfully published
-  async fn publish(&mut self, network: NetworkId) -> Result<bool, String> {
+  async fn publish(&mut self, network: ExternalNetworkId) -> Result<bool, String> {
     let mut txn = self.db.txn();
     let Some((session, slash_report)) = SlashReports::take(&mut txn, network) else {
       // No slash report to publish
@@ -36,7 +36,7 @@ impl<D: Db> PublishSlashReportTask<D> {
     let serai = self.serai.as_of_latest_finalized_block().await.map_err(|e| format!("{e:?}"))?;
     let serai = serai.validator_sets();
     let session_after_slash_report = Session(session.0 + 1);
-    let current_session = serai.session(network).await.map_err(|e| format!("{e:?}"))?;
+    let current_session = serai.session(network.into()).await.map_err(|e| format!("{e:?}"))?;
     let current_session = current_session.map(|session| session.0);
     // Only attempt to publish the slash report for session #n while session #n+1 is still
     // active
@@ -84,11 +84,7 @@ impl<D: Db> ContinuallyRan for PublishSlashReportTask<D> {
     async move {
       let mut made_progress = false;
       let mut error = None;
-      for network in serai_client::primitives::NETWORKS {
-        if network == NetworkId::Serai {
-          continue;
-        };
-
+      for network in serai_client::primitives::EXTERNAL_NETWORKS {
         let network_res = self.publish(network).await;
         // We made progress if any network successfully published their slash report
         made_progress |= network_res == Ok(true);

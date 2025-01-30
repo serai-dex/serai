@@ -7,11 +7,11 @@ use sp_core::{
 
 use serai_client::{
   primitives::{
-    FAST_EPOCH_DURATION, TARGET_BLOCK_TIME, NETWORKS, BlockHash, NetworkId, EmbeddedEllipticCurve,
-    insecure_pair_from_name,
+    FAST_EPOCH_DURATION, TARGET_BLOCK_TIME, NETWORKS, BlockHash, ExternalNetworkId, NetworkId,
+    EmbeddedEllipticCurve, Amount, insecure_pair_from_name,
   },
   validator_sets::{
-    primitives::{Session, ValidatorSet, ExternalValidatorSet, KeyPair},
+    primitives::{Session, ExternalValidatorSet, ValidatorSet, KeyPair},
     ValidatorSetsEvent,
   },
   in_instructions::{
@@ -313,8 +313,12 @@ async fn validator_set_rotation() {
           // provide a batch to complete the handover and retire the previous set
           let mut block_hash = BlockHash([0; 32]);
           OsRng.fill_bytes(&mut block_hash.0);
-          let batch =
-            Batch { network: network.try_into().unwrap(), id: 0, external_network_block_hash: block_hash, instructions: vec![] };
+          let batch = Batch {
+            network: network.try_into().unwrap(),
+            id: 0,
+            external_network_block_hash: block_hash,
+            instructions: vec![],
+          };
           publish_tx(
             &serai,
             &SeraiInInstructions::execute_batch(SignedBatch {

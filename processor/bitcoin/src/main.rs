@@ -90,7 +90,7 @@ use bitcoin_serai::bitcoin::{
 };
 
 use serai_client::{
-  primitives::{MAX_DATA_LEN, Coin, NetworkId, Amount, Balance},
+  primitives::{MAX_DATA_LEN, ExternalNetworkId, ExternalCoin, Amount, Balance},
   networks::bitcoin::Address,
 };
 */

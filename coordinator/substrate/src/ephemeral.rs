@@ -4,8 +4,8 @@ use std::sync::Arc;
 use futures::stream::{StreamExt, FuturesOrdered};
 
 use serai_client::{
-  primitives::{NetworkId, SeraiAddress, EmbeddedEllipticCurve},
-  validator_sets::primitives::MAX_KEY_SHARES_PER_SET,
+  primitives::{SeraiAddress, EmbeddedEllipticCurve},
+  validator_sets::primitives::{MAX_KEY_SHARES_PER_SET, ExternalValidatorSet},
   Serai,
 };
 
@@ -130,16 +130,13 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
           let serai_client::validator_sets::ValidatorSetsEvent::NewSet { set } = &new_set else {
             panic!("NewSet event wasn't a NewSet event: {new_set:?}");
           };
-
           // We only coordinate over external networks
-          if set.network == NetworkId::Serai {
-            continue;
-          }
+          let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
 
           let serai = self.serai.as_of(block.block_hash);
           let serai = serai.validator_sets();
           let Some(validators) =
-            serai.participants(set.network).await.map_err(|e| format!("{e:?}"))?
+            serai.participants(set.network.into()).await.map_err(|e| format!("{e:?}"))?
           else {
             Err(format!(
               "block #{block_number} declared a new set but didn't have the participants"
@@ -222,11 +219,11 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
             }
 
             let mut new_set = NewSetInformation {
-              set: *set,
+              set,
               serai_block: block.block_hash,
               declaration_time: block.time,
-              // TODO: Why do we have this as an explicit field here?
-              // Shouldn't this be inlined into the Processor's key gen code, where it's used?
+              // TODO: This should be inlined into the Processor's key gen code
+              // It's legacy from when we removed participants from the key gen
               threshold: ((total_weight * 2) / 3) + 1,
               validators,
               evrf_public_keys,
@@ -246,7 +243,8 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
           else {
             panic!("AcceptedHandover event wasn't a AcceptedHandover event: {accepted_handover:?}");
           };
-          crate::SignSlashReport::send(&mut txn, *set);
+          let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
+          crate::SignSlashReport::send(&mut txn, set);
         }
 
         txn.commit();

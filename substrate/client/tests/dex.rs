@@ -6,7 +6,7 @@ use serai_abi::in_instructions::primitives::DexCall;
 
 use serai_client::{
   primitives::{
-    BlockHash, NetworkId, Coin, Amount, Balance, SeraiAddress, ExternalAddress,
+    BlockHash, ExternalCoin, Coin, Amount, ExternalBalance, Balance, SeraiAddress, ExternalAddress,
     insecure_pair_from_name,
   },
   in_instructions::primitives::{

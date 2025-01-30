@@ -10,8 +10,8 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use dkg::Participant;
 
 use serai_client::{
-  primitives::{NetworkId, SeraiAddress, Signature},
-  validator_sets::primitives::{Session, ValidatorSet, KeyPair, SlashReport},
+  primitives::{ExternalNetworkId, SeraiAddress, Signature},
+  validator_sets::primitives::{Session, ExternalValidatorSet, KeyPair, SlashReport},
   in_instructions::primitives::SignedBatch,
   Transaction,
 };
@@ -35,7 +35,7 @@ pub use publish_slash_report::PublishSlashReportTask;
 #[borsh(init = init_participant_indexes)]
 pub struct NewSetInformation {
   /// The set.
-  pub set: ValidatorSet,
+  pub set: ExternalValidatorSet,
   /// The Serai block which declared it.
   pub serai_block: [u8; 32],
   /// The time of the block which declared it, in seconds.
@@ -82,24 +82,24 @@ mod _public_db {
   db_channel!(
     CoordinatorSubstrate {
       // Canonical messages to send to the processor
-      Canonical: (network: NetworkId) -> messages::substrate::CoordinatorMessage,
+      Canonical: (network: ExternalNetworkId) -> messages::substrate::CoordinatorMessage,
 
       // Relevant new set, from an ephemeral event stream
       NewSet: () -> NewSetInformation,
       // Potentially relevant sign slash report, from an ephemeral event stream
-      SignSlashReport: (set: ValidatorSet) -> (),
+      SignSlashReport: (set: ExternalValidatorSet) -> (),
 
       // Signed batches to publish onto the Serai network
-      SignedBatches: (network: NetworkId) -> SignedBatch,
+      SignedBatches: (network: ExternalNetworkId) -> SignedBatch,
     }
   );
 
   create_db!(
     CoordinatorSubstrate {
       // Keys to set on the Serai network
-      Keys: (network: NetworkId) -> (Session, Vec<u8>),
+      Keys: (network: ExternalNetworkId) -> (Session, Vec<u8>),
       // Slash reports to publish onto the Serai network
-      SlashReports: (network: NetworkId) -> (Session, Vec<u8>),
+      SlashReports: (network: ExternalNetworkId) -> (Session, Vec<u8>),
     }
   );
 }
@@ -109,7 +109,7 @@ pub struct Canonical;
 impl Canonical {
   pub(crate) fn send(
     txn: &mut impl DbTxn,
-    network: NetworkId,
+    network: ExternalNetworkId,
     msg: &messages::substrate::CoordinatorMessage,
   ) {
     _public_db::Canonical::send(txn, network, msg);
@@ -117,7 +117,7 @@ impl Canonical {
   /// Try to receive a canonical event, returning `None` if there is none to receive.
   pub fn try_recv(
     txn: &mut impl DbTxn,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> Option<messages::substrate::CoordinatorMessage> {
     _public_db::Canonical::try_recv(txn, network)
   }
@@ -141,12 +141,12 @@ impl NewSet {
 /// notifications for all relevant validator sets will be included.
 pub struct SignSlashReport;
 impl SignSlashReport {
-  pub(crate) fn send(txn: &mut impl DbTxn, set: ValidatorSet) {
+  pub(crate) fn send(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
     _public_db::SignSlashReport::send(txn, set, &());
   }
   /// Try to receive a notification to sign a slash report, returning `None` if there is none to
   /// receive.
-  pub fn try_recv(txn: &mut impl DbTxn, set: ValidatorSet) -> Option<()> {
+  pub fn try_recv(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Option<()> {
     _public_db::SignSlashReport::try_recv(txn, set)
   }
 }
@@ -160,7 +160,7 @@ impl Keys {
   /// reported at once.
   pub fn set(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     key_pair: KeyPair,
     signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
     signature: Signature,
@@ -180,7 +180,10 @@ impl Keys {
     );
     _public_db::Keys::set(txn, set.network, &(set.session, tx.encode()));
   }
-  pub(crate) fn take(txn: &mut impl DbTxn, network: NetworkId) -> Option<(Session, Transaction)> {
+  pub(crate) fn take(
+    txn: &mut impl DbTxn,
+    network: ExternalNetworkId,
+  ) -> Option<(Session, Transaction)> {
     let (session, tx) = _public_db::Keys::take(txn, network)?;
     Some((session, <_>::decode(&mut tx.as_slice()).unwrap()))
   }
@@ -193,7 +196,7 @@ impl SignedBatches {
   pub fn send(txn: &mut impl DbTxn, batch: &SignedBatch) {
     _public_db::SignedBatches::send(txn, batch.batch.network, batch);
   }
-  pub(crate) fn try_recv(txn: &mut impl DbTxn, network: NetworkId) -> Option<SignedBatch> {
+  pub(crate) fn try_recv(txn: &mut impl DbTxn, network: ExternalNetworkId) -> Option<SignedBatch> {
     _public_db::SignedBatches::try_recv(txn, network)
   }
 }
@@ -207,7 +210,7 @@ impl SlashReports {
   /// slashes reported at once.
   pub fn set(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     slash_report: SlashReport,
     signature: Signature,
   ) {
@@ -225,7 +228,10 @@ impl SlashReports {
     );
     _public_db::SlashReports::set(txn, set.network, &(set.session, tx.encode()));
   }
-  pub(crate) fn take(txn: &mut impl DbTxn, network: NetworkId) -> Option<(Session, Transaction)> {
+  pub(crate) fn take(
+    txn: &mut impl DbTxn,
+    network: ExternalNetworkId,
+  ) -> Option<(Session, Transaction)> {
     let (session, tx) = _public_db::SlashReports::take(txn, network)?;
     Some((session, <_>::decode(&mut tx.as_slice()).unwrap()))
   }

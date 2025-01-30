@@ -2,7 +2,7 @@ use core::future::Future;
 use std::sync::Arc;
 
 #[rustfmt::skip]
-use serai_client::{primitives::NetworkId, in_instructions::primitives::SignedBatch, SeraiError, Serai};
+use serai_client::{primitives::ExternalNetworkId, in_instructions::primitives::SignedBatch, SeraiError, Serai};
 
 use serai_db::{Get, DbTxn, Db, create_db};
 use serai_task::ContinuallyRan;
@@ -11,8 +11,8 @@ use crate::SignedBatches;
 
 create_db!(
   CoordinatorSubstrate {
-    LastPublishedBatch: (network: NetworkId) -> u32,
-    BatchesToPublish: (network: NetworkId, batch: u32) -> SignedBatch,
+    LastPublishedBatch: (network: ExternalNetworkId) -> u32,
+    BatchesToPublish: (network: ExternalNetworkId, batch: u32) -> SignedBatch,
   }
 );
 
@@ -20,19 +20,13 @@ create_db!(
 pub struct PublishBatchTask<D: Db> {
   db: D,
   serai: Arc<Serai>,
-  network: NetworkId,
+  network: ExternalNetworkId,
 }
 
 impl<D: Db> PublishBatchTask<D> {
   /// Create a task to publish `SignedBatch`s onto Serai.
-  ///
-  /// Returns None if `network == NetworkId::Serai`.
-  // TODO: ExternalNetworkId
-  pub fn new(db: D, serai: Arc<Serai>, network: NetworkId) -> Option<Self> {
-    if network == NetworkId::Serai {
-      None?
-    };
-    Some(Self { db, serai, network })
+  pub fn new(db: D, serai: Arc<Serai>, network: ExternalNetworkId) -> Self {
+    Self { db, serai, network }
   }
 }
 

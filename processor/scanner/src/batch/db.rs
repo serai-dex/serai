@@ -7,7 +7,7 @@ use scale::{Encode, Decode, IoReader};
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db};
 
-use serai_primitives::Balance;
+use serai_primitives::ExternalBalance;
 use serai_validator_sets_primitives::Session;
 
 use primitives::EncodableG;
@@ -39,7 +39,7 @@ create_db!(
 
 pub(crate) struct ReturnInformation<S: ScannerFeed> {
   pub(crate) address: AddressFor<S>,
-  pub(crate) balance: Balance,
+  pub(crate) balance: ExternalBalance,
 }
 
 pub(crate) struct BatchDb<S: ScannerFeed>(PhantomData<S>);
@@ -116,7 +116,7 @@ impl<S: ScannerFeed> BatchDb<S> {
 
       res.push((opt[0] == 1).then(|| {
         let address = AddressFor::<S>::deserialize_reader(&mut buf).unwrap();
-        let balance = Balance::decode(&mut IoReader(&mut buf)).unwrap();
+        let balance = ExternalBalance::decode(&mut IoReader(&mut buf)).unwrap();
         ReturnInformation { address, balance }
       }));
     }

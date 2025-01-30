@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 use serai_db::{Get, DbTxn, Db as DbTrait, create_db, db_channel};
 
 use scale::Encode;
-use serai_client::validator_sets::primitives::ValidatorSet;
+use serai_client::validator_sets::primitives::ExternalValidatorSet;
 
 use tributary_sdk::{TransactionKind, TransactionError, ProvidedError, TransactionTrait, Tributary};
 
@@ -33,13 +33,13 @@ use crate::{
 
 create_db! {
   Coordinator {
-     PublishOnRecognition: (set: ValidatorSet, topic: Topic) -> Transaction,
+     PublishOnRecognition: (set: ExternalValidatorSet, topic: Topic) -> Transaction,
   }
 }
 
 db_channel! {
   Coordinator {
-    PendingCosigns: (set: ValidatorSet) -> CosignIntent,
+    PendingCosigns: (set: ExternalValidatorSet) -> CosignIntent,
   }
 }
 
@@ -48,7 +48,7 @@ db_channel! {
 /// This is not a well-designed function. This is specific to the context in which its called,
 /// within this file. It should only be considered an internal helper for this domain alone.
 async fn provide_transaction<TD: DbTrait, P: P2p>(
-  set: ValidatorSet,
+  set: ExternalValidatorSet,
   tributary: &Tributary<TD, Transaction, P>,
   tx: Transaction,
 ) {
@@ -211,7 +211,7 @@ async fn add_signed_unsigned_transaction<TD: DbTrait, P: P2p>(
 }
 
 async fn add_with_recognition_check<TD: DbTrait, P: P2p>(
-  set: ValidatorSet,
+  set: ExternalValidatorSet,
   tributary_db: &mut TD,
   tributary: &Tributary<TD, Transaction, P>,
   key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
@@ -350,7 +350,7 @@ impl<CD: DbTrait, TD: DbTrait, P: P2p> ContinuallyRan for AddTributaryTransactio
 /// Takes the messages from ScanTributaryTask and publishes them to the message-queue.
 pub(crate) struct TributaryProcessorMessagesTask<TD: DbTrait> {
   tributary_db: TD,
-  set: ValidatorSet,
+  set: ExternalValidatorSet,
   message_queue: Arc<MessageQueue>,
 }
 impl<TD: DbTrait> ContinuallyRan for TributaryProcessorMessagesTask<TD> {
@@ -430,7 +430,7 @@ impl<CD: DbTrait, TD: DbTrait, P: P2p> ContinuallyRan for SignSlashReportTask<CD
 /// Run the scan task whenever the Tributary adds a new block.
 async fn scan_on_new_block<CD: DbTrait, TD: DbTrait, P: P2p>(
   db: CD,
-  set: ValidatorSet,
+  set: ExternalValidatorSet,
   tributary: Tributary<TD, Transaction, P>,
   scan_tributary_task: TaskHandle,
   tasks_to_keep_alive: Vec<TaskHandle>,
@@ -469,7 +469,7 @@ pub(crate) async fn spawn_tributary<P: P2p>(
   db: Db,
   message_queue: Arc<MessageQueue>,
   p2p: P,
-  p2p_add_tributary: &mpsc::UnboundedSender<(ValidatorSet, Tributary<Db, Transaction, P>)>,
+  p2p_add_tributary: &mpsc::UnboundedSender<(ExternalValidatorSet, Tributary<Db, Transaction, P>)>,
   set: NewSetInformation,
   serai_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
 ) {

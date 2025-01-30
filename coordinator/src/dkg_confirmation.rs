@@ -17,7 +17,7 @@ use serai_db::{DbTxn, Db as DbTrait};
 
 use serai_client::{
   primitives::SeraiAddress,
-  validator_sets::primitives::{ValidatorSet, musig_context, set_keys_message},
+  validator_sets::primitives::{ExternalValidatorSet, musig_context, set_keys_message},
 };
 
 use serai_task::{DoesNotError, ContinuallyRan};
@@ -141,7 +141,7 @@ impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
     Self { db, set, tributary_db, key, signer: None }
   }
 
-  fn slash(db: &mut CD, set: ValidatorSet, validator: SeraiAddress) {
+  fn slash(db: &mut CD, set: ExternalValidatorSet, validator: SeraiAddress) {
     let mut txn = db.txn();
     TributaryTransactionsFromDkgConfirmation::send(
       &mut txn,
@@ -153,7 +153,7 @@ impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
 
   fn preprocess(
     db: &mut CD,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     attempt: u32,
     key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
     signer: &mut Option<Signer>,
@@ -162,7 +162,9 @@ impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
     let (machine, preprocess) = AlgorithmMachine::new(
       schnorrkel(),
       // We use a 1-of-1 Musig here as we don't know who will actually be in this Musig yet
-      musig(&musig_context(set), key, &[Ristretto::generator() * key.deref()]).unwrap().into(),
+      musig(&musig_context(set.into()), key, &[Ristretto::generator() * key.deref()])
+        .unwrap()
+        .into(),
     )
     .preprocess(&mut OsRng);
     // We take the preprocess so we can use it in a distinct machine with the actual Musig
@@ -256,8 +258,9 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                 })
                 .collect::<Vec<_>>();
 
-              let keys =
-                musig(&musig_context(self.set.set), &self.key, &musig_public_keys).unwrap().into();
+              let keys = musig(&musig_context(self.set.set.into()), &self.key, &musig_public_keys)
+                .unwrap()
+                .into();
 
               // Rebuild the machine
               let (machine, preprocess_from_cache) =

@@ -3,7 +3,7 @@ use std::io;
 use scale::{Encode, Decode, IoReader};
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::Balance;
+use serai_primitives::ExternalBalance;
 use serai_coins_primitives::OutInstructionWithBalance;
 
 use crate::Address;
@@ -12,7 +12,7 @@ use crate::Address;
 #[derive(Clone, BorshSerialize, BorshDeserialize)]
 pub struct Payment<A: Address> {
   address: A,
-  balance: Balance,
+  balance: ExternalBalance,
 }
 
 impl<A: Address> TryFrom<OutInstructionWithBalance> for Payment<A> {
@@ -27,7 +27,7 @@ impl<A: Address> TryFrom<OutInstructionWithBalance> for Payment<A> {
 
 impl<A: Address> Payment<A> {
   /// Create a new Payment.
-  pub fn new(address: A, balance: Balance) -> Self {
+  pub fn new(address: A, balance: ExternalBalance) -> Self {
     Payment { address, balance }
   }
 
@@ -36,7 +36,7 @@ impl<A: Address> Payment<A> {
     &self.address
   }
   /// The balance to transfer.
-  pub fn balance(&self) -> Balance {
+  pub fn balance(&self) -> ExternalBalance {
     self.balance
   }
 
@@ -44,7 +44,7 @@ impl<A: Address> Payment<A> {
   pub fn read(reader: &mut impl io::Read) -> io::Result<Self> {
     let address = A::deserialize_reader(reader)?;
     let reader = &mut IoReader(reader);
-    let balance = Balance::decode(reader).map_err(io::Error::other)?;
+    let balance = ExternalBalance::decode(reader).map_err(io::Error::other)?;
     Ok(Self { address, balance })
   }
   /// Write the Payment.

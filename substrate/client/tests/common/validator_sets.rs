@@ -16,12 +16,12 @@ use frost::dkg::musig::musig;
 use schnorrkel::Schnorrkel;
 
 use serai_client::{
-  primitives::EmbeddedEllipticCurve,
+  primitives::{EmbeddedEllipticCurve, Amount},
   validator_sets::{
     primitives::{MAX_KEY_LEN, ExternalValidatorSet, KeyPair, musig_context, set_keys_message},
     ValidatorSetsEvent,
   },
-  Amount, Serai, SeraiValidatorSets,
+  SeraiValidatorSets, Serai,
 };
 
 use crate::common::tx::publish_tx;

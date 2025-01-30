@@ -26,9 +26,7 @@ pub enum EmbeddedEllipticCurve {
 }
 
 /// The type used to identify external networks.
-#[derive(
-  Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, PartialOrd, Ord, MaxEncodedLen, TypeInfo,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ExternalNetworkId {
@@ -162,6 +160,17 @@ impl ExternalNetworkId {
 }
 
 impl NetworkId {
+  /// The embedded elliptic curve actively used for this network.
+  ///
+  /// This is guaranteed to return `[]`, `[Embedwards25519]`, or
+  /// `[Embedwards25519, *network specific curve*]`.
+  pub fn embedded_elliptic_curves(&self) -> &'static [EmbeddedEllipticCurve] {
+    match self {
+      Self::Serai => &[],
+      Self::External(network) => network.embedded_elliptic_curves(),
+    }
+  }
+
   pub fn coins(&self) -> Vec<Coin> {
     match self {
       Self::Serai => vec![Coin::Serai],

@@ -8,7 +8,7 @@ use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_client::{
-  primitives::{Coin, Amount, Balance},
+  primitives::{ExternalCoin, Amount, ExternalBalance},
   networks::monero::Address,
 };
 
@@ -76,8 +76,8 @@ impl ReceivedOutput<<Ed25519 as Ciphersuite>::G, Address> for Output {
     None
   }
 
-  fn balance(&self) -> Balance {
-    Balance { coin: Coin::Monero, amount: Amount(self.0.commitment().amount) }
+  fn balance(&self) -> ExternalBalance {
+    ExternalBalance { coin: ExternalCoin::Monero, amount: Amount(self.0.commitment().amount) }
   }
 
   fn data(&self) -> &[u8] {

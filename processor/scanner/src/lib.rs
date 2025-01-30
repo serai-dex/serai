@@ -10,7 +10,7 @@ use group::GroupEncoding;
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, Db};
 
-use serai_primitives::{NetworkId, Coin, Amount};
+use serai_primitives::{ExternalNetworkId, ExternalCoin, Amount};
 use serai_coins_primitives::OutInstructionWithBalance;
 
 use messages::substrate::ExecutedBatch;
@@ -64,7 +64,7 @@ impl<B: Block> BlockExt for B {
 /// This defines the primitive types used, along with various getters necessary for indexing.
 pub trait ScannerFeed: 'static + Send + Sync + Clone {
   /// The ID of the network being scanned for.
-  const NETWORK: NetworkId;
+  const NETWORK: ExternalNetworkId;
 
   /// The amount of confirmations a block must have to be considered finalized.
   ///
@@ -175,14 +175,14 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
   ///
   /// This MUST be constant. Serai MUST NOT create internal outputs worth less than this. This
   /// SHOULD be a value worth handling at a human level.
-  fn dust(coin: Coin) -> Amount;
+  fn dust(coin: ExternalCoin) -> Amount;
 
   /// The cost to aggregate an input as of the specified block.
   ///
   /// This is defined as the transaction fee for a 2-input, 1-output transaction.
   fn cost_to_aggregate(
     &self,
-    coin: Coin,
+    coin: ExternalCoin,
     reference_block: &Self::Block,
   ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>>;
 }

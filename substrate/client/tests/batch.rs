@@ -8,7 +8,7 @@ use blake2::{
 use scale::Encode;
 
 use serai_client::{
-  primitives::{BlockHash, NetworkId, ExternalCoin, Amount, ExternalBalance, SeraiAddress},
+  primitives::{BlockHash, ExternalCoin, Amount, ExternalBalance, SeraiAddress},
   coins::CoinsEvent,
   validator_sets::primitives::Session,
   in_instructions::{

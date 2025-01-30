@@ -1,7 +1,7 @@
 use core::future::Future;
 use std::time::{Duration, SystemTime};
 
-use serai_client::validator_sets::primitives::{MAX_KEY_SHARES_PER_SET, ValidatorSet};
+use serai_client::validator_sets::primitives::{MAX_KEY_SHARES_PER_SET, ExternalValidatorSet};
 
 use futures_lite::FutureExt;
 
@@ -38,7 +38,7 @@ pub const BATCH_SIZE_LIMIT: usize = MIN_BLOCKS_PER_BATCH *
 /// If the other validator has more blocks then we do, they're expected to inform us. This forms
 /// the sync protocol for our Tributaries.
 pub(crate) struct HeartbeatTask<TD: Db, Tx: TransactionTrait, P: P2p> {
-  pub(crate) set: ValidatorSet,
+  pub(crate) set: ExternalValidatorSet,
   pub(crate) tributary: Tributary<TD, Tx, P>,
   pub(crate) reader: TributaryReader<TD, Tx>,
   pub(crate) p2p: P,

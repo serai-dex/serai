@@ -7,7 +7,7 @@ use alloy_transport::{RpcError, TransportErrorKind};
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
-use serai_client::primitives::{NetworkId, Coin, Amount};
+use serai_client::primitives::{ExternalNetworkId, ExternalCoin, Amount};
 
 use tokio::task::JoinSet;
 
@@ -30,7 +30,7 @@ pub(crate) struct Rpc<D: Db> {
 }
 
 impl<D: Db> ScannerFeed for Rpc<D> {
-  const NETWORK: NetworkId = NetworkId::Ethereum;
+  const NETWORK: ExternalNetworkId = ExternalNetworkId::Ethereum;
 
   // We only need one confirmation as Ethereum properly finalizes
   const CONFIRMATIONS: u64 = 1;
@@ -209,22 +209,22 @@ impl<D: Db> ScannerFeed for Rpc<D> {
     }
   }
 
-  fn dust(coin: Coin) -> Amount {
-    assert_eq!(coin.network(), NetworkId::Ethereum);
+  fn dust(coin: ExternalCoin) -> Amount {
+    assert_eq!(coin.network(), ExternalNetworkId::Ethereum);
     match coin {
-      Coin::Ether => ETHER_DUST,
-      Coin::Dai => DAI_DUST,
+      ExternalCoin::Ether => ETHER_DUST,
+      ExternalCoin::Dai => DAI_DUST,
       _ => unreachable!(),
     }
   }
 
   fn cost_to_aggregate(
     &self,
-    coin: Coin,
+    coin: ExternalCoin,
     _reference_block: &Self::Block,
   ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>> {
     async move {
-      assert_eq!(coin.network(), NetworkId::Ethereum);
+      assert_eq!(coin.network(), ExternalNetworkId::Ethereum);
       // There is no cost to aggregate as we receive to an account
       Ok(Amount(0))
     }

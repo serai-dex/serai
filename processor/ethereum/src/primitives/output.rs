@@ -8,7 +8,7 @@ use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_client::{
-  primitives::{NetworkId, Coin, Amount, Balance},
+  primitives::{ExternalNetworkId, ExternalCoin, Amount, ExternalBalance},
   networks::ethereum::Address,
 };
 
@@ -17,20 +17,20 @@ use ethereum_router::{Coin as EthereumCoin, InInstruction as EthereumInInstructi
 
 use crate::{DAI, ETHER_DUST};
 
-fn coin_to_serai_coin(coin: &EthereumCoin) -> Option<Coin> {
+fn coin_to_serai_coin(coin: &EthereumCoin) -> Option<ExternalCoin> {
   match coin {
-    EthereumCoin::Ether => Some(Coin::Ether),
+    EthereumCoin::Ether => Some(ExternalCoin::Ether),
     EthereumCoin::Erc20(token) => {
       if *token == DAI {
-        return Some(Coin::Dai);
+        return Some(ExternalCoin::Dai);
       }
       None
     }
   }
 }
 
-fn amount_to_serai_amount(coin: Coin, amount: U256) -> Amount {
-  assert_eq!(coin.network(), NetworkId::Ethereum);
+fn amount_to_serai_amount(coin: ExternalCoin, amount: U256) -> Amount {
+  assert_eq!(coin.network(), ExternalNetworkId::Ethereum);
   assert_eq!(coin.decimals(), 8);
   // Remove 10 decimals so we go from 18 decimals to 8 decimals
   let divisor = U256::from(10_000_000_000u64);
@@ -119,7 +119,7 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
     }
   }
 
-  fn balance(&self) -> Balance {
+  fn balance(&self) -> ExternalBalance {
     match self {
       Output::Output { key: _, instruction } => {
         let coin = coin_to_serai_coin(&instruction.coin).unwrap_or_else(|| {
@@ -128,9 +128,11 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
             "this never should have been yielded"
           )
         });
-        Balance { coin, amount: amount_to_serai_amount(coin, instruction.amount) }
+        ExternalBalance { coin, amount: amount_to_serai_amount(coin, instruction.amount) }
       }
-      Output::Eventuality { .. } => Balance { coin: Coin::Ether, amount: ETHER_DUST },
+      Output::Eventuality { .. } => {
+        ExternalBalance { coin: ExternalCoin::Ether, amount: ETHER_DUST }
+      }
     }
   }
   fn data(&self) -> &[u8] {

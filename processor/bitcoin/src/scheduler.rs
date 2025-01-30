@@ -8,7 +8,7 @@ use bitcoin_serai::{
 };
 
 use serai_client::{
-  primitives::{Coin, Amount},
+  primitives::{ExternalCoin, Amount},
   networks::bitcoin::Address,
 };
 
@@ -59,7 +59,7 @@ fn signable_transaction<D: Db>(
     .map(|payment| {
       (ScriptBuf::from(payment.address().clone()), {
         let balance = payment.balance();
-        assert_eq!(balance.coin, Coin::Bitcoin);
+        assert_eq!(balance.coin, ExternalCoin::Bitcoin);
         balance.amount.0
       })
     })

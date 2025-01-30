@@ -5631,19 +5631,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "monero-seed"
-version = "0.1.0"
-dependencies = [
- "curve25519-dalek",
- "hex",
- "monero-primitives",
- "rand_core",
- "std-shims",
- "thiserror 2.0.9",
- "zeroize",
-]
-
-[[package]]
 name = "monero-serai"
 version = "0.1.4-alpha"
 dependencies = [
@@ -5714,21 +5701,6 @@ dependencies = [
  "std-shims",
  "thiserror 2.0.9",
  "tokio",
- "zeroize",
-]
-
-[[package]]
-name = "monero-wallet-util"
-version = "0.1.0"
-dependencies = [
- "curve25519-dalek",
- "hex",
- "monero-seed",
- "monero-wallet",
- "polyseed",
- "rand_core",
- "std-shims",
- "thiserror 2.0.9",
  "zeroize",
 ]
 
@@ -6479,17 +6451,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7924d1d0ad836f665c9065e26d016c673ece3993f30d340068b16f282afc1156"
 
 [[package]]
-name = "password-hash"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "346f04948ba92c43e8469c1ee6736c7563d71012b17d40745260fe106aac2166"
-dependencies = [
- "base64ct",
- "rand_core",
- "subtle",
-]
-
-[[package]]
 name = "pasta_curves"
 version = "0.5.1"
 source = "git+https://github.com/kayabaNerve/pasta_curves?rev=a46b5be95cacbff54d06aad8d3bbcba42e05d616#a46b5be95cacbff54d06aad8d3bbcba42e05d616"
@@ -6533,9 +6494,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ed6a7761f76e3b9f92dfb0a60a6a6477c61024b775147ff0973a02653abaf2"
 dependencies = [
  "digest 0.10.7",
- "hmac",
- "password-hash",
- "sha2",
 ]
 
 [[package]]
@@ -6656,20 +6614,6 @@ dependencies = [
  "cpufeatures",
  "opaque-debug",
  "universal-hash",
-]
-
-[[package]]
-name = "polyseed"
-version = "0.1.0"
-dependencies = [
- "hex",
- "pbkdf2 0.12.2",
- "rand_core",
- "sha3",
- "std-shims",
- "subtle",
- "thiserror 2.0.9",
- "zeroize",
 ]
 
 [[package]]
@@ -9006,6 +8950,7 @@ dependencies = [
  "serai-coins-primitives",
  "serai-primitives",
  "sp-core",
+ "sp-io",
  "sp-runtime",
  "sp-std",
 ]
@@ -9445,7 +9390,7 @@ dependencies = [
  "generalized-bulletproofs-circuit-abstraction",
  "generalized-bulletproofs-ec-gadgets",
  "minimal-ed448",
- "monero-wallet-util",
+ "monero-wallet",
  "multiexp",
  "schnorr-signatures",
  "secq256k1",
@@ -9531,6 +9476,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "sp-std",
  "zeroize",
 ]
 

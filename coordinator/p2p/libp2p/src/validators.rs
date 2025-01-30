@@ -4,7 +4,9 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
-use serai_client::{primitives::NetworkId, validator_sets::primitives::Session, SeraiError, Serai};
+use serai_client::{
+  primitives::ExternalNetworkId, validator_sets::primitives::Session, SeraiError, Serai,
+};
 
 use serai_task::{Task, ContinuallyRan};
 
@@ -24,11 +26,11 @@ pub(crate) struct Validators {
   serai: Arc<Serai>,
 
   // A cache for which session we're populated with the validators of
-  sessions: HashMap<NetworkId, Session>,
+  sessions: HashMap<ExternalNetworkId, Session>,
   // The validators by network
-  by_network: HashMap<NetworkId, HashSet<PeerId>>,
+  by_network: HashMap<ExternalNetworkId, HashSet<PeerId>>,
   // The validators and their networks
-  validators: HashMap<PeerId, HashSet<NetworkId>>,
+  validators: HashMap<PeerId, HashSet<ExternalNetworkId>>,
 
   // The channel to send the changes down
   changes: mpsc::UnboundedSender<Changes>,
@@ -49,8 +51,8 @@ impl Validators {
 
   async fn session_changes(
     serai: impl Borrow<Serai>,
-    sessions: impl Borrow<HashMap<NetworkId, Session>>,
-  ) -> Result<Vec<(NetworkId, Session, HashSet<PeerId>)>, SeraiError> {
+    sessions: impl Borrow<HashMap<ExternalNetworkId, Session>>,
+  ) -> Result<Vec<(ExternalNetworkId, Session, HashSet<PeerId>)>, SeraiError> {
     /*
       This uses the latest finalized block, not the latest cosigned block, which should be fine as
       in the worst case, we'd connect to unexpected validators. They still shouldn't be able to
@@ -67,13 +69,10 @@ impl Validators {
       // FuturesUnordered can be bad practice as it'll cause timeouts if infrequently polled, but
       // we poll it till it yields all futures with the most minimal processing possible
       let mut futures = FuturesUnordered::new();
-      for network in serai_client::primitives::NETWORKS {
-        if network == NetworkId::Serai {
-          continue;
-        }
+      for network in serai_client::primitives::EXTERNAL_NETWORKS {
         let sessions = sessions.borrow();
         futures.push(async move {
-          let session = match temporal_serai.session(network).await {
+          let session = match temporal_serai.session(network.into()).await {
             Ok(Some(session)) => session,
             Ok(None) => return Ok(None),
             Err(e) => return Err(e),
@@ -82,7 +81,7 @@ impl Validators {
           if sessions.get(&network) == Some(&session) {
             Ok(None)
           } else {
-            match temporal_serai.active_network_validators(network).await {
+            match temporal_serai.active_network_validators(network.into()).await {
               Ok(validators) => Ok(Some((
                 network,
                 session,
@@ -105,7 +104,7 @@ impl Validators {
 
   fn incorporate_session_changes(
     &mut self,
-    session_changes: Vec<(NetworkId, Session, HashSet<PeerId>)>,
+    session_changes: Vec<(ExternalNetworkId, Session, HashSet<PeerId>)>,
   ) {
     let mut removed = HashSet::new();
     let mut added = HashSet::new();
@@ -160,11 +159,11 @@ impl Validators {
     Ok(())
   }
 
-  pub(crate) fn by_network(&self) -> &HashMap<NetworkId, HashSet<PeerId>> {
+  pub(crate) fn by_network(&self) -> &HashMap<ExternalNetworkId, HashSet<PeerId>> {
     &self.by_network
   }
 
-  pub(crate) fn networks(&self, peer_id: &PeerId) -> Option<&HashSet<NetworkId>> {
+  pub(crate) fn networks(&self, peer_id: &PeerId) -> Option<&HashSet<ExternalNetworkId>> {
     self.validators.get(peer_id)
   }
 }

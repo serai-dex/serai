@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{primitives::SeraiAddress, validator_sets::primitives::ValidatorSet};
+use serai_client::{primitives::SeraiAddress, validator_sets::primitives::ExternalValidatorSet};
 
 use messages::sign::{VariantSignId, SignId};
 
@@ -97,7 +97,7 @@ impl Topic {
   /// The SignId for this topic
   ///
   /// Returns None if Topic isn't Topic::Sign
-  pub(crate) fn sign_id(self, set: ValidatorSet) -> Option<messages::sign::SignId> {
+  pub(crate) fn sign_id(self, set: ExternalValidatorSet) -> Option<messages::sign::SignId> {
     #[allow(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
@@ -115,7 +115,7 @@ impl Topic {
   /// Returns None if Topic isn't Topic::DkgConfirmation.
   pub(crate) fn dkg_confirmation_sign_id(
     self,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
   ) -> Option<messages::sign::SignId> {
     #[allow(clippy::match_same_arms)]
     match self {
@@ -227,41 +227,48 @@ pub(crate) enum DataSet<D: Borshy> {
 create_db!(
   CoordinatorTributary {
     // The last handled tributary block's (number, hash)
-    LastHandledTributaryBlock: (set: ValidatorSet) -> (u64, [u8; 32]),
+    LastHandledTributaryBlock: (set: ExternalValidatorSet) -> (u64, [u8; 32]),
 
     // The slash points a validator has accrued, with u32::MAX representing a fatal slash.
-    SlashPoints: (set: ValidatorSet, validator: SeraiAddress) -> u32,
+    SlashPoints: (set: ExternalValidatorSet, validator: SeraiAddress) -> u32,
 
     // The cosign intent for a Substrate block
-    CosignIntents: (set: ValidatorSet, substrate_block_hash: [u8; 32]) -> CosignIntent,
+    CosignIntents: (set: ExternalValidatorSet, substrate_block_hash: [u8; 32]) -> CosignIntent,
     // The latest Substrate block to cosign.
-    LatestSubstrateBlockToCosign: (set: ValidatorSet) -> [u8; 32],
+    LatestSubstrateBlockToCosign: (set: ExternalValidatorSet) -> [u8; 32],
     // The hash of the block we're actively cosigning.
-    ActivelyCosigning: (set: ValidatorSet) -> [u8; 32],
+    ActivelyCosigning: (set: ExternalValidatorSet) -> [u8; 32],
     // If this block has already been cosigned.
-    Cosigned: (set: ValidatorSet, substrate_block_hash: [u8; 32]) -> (),
+    Cosigned: (set: ExternalValidatorSet, substrate_block_hash: [u8; 32]) -> (),
 
     // The plans to recognize upon a `Transaction::SubstrateBlock` being included on-chain.
-    SubstrateBlockPlans: (set: ValidatorSet, substrate_block_hash: [u8; 32]) -> Vec<[u8; 32]>,
+    SubstrateBlockPlans: (
+      set: ExternalValidatorSet,
+      substrate_block_hash: [u8; 32]
+    ) -> Vec<[u8; 32]>,
 
     // The weight accumulated for a topic.
-    AccumulatedWeight: (set: ValidatorSet, topic: Topic) -> u16,
+    AccumulatedWeight: (set: ExternalValidatorSet, topic: Topic) -> u16,
     // The entries accumulated for a topic, by validator.
-    Accumulated: <D: Borshy>(set: ValidatorSet, topic: Topic, validator: SeraiAddress) -> D,
+    Accumulated: <D: Borshy>(
+      set: ExternalValidatorSet,
+      topic: Topic,
+      validator: SeraiAddress
+    ) -> D,
 
     // Topics to be recognized as of a certain block number due to the reattempt protocol.
-    Reattempt: (set: ValidatorSet, block_number: u64) -> Vec<Topic>,
+    Reattempt: (set: ExternalValidatorSet, block_number: u64) -> Vec<Topic>,
   }
 );
 
 db_channel!(
   CoordinatorTributary {
     // Messages to send to the processor
-    ProcessorMessages: (set: ValidatorSet) -> messages::CoordinatorMessage,
+    ProcessorMessages: (set: ExternalValidatorSet) -> messages::CoordinatorMessage,
     // Messages for the DKG confirmation
-    DkgConfirmationMessages: (set: ValidatorSet) -> messages::sign::CoordinatorMessage,
+    DkgConfirmationMessages: (set: ExternalValidatorSet) -> messages::sign::CoordinatorMessage,
     // Topics which have been explicitly recognized
-    RecognizedTopics: (set: ValidatorSet) -> Topic,
+    RecognizedTopics: (set: ExternalValidatorSet) -> Topic,
   }
 );
 
@@ -269,13 +276,13 @@ pub(crate) struct TributaryDb;
 impl TributaryDb {
   pub(crate) fn last_handled_tributary_block(
     getter: &impl Get,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
   ) -> Option<(u64, [u8; 32])> {
     LastHandledTributaryBlock::get(getter, set)
   }
   pub(crate) fn set_last_handled_tributary_block(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     block_number: u64,
     block_hash: [u8; 32],
   ) {
@@ -284,23 +291,26 @@ impl TributaryDb {
 
   pub(crate) fn latest_substrate_block_to_cosign(
     getter: &impl Get,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
   ) -> Option<[u8; 32]> {
     LatestSubstrateBlockToCosign::get(getter, set)
   }
   pub(crate) fn set_latest_substrate_block_to_cosign(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     substrate_block_hash: [u8; 32],
   ) {
     LatestSubstrateBlockToCosign::set(txn, set, &substrate_block_hash);
   }
-  pub(crate) fn actively_cosigning(txn: &mut impl DbTxn, set: ValidatorSet) -> Option<[u8; 32]> {
+  pub(crate) fn actively_cosigning(
+    txn: &mut impl DbTxn,
+    set: ExternalValidatorSet,
+  ) -> Option<[u8; 32]> {
     ActivelyCosigning::get(txn, set)
   }
   pub(crate) fn start_cosigning(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     substrate_block_hash: [u8; 32],
     substrate_block_number: u64,
   ) {
@@ -320,33 +330,33 @@ impl TributaryDb {
       },
     );
   }
-  pub(crate) fn finish_cosigning(txn: &mut impl DbTxn, set: ValidatorSet) {
+  pub(crate) fn finish_cosigning(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
     assert!(ActivelyCosigning::take(txn, set).is_some(), "finished cosigning but not cosigning");
   }
   pub(crate) fn mark_cosigned(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     substrate_block_hash: [u8; 32],
   ) {
     Cosigned::set(txn, set, substrate_block_hash, &());
   }
   pub(crate) fn cosigned(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     substrate_block_hash: [u8; 32],
   ) -> bool {
     Cosigned::get(txn, set, substrate_block_hash).is_some()
   }
 
-  pub(crate) fn recognize_topic(txn: &mut impl DbTxn, set: ValidatorSet, topic: Topic) {
+  pub(crate) fn recognize_topic(txn: &mut impl DbTxn, set: ExternalValidatorSet, topic: Topic) {
     AccumulatedWeight::set(txn, set, topic, &0);
     RecognizedTopics::send(txn, set, &topic);
   }
-  pub(crate) fn recognized(getter: &impl Get, set: ValidatorSet, topic: Topic) -> bool {
+  pub(crate) fn recognized(getter: &impl Get, set: ExternalValidatorSet, topic: Topic) -> bool {
     AccumulatedWeight::get(getter, set, topic).is_some()
   }
 
-  pub(crate) fn start_of_block(txn: &mut impl DbTxn, set: ValidatorSet, block_number: u64) {
+  pub(crate) fn start_of_block(txn: &mut impl DbTxn, set: ExternalValidatorSet, block_number: u64) {
     for topic in Reattempt::take(txn, set, block_number).unwrap_or(vec![]) {
       /*
         TODO: Slash all people who preprocessed but didn't share, and add a delay to their
@@ -376,7 +386,7 @@ impl TributaryDb {
 
   pub(crate) fn fatal_slash(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     validator: SeraiAddress,
     reason: &str,
   ) {
@@ -386,7 +396,7 @@ impl TributaryDb {
 
   pub(crate) fn is_fatally_slashed(
     getter: &impl Get,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     validator: SeraiAddress,
   ) -> bool {
     SlashPoints::get(getter, set, validator).unwrap_or(0) == u32::MAX
@@ -395,7 +405,7 @@ impl TributaryDb {
   #[allow(clippy::too_many_arguments)]
   pub(crate) fn accumulate<D: Borshy>(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     validators: &[SeraiAddress],
     total_weight: u16,
     block_number: u64,
@@ -511,7 +521,7 @@ impl TributaryDb {
 
   pub(crate) fn send_message(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     message: impl Into<messages::CoordinatorMessage>,
   ) {
     ProcessorMessages::send(txn, set, &message.into());

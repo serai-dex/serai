@@ -3,7 +3,7 @@ use core::future::Future;
 use monero_wallet::rpc::{RpcError, Rpc as RpcTrait};
 use monero_simple_request_rpc::SimpleRequestRpc;
 
-use serai_client::primitives::{NetworkId, Coin, Amount};
+use serai_client::primitives::{ExternalNetworkId, ExternalCoin, Amount};
 
 use scanner::ScannerFeed;
 use signers::TransactionPublisher;
@@ -19,7 +19,7 @@ pub(crate) struct Rpc {
 }
 
 impl ScannerFeed for Rpc {
-  const NETWORK: NetworkId = NetworkId::Monero;
+  const NETWORK: ExternalNetworkId = ExternalNetworkId::Monero;
   // Outputs aren't spendable until 10 blocks later due to the 10-block lock
   // Since we assumed scanned outputs are spendable, that sets a minimum confirmation depth of 10
   // A 10-block reorganization hasn't been observed in years and shouldn't occur
@@ -107,8 +107,8 @@ impl ScannerFeed for Rpc {
     }
   }
 
-  fn dust(coin: Coin) -> Amount {
-    assert_eq!(coin, Coin::Monero);
+  fn dust(coin: ExternalCoin) -> Amount {
+    assert_eq!(coin, ExternalCoin::Monero);
 
     // 0.01 XMR
     Amount(10_000_000_000)
@@ -116,11 +116,11 @@ impl ScannerFeed for Rpc {
 
   fn cost_to_aggregate(
     &self,
-    coin: Coin,
+    coin: ExternalCoin,
     _reference_block: &Self::Block,
   ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>> {
     async move {
-      assert_eq!(coin, Coin::Bitcoin);
+      assert_eq!(coin, ExternalCoin::Bitcoin);
       // TODO
       Ok(Amount(0))
     }

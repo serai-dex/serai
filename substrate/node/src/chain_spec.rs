@@ -88,7 +88,10 @@ fn devnet_genesis(
       networks: key_shares.clone(),
       participants: validators.clone(),
     },
-    emissions: EmissionsConfig { networks: key_shares, participants: validators.clone() },
+    emissions: EmissionsConfig {
+      networks: key_shares,
+      participants: validators.iter().map(|(validator, _)| *validator).collect(),
+    },
     signals: SignalsConfig::default(),
     babe: BabeConfig {
       authorities: validators.iter().map(|validator| (validator.0.into(), 1)).collect(),

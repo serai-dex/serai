@@ -11,10 +11,11 @@ use sp_core::{sr25519::Signature, Pair as PairTrait};
 
 use serai_abi::{
   primitives::{
-    BlockHash, ExternalNetworkId, ExternalCoin, Amount, ExternalBalance, SeraiAddress, insecure_pair_from_name,
+    EXTERNAL_COINS, BlockHash, ExternalNetworkId, NetworkId, ExternalCoin, Amount, ExternalBalance,
+    SeraiAddress, insecure_pair_from_name,
   },
-  validator_sets::primitives::{musig_context, Session, ValidatorSet},
-  genesis_liquidity::primitives::{oraclize_values_message, Values},
+  validator_sets::primitives::{Session, ValidatorSet, musig_context},
+  genesis_liquidity::primitives::{Values, oraclize_values_message},
   in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
 };
 

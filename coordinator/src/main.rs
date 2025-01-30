@@ -14,8 +14,8 @@ use borsh::BorshDeserialize;
 use tokio::sync::mpsc;
 
 use serai_client::{
-  primitives::{NetworkId, PublicKey, SeraiAddress, Signature},
-  validator_sets::primitives::{ValidatorSet, KeyPair},
+  primitives::{ExternalNetworkId, PublicKey, SeraiAddress, Signature},
+  validator_sets::primitives::{ExternalValidatorSet, KeyPair},
   Serai,
 };
 use message_queue::{Service, client::MessageQueue};
@@ -153,14 +153,13 @@ async fn handle_network(
   mut db: impl serai_db::Db,
   message_queue: Arc<MessageQueue>,
   serai: Arc<Serai>,
-  network: NetworkId,
+  network: ExternalNetworkId,
 ) {
   // Spawn the task to publish batches for this network
   {
     let (publish_batch_task_def, publish_batch_task) = Task::new();
     tokio::spawn(
       PublishBatchTask::new(db.clone(), serai.clone(), network)
-        .unwrap()
         .continually_run(publish_batch_task_def, vec![]),
     );
     // Forget its handle so it always runs in the background
@@ -197,7 +196,7 @@ async fn handle_network(
     match msg {
       messages::ProcessorMessage::KeyGen(msg) => match msg {
         messages::key_gen::ProcessorMessage::Participation { session, participation } => {
-          let set = ValidatorSet { network, session };
+          let set = ExternalValidatorSet { network, session };
           TributaryTransactionsFromProcessorMessages::send(
             &mut txn,
             set,
@@ -211,7 +210,7 @@ async fn handle_network(
         } => {
           KeysToConfirm::set(
             &mut txn,
-            ValidatorSet { network, session },
+            ExternalValidatorSet { network, session },
             &KeyPair(
               PublicKey::from_raw(substrate_key),
               network_key
@@ -221,15 +220,15 @@ async fn handle_network(
           );
         }
         messages::key_gen::ProcessorMessage::Blame { session, participant } => {
-          RemoveParticipant::send(&mut txn, ValidatorSet { network, session }, participant);
+          RemoveParticipant::send(&mut txn, ExternalValidatorSet { network, session }, participant);
         }
       },
       messages::ProcessorMessage::Sign(msg) => match msg {
         messages::sign::ProcessorMessage::InvalidParticipant { session, participant } => {
-          RemoveParticipant::send(&mut txn, ValidatorSet { network, session }, participant);
+          RemoveParticipant::send(&mut txn, ExternalValidatorSet { network, session }, participant);
         }
         messages::sign::ProcessorMessage::Preprocesses { id, preprocesses } => {
-          let set = ValidatorSet { network, session: id.session };
+          let set = ExternalValidatorSet { network, session: id.session };
           if id.attempt == 0 {
             // Batches are declared by their intent to be signed
             if let messages::sign::VariantSignId::Batch(hash) = id.id {
@@ -254,7 +253,7 @@ async fn handle_network(
           );
         }
         messages::sign::ProcessorMessage::Shares { id, shares } => {
-          let set = ValidatorSet { network, session: id.session };
+          let set = ExternalValidatorSet { network, session: id.session };
           TributaryTransactionsFromProcessorMessages::send(
             &mut txn,
             set,
@@ -282,7 +281,7 @@ async fn handle_network(
         } => {
           SlashReports::set(
             &mut txn,
-            ValidatorSet { network, session },
+            ExternalValidatorSet { network, session },
             slash_report,
             Signature(signature),
           );
@@ -298,7 +297,7 @@ async fn handle_network(
               .push(plan.transaction_plan_id);
           }
           for (session, plans) in by_session {
-            let set = ValidatorSet { network, session };
+            let set = ExternalValidatorSet { network, session };
             SubstrateBlockPlans::set(&mut txn, set, block, &plans);
             TributaryTransactionsFromProcessorMessages::send(
               &mut txn,
@@ -481,10 +480,7 @@ async fn main() {
   );
 
   // Handle each of the networks
-  for network in serai_client::primitives::NETWORKS {
-    if network == NetworkId::Serai {
-      continue;
-    }
+  for network in serai_client::primitives::EXTERNAL_NETWORKS {
     tokio::spawn(handle_network(db.clone(), message_queue.clone(), serai.clone(), network));
   }
 

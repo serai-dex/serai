@@ -3,7 +3,7 @@ use std::{sync::Arc, collections::HashMap};
 
 use serai_client::{
   primitives::{SeraiAddress, Amount},
-  validator_sets::primitives::ValidatorSet,
+  validator_sets::primitives::ExternalValidatorSet,
   Serai,
 };
 
@@ -28,7 +28,7 @@ db_channel! {
   CosignIntendChannels {
     GlobalSessionsChannel: () -> ([u8; 32], GlobalSession),
     BlockEvents: () -> BlockEventData,
-    IntendedCosigns: (set: ValidatorSet) -> CosignIntent,
+    IntendedCosigns: (set: ExternalValidatorSet) -> CosignIntent,
   }
 }
 
@@ -110,7 +110,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             keys.insert(set.network, SeraiAddress::from(*key));
             let stake = serai
               .validator_sets()
-              .total_allocated_stake(set.network)
+              .total_allocated_stake(set.network.into())
               .await
               .map_err(|e| format!("{e:?}"))?
               .unwrap_or(Amount(0))

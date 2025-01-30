@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 
 use serai_db::{DbTxn, Db as DbTrait};
 
-use serai_client::validator_sets::primitives::{Session, ValidatorSet};
+use serai_client::validator_sets::primitives::{Session, ExternalValidatorSet};
 use message_queue::{Service, Metadata, client::MessageQueue};
 
 use tributary_sdk::Tributary;
@@ -27,8 +27,8 @@ pub(crate) struct SubstrateTask<P: P2p> {
   pub(crate) message_queue: Arc<MessageQueue>,
   pub(crate) p2p: P,
   pub(crate) p2p_add_tributary:
-    mpsc::UnboundedSender<(ValidatorSet, Tributary<Db, Transaction, P>)>,
-  pub(crate) p2p_retire_tributary: mpsc::UnboundedSender<ValidatorSet>,
+    mpsc::UnboundedSender<(ExternalValidatorSet, Tributary<Db, Transaction, P>)>,
+  pub(crate) p2p_retire_tributary: mpsc::UnboundedSender<ExternalValidatorSet>,
 }
 
 impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
@@ -38,7 +38,7 @@ impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
       let mut made_progress = false;
 
       // Handle the Canonical events
-      for network in serai_client::primitives::NETWORKS {
+      for network in serai_client::primitives::EXTERNAL_NETWORKS {
         loop {
           let mut txn = self.db.txn();
           let Some(msg) = serai_coordinator_substrate::Canonical::try_recv(&mut txn, network)
@@ -48,7 +48,7 @@ impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
 
           match msg {
             messages::substrate::CoordinatorMessage::SetKeys { session, .. } => {
-              KeySet::set(&mut txn, ValidatorSet { network, session }, &());
+              KeySet::set(&mut txn, ExternalValidatorSet { network, session }, &());
             }
             messages::substrate::CoordinatorMessage::SlashesReported { session } => {
               let prior_retired = crate::db::RetiredTributary::get(&txn, network);
@@ -58,7 +58,7 @@ impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
               crate::db::RetiredTributary::set(&mut txn, network, &session);
               self
                 .p2p_retire_tributary
-                .send(ValidatorSet { network, session })
+                .send(ExternalValidatorSet { network, session })
                 .expect("p2p retire_tributary channel dropped?");
             }
             messages::substrate::CoordinatorMessage::Block { .. } => {}
@@ -108,7 +108,10 @@ impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
           */
           crate::db::TributaryCleanup::send(
             &mut txn,
-            &ValidatorSet { network: new_set.set.network, session: Session(historic_session) },
+            &ExternalValidatorSet {
+              network: new_set.set.network,
+              session: Session(historic_session),
+            },
           );
         }
 

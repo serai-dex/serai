@@ -5,10 +5,10 @@ use sp_runtime::BoundedVec;
 
 use serai_abi::{primitives::Amount, validator_sets::primitives::ExternalValidatorSet};
 pub use serai_abi::validator_sets::primitives;
-use primitives::{MAX_KEY_LEN, Session, ValidatorSet, KeyPair, SlashReport};
+use primitives::{MAX_KEY_LEN, Session, KeyPair, SlashReport};
 
 use crate::{
-  primitives::{NetworkId, ExternalNetworkId, EmbeddedEllipticCurve, SeraiAddress},
+  primitives::{NetworkId, ExternalNetworkId, EmbeddedEllipticCurve},
   Transaction, Serai, TemporalSerai, SeraiError,
 };
 
@@ -203,7 +203,7 @@ impl SeraiValidatorSets<'_> {
   }
 
   pub fn set_keys(
-    network: NetworkId,
+    network: ExternalNetworkId,
     key_pair: KeyPair,
     signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
     signature: Signature,
@@ -237,7 +237,7 @@ impl SeraiValidatorSets<'_> {
   }
 
   pub fn report_slashes(
-    network: NetworkId,
+    network: ExternalNetworkId,
     slashes: SlashReport,
     signature: Signature,
   ) -> Transaction {

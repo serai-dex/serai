@@ -10,7 +10,7 @@ use dkg::Participant;
 
 use serai_client::{
   primitives::SeraiAddress,
-  validator_sets::primitives::{ValidatorSet, Slash},
+  validator_sets::primitives::{ExternalValidatorSet, Slash},
 };
 
 use serai_db::*;
@@ -41,7 +41,10 @@ pub use db::Topic;
 pub struct ProcessorMessages;
 impl ProcessorMessages {
   /// Try to receive a message to send to a Processor.
-  pub fn try_recv(txn: &mut impl DbTxn, set: ValidatorSet) -> Option<messages::CoordinatorMessage> {
+  pub fn try_recv(
+    txn: &mut impl DbTxn,
+    set: ExternalValidatorSet,
+  ) -> Option<messages::CoordinatorMessage> {
     db::ProcessorMessages::try_recv(txn, set)
   }
 }
@@ -58,7 +61,7 @@ impl DkgConfirmationMessages {
   /// across validator sets, with no guarantees of uniqueness across contexts.
   pub fn try_recv(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
   ) -> Option<messages::sign::CoordinatorMessage> {
     db::DkgConfirmationMessages::try_recv(txn, set)
   }
@@ -70,12 +73,12 @@ impl CosignIntents {
   /// Provide a CosignIntent for this Tributary.
   ///
   /// This must be done before the associated `Transaction::Cosign` is provided.
-  pub fn provide(txn: &mut impl DbTxn, set: ValidatorSet, intent: &CosignIntent) {
+  pub fn provide(txn: &mut impl DbTxn, set: ExternalValidatorSet, intent: &CosignIntent) {
     db::CosignIntents::set(txn, set, intent.block_hash, intent);
   }
   fn take(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     substrate_block_hash: [u8; 32],
   ) -> Option<CosignIntent> {
     db::CosignIntents::take(txn, set, substrate_block_hash)
@@ -88,13 +91,13 @@ impl RecognizedTopics {
   /// If this topic has been recognized by this Tributary.
   ///
   /// This will either be by explicit recognition or participation.
-  pub fn recognized(getter: &impl Get, set: ValidatorSet, topic: Topic) -> bool {
+  pub fn recognized(getter: &impl Get, set: ExternalValidatorSet, topic: Topic) -> bool {
     TributaryDb::recognized(getter, set, topic)
   }
   /// The next topic requiring recognition which has been recognized by this Tributary.
   pub fn try_recv_topic_requiring_recognition(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
   ) -> Option<Topic> {
     db::RecognizedTopics::try_recv(txn, set)
   }
@@ -109,7 +112,7 @@ impl SubstrateBlockPlans {
   /// This must be done before the associated `Transaction::Cosign` is provided.
   pub fn set(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     substrate_block_hash: [u8; 32],
     plans: &Vec<[u8; 32]>,
   ) {
@@ -117,7 +120,7 @@ impl SubstrateBlockPlans {
   }
   fn take(
     txn: &mut impl DbTxn,
-    set: ValidatorSet,
+    set: ExternalValidatorSet,
     substrate_block_hash: [u8; 32],
   ) -> Option<Vec<[u8; 32]>> {
     db::SubstrateBlockPlans::take(txn, set, substrate_block_hash)

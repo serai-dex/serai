@@ -5,7 +5,7 @@ use group::GroupEncoding;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::{ExternalAddress, Balance};
+use serai_primitives::{ExternalAddress, ExternalBalance};
 
 use crate::Id;
 
@@ -133,7 +133,7 @@ pub trait ReceivedOutput<K: GroupEncoding, A: Address>:
   fn presumed_origin(&self) -> Option<A>;
 
   /// The balance associated with this output.
-  fn balance(&self) -> Balance;
+  fn balance(&self) -> ExternalBalance;
   /// The arbitrary data (presumably an InInstruction) associated with this output.
   fn data(&self) -> &[u8];
 

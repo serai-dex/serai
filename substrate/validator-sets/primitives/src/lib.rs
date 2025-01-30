@@ -140,7 +140,7 @@ pub fn musig_key(set: ValidatorSet, set_keys: &[Public]) -> Public {
 }
 
 /// The message for the `set_keys` signature.
-pub fn set_keys_message(set: &ValidatorSet, key_pair: &KeyPair) -> Vec<u8> {
+pub fn set_keys_message(set: &ExternalValidatorSet, key_pair: &KeyPair) -> Vec<u8> {
   (b"ValidatorSets-set_keys", set, key_pair).encode()
 }
 

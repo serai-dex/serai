@@ -11,7 +11,7 @@ use sp_core::Pair;
 
 use serai_client::{
   primitives::{
-    BlockHash, ExternalNetworkId, ExternalCoin, Amount, ExternalBalance, SeraiAddress, ExternalAddress,
+    BlockHash, ExternalCoin, Amount, ExternalBalance, SeraiAddress, ExternalAddress,
     insecure_pair_from_name,
   },
   coins::{

@@ -5,8 +5,8 @@ use serai_client::TemporalSerai;
 
 use serai_abi::{
   primitives::{
-    NETWORKS, COINS, TARGET_BLOCK_TIME, FAST_EPOCH_DURATION, FAST_EPOCH_INITIAL_PERIOD, BlockHash,
-    Coin,
+    EXTERNAL_NETWORKS, NETWORKS, TARGET_BLOCK_TIME, FAST_EPOCH_DURATION, FAST_EPOCH_INITIAL_PERIOD,
+    BlockHash, ExternalNetworkId, NetworkId, ExternalCoin, Amount, ExternalBalance,
   },
   validator_sets::primitives::Session,
   emissions::primitives::{INITIAL_REWARD_PER_BLOCK, SECURE_BY},
@@ -38,17 +38,16 @@ async fn send_batches(serai: &Serai, ids: &mut HashMap<ExternalNetworkId, u32>) 
     let mut block = BlockHash([0; 32]);
     OsRng.fill_bytes(&mut block.0);
 
-      provide_batch(
-        serai,
-        Batch {
-          network,
-          id: ids[&network],
-          external_network_block_hash: block,
-          instructions: vec![],
-        },
-      )
-      .await;
-    }
+    provide_batch(
+      serai,
+      Batch {
+        network,
+        id: ids[&network],
+        external_network_block_hash: block,
+        instructions: vec![],
+      },
+    )
+    .await;
   }
 }
 

@@ -14,7 +14,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::Get;
 
 use serai_client::{
-  primitives::{Coin, Amount, Balance, ExternalAddress},
+  primitives::{ExternalCoin, Amount, ExternalBalance, ExternalAddress},
   networks::bitcoin::Address,
 };
 
@@ -127,8 +127,8 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
     self.presumed_origin.clone()
   }
 
-  fn balance(&self) -> Balance {
-    Balance { coin: Coin::Bitcoin, amount: Amount(self.output.value()) }
+  fn balance(&self) -> ExternalBalance {
+    ExternalBalance { coin: ExternalCoin::Bitcoin, amount: Amount(self.output.value()) }
   }
 
   fn data(&self) -> &[u8] {

@@ -9,7 +9,7 @@ use scale::Encode;
 use sp_core::Pair;
 
 use serai_client::{
-  primitives::{BlockHash, NetworkId, ExternalBalance, SeraiAddress, insecure_pair_from_name},
+  primitives::{BlockHash, ExternalBalance, SeraiAddress, insecure_pair_from_name},
   validator_sets::primitives::{ExternalValidatorSet, KeyPair},
   in_instructions::{
     primitives::{Batch, SignedBatch, batch_message, InInstruction, InInstructionWithBalance},

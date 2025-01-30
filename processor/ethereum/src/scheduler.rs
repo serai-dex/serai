@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use alloy_core::primitives::U256;
 
 use serai_client::{
-  primitives::{NetworkId, Coin, Balance},
+  primitives::{ExternalNetworkId, ExternalCoin, ExternalBalance},
   networks::ethereum::Address,
 };
 
@@ -17,17 +17,17 @@ use ethereum_router::Coin as EthereumCoin;
 
 use crate::{DAI, transaction::Action, rpc::Rpc};
 
-fn coin_to_ethereum_coin(coin: Coin) -> EthereumCoin {
-  assert_eq!(coin.network(), NetworkId::Ethereum);
+fn coin_to_ethereum_coin(coin: ExternalCoin) -> EthereumCoin {
+  assert_eq!(coin.network(), ExternalNetworkId::Ethereum);
   match coin {
-    Coin::Ether => EthereumCoin::Ether,
-    Coin::Dai => EthereumCoin::Erc20(DAI),
+    ExternalCoin::Ether => EthereumCoin::Ether,
+    ExternalCoin::Dai => EthereumCoin::Erc20(DAI),
     _ => unreachable!(),
   }
 }
 
-fn balance_to_ethereum_amount(balance: Balance) -> U256 {
-  assert_eq!(balance.coin.network(), NetworkId::Ethereum);
+fn balance_to_ethereum_amount(balance: ExternalBalance) -> U256 {
+  assert_eq!(balance.coin.network(), ExternalNetworkId::Ethereum);
   assert_eq!(balance.coin.decimals(), 8);
   // Restore 10 decimals so we go from 8 decimals to 18 decimals
   // TODO: Document the expectation all integrated coins have 18 decimals
@@ -73,17 +73,17 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
     }
 
     let mut res = vec![];
-    for coin in [Coin::Ether, Coin::Dai] {
+    for coin in [ExternalCoin::Ether, ExternalCoin::Dai] {
       let Some(outs) = outs.remove(&coin) else { continue };
       assert!(!outs.is_empty());
 
       let fee_per_gas = match coin {
         // 10 gwei
-        Coin::Ether => {
+        ExternalCoin::Ether => {
           U256::try_from(10u64).unwrap() * alloy_core::primitives::utils::Unit::GWEI.wei()
         }
         // 0.0003 DAI
-        Coin::Dai => {
+        ExternalCoin::Dai => {
           U256::try_from(30u64).unwrap() * alloy_core::primitives::utils::Unit::TWEI.wei()
         }
         _ => unreachable!(),

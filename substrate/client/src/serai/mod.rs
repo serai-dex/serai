@@ -16,7 +16,7 @@ pub use abi::{primitives, Transaction};
 use abi::*;
 
 pub use primitives::{SeraiAddress, Signature, Amount};
-use primitives::{Header, NetworkId};
+use primitives::{Header, ExternalNetworkId};
 
 pub mod coins;
 pub use coins::SeraiCoins;
@@ -313,7 +313,7 @@ impl Serai {
   /// Return the P2P Multiaddrs for the validators of the specified network.
   pub async fn p2p_validators(
     &self,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> Result<Vec<multiaddr::Multiaddr>, SeraiError> {
     self.call("p2p_validators", network).await
   }

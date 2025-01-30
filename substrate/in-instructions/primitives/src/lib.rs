@@ -20,7 +20,7 @@ use sp_std::vec::Vec;
 use sp_runtime::RuntimeDebug;
 
 #[rustfmt::skip]
-use serai_primitives::{BlockHash, NetworkId, Balance, SeraiAddress, ExternalAddress, system_address};
+use serai_primitives::{BlockHash, ExternalNetworkId, NetworkId, ExternalBalance, Balance, SeraiAddress, ExternalAddress, system_address};
 
 mod shorthand;
 pub use shorthand::*;

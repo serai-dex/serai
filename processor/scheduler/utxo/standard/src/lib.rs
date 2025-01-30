@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use group::GroupEncoding;
 
-use serai_primitives::{Coin, Amount, Balance};
+use serai_primitives::{ExternalCoin, Amount, ExternalBalance};
 
 use serai_db::DbTxn;
 
@@ -42,7 +42,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
     block: &BlockFor<S>,
     key_for_change: KeyFor<S>,
     key: KeyFor<S>,
-    coin: Coin,
+    coin: ExternalCoin,
   ) -> Result<Vec<EventualityFor<S>>, <Self as SchedulerTrait<S>>::EphemeralError> {
     let mut eventualities = vec![];
 
@@ -79,7 +79,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
     txn: &mut impl DbTxn,
     operating_costs: &mut u64,
     key: KeyFor<S>,
-    coin: Coin,
+    coin: ExternalCoin,
     value_of_outputs: u64,
   ) -> Vec<Payment<AddressFor<S>>> {
     // Fetch all payments for this key
@@ -133,7 +133,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
   fn queue_branches(
     txn: &mut impl DbTxn,
     key: KeyFor<S>,
-    coin: Coin,
+    coin: ExternalCoin,
     effected_payments: Vec<Amount>,
     tx: TreeTransaction<AddressFor<S>>,
   ) {
@@ -149,7 +149,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
           children thanks to our sort.
         */
         for (amount, child) in effected_payments.into_iter().zip(children) {
-          Db::<S>::queue_pending_branch(txn, key, Balance { coin, amount }, &child);
+          Db::<S>::queue_pending_branch(txn, key, ExternalBalance { coin, amount }, &child);
         }
       }
     }
@@ -216,8 +216,6 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
     let branch_address = P::branch_address(key);
 
     'coin: for coin in S::NETWORK.coins() {
-      let coin = *coin;
-
       // Perform any input aggregation we should
       eventualities
         .append(&mut self.aggregate_inputs(txn, block, key_for_change, key, coin).await?);
@@ -308,7 +306,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
     block: &BlockFor<S>,
     from: KeyFor<S>,
     to: KeyFor<S>,
-    coin: Coin,
+    coin: ExternalCoin,
   ) -> Result<(), <Self as SchedulerTrait<S>>::EphemeralError> {
     let from_bytes = from.to_bytes().as_ref().to_vec();
     // Ensure our inputs are aggregated
@@ -349,10 +347,10 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
 
   fn activate_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
-      assert!(Db::<S>::outputs(txn, key, *coin).is_none());
-      Db::<S>::set_outputs(txn, key, *coin, &[]);
-      assert!(Db::<S>::queued_payments(txn, key, *coin).is_none());
-      Db::<S>::set_queued_payments(txn, key, *coin, &[]);
+      assert!(Db::<S>::outputs(txn, key, coin).is_none());
+      Db::<S>::set_outputs(txn, key, coin, &[]);
+      assert!(Db::<S>::queued_payments(txn, key, coin).is_none());
+      Db::<S>::set_queued_payments(txn, key, coin, &[]);
     }
   }
 
@@ -368,18 +366,18 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
       for coin in S::NETWORK.coins() {
         // Move the payments to the new key
         {
-          let still_queued = Db::<S>::queued_payments(txn, retiring_key, *coin).unwrap();
-          let mut new_queued = Db::<S>::queued_payments(txn, new_key, *coin).unwrap();
+          let still_queued = Db::<S>::queued_payments(txn, retiring_key, coin).unwrap();
+          let mut new_queued = Db::<S>::queued_payments(txn, new_key, coin).unwrap();
 
           let mut queued = still_queued;
           queued.append(&mut new_queued);
 
-          Db::<S>::set_queued_payments(txn, retiring_key, *coin, &[]);
-          Db::<S>::set_queued_payments(txn, new_key, *coin, &queued);
+          Db::<S>::set_queued_payments(txn, retiring_key, coin, &[]);
+          Db::<S>::set_queued_payments(txn, new_key, coin, &queued);
         }
 
         // Move the outputs to the new key
-        self.flush_outputs(txn, &mut eventualities, block, retiring_key, new_key, *coin).await?;
+        self.flush_outputs(txn, &mut eventualities, block, retiring_key, new_key, coin).await?;
       }
       Ok(eventualities)
     }
@@ -387,10 +385,10 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
 
   fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
-      assert!(Db::<S>::outputs(txn, key, *coin).unwrap().is_empty());
-      Db::<S>::del_outputs(txn, key, *coin);
-      assert!(Db::<S>::queued_payments(txn, key, *coin).unwrap().is_empty());
-      Db::<S>::del_queued_payments(txn, key, *coin);
+      assert!(Db::<S>::outputs(txn, key, coin).unwrap().is_empty());
+      Db::<S>::del_outputs(txn, key, coin);
+      assert!(Db::<S>::queued_payments(txn, key, coin).unwrap().is_empty());
+      Db::<S>::del_queued_payments(txn, key, coin);
     }
   }
 
@@ -463,7 +461,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
                 block,
                 active_keys[0].0,
                 active_keys[1].0,
-                *coin,
+                coin,
               )
               .await?;
           }
@@ -552,10 +550,10 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
 
       // Queue the payments for this key
       for coin in S::NETWORK.coins() {
-        let mut queued_payments = Db::<S>::queued_payments(txn, fulfillment_key, *coin).unwrap();
+        let mut queued_payments = Db::<S>::queued_payments(txn, fulfillment_key, coin).unwrap();
         queued_payments
-          .extend(payments.iter().filter(|payment| payment.balance().coin == *coin).cloned());
-        Db::<S>::set_queued_payments(txn, fulfillment_key, *coin, &queued_payments);
+          .extend(payments.iter().filter(|payment| payment.balance().coin == coin).cloned());
+        Db::<S>::set_queued_payments(txn, fulfillment_key, coin, &queued_payments);
       }
 
       // Handle the queued payments

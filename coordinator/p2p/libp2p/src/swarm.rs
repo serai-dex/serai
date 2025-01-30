@@ -6,7 +6,7 @@ use std::{
 
 use borsh::BorshDeserialize;
 
-use serai_client::validator_sets::primitives::ValidatorSet;
+use serai_client::validator_sets::primitives::ExternalValidatorSet;
 
 use tokio::sync::{mpsc, oneshot, RwLock};
 
@@ -68,7 +68,7 @@ pub(crate) struct SwarmTask {
   outbound_request_responses: HashMap<OutboundRequestId, oneshot::Sender<Response>>,
 
   inbound_request_response_channels: HashMap<InboundRequestId, ResponseChannel<Response>>,
-  heartbeat_requests: mpsc::UnboundedSender<(InboundRequestId, ValidatorSet, [u8; 32])>,
+  heartbeat_requests: mpsc::UnboundedSender<(InboundRequestId, ExternalValidatorSet, [u8; 32])>,
   notable_cosign_requests: mpsc::UnboundedSender<(InboundRequestId, [u8; 32])>,
   inbound_request_responses: mpsc::UnboundedReceiver<(InboundRequestId, Response)>,
 }
@@ -324,7 +324,7 @@ impl SwarmTask {
 
     outbound_requests: mpsc::UnboundedReceiver<(PeerId, Request, oneshot::Sender<Response>)>,
 
-    heartbeat_requests: mpsc::UnboundedSender<(InboundRequestId, ValidatorSet, [u8; 32])>,
+    heartbeat_requests: mpsc::UnboundedSender<(InboundRequestId, ExternalValidatorSet, [u8; 32])>,
     notable_cosign_requests: mpsc::UnboundedSender<(InboundRequestId, [u8; 32])>,
     inbound_request_responses: mpsc::UnboundedReceiver<(InboundRequestId, Response)>,
   ) {

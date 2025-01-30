@@ -58,7 +58,7 @@ fn burn_with_instruction() {
 
     // we shouldn't be able to burn more than what we have
     let mut instruction = OutInstructionWithBalance {
-      instruction: OutInstruction { address: ExternalAddress::new(vec![]).unwrap(), data: None },
+      instruction: OutInstruction { address: ExternalAddress::new(vec![]).unwrap() },
       balance: ExternalBalance {
         coin: coin.try_into().unwrap(),
         amount: Amount(balance.amount.0 + 1),

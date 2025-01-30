@@ -14,8 +14,8 @@ use zeroize::Zeroizing;
 use schnorrkel::Keypair;
 
 use serai_client::{
-  primitives::{NetworkId, PublicKey},
-  validator_sets::primitives::ValidatorSet,
+  primitives::{ExternalNetworkId, PublicKey},
+  validator_sets::primitives::ExternalValidatorSet,
   Serai,
 };
 
@@ -104,7 +104,7 @@ impl serai_coordinator_p2p::Peer<'_> for Peer<'_> {
 
 #[derive(Clone)]
 struct Peers {
-  peers: Arc<RwLock<HashMap<NetworkId, HashSet<PeerId>>>>,
+  peers: Arc<RwLock<HashMap<ExternalNetworkId, HashSet<PeerId>>>>,
 }
 
 // Consider adding identify/kad/autonat/rendevous/(relay + dcutr). While we currently use the Serai
@@ -135,7 +135,8 @@ struct Libp2pInner {
   signed_cosigns: Mutex<mpsc::UnboundedReceiver<SignedCosign>>,
   signed_cosigns_send: mpsc::UnboundedSender<SignedCosign>,
 
-  heartbeat_requests: Mutex<mpsc::UnboundedReceiver<(InboundRequestId, ValidatorSet, [u8; 32])>>,
+  heartbeat_requests:
+    Mutex<mpsc::UnboundedReceiver<(InboundRequestId, ExternalValidatorSet, [u8; 32])>>,
   notable_cosign_requests: Mutex<mpsc::UnboundedReceiver<(InboundRequestId, [u8; 32])>>,
   inbound_request_responses: mpsc::UnboundedSender<(InboundRequestId, Response)>,
 }
@@ -312,7 +313,7 @@ impl serai_cosign::RequestNotableCosigns for Libp2p {
 impl serai_coordinator_p2p::P2p for Libp2p {
   type Peer<'a> = Peer<'a>;
 
-  fn peers(&self, network: NetworkId) -> impl Send + Future<Output = Vec<Self::Peer<'_>>> {
+  fn peers(&self, network: ExternalNetworkId) -> impl Send + Future<Output = Vec<Self::Peer<'_>>> {
     async move {
       let Some(peer_ids) = self.0.peers.peers.read().await.get(&network).cloned() else {
         return vec![];

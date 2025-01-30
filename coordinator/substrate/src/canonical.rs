@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use futures::stream::{StreamExt, FuturesOrdered};
 
-use serai_client::Serai;
+use serai_client::{validator_sets::primitives::ExternalValidatorSet, Serai};
 
 use messages::substrate::{InInstructionResult, ExecutedBatch, CoordinatorMessage};
 
@@ -152,6 +152,7 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
           else {
             panic!("SetRetired event wasn't a SetRetired event: {set_retired:?}");
           };
+          let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
           crate::Canonical::send(
             &mut txn,
             set.network,
@@ -159,7 +160,7 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
           );
         }
 
-        for network in serai_client::primitives::NETWORKS {
+        for network in serai_client::primitives::EXTERNAL_NETWORKS {
           let mut batch = None;
           for this_batch in &block.batch_events {
             let serai_client::in_instructions::InInstructionsEvent::Batch {
@@ -201,7 +202,7 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
             let serai_client::coins::CoinsEvent::BurnWithInstruction { from: _, instruction } =
               &burn
             else {
-              panic!("Burn event wasn't a Burn.in event: {burn:?}");
+              panic!("BurnWithInstruction event wasn't a BurnWithInstruction event: {burn:?}");
             };
             if instruction.balance.coin.network() == network {
               burns.push(instruction.clone());

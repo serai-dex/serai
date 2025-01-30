@@ -1,6 +1,6 @@
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::{Coin, Amount, Balance};
+use serai_primitives::{ExternalCoin, Amount, ExternalBalance};
 
 use primitives::{Address, Payment};
 use scanner::ScannerFeed;
@@ -52,7 +52,7 @@ impl<A: Address> TreeTransaction<A> {
   /// payments should be made.
   pub fn payments<S: ScannerFeed>(
     &self,
-    coin: Coin,
+    coin: ExternalCoin,
     branch_address: &A,
     input_value: u64,
   ) -> Option<Vec<Payment<A>>> {
@@ -115,7 +115,10 @@ impl<A: Address> TreeTransaction<A> {
           .filter_map(|(payment, amount)| {
             amount.map(|amount| {
               // The existing payment, with the new amount
-              Payment::new(payment.address().clone(), Balance { coin, amount: Amount(amount) })
+              Payment::new(
+                payment.address().clone(),
+                ExternalBalance { coin, amount: Amount(amount) },
+              )
             })
           })
           .collect()
@@ -126,7 +129,7 @@ impl<A: Address> TreeTransaction<A> {
           .filter_map(|amount| {
             amount.map(|amount| {
               // A branch output with the new amount
-              Payment::new(branch_address.clone(), Balance { coin, amount: Amount(amount) })
+              Payment::new(branch_address.clone(), ExternalBalance { coin, amount: Amount(amount) })
             })
           })
           .collect()

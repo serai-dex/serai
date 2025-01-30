@@ -67,7 +67,7 @@ pub mod pallet {
       in_instruction_results: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
     },
     Halt {
-      network: NetworkId,
+      network: ExternalNetworkId,
     },
   }
 
@@ -103,7 +103,7 @@ pub mod pallet {
     fn execute(instruction: &InInstructionWithBalance) -> Result<(), DispatchError> {
       match &instruction.instruction {
         InInstruction::Transfer(address) => {
-          Coins::<T>::mint(address.into(), instruction.balance.into())?;
+          Coins::<T>::mint((*address).into(), instruction.balance.into())?;
         }
         InInstruction::Dex(call) => {
           // This will only be initiated by external chain transactions. That is why we only need
@@ -222,11 +222,11 @@ pub mod pallet {
         }
         InInstruction::GenesisLiquidity(address) => {
           Coins::<T>::mint(GENESIS_LIQUIDITY_ACCOUNT.into(), instruction.balance.into())?;
-          GenesisLiq::<T>::add_coin_liquidity(address.into(), instruction.balance)?;
+          GenesisLiq::<T>::add_coin_liquidity((*address).into(), instruction.balance)?;
         }
         InInstruction::SwapToStakedSRI(address, network) => {
           Coins::<T>::mint(POL_ACCOUNT.into(), instruction.balance.into())?;
-          Emissions::<T>::swap_to_staked_sri(address.into(), network, instruction.balance)?;
+          Emissions::<T>::swap_to_staked_sri((*address).into(), *network, instruction.balance)?;
         }
       }
       Ok(())
@@ -319,7 +319,10 @@ pub mod pallet {
       // key is publishing `Batch`s. This should only happen once the current key has verified all
       // `Batch`s published by the prior key, meaning they are accepting the hand-over.
       if prior.is_some() && (!valid_by_prior) {
-        ValidatorSets::<T>::retire_set(ValidatorSet { network: network.into(), session: prior_session });
+        ValidatorSets::<T>::retire_set(ValidatorSet {
+          network: network.into(),
+          session: prior_session,
+        });
       }
 
       // check that this validator set isn't publishing a batch more than once per block
