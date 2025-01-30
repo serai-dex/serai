@@ -11,7 +11,7 @@ use crate::{Client, Error};
 #[allow(dead_code)]
 #[derive(Debug)]
 pub struct Response<'a>(pub(crate) hyper::Response<Incoming>, pub(crate) &'a Client);
-impl<'a> Response<'a> {
+impl Response<'_> {
   pub fn status(&self) -> StatusCode {
     self.0.status()
   }

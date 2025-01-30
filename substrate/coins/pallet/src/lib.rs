@@ -1,5 +1,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
 use serai_primitives::{Balance, Coin, ExternalBalance, SubstrateAmount};
 
 pub trait AllowMint {

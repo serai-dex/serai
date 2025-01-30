@@ -36,29 +36,28 @@ pub use multisig::{ClsagMultisigMaskSender, ClsagAddendum, ClsagMultisig};
 mod tests;
 
 /// Errors when working with CLSAGs.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, thiserror::Error)]
 pub enum ClsagError {
   /// The ring was invalid (such as being too small or too large).
-  #[cfg_attr(feature = "std", error("invalid ring"))]
+  #[error("invalid ring")]
   InvalidRing,
   /// The discrete logarithm of the key, scaling G, wasn't equivalent to the signing ring member.
-  #[cfg_attr(feature = "std", error("invalid commitment"))]
+  #[error("invalid commitment")]
   InvalidKey,
   /// The commitment opening provided did not match the ring member's.
-  #[cfg_attr(feature = "std", error("invalid commitment"))]
+  #[error("invalid commitment")]
   InvalidCommitment,
   /// The key image was invalid (such as being identity or torsioned)
-  #[cfg_attr(feature = "std", error("invalid key image"))]
+  #[error("invalid key image")]
   InvalidImage,
   /// The `D` component was invalid.
-  #[cfg_attr(feature = "std", error("invalid D"))]
+  #[error("invalid D")]
   InvalidD,
   /// The `s` vector was invalid.
-  #[cfg_attr(feature = "std", error("invalid s"))]
+  #[error("invalid s")]
   InvalidS,
   /// The `c1` variable was invalid.
-  #[cfg_attr(feature = "std", error("invalid c1"))]
+  #[error("invalid c1")]
   InvalidC1,
 }
 

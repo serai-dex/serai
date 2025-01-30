@@ -30,4 +30,5 @@ jobs:
             -p patchable-async-sleep \
             -p serai-db \
             -p serai-env \
+            -p serai-task \
             -p simple-request

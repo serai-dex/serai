@@ -1,13 +1,14 @@
 use scale::Encode;
 
 use sp_core::sr25519::{Public, Signature};
+use sp_runtime::BoundedVec;
 
 use serai_abi::{primitives::Amount, validator_sets::primitives::ExternalValidatorSet};
 pub use serai_abi::validator_sets::primitives;
-use primitives::{Session, KeyPair};
+use primitives::{MAX_KEY_LEN, Session, KeyPair, SlashReport};
 
 use crate::{
-  primitives::{NetworkId, ExternalNetworkId, SeraiAddress},
+  primitives::{NetworkId, ExternalNetworkId, EmbeddedEllipticCurve},
   Transaction, Serai, TemporalSerai, SeraiError,
 };
 
@@ -17,7 +18,7 @@ pub type ValidatorSetsEvent = serai_abi::validator_sets::Event;
 
 #[derive(Clone, Copy)]
 pub struct SeraiValidatorSets<'a>(pub(crate) &'a TemporalSerai<'a>);
-impl<'a> SeraiValidatorSets<'a> {
+impl SeraiValidatorSets<'_> {
   pub async fn new_set_events(&self) -> Result<Vec<ValidatorSetsEvent>, SeraiError> {
     self
       .0
@@ -107,6 +108,21 @@ impl<'a> SeraiValidatorSets<'a> {
     self.0.storage(PALLET, "CurrentSession", network).await
   }
 
+  pub async fn embedded_elliptic_curve_key(
+    &self,
+    validator: Public,
+    embedded_elliptic_curve: EmbeddedEllipticCurve,
+  ) -> Result<Option<Vec<u8>>, SeraiError> {
+    self
+      .0
+      .storage(
+        PALLET,
+        "EmbeddedEllipticCurveKeys",
+        (sp_core::hashing::blake2_128(&validator.encode()), validator, embedded_elliptic_curve),
+      )
+      .await
+  }
+
   pub async fn participants(
     &self,
     network: NetworkId,
@@ -188,19 +204,28 @@ impl<'a> SeraiValidatorSets<'a> {
 
   pub fn set_keys(
     network: ExternalNetworkId,
-    removed_participants: sp_runtime::BoundedVec<
-      SeraiAddress,
-      sp_core::ConstU32<{ primitives::MAX_KEY_SHARES_PER_SET / 3 }>,
-    >,
     key_pair: KeyPair,
+    signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
     signature: Signature,
   ) -> Transaction {
     Serai::unsigned(serai_abi::Call::ValidatorSets(serai_abi::validator_sets::Call::set_keys {
       network,
-      removed_participants,
       key_pair,
+      signature_participants,
       signature,
     }))
+  }
+
+  pub fn set_embedded_elliptic_curve_key(
+    embedded_elliptic_curve: EmbeddedEllipticCurve,
+    key: BoundedVec<u8, sp_core::ConstU32<{ MAX_KEY_LEN }>>,
+  ) -> serai_abi::Call {
+    serai_abi::Call::ValidatorSets(
+      serai_abi::validator_sets::Call::set_embedded_elliptic_curve_key {
+        embedded_elliptic_curve,
+        key,
+      },
+    )
   }
 
   pub fn allocate(network: NetworkId, amount: Amount) -> serai_abi::Call {
@@ -213,10 +238,7 @@ impl<'a> SeraiValidatorSets<'a> {
 
   pub fn report_slashes(
     network: ExternalNetworkId,
-    slashes: sp_runtime::BoundedVec<
-      (SeraiAddress, u32),
-      sp_core::ConstU32<{ primitives::MAX_KEY_SHARES_PER_SET / 3 }>,
-    >,
+    slashes: SlashReport,
     signature: Signature,
   ) -> Transaction {
     Serai::unsigned(serai_abi::Call::ValidatorSets(

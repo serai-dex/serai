@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["serai"]
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -18,10 +18,13 @@ workspace = true
 
 [dependencies]
 zeroize = "^1.5"
-thiserror = { version = "1", optional = true }
+thiserror = { version = "2", default-features = false, optional = true }
+
+bitvec = { version = "1", default-features = false, features = ["alloc", "serde"] }
 
 hex = "0.4"
 scale = { package = "parity-scale-codec", version = "3" }
+borsh = { version = "1", features = ["derive"] }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
 
@@ -39,7 +42,7 @@ simple-request = { path = "../../common/request", version = "0.1", optional = tr
 bitcoin = { version = "0.32", optional = true }
 
 ciphersuite = { path = "../../crypto/ciphersuite", version = "0.4", optional = true }
-monero-wallet = { path = "../../networks/monero/wallet", version = "0.1.0", default-features = false, features = ["std"], optional = true }
+monero-address = { path = "../../networks/monero/wallet/address", version = "0.1.0", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 rand_core = "0.6"
@@ -57,12 +60,13 @@ dockertest = "0.5"
 serai-docker-tests = { path = "../../tests/docker" }
 
 [features]
-serai = ["thiserror", "serde", "serde_json", "serai-abi/serde", "multiaddr", "sp-core", "sp-runtime", "frame-system", "simple-request"]
+serai = ["thiserror/std", "serde", "serde_json", "serai-abi/serde", "multiaddr", "sp-core", "sp-runtime", "frame-system", "simple-request"]
 borsh = ["serai-abi/borsh"]
 
 networks = []
 bitcoin = ["networks", "dep:bitcoin"]
-monero = ["networks", "ciphersuite/ed25519", "monero-wallet"]
+ethereum = ["networks"]
+monero = ["networks", "ciphersuite/ed25519", "monero-address"]
 
 # Assumes the default usage is to use Serai as a DEX, which doesn't actually
 # require connecting to a Serai node

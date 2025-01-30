@@ -3,6 +3,8 @@ use std::{
   time::{SystemTime, Duration},
 };
 
+use rand_core::{RngCore, OsRng};
+
 use dkg::{Participant, tests::clone_without};
 
 use messages::{sign::SignId, SubstrateContext};
@@ -243,7 +245,7 @@ fn send_test() {
             },
             block: substrate_block_num,
             burns: vec![OutInstructionWithBalance {
-              instruction: OutInstruction { address: wallet.address(), data: None },
+              instruction: OutInstruction { address: wallet.address() },
               balance: ExternalBalance { coin: balance_sent.coin, amount: amount_minted },
             }],
             batches: vec![batch.batch.id],

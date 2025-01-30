@@ -1,0 +1,52 @@
+[package]
+name = "serai-processor-bin"
+version = "0.1.0"
+description = "Framework for Serai processor binaries"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/bin"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+rust-version = "1.80"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+zeroize = { version = "1", default-features = false, features = ["std"] }
+
+hex = { version = "0.4", default-features = false, features = ["std"] }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "evrf-ristretto"] }
+
+serai-client = { path = "../../substrate/client", default-features = false }
+serai-cosign = { path = "../../coordinator/cosign" }
+
+log = { version = "0.4", default-features = false, features = ["std"] }
+env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+
+serai-env = { path = "../../common/env" }
+serai-db = { path = "../../common/db" }
+
+messages = { package = "serai-processor-messages", path = "../messages" }
+key-gen = { package = "serai-processor-key-gen", path = "../key-gen" }
+
+primitives = { package = "serai-processor-primitives", path = "../primitives" }
+scheduler = { package = "serai-processor-scheduler-primitives", path = "../scheduler/primitives" }
+scanner = { package = "serai-processor-scanner", path = "../scanner" }
+signers = { package = "serai-processor-signers", path = "../signers" }
+
+message-queue = { package = "serai-message-queue", path = "../../message-queue" }
+
+[features]
+parity-db = ["serai-db/parity-db"]
+rocksdb = ["serai-db/rocksdb"]

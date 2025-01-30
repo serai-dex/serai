@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/primitives"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -17,6 +17,8 @@ workspace = true
 
 [dependencies]
 zeroize = { version = "^1.5", features = ["derive"], optional = true }
+
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, optional = true }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
@@ -36,7 +38,7 @@ frame-support = { git = "https://github.com/serai-dex/substrate", default-featur
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 
 [features]
-std = ["zeroize", "scale/std", "borsh?/std", "serde?/std", "scale-info/std", "sp-core/std", "sp-runtime/std", "sp-std/std", "frame-support/std"]
+std = ["zeroize", "ciphersuite/std", "scale/std", "borsh?/std", "serde?/std", "scale-info/std", "sp-core/std", "sp-runtime/std", "sp-std/std", "frame-support/std"]
 borsh = ["dep:borsh"]
 serde = ["dep:serde"]
 default = ["std"]

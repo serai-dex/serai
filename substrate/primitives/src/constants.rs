@@ -3,6 +3,7 @@ use crate::BlockNumber;
 // 1 MB
 pub const BLOCK_SIZE: u32 = 1024 * 1024;
 // 6 seconds
+// TODO: Use Duration
 pub const TARGET_BLOCK_TIME: u64 = 6;
 
 /// Measured in blocks.

@@ -1,0 +1,27 @@
+[package]
+name = "generalized-bulletproofs-circuit-abstraction"
+version = "0.1.0"
+description = "An abstraction for arithmetic circuits over Generalized Bulletproofs"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/fcmps/circuit-abstraction"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["bulletproofs", "circuit"]
+edition = "2021"
+rust-version = "1.69"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+std-shims = { path = "../../../common/std-shims", version = "^0.1.1", default-features = false }
+
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+
+ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false }
+
+generalized-bulletproofs = { path = "../generalized-bulletproofs", default-features = false }
+
+[features]
+std = ["std-shims/std", "zeroize/std", "ciphersuite/std", "generalized-bulletproofs/std"]
+default = ["std"]

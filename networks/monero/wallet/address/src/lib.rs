@@ -199,29 +199,25 @@ pub enum Network {
 }
 
 /// Errors when decoding an address.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, thiserror::Error)]
 pub enum AddressError {
   /// The address had an invalid (network, type) byte.
-  #[cfg_attr(feature = "std", error("invalid byte for the address's network/type ({0})"))]
+  #[error("invalid byte for the address's network/type ({0})")]
   InvalidTypeByte(u8),
   /// The address wasn't a valid Base58Check (as defined by Monero) string.
-  #[cfg_attr(feature = "std", error("invalid address encoding"))]
+  #[error("invalid address encoding")]
   InvalidEncoding,
   /// The data encoded wasn't the proper length.
-  #[cfg_attr(feature = "std", error("invalid length"))]
+  #[error("invalid length")]
   InvalidLength,
   /// The address had an invalid key.
-  #[cfg_attr(feature = "std", error("invalid key"))]
+  #[error("invalid key")]
   InvalidKey,
   /// The address was featured with unrecognized features.
-  #[cfg_attr(feature = "std", error("unknown features"))]
+  #[error("unknown features")]
   UnknownFeatures(u64),
   /// The network was for a different network than expected.
-  #[cfg_attr(
-    feature = "std",
-    error("different network ({actual:?}) than expected ({expected:?})")
-  )]
+  #[error("different network ({actual:?}) than expected ({expected:?})")]
   DifferentNetwork {
     /// The Network expected.
     expected: Network,

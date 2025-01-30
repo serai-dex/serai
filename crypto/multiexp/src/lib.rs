@@ -59,7 +59,7 @@ pub(crate) fn prep_bits<G: Group<Scalar: PrimeFieldBits>>(
   for pair in pairs {
     let p = groupings.len();
     let mut bits = pair.0.to_le_bits();
-    groupings.push(vec![0; (bits.len() + (w_usize - 1)) / w_usize]);
+    groupings.push(vec![0; bits.len().div_ceil(w_usize)]);
 
     for (i, mut bit) in bits.iter_mut().enumerate() {
       let mut bit = u8_from_bool(&mut bit);

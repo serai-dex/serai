@@ -8,6 +8,7 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
 publish = false
+rust-version = "1.72"
 
 [package.metadata.docs.rs]
 all-features = true

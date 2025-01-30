@@ -15,7 +15,7 @@ const PALLET: &str = "GenesisLiquidity";
 
 #[derive(Clone, Copy)]
 pub struct SeraiGenesisLiquidity<'a>(pub(crate) &'a TemporalSerai<'a>);
-impl<'a> SeraiGenesisLiquidity<'a> {
+impl SeraiGenesisLiquidity<'_> {
   pub async fn events(&self) -> Result<Vec<GenesisLiquidityEvent>, SeraiError> {
     self
       .0

@@ -25,6 +25,8 @@ use ciphersuite::{
   },
   Ciphersuite, Ristretto,
 };
+use embedwards25519::Embedwards25519;
+use secq256k1::Secq256k1;
 
 mod mimalloc;
 use mimalloc::mimalloc;
@@ -267,6 +269,55 @@ fn infrastructure_keys(network: Network) -> InfrastructureKeys {
   ])
 }
 
+struct EmbeddedCurveKeys {
+  embedwards25519: (Zeroizing<Vec<u8>>, Vec<u8>),
+  secq256k1: (Zeroizing<Vec<u8>>, Vec<u8>),
+}
+
+fn embedded_curve_keys(network: Network) -> EmbeddedCurveKeys {
+  // Generate entropy for the embedded curve keys
+
+  let entropy = {
+    let path = home::home_dir()
+      .unwrap()
+      .join(".serai")
+      .join(network.label())
+      .join("embedded_curve_keys_entropy");
+    // Check if there's existing entropy
+    if let Ok(entropy) = fs::read(&path).map(Zeroizing::new) {
+      assert_eq!(entropy.len(), 32, "entropy saved to disk wasn't 32 bytes");
+      let mut res = Zeroizing::new([0; 32]);
+      res.copy_from_slice(entropy.as_ref());
+      res
+    } else {
+      // If there isn't, generate fresh entropy
+      let mut res = Zeroizing::new([0; 32]);
+      OsRng.fill_bytes(res.as_mut());
+      fs::write(&path, &res).unwrap();
+      res
+    }
+  };
+
+  let mut transcript =
+    RecommendedTranscript::new(b"Serai Orchestrator Embedded Curve Keys Transcript");
+  transcript.append_message(b"network", network.label().as_bytes());
+  transcript.append_message(b"entropy", entropy);
+  let mut rng = ChaCha20Rng::from_seed(transcript.rng_seed(b"embedded_curve_keys"));
+
+  EmbeddedCurveKeys {
+    embedwards25519: {
+      let key = Zeroizing::new(<Embedwards25519 as Ciphersuite>::F::random(&mut rng));
+      let pub_key = Embedwards25519::generator() * key.deref();
+      (Zeroizing::new(key.to_repr().as_slice().to_vec()), pub_key.to_bytes().to_vec())
+    },
+    secq256k1: {
+      let key = Zeroizing::new(<Secq256k1 as Ciphersuite>::F::random(&mut rng));
+      let pub_key = Secq256k1::generator() * key.deref();
+      (Zeroizing::new(key.to_repr().as_slice().to_vec()), pub_key.to_bytes().to_vec())
+    },
+  }
+}
+
 fn dockerfiles(network: Network) {
   let orchestration_path = orchestration_path(network);
 
@@ -294,18 +345,15 @@ fn dockerfiles(network: Network) {
     monero_key.1,
   );
 
-  let new_entropy = || {
-    let mut res = Zeroizing::new([0; 32]);
-    OsRng.fill_bytes(res.as_mut());
-    res
-  };
+  let embedded_curve_keys = embedded_curve_keys(network);
   processor(
     &orchestration_path,
     network,
     "bitcoin",
     coordinator_key.1,
     bitcoin_key.0,
-    new_entropy(),
+    embedded_curve_keys.embedwards25519.0.clone(),
+    embedded_curve_keys.secq256k1.0.clone(),
   );
   processor(
     &orchestration_path,
@@ -313,9 +361,18 @@ fn dockerfiles(network: Network) {
     "ethereum",
     coordinator_key.1,
     ethereum_key.0,
-    new_entropy(),
+    embedded_curve_keys.embedwards25519.0.clone(),
+    embedded_curve_keys.secq256k1.0.clone(),
   );
-  processor(&orchestration_path, network, "monero", coordinator_key.1, monero_key.0, new_entropy());
+  processor(
+    &orchestration_path,
+    network,
+    "monero",
+    coordinator_key.1,
+    monero_key.0,
+    embedded_curve_keys.embedwards25519.0.clone(),
+    embedded_curve_keys.embedwards25519.0.clone(),
+  );
 
   let serai_key = {
     let serai_key = Zeroizing::new(
@@ -346,6 +403,7 @@ fn key_gen(network: Network) {
   let _ = fs::create_dir_all(&serai_dir);
   fs::write(key_file, key.to_repr()).expect("couldn't write key");
 
+  // TODO: Move embedded curve key gen here, and print them
   println!(
     "Public Key: {}",
     hex::encode((<Ristretto as Ciphersuite>::generator() * key).to_bytes())

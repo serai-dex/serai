@@ -7,11 +7,11 @@ use sp_core::{
 
 use serai_client::{
   primitives::{
-    NETWORKS, NetworkId, BlockHash, insecure_pair_from_name, FAST_EPOCH_DURATION,
-    TARGET_BLOCK_TIME, ExternalNetworkId, Amount,
+    FAST_EPOCH_DURATION, TARGET_BLOCK_TIME, NETWORKS, BlockHash, ExternalNetworkId, NetworkId,
+    EmbeddedEllipticCurve, Amount, insecure_pair_from_name,
   },
   validator_sets::{
-    primitives::{Session, ValidatorSet, ExternalValidatorSet, KeyPair},
+    primitives::{Session, ExternalValidatorSet, ValidatorSet, KeyPair},
     ValidatorSetsEvent,
   },
   in_instructions::{
@@ -24,7 +24,7 @@ use serai_client::{
 mod common;
 use common::{
   tx::publish_tx,
-  validator_sets::{allocate_stake, deallocate_stake, set_keys},
+  validator_sets::{set_embedded_elliptic_curve_key, allocate_stake, deallocate_stake, set_keys},
 };
 
 fn get_random_key_pair() -> KeyPair {
@@ -224,12 +224,39 @@ async fn validator_set_rotation() {
 
         // add 1 participant
         let last_participant = accounts[4].clone();
+
+        // If this is the first iteration, set embedded elliptic curve keys
+        if i == 0 {
+          for (i, embedded_elliptic_curve) in
+            [EmbeddedEllipticCurve::Embedwards25519, EmbeddedEllipticCurve::Secq256k1]
+              .into_iter()
+              .enumerate()
+          {
+            set_embedded_elliptic_curve_key(
+              &serai,
+              &last_participant,
+              embedded_elliptic_curve,
+              vec![
+                0;
+                match embedded_elliptic_curve {
+                  EmbeddedEllipticCurve::Embedwards25519 => 32,
+                  EmbeddedEllipticCurve::Secq256k1 => 33,
+                }
+              ]
+              .try_into()
+              .unwrap(),
+              i.try_into().unwrap(),
+            )
+            .await;
+          }
+        }
+
         let hash = allocate_stake(
           &serai,
           network,
           key_shares[&network],
           &last_participant,
-          i.try_into().unwrap(),
+          (2 + i).try_into().unwrap(),
         )
         .await;
         participants.push(last_participant.public());
@@ -289,7 +316,7 @@ async fn validator_set_rotation() {
           let batch = Batch {
             network: network.try_into().unwrap(),
             id: 0,
-            block: block_hash,
+            external_network_block_hash: block_hash,
             instructions: vec![],
           };
           publish_tx(

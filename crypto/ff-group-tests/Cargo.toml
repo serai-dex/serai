@@ -30,4 +30,4 @@ p256 = { version = "^0.13.1", default-features = false, features = ["std", "arit
 
 bls12_381 = "0.8"
 
-pasta_curves = "0.5"
+pasta_curves = { git = "https://github.com/kayabaNerve/pasta_curves", rev = "a46b5be95cacbff54d06aad8d3bbcba42e05d616" }

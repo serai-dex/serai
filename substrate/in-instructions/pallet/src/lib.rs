@@ -9,6 +9,12 @@ use serai_primitives::*;
 pub use in_instructions_primitives as primitives;
 use primitives::*;
 
+#[cfg(test)]
+mod mock;
+
+#[cfg(test)]
+mod tests;
+
 // TODO: Investigate why Substrate generates these
 #[allow(
   unreachable_patterns,
@@ -58,9 +64,17 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]
   pub enum Event<T: Config> {
-    Batch { network: ExternalNetworkId, id: u32, block: BlockHash, instructions_hash: [u8; 32] },
-    InstructionFailure { network: ExternalNetworkId, id: u32, index: u32 },
-    Halt { network: ExternalNetworkId },
+    Batch {
+      network: ExternalNetworkId,
+      publishing_session: Session,
+      id: u32,
+      external_network_block_hash: BlockHash,
+      in_instructions_hash: [u8; 32],
+      in_instruction_results: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
+    },
+    Halt {
+      network: ExternalNetworkId,
+    },
   }
 
   #[pallet::error]
@@ -88,20 +102,14 @@ pub mod pallet {
   #[pallet::storage]
   pub(crate) type Halted<T: Config> = StorageMap<_, Identity, ExternalNetworkId, (), OptionQuery>;
 
-  // The latest block a network has acknowledged as finalized
-  #[pallet::storage]
-  #[pallet::getter(fn latest_network_block)]
-  pub(crate) type LatestNetworkBlock<T: Config> =
-    StorageMap<_, Identity, ExternalNetworkId, BlockHash, OptionQuery>;
-
   impl<T: Config> Pallet<T> {
     // Use a dedicated transaction layer when executing this InInstruction
     // This lets it individually error without causing any storage modifications
     #[frame_support::transactional]
-    fn execute(instruction: InInstructionWithBalance) -> Result<(), DispatchError> {
-      match instruction.instruction {
+    fn execute(instruction: &InInstructionWithBalance) -> Result<(), DispatchError> {
+      match &instruction.instruction {
         InInstruction::Transfer(address) => {
-          Coins::<T>::mint(address.into(), instruction.balance.into())?;
+          Coins::<T>::mint((*address).into(), instruction.balance.into())?;
         }
         InInstruction::Dex(call) => {
           // This will only be initiated by external chain transactions. That is why we only need
@@ -110,6 +118,7 @@ pub mod pallet {
           match call {
             DexCall::SwapAndAddLiquidity(address) => {
               let origin = RawOrigin::Signed(IN_INSTRUCTION_EXECUTOR.into());
+              let address = *address;
               let coin = instruction.balance.coin;
 
               // mint the given coin on the account
@@ -205,9 +214,7 @@ pub mod pallet {
                   Coins::<T>::balance(IN_INSTRUCTION_EXECUTOR.into(), out_balance.coin);
                 let instruction = OutInstructionWithBalance {
                   instruction: OutInstruction {
-                    address: out_address.as_external().unwrap(),
-                    // TODO: Properly pass data. Replace address with an OutInstruction entirely?
-                    data: None,
+                    address: out_address.clone().as_external().unwrap(),
                   },
                   balance: ExternalBalance {
                     coin: out_balance.coin.try_into().unwrap(),
@@ -221,11 +228,11 @@ pub mod pallet {
         }
         InInstruction::GenesisLiquidity(address) => {
           Coins::<T>::mint(GENESIS_LIQUIDITY_ACCOUNT.into(), instruction.balance.into())?;
-          GenesisLiq::<T>::add_coin_liquidity(address.into(), instruction.balance)?;
+          GenesisLiq::<T>::add_coin_liquidity((*address).into(), instruction.balance)?;
         }
         InInstruction::SwapToStakedSRI(address, network) => {
           Coins::<T>::mint(POL_ACCOUNT.into(), instruction.balance.into())?;
-          Emissions::<T>::swap_to_staked_sri(address.into(), network, instruction.balance)?;
+          Emissions::<T>::swap_to_staked_sri((*address).into(), *network, instruction.balance)?;
         }
       }
       Ok(())
@@ -263,27 +270,10 @@ pub mod pallet {
   impl<T: Config> Pallet<T> {
     #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
-    pub fn execute_batch(origin: OriginFor<T>, batch: SignedBatch) -> DispatchResult {
+    pub fn execute_batch(origin: OriginFor<T>, _batch: SignedBatch) -> DispatchResult {
       ensure_none(origin)?;
 
-      let batch = batch.batch;
-
-      LatestNetworkBlock::<T>::insert(batch.network, batch.block);
-      Self::deposit_event(Event::Batch {
-        network: batch.network,
-        id: batch.id,
-        block: batch.block,
-        instructions_hash: blake2_256(&batch.instructions.encode()),
-      });
-      for (i, instruction) in batch.instructions.into_iter().enumerate() {
-        if Self::execute(instruction).is_err() {
-          Self::deposit_event(Event::InstructionFailure {
-            network: batch.network,
-            id: batch.id,
-            index: u32::try_from(i).unwrap(),
-          });
-        }
-      }
+      // The entire Batch execution is handled in pre_dispatch
 
       Ok(())
     }
@@ -309,6 +299,7 @@ pub mod pallet {
 
       // verify the signature
       let (current_session, prior, current) = keys_for_network::<T>(network)?;
+      let prior_session = Session(current_session.0 - 1);
       let batch_message = batch_message(&batch.batch);
       // Check the prior key first since only a single `Batch` (the last one) will be when prior is
       // Some yet prior wasn't the signing key
@@ -324,6 +315,8 @@ pub mod pallet {
         Err(InvalidTransaction::BadProof)?;
       }
 
+      let batch = &batch.batch;
+
       if Halted::<T>::contains_key(network) {
         Err(InvalidTransaction::Custom(1))?;
       }
@@ -334,7 +327,7 @@ pub mod pallet {
       if prior.is_some() && (!valid_by_prior) {
         ValidatorSets::<T>::retire_set(ValidatorSet {
           network: network.into(),
-          session: Session(current_session.0 - 1),
+          session: prior_session,
         });
       }
 
@@ -344,36 +337,42 @@ pub mod pallet {
       if last_block >= current_block {
         Err(InvalidTransaction::Future)?;
       }
-      LastBatchBlock::<T>::insert(batch.batch.network, frame_system::Pallet::<T>::block_number());
+      LastBatchBlock::<T>::insert(batch.network, frame_system::Pallet::<T>::block_number());
 
       // Verify the batch is sequential
       // LastBatch has the last ID set. The next ID should be it + 1
       // If there's no ID, the next ID should be 0
       let expected = LastBatch::<T>::get(network).map_or(0, |prev| prev + 1);
-      if batch.batch.id < expected {
+      if batch.id < expected {
         Err(InvalidTransaction::Stale)?;
       }
-      if batch.batch.id > expected {
+      if batch.id > expected {
         Err(InvalidTransaction::Future)?;
       }
-      LastBatch::<T>::insert(batch.batch.network, batch.batch.id);
+      LastBatch::<T>::insert(batch.network, batch.id);
 
-      // Verify all Balances in this Batch are for this network
-      for instruction in &batch.batch.instructions {
+      let in_instructions_hash = blake2_256(&batch.instructions.encode());
+      let mut in_instruction_results = bitvec::vec::BitVec::new();
+      for instruction in &batch.instructions {
         // Verify this coin is for this network
-        // If this is ever hit, it means the validator set has turned malicious and should be fully
-        // slashed
-        // Because we have an error here, no validator set which turns malicious should execute
-        // this code path
-        // Accordingly, there's no value in writing code to fully slash the network, when such an
-        // even would require a runtime upgrade to fully resolve anyways
-        if instruction.balance.coin.network() != batch.batch.network {
+        if instruction.balance.coin.network() != batch.network {
           Err(InvalidTransaction::Custom(2))?;
         }
+
+        in_instruction_results.push(Self::execute(instruction).is_ok());
       }
 
+      Self::deposit_event(Event::Batch {
+        network: batch.network,
+        publishing_session: if valid_by_prior { prior_session } else { current_session },
+        id: batch.id,
+        external_network_block_hash: batch.external_network_block_hash,
+        in_instructions_hash,
+        in_instruction_results,
+      });
+
       ValidTransaction::with_tag_prefix("in-instructions")
-        .and_provides((batch.batch.network, batch.batch.id))
+        .and_provides((batch.network, batch.id))
         // Set a 10 block longevity, though this should be included in the next block
         .longevity(10)
         .propagate(true)

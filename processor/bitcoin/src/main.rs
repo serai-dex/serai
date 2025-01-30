@@ -1,0 +1,286 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+
+#[global_allocator]
+static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
+  zalloc::ZeroizingAlloc(std::alloc::System);
+
+use bitcoin_serai::rpc::Rpc as BRpc;
+
+use ::primitives::task::{Task, ContinuallyRan};
+
+mod primitives;
+pub(crate) use crate::primitives::*;
+
+// Internal utilities for scanning transactions
+mod scan;
+
+// App-logic trait satisfactions
+mod key_gen;
+use crate::key_gen::KeyGenParams;
+mod rpc;
+use rpc::Rpc;
+mod scheduler;
+use scheduler::{Planner, Scheduler};
+
+// Our custom code for Bitcoin
+mod db;
+mod txindex;
+use txindex::TxIndexTask;
+
+pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) -> [u8; 32] {
+  use bitcoin_serai::bitcoin::hashes::Hash;
+
+  let mut res = hash.to_byte_array();
+  res.reverse();
+  res
+}
+
+#[tokio::main]
+async fn main() {
+  let db = bin::init();
+  let feed = Rpc {
+    db: db.clone(),
+    rpc: loop {
+      match BRpc::new(bin::url()).await {
+        Ok(rpc) => break rpc,
+        Err(e) => {
+          log::error!("couldn't connect to the Bitcoin node: {e:?}");
+          tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+        }
+      }
+    },
+  };
+
+  let (index_task, index_handle) = Task::new();
+  tokio::spawn(TxIndexTask(feed.clone()).continually_run(index_task, vec![]));
+  core::mem::forget(index_handle);
+
+  bin::main_loop::<(), _, KeyGenParams, _>(db, feed.clone(), Scheduler::new(Planner), feed).await;
+}
+
+/*
+use bitcoin_serai::{
+  bitcoin::{
+    hashes::Hash as HashTrait,
+    key::{Parity, XOnlyPublicKey},
+    consensus::{Encodable, Decodable},
+    script::Instruction,
+    Transaction, Block, ScriptBuf,
+    opcodes::all::{OP_SHA256, OP_EQUALVERIFY},
+  },
+  wallet::{
+    tweak_keys, p2tr_script_buf, ReceivedOutput, Scanner, TransactionError,
+    SignableTransaction as BSignableTransaction, TransactionMachine,
+  },
+  rpc::{RpcError, Rpc},
+};
+
+#[cfg(test)]
+use bitcoin_serai::bitcoin::{
+  secp256k1::{SECP256K1, SecretKey, Message},
+  PrivateKey, PublicKey,
+  sighash::{EcdsaSighashType, SighashCache},
+  script::PushBytesBuf,
+  absolute::LockTime,
+  Amount as BAmount, Sequence, Script, Witness, OutPoint,
+  transaction::Version,
+  blockdata::transaction::{TxIn, TxOut},
+};
+
+use serai_client::{
+  primitives::{MAX_DATA_LEN, ExternalNetworkId, ExternalCoin, Amount, Balance},
+  networks::bitcoin::Address,
+};
+*/
+
+/*
+impl TransactionTrait<Bitcoin> for Transaction {
+  #[cfg(test)]
+  async fn fee(&self, network: &Bitcoin) -> u64 {
+    let mut value = 0;
+    for input in &self.input {
+      let output = input.previous_output;
+      let mut hash = *output.txid.as_raw_hash().as_byte_array();
+      hash.reverse();
+      value += network.rpc.get_transaction(&hash).await.unwrap().output
+        [usize::try_from(output.vout).unwrap()]
+      .value
+      .to_sat();
+    }
+    for output in &self.output {
+      value -= output.value.to_sat();
+    }
+    value
+  }
+}
+
+impl Bitcoin {
+  pub(crate) async fn new(url: String) -> Bitcoin {
+    let mut res = Rpc::new(url.clone()).await;
+    while let Err(e) = res {
+      log::error!("couldn't connect to Bitcoin node: {e:?}");
+      sleep(Duration::from_secs(5)).await;
+      res = Rpc::new(url.clone()).await;
+    }
+    Bitcoin { rpc: res.unwrap() }
+  }
+
+  #[cfg(test)]
+  pub(crate) async fn fresh_chain(&self) {
+    if self.rpc.get_latest_block_number().await.unwrap() > 0 {
+      self
+        .rpc
+        .rpc_call(
+          "invalidateblock",
+          serde_json::json!([hex::encode(self.rpc.get_block_hash(1).await.unwrap())]),
+        )
+        .await
+        .unwrap()
+    }
+  }
+
+  // This function panics on a node which doesn't follow the Bitcoin protocol, which is deemed fine
+  async fn median_fee(&self, block: &Block) -> Result<Fee, NetworkError> {
+    let mut fees = vec![];
+    if block.txdata.len() > 1 {
+      for tx in &block.txdata[1 ..] {
+        let mut in_value = 0;
+        for input in &tx.input {
+          let mut input_tx = input.previous_output.txid.to_raw_hash().to_byte_array();
+          input_tx.reverse();
+          in_value += self
+            .rpc
+            .get_transaction(&input_tx)
+            .await
+            .map_err(|_| NetworkError::ConnectionError)?
+            .output[usize::try_from(input.previous_output.vout).unwrap()]
+          .value
+          .to_sat();
+        }
+        let out = tx.output.iter().map(|output| output.value.to_sat()).sum::<u64>();
+        fees.push((in_value - out) / u64::try_from(tx.vsize()).unwrap());
+      }
+    }
+    fees.sort();
+    let fee = fees.get(fees.len() / 2).copied().unwrap_or(0);
+
+    // The DUST constant documentation notes a relay rule practically enforcing a
+    // 1000 sat/kilo-vbyte minimum fee.
+    Ok(Fee(fee.max(1)))
+  }
+
+  #[cfg(test)]
+  pub(crate) fn sign_btc_input_for_p2pkh(
+    tx: &Transaction,
+    input_index: usize,
+    private_key: &PrivateKey,
+  ) -> ScriptBuf {
+    use bitcoin_serai::bitcoin::{Network as BNetwork, Address as BAddress};
+
+    let public_key = PublicKey::from_private_key(SECP256K1, private_key);
+    let main_addr = BAddress::p2pkh(public_key, BNetwork::Regtest);
+
+    let mut der = SECP256K1
+      .sign_ecdsa_low_r(
+        &Message::from_digest_slice(
+          SighashCache::new(tx)
+            .legacy_signature_hash(
+              input_index,
+              &main_addr.script_pubkey(),
+              EcdsaSighashType::All.to_u32(),
+            )
+            .unwrap()
+            .to_raw_hash()
+            .as_ref(),
+        )
+        .unwrap(),
+        &private_key.inner,
+      )
+      .serialize_der()
+      .to_vec();
+    der.push(1);
+
+    ScriptBuf::builder()
+      .push_slice(PushBytesBuf::try_from(der).unwrap())
+      .push_key(&public_key)
+      .into_script()
+  }
+}
+
+impl Network for Bitcoin {
+  // 2 inputs should be 2 * 230 = 460 weight units
+  // The output should be ~36 bytes, or 144 weight units
+  // The overhead should be ~20 bytes at most, or 80 weight units
+  // 684 weight units, 171 vbytes, round up to 200
+  // 200 vbytes at 1 sat/weight (our current minimum fee, 4 sat/vbyte) = 800 sat fee for the
+  // aggregation TX
+  const COST_TO_AGGREGATE: u64 = 800;
+
+  #[cfg(test)]
+  async fn get_block_number(&self, id: &[u8; 32]) -> usize {
+    self.rpc.get_block_number(id).await.unwrap()
+  }
+
+  #[cfg(test)]
+  async fn get_transaction_by_eventuality(&self, _: usize, id: &Eventuality) -> Transaction {
+    self.rpc.get_transaction(&id.0).await.unwrap()
+  }
+
+  #[cfg(test)]
+  async fn mine_block(&self) {
+    use bitcoin_serai::bitcoin::{Network as BNetwork, Address as BAddress};
+
+    self
+      .rpc
+      .rpc_call::<Vec<String>>(
+        "generatetoaddress",
+        serde_json::json!([1, BAddress::p2sh(Script::new(), BNetwork::Regtest).unwrap()]),
+      )
+      .await
+      .unwrap();
+  }
+
+  #[cfg(test)]
+  async fn test_send(&self, address: Address) -> Block {
+    use bitcoin_serai::bitcoin::{Network as BNetwork, Address as BAddress};
+
+    let secret_key = SecretKey::new(&mut rand_core::OsRng);
+    let private_key = PrivateKey::new(secret_key, BNetwork::Regtest);
+    let public_key = PublicKey::from_private_key(SECP256K1, &private_key);
+    let main_addr = BAddress::p2pkh(public_key, BNetwork::Regtest);
+
+    let new_block = self.get_latest_block_number().await.unwrap() + 1;
+    self
+      .rpc
+      .rpc_call::<Vec<String>>("generatetoaddress", serde_json::json!([100, main_addr]))
+      .await
+      .unwrap();
+
+    let tx = self.get_block(new_block).await.unwrap().txdata.swap_remove(0);
+    let mut tx = Transaction {
+      version: Version(2),
+      lock_time: LockTime::ZERO,
+      input: vec![TxIn {
+        previous_output: OutPoint { txid: tx.compute_txid(), vout: 0 },
+        script_sig: Script::new().into(),
+        sequence: Sequence(u32::MAX),
+        witness: Witness::default(),
+      }],
+      output: vec![TxOut {
+        value: tx.output[0].value - BAmount::from_sat(10000),
+        script_pubkey: address.clone().into(),
+      }],
+    };
+    tx.input[0].script_sig = Self::sign_btc_input_for_p2pkh(&tx, 0, &private_key);
+
+    let block = self.get_latest_block_number().await.unwrap() + 1;
+    self.rpc.send_raw_transaction(&tx).await.unwrap();
+    for _ in 0 .. Self::CONFIRMATIONS {
+      self.mine_block().await;
+    }
+    self.get_block(block).await.unwrap()
+  }
+}
+*/

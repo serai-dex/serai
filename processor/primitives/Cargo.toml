@@ -1,0 +1,32 @@
+[package]
+name = "serai-processor-primitives"
+version = "0.1.0"
+description = "Primitives for the Serai processor"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/primitives"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+rust-version = "1.80"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+group = { version = "0.13", default-features = false }
+
+serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std", "borsh"] }
+serai-coins-primitives = { path = "../../substrate/coins/primitives", default-features = false, features = ["std", "borsh"] }
+
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+
+log = { version = "0.4", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["macros", "sync", "time"] }
+
+serai-task = { path = "../../common/task", default-features = false }

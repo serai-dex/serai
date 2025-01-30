@@ -141,48 +141,44 @@ impl InternalPayment {
 }
 
 /// An error while sending Monero.
-#[derive(Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[derive(Clone, PartialEq, Eq, Debug, thiserror::Error)]
 pub enum SendError {
   /// The RingCT type to produce proofs for this transaction with weren't supported.
-  #[cfg_attr(feature = "std", error("this library doesn't yet support that RctType"))]
+  #[error("this library doesn't yet support that RctType")]
   UnsupportedRctType,
   /// The transaction had no inputs specified.
-  #[cfg_attr(feature = "std", error("no inputs"))]
+  #[error("no inputs")]
   NoInputs,
   /// The decoy quantity was invalid for the specified RingCT type.
-  #[cfg_attr(feature = "std", error("invalid number of decoys"))]
+  #[error("invalid number of decoys")]
   InvalidDecoyQuantity,
   /// The transaction had no outputs specified.
-  #[cfg_attr(feature = "std", error("no outputs"))]
+  #[error("no outputs")]
   NoOutputs,
   /// The transaction had too many outputs specified.
-  #[cfg_attr(feature = "std", error("too many outputs"))]
+  #[error("too many outputs")]
   TooManyOutputs,
   /// The transaction did not have a change output, and did not have two outputs.
   ///
   /// Monero requires all transactions have at least two outputs, assuming one payment and one
   /// change (or at least one dummy and one change). Accordingly, specifying no change and only
   /// one payment prevents creating a valid transaction
-  #[cfg_attr(feature = "std", error("only one output and no change address"))]
+  #[error("only one output and no change address")]
   NoChange,
   /// Multiple addresses had payment IDs specified.
-  ///
+  ///o
   /// Only one payment ID is allowed per transaction.
-  #[cfg_attr(feature = "std", error("multiple addresses with payment IDs"))]
+  #[error("multiple addresses with payment IDs")]
   MultiplePaymentIds,
   /// Too much arbitrary data was specified.
-  #[cfg_attr(feature = "std", error("too much data"))]
+  #[error("too much data")]
   TooMuchArbitraryData,
   /// The created transaction was too large.
-  #[cfg_attr(feature = "std", error("too large of a transaction"))]
+  #[error("too large of a transaction")]
   TooLargeTransaction,
   /// This transaction could not pay for itself.
-  #[cfg_attr(
-    feature = "std",
-    error(
-      "not enough funds (inputs {inputs}, outputs {outputs}, necessary_fee {necessary_fee:?})"
-    )
+  #[error(
+    "not enough funds (inputs {inputs}, outputs {outputs}, necessary_fee {necessary_fee:?})"
   )]
   NotEnoughFunds {
     /// The amount of funds the inputs contributed.
@@ -196,20 +192,17 @@ pub enum SendError {
     necessary_fee: Option<u64>,
   },
   /// This transaction is being signed with the wrong private key.
-  #[cfg_attr(feature = "std", error("wrong spend private key"))]
+  #[error("wrong spend private key")]
   WrongPrivateKey,
   /// This transaction was read from a bytestream which was malicious.
-  #[cfg_attr(
-    feature = "std",
-    error("this SignableTransaction was created by deserializing a malicious serialization")
-  )]
+  #[error("this SignableTransaction was created by deserializing a malicious serialization")]
   MaliciousSerialization,
   /// There was an error when working with the CLSAGs.
-  #[cfg_attr(feature = "std", error("clsag error ({0})"))]
+  #[error("clsag error ({0})")]
   ClsagError(ClsagError),
   /// There was an error when working with FROST.
   #[cfg(feature = "multisig")]
-  #[cfg_attr(feature = "std", error("frost error {0}"))]
+  #[error("frost error {0}")]
   FrostError(FrostError),
 }
 

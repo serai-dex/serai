@@ -20,7 +20,6 @@ use group::{
 use transcript::{Transcript, RecommendedTranscript};
 use dalek_ff_group as dfg;
 use frost::{
-  dkg::lagrange,
   curve::Ed25519,
   Participant, FrostError, ThresholdKeys, ThresholdView,
   algorithm::{WriteAddendum, Algorithm},
@@ -233,8 +232,10 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       .append_message(b"key_image_share", addendum.key_image_share.compress().to_bytes());
 
     // Accumulate the interpolated share
-    let interpolated_key_image_share =
-      addendum.key_image_share * lagrange::<dfg::Scalar>(l, view.included());
+    let interpolated_key_image_share = addendum.key_image_share *
+      view
+        .interpolation_factor(l)
+        .ok_or(FrostError::InternalError("processing addendum of non-participant"))?;
     *self.image.as_mut().unwrap() += interpolated_key_image_share;
 
     self

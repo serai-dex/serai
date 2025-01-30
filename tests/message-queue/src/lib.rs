@@ -92,7 +92,8 @@ fn basic_functionality() {
           },
           b"Hello, World!".to_vec(),
         )
-        .await;
+        .await
+        .unwrap();
 
       // Queue this twice, which message-queue should de-duplicate
       for _ in 0 .. 2 {
@@ -105,7 +106,8 @@ fn basic_functionality() {
             },
             b"Hello, World, again!".to_vec(),
           )
-          .await;
+          .await
+          .unwrap();
       }
 
       // Successfully get it
@@ -148,7 +150,8 @@ fn basic_functionality() {
           },
           b"Hello, World!".to_vec(),
         )
-        .await;
+        .await
+        .unwrap();
 
       let monero = MessageQueue::new(
         Service::Processor(ExternalNetworkId::Monero),

@@ -1,13 +1,13 @@
 [package]
 name = "serai-db"
-version = "0.1.0"
+version = "0.1.1"
 description = "A simple database trait and backends for it"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/common/db"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.71"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -18,7 +18,7 @@ workspace = true
 
 [dependencies]
 parity-db = { version = "0.4", default-features = false, optional = true }
-rocksdb = { version = "0.21", default-features = false, features = ["zstd"], optional = true }
+rocksdb = { version = "0.23", default-features = false, features = ["zstd"], optional = true }
 
 [features]
 parity-db = ["dep:parity-db"]

@@ -242,7 +242,16 @@ impl Mul<Scalar> for Point {
             res = res.double();
           }
         }
-        res += table[usize::from(bits)];
+
+        let mut add_by = Point::identity();
+        #[allow(clippy::needless_range_loop)]
+        for i in 0 .. 16 {
+          #[allow(clippy::cast_possible_truncation)] // Safe since 0 .. 16
+          {
+            add_by = <_>::conditional_select(&add_by, &table[i], bits.ct_eq(&(i as u8)));
+          }
+        }
+        res += add_by;
         bits = 0;
       }
     }

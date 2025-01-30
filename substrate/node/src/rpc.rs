@@ -65,7 +65,7 @@ where
         let validators = client.runtime_api().validators(latest_block, network).map_err(|_| {
           jsonrpsee::core::Error::to_call_error(std::io::Error::other(format!(
             "couldn't get validators from the latest block, which is likely a fatal bug. {}",
-            "please report this at https://github.com/serai-dex/serai",
+            "please report this at https://github.com/serai-dex/serai/issues",
           )))
         })?;
         // Always return the protocol's bootnodes

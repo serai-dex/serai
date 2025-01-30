@@ -8,6 +8,7 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
 publish = false
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -17,6 +18,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+hex = { version = "0.4", default-features = false, features = ["std"] }
+
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
@@ -26,3 +29,5 @@ serai-primitives = { path = "../../substrate/primitives", default-features = fal
 in-instructions-primitives = { package = "serai-in-instructions-primitives", path = "../../substrate/in-instructions/primitives", default-features = false, features = ["std", "borsh"] }
 coins-primitives = { package = "serai-coins-primitives", path = "../../substrate/coins/primitives", default-features = false, features = ["std", "borsh"] }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../../substrate/validator-sets/primitives", default-features = false, features = ["std", "borsh"] }
+
+serai-cosign = { path = "../../coordinator/cosign", default-features = false }

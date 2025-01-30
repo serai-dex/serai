@@ -44,7 +44,7 @@ async fn dht() {
       assert!(!Serai::new(serai_rpc.clone())
         .await
         .unwrap()
-        .p2p_validators(ExternalNetworkId::Bitcoin.into())
+        .p2p_validators(ExternalNetworkId::Bitcoin)
         .await
         .unwrap()
         .is_empty());

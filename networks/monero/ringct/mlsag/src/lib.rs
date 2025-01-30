@@ -19,23 +19,22 @@ use monero_generators::{H, hash_to_point};
 use monero_primitives::keccak256_to_scalar;
 
 /// Errors when working with MLSAGs.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, thiserror::Error)]
 pub enum MlsagError {
   /// Invalid ring (such as too small or too large).
-  #[cfg_attr(feature = "std", error("invalid ring"))]
+  #[error("invalid ring")]
   InvalidRing,
   /// Invalid amount of key images.
-  #[cfg_attr(feature = "std", error("invalid amount of key images"))]
+  #[error("invalid amount of key images")]
   InvalidAmountOfKeyImages,
   /// Invalid ss matrix.
-  #[cfg_attr(feature = "std", error("invalid ss"))]
+  #[error("invalid ss")]
   InvalidSs,
   /// Invalid key image.
-  #[cfg_attr(feature = "std", error("invalid key image"))]
+  #[error("invalid key image")]
   InvalidKeyImage,
   /// Invalid ci vector.
-  #[cfg_attr(feature = "std", error("invalid ci"))]
+  #[error("invalid ci")]
   InvalidCi,
 }
 

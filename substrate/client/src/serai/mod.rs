@@ -16,7 +16,7 @@ pub use abi::{primitives, Transaction};
 use abi::*;
 
 pub use primitives::{SeraiAddress, Signature, Amount};
-use primitives::{Header, NetworkId};
+use primitives::{Header, ExternalNetworkId};
 
 pub mod coins;
 pub use coins::SeraiCoins;
@@ -45,17 +45,17 @@ impl Block {
   }
 
   /// Returns the time of this block, set by its producer, in milliseconds since the epoch.
-  pub fn time(&self) -> Result<u64, SeraiError> {
+  pub fn time(&self) -> Option<u64> {
     for transaction in &self.transactions {
       if let Call::Timestamp(timestamp::Call::set { now }) = transaction.call() {
-        return Ok(*now);
+        return Some(*now);
       }
     }
-    Err(SeraiError::InvalidNode("no time was present in block".to_string()))
+    None
   }
 }
 
-#[derive(Error, Debug)]
+#[derive(Debug, Error)]
 pub enum SeraiError {
   #[error("failed to communicate with serai")]
   ConnectionError,
@@ -80,7 +80,7 @@ pub struct TemporalSerai<'a> {
   block: [u8; 32],
   events: RwLock<Option<EventsInBlock>>,
 }
-impl<'a> Clone for TemporalSerai<'a> {
+impl Clone for TemporalSerai<'_> {
   fn clone(&self) -> Self {
     Self { serai: self.serai, block: self.block, events: RwLock::new(None) }
   }
@@ -313,13 +313,13 @@ impl Serai {
   /// Return the P2P Multiaddrs for the validators of the specified network.
   pub async fn p2p_validators(
     &self,
-    network: NetworkId,
+    network: ExternalNetworkId,
   ) -> Result<Vec<multiaddr::Multiaddr>, SeraiError> {
     self.call("p2p_validators", network).await
   }
 }
 
-impl<'a> TemporalSerai<'a> {
+impl TemporalSerai<'_> {
   async fn events<E>(
     &self,
     filter_map: impl Fn(&Event) -> Option<E>,
@@ -389,27 +389,27 @@ impl<'a> TemporalSerai<'a> {
     })
   }
 
-  pub fn coins(&'a self) -> SeraiCoins<'a> {
+  pub fn coins(&self) -> SeraiCoins<'_> {
     SeraiCoins(self)
   }
 
-  pub fn dex(&'a self) -> SeraiDex<'a> {
+  pub fn dex(&self) -> SeraiDex<'_> {
     SeraiDex(self)
   }
 
-  pub fn in_instructions(&'a self) -> SeraiInInstructions<'a> {
+  pub fn in_instructions(&self) -> SeraiInInstructions<'_> {
     SeraiInInstructions(self)
   }
 
-  pub fn validator_sets(&'a self) -> SeraiValidatorSets<'a> {
+  pub fn validator_sets(&self) -> SeraiValidatorSets<'_> {
     SeraiValidatorSets(self)
   }
 
-  pub fn genesis_liquidity(&'a self) -> SeraiGenesisLiquidity {
+  pub fn genesis_liquidity(&self) -> SeraiGenesisLiquidity {
     SeraiGenesisLiquidity(self)
   }
 
-  pub fn liquidity_tokens(&'a self) -> SeraiLiquidityTokens {
+  pub fn liquidity_tokens(&self) -> SeraiLiquidityTokens {
     SeraiLiquidityTokens(self)
   }
 }

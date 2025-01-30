@@ -11,6 +11,7 @@ ignore = [
   "RUSTSEC-2021-0139", # https://github.com/serai-dex/serai/228
   "RUSTSEC-2022-0061", # https://github.com/serai-dex/serai/227
   "RUSTSEC-2024-0370", # proc-macro-error is unmaintained
+  "RUSTSEC-2024-0384", # instant is unmaintained
 ]
 
 [licenses]
@@ -27,7 +28,8 @@ allow = [
   "BSD-2-Clause",
   "BSD-3-Clause",
   "ISC",
-  "Unicode-DFS-2016",
+  "Zlib",
+  "Unicode-3.0",
   "OpenSSL",
 
   # Non-invasive copyleft
@@ -39,16 +41,43 @@ allow = [
 
 exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-env" },
+  { allow = ["AGPL-3.0"], name = "serai-task" },
 
-  { allow = ["AGPL-3.0"], name = "ethereum-serai" },
+  { allow = ["AGPL-3.0"], name = "ethereum-schnorr-contract" },
   { allow = ["AGPL-3.0"], name = "serai-ethereum-relayer" },
 
   { allow = ["AGPL-3.0"], name = "serai-message-queue" },
 
   { allow = ["AGPL-3.0"], name = "serai-processor-messages" },
-  { allow = ["AGPL-3.0"], name = "serai-processor" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-primitives" },
 
-  { allow = ["AGPL-3.0"], name = "tributary-chain" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-key-gen" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-frost-attempt-manager" },
+
+  { allow = ["AGPL-3.0"], name = "serai-processor-scanner" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-scheduler-primitives" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-utxo-scheduler-primitives" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-utxo-scheduler" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-transaction-chaining-scheduler" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-smart-contract-scheduler" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-signers" },
+
+  { allow = ["AGPL-3.0"], name = "serai-bitcoin-processor" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-bin" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-ethereum-primitives" },
+  { allow = ["AGPL-3.0"], name = "serai-ethereum-test-primitives" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-ethereum-deployer" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-ethereum-router" },
+  { allow = ["AGPL-3.0"], name = "serai-processor-ethereum-erc20" },
+  { allow = ["AGPL-3.0"], name = "serai-ethereum-processor" },
+  { allow = ["AGPL-3.0"], name = "serai-monero-processor" },
+
+  { allow = ["AGPL-3.0"], name = "tributary-sdk" },
+  { allow = ["AGPL-3.0"], name = "serai-cosign" },
+  { allow = ["AGPL-3.0"], name = "serai-coordinator-substrate" },
+  { allow = ["AGPL-3.0"], name = "serai-coordinator-tributary" },
+  { allow = ["AGPL-3.0"], name = "serai-coordinator-p2p" },
+  { allow = ["AGPL-3.0"], name = "serai-coordinator-libp2p-p2p" },
   { allow = ["AGPL-3.0"], name = "serai-coordinator" },
 
   { allow = ["AGPL-3.0"], name = "serai-coins-pallet" },
@@ -92,7 +121,10 @@ license-files = [
 multiple-versions = "warn"
 wildcards = "warn"
 highlight = "all"
-deny = [ { name = "serde_derive", version = ">=1.0.172, <1.0.185" } ]
+deny = [
+  { name = "serde_derive", version = ">=1.0.172, <1.0.185" },
+  { name = "hashbrown", version = ">=0.15" },
+]
 
 [sources]
 unknown-registry = "deny"
@@ -102,5 +134,5 @@ allow-git = [
   "https://github.com/rust-lang-nursery/lazy-static.rs",
   "https://github.com/serai-dex/substrate-bip39",
   "https://github.com/serai-dex/substrate",
-  "https://github.com/alloy-rs/core",
+  "https://github.com/kayabaNerve/pasta_curves",
 ]

@@ -1,134 +1,148 @@
-use blake2::{
-  digest::{consts::U32, Digest},
-  Blake2b,
-};
+use std::{path::Path, fs};
 
-use scale::Encode;
-use borsh::{BorshSerialize, BorshDeserialize};
+pub(crate) use serai_db::{Get, DbTxn, Db as DbTrait};
+use serai_db::{create_db, db_channel};
+
+use dkg::Participant;
+
 use serai_client::{
-  in_instructions::primitives::{Batch, SignedBatch},
   primitives::ExternalNetworkId,
-  validator_sets::primitives::{ExternalValidatorSet, Session},
+  validator_sets::primitives::{Session, ExternalValidatorSet, KeyPair},
 };
 
-pub use serai_db::*;
+use serai_cosign::SignedCosign;
+use serai_coordinator_substrate::NewSetInformation;
+use serai_coordinator_tributary::Transaction;
 
-use ::tributary::ReadWrite;
-use crate::tributary::{TributarySpec, Transaction, scanner::RecognizedIdType};
+#[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
+pub(crate) type Db = std::sync::Arc<serai_db::ParityDb>;
+#[cfg(feature = "rocksdb")]
+pub(crate) type Db = serai_db::RocksDB;
 
-create_db!(
-  MainDb {
-    HandledMessageDb: (network: ExternalNetworkId) -> u64,
-    ActiveTributaryDb: () -> Vec<u8>,
-    RetiredTributaryDb: (set: ExternalValidatorSet) -> (),
-    FirstPreprocessDb: (
-      network: ExternalNetworkId,
-      id_type: RecognizedIdType,
-      id: &[u8]
-    ) -> Vec<Vec<u8>>,
-    LastReceivedBatchDb: (network: ExternalNetworkId) -> u32,
-    ExpectedBatchDb: (network: ExternalNetworkId, id: u32) -> [u8; 32],
-    BatchDb: (network: ExternalNetworkId, id: u32)  -> SignedBatch,
-    LastVerifiedBatchDb: (network: ExternalNetworkId) -> u32,
-    HandoverBatchDb: (set: ExternalValidatorSet) -> u32,
-    LookupHandoverBatchDb: (network: ExternalNetworkId, batch: u32) -> Session,
-    QueuedBatchesDb: (set: ExternalValidatorSet) -> Vec<u8>
-  }
-);
-
-impl ActiveTributaryDb {
-  pub fn active_tributaries<G: Get>(getter: &G) -> (Vec<u8>, Vec<TributarySpec>) {
-    let bytes = Self::get(getter).unwrap_or_default();
-    let mut bytes_ref: &[u8] = bytes.as_ref();
-
-    let mut tributaries = vec![];
-    while !bytes_ref.is_empty() {
-      tributaries.push(TributarySpec::deserialize_reader(&mut bytes_ref).unwrap());
-    }
-
-    (bytes, tributaries)
+#[allow(unused_variables, unreachable_code)]
+fn db(path: &str) -> Db {
+  {
+    let path: &Path = path.as_ref();
+    // This may error if this path already exists, which we shouldn't propagate/panic on. If this
+    // is a problem (such as we don't have the necessary permissions to write to this path), we
+    // expect the following DB opening to error.
+    let _: Result<_, _> = fs::create_dir_all(path.parent().unwrap());
   }
 
-  pub fn add_participating_in_tributary(txn: &mut impl DbTxn, spec: &TributarySpec) {
-    let (mut existing_bytes, existing) = ActiveTributaryDb::active_tributaries(txn);
-    for tributary in &existing {
-      if tributary == spec {
-        return;
-      }
-    }
+  #[cfg(all(feature = "parity-db", feature = "rocksdb"))]
+  panic!("built with parity-db and rocksdb");
+  #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
+  let db = serai_db::new_parity_db(path);
+  #[cfg(feature = "rocksdb")]
+  let db = serai_db::new_rocksdb(path);
+  db
+}
 
-    spec.serialize(&mut existing_bytes).unwrap();
-    ActiveTributaryDb::set(txn, &existing_bytes);
-  }
+pub(crate) fn coordinator_db() -> Db {
+  let root_path = serai_env::var("DB_PATH").expect("path to DB wasn't specified");
+  db(&format!("{root_path}/coordinator/db"))
+}
 
-  pub fn retire_tributary(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
-    let mut active = Self::active_tributaries(txn).1;
-    for i in 0 .. active.len() {
-      if active[i].set() == set {
-        active.remove(i);
-        break;
-      }
-    }
+fn tributary_db_folder(set: ExternalValidatorSet) -> String {
+  let root_path = serai_env::var("DB_PATH").expect("path to DB wasn't specified");
+  let network = match set.network {
+    ExternalNetworkId::Bitcoin => "Bitcoin",
+    ExternalNetworkId::Ethereum => "Ethereum",
+    ExternalNetworkId::Monero => "Monero",
+  };
+  format!("{root_path}/tributary-{network}-{}", set.session.0)
+}
 
-    let mut bytes = vec![];
-    for active in active {
-      active.serialize(&mut bytes).unwrap();
-    }
-    Self::set(txn, &bytes);
-    RetiredTributaryDb::set(txn, set, &());
+pub(crate) fn tributary_db(set: ExternalValidatorSet) -> Db {
+  db(&format!("{}/db", tributary_db_folder(set)))
+}
+
+pub(crate) fn prune_tributary_db(set: ExternalValidatorSet) {
+  log::info!("pruning data directory for tributary {set:?}");
+  let db = tributary_db_folder(set);
+  if fs::exists(&db).expect("couldn't check if tributary DB exists") {
+    fs::remove_dir_all(db).unwrap();
   }
 }
 
-impl FirstPreprocessDb {
-  pub fn save_first_preprocess(
-    txn: &mut impl DbTxn,
-    network: ExternalNetworkId,
-    id_type: RecognizedIdType,
-    id: &[u8],
-    preprocess: &Vec<Vec<u8>>,
-  ) {
-    if let Some(existing) = FirstPreprocessDb::get(txn, network, id_type, id) {
-      assert_eq!(&existing, preprocess, "saved a distinct first preprocess");
-      return;
+create_db! {
+  Coordinator {
+    // The currently active Tributaries
+    ActiveTributaries: () -> Vec<NewSetInformation>,
+    // The latest Tributary to have been retired for a network
+    // Since Tributaries are retired sequentially, this is informative to if any Tributary has been
+    // retired
+    RetiredTributary: (network: ExternalNetworkId) -> Session,
+    // The last handled message from a Processor
+    LastProcessorMessage: (network: ExternalNetworkId) -> u64,
+    // Cosigns we produced and tried to intake yet incurred an error while doing so
+    ErroneousCosigns: () -> Vec<SignedCosign>,
+    // The keys to confirm and set on the Serai network
+    KeysToConfirm: (set: ExternalValidatorSet) -> KeyPair,
+    // The key was set on the Serai network
+    KeySet: (set: ExternalValidatorSet) -> (),
+  }
+}
+
+db_channel! {
+  Coordinator {
+    // Cosigns we produced
+    SignedCosigns: () -> SignedCosign,
+    // Tributaries to clean up upon reboot
+    TributaryCleanup: () -> ExternalValidatorSet,
+  }
+}
+
+mod _internal_db {
+  use super::*;
+
+  db_channel! {
+    Coordinator {
+      // Tributary transactions to publish from the Processor messages
+      TributaryTransactionsFromProcessorMessages: (set: ExternalValidatorSet) -> Transaction,
+      // Tributary transactions to publish from the DKG confirmation task
+      TributaryTransactionsFromDkgConfirmation: (set: ExternalValidatorSet) -> Transaction,
+      // Participants to remove
+      RemoveParticipant: (set: ExternalValidatorSet) -> Participant,
     }
-    FirstPreprocessDb::set(txn, network, id_type, id, preprocess);
   }
 }
 
-impl ExpectedBatchDb {
-  pub fn save_expected_batch(txn: &mut impl DbTxn, batch: &Batch) {
-    LastReceivedBatchDb::set(txn, batch.network, &batch.id);
-    Self::set(
-      txn,
-      batch.network,
-      batch.id,
-      &Blake2b::<U32>::digest(batch.instructions.encode()).into(),
-    );
-  }
-}
-
-impl HandoverBatchDb {
-  pub fn set_handover_batch(txn: &mut impl DbTxn, set: ExternalValidatorSet, batch: u32) {
-    Self::set(txn, set, &batch);
-    LookupHandoverBatchDb::set(txn, set.network, batch, &set.session);
-  }
-}
-impl QueuedBatchesDb {
-  pub fn queue(txn: &mut impl DbTxn, set: ExternalValidatorSet, batch: &Transaction) {
-    let mut batches = Self::get(txn, set).unwrap_or_default();
-    batch.write(&mut batches).unwrap();
-    Self::set(txn, set, &batches);
-  }
-
-  pub fn take(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Vec<Transaction> {
-    let batches_vec = Self::get(txn, set).unwrap_or_default();
-    txn.del(Self::key(set));
-
-    let mut batches: &[u8] = &batches_vec;
-    let mut res = vec![];
-    while !batches.is_empty() {
-      res.push(Transaction::read(&mut batches).unwrap());
+pub(crate) struct TributaryTransactionsFromProcessorMessages;
+impl TributaryTransactionsFromProcessorMessages {
+  pub(crate) fn send(txn: &mut impl DbTxn, set: ExternalValidatorSet, tx: &Transaction) {
+    // If this set has yet to be retired, send this transaction
+    if RetiredTributary::get(txn, set.network).map(|session| session.0) < Some(set.session.0) {
+      _internal_db::TributaryTransactionsFromProcessorMessages::send(txn, set, tx);
     }
-    res
+  }
+  pub(crate) fn try_recv(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Option<Transaction> {
+    _internal_db::TributaryTransactionsFromProcessorMessages::try_recv(txn, set)
+  }
+}
+
+pub(crate) struct TributaryTransactionsFromDkgConfirmation;
+impl TributaryTransactionsFromDkgConfirmation {
+  pub(crate) fn send(txn: &mut impl DbTxn, set: ExternalValidatorSet, tx: &Transaction) {
+    // If this set has yet to be retired, send this transaction
+    if RetiredTributary::get(txn, set.network).map(|session| session.0) < Some(set.session.0) {
+      _internal_db::TributaryTransactionsFromDkgConfirmation::send(txn, set, tx);
+    }
+  }
+  pub(crate) fn try_recv(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Option<Transaction> {
+    _internal_db::TributaryTransactionsFromDkgConfirmation::try_recv(txn, set)
+  }
+}
+
+pub(crate) struct RemoveParticipant;
+impl RemoveParticipant {
+  pub(crate) fn send(txn: &mut impl DbTxn, set: ExternalValidatorSet, participant: Participant) {
+    // If this set has yet to be retired, send this transaction
+    if RetiredTributary::get(txn, set.network).map(|session| session.0) < Some(set.session.0) {
+      _internal_db::RemoveParticipant::send(txn, set, &participant);
+    }
+  }
+  pub(crate) fn try_recv(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Option<Participant> {
+    _internal_db::RemoveParticipant::try_recv(txn, set)
   }
 }

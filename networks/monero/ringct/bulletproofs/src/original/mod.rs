@@ -56,7 +56,7 @@ impl AggregateRangeWitness {
   }
 }
 
-impl<'a> AggregateRangeStatement<'a> {
+impl AggregateRangeStatement<'_> {
   fn initial_transcript(&self) -> (Scalar, Vec<EdwardsPoint>) {
     let V = self.commitments.iter().map(|c| c * INV_EIGHT()).collect::<Vec<_>>();
     (keccak256_to_scalar(V.iter().flat_map(|V| V.compress().to_bytes()).collect::<Vec<_>>()), V)

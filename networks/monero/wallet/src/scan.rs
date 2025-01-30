@@ -67,14 +67,13 @@ impl Timelocked {
 }
 
 /// Errors when scanning a block.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, thiserror::Error)]
 pub enum ScanError {
   /// The block was for an unsupported protocol version.
-  #[cfg_attr(feature = "std", error("unsupported protocol version ({0})"))]
+  #[error("unsupported protocol version ({0})")]
   UnsupportedProtocol(u8),
   /// The ScannableBlock was invalid.
-  #[cfg_attr(feature = "std", error("invalid scannable block ({0})"))]
+  #[error("invalid scannable block ({0})")]
   InvalidScannableBlock(&'static str),
 }
 

@@ -37,11 +37,11 @@ pub(crate) fn challenge<T: Transcript, F: PrimeField>(transcript: &mut T) -> F {
   // Get a wide amount of bytes to safely reduce without bias
   // In most cases, <=1.5x bytes is enough. 2x is still standard and there's some theoretical
   // groups which may technically require more than 1.5x bytes for this to work as intended
-  let target_bytes = ((usize::try_from(F::NUM_BITS).unwrap() + 7) / 8) * 2;
+  let target_bytes = usize::try_from(F::NUM_BITS).unwrap().div_ceil(8) * 2;
   let mut challenge_bytes = transcript.challenge(b"challenge");
   let challenge_bytes_len = challenge_bytes.as_ref().len();
   // If the challenge is 32 bytes, and we need 64, we need two challenges
-  let needed_challenges = (target_bytes + (challenge_bytes_len - 1)) / challenge_bytes_len;
+  let needed_challenges = target_bytes.div_ceil(challenge_bytes_len);
 
   // The following algorithm should be equivalent to a wide reduction of the challenges,
   // interpreted as concatenated, big-endian byte string

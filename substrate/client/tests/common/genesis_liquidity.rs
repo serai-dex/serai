@@ -10,13 +10,13 @@ use schnorrkel::Schnorrkel;
 use sp_core::{sr25519::Signature, Pair as PairTrait};
 
 use serai_abi::{
-  genesis_liquidity::primitives::{oraclize_values_message, Values},
-  in_instructions::primitives::{Batch, InInstruction, InInstructionWithBalance},
   primitives::{
-    insecure_pair_from_name, Amount, ExternalBalance, BlockHash, ExternalCoin, ExternalNetworkId,
-    NetworkId, SeraiAddress, EXTERNAL_COINS,
+    EXTERNAL_COINS, BlockHash, ExternalNetworkId, NetworkId, ExternalCoin, Amount, ExternalBalance,
+    SeraiAddress, insecure_pair_from_name,
   },
-  validator_sets::primitives::{musig_context, Session, ValidatorSet},
+  validator_sets::primitives::{Session, ValidatorSet, musig_context},
+  genesis_liquidity::primitives::{Values, oraclize_values_message},
+  in_instructions::primitives::{InInstruction, InInstructionWithBalance, Batch},
 };
 
 use serai_client::{Serai, SeraiGenesisLiquidity};
@@ -53,7 +53,7 @@ pub async fn set_up_genesis(
       })
       .collect::<Vec<_>>();
 
-    // set up bloch hash
+    // set up block hash
     let mut block = BlockHash([0; 32]);
     OsRng.fill_bytes(&mut block.0);
 
@@ -65,8 +65,12 @@ pub async fn set_up_genesis(
       })
       .or_insert(0);
 
-    let batch =
-      Batch { network: coin.network(), id: batch_ids[&coin.network()], block, instructions };
+    let batch = Batch {
+      network: coin.network(),
+      external_network_block_hash: block,
+      id: batch_ids[&coin.network()],
+      instructions,
+    };
     provide_batch(serai, batch).await;
   }
 

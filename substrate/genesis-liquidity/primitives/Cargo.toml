@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/genesis-liquidity/primitives"
 authors = ["Akil Demir <akildemir72@gmail.com>"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -36,7 +36,7 @@ std = [
   "borsh?/std",
   "serde?/std",
   "scale-info/std",
-  
+
   "serai-primitives/std",
   "validator-sets-primitives/std",
 

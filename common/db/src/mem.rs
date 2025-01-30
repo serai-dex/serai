@@ -11,7 +11,7 @@ use crate::*;
 #[derive(PartialEq, Eq, Debug)]
 pub struct MemDbTxn<'a>(&'a MemDb, HashMap<Vec<u8>, Vec<u8>>, HashSet<Vec<u8>>);
 
-impl<'a> Get for MemDbTxn<'a> {
+impl Get for MemDbTxn<'_> {
   fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
     if self.2.contains(key.as_ref()) {
       return None;
@@ -23,7 +23,7 @@ impl<'a> Get for MemDbTxn<'a> {
       .or_else(|| self.0 .0.read().unwrap().get(key.as_ref()).cloned())
   }
 }
-impl<'a> DbTxn for MemDbTxn<'a> {
+impl DbTxn for MemDbTxn<'_> {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
     self.2.remove(key.as_ref());
     self.1.insert(key.as_ref().to_vec(), value.as_ref().to_vec());

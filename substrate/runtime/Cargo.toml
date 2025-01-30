@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/runtime"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
-rust-version = "1.74"
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -19,7 +19,7 @@ ignored = ["scale", "scale-info"]
 workspace = true
 
 [dependencies]
-hashbrown = { version = "0.14", default-features = false, features = ["ahash", "inline-more"] }
+hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }

@@ -20,7 +20,7 @@ use sp_std::vec::Vec;
 use sp_runtime::RuntimeDebug;
 
 #[rustfmt::skip]
-use serai_primitives::{BlockHash, Balance, ExternalNetworkId, NetworkId, SeraiAddress, ExternalBalance, ExternalAddress, system_address};
+use serai_primitives::{BlockHash, ExternalNetworkId, NetworkId, ExternalBalance, Balance, SeraiAddress, ExternalAddress, system_address};
 
 mod shorthand;
 pub use shorthand::*;
@@ -107,7 +107,7 @@ pub struct InInstructionWithBalance {
 pub struct Batch {
   pub network: ExternalNetworkId,
   pub id: u32,
-  pub block: BlockHash,
+  pub external_network_block_hash: BlockHash,
   pub instructions: Vec<InInstructionWithBalance>,
 }
 

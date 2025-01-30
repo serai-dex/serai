@@ -42,8 +42,8 @@ runs:
       shell: bash
       run: |
         cargo install svm-rs
-        svm install 0.8.25
-        svm use 0.8.25
+        svm install 0.8.26
+        svm use 0.8.26
 
     # - name: Cache Rust
     #   uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43

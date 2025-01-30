@@ -20,6 +20,7 @@ members = [
   "common/patchable-async-sleep",
   "common/db",
   "common/env",
+  "common/task",
   "common/request",
 
   "crypto/transcript",
@@ -30,17 +31,25 @@ members = [
   "crypto/ciphersuite",
 
   "crypto/multiexp",
-
   "crypto/schnorr",
   "crypto/dleq",
+
+  "crypto/evrf/secq256k1",
+  "crypto/evrf/embedwards25519",
+  "crypto/evrf/generalized-bulletproofs",
+  "crypto/evrf/circuit-abstraction",
+  "crypto/evrf/divisors",
+  "crypto/evrf/ec-gadgets",
+
   "crypto/dkg",
   "crypto/frost",
   "crypto/schnorrkel",
 
   "networks/bitcoin",
 
+  "networks/ethereum/build-contracts",
+  "networks/ethereum/schnorr",
   "networks/ethereum/alloy-simple-request-transport",
-  "networks/ethereum",
   "networks/ethereum/relayer",
 
   "networks/monero/io",
@@ -60,10 +69,37 @@ members = [
   "message-queue",
 
   "processor/messages",
-  "processor",
 
-  "coordinator/tributary/tendermint",
+  "processor/key-gen",
+  "processor/view-keys",
+  "processor/frost-attempt-manager",
+
+  "processor/primitives",
+  "processor/scanner",
+  "processor/scheduler/primitives",
+  "processor/scheduler/utxo/primitives",
+  "processor/scheduler/utxo/standard",
+  "processor/scheduler/utxo/transaction-chaining",
+  "processor/scheduler/smart-contract",
+  "processor/signers",
+
+  "processor/bin",
+  "processor/bitcoin",
+  "processor/ethereum/primitives",
+  "processor/ethereum/test-primitives",
+  "processor/ethereum/deployer",
+  "processor/ethereum/router",
+  "processor/ethereum/erc20",
+  "processor/ethereum",
+  "processor/monero",
+
+  "coordinator/tributary-sdk/tendermint",
+  "coordinator/tributary-sdk",
+  "coordinator/cosign",
+  "coordinator/substrate",
   "coordinator/tributary",
+  "coordinator/p2p",
+  "coordinator/p2p/libp2p",
   "coordinator",
 
   "substrate/primitives",
@@ -105,9 +141,9 @@ members = [
 
   "tests/docker",
   "tests/message-queue",
-  "tests/processor",
-  "tests/coordinator",
-  "tests/full-stack",
+  # TODO "tests/processor",
+  # TODO "tests/coordinator",
+  # TODO "tests/full-stack",
   "tests/reproducible-runtime",
 ]
 
@@ -115,18 +151,32 @@ members = [
 # to the extensive operations required for Bulletproofs
 [profile.dev.package]
 subtle = { opt-level = 3 }
-curve25519-dalek = { opt-level = 3 }
 
 ff = { opt-level = 3 }
 group = { opt-level = 3 }
 
 crypto-bigint = { opt-level = 3 }
+secp256k1 = { opt-level = 3 }
+curve25519-dalek = { opt-level = 3 }
 dalek-ff-group = { opt-level = 3 }
 minimal-ed448 = { opt-level = 3 }
 
 multiexp = { opt-level = 3 }
 
-monero-serai = { opt-level = 3 }
+secq256k1 = { opt-level = 3 }
+embedwards25519 = { opt-level = 3 }
+generalized-bulletproofs = { opt-level = 3 }
+generalized-bulletproofs-circuit-abstraction = { opt-level = 3 }
+ec-divisors = { opt-level = 3 }
+generalized-bulletproofs-ec-gadgets = { opt-level = 3 }
+
+dkg = { opt-level = 3 }
+
+monero-generators = { opt-level = 3 }
+monero-borromean = { opt-level = 3 }
+monero-bulletproofs = { opt-level = 3 }
+monero-mlsag = { opt-level = 3 }
+monero-clsag = { opt-level = 3 }
 
 [profile.release]
 panic = "unwind"
@@ -155,11 +205,9 @@ matches = { path = "patches/matches" }
 option-ext = { path = "patches/option-ext" }
 directories-next = { path = "patches/directories-next" }
 
-# https://github.com/alloy-rs/core/issues/717
-alloy-sol-type-parser = { git = "https://github.com/alloy-rs/core", rev = "446b9d2fbce12b88456152170709a3eaac929af0" }
-
 [workspace.lints.clippy]
 unwrap_or_default = "allow"
+map_unwrap_or = "allow"
 borrow_as_ptr = "deny"
 cast_lossless = "deny"
 cast_possible_truncation = "deny"
@@ -187,7 +235,6 @@ manual_instant_elapsed = "deny"
 manual_let_else = "deny"
 manual_ok_or = "deny"
 manual_string_new = "deny"
-map_unwrap_or = "deny"
 match_bool = "deny"
 match_same_arms = "deny"
 missing_fields_in_debug = "deny"
@@ -199,6 +246,7 @@ range_plus_one = "deny"
 redundant_closure_for_method_calls = "deny"
 redundant_else = "deny"
 string_add_assign = "deny"
+string_slice = "deny"
 unchecked_duration_subtraction = "deny"
 uninlined_format_args = "deny"
 unnecessary_box_returns = "deny"

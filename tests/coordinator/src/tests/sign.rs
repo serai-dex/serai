@@ -249,7 +249,6 @@ async fn sign_test() {
         balance,
         instruction: OutInstruction {
           address: ExternalAddress::new(b"external".to_vec()).unwrap(),
-          data: None,
         },
       };
       serai

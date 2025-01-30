@@ -5,4 +5,4 @@ a full copy of the AGPL-3.0 License is included in the root of this repository
 as a reference text. This copy should be provided with any distribution of a
 crate licensed under the AGPL-3.0, as per its terms.
 
-The GitHub actions (`.github/actions`) are licensed under the MIT license.
+The GitHub actions/workflows (`.github`) are licensed under the MIT license.

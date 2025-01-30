@@ -1,0 +1,49 @@
+[package]
+name = "tributary-sdk"
+version = "0.1.0"
+description = "A micro-blockchain to provide consensus and ordering to P2P communication"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/tributary-sdk"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+rust-version = "1.81"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { version = "2", default-features = false, features = ["std"] }
+
+subtle = { version = "^2", default-features = false, features = ["std"] }
+zeroize = { version = "^1.5", default-features = false, features = ["std"] }
+
+rand = { version = "0.8", default-features = false, features = ["std"] }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
+
+blake2 = { version = "0.10", default-features = false, features = ["std"] }
+transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", default-features = false, features = ["std", "recommended"] }
+
+ciphersuite = { package = "ciphersuite", path = "../../crypto/ciphersuite", version = "0.4", default-features = false, features = ["std", "ristretto"] }
+schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", version = "0.5", default-features = false, features = ["std"] }
+
+hex = { version = "0.4", default-features = false, features = ["std"] }
+log = { version = "0.4", default-features = false, features = ["std"] }
+
+serai-db = { path = "../../common/db", version = "0.1" }
+
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
+futures-util = { version = "0.3", default-features = false, features = ["std", "sink", "channel"] }
+futures-channel = { version = "0.3", default-features = false, features = ["std", "sink"] }
+tendermint = { package = "tendermint-machine", path = "./tendermint", version = "0.2" }
+
+tokio = { version = "1", default-features = false, features = ["sync", "time", "rt"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros"] }
+
+[features]
+tests = []
