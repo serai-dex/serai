@@ -105,7 +105,7 @@ fn test_valid_participants_inner<K: KeyGenParams>() {
         &mut tx,
         CoordinatorMessage::Participation {
           session: SESSION,
-          participant: Participant::new(i as u16 + 1).unwrap(),
+          participant: Participant::new(u16::try_from(i).unwrap() + 1).unwrap(),
           participation,
         },
       );
@@ -220,7 +220,7 @@ fn test_some_bad_participants_inner<K: KeyGenParams>() {
         &mut tx,
         CoordinatorMessage::Participation {
           session: SESSION,
-          participant: Participant::new(i as u16 + 1).unwrap(),
+          participant: Participant::new(u16::try_from(i).unwrap() + 1).unwrap(),
           participation,
         },
       );
