@@ -1,10 +1,11 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![deny(missing_docs)]
 #![allow(non_snake_case)]
 
 use core::fmt;
-use std::collections::HashSet;
+use std_shims::{vec, vec::Vec, collections::HashSet};
 
 use zeroize::Zeroize;
 
@@ -70,14 +71,26 @@ pub struct Generators<C: Ciphersuite> {
 #[must_use]
 #[derive(Clone)]
 pub struct BatchVerifier<C: Ciphersuite> {
-  g: C::F,
-  h: C::F,
+  /// The summed scalar for the G generator.
+  pub g: C::F,
+  /// The summed scalar for the G generator.
+  pub h: C::F,
 
-  g_bold: Vec<C::F>,
-  h_bold: Vec<C::F>,
-  h_sum: Vec<C::F>,
+  /// The summed scalars for the G_bold generators.
+  pub g_bold: Vec<C::F>,
+  /// The summed scalars for the H_bold generators.
+  pub h_bold: Vec<C::F>,
+  /// The summed scalars for the sums of all H generators prior to the index.
+  ///
+  /// This is not populated with the full set of summed H generators. This is only populated with
+  /// the powers of 2. Accordingly, an index i specifies a scalar for the sum of all H generators
+  /// from H**2**0 ..= H**2**i.
+  pub h_sum: Vec<C::F>,
 
-  additional: Vec<(C::F, C::G)>,
+  /// Additional (non-fixed) points to include in the multiexp.
+  ///
+  /// This is used for proof-specific elements.
+  pub additional: Vec<(C::F, C::G)>,
 }
 
 impl<C: Ciphersuite> fmt::Debug for Generators<C> {
@@ -171,15 +184,15 @@ impl<C: Ciphersuite> Generators<C> {
     Ok(Generators { g, h, g_bold, h_bold, h_sum })
   }
 
-  /// Create a BatchVerifier for proofs which use these generators.
-  pub fn batch_verifier(&self) -> BatchVerifier<C> {
+  /// Create a BatchVerifier for proofs which use a consistent set of generators.
+  pub fn batch_verifier() -> BatchVerifier<C> {
     BatchVerifier {
       g: C::F::ZERO,
       h: C::F::ZERO,
 
-      g_bold: vec![C::F::ZERO; self.g_bold.len()],
-      h_bold: vec![C::F::ZERO; self.h_bold.len()],
-      h_sum: vec![C::F::ZERO; self.h_sum.len()],
+      g_bold: vec![],
+      h_bold: vec![],
+      h_sum: vec![],
 
       additional: Vec::with_capacity(128),
     }
@@ -298,8 +311,6 @@ impl<C: Ciphersuite> PedersenCommitment<C> {
 pub struct PedersenVectorCommitment<C: Ciphersuite> {
   /// The values committed to across the `g` (bold) generators.
   pub g_values: ScalarVector<C::F>,
-  /// The values committed to across the `h` (bold) generators.
-  pub h_values: ScalarVector<C::F>,
   /// The mask blinding the values committed to.
   pub mask: C::F,
 }
@@ -309,16 +320,13 @@ impl<C: Ciphersuite> PedersenVectorCommitment<C> {
   ///
   /// This function returns None if the amount of generators is less than the amount of values
   /// within the relevant vector.
-  pub fn commit(&self, g_bold: &[C::G], h_bold: &[C::G], h: C::G) -> Option<C::G> {
-    if (g_bold.len() < self.g_values.len()) || (h_bold.len() < self.h_values.len()) {
+  pub fn commit(&self, g_bold: &[C::G], h: C::G) -> Option<C::G> {
+    if g_bold.len() < self.g_values.len() {
       None?;
     };
 
     let mut terms = vec![(self.mask, h)];
     for pair in self.g_values.0.iter().cloned().zip(g_bold.iter().cloned()) {
-      terms.push(pair);
-    }
-    for pair in self.h_values.0.iter().cloned().zip(h_bold.iter().cloned()) {
       terms.push(pair);
     }
     let res = multiexp(&terms);

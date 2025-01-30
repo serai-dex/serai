@@ -17,20 +17,22 @@ rustdoc-args = ["--cfg", "docsrs"]
 rustversion = "1"
 hex-literal = { version = "0.4", default-features = false }
 
-rand_core = { version = "0.6", default-features = false, features = ["std"] }
+std-shims = { version = "0.1", path = "../../../common/std-shims", default-features = false, optional = true }
 
-zeroize = { version = "^1.5", default-features = false, features = ["std", "zeroize_derive"] }
-subtle = { version = "^2.4", default-features = false, features = ["std"] }
+rand_core = { version = "0.6", default-features = false }
+
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+subtle = { version = "^2.4", default-features = false }
 
 generic-array = { version = "1", default-features = false }
 crypto-bigint = { version = "0.5", default-features = false, features = ["zeroize"] }
 
 dalek-ff-group = { path = "../../dalek-ff-group", version = "0.4", default-features = false }
 
-blake2 = { version = "0.10", default-features = false, features = ["std"] }
-ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false, features = ["std"] }
-ec-divisors = { path = "../divisors" }
-generalized-bulletproofs-ec-gadgets = { path = "../ec-gadgets" }
+blake2 = { version = "0.10", default-features = false }
+ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false }
+ec-divisors = { path = "../divisors", default-features = false }
+generalized-bulletproofs-ec-gadgets = { path = "../ec-gadgets", default-features = false }
 
 [dev-dependencies]
 hex = "0.4"
@@ -38,3 +40,8 @@ hex = "0.4"
 rand_core = { version = "0.6", features = ["std"] }
 
 ff-group-tests = { path = "../../ff-group-tests" }
+
+[features]
+alloc = ["std-shims", "zeroize/alloc", "ciphersuite/alloc"]
+std = ["std-shims/std", "rand_core/std", "zeroize/std", "subtle/std", "blake2/std", "ciphersuite/std", "ec-divisors/std", "generalized-bulletproofs-ec-gadgets/std"]
+default = ["std"]

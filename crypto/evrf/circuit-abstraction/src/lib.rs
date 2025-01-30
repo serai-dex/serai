@@ -1,14 +1,14 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![deny(missing_docs)]
 #![allow(non_snake_case)]
 
+use std_shims::{vec, vec::Vec};
+
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
-use ciphersuite::{
-  group::ff::{Field, PrimeField},
-  Ciphersuite,
-};
+use ciphersuite::{group::ff::Field, Ciphersuite};
 
 use generalized_bulletproofs::{
   ScalarVector, PedersenCommitment, PedersenVectorCommitment, ProofGenerators,
@@ -26,16 +26,28 @@ pub trait Transcript {
   ///
   /// It is the caller's responsibility to have properly transcripted all variables prior to
   /// sampling this challenge.
-  fn challenge<F: PrimeField>(&mut self) -> F;
+  fn challenge<C: Ciphersuite>(&mut self) -> C::F;
+
+  /// Sample a challenge as a byte array.
+  ///
+  /// It is the caller's responsibility to have properly transcripted all variables prior to
+  /// sampling this challenge.
+  fn challenge_bytes(&mut self) -> [u8; 64];
 }
 impl Transcript for ProverTranscript {
-  fn challenge<F: PrimeField>(&mut self) -> F {
-    self.challenge()
+  fn challenge<C: Ciphersuite>(&mut self) -> C::F {
+    self.challenge::<C>()
+  }
+  fn challenge_bytes(&mut self) -> [u8; 64] {
+    self.challenge_bytes()
   }
 }
 impl Transcript for VerifierTranscript<'_> {
-  fn challenge<F: PrimeField>(&mut self) -> F {
-    self.challenge()
+  fn challenge<C: Ciphersuite>(&mut self) -> C::F {
+    self.challenge::<C>()
+  }
+  fn challenge_bytes(&mut self) -> [u8; 64] {
+    self.challenge_bytes()
   }
 }
 
@@ -64,7 +76,6 @@ impl<C: Ciphersuite> Circuit<C> {
   }
 
   /// Create an instance to prove satisfaction of a circuit with.
-  // TODO: Take the transcript here
   #[allow(clippy::type_complexity)]
   pub fn prove(
     vector_commitments: Vec<PedersenVectorCommitment<C>>,
@@ -78,14 +89,13 @@ impl<C: Ciphersuite> Circuit<C> {
   }
 
   /// Create an instance to verify a proof with.
-  // TODO: Take the transcript here
   pub fn verify() -> Self {
     Self { muls: 0, constraints: vec![], prover: None }
   }
 
   /// Evaluate a linear combination.
   ///
-  /// Yields WL aL + WR aR + WO aO + WCG CG + WCH CH + WV V + c.
+  /// Yields WL aL + WR aR + WO aO + WCG CG + WV V + c.
   ///
   /// May panic if the linear combination references non-existent terms.
   ///
@@ -105,11 +115,6 @@ impl<C: Ciphersuite> Circuit<C> {
       for (WCG, C) in lincomb.WCG().iter().zip(&prover.C) {
         for (j, weight) in WCG {
           res += C.g_values[*j] * weight;
-        }
-      }
-      for (WCH, C) in lincomb.WCH().iter().zip(&prover.C) {
-        for (j, weight) in WCH {
-          res += C.h_values[*j] * weight;
         }
       }
       for (index, weight) in lincomb.WV() {
@@ -176,13 +181,13 @@ impl<C: Ciphersuite> Circuit<C> {
         // We can't deconstruct the witness as it implements Drop (per ZeroizeOnDrop)
         // Accordingly, we take the values within it and move forward with those
         let mut aL = vec![];
-        std::mem::swap(&mut prover.aL, &mut aL);
+        core::mem::swap(&mut prover.aL, &mut aL);
         let mut aR = vec![];
-        std::mem::swap(&mut prover.aR, &mut aR);
+        core::mem::swap(&mut prover.aR, &mut aR);
         let mut C = vec![];
-        std::mem::swap(&mut prover.C, &mut C);
+        core::mem::swap(&mut prover.C, &mut C);
         let mut V = vec![];
-        std::mem::swap(&mut prover.V, &mut V);
+        core::mem::swap(&mut prover.V, &mut V);
         ArithmeticCircuitWitness::new(ScalarVector::from(aL), ScalarVector::from(aR), C, V)
       })
       .transpose()?;

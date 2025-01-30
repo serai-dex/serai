@@ -3,7 +3,7 @@ use rand_core::{RngCore, OsRng};
 use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
 
 use crate::{
-  ScalarVector, PedersenCommitment, PedersenVectorCommitment,
+  ScalarVector, PedersenCommitment, PedersenVectorCommitment, Generators,
   transcript::*,
   arithmetic_circuit_proof::{
     Variable, LinComb, ArithmeticCircuitStatement, ArithmeticCircuitWitness,
@@ -43,7 +43,7 @@ fn test_zero_arithmetic_circuit() {
     statement.clone().prove(&mut OsRng, &mut transcript, witness).unwrap();
     transcript.complete()
   };
-  let mut verifier = generators.batch_verifier();
+  let mut verifier = Generators::batch_verifier();
 
   let mut transcript = VerifierTranscript::new([0; 32], &proof);
   let verifier_commmitments = transcript.read_commitments(0, 1);
@@ -59,14 +59,8 @@ fn test_vector_commitment_arithmetic_circuit() {
 
   let v1 = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
   let v2 = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
-  let v3 = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
-  let v4 = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
   let gamma = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
-  let commitment = (reduced.g_bold(0) * v1) +
-    (reduced.g_bold(1) * v2) +
-    (reduced.h_bold(0) * v3) +
-    (reduced.h_bold(1) * v4) +
-    (generators.h() * gamma);
+  let commitment = (reduced.g_bold(0) * v1) + (reduced.g_bold(1) * v2) + (generators.h() * gamma);
   let V = vec![];
   let C = vec![commitment];
 
@@ -83,20 +77,14 @@ fn test_vector_commitment_arithmetic_circuit() {
     vec![LinComb::empty()
       .term(<Ristretto as Ciphersuite>::F::ONE, Variable::CG { commitment: 0, index: 0 })
       .term(<Ristretto as Ciphersuite>::F::from(2u64), Variable::CG { commitment: 0, index: 1 })
-      .term(<Ristretto as Ciphersuite>::F::from(3u64), Variable::CH { commitment: 0, index: 0 })
-      .term(<Ristretto as Ciphersuite>::F::from(4u64), Variable::CH { commitment: 0, index: 1 })
-      .constant(-(v1 + (v2 + v2) + (v3 + v3 + v3) + (v4 + v4 + v4 + v4)))],
+      .constant(-(v1 + (v2 + v2)))],
     commitments.clone(),
   )
   .unwrap();
   let witness = ArithmeticCircuitWitness::<Ristretto>::new(
     aL,
     aR,
-    vec![PedersenVectorCommitment {
-      g_values: ScalarVector(vec![v1, v2]),
-      h_values: ScalarVector(vec![v3, v4]),
-      mask: gamma,
-    }],
+    vec![PedersenVectorCommitment { g_values: ScalarVector(vec![v1, v2]), mask: gamma }],
     vec![],
   )
   .unwrap();
@@ -105,7 +93,7 @@ fn test_vector_commitment_arithmetic_circuit() {
     statement.clone().prove(&mut OsRng, &mut transcript, witness).unwrap();
     transcript.complete()
   };
-  let mut verifier = generators.batch_verifier();
+  let mut verifier = Generators::batch_verifier();
 
   let mut transcript = VerifierTranscript::new([0; 32], &proof);
   let verifier_commmitments = transcript.read_commitments(1, 0);
@@ -139,13 +127,8 @@ fn fuzz_test_arithmetic_circuit() {
       while g_values.0.len() < ((OsRng.next_u64() % 8) + 1).try_into().unwrap() {
         g_values.0.push(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
       }
-      let mut h_values = ScalarVector(vec![]);
-      while h_values.0.len() < ((OsRng.next_u64() % 8) + 1).try_into().unwrap() {
-        h_values.0.push(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
-      }
       C.push(PedersenVectorCommitment {
         g_values,
-        h_values,
         mask: <Ristretto as Ciphersuite>::F::random(&mut OsRng),
       });
     }
@@ -193,13 +176,6 @@ fn fuzz_test_arithmetic_circuit() {
           constraint = constraint.term(weight, Variable::CG { commitment, index });
           eval += weight * C.g_values[index];
         }
-
-        for _ in 0 .. (OsRng.next_u64() % 4) {
-          let index = usize::try_from(OsRng.next_u64()).unwrap() % C.h_values.len();
-          let weight = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
-          constraint = constraint.term(weight, Variable::CH { commitment, index });
-          eval += weight * C.h_values[index];
-        }
       }
 
       if !V.is_empty() {
@@ -218,11 +194,7 @@ fn fuzz_test_arithmetic_circuit() {
 
     let mut transcript = Transcript::new([0; 32]);
     let commitments = transcript.write_commitments(
-      C.iter()
-        .map(|C| {
-          C.commit(generators.g_bold_slice(), generators.h_bold_slice(), generators.h()).unwrap()
-        })
-        .collect(),
+      C.iter().map(|C| C.commit(generators.g_bold_slice(), generators.h()).unwrap()).collect(),
       V.iter().map(|V| V.commit(generators.g(), generators.h())).collect(),
     );
 
@@ -239,7 +211,7 @@ fn fuzz_test_arithmetic_circuit() {
       statement.clone().prove(&mut OsRng, &mut transcript, witness).unwrap();
       transcript.complete()
     };
-    let mut verifier = generators.batch_verifier();
+    let mut verifier = Generators::batch_verifier();
 
     let mut transcript = VerifierTranscript::new([0; 32], &proof);
     let verifier_commmitments = transcript.read_commitments(C.len(), V.len());

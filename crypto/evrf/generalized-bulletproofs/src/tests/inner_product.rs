@@ -8,7 +8,7 @@ use ciphersuite::{
 };
 
 use crate::{
-  ScalarVector, PointVector,
+  ScalarVector, PointVector, Generators,
   transcript::*,
   inner_product::{P, IpStatement, IpWitness},
   tests::generators,
@@ -41,7 +41,7 @@ fn test_zero_inner_product() {
     transcript.complete()
   };
 
-  let mut verifier = generators.batch_verifier();
+  let mut verifier = Generators::batch_verifier();
   IpStatement::<Ristretto>::new(
     reduced,
     ScalarVector(vec![<Ristretto as Ciphersuite>::F::ONE; 1]),
@@ -58,7 +58,7 @@ fn test_zero_inner_product() {
 fn test_inner_product() {
   // P = sum(g_bold * a, h_bold * b)
   let generators = generators::<Ristretto>(32);
-  let mut verifier = generators.batch_verifier();
+  let mut verifier = Generators::batch_verifier();
   for i in [1, 2, 4, 8, 16, 32] {
     let generators = generators.reduce(i).unwrap();
     let g = generators.g();

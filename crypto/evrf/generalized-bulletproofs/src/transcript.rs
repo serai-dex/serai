@@ -1,9 +1,12 @@
-use std::io;
+use std_shims::{vec::Vec, io};
 
 use blake2::{Digest, Blake2b512};
 
 use ciphersuite::{
-  group::{ff::PrimeField, GroupEncoding},
+  group::{
+    ff::{Field, PrimeField},
+    GroupEncoding,
+  },
   Ciphersuite,
 };
 
@@ -13,27 +16,11 @@ const SCALAR: u8 = 0;
 const POINT: u8 = 1;
 const CHALLENGE: u8 = 2;
 
-fn challenge<F: PrimeField>(digest: &mut Blake2b512) -> F {
-  // Panic if this is such a wide field, we won't successfully perform a reduction into an unbiased
-  // scalar
-  debug_assert!((F::NUM_BITS + 128) < 512);
-
+fn challenge<C: Ciphersuite>(digest: &mut Blake2b512) -> C::F {
   digest.update([CHALLENGE]);
-  let chl = digest.clone().finalize();
+  let chl = digest.clone().finalize().into();
 
-  let mut res = F::ZERO;
-  for (i, mut byte) in chl.iter().cloned().enumerate() {
-    for j in 0 .. 8 {
-      let lsb = byte & 1;
-      let mut bit = F::from(u64::from(lsb));
-      for _ in 0 .. ((i * 8) + j) {
-        bit = bit.double();
-      }
-      res += bit;
-
-      byte >>= 1;
-    }
-  }
+  let res = C::reduce_512(chl);
 
   // Negligible probability
   if bool::from(res.is_zero()) {
@@ -83,6 +70,8 @@ impl Transcript {
   }
 
   /// Push a scalar onto the transcript.
+  ///
+  /// The order and layout of this must be constant to the context.
   pub fn push_scalar(&mut self, scalar: impl PrimeField) {
     self.digest.update([SCALAR]);
     let bytes = scalar.to_repr();
@@ -91,6 +80,8 @@ impl Transcript {
   }
 
   /// Push a point onto the transcript.
+  ///
+  /// The order and layout of this must be constant to the context.
   pub fn push_point(&mut self, point: impl GroupEncoding) {
     self.digest.update([POINT]);
     let bytes = point.to_bytes();
@@ -104,9 +95,11 @@ impl Transcript {
     C: Vec<C::G>,
     V: Vec<C::G>,
   ) -> Commitments<C> {
+    self.digest.update(u32::try_from(C.len()).unwrap().to_le_bytes());
     for C in &C {
       self.push_point(*C);
     }
+    self.digest.update(u32::try_from(V.len()).unwrap().to_le_bytes());
     for V in &V {
       self.push_point(*V);
     }
@@ -114,8 +107,14 @@ impl Transcript {
   }
 
   /// Sample a challenge.
-  pub fn challenge<F: PrimeField>(&mut self) -> F {
-    challenge(&mut self.digest)
+  pub fn challenge<C: Ciphersuite>(&mut self) -> C::F {
+    challenge::<C>(&mut self.digest)
+  }
+
+  /// Sample a challenge as a byte array.
+  pub fn challenge_bytes(&mut self) -> [u8; 64] {
+    self.digest.update([CHALLENGE]);
+    self.digest.clone().finalize().into()
   }
 
   /// Complete a transcript, yielding the fully serialized proof.
@@ -139,20 +138,36 @@ impl<'a> VerifierTranscript<'a> {
   }
 
   /// Read a scalar from the transcript.
+  ///
+  /// The order and layout of this must be constant to the context.
   pub fn read_scalar<C: Ciphersuite>(&mut self) -> io::Result<C::F> {
-    let scalar = C::read_F(&mut self.transcript)?;
+    // Read the scalar onto the transcript using the serialization present in the transcript
     self.digest.update([SCALAR]);
-    let bytes = scalar.to_repr();
-    self.digest.update(bytes);
+    let scalar_len = <C::F as PrimeField>::Repr::default().as_ref().len();
+    if self.transcript.len() < scalar_len {
+      Err(io::Error::new(io::ErrorKind::Other, "not enough bytes to read_scalar"))?;
+    }
+    self.digest.update(&self.transcript[.. scalar_len]);
+
+    // Read the actual scalar, where `read_F` ensures its canonically serialized
+    let scalar = C::read_F(&mut self.transcript)?;
     Ok(scalar)
   }
 
   /// Read a point from the transcript.
+  ///
+  /// The order and layout of this must be constant to the context.
   pub fn read_point<C: Ciphersuite>(&mut self) -> io::Result<C::G> {
-    let point = C::read_G(&mut self.transcript)?;
+    // Read the point onto the transcript using the serialization present in the transcript
     self.digest.update([POINT]);
-    let bytes = point.to_bytes();
-    self.digest.update(bytes);
+    let point_len = <C::G as GroupEncoding>::Repr::default().as_ref().len();
+    if self.transcript.len() < point_len {
+      Err(io::Error::new(io::ErrorKind::Other, "not enough bytes to read_point"))?;
+    }
+    self.digest.update(&self.transcript[.. point_len]);
+
+    // Read the actual point, where `read_G` ensures its canonically serialized
+    let point = C::read_G(&mut self.transcript)?;
     Ok(point)
   }
 
@@ -165,10 +180,12 @@ impl<'a> VerifierTranscript<'a> {
     C: usize,
     V: usize,
   ) -> io::Result<Commitments<C>> {
+    self.digest.update(u32::try_from(C).unwrap().to_le_bytes());
     let mut C_vec = Vec::with_capacity(C);
     for _ in 0 .. C {
       C_vec.push(self.read_point::<C>()?);
     }
+    self.digest.update(u32::try_from(V).unwrap().to_le_bytes());
     let mut V_vec = Vec::with_capacity(V);
     for _ in 0 .. V {
       V_vec.push(self.read_point::<C>()?);
@@ -177,11 +194,17 @@ impl<'a> VerifierTranscript<'a> {
   }
 
   /// Sample a challenge.
-  pub fn challenge<F: PrimeField>(&mut self) -> F {
-    challenge(&mut self.digest)
+  pub fn challenge<C: Ciphersuite>(&mut self) -> C::F {
+    challenge::<C>(&mut self.digest)
   }
 
-  /// Complete the transcript, returning the advanced slice.
+  /// Sample a challenge as a byte array.
+  pub fn challenge_bytes(&mut self) -> [u8; 64] {
+    self.digest.update([CHALLENGE]);
+    self.digest.clone().finalize().into()
+  }
+
+  /// Complete the transcript transcript, yielding what remains.
   pub fn complete(self) -> &'a [u8] {
     self.transcript
   }

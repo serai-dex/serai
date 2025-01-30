@@ -1,4 +1,5 @@
 use core::fmt;
+use std_shims::{vec, vec::Vec};
 
 use ciphersuite::{
   group::ff::{Field, PrimeField, BatchInverter},
@@ -10,11 +11,6 @@ use generalized_bulletproofs_circuit_abstraction::*;
 use crate::*;
 
 /// Parameters for a discrete logarithm proof.
-///
-/// This isn't required to be implemented by the Field/Group/Ciphersuite, solely a struct, to
-/// enable parameterization of discrete log proofs to the bitlength of the discrete logarithm.
-/// While that may be F::NUM_BITS, a discrete log proof a for a full scalar, it could also be 64,
-/// a discrete log proof for a u64 (such as if opening a Pedersen commitment in-circuit).
 pub trait DiscreteLogParameters {
   /// The amount of bits used to represent a scalar.
   type ScalarBits: ArrayLength;
@@ -30,8 +26,8 @@ pub trait DiscreteLogParameters {
 
   /// The amount of y x**i coefficients in a divisor.
   ///
-  /// This is the amount of points in a divisor (the amount of bits in a scalar, plus one) plus
-  /// one, divided by two, minus two.
+  /// This is the amount of points in a divisor (the amount of bits in a scalar, plus one) divided
+  /// by two, minus two.
   type YxCoefficients: ArrayLength;
 }
 
@@ -106,8 +102,6 @@ pub struct Divisor<Parameters: DiscreteLogParameters> {
   /// exceeding trivial complexity.
   pub y: Variable,
   /// The coefficients for the `y**1 x**i` terms of the polynomial.
-  // This subtraction enforces the divisor to have at least 4 points which is acceptable.
-  // TODO: Double check these constants
   pub yx: GenericArray<Variable, Parameters::YxCoefficients>,
   /// The coefficients for the `x**i` terms of the polynomial, skipping x**1.
   ///
@@ -324,7 +318,7 @@ pub trait EcDlogGadgets<C: Ciphersuite> {
     &self,
     transcript: &mut T,
     curve: &CurveSpec<C::F>,
-    generators: &[GeneratorTable<C::F, Parameters>],
+    generators: &[&GeneratorTable<C::F, Parameters>],
   ) -> (DiscreteLogChallenge<C::F, Parameters>, Vec<ChallengedGenerator<C::F, Parameters>>);
 
   /// Prove this point has the specified discrete logarithm over the specified generator.
@@ -355,12 +349,14 @@ impl<C: Ciphersuite> EcDlogGadgets<C> for Circuit<C> {
     &self,
     transcript: &mut T,
     curve: &CurveSpec<C::F>,
-    generators: &[GeneratorTable<C::F, Parameters>],
+    generators: &[&GeneratorTable<C::F, Parameters>],
   ) -> (DiscreteLogChallenge<C::F, Parameters>, Vec<ChallengedGenerator<C::F, Parameters>>) {
     // Get the challenge points
-    // TODO: Implement a proper hash to curve
+    let sign_of_points = transcript.challenge_bytes();
+    let sign_of_point_0 = (sign_of_points[0] & 1) == 1;
+    let sign_of_point_1 = ((sign_of_points[0] >> 1) & 1) == 1;
     let (c0_x, c0_y) = loop {
-      let c0_x: C::F = transcript.challenge();
+      let c0_x = transcript.challenge::<C>();
       let Some(c0_y) =
         Option::<C::F>::from(((c0_x.square() * c0_x) + (curve.a * c0_x) + curve.b).sqrt())
       else {
@@ -368,17 +364,16 @@ impl<C: Ciphersuite> EcDlogGadgets<C> for Circuit<C> {
       };
       // Takes the even y coordinate as to not be dependent on whatever root the above sqrt
       // happens to returns
-      // TODO: Randomly select which to take
-      break (c0_x, if bool::from(c0_y.is_odd()) { -c0_y } else { c0_y });
+      break (c0_x, if bool::from(c0_y.is_odd()) != sign_of_point_0 { -c0_y } else { c0_y });
     };
     let (c1_x, c1_y) = loop {
-      let c1_x: C::F = transcript.challenge();
+      let c1_x = transcript.challenge::<C>();
       let Some(c1_y) =
         Option::<C::F>::from(((c1_x.square() * c1_x) + (curve.a * c1_x) + curve.b).sqrt())
       else {
         continue;
       };
-      break (c1_x, if bool::from(c1_y.is_odd()) { -c1_y } else { c1_y });
+      break (c1_x, if bool::from(c1_y.is_odd()) != sign_of_point_1 { -c1_y } else { c1_y });
     };
 
     // mmadd-1998-cmo
@@ -483,7 +478,7 @@ impl<C: Ciphersuite> EcDlogGadgets<C> for Circuit<C> {
     let arg_iter = arg_iter.chain(dlog.iter());
     for variable in arg_iter {
       debug_assert!(
-        matches!(variable, Variable::CG { .. } | Variable::CH { .. } | Variable::V(_)),
+        matches!(variable, Variable::CG { .. } | Variable::V(_)),
         "discrete log proofs requires all arguments belong to commitments",
       );
     }

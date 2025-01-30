@@ -1,7 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![deny(missing_docs)]
 #![allow(non_snake_case)]
+
+use std_shims::{vec, vec::Vec};
 
 use subtle::{Choice, ConstantTimeEq, ConstantTimeGreater, ConditionallySelectable};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -18,7 +21,7 @@ pub use poly::Poly;
 mod tests;
 
 /// A curve usable with this library.
-pub trait DivisorCurve: Group + ConstantTimeEq + ConditionallySelectable {
+pub trait DivisorCurve: Group + ConstantTimeEq + ConditionallySelectable + Zeroize {
   /// An element of the field this curve is defined over.
   type FieldElement: Zeroize + PrimeField + ConditionallySelectable;
 
@@ -54,6 +57,8 @@ pub trait DivisorCurve: Group + ConstantTimeEq + ConditionallySelectable {
   /// Convert a point to its x and y coordinates.
   ///
   /// Returns None if passed the point at infinity.
+  ///
+  /// This function may run in time variable to if the point is the identity.
   fn to_xy(point: Self) -> Option<(Self::FieldElement, Self::FieldElement)>;
 }
 
@@ -271,8 +276,16 @@ pub struct ScalarDecomposition<F: Zeroize + PrimeFieldBits> {
 }
 
 impl<F: Zeroize + PrimeFieldBits> ScalarDecomposition<F> {
-  /// Decompose a scalar.
-  pub fn new(scalar: F) -> Self {
+  /// Decompose a non-zero scalar.
+  ///
+  /// Returns `None` if the scalar is zero.
+  ///
+  /// This function is constant time if the scalar is non-zero.
+  pub fn new(scalar: F) -> Option<Self> {
+    if bool::from(scalar.is_zero()) {
+      None?;
+    }
+
     /*
       We need the sum of the coefficients to equal F::NUM_BITS. The scalar's bits will be less than
       F::NUM_BITS. Accordingly, we need to increment the sum of the coefficients without
@@ -400,7 +413,12 @@ impl<F: Zeroize + PrimeFieldBits> ScalarDecomposition<F> {
     }
     debug_assert!(bool::from(decomposition.iter().sum::<u64>().ct_eq(&num_bits)));
 
-    ScalarDecomposition { scalar, decomposition }
+    Some(ScalarDecomposition { scalar, decomposition })
+  }
+
+  /// The scalar.
+  pub fn scalar(&self) -> &F {
+    &self.scalar
   }
 
   /// The decomposition of the scalar.
@@ -414,7 +432,7 @@ impl<F: Zeroize + PrimeFieldBits> ScalarDecomposition<F> {
   ///
   /// This function executes in constant time with regards to the scalar.
   ///
-  /// This function MAY panic if this scalar is zero.
+  /// This function MAY panic if the generator is the point at infinity.
   pub fn scalar_mul_divisor<C: Zeroize + DivisorCurve<Scalar = F>>(
     &self,
     mut generator: C,
@@ -430,37 +448,19 @@ impl<F: Zeroize + PrimeFieldBits> ScalarDecomposition<F> {
     divisor_points[0] = -generator * self.scalar;
 
     // Write the decomposition
-    let mut write_to: u32 = 1;
+    let mut write_above: u64 = 0;
     for coefficient in &self.decomposition {
-      let mut coefficient = *coefficient;
-      // Iterate over the maximum amount of iters for this value to be constant time regardless of
-      // any branch prediction algorithms
-      for _ in 0 .. <C::Scalar as PrimeField>::NUM_BITS {
-        // Write the generator to the slot we're supposed to
-        /*
-          Without this loop, we'd increment this dependent on the distribution within the
-          decomposition. If the distribution is bottom-heavy, we won't access the tail of
-          `divisor_points` for a while, risking it being ejected out of the cache (causing a cache
-          miss which may not occur with a top-heavy distribution which quickly moves to the tail).
-
-          This is O(log2(NUM_BITS) ** 3) though, as this the third loop, which is horrific.
-        */
-        for i in 1 ..= <C::Scalar as PrimeField>::NUM_BITS {
-          divisor_points[i as usize] =
-            <_>::conditional_select(&divisor_points[i as usize], &generator, i.ct_eq(&write_to));
-        }
-        // If the coefficient isn't zero, increment write_to (so we don't overwrite this generator
-        // when it should be there)
-        let coefficient_not_zero = !coefficient.ct_eq(&0);
-        write_to = <_>::conditional_select(&write_to, &(write_to + 1), coefficient_not_zero);
-        // Subtract one from the coefficient, if it's not zero and won't underflow
-        coefficient =
-          <_>::conditional_select(&coefficient, &coefficient.wrapping_sub(1), coefficient_not_zero);
+      // Write the generator to every slot except the slots we have already written to.
+      for i in 1 ..= (<C::Scalar as PrimeField>::NUM_BITS as u64) {
+        divisor_points[i as usize].conditional_assign(&generator, i.ct_gt(&write_above));
       }
+
+      // Increase the next write start by the coefficient.
+      write_above += coefficient;
       generator = generator.double();
     }
 
-    // Create a divisor out of all points except the last point which is solely scratch
+    // Create a divisor out of the points
     let res = new_divisor(&divisor_points).unwrap();
     divisor_points.zeroize();
     res
@@ -511,6 +511,7 @@ mod pasta {
 
 #[cfg(any(test, feature = "ed25519"))]
 mod ed25519 {
+  use subtle::{Choice, ConditionallySelectable};
   use group::{
     ff::{Field, PrimeField},
     Group, GroupEncoding,
@@ -558,9 +559,13 @@ mod ed25519 {
         ((D * edwards_y_sq) + Self::FieldElement::ONE).invert().unwrap())
       .sqrt()
       .unwrap();
-      if u8::from(bool::from(edwards_x.is_odd())) != x_is_odd {
-        edwards_x = -edwards_x;
-      }
+
+      // Negate the x coordinate if the sign doesn't match
+      edwards_x = <_>::conditional_select(
+        &edwards_x,
+        &-edwards_x,
+        edwards_x.is_odd() ^ Choice::from(x_is_odd),
+      );
 
       // Calculate the x and y coordinates for Wei25519
       let edwards_y_plus_one = Self::FieldElement::ONE + edwards_y;

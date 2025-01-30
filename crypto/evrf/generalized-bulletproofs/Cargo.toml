@@ -3,25 +3,27 @@ name = "generalized-bulletproofs"
 version = "0.1.0"
 description = "Generalized Bulletproofs"
 license = "MIT"
-repository = "https://github.com/serai-dex/serai/tree/develop/crypto/evrf/generalized-bulletproofs"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/generalized-bulletproofs"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["ciphersuite", "ff", "group"]
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.69"
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rand_core = { version = "0.6", default-features = false, features = ["std"] }
+std-shims = { path = "../../../common/std-shims", version = "^0.1.1", default-features = false }
 
-zeroize = { version = "^1.5", default-features = false, features = ["std", "zeroize_derive"] }
+rand_core = { version = "0.6", default-features = false }
 
-blake2 = { version = "0.10", default-features = false, features = ["std"] }
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
 
-multiexp = { path = "../../multiexp", version = "0.4", default-features = false, features = ["std", "batch"] }
-ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false, features = ["std"] }
+blake2 = { version = "0.10", default-features = false }
+
+multiexp = { path = "../../multiexp", version = "0.4", default-features = false, features = ["batch"] }
+ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false }
 
 [dev-dependencies]
 rand_core = { version = "0.6", features = ["getrandom"] }
@@ -31,4 +33,6 @@ transcript = { package = "flexible-transcript", path = "../../transcript", featu
 ciphersuite = { path = "../../ciphersuite", features = ["ristretto"] }
 
 [features]
-tests = []
+std = ["std-shims/std", "rand_core/std", "zeroize/std", "blake2/std", "multiexp/std", "ciphersuite/std"]
+tests = ["std"]
+default = ["std"]

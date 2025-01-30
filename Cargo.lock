@@ -2470,6 +2470,7 @@ dependencies = [
  "hex",
  "pasta_curves",
  "rand_core",
+ "std-shims",
  "subtle",
  "zeroize",
 ]
@@ -2570,6 +2571,7 @@ dependencies = [
  "hex-literal",
  "rand_core",
  "rustversion",
+ "std-shims",
  "subtle",
  "zeroize",
 ]
@@ -3293,6 +3295,7 @@ dependencies = [
  "flexible-transcript",
  "multiexp",
  "rand_core",
+ "std-shims",
  "zeroize",
 ]
 
@@ -3302,6 +3305,7 @@ version = "0.1.0"
 dependencies = [
  "ciphersuite",
  "generalized-bulletproofs",
+ "std-shims",
  "zeroize",
 ]
 
@@ -3312,6 +3316,7 @@ dependencies = [
  "ciphersuite",
  "generalized-bulletproofs-circuit-abstraction",
  "generic-array 1.1.1",
+ "std-shims",
 ]
 
 [[package]]
@@ -8822,6 +8827,7 @@ dependencies = [
  "k256",
  "rand_core",
  "rustversion",
+ "std-shims",
  "subtle",
  "zeroize",
 ]
@@ -9432,11 +9438,17 @@ dependencies = [
  "dalek-ff-group",
  "dkg",
  "dleq",
+ "ec-divisors",
+ "embedwards25519",
  "flexible-transcript",
+ "generalized-bulletproofs",
+ "generalized-bulletproofs-circuit-abstraction",
+ "generalized-bulletproofs-ec-gadgets",
  "minimal-ed448",
  "monero-wallet-util",
  "multiexp",
  "schnorr-signatures",
+ "secq256k1",
 ]
 
 [[package]]

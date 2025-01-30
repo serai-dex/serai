@@ -28,6 +28,12 @@ macro_rules! dalek_curve {
         $Point::generator()
       }
 
+      fn reduce_512(mut scalar: [u8; 64]) -> Self::F {
+        let res = Scalar::from_bytes_mod_order_wide(&scalar);
+        scalar.zeroize();
+        res
+      }
+
       fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
         Scalar::from_hash(Sha512::new_with_prefix(&[dst, data].concat()))
       }

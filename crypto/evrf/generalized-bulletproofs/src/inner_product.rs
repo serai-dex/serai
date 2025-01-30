@@ -1,3 +1,5 @@
+use std_shims::{vec, vec::Vec};
+
 use multiexp::multiexp_vartime;
 use ciphersuite::{group::ff::Field, Ciphersuite};
 
@@ -186,7 +188,7 @@ impl<'a, C: Ciphersuite> IpStatement<'a, C> {
       // Now that we've calculate L, R, transcript them to receive x (26-27)
       transcript.push_point(L);
       transcript.push_point(R);
-      let x: C::F = transcript.challenge();
+      let x: C::F = transcript.challenge::<C>();
       let x_inv = x.invert().unwrap();
 
       // The prover and verifier now calculate the following (28-31)
@@ -269,11 +271,19 @@ impl<'a, C: Ciphersuite> IpStatement<'a, C> {
   /// This will return Err if there is an error. This will return Ok if the proof was successfully
   /// queued for batch verification. The caller is required to verify the batch in order to ensure
   /// the proof is actually correct.
+  ///
+  /// If this proof returns an error, the BatchVerifier MUST be assumed corrupted and discarded.
   pub(crate) fn verify(
     self,
     verifier: &mut BatchVerifier<C>,
     transcript: &mut VerifierTranscript,
   ) -> Result<(), IpError> {
+    if verifier.g_bold.len() < self.generators.len() {
+      verifier.g_bold.resize(self.generators.len(), C::F::ZERO);
+      verifier.h_bold.resize(self.generators.len(), C::F::ZERO);
+      verifier.h_sum.resize(self.generators.len(), C::F::ZERO);
+    }
+
     let IpStatement { generators, h_bold_weights, u, P } = self;
 
     // Calculate the discrete log w.r.t. 2 for the amount of generators present
@@ -296,7 +306,7 @@ impl<'a, C: Ciphersuite> IpStatement<'a, C> {
     for _ in 0 .. lr_len {
       L.push(transcript.read_point::<C>().map_err(|_| IpError::IncompleteProof)?);
       R.push(transcript.read_point::<C>().map_err(|_| IpError::IncompleteProof)?);
-      xs.push(transcript.challenge());
+      xs.push(transcript.challenge::<C>());
     }
 
     // We calculate their inverse in batch

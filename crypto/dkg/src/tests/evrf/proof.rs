@@ -15,7 +15,7 @@ use ciphersuite::{
 };
 use pasta_curves::{Ep, Eq, Fp, Fq};
 
-use generalized_bulletproofs::tests::generators;
+use generalized_bulletproofs::{Generators, tests::generators};
 use generalized_bulletproofs_ec_gadgets::DiscreteLogParameters;
 
 use crate::evrf::proof::*;
@@ -35,6 +35,9 @@ impl Ciphersuite for Pallas {
     // This is solely test code so it's fine
     Self::F::from_uniform_bytes(&Self::H::digest([dst, msg].concat()).into())
   }
+  fn reduce_512(scalar: [u8; 64]) -> Self::F {
+    Self::F::from_uniform_bytes(&scalar)
+  }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
@@ -52,6 +55,9 @@ impl Ciphersuite for Vesta {
     // This is solely test code so it's fine
     Self::F::from_uniform_bytes(&Self::H::digest([dst, msg].concat()).into())
   }
+  fn reduce_512(scalar: [u8; 64]) -> Self::F {
+    Self::F::from_uniform_bytes(&scalar)
+  }
 }
 
 pub struct VestaParams;
@@ -68,7 +74,7 @@ impl EvrfCurve for Pallas {
 }
 
 fn evrf_proof_test<C: EvrfCurve>() {
-  let generators = generators(1024);
+  let generators = generators(2048);
   let vesta_private_key = Zeroizing::new(<C::EmbeddedCurve as Ciphersuite>::F::random(&mut OsRng));
   let ecdh_public_keys = [
     <C::EmbeddedCurve as Ciphersuite>::G::random(&mut OsRng),
@@ -81,7 +87,7 @@ fn evrf_proof_test<C: EvrfCurve>() {
   println!("Proving time: {:?}", time.elapsed());
 
   let time = Instant::now();
-  let mut verifier = generators.batch_verifier();
+  let mut verifier = Generators::batch_verifier();
   Evrf::<C>::verify(
     &mut OsRng,
     &generators,

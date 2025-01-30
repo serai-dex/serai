@@ -129,15 +129,11 @@ impl<C: EvrfCurve> Evrf<C> {
   /// Read a Variable from a theoretical vector commitment tape
   fn read_one_from_tape(generators_to_use: usize, start: &mut usize) -> Variable {
     // Each commitment has twice as many variables as generators in use
-    let commitment = *start / (2 * generators_to_use);
+    let commitment = *start / generators_to_use;
     // The index will be less than the amount of generators in use, as half are left and half are
     // right
     let index = *start % generators_to_use;
-    let res = if (*start / generators_to_use) % 2 == 0 {
-      Variable::CG { commitment, index }
-    } else {
-      Variable::CH { commitment, index }
-    };
+    let res = Variable::CG { commitment, index };
     *start += 1;
     res
   }
@@ -202,8 +198,8 @@ impl<C: EvrfCurve> Evrf<C> {
         padded_pow_of_2 <<= 1;
       }
       // This may as small as 16, which would create an excessive amount of vector commitments
-      // We set a floor of 1024 rows for bandwidth reasons
-      padded_pow_of_2.max(1024)
+      // We set a floor of 2048 rows for bandwidth reasons
+      padded_pow_of_2.max(2048)
     };
     (expected_muls, generators_to_use)
   }
@@ -213,7 +209,7 @@ impl<C: EvrfCurve> Evrf<C> {
     evrf_public_key: (C::F, C::F),
     coefficients: usize,
     ecdh_commitments: &[[(C::F, C::F); 2]],
-    generator_tables: &[GeneratorTable<C::F, C::EmbeddedCurveParameters>],
+    generator_tables: &[&GeneratorTable<C::F, C::EmbeddedCurveParameters>],
     circuit: &mut Circuit<C>,
     transcript: &mut impl Transcript,
   ) {
@@ -376,8 +372,10 @@ impl<C: EvrfCurve> Evrf<C> {
     let evrf_public_key;
     let mut actual_coefficients = Vec::with_capacity(coefficients);
     {
+      // This is checked at a higher level
       let dlog =
-        ScalarDecomposition::<<C::EmbeddedCurve as Ciphersuite>::F>::new(**evrf_private_key);
+        ScalarDecomposition::<<C::EmbeddedCurve as Ciphersuite>::F>::new(**evrf_private_key)
+          .expect("eVRF private key was zero");
       let points = Self::transcript_to_points(transcript, coefficients);
 
       // Start by pushing the discrete logarithm onto the tape
@@ -431,7 +429,8 @@ impl<C: EvrfCurve> Evrf<C> {
           }
         }
         let dlog =
-          ScalarDecomposition::<<C::EmbeddedCurve as Ciphersuite>::F>::new(ecdh_private_key);
+          ScalarDecomposition::<<C::EmbeddedCurve as Ciphersuite>::F>::new(ecdh_private_key)
+            .expect("ECDH private key was zero");
         let ecdh_commitment = <C::EmbeddedCurve as Ciphersuite>::generator() * ecdh_private_key;
         ecdh_commitments.push(ecdh_commitment);
         ecdh_commitments_xy.last_mut().unwrap()[j] =
@@ -471,15 +470,10 @@ impl<C: EvrfCurve> Evrf<C> {
       Self::muls_and_generators_to_use(coefficients, ecdh_public_keys.len());
 
     let mut vector_commitments =
-      Vec::with_capacity(vector_commitment_tape.len().div_ceil(2 * generators_to_use));
-    for chunk in vector_commitment_tape.chunks(2 * generators_to_use) {
+      Vec::with_capacity(vector_commitment_tape.len().div_ceil(generators_to_use));
+    for chunk in vector_commitment_tape.chunks(generators_to_use) {
       let g_values = chunk[.. generators_to_use.min(chunk.len())].to_vec().into();
-      let h_values = chunk[generators_to_use.min(chunk.len()) ..].to_vec().into();
-      vector_commitments.push(PedersenVectorCommitment {
-        g_values,
-        h_values,
-        mask: C::F::random(&mut *rng),
-      });
+      vector_commitments.push(PedersenVectorCommitment { g_values, mask: C::F::random(&mut *rng) });
     }
 
     vector_commitment_tape.zeroize();
@@ -499,7 +493,7 @@ impl<C: EvrfCurve> Evrf<C> {
         .iter()
         .map(|commitment| {
           commitment
-            .commit(generators.g_bold_slice(), generators.h_bold_slice(), generators.h())
+            .commit(generators.g_bold_slice(), generators.h())
             .ok_or(AcError::NotEnoughGenerators)
         })
         .collect::<Result<_, _>>()?,
@@ -518,7 +512,7 @@ impl<C: EvrfCurve> Evrf<C> {
       evrf_public_key,
       coefficients,
       &ecdh_commitments_xy,
-      &generator_tables,
+      &generator_tables.iter().collect::<Vec<_>>(),
       &mut circuit,
       &mut transcript,
     );
@@ -543,7 +537,7 @@ impl<C: EvrfCurve> Evrf<C> {
     let mut agg_weights = Vec::with_capacity(commitments.len());
     agg_weights.push(C::F::ONE);
     while agg_weights.len() < commitments.len() {
-      agg_weights.push(transcript.challenge::<C::F>());
+      agg_weights.push(transcript.challenge::<C>());
     }
     let mut x = commitments
       .iter()
@@ -554,7 +548,7 @@ impl<C: EvrfCurve> Evrf<C> {
     // Do a Schnorr PoK for the randomness of the aggregated Pedersen commitment
     let mut r = C::F::random(&mut *rng);
     transcript.push_point(generators.h() * r);
-    let c = transcript.challenge::<C::F>();
+    let c = transcript.challenge::<C>();
     transcript.push_scalar(r + (c * x));
     r.zeroize();
     x.zeroize();
@@ -615,7 +609,7 @@ impl<C: EvrfCurve> Evrf<C> {
     let coeffs_vc_variables = dlog_len + ((1 + (2 * coefficients)) * dlog_proof_len);
     let ecdhs_vc_variables = ((2 * ecdh_public_keys.len()) * dlog_len) +
       ((2 * 2 * ecdh_public_keys.len()) * dlog_proof_len);
-    let vcs = (coeffs_vc_variables + ecdhs_vc_variables).div_ceil(2 * generators_to_use);
+    let vcs = (coeffs_vc_variables + ecdhs_vc_variables).div_ceil(generators_to_use);
 
     let all_commitments =
       transcript.read_commitments(vcs, coefficients + ecdh_public_keys.len()).map_err(|_| ())?;
@@ -642,7 +636,7 @@ impl<C: EvrfCurve> Evrf<C> {
       <C::EmbeddedCurve as Ciphersuite>::G::to_xy(evrf_public_key).ok_or(())?,
       coefficients,
       &ecdh_keys_xy,
-      &generator_tables,
+      &generator_tables.iter().collect::<Vec<_>>(),
       &mut circuit,
       &mut transcript,
     );
@@ -665,7 +659,7 @@ impl<C: EvrfCurve> Evrf<C> {
     let mut agg_weights = Vec::with_capacity(commitments.len());
     agg_weights.push(C::F::ONE);
     while agg_weights.len() < commitments.len() {
-      agg_weights.push(transcript.challenge::<C::F>());
+      agg_weights.push(transcript.challenge::<C>());
     }
 
     let sum_points =
@@ -677,7 +671,7 @@ impl<C: EvrfCurve> Evrf<C> {
 
     #[allow(non_snake_case)]
     let R = transcript.read_point::<C>().map_err(|_| ())?;
-    let c = transcript.challenge::<C::F>();
+    let c = transcript.challenge::<C>();
     let s = transcript.read_scalar::<C>().map_err(|_| ())?;
 
     // Doesn't batch verify this as we can't access the internals of the GBP batch verifier

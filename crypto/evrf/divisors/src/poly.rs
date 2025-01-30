@@ -1,4 +1,5 @@
 use core::ops::{Add, Neg, Sub, Mul, Rem};
+use std_shims::{vec, vec::Vec};
 
 use subtle::{Choice, ConstantTimeEq, ConstantTimeGreater, ConditionallySelectable};
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -257,7 +258,7 @@ impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
     self.zero_coefficient = F::ZERO;
 
     // Move the x coefficients
-    std::mem::swap(&mut self.yx_coefficients[power_of_y - 1], &mut self.x_coefficients);
+    core::mem::swap(&mut self.yx_coefficients[power_of_y - 1], &mut self.x_coefficients);
     self.x_coefficients = vec![];
 
     self
@@ -564,7 +565,7 @@ impl<F: From<u64> + Zeroize + PrimeField> Poly<F> {
     quotient = conditional_select_poly(
       quotient,
       // If the dividing coefficient was for y**0 x**0, we return the poly scaled by its inverse
-      self.clone() * denominator_dividing_coefficient_inv,
+      self * denominator_dividing_coefficient_inv,
       denominator_dividing_coefficient.ct_eq(&CoefficientIndex { y_pow: 0, x_pow: 0 }),
     );
     remainder = conditional_select_poly(

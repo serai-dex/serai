@@ -85,7 +85,7 @@ use ciphersuite::{
 };
 use multiexp::multiexp_vartime;
 
-use generalized_bulletproofs::arithmetic_circuit_proof::*;
+use generalized_bulletproofs::{Generators, arithmetic_circuit_proof::*};
 use ec_divisors::DivisorCurve;
 
 use crate::{Participant, ThresholdParams, Interpolation, ThresholdCore, ThresholdKeys};
@@ -277,6 +277,7 @@ impl<C: EvrfCurve> EvrfDkg<C> {
     if evrf_public_keys.iter().any(|key| bool::from(key.is_identity())) {
       Err(EvrfError::PublicKeyWasIdentity)?;
     };
+    // This also checks the private key is not 0
     let evrf_public_key = <C::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key.deref();
     if !evrf_public_keys.iter().any(|key| *key == evrf_public_key) {
       Err(EvrfError::NotAParticipant)?;
@@ -359,7 +360,7 @@ impl<C: EvrfCurve> EvrfDkg<C> {
 
     let transcript = Self::initial_transcript(context, evrf_public_keys, t);
 
-    let mut evrf_verifier = generators.0.batch_verifier();
+    let mut evrf_verifier = Generators::batch_verifier();
     for (i, participation) in participations {
       let evrf_public_key = evrf_public_keys[usize::from(u16::from(*i)) - 1];
 
@@ -395,7 +396,7 @@ impl<C: EvrfCurve> EvrfDkg<C> {
         if faulty.contains(i) {
           continue;
         }
-        let mut evrf_verifier = generators.0.batch_verifier();
+        let mut evrf_verifier = Generators::batch_verifier();
         Evrf::<C>::verify(
           rng,
           &generators.0,
