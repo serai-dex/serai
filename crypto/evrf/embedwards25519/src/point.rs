@@ -46,7 +46,8 @@ impl ConstantTimeEq for Point {
     let y1 = self.y * other.z;
     let y2 = other.y * self.z;
 
-    (self.x.is_zero() & other.x.is_zero()) | (x1.ct_eq(&x2) & y1.ct_eq(&y2))
+    // Both identity or equivalent over their denominators
+    (self.z.is_zero() & other.z.is_zero()) | (x1.ct_eq(&x2) & y1.ct_eq(&y2))
   }
 }
 
