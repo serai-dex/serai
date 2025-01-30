@@ -81,7 +81,7 @@ mod mock;
 use frame_support::{ensure, pallet_prelude::*, BoundedBTreeSet};
 use frame_system::{
   pallet_prelude::{BlockNumberFor, OriginFor},
-  ensure_signed,
+  ensure_signed, RawOrigin,
 };
 
 pub use pallet::*;
@@ -109,7 +109,7 @@ pub mod pallet {
 
   use sp_core::sr25519::Public;
 
-  use coins_pallet::{Pallet as CoinsPallet, Config as CoinsConfig};
+  use coins_pallet::{Pallet as Coins, Config as CoinsConfig};
 
   /// Pool ID.
   ///
@@ -828,7 +828,7 @@ pub mod pallet {
       to: &T::AccountId,
       balance: Balance,
     ) -> Result<Amount, DispatchError> {
-      CoinsPallet::<T>::transfer_internal(*from, *to, balance)?;
+      Coins::<T>::transfer_internal(*from, *to, balance)?;
       Ok(balance.amount)
     }
 
@@ -927,7 +927,7 @@ pub mod pallet {
     /// Get the `owner`'s balance of `coin`, which could be the chain's native coin or another
     /// fungible. Returns a value in the form of an `Amount`.
     fn get_balance(owner: &T::AccountId, coin: Coin) -> SubstrateAmount {
-      CoinsPallet::<T>::balance(*owner, coin).0
+      Coins::<T>::balance(*owner, coin).0
     }
 
     /// Returns a pool id constructed from 2 coins.
@@ -992,11 +992,33 @@ pub mod pallet {
           let (reserve_in, reserve_out) = Self::get_reserves(coin1, coin2)?;
           let prev_amount = amounts.last().expect("Always has at least one element");
           let amount_out = Self::get_amount_out(*prev_amount, reserve_in, reserve_out)?;
+
+          // now that we got swap fee from the user, burn half of it.
+          Self::burn_half_of_swap_fee(Self::get_pool_id(*coin1, *coin2)?, *coin1, *prev_amount)?;
+
           amounts.push(amount_out);
         }
       }
 
       Ok(amounts)
+    }
+
+    fn burn_half_of_swap_fee(
+      pool: PoolId,
+      coin: Coin,
+      amount: SubstrateAmount,
+    ) -> Result<(), DispatchError> {
+      let pool_account = Self::get_pool_account(pool);
+
+      // half of the taken fee
+      let burn_percent = T::LPFee::get().checked_div(2).ok_or(Error::<T>::Overflow)?;
+      let burn_amount = Self::mul_div(amount, burn_percent.into(), 1000)?;
+
+      Coins::<T>::burn(
+        RawOrigin::Signed(pool_account).into(),
+        Balance { coin, amount: Amount(burn_amount) },
+      )?;
+      Ok(())
     }
 
     /// Used by the RPC service to provide current prices.
