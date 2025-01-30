@@ -994,6 +994,14 @@ pub mod pallet {
         false
       }
     }
+
+    /// Returns the external network key for a given external network
+    pub fn external_network_key(network: ExternalNetworkId) -> Option<Vec<u8>> {
+      let current_session = Self::session(NetworkId::from(network))?;
+      let keys = Keys::<T>::get(ExternalValidatorSet { network, session: current_session })?;
+
+      Some(keys.1.into_inner())
+    }
   }
 
   #[pallet::call]
@@ -1362,6 +1370,19 @@ pub mod pallet {
     fn is_disabled(index: u32) -> bool {
       SeraiDisabledIndices::<T>::get(index).is_some()
     }
+  }
+}
+
+sp_api::decl_runtime_apis! {
+  #[api_version(1)]
+  pub trait ValidatorSetsApi {
+    /// Returns the validator set for a given network.
+    fn validators(network_id: NetworkId) -> Vec<PublicKey>;
+
+    /// Returns the external network key for a given external network.
+    fn external_network_key(
+      network: ExternalNetworkId,
+    ) -> Option<Vec<u8>>;
   }
 }
 

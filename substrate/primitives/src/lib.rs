@@ -40,6 +40,10 @@ pub use account::*;
 mod constants;
 pub use constants::*;
 
+mod dex;
+#[allow(unused_imports)]
+pub use dex::*;
+
 pub type BlockNumber = u64;
 pub type Header = sp_runtime::generic::Header<BlockNumber, sp_runtime::traits::BlakeTwo256>;
 

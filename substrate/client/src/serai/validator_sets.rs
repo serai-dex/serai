@@ -179,7 +179,7 @@ impl SeraiValidatorSets<'_> {
     &self,
     network: NetworkId,
   ) -> Result<Vec<Public>, SeraiError> {
-    self.0.runtime_api("SeraiRuntimeApi_validators", network).await
+    self.0.runtime_api("ValidatorSetsApi_validators", network).await
   }
 
   // TODO: Store these separately since we almost never need both at once?

@@ -999,6 +999,25 @@ pub mod pallet {
       Ok(amounts)
     }
 
+    fn get_swap_path_from_coins(
+      coin1: Coin,
+      coin2: Coin,
+    ) -> Option<BoundedVec<Coin, T::MaxSwapPathLength>> {
+      if coin1 == coin2 {
+        return None;
+      }
+
+      let path = if (coin1 == Coin::native() && coin2 != Coin::native()) ||
+        (coin2 == Coin::native() && coin1 != Coin::native())
+      {
+        vec![coin1, coin2]
+      } else {
+        vec![coin1, Coin::native(), coin2]
+      };
+
+      Some(path.try_into().unwrap())
+    }
+
     /// Used by the RPC service to provide current prices.
     pub fn quote_price_exact_tokens_for_tokens(
       coin1: Coin,
@@ -1006,20 +1025,24 @@ pub mod pallet {
       amount: SubstrateAmount,
       include_fee: bool,
     ) -> Option<SubstrateAmount> {
-      let pool_id = Self::get_pool_id(coin1, coin2).ok()?;
-      let pool_account = Self::get_pool_account(pool_id);
+      let path = Self::get_swap_path_from_coins(coin1, coin2)?;
 
-      let balance1 = Self::get_balance(&pool_account, coin1);
-      let balance2 = Self::get_balance(&pool_account, coin2);
-      if balance1 != 0 {
-        if include_fee {
-          Self::get_amount_out(amount, balance1, balance2).ok()
-        } else {
-          Self::quote(amount, balance1, balance2).ok()
+      let mut amounts: Vec<SubstrateAmount> = vec![amount];
+      for coins_pair in path.windows(2) {
+        if let [coin1, coin2] = coins_pair {
+          let (reserve_in, reserve_out) = Self::get_reserves(coin1, coin2).ok()?;
+          let prev_amount = amounts.last().expect("Always has at least one element");
+          let amount_out = if include_fee {
+            Self::get_amount_out(*prev_amount, reserve_in, reserve_out).ok()?
+          } else {
+            Self::quote(*prev_amount, reserve_in, reserve_out).ok()?
+          };
+
+          amounts.push(amount_out);
         }
-      } else {
-        None
       }
+
+      Some(*amounts.last().unwrap())
     }
 
     /// Used by the RPC service to provide current prices.
@@ -1029,20 +1052,23 @@ pub mod pallet {
       amount: SubstrateAmount,
       include_fee: bool,
     ) -> Option<SubstrateAmount> {
-      let pool_id = Self::get_pool_id(coin1, coin2).ok()?;
-      let pool_account = Self::get_pool_account(pool_id);
+      let path = Self::get_swap_path_from_coins(coin1, coin2)?;
 
-      let balance1 = Self::get_balance(&pool_account, coin1);
-      let balance2 = Self::get_balance(&pool_account, coin2);
-      if balance1 != 0 {
-        if include_fee {
-          Self::get_amount_in(amount, balance1, balance2).ok()
-        } else {
-          Self::quote(amount, balance2, balance1).ok()
+      let mut amounts: Vec<SubstrateAmount> = vec![amount];
+      for coins_pair in path.windows(2).rev() {
+        if let [coin1, coin2] = coins_pair {
+          let (reserve_in, reserve_out) = Self::get_reserves(coin1, coin2).ok()?;
+          let prev_amount = amounts.last().expect("Always has at least one element");
+          let amount_in = if include_fee {
+            Self::get_amount_in(*prev_amount, reserve_in, reserve_out).ok()?
+          } else {
+            Self::quote(*prev_amount, reserve_out, reserve_in).ok()?
+          };
+          amounts.push(amount_in);
         }
-      } else {
-        None
       }
+
+      Some(*amounts.last().unwrap())
     }
 
     /// Calculates the optimal amount from the reserves.

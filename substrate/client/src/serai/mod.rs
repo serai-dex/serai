@@ -16,7 +16,8 @@ pub use abi::{primitives, Transaction};
 use abi::*;
 
 pub use primitives::{SeraiAddress, Signature, Amount};
-use primitives::{Header, ExternalNetworkId};
+use primitives::{Header, NetworkId, ExternalNetworkId, QuotePriceParams};
+use crate::in_instructions::primitives::Shorthand;
 
 pub mod coins;
 pub use coins::SeraiCoins;
@@ -316,6 +317,24 @@ impl Serai {
     network: ExternalNetworkId,
   ) -> Result<Vec<multiaddr::Multiaddr>, SeraiError> {
     self.call("p2p_validators", network).await
+  }
+
+  // TODO: move this to SeraiValidatorSets?
+  pub async fn external_network_address(
+    &self,
+    network: ExternalNetworkId,
+  ) -> Result<String, SeraiError> {
+    self.call("external_network_address", network).await
+  }
+
+  // TODO: move this to SeraiInInstructions?
+  pub async fn encoded_shorthand(&self, shorthand: Shorthand) -> Result<Vec<u8>, SeraiError> {
+    self.call("encoded_shorthand", shorthand).await
+  }
+
+  // TODO: move this to SeraiDex?
+  pub async fn quote_price(&self, params: QuotePriceParams) -> Result<u64, SeraiError> {
+    self.call("quote_price", params).await
   }
 }
 

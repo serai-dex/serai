@@ -53,7 +53,7 @@ use sp_runtime::{
 
 #[allow(unused_imports)]
 use primitives::{
-  NetworkId, PublicKey, AccountLookup, SubstrateAmount, Coin, EXTERNAL_NETWORKS,
+  NetworkId, ExternalNetworkId, PublicKey, AccountLookup, SubstrateAmount, Coin, EXTERNAL_NETWORKS,
   MEDIAN_PRICE_WINDOW_LENGTH, HOURS, DAYS, MINUTES, TARGET_BLOCK_TIME, BLOCK_SIZE,
   FAST_EPOCH_DURATION,
 };
@@ -374,13 +374,6 @@ mod benches {
   );
 }
 
-sp_api::decl_runtime_apis! {
-  #[api_version(1)]
-  pub trait SeraiRuntimeApi {
-    fn validators(network_id: NetworkId) -> Vec<PublicKey>;
-  }
-}
-
 sp_api::impl_runtime_apis! {
   impl sp_api::Core<Block> for Runtime {
     fn version() -> RuntimeVersion {
@@ -589,7 +582,7 @@ sp_api::impl_runtime_apis! {
     }
   }
 
-  impl crate::SeraiRuntimeApi<Block> for Runtime {
+  impl validator_sets::ValidatorSetsApi<Block> for Runtime {
     fn validators(network_id: NetworkId) -> Vec<PublicKey> {
       if network_id == NetworkId::Serai {
         Babe::authorities()
@@ -603,6 +596,10 @@ sp_api::impl_runtime_apis! {
             |vec| vec.into_inner().into_iter().map(|(validator, _)| validator).collect()
           )
       }
+    }
+
+    fn external_network_key(network: ExternalNetworkId) -> Option<Vec<u8>> {
+      ValidatorSets::external_network_key(network)
     }
   }
 

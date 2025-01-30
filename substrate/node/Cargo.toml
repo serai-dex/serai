@@ -52,6 +52,8 @@ futures-util = "0.3"
 tokio = { version = "1", features = ["sync", "rt-multi-thread"] }
 jsonrpsee = { version = "0.16", features = ["server"] }
 
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+
 sc-offchain = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
 sc-transaction-pool-api = { git = "https://github.com/serai-dex/substrate" }
@@ -76,6 +78,11 @@ substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
 pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
 
 serai-env = { path = "../../common/env" }
+
+bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["std", "hazmat"] }
+monero-wallet = { path = "../../networks/monero/wallet", default-features = false, features = ["std"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ed25519", "secp256k1"] }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 
 [build-dependencies]
 substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate" }

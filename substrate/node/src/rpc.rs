@@ -1,4 +1,4 @@
-use std::{sync::Arc, collections::HashSet};
+use std::{sync::Arc, ops::Deref, collections::HashSet};
 
 use rand_core::{RngCore, OsRng};
 
@@ -7,13 +7,17 @@ use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
 
 use serai_runtime::{
-  primitives::{NetworkId, SubstrateAmount, PublicKey},
-  Nonce, Block, SeraiRuntimeApi,
+  in_instructions::primitives::Shorthand,
+  primitives::{ExternalNetworkId, NetworkId, PublicKey, SubstrateAmount, QuotePriceParams},
+  validator_sets::ValidatorSetsApi,
+  dex::DexApi,
+  Block, Nonce,
 };
 
 use tokio::sync::RwLock;
 
-use jsonrpsee::RpcModule;
+use jsonrpsee::{RpcModule, core::Error};
+use scale::Encode;
 
 pub use sc_rpc_api::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
@@ -40,11 +44,14 @@ pub fn create_full<
 where
   C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, PublicKey, Nonce>
     + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, SubstrateAmount>
-    + SeraiRuntimeApi<Block>
+    + ValidatorSetsApi<Block>
+    + DexApi<Block>
     + BlockBuilder<Block>,
 {
   use substrate_frame_rpc_system::{System, SystemApiServer};
   use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
+  use ciphersuite::{Ciphersuite, Ed25519, Secp256k1};
+  use bitcoin_serai::{bitcoin, crypto::x_only};
 
   let mut module = RpcModule::new(());
   let FullDeps { id, client, pool, deny_unsafe, authority_discovery } = deps;
@@ -54,7 +61,7 @@ where
 
   if let Some(authority_discovery) = authority_discovery {
     let mut authority_discovery_module =
-      RpcModule::new((id, client, RwLock::new(authority_discovery)));
+      RpcModule::new((id, client.clone(), RwLock::new(authority_discovery)));
     authority_discovery_module.register_async_method(
       "p2p_validators",
       |params, context| async move {
@@ -63,7 +70,7 @@ where
         let latest_block = client.info().best_hash;
 
         let validators = client.runtime_api().validators(latest_block, network).map_err(|_| {
-          jsonrpsee::core::Error::to_call_error(std::io::Error::other(format!(
+          Error::to_call_error(std::io::Error::other(format!(
             "couldn't get validators from the latest block, which is likely a fatal bug. {}",
             "please report this at https://github.com/serai-dex/serai/issues",
           )))
@@ -99,5 +106,95 @@ where
     module.merge(authority_discovery_module)?;
   }
 
+  let mut serai_json_module = RpcModule::new(client);
+
+  // add network address rpc
+  serai_json_module.register_async_method(
+    "external_network_address",
+    |params, context| async move {
+      let network: ExternalNetworkId = params.parse()?;
+      let client = &*context;
+      let latest_block = client.info().best_hash;
+
+      let external_key = client
+        .runtime_api()
+        .external_network_key(latest_block, network)
+        .map_err(|_| Error::Custom("api call error".to_string()))?
+        .ok_or(Error::Custom("no address for the network".to_string()))?;
+
+      match network {
+        ExternalNetworkId::Bitcoin => {
+          let key = <Secp256k1 as Ciphersuite>::read_G::<&[u8]>(&mut external_key.as_slice())
+            .map_err(|_| Error::Custom("invalid key stored in db".to_string()))?;
+
+          let addr = bitcoin::Address::p2tr_tweaked(
+            bitcoin::key::TweakedPublicKey::dangerous_assume_tweaked(x_only(&key)),
+            bitcoin::address::KnownHrp::Mainnet,
+          );
+
+          Ok(addr.to_string())
+        }
+        // We don't know the eth address before the smart contract is deployed.
+        ExternalNetworkId::Ethereum => Ok(String::new()),
+        ExternalNetworkId::Monero => {
+          let view_private = zeroize::Zeroizing::new(
+            <Ed25519 as Ciphersuite>::hash_to_F(
+              b"Serai DEX Additional Key",
+              &["Monero".as_bytes(), &0u64.to_le_bytes()].concat(),
+            )
+            .0,
+          );
+
+          let spend = <Ed25519 as Ciphersuite>::read_G::<&[u8]>(&mut external_key.as_slice())
+            .map_err(|_| Error::Custom("invalid key stored in db".to_string()))?;
+
+          let addr = monero_wallet::address::MoneroAddress::new(
+            monero_wallet::address::Network::Mainnet,
+            monero_wallet::address::AddressType::Featured {
+              subaddress: false,
+              payment_id: None,
+              guaranteed: true,
+            },
+            *spend,
+            view_private.deref() * curve25519_dalek::constants::ED25519_BASEPOINT_TABLE,
+          );
+
+          Ok(addr.to_string())
+        }
+      }
+    },
+  )?;
+
+  // add shorthand encoding rpc
+  serai_json_module.register_async_method("encoded_shorthand", |params, _| async move {
+    // decode using serde and encode back using scale
+    let shorthand: Shorthand = params.parse()?;
+    Ok(shorthand.encode())
+  })?;
+
+  // add simulating a swap path rpc
+  serai_json_module.register_async_method("quote_price", |params, context| async move {
+    let client = &*context;
+    let latest_block = client.info().best_hash;
+    let QuotePriceParams { coin1, coin2, amount, include_fee, exact_in } = params.parse()?;
+
+    let amount = if exact_in {
+      client
+        .runtime_api()
+        .quote_price_exact_tokens_for_tokens(latest_block, coin1, coin2, amount, include_fee)
+        .map_err(|_| Error::Custom("api call error".to_string()))?
+        .ok_or(Error::Custom("invalid params or empty pool".to_string()))?
+    } else {
+      client
+        .runtime_api()
+        .quote_price_tokens_for_exact_tokens(latest_block, coin1, coin2, amount, include_fee)
+        .map_err(|_| Error::Custom("api call error".to_string()))?
+        .ok_or(Error::Custom("invalid params or empty pool".to_string()))?
+    };
+
+    Ok(amount)
+  })?;
+
+  module.merge(serai_json_module)?;
   Ok(module)
 }
