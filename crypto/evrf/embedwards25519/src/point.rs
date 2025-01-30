@@ -198,6 +198,7 @@ impl Group for Point {
     Point { x: FieldElement::ZERO, y: FieldElement::ONE, z: FieldElement::ZERO }
   }
   fn generator() -> Self {
+    // Point with the lowest valid x-coordinate
     Point {
       x: FieldElement::from_repr(hex_literal::hex!(
         "0100000000000000000000000000000000000000000000000000000000000000"
@@ -335,8 +336,10 @@ impl GroupEncoding for Point {
       // If this the identity, set y to 1
       let y =
         CtOption::conditional_select(&y, &CtOption::new(FieldElement::ONE, 1.into()), is_identity);
+      // If this the identity, set y to 1 and z to 0 (instead of 1)
+      let z = <_>::conditional_select(&FieldElement::ONE, &FieldElement::ZERO, is_identity);
       // Create the point if we have a y solution
-      let point = y.map(|y| Point { x, y, z: FieldElement::ONE });
+      let point = y.map(|y| Point { x, y, z });
 
       let not_negative_zero = !(is_identity & sign);
       // Only return the point if it isn't -0

@@ -7,7 +7,7 @@ This curve was found via
 for finding curves (specifically, curve cycles), modified to search for curves
 whose field is the Ed25519 scalar field (not the Ed25519 field).
 
-```
+```ignore
 p = 0x1000000000000000000000000000000014def9dea2f79cd65812631a5cf5d3ed
 q = 0x0fffffffffffffffffffffffffffffffe53f4debb78ff96877063f0306eef96b
 D = -420435
