@@ -15,8 +15,18 @@ use sp_std::{vec, vec::Vec};
 #[cfg(feature = "borsh")]
 use crate::{borsh_serialize_bounded_vec, borsh_deserialize_bounded_vec};
 
+/// Identifier for an embedded elliptic curve.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[cfg_attr(feature = "std", derive(Zeroize))]
+#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum EmbeddedEllipticCurve {
+  Embedwards25519,
+  Secq256k1,
+}
+
 /// The type used to identify external networks.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, TypeInfo)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, TypeInfo)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ExternalNetworkId {
@@ -125,6 +135,21 @@ impl BorshDeserialize for NetworkId {
 }
 
 impl ExternalNetworkId {
+  /// The embedded elliptic curve actively used for this network.
+  ///
+  /// This is guaranteed to return `[]`, `[Embedwards25519]`, or
+  /// `[Embedwards25519, *network specific curve*]`.
+  pub fn embedded_elliptic_curves(&self) -> &'static [EmbeddedEllipticCurve] {
+    match self {
+      // We need to generate a Ristretto key for oraclizing and a Secp256k1 key for the network
+      Self::Bitcoin | Self::Ethereum => {
+        &[EmbeddedEllipticCurve::Embedwards25519, EmbeddedEllipticCurve::Secq256k1]
+      }
+      // Since the oraclizing key curve is the same as the network's curve, we only need it
+      Self::Monero => &[EmbeddedEllipticCurve::Embedwards25519],
+    }
+  }
+
   pub fn coins(&self) -> Vec<ExternalCoin> {
     match self {
       Self::Bitcoin => vec![ExternalCoin::Bitcoin],
@@ -135,6 +160,17 @@ impl ExternalNetworkId {
 }
 
 impl NetworkId {
+  /// The embedded elliptic curve actively used for this network.
+  ///
+  /// This is guaranteed to return `[]`, `[Embedwards25519]`, or
+  /// `[Embedwards25519, *network specific curve*]`.
+  pub fn embedded_elliptic_curves(&self) -> &'static [EmbeddedEllipticCurve] {
+    match self {
+      Self::Serai => &[],
+      Self::External(network) => network.embedded_elliptic_curves(),
+    }
+  }
+
   pub fn coins(&self) -> Vec<Coin> {
     match self {
       Self::Serai => vec![Coin::Serai],

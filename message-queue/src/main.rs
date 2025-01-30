@@ -72,6 +72,10 @@ pub(crate) fn queue_message(
   // Assert one, and only one of these, is the coordinator
   assert!(matches!(meta.from, Service::Coordinator) ^ matches!(meta.to, Service::Coordinator));
 
+  // Lock the queue
+  let queue_lock = QUEUES.read().unwrap();
+  let mut queue_lock = queue_lock[&(meta.from, meta.to)].write().unwrap();
+
   // Verify (from, to, intent) hasn't been prior seen
   fn key(domain: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
     [&[u8::try_from(domain.len()).unwrap()], domain, key.as_ref()].concat()
@@ -93,7 +97,7 @@ pub(crate) fn queue_message(
   DbTxn::put(&mut txn, intent_key, []);
 
   // Queue it
-  let id = QUEUES.read().unwrap()[&(meta.from, meta.to)].write().unwrap().queue_message(
+  let id = queue_lock.queue_message(
     &mut txn,
     QueuedMessage {
       from: meta.from,

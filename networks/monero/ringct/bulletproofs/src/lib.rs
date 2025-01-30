@@ -45,14 +45,13 @@ use crate::plus::{
 mod tests;
 
 /// An error from proving/verifying Bulletproofs(+).
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, thiserror::Error)]
 pub enum BulletproofError {
   /// Proving/verifying a Bulletproof(+) range proof with no commitments.
-  #[cfg_attr(feature = "std", error("no commitments to prove the range for"))]
+  #[error("no commitments to prove the range for")]
   NoCommitments,
   /// Proving/verifying a Bulletproof(+) range proof with more commitments than supported.
-  #[cfg_attr(feature = "std", error("too many commitments to prove the range for"))]
+  #[error("too many commitments to prove the range for")]
   TooManyCommitments,
 }
 

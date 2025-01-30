@@ -283,7 +283,7 @@ impl pallet_authorship::Config for Runtime {
 }
 
 // Maximum number of authorities per session.
-pub type MaxAuthorities = ConstU32<{ validator_sets::primitives::MAX_KEY_SHARES_PER_SET }>;
+pub type MaxAuthorities = ConstU32<{ validator_sets::primitives::MAX_KEY_SHARES_PER_SET_U32 }>;
 
 /// Longevity of an offence report.
 pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;

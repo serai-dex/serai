@@ -8,12 +8,13 @@ use blake2::{
 use scale::Encode;
 
 use serai_client::{
-  primitives::{Amount, BlockHash, ExternalBalance, ExternalCoin, SeraiAddress},
+  primitives::{BlockHash, ExternalCoin, Amount, ExternalBalance, SeraiAddress},
+  coins::CoinsEvent,
+  validator_sets::primitives::Session,
   in_instructions::{
     primitives::{InInstruction, InInstructionWithBalance, Batch},
     InInstructionsEvent,
   },
-  coins::CoinsEvent,
   Serai,
 };
 
@@ -23,8 +24,6 @@ use common::in_instructions::provide_batch;
 serai_test!(
   publish_batch: (|serai: Serai| async move {
     let id = 0;
-    let mut block_hash = BlockHash([0; 32]);
-    OsRng.fill_bytes(&mut block_hash.0);
 
     let mut address = SeraiAddress::new([0; 32]);
     OsRng.fill_bytes(&mut address.0);
@@ -34,10 +33,13 @@ serai_test!(
     let amount = Amount(OsRng.next_u64().saturating_add(1));
     let balance = ExternalBalance { coin, amount };
 
+    let mut external_network_block_hash = BlockHash([0; 32]);
+    OsRng.fill_bytes(&mut external_network_block_hash.0);
+
     let batch = Batch {
       network,
       id,
-      block: block_hash,
+      external_network_block_hash,
       instructions: vec![InInstructionWithBalance {
         instruction: InInstruction::Transfer(address),
         balance,
@@ -49,16 +51,16 @@ serai_test!(
     let serai = serai.as_of(block);
     {
       let serai = serai.in_instructions();
-      let latest_finalized = serai.latest_block_for_network(network).await.unwrap();
-      assert_eq!(latest_finalized, Some(block_hash));
       let batches = serai.batch_events().await.unwrap();
       assert_eq!(
         batches,
         vec![InInstructionsEvent::Batch {
           network,
+          publishing_session: Session(0),
           id,
-          block: block_hash,
-          instructions_hash: Blake2b::<U32>::digest(batch.instructions.encode()).into(),
+          external_network_block_hash,
+          in_instructions_hash: Blake2b::<U32>::digest(batch.instructions.encode()).into(),
+          in_instruction_results: bitvec::bitvec![u8, bitvec::order::Lsb0; 1; 1],
         }]
       );
     }

@@ -6,8 +6,8 @@ use serai_abi::in_instructions::primitives::DexCall;
 
 use serai_client::{
   primitives::{
-    Amount, Coin, Balance, BlockHash, insecure_pair_from_name, ExternalAddress, SeraiAddress,
-    ExternalCoin, ExternalBalance,
+    BlockHash, ExternalCoin, Coin, Amount, ExternalBalance, Balance, SeraiAddress, ExternalAddress,
+    insecure_pair_from_name,
   },
   in_instructions::primitives::{
     InInstruction, InInstructionWithBalance, Batch, IN_INSTRUCTION_EXECUTOR, OutAddress,
@@ -247,7 +247,7 @@ serai_test!(
     let batch = Batch {
       network: coin.network(),
       id: batch_id,
-      block: block_hash,
+      external_network_block_hash: block_hash,
       instructions: vec![InInstructionWithBalance {
         instruction: InInstruction::Dex(DexCall::SwapAndAddLiquidity(pair.public().into())),
         balance: ExternalBalance { coin, amount: Amount(20_000_000_000_000) },
@@ -329,7 +329,7 @@ serai_test!(
       let batch = Batch {
         network: coin1.network(),
         id: coin1_batch_id,
-        block: block_hash,
+        external_network_block_hash: block_hash,
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::Dex(DexCall::Swap(out_balance, out_address)),
           balance: ExternalBalance { coin: coin1, amount: Amount(200_000_000_000_000) },
@@ -369,7 +369,7 @@ serai_test!(
       let batch = Batch {
         network: coin2.network(),
         id: coin2_batch_id,
-        block: block_hash,
+        external_network_block_hash: block_hash,
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::Dex(DexCall::Swap(out_balance, out_address.clone())),
           balance: ExternalBalance { coin: coin2, amount: Amount(200_000_000_000) },
@@ -407,7 +407,7 @@ serai_test!(
       let batch = Batch {
         network: coin1.network(),
         id: coin1_batch_id,
-        block: block_hash,
+        external_network_block_hash: block_hash,
         instructions: vec![InInstructionWithBalance {
           instruction: InInstruction::Dex(DexCall::Swap(out_balance, out_address.clone())),
           balance: ExternalBalance { coin: coin1, amount: Amount(100_000_000_000_000) },

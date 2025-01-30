@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/substrate/node"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 publish = false
-rust-version = "1.74"
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -26,6 +26,10 @@ hex = "0.4"
 log = "0.4"
 
 schnorrkel = "0.11"
+
+ciphersuite = { path = "../../crypto/ciphersuite" }
+embedwards25519 = { path = "../../crypto/evrf/embedwards25519" }
+secq256k1 = { path = "../../crypto/evrf/secq256k1" }
 
 libp2p = "0.52"
 

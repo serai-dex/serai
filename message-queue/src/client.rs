@@ -64,22 +64,20 @@ impl MessageQueue {
     Self::new(service, url, priv_key)
   }
 
-  #[must_use]
-  async fn send(socket: &mut TcpStream, msg: MessageQueueRequest) -> bool {
+  async fn send(socket: &mut TcpStream, msg: MessageQueueRequest) -> Result<(), String> {
     let msg = borsh::to_vec(&msg).unwrap();
-    let Ok(()) = socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await else {
-      log::warn!("couldn't send the message len");
-      return false;
+    match socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await {
+      Ok(()) => {}
+      Err(e) => Err(format!("couldn't send the message len: {e:?}"))?,
     };
-    let Ok(()) = socket.write_all(&msg).await else {
-      log::warn!("couldn't write the message");
-      return false;
-    };
-    true
+    match socket.write_all(&msg).await {
+      Ok(()) => {}
+      Err(e) => Err(format!("couldn't write the message: {e:?}"))?,
+    }
+    Ok(())
   }
 
-  pub async fn queue(&self, metadata: Metadata, msg: Vec<u8>) {
-    // TODO: Should this use OsRng? Deterministic or deterministic + random may be better.
+  pub async fn queue(&self, metadata: Metadata, msg: Vec<u8>) -> Result<(), String> {
     let nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
     let nonce_pub = Ristretto::generator() * nonce.deref();
     let sig = SchnorrSignature::<Ristretto>::sign(
@@ -97,6 +95,21 @@ impl MessageQueue {
     .serialize();
 
     let msg = MessageQueueRequest::Queue { meta: metadata, msg, sig };
+
+    let mut socket = match TcpStream::connect(&self.url).await {
+      Ok(socket) => socket,
+      Err(e) => Err(format!("failed to connect to the message-queue service: {e:?}"))?,
+    };
+    Self::send(&mut socket, msg.clone()).await?;
+    match socket.read_u8().await {
+      Ok(1) => {}
+      Ok(b) => Err(format!("message-queue didn't return for 1 for its ack, recieved: {b}"))?,
+      Err(e) => Err(format!("failed to read the response from the message-queue service: {e:?}"))?,
+    }
+    Ok(())
+  }
+
+  pub async fn queue_with_retry(&self, metadata: Metadata, msg: Vec<u8>) {
     let mut first = true;
     loop {
       // Sleep, so we don't hammer re-attempts
@@ -105,14 +118,9 @@ impl MessageQueue {
       }
       first = false;
 
-      let Ok(mut socket) = TcpStream::connect(&self.url).await else { continue };
-      if !Self::send(&mut socket, msg.clone()).await {
-        continue;
+      if self.queue(metadata.clone(), msg.clone()).await.is_ok() {
+        break;
       }
-      if socket.read_u8().await.ok() != Some(1) {
-        continue;
-      }
-      break;
     }
   }
 
@@ -136,7 +144,7 @@ impl MessageQueue {
       log::trace!("opened socket for next");
 
       loop {
-        if !Self::send(&mut socket, msg.clone()).await {
+        if Self::send(&mut socket, msg.clone()).await.is_err() {
           continue 'outer;
         }
         let status = match socket.read_u8().await {
@@ -224,7 +232,7 @@ impl MessageQueue {
       first = false;
 
       let Ok(mut socket) = TcpStream::connect(&self.url).await else { continue };
-      if !Self::send(&mut socket, msg.clone()).await {
+      if Self::send(&mut socket, msg.clone()).await.is_err() {
         continue;
       }
       if socket.read_u8().await.ok() != Some(1) {

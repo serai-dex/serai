@@ -1,0 +1,259 @@
+name: Weekly MSRV Check
+
+on:
+  schedule:
+    - cron: "0 0 * * 0"
+  workflow_dispatch:
+
+jobs:
+  msrv-common:
+    name: Run cargo msrv on common
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Install cargo msrv
+        run: cargo install --locked cargo-msrv
+
+      - name: Run cargo msrv on common
+        run: |
+          cargo msrv verify --manifest-path common/zalloc/Cargo.toml
+          cargo msrv verify --manifest-path common/std-shims/Cargo.toml
+          cargo msrv verify --manifest-path common/env/Cargo.toml
+          cargo msrv verify --manifest-path common/db/Cargo.toml
+          cargo msrv verify --manifest-path common/task/Cargo.toml
+          cargo msrv verify --manifest-path common/request/Cargo.toml
+          cargo msrv verify --manifest-path common/patchable-async-sleep/Cargo.toml
+
+  msrv-crypto:
+    name: Run cargo msrv on crypto
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Install cargo msrv
+        run: cargo install --locked cargo-msrv
+
+      - name: Run cargo msrv on crypto
+        run: |
+          cargo msrv verify --manifest-path crypto/transcript/Cargo.toml
+
+          cargo msrv verify --manifest-path crypto/ff-group-tests/Cargo.toml
+          cargo msrv verify --manifest-path crypto/dalek-ff-group/Cargo.toml
+          cargo msrv verify --manifest-path crypto/ed448/Cargo.toml
+
+          cargo msrv verify --manifest-path crypto/multiexp/Cargo.toml
+
+          cargo msrv verify --manifest-path crypto/dleq/Cargo.toml
+          cargo msrv verify --manifest-path crypto/ciphersuite/Cargo.toml
+          cargo msrv verify --manifest-path crypto/schnorr/Cargo.toml
+
+          cargo msrv verify --manifest-path crypto/evrf/generalized-bulletproofs/Cargo.toml
+          cargo msrv verify --manifest-path crypto/evrf/circuit-abstraction/Cargo.toml
+          cargo msrv verify --manifest-path crypto/evrf/divisors/Cargo.toml
+          cargo msrv verify --manifest-path crypto/evrf/ec-gadgets/Cargo.toml
+          cargo msrv verify --manifest-path crypto/evrf/embedwards25519/Cargo.toml
+          cargo msrv verify --manifest-path crypto/evrf/secq256k1/Cargo.toml
+
+          cargo msrv verify --manifest-path crypto/dkg/Cargo.toml
+          cargo msrv verify --manifest-path crypto/frost/Cargo.toml
+          cargo msrv verify --manifest-path crypto/schnorrkel/Cargo.toml
+
+  msrv-networks:
+    name: Run cargo msrv on networks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Install cargo msrv
+        run: cargo install --locked cargo-msrv
+
+      - name: Run cargo msrv on networks
+        run: |
+          cargo msrv verify --manifest-path networks/bitcoin/Cargo.toml
+
+          cargo msrv verify --manifest-path networks/ethereum/build-contracts/Cargo.toml
+          cargo msrv verify --manifest-path networks/ethereum/schnorr/Cargo.toml
+          cargo msrv verify --manifest-path networks/ethereum/alloy-simple-request-transport/Cargo.toml
+          cargo msrv verify --manifest-path networks/ethereum/relayer/Cargo.toml --features parity-db
+
+          cargo msrv verify --manifest-path networks/monero/io/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/generators/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/primitives/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/ringct/mlsag/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/ringct/clsag/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/ringct/borromean/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/ringct/bulletproofs/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/rpc/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/rpc/simple-request/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/wallet/address/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/wallet/Cargo.toml
+          cargo msrv verify --manifest-path networks/monero/verify-chain/Cargo.toml
+
+  msrv-message-queue:
+    name: Run cargo msrv on message-queue
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Install cargo msrv
+        run: cargo install --locked cargo-msrv
+
+      - name: Run cargo msrv on message-queue
+        run: |
+          cargo msrv verify --manifest-path message-queue/Cargo.toml --features parity-db
+
+  msrv-processor:
+    name: Run cargo msrv on processor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Install cargo msrv
+        run: cargo install --locked cargo-msrv
+
+      - name: Run cargo msrv on processor
+        run: |
+          cargo msrv verify --manifest-path processor/view-keys/Cargo.toml
+
+          cargo msrv verify --manifest-path processor/primitives/Cargo.toml
+          cargo msrv verify --manifest-path processor/messages/Cargo.toml
+
+          cargo msrv verify --manifest-path processor/scanner/Cargo.toml
+
+          cargo msrv verify --manifest-path processor/scheduler/primitives/Cargo.toml
+          cargo msrv verify --manifest-path processor/scheduler/smart-contract/Cargo.toml
+          cargo msrv verify --manifest-path processor/scheduler/utxo/primitives/Cargo.toml
+          cargo msrv verify --manifest-path processor/scheduler/utxo/standard/Cargo.toml
+          cargo msrv verify --manifest-path processor/scheduler/utxo/transaction-chaining/Cargo.toml
+
+          cargo msrv verify --manifest-path processor/key-gen/Cargo.toml
+          cargo msrv verify --manifest-path processor/frost-attempt-manager/Cargo.toml
+          cargo msrv verify --manifest-path processor/signers/Cargo.toml
+          cargo msrv verify --manifest-path processor/bin/Cargo.toml --features parity-db
+
+          cargo msrv verify --manifest-path processor/bitcoin/Cargo.toml
+
+          cargo msrv verify --manifest-path processor/ethereum/primitives/Cargo.toml
+          cargo msrv verify --manifest-path processor/ethereum/test-primitives/Cargo.toml
+          cargo msrv verify --manifest-path processor/ethereum/erc20/Cargo.toml
+          cargo msrv verify --manifest-path processor/ethereum/deployer/Cargo.toml
+          cargo msrv verify --manifest-path processor/ethereum/router/Cargo.toml
+          cargo msrv verify --manifest-path processor/ethereum/Cargo.toml
+
+          cargo msrv verify --manifest-path processor/monero/Cargo.toml
+
+  msrv-coordinator:
+    name: Run cargo msrv on coordinator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Install cargo msrv
+        run: cargo install --locked cargo-msrv
+
+      - name: Run cargo msrv on coordinator
+        run: |
+          cargo msrv verify --manifest-path coordinator/tributary-sdk/tendermint/Cargo.toml
+          cargo msrv verify --manifest-path coordinator/tributary-sdk/Cargo.toml
+          cargo msrv verify --manifest-path coordinator/cosign/Cargo.toml
+          cargo msrv verify --manifest-path coordinator/substrate/Cargo.toml
+          cargo msrv verify --manifest-path coordinator/tributary/Cargo.toml
+          cargo msrv verify --manifest-path coordinator/p2p/Cargo.toml
+          cargo msrv verify --manifest-path coordinator/p2p/libp2p/Cargo.toml
+          cargo msrv verify --manifest-path coordinator/Cargo.toml
+
+  msrv-substrate:
+    name: Run cargo msrv on substrate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Install cargo msrv
+        run: cargo install --locked cargo-msrv
+
+      - name: Run cargo msrv on substrate
+        run: |
+          cargo msrv verify --manifest-path substrate/primitives/Cargo.toml
+
+          cargo msrv verify --manifest-path substrate/coins/primitives/Cargo.toml
+          cargo msrv verify --manifest-path substrate/coins/pallet/Cargo.toml
+
+          cargo msrv verify --manifest-path substrate/dex/pallet/Cargo.toml
+
+          cargo msrv verify --manifest-path substrate/economic-security/pallet/Cargo.toml
+
+          cargo msrv verify --manifest-path substrate/genesis-liquidity/primitives/Cargo.toml
+          cargo msrv verify --manifest-path substrate/genesis-liquidity/pallet/Cargo.toml
+
+          cargo msrv verify --manifest-path substrate/in-instructions/primitives/Cargo.toml
+          cargo msrv verify --manifest-path substrate/in-instructions/pallet/Cargo.toml
+
+          cargo msrv verify --manifest-path substrate/validator-sets/pallet/Cargo.toml
+          cargo msrv verify --manifest-path substrate/validator-sets/primitives/Cargo.toml
+
+          cargo msrv verify --manifest-path substrate/emissions/primitives/Cargo.toml
+          cargo msrv verify --manifest-path substrate/emissions/pallet/Cargo.toml
+
+          cargo msrv verify --manifest-path substrate/signals/primitives/Cargo.toml
+          cargo msrv verify --manifest-path substrate/signals/pallet/Cargo.toml
+
+          cargo msrv verify --manifest-path substrate/abi/Cargo.toml
+          cargo msrv verify --manifest-path substrate/client/Cargo.toml
+
+          cargo msrv verify --manifest-path substrate/runtime/Cargo.toml
+          cargo msrv verify --manifest-path substrate/node/Cargo.toml
+
+  msrv-orchestration:
+    name: Run cargo msrv on orchestration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Install cargo msrv
+        run: cargo install --locked cargo-msrv
+
+      - name: Run cargo msrv on message-queue
+        run: |
+          cargo msrv verify --manifest-path orchestration/Cargo.toml
+
+  msrv-mini:
+    name: Run cargo msrv on mini
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Install cargo msrv
+        run: cargo install --locked cargo-msrv
+
+      - name: Run cargo msrv on mini
+        run: |
+          cargo msrv verify --manifest-path mini/Cargo.toml

@@ -1,0 +1,33 @@
+[package]
+name = "serai-cosign"
+version = "0.1.0"
+description = "Evaluator of cosigns for the Serai network"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/cosign"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+rust-version = "1.81"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+blake2 = { version = "0.10", default-features = false, features = ["std"] }
+schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
+
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+serai-client = { path = "../../substrate/client", default-features = false, features = ["serai", "borsh"] }
+
+log = { version = "0.4", default-features = false, features = ["std"] }
+
+tokio = { version = "1", default-features = false }
+
+serai-db = { path = "../../common/db", version = "0.1.1" }
+serai-task = { path = "../../common/task", version = "0.1" }

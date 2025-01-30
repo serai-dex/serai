@@ -6,7 +6,7 @@ use group::ff::PrimeField;
 
 use elliptic_curve::{
   generic_array::GenericArray,
-  bigint::{NonZero, CheckedAdd, Encoding, U384},
+  bigint::{NonZero, CheckedAdd, Encoding, U384, U512},
   hash2curve::{Expander, ExpandMsg, ExpandMsgXmd},
 };
 
@@ -29,6 +29,22 @@ macro_rules! kp_curve {
 
       fn generator() -> Self::G {
         $lib::ProjectivePoint::GENERATOR
+      }
+
+      fn reduce_512(scalar: [u8; 64]) -> Self::F {
+        let mut modulus = [0; 64];
+        modulus[32 ..].copy_from_slice(&(Self::F::ZERO - Self::F::ONE).to_bytes());
+        let modulus = U512::from_be_slice(&modulus).checked_add(&U512::ONE).unwrap();
+
+        let mut wide =
+          U512::from_be_bytes(scalar).rem(&NonZero::new(modulus).unwrap()).to_be_bytes();
+
+        let mut array = *GenericArray::from_slice(&wide[32 ..]);
+        let res = $lib::Scalar::from_repr(array).unwrap();
+
+        wide.zeroize();
+        array.zeroize();
+        res
       }
 
       fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {

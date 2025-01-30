@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 publish = false
-rust-version = "1.74"
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -19,6 +19,8 @@ ignored = ["scale", "scale-info"]
 workspace = true
 
 [dependencies]
+bitvec = { version = "1", default-features = false, features = ["alloc"] }
+
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "max-encoded-len"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
@@ -39,6 +41,14 @@ dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-
 validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
 genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = "../../genesis-liquidity/pallet", default-features = false }
 emissions-pallet = { package = "serai-emissions-pallet", path = "../../emissions/pallet", default-features = false }
+
+
+[dev-dependencies]
+pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
+
+economic-security-pallet = { package = "serai-economic-security-pallet", path = "../../economic-security/pallet", default-features = false }
 
 [features]
 std = [
@@ -62,8 +72,19 @@ std = [
   "validator-sets-pallet/std",
   "genesis-liquidity-pallet/std",
   "emissions-pallet/std",
-]
-default = ["std"]
 
-# TODO
-try-runtime = []
+  "economic-security-pallet/std",
+
+  "pallet-babe/std",
+  "pallet-grandpa/std",
+  "pallet-timestamp/std",
+]
+
+try-runtime = [
+  "frame-system/try-runtime",
+  "frame-support/try-runtime",
+
+  "sp-runtime/try-runtime",
+]
+
+default = ["std"]

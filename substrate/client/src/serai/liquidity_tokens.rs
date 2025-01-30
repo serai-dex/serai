@@ -8,7 +8,7 @@ const PALLET: &str = "LiquidityTokens";
 
 #[derive(Clone, Copy)]
 pub struct SeraiLiquidityTokens<'a>(pub(crate) &'a TemporalSerai<'a>);
-impl<'a> SeraiLiquidityTokens<'a> {
+impl SeraiLiquidityTokens<'_> {
   pub async fn token_supply(&self, coin: ExternalCoin) -> Result<Amount, SeraiError> {
     Ok(self.0.storage(PALLET, "Supply", coin).await?.unwrap_or(Amount(0)))
   }

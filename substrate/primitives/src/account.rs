@@ -52,7 +52,7 @@ pub fn borsh_deserialize_signature<R: borsh::io::Read>(
 
 // TODO: Remove this for solely Public?
 #[derive(
-  Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
+  Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
@@ -90,9 +90,20 @@ impl std::fmt::Display for SeraiAddress {
   }
 }
 
+/// Create a Substraate key pair by a name.
+///
+/// This should never be considered to have a secure private key. It has effectively no entropy.
 #[cfg(feature = "std")]
 pub fn insecure_pair_from_name(name: &str) -> Pair {
   Pair::from_string(&format!("//{name}"), None).unwrap()
+}
+
+/// Create a private key for an arbitrary ciphersuite by a name.
+///
+/// This key should never be considered a secure private key. It has effectively no entropy.
+#[cfg(feature = "std")]
+pub fn insecure_arbitrary_key_from_name<C: ciphersuite::Ciphersuite>(name: &str) -> C::F {
+  C::hash_to_F(b"insecure arbitrary key", name.as_bytes())
 }
 
 pub struct AccountLookup;

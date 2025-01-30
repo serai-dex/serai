@@ -1,0 +1,56 @@
+[package]
+name = "serai-monero-processor"
+version = "0.1.0"
+description = "Serai Monero Processor"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/processor/monero"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+rust-version = "1.80"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+rand_core = { version = "0.6", default-features = false }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
+zeroize = { version = "1", default-features = false, features = ["std"] }
+
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std", "ed25519"] }
+dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "evrf-ed25519"] }
+frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
+
+monero-wallet = { path = "../../networks/monero/wallet", default-features = false, features = ["std", "multisig"] }
+monero-simple-request-rpc = { path = "../../networks/monero/rpc/simple-request", default-features = false }
+
+serai-client = { path = "../../substrate/client", default-features = false, features = ["monero"] }
+
+zalloc = { path = "../../common/zalloc" }
+log = { version = "0.4", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
+
+key-gen = { package = "serai-processor-key-gen", path = "../key-gen" }
+view-keys = { package = "serai-processor-view-keys", path = "../view-keys" }
+
+primitives = { package = "serai-processor-primitives", path = "../primitives" }
+scheduler = { package = "serai-processor-scheduler-primitives", path = "../scheduler/primitives" }
+scanner = { package = "serai-processor-scanner", path = "../scanner" }
+utxo-scheduler = { package = "serai-processor-utxo-scheduler-primitives", path = "../scheduler/utxo/primitives" }
+utxo-standard-scheduler = { package = "serai-processor-utxo-scheduler", path = "../scheduler/utxo/standard" }
+signers = { package = "serai-processor-signers", path = "../signers" }
+
+bin = { package = "serai-processor-bin", path = "../bin" }
+
+[features]
+parity-db = ["bin/parity-db"]
+rocksdb = ["bin/rocksdb"]

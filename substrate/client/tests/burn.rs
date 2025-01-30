@@ -7,19 +7,22 @@ use blake2::{
 
 use scale::Encode;
 
-use serai_abi::coins::primitives::OutInstructionWithBalance;
 use sp_core::Pair;
 
 use serai_client::{
   primitives::{
-    Amount, ExternalCoin, ExternalBalance, BlockHash, SeraiAddress, Data, ExternalAddress,
+    BlockHash, ExternalCoin, Amount, ExternalBalance, SeraiAddress, ExternalAddress,
     insecure_pair_from_name,
   },
+  coins::{
+    primitives::{OutInstruction, OutInstructionWithBalance},
+    CoinsEvent,
+  },
+  validator_sets::primitives::Session,
   in_instructions::{
     InInstructionsEvent,
     primitives::{InInstruction, InInstructionWithBalance, Batch},
   },
-  coins::{primitives::OutInstruction, CoinsEvent},
   Serai, SeraiCoins,
 };
 
@@ -44,7 +47,7 @@ serai_test!(
     let batch = Batch {
       network,
       id,
-      block: block_hash,
+      external_network_block_hash: block_hash,
       instructions: vec![InInstructionWithBalance {
         instruction: InInstruction::Transfer(address),
         balance,
@@ -54,17 +57,19 @@ serai_test!(
     let block = provide_batch(&serai, batch.clone()).await;
 
     let instruction = {
-    let serai = serai.as_of(block);
-    let batches = serai.in_instructions().batch_events().await.unwrap();
-    assert_eq!(
-      batches,
-      vec![InInstructionsEvent::Batch {
-        network,
-        id,
-        block: block_hash,
-        instructions_hash: Blake2b::<U32>::digest(batch.instructions.encode()).into(),
-      }]
-    );
+      let serai = serai.as_of(block);
+      let batches = serai.in_instructions().batch_events().await.unwrap();
+      assert_eq!(
+        batches,
+        vec![InInstructionsEvent::Batch {
+          network,
+          publishing_session: Session(0),
+          id,
+          external_network_block_hash: block_hash,
+          in_instructions_hash: Blake2b::<U32>::digest(batch.instructions.encode()).into(),
+          in_instruction_results: bitvec::bitvec![u8, bitvec::order::Lsb0; 1; 1],
+        }]
+      );
 
     assert_eq!(
       serai.coins().mint_events().await.unwrap(),
@@ -73,20 +78,16 @@ serai_test!(
     assert_eq!(serai.coins().coin_supply(coin.into()).await.unwrap(), amount);
     assert_eq!(serai.coins().coin_balance(coin.into(), address).await.unwrap(), amount);
 
-    // Now burn it
-    let mut rand_bytes = vec![0; 32];
-    OsRng.fill_bytes(&mut rand_bytes);
-    let external_address = ExternalAddress::new(rand_bytes).unwrap();
+      // Now burn it
+      let mut rand_bytes = vec![0; 32];
+      OsRng.fill_bytes(&mut rand_bytes);
+      let external_address = ExternalAddress::new(rand_bytes).unwrap();
 
-    let mut rand_bytes = vec![0; 32];
-    OsRng.fill_bytes(&mut rand_bytes);
-    let data = Data::new(rand_bytes).unwrap();
-
-    OutInstructionWithBalance {
-      balance,
-      instruction: OutInstruction { address: external_address, data: Some(data) },
-    }
-};
+      OutInstructionWithBalance {
+        balance,
+        instruction: OutInstruction { address: external_address },
+      }
+    };
 
     let block = publish_tx(
       &serai,

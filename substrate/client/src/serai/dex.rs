@@ -9,7 +9,7 @@ const PALLET: &str = "Dex";
 
 #[derive(Clone, Copy)]
 pub struct SeraiDex<'a>(pub(crate) &'a TemporalSerai<'a>);
-impl<'a> SeraiDex<'a> {
+impl SeraiDex<'_> {
   pub async fn events(&self) -> Result<Vec<DexEvent>, SeraiError> {
     self
       .0

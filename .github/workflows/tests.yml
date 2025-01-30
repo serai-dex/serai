@@ -39,9 +39,33 @@ jobs:
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
             -p serai-message-queue \
             -p serai-processor-messages \
-            -p serai-processor \
+            -p serai-processor-key-gen \
+            -p serai-processor-view-keys \
+            -p serai-processor-frost-attempt-manager \
+            -p serai-processor-primitives \
+            -p serai-processor-scanner \
+            -p serai-processor-scheduler-primitives \
+            -p serai-processor-utxo-scheduler-primitives \
+            -p serai-processor-utxo-scheduler \
+            -p serai-processor-transaction-chaining-scheduler \
+            -p serai-processor-smart-contract-scheduler \
+            -p serai-processor-signers \
+            -p serai-processor-bin \
+            -p serai-bitcoin-processor \
+            -p serai-processor-ethereum-primitives \
+            -p serai-processor-ethereum-test-primitives \
+            -p serai-processor-ethereum-deployer \
+            -p serai-processor-ethereum-router \
+            -p serai-processor-ethereum-erc20 \
+            -p serai-ethereum-processor \
+            -p serai-monero-processor \
             -p tendermint-machine \
-            -p tributary-chain \
+            -p tributary-sdk \
+            -p serai-cosign \
+            -p serai-coordinator-substrate \
+            -p serai-coordinator-tributary \
+            -p serai-coordinator-p2p \
+            -p serai-coordinator-libp2p-p2p \
             -p serai-coordinator \
             -p serai-orchestrator \
             -p serai-docker-tests

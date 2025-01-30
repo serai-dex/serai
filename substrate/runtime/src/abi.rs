@@ -5,8 +5,6 @@ use scale::{Encode, Decode};
 use serai_abi::Call;
 
 use crate::{
-  Vec,
-  primitives::{PublicKey, SeraiAddress},
   timestamp, coins, dex, genesis_liquidity,
   validator_sets::{self, MembershipProof},
   in_instructions, signals, babe, grandpa, RuntimeCall,
@@ -92,28 +90,26 @@ impl From<Call> for RuntimeCall {
       Call::ValidatorSets(vs) => match vs {
         serai_abi::validator_sets::Call::set_keys {
           network,
-          removed_participants,
           key_pair,
+          signature_participants,
           signature,
         } => RuntimeCall::ValidatorSets(validator_sets::Call::set_keys {
           network,
-          removed_participants: <_>::try_from(
-            removed_participants.into_iter().map(PublicKey::from).collect::<Vec<_>>(),
-          )
-          .unwrap(),
           key_pair,
+          signature_participants,
           signature,
+        }),
+        serai_abi::validator_sets::Call::set_embedded_elliptic_curve_key {
+          embedded_elliptic_curve,
+          key,
+        } => RuntimeCall::ValidatorSets(validator_sets::Call::set_embedded_elliptic_curve_key {
+          embedded_elliptic_curve,
+          key,
         }),
         serai_abi::validator_sets::Call::report_slashes { network, slashes, signature } => {
           RuntimeCall::ValidatorSets(validator_sets::Call::report_slashes {
             network,
-            slashes: <_>::try_from(
-              slashes
-                .into_iter()
-                .map(|(addr, slash)| (PublicKey::from(addr), slash))
-                .collect::<Vec<_>>(),
-            )
-            .unwrap(),
+            slashes,
             signature,
           })
         }
@@ -282,29 +278,22 @@ impl TryInto<Call> for RuntimeCall {
         _ => Err(())?,
       }),
       RuntimeCall::ValidatorSets(call) => Call::ValidatorSets(match call {
-        validator_sets::Call::set_keys { network, removed_participants, key_pair, signature } => {
+        validator_sets::Call::set_keys { network, key_pair, signature_participants, signature } => {
           serai_abi::validator_sets::Call::set_keys {
             network,
-            removed_participants: <_>::try_from(
-              removed_participants.into_iter().map(SeraiAddress::from).collect::<Vec<_>>(),
-            )
-            .unwrap(),
             key_pair,
+            signature_participants,
             signature,
           }
         }
-        validator_sets::Call::report_slashes { network, slashes, signature } => {
-          serai_abi::validator_sets::Call::report_slashes {
-            network,
-            slashes: <_>::try_from(
-              slashes
-                .into_iter()
-                .map(|(addr, slash)| (SeraiAddress::from(addr), slash))
-                .collect::<Vec<_>>(),
-            )
-            .unwrap(),
-            signature,
+        validator_sets::Call::set_embedded_elliptic_curve_key { embedded_elliptic_curve, key } => {
+          serai_abi::validator_sets::Call::set_embedded_elliptic_curve_key {
+            embedded_elliptic_curve,
+            key,
           }
+        }
+        validator_sets::Call::report_slashes { network, slashes, signature } => {
+          serai_abi::validator_sets::Call::report_slashes { network, slashes, signature }
         }
         validator_sets::Call::allocate { network, amount } => {
           serai_abi::validator_sets::Call::allocate { network, amount }

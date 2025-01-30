@@ -1,0 +1,40 @@
+[package]
+name = "serai-coordinator-substrate"
+version = "0.1.0"
+description = "Serai Coordinator's Substrate Scanner"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/substrate"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+rust-version = "1.81"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+bitvec = { version = "1", default-features = false, features = ["std"] }
+
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive", "bit-vec"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+
+dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
+
+serai-client = { path = "../../substrate/client", version = "0.1", default-features = false, features = ["serai", "borsh"] }
+
+log = { version = "0.4", default-features = false, features = ["std"] }
+
+futures = { version = "0.3", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false }
+
+serai-db = { path = "../../common/db", version = "0.1.1" }
+serai-task = { path = "../../common/task", version = "0.1" }
+
+serai-cosign = { path = "../cosign", version = "0.1" }
+
+messages = { package = "serai-processor-messages", version = "0.1", path = "../../processor/messages" }

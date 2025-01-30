@@ -1,10 +1,7 @@
 pub use serai_abi::in_instructions::primitives;
 use primitives::SignedBatch;
 
-use crate::{
-  primitives::{BlockHash, ExternalNetworkId},
-  Transaction, SeraiError, Serai, TemporalSerai,
-};
+use crate::{primitives::ExternalNetworkId, Transaction, SeraiError, Serai, TemporalSerai};
 
 pub type InInstructionsEvent = serai_abi::in_instructions::Event;
 
@@ -12,14 +9,7 @@ const PALLET: &str = "InInstructions";
 
 #[derive(Clone, Copy)]
 pub struct SeraiInInstructions<'a>(pub(crate) &'a TemporalSerai<'a>);
-impl<'a> SeraiInInstructions<'a> {
-  pub async fn latest_block_for_network(
-    &self,
-    network: ExternalNetworkId,
-  ) -> Result<Option<BlockHash>, SeraiError> {
-    self.0.storage(PALLET, "LatestNetworkBlock", network).await
-  }
-
+impl SeraiInInstructions<'_> {
   pub async fn last_batch_for_network(
     &self,
     network: ExternalNetworkId,

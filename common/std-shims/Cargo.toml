@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/common/std-shims"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["nostd", "no_std", "alloc", "io"]
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -18,7 +18,7 @@ workspace = true
 
 [dependencies]
 spin = { version = "0.9", default-features = false, features = ["use_ticket_mutex", "lazy"] }
-hashbrown = { version = "0.14", default-features = false, features = ["ahash", "inline-more"] }
+hashbrown = { version = "0.15", default-features = false, features = ["default-hasher", "inline-more"] }
 
 [features]
 std = []

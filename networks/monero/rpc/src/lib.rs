@@ -42,34 +42,33 @@ const GRACE_BLOCKS_FOR_FEE_ESTIMATE: u64 = 10;
 const TXS_PER_REQUEST: usize = 100;
 
 /// An error from the RPC.
-#[derive(Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "std", derive(thiserror::Error))]
+#[derive(Clone, PartialEq, Eq, Debug, thiserror::Error)]
 pub enum RpcError {
   /// An internal error.
-  #[cfg_attr(feature = "std", error("internal error ({0})"))]
+  #[error("internal error ({0})")]
   InternalError(String),
   /// A connection error with the node.
-  #[cfg_attr(feature = "std", error("connection error ({0})"))]
+  #[error("connection error ({0})")]
   ConnectionError(String),
   /// The node is invalid per the expected protocol.
-  #[cfg_attr(feature = "std", error("invalid node ({0})"))]
+  #[error("invalid node ({0})")]
   InvalidNode(String),
   /// Requested transactions weren't found.
-  #[cfg_attr(feature = "std", error("transactions not found"))]
+  #[error("transactions not found")]
   TransactionsNotFound(Vec<[u8; 32]>),
   /// The transaction was pruned.
   ///
   /// Pruned transactions are not supported at this time.
-  #[cfg_attr(feature = "std", error("pruned transaction"))]
+  #[error("pruned transaction")]
   PrunedTransaction,
   /// A transaction (sent or received) was invalid.
-  #[cfg_attr(feature = "std", error("invalid transaction ({0:?})"))]
+  #[error("invalid transaction ({0:?})")]
   InvalidTransaction([u8; 32]),
   /// The returned fee was unusable.
-  #[cfg_attr(feature = "std", error("unexpected fee response"))]
+  #[error("unexpected fee response")]
   InvalidFee,
   /// The priority intended for use wasn't usable.
-  #[cfg_attr(feature = "std", error("invalid priority"))]
+  #[error("invalid priority")]
   InvalidPriority,
 }
 

@@ -1,0 +1,22 @@
+[package]
+name = "serai-task"
+version = "0.1.0"
+description = "A task schema for Serai services"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/common/task"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+rust-version = "1.75"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+log = { version = "0.4", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["macros", "sync", "time"] }

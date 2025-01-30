@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/emissions/pallet"
 authors = ["Akil Demir <akildemir72@gmail.com>"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -54,7 +54,7 @@ std = [
   "validator-sets-pallet/std",
   "dex-pallet/std",
   "genesis-liquidity-pallet/std",
-  
+
   "economic-security-pallet/std",
 
   "serai-primitives/std",

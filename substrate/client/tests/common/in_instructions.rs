@@ -9,7 +9,7 @@ use scale::Encode;
 use sp_core::Pair;
 
 use serai_client::{
-  primitives::{insecure_pair_from_name, BlockHash, ExternalBalance, SeraiAddress},
+  primitives::{BlockHash, ExternalBalance, SeraiAddress, insecure_pair_from_name},
   validator_sets::primitives::{ExternalValidatorSet, KeyPair},
   in_instructions::{
     primitives::{Batch, SignedBatch, batch_message, InInstruction, InInstructionWithBalance},
@@ -45,17 +45,29 @@ pub async fn provide_batch(serai: &Serai, batch: Batch) -> [u8; 32] {
   )
   .await;
 
-  let batches = serai.as_of(block).in_instructions().batch_events().await.unwrap();
-  // TODO: impl From<Batch> for BatchEvent?
-  assert_eq!(
-    batches,
-    vec![InInstructionsEvent::Batch {
-      network: batch.network,
-      id: batch.id,
-      block: batch.block,
-      instructions_hash: Blake2b::<U32>::digest(batch.instructions.encode()).into(),
-    }],
-  );
+  {
+    let mut batches = serai.as_of(block).in_instructions().batch_events().await.unwrap();
+    assert_eq!(batches.len(), 1);
+    let InInstructionsEvent::Batch {
+      network,
+      publishing_session,
+      id,
+      external_network_block_hash,
+      in_instructions_hash,
+      in_instruction_results: _,
+    } = batches.swap_remove(0)
+    else {
+      panic!("Batch event wasn't Batch event")
+    };
+    assert_eq!(network, batch.network);
+    assert_eq!(publishing_session, session);
+    assert_eq!(id, batch.id);
+    assert_eq!(external_network_block_hash, batch.external_network_block_hash);
+    assert_eq!(
+      in_instructions_hash,
+      <[u8; 32]>::from(Blake2b::<U32>::digest(batch.instructions.encode()))
+    );
+  }
 
   // TODO: Check the tokens events
 
@@ -75,7 +87,7 @@ pub async fn mint_coin(
   let batch = Batch {
     network: balance.coin.network(),
     id: batch_id,
-    block: block_hash,
+    external_network_block_hash: block_hash,
     instructions: vec![InInstructionWithBalance {
       instruction: InInstruction::Transfer(address),
       balance,

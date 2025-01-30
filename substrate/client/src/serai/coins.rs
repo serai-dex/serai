@@ -12,7 +12,7 @@ pub type CoinsEvent = serai_abi::coins::Event;
 
 #[derive(Clone, Copy)]
 pub struct SeraiCoins<'a>(pub(crate) &'a TemporalSerai<'a>);
-impl<'a> SeraiCoins<'a> {
+impl SeraiCoins<'_> {
   pub async fn mint_events(&self) -> Result<Vec<CoinsEvent>, SeraiError> {
     self
       .0

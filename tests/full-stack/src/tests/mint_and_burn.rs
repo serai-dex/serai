@@ -496,8 +496,8 @@ async fn mint_and_burn_test() {
         let serai_pair = &serai_pair;
         move |nonce, coin, amount, address| async move {
           let out_instruction = OutInstructionWithBalance {
-            balance: ExternalBalance { coin, amount: Amount(amount) },
-            instruction: OutInstruction { address, data: None },
+            balance: Balance { coin, amount: Amount(amount) },
+            instruction: OutInstruction { address },
           };
 
           serai
