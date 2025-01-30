@@ -19,7 +19,7 @@ use sp_runtime::{
 };
 
 use serai_primitives::*;
-use validator_sets::{primitives::MAX_KEY_SHARES_PER_SET, MembershipProof};
+use validator_sets::{primitives::MAX_KEY_SHARES_PER_SET_U32, MembershipProof};
 
 pub use crate as validator_sets;
 pub use coins_pallet as coins;
@@ -30,7 +30,7 @@ pub use pallet_timestamp as timestamp;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 // Maximum number of authorities per session.
-pub type MaxAuthorities = ConstU32<{ MAX_KEY_SHARES_PER_SET }>;
+pub type MaxAuthorities = ConstU32<{ MAX_KEY_SHARES_PER_SET_U32 }>;
 
 pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
 pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
@@ -176,9 +176,16 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
   .assimilate_storage(&mut t)
   .unwrap();
 
+  #[expect(unused_variables, unreachable_code, clippy::diverging_sub_expression)]
   validator_sets::GenesisConfig::<Test> {
     networks,
-    participants: genesis_participants().into_iter().map(|p| p.public()).collect(),
+    participants: genesis_participants()
+      .into_iter()
+      .map(|p| {
+        let keys: crate::AllEmbeddedEllipticCurveKeysAtGenesis = todo!("TODO");
+        (p.public(), keys)
+      })
+      .collect(),
   }
   .assimilate_storage(&mut t)
   .unwrap();

@@ -4,7 +4,6 @@ use frame_support::traits::Hooks;
 use frame_system::RawOrigin;
 
 use sp_core::{sr25519::Signature, Pair as PairTrait};
-use sp_runtime::BoundedVec;
 
 use validator_sets::primitives::KeyPair;
 use serai_primitives::{
@@ -16,8 +15,8 @@ fn set_keys_for_session(network: ExternalNetworkId) {
   ValidatorSets::set_keys(
     RawOrigin::None.into(),
     network,
-    BoundedVec::new(),
     KeyPair(insecure_pair_from_name("Alice").public(), vec![].try_into().unwrap()),
+    vec![].try_into().unwrap(),
     Signature([0u8; 64]),
   )
   .unwrap();

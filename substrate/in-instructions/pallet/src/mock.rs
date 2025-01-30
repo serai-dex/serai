@@ -15,7 +15,7 @@ use sp_runtime::{
   BuildStorage,
 };
 
-use validator_sets::{primitives::MAX_KEY_SHARES_PER_SET, MembershipProof};
+use validator_sets::{primitives::MAX_KEY_SHARES_PER_SET_U32, MembershipProof};
 
 pub use crate as in_instructions;
 pub use coins_pallet as coins;
@@ -30,7 +30,7 @@ pub use economic_security_pallet as economic_security;
 
 type Block = frame_system::mocking::MockBlock<Test>;
 // Maximum number of authorities per session.
-pub type MaxAuthorities = ConstU32<{ MAX_KEY_SHARES_PER_SET }>;
+pub type MaxAuthorities = ConstU32<{ MAX_KEY_SHARES_PER_SET_U32 }>;
 
 pub const MEDIAN_PRICE_WINDOW_LENGTH: u16 = 10;
 
@@ -188,9 +188,17 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
   .assimilate_storage(&mut t)
   .unwrap();
 
+  #[expect(unused_variables, unreachable_code, clippy::diverging_sub_expression)]
   validator_sets::GenesisConfig::<Test> {
     networks: networks.clone(),
-    participants: validators.clone(),
+    participants: validators
+      .clone()
+      .into_iter()
+      .map(|p| {
+        let keys: validator_sets_pallet::AllEmbeddedEllipticCurveKeysAtGenesis = todo!("TODO");
+        (p, keys)
+      })
+      .collect(),
   }
   .assimilate_storage(&mut t)
   .unwrap();

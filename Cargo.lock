@@ -9412,8 +9412,10 @@ dependencies = [
 name = "serai-node"
 version = "0.1.0"
 dependencies = [
+ "bitcoin-serai",
  "ciphersuite",
  "clap",
+ "curve25519-dalek",
  "embedwards25519",
  "frame-benchmarking",
  "futures-util",
@@ -9421,7 +9423,7 @@ dependencies = [
  "jsonrpsee",
  "libp2p 0.52.4",
  "log",
- "monero-wallet",
+ "monero-address",
  "pallet-transaction-payment-rpc",
  "parity-scale-codec",
  "rand_core",
@@ -9883,7 +9885,6 @@ dependencies = [
  "frame-support",
  "frame-system",
  "frost-schnorrkel",
- "hashbrown 0.14.5",
  "modular-frost",
  "pallet-babe",
  "pallet-grandpa",
@@ -9895,6 +9896,8 @@ dependencies = [
  "serai-dex-pallet",
  "serai-primitives",
  "serai-validator-sets-primitives",
+ "serde",
+ "sp-api",
  "sp-application-crypto",
  "sp-consensus-babe",
  "sp-core",

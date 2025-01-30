@@ -16,7 +16,7 @@ pub use abi::{primitives, Transaction};
 use abi::*;
 
 pub use primitives::{SeraiAddress, Signature, Amount};
-use primitives::{Header, NetworkId, ExternalNetworkId, QuotePriceParams};
+use primitives::{Header, ExternalNetworkId, QuotePriceParams};
 use crate::in_instructions::primitives::Shorthand;
 
 pub mod coins;

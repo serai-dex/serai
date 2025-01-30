@@ -20,7 +20,7 @@ use sp_core::{
   sr25519::{Public, Pair, Signature},
   Pair as PairTrait,
 };
-use sp_runtime::{traits::ValidateUnsigned, BoundedVec};
+use sp_runtime::traits::ValidateUnsigned;
 
 use serai_primitives::*;
 
@@ -63,8 +63,8 @@ fn set_keys_for_session(network: ExternalNetworkId) {
   ValidatorSets::set_keys(
     RawOrigin::None.into(),
     network,
-    BoundedVec::new(),
     KeyPair(insecure_pair_from_name("Alice").public(), vec![].try_into().unwrap()),
+    vec![].try_into().unwrap(),
     Signature([0u8; 64]),
   )
   .unwrap();
@@ -100,7 +100,7 @@ fn set_keys_signature(set: &ExternalValidatorSet, key_pair: &KeyPair, pairs: &[P
   let sig = frost::tests::sign_without_caching(
     &mut OsRng,
     frost::tests::algorithm_machines(&mut OsRng, &Schnorrkel::new(b"substrate"), &musig_keys),
-    &set_keys_message(set, &[], key_pair),
+    &set_keys_message(set, key_pair),
   );
 
   Signature(sig.to_bytes())
@@ -463,16 +463,16 @@ fn set_keys_keys_exist() {
     ValidatorSets::set_keys(
       RawOrigin::None.into(),
       network,
-      Vec::new().try_into().unwrap(),
       KeyPair(insecure_pair_from_name("name").public(), Vec::new().try_into().unwrap()),
+      vec![].try_into().unwrap(),
       Signature([0u8; 64]),
     )
     .unwrap();
 
     let call = validator_sets::Call::<Test>::set_keys {
       network,
-      removed_participants: Vec::new().try_into().unwrap(),
       key_pair: KeyPair(insecure_pair_from_name("name").public(), Vec::new().try_into().unwrap()),
+      signature_participants: vec![].try_into().unwrap(),
       signature: Signature([0u8; 64]),
     };
 
@@ -497,8 +497,8 @@ fn set_keys_invalid_signature() {
 
     let call = validator_sets::Call::<Test>::set_keys {
       network,
-      removed_participants: Vec::new().try_into().unwrap(),
       key_pair: key_pair.clone(),
+      signature_participants: vec![].try_into().unwrap(),
       signature,
     };
     assert_eq!(
@@ -515,8 +515,8 @@ fn set_keys_invalid_signature() {
 
     let call = validator_sets::Call::<Test>::set_keys {
       network,
-      removed_participants: Vec::new().try_into().unwrap(),
       key_pair: key_pair.clone(),
+      signature_participants: vec![].try_into().unwrap(),
       signature,
     };
     assert_eq!(
@@ -534,8 +534,8 @@ fn set_keys_invalid_signature() {
 
     let call = validator_sets::Call::<Test>::set_keys {
       network,
-      removed_participants: Vec::new().try_into().unwrap(),
       key_pair: key_pair.clone(),
+      signature_participants: vec![].try_into().unwrap(),
       signature,
     };
     assert_eq!(
@@ -547,14 +547,11 @@ fn set_keys_invalid_signature() {
     let signature = set_keys_signature(&set, &key_pair, &participants);
     let call = validator_sets::Call::<Test>::set_keys {
       network,
-      removed_participants: Vec::new().try_into().unwrap(),
       key_pair,
+      signature_participants: vec![].try_into().unwrap(),
       signature,
     };
     ValidatorSets::validate_unsigned(TransactionSource::External, &call).unwrap();
-
-    // TODO: removed_participants parameter isn't tested since it will be removed in upcoming
-    // commits?
   })
 }
 

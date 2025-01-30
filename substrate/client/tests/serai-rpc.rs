@@ -93,11 +93,8 @@ async fn test_external_address(serai: Serai) {
   let xmr_address: String = serai.external_network_address(network).await.unwrap();
 
   // make sure it is a valid address
-  let _ = monero_wallet::address::MoneroAddress::from_str(
-    monero_wallet::address::Network::Mainnet,
-    &xmr_address,
-  )
-  .unwrap();
+  let _ = monero_address::MoneroAddress::from_str(monero_address::Network::Mainnet, &xmr_address)
+    .unwrap();
 }
 
 async fn test_encoded_shorthand(serai: Serai) {

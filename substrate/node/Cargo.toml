@@ -79,10 +79,9 @@ pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate
 
 serai-env = { path = "../../common/env" }
 
-bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["std", "hazmat"] }
-monero-wallet = { path = "../../networks/monero/wallet", default-features = false, features = ["std"] }
-ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["ed25519", "secp256k1"] }
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
+bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["std", "hazmat"] }
+monero-address = { path = "../../networks/monero/wallet/address", default-features = false, features = ["std"] }
 
 [build-dependencies]
 substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate" }

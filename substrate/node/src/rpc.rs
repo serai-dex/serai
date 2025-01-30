@@ -148,9 +148,9 @@ where
           let spend = <Ed25519 as Ciphersuite>::read_G::<&[u8]>(&mut external_key.as_slice())
             .map_err(|_| Error::Custom("invalid key stored in db".to_string()))?;
 
-          let addr = monero_wallet::address::MoneroAddress::new(
-            monero_wallet::address::Network::Mainnet,
-            monero_wallet::address::AddressType::Featured {
+          let addr = monero_address::MoneroAddress::new(
+            monero_address::Network::Mainnet,
+            monero_address::AddressType::Featured {
               subaddress: false,
               payment_id: None,
               guaranteed: true,

@@ -42,7 +42,6 @@ validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../..
 genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = "../../genesis-liquidity/pallet", default-features = false }
 emissions-pallet = { package = "serai-emissions-pallet", path = "../../emissions/pallet", default-features = false }
 
-
 [dev-dependencies]
 pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
 pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
