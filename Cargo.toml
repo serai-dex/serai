@@ -230,11 +230,11 @@ p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab
 hybrid-array = { git = "https://github.com/kayabaNerve/hybrid-array", rev = "8caa508976c93696a67f40734537c91be7cecd96" }
 
 [workspace.lints.clippy]
+incompatible_msrv = "allow" # Manually verified with a GitHub workflow
+manual_is_multiple_of = "allow"
 unwrap_or_default = "allow"
 map_unwrap_or = "allow"
 needless_continue = "allow"
-manual_is_multiple_of = "allow"
-incompatible_msrv = "allow" # Manually verified with a GitHub workflow
 borrow_as_ptr = "deny"
 cast_lossless = "deny"
 cast_possible_truncation = "deny"
