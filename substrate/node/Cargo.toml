@@ -32,18 +32,18 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
 embedwards25519 = { path = "../../crypto/embedwards25519" }
 secq256k1 = { path = "../../crypto/secq256k1" }
 
-libp2p = "0.52"
+libp2p = "0.54"
 
-sp-core = { git = "https://github.com/serai-dex/substrate" }
-sp-keystore = { git = "https://github.com/serai-dex/substrate" }
-sp-timestamp = { git = "https://github.com/serai-dex/substrate" }
-sp-io = { git = "https://github.com/serai-dex/substrate" }
-sp-blockchain = { git = "https://github.com/serai-dex/substrate" }
-sp-api = { git = "https://github.com/serai-dex/substrate" }
-sp-block-builder = { git = "https://github.com/serai-dex/substrate" }
-sp-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
+sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sp-keystore = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sp-timestamp = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sp-io = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sp-blockchain = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sp-api = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sp-block-builder = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sp-consensus-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
 
-frame-benchmarking = { git = "https://github.com/serai-dex/substrate" }
+frame-benchmarking = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
 
 serai-runtime = { path = "../runtime", features = ["std"] }
 
@@ -51,32 +51,32 @@ clap = { version = "4", features = ["derive"] }
 
 futures-util = "0.3"
 tokio = { version = "1", features = ["sync", "rt-multi-thread"] }
-jsonrpsee = { version = "0.16", features = ["server"] }
+jsonrpsee = { version = "0.24", features = ["server"] }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
-sc-offchain = { git = "https://github.com/serai-dex/substrate" }
-sc-transaction-pool = { git = "https://github.com/serai-dex/substrate" }
-sc-transaction-pool-api = { git = "https://github.com/serai-dex/substrate" }
-sc-basic-authorship = { git = "https://github.com/serai-dex/substrate" }
-sc-executor = { git = "https://github.com/serai-dex/substrate" }
-sc-service = { git = "https://github.com/serai-dex/substrate" }
-sc-client-api = { git = "https://github.com/serai-dex/substrate" }
-sc-network-common = { git = "https://github.com/serai-dex/substrate" }
-sc-network = { git = "https://github.com/serai-dex/substrate" }
+sc-offchain = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-transaction-pool = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-transaction-pool-api = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-basic-authorship = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-executor = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-service = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-client-api = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-network-common = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-network = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false, features = [] }
 
-sc-consensus = { git = "https://github.com/serai-dex/substrate" }
-sc-consensus-babe = { git = "https://github.com/serai-dex/substrate" }
-sc-consensus-grandpa = { git = "https://github.com/serai-dex/substrate" }
-sc-authority-discovery = { git = "https://github.com/serai-dex/substrate" }
+sc-consensus = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-consensus-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-consensus-grandpa = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-authority-discovery = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
 
-sc-telemetry = { git = "https://github.com/serai-dex/substrate" }
-sc-cli = { git = "https://github.com/serai-dex/substrate" }
+sc-telemetry = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+sc-cli = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false, features = ["rocksdb"] }
 
-sc-rpc-api = { git = "https://github.com/serai-dex/substrate" }
+sc-rpc-api = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
 
-substrate-frame-rpc-system = { git = "https://github.com/serai-dex/substrate" }
-pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/substrate" }
+substrate-frame-rpc-system = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
+pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
 
 serai-env = { path = "../../common/env" }
 
@@ -85,7 +85,7 @@ bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, fea
 monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "6966575e05fe09b77674c46984b21686ed9304ff", default-features = false, features = ["std"] }
 
 [build-dependencies]
-substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate" }
+substrate-build-script-utils = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next" }
 
 [features]
 default = []

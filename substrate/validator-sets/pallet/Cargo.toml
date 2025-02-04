@@ -23,20 +23,20 @@ scale-info = { version = "2", default-features = false, features = ["derive", "b
 
 serde = { version = "1", default-features = false, features = ["derive", "alloc"] }
 
-sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-session = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-staking = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+sp-io = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+sp-api = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+sp-application-crypto = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+sp-session = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+sp-staking = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
-pallet-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+pallet-grandpa = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
 validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../primitives", default-features = false }
@@ -45,9 +45,9 @@ coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", de
 dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
 
 [dev-dependencies]
-pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-features = false }
+pallet-timestamp = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-sp-consensus-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-consensus-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
 ciphersuite = { path = "../../../crypto/ciphersuite", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../../../crypto/dalek-ff-group", default-features = false, features = ["std"] }

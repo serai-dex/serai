@@ -24,13 +24,13 @@ scale-info = { version = "2", default-features = false, features = ["derive", "b
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
 serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
 
-sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-sp-consensus-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-consensus-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-consensus-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+sp-consensus-grandpa = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
 serai-primitives = { path = "../primitives", version = "0.1", default-features = false }
 serai-coins-primitives = { path = "../coins/primitives", version = "0.1", default-features = false }
