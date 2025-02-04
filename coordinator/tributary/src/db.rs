@@ -61,7 +61,7 @@ impl Topic {
         attempt: attempt + 1,
         round: SigningProtocolRound::Preprocess,
       }),
-      Topic::SlashReport { .. } => None,
+      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round: _ } => {
         Some(Topic::Sign { id, attempt: attempt + 1, round: SigningProtocolRound::Preprocess })
       }
@@ -83,7 +83,7 @@ impl Topic {
         }
         SigningProtocolRound::Share => None,
       },
-      Topic::SlashReport { .. } => None,
+      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
           let attempt = attempt + 1;
@@ -102,7 +102,7 @@ impl Topic {
     match self {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { .. } => None,
-      Topic::SlashReport { .. } => None,
+      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round: _ } => Some(SignId { session: set.session, id, attempt }),
     }
   }
@@ -129,7 +129,7 @@ impl Topic {
         };
         SignId { session: set.session, id, attempt }
       }),
-      Topic::SlashReport { .. } => None,
+      Topic::SlashReport => None,
       Topic::Sign { .. } => None,
     }
   }
@@ -147,7 +147,7 @@ impl Topic {
           Some(Topic::DkgConfirmation { attempt, round: SigningProtocolRound::Preprocess })
         }
       },
-      Topic::SlashReport { .. } => None,
+      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => None,
         SigningProtocolRound::Share => {
@@ -170,7 +170,7 @@ impl Topic {
         }
         SigningProtocolRound::Share => None,
       },
-      Topic::SlashReport { .. } => None,
+      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
           Some(Topic::Sign { id, attempt, round: SigningProtocolRound::Share })
@@ -189,7 +189,7 @@ impl Topic {
       // We don't require recognition for the first attempt, solely the re-attempts
       Topic::DkgConfirmation { attempt, .. } => *attempt != 0,
       // We don't require recognition for the slash report
-      Topic::SlashReport { .. } => false,
+      Topic::SlashReport => false,
       // We do require recognition for every sign protocol
       Topic::Sign { .. } => true,
     }
@@ -206,7 +206,7 @@ impl Topic {
     match self {
       Topic::RemoveParticipant { .. } => Participating::Everyone,
       Topic::DkgConfirmation { .. } => Participating::Participated,
-      Topic::SlashReport { .. } => Participating::Everyone,
+      Topic::SlashReport => Participating::Everyone,
       Topic::Sign { .. } => Participating::Participated,
     }
   }

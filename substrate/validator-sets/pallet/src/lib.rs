@@ -1254,7 +1254,7 @@ pub mod pallet {
 
     // Explicitly provide a pre-dispatch which calls validate_unsigned
     fn pre_dispatch(call: &Self::Call) -> Result<(), TransactionValidityError> {
-      Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ()).map_err(Into::into)
+      Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ())
     }
   }
 
