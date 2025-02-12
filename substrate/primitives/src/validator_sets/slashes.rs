@@ -1,35 +1,25 @@
 use core::{num::NonZero, time::Duration};
+use alloc::vec::Vec;
 
-#[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
-
-#[cfg(feature = "borsh")]
 use borsh::{BorshSerialize, BorshDeserialize};
-#[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
-#[cfg(not(feature = "std"))]
-use sp_std::vec::Vec;
 
-use serai_primitives::{TARGET_BLOCK_TIME, Amount};
-
-use crate::{SESSION_LENGTH, MAX_KEY_SHARES_PER_SET_U32};
+use crate::{
+  constants::{TARGET_BLOCK_TIME, SESSION_LENGTH, MAX_KEY_SHARES_PER_SET_U32},
+  balance::Amount,
+};
 
 /// Each slash point is equivalent to the downtime implied by missing a block proposal.
-// Takes a NonZero<u16> so that the result is never 0.
+// Takes a NonZero<u16> so that the result is never 0, making this safe to divide by.
 fn downtime_per_slash_point(validators: NonZero<u16>) -> Duration {
-  Duration::from_secs(TARGET_BLOCK_TIME) * u32::from(u16::from(validators))
+  TARGET_BLOCK_TIME * u32::from(u16::from(validators))
 }
 
 /// A slash for a validator.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "std", derive(Zeroize))]
-#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 pub enum Slash {
   /// The slash points accumulated by this validator.
   ///
@@ -46,7 +36,7 @@ pub enum Slash {
 impl Slash {
   /// Calculate the penalty which should be applied to the validator.
   ///
-  /// Does not panic, even due to overflows, if `allocated_stake + session_rewards <= u64::MAX`.
+  /// Does not panic, even when compiled with checked arithmetic.
   pub fn penalty(
     self,
     validators: NonZero<u16>,
@@ -206,31 +196,34 @@ impl Slash {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct SlashReport(pub BoundedVec<Slash, ConstU32<{ MAX_KEY_SHARES_PER_SET_U32 }>>);
+/// A report of all slashes incurred for a `ValidatorSet`.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+pub struct SlashReport(
+  #[borsh(
+    serialize_with = "crate::borsh_serialize_bounded_vec",
+    deserialize_with = "crate::borsh_deserialize_bounded_vec"
+  )]
+  pub BoundedVec<Slash, ConstU32<{ MAX_KEY_SHARES_PER_SET_U32 }>>,
+);
 
-#[cfg(feature = "borsh")]
-impl BorshSerialize for SlashReport {
-  fn serialize<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
-    BorshSerialize::serialize(self.0.as_slice(), writer)
-  }
-}
-#[cfg(feature = "borsh")]
-impl BorshDeserialize for SlashReport {
-  fn deserialize_reader<R: borsh::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
-    let slashes = Vec::<Slash>::deserialize_reader(reader)?;
-    slashes
-      .try_into()
-      .map(Self)
-      .map_err(|_| borsh::io::Error::other("length of slash report exceeds max validators"))
-  }
+/// An error when converting from a `Vec`.
+pub enum FromVecError {
+  /// The source `Vec` was too long to be converted.
+  TooLong,
 }
 
 impl TryFrom<Vec<Slash>> for SlashReport {
-  type Error = &'static str;
-  fn try_from(slashes: Vec<Slash>) -> Result<SlashReport, &'static str> {
-    slashes.try_into().map(Self).map_err(|_| "length of slash report exceeds max validators")
+  type Error = FromVecError;
+  fn try_from(slashes: Vec<Slash>) -> Result<SlashReport, FromVecError> {
+    slashes.try_into().map(Self).map_err(|_| FromVecError::TooLong)
+  }
+}
+
+impl zeroize::Zeroize for SlashReport {
+  fn zeroize(&mut self) {
+    for slash in self.0.as_mut() {
+      slash.zeroize();
+    }
   }
 }
 
@@ -238,13 +231,18 @@ impl SlashReport {
   /// The message to sign when publishing this SlashReport.
   // This is assumed binding to the ValidatorSet via the key signed with
   pub fn report_slashes_message(&self) -> Vec<u8> {
-    (b"ValidatorSets-report_slashes", &self.0).encode()
+    const DST: &[u8] = b"ValidatorSets-report_slashes";
+    let mut buf = Vec::with_capacity(
+      DST.len() + core::mem::size_of::<u32>() + (self.0.len() * core::mem::size_of::<Slash>()),
+    );
+    (DST, self).serialize(&mut buf).unwrap();
+    buf
   }
 }
 
 #[test]
 fn test_penalty() {
-  for validators in [1, 50, 100, crate::MAX_KEY_SHARES_PER_SET] {
+  for validators in [1, 50, 100, crate::constants::MAX_KEY_SHARES_PER_SET] {
     let validators = NonZero::new(validators).unwrap();
     // 12 hours of slash points should only decrease the rewards proportionately
     let twelve_hours_of_slash_points =
@@ -316,11 +314,13 @@ fn test_penalty() {
 
 #[test]
 fn no_overflow() {
+  // Test with u16::MAX for validators, maximizing the downtime each slash point represents
   Slash::Points(u32::MAX).penalty(
     NonZero::new(u16::MAX).unwrap(),
     Amount(u64::MAX),
     Amount(u64::MAX),
   );
 
+  // Test with 1 for validators, in case validators is inversely correlated
   Slash::Points(u32::MAX).penalty(NonZero::new(1).unwrap(), Amount(u64::MAX), Amount(u64::MAX));
 }

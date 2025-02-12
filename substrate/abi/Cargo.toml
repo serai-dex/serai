@@ -12,76 +12,38 @@ rust-version = "1.85"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo-machete]
+ignored = ["serde"]
+
 [lints]
 workspace = true
 
 [dependencies]
-bitvec = { version = "1", default-features = false, features = ["alloc", "serde"] }
+borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
 
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "bit-vec"] }
-scale-info = { version = "2", default-features = false, features = ["derive", "bit-vec"] }
-
-borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
-serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
-
+bitvec = { version = "1", default-features = false, features = ["alloc"] }
 sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-sp-consensus-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
-sp-consensus-grandpa = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
-
-frame-support = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+serde = { version = "1", default-features = false, features = ["derive"], optional = true }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
+scale-info = { version = "2", default-features = false, features = ["derive"], optional = true }
+sp-runtime = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false, features = ["serde"], optional = true }
 
 serai-primitives = { path = "../primitives", version = "0.1", default-features = false }
-serai-coins-primitives = { path = "../coins/primitives", version = "0.1", default-features = false }
-serai-validator-sets-primitives = { path = "../validator-sets/primitives", version = "0.1", default-features = false }
-serai-genesis-liquidity-primitives = { path = "../genesis-liquidity/primitives", version = "0.1", default-features = false }
-serai-emissions-primitives = { path = "../emissions/primitives", version = "0.1", default-features = false }
-serai-in-instructions-primitives = { path = "../in-instructions/primitives", version = "0.1", default-features = false }
-serai-signals-primitives = { path = "../signals/primitives", version = "0.1", default-features = false }
 
 [features]
 std = [
+  "borsh/std",
+
   "bitvec/std",
-
-  "scale/std",
-  "scale-info/std",
-
-  "borsh?/std",
-  "serde?/std",
-
   "sp-core/std",
-  "sp-runtime/std",
 
-  "sp-consensus-babe/std",
-  "sp-consensus-grandpa/std",
-
-  "frame-support/std",
+  "serde?/std",
+  "scale?/std",
+  "scale-info?/std",
+  "sp-runtime?/std",
 
   "serai-primitives/std",
-  "serai-coins-primitives/std",
-  "serai-validator-sets-primitives/std",
-  "serai-genesis-liquidity-primitives/std",
-  "serai-emissions-primitives/std",
-  "serai-in-instructions-primitives/std",
-  "serai-signals-primitives/std",
 ]
-borsh = [
-  "dep:borsh",
-  "serai-primitives/borsh",
-  "serai-coins-primitives/borsh",
-  "serai-validator-sets-primitives/borsh",
-  "serai-genesis-liquidity-primitives/borsh",
-  "serai-in-instructions-primitives/borsh",
-  "serai-signals-primitives/borsh",
-]
-serde = [
-  "dep:serde",
-  "serai-primitives/serde",
-  "serai-coins-primitives/serde",
-  "serai-validator-sets-primitives/serde",
-  "serai-genesis-liquidity-primitives/serde",
-  "serai-in-instructions-primitives/serde",
-  "serai-signals-primitives/serde",
-]
+substrate = ["serde", "scale", "scale-info", "sp-runtime"]
 default = ["std"]

@@ -1,79 +1,144 @@
+use borsh::{BorshSerialize, BorshDeserialize};
+
 use sp_core::{ConstU32, bounded::BoundedVec};
 
-pub use serai_validator_sets_primitives as primitives;
+use serai_primitives::{
+  crypto::{ExternalKey, KeyPair, Signature},
+  address::SeraiAddress,
+  balance::Amount,
+  network_id::*,
+  validator_sets::*,
+};
 
-use serai_primitives::*;
-use serai_validator_sets_primitives::*;
-
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
+/// A call to the validator sets.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {
+  /// Set the keys for a validator set.
   set_keys {
+    /// The network whose latest validator set is setting their keys.
     network: ExternalNetworkId,
+    /// The keys being set.
     key_pair: KeyPair,
+    /// The participants in the validator set who signed off on these keys.
+    #[borsh(
+      serialize_with = "serai_primitives::sp_borsh::borsh_serialize_bitvec",
+      deserialize_with = "serai_primitives::sp_borsh::borsh_deserialize_bitvec"
+    )]
     signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
+    /// The signature confirming these keys are valid.
     signature: Signature,
   },
-  set_embedded_elliptic_curve_key {
-    embedded_elliptic_curve: EmbeddedEllipticCurve,
-    key: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
-  },
+  /// Report a validator set's slashes onto Serai.
   report_slashes {
+    /// The network whose retiring validator set is setting their keys.
     network: ExternalNetworkId,
+    /// The slashes they're reporting.
     slashes: SlashReport,
+    /// The signature confirming the validity of this slash report.
     signature: Signature,
   },
+  /// Set a validator's keys on embedded elliptic curves for a specific network.
+  set_embedded_elliptic_curve_keys {
+    /// The network the origin is setting their embedded elliptic curve keys for.
+    network: ExternalNetworkId,
+    /// The keys on the embedded elliptic curves.
+    ///
+    /// This may be a single key if the external network uses the same embedded elliptic curve as
+    /// used for the key to oraclize onto Serai.
+    #[borsh(
+      serialize_with = "serai_primitives::sp_borsh::borsh_serialize_bounded_vec",
+      deserialize_with = "serai_primitives::sp_borsh::borsh_deserialize_bounded_vec"
+    )]
+    keys: BoundedVec<u8, ConstU32<{ 2 * ExternalKey::MAX_LEN }>>,
+  },
+  /// Allocate stake to a network.
   allocate {
+    /// The network to allocate stake to.
     network: NetworkId,
+    /// The amount of stake to allocate.
     amount: Amount,
   },
+  /// Deallocate stake from a network.
+  ///
+  /// This deallocation may be immediate or may be delayed depending on if the origin is an
+  /// active, or even recent, validator. If delayed, it will have to be claimed at a later time.
   deallocate {
+    /// The network to deallocate stake from.
     network: NetworkId,
+    /// The amount of stake to deallocate.
     amount: Amount,
   },
+  /// Claim a now-unlocked deallocation.
   claim_deallocation {
-    network: NetworkId,
-    session: Session,
+    /// The validator set which claiming the deallocation was delayed until.
+    deallocation: ValidatorSet,
   },
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
+impl Call {
+  pub(crate) fn is_signed(&self) -> bool {
+    match self {
+      Call::set_keys { .. } | Call::report_slashes { .. } => false,
+      Call::set_embedded_elliptic_curve_keys { .. } |
+      Call::allocate { .. } |
+      Call::deallocate { .. } |
+      Call::claim_deallocation { .. } => true,
+    }
+  }
+}
+
+/// An event from the validator sets.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
+  /// A new validator set was declared.
   NewSet {
+    /// The set declared.
     set: ValidatorSet,
   },
-  ParticipantRemoved {
-    set: ValidatorSet,
-    removed: SeraiAddress,
-  },
-  KeyGen {
+  /// A validator set has set their keys.
+  SetKeys {
+    /// The set which set their keys.
     set: ExternalValidatorSet,
+    /// The keys sets.
     key_pair: KeyPair,
   },
+  /// A validator set has accepted responsibility from the prior validator set.
   AcceptedHandover {
+    /// The set which accepted responsibility from the prior set.
     set: ValidatorSet,
   },
+  /// A validator set has retired.
   SetRetired {
+    /// The set retired.
     set: ValidatorSet,
   },
-  AllocationIncreased {
+  /// A validator's allocation to a network has increased.
+  Allocation {
+    /// The validator who increased their allocation.
     validator: SeraiAddress,
+    /// The network the stake was allocated to.
     network: NetworkId,
+    /// The amount of stake allocated.
     amount: Amount,
   },
-  AllocationDecreased {
+  /// A validator's allocation to a network has decreased.
+  Deallocation {
+    /// The validator who decreased their allocation.
     validator: SeraiAddress,
+    /// The network the stake was deallocated from.
     network: NetworkId,
+    /// The amount of stake deallocated.
     amount: Amount,
+    /// The session which claiming the deallocation was delayed until.
     delayed_until: Option<Session>,
   },
+  /// A validator's deallocation from a network has been claimed.
+  ///
+  /// This is only emited for deallocations which were delayed and has to be explicitly claimed.
   DeallocationClaimed {
+    /// The validator who claimed their deallocation.
     validator: SeraiAddress,
-    network: NetworkId,
-    session: Session,
+    /// The validator set the deallocation was delayed until.
+    deallocation: ValidatorSet,
   },
 }

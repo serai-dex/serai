@@ -1,20 +1,50 @@
-pub use serai_genesis_liquidity_primitives as primitives;
+use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::*;
-use primitives::*;
+use serai_primitives::{
+  crypto::Signature, address::SeraiAddress, balance::ExternalBalance, genesis::GenesisValues,
+};
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+/// A call to the genesis liquidity.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {
-  remove_coin_liquidity { balance: ExternalBalance },
-  oraclize_values { values: Values, signature: Signature },
+  /// Oraclize the value of non-Bitcoin external coins relative to Bitcoin.
+  oraclize_values {
+    /// The values of the non-Bitcoin external coins.
+    values: GenesisValues,
+    /// The signature by the genesis validators for these values.
+    signature: Signature,
+  },
+  /// Remove liquidity.
+  remove_liquidity {
+    /// The genesis liquidity to remove.
+    balance: ExternalBalance,
+  },
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+impl Call {
+  pub(crate) fn is_signed(&self) -> bool {
+    match self {
+      Call::oraclize_values { .. } => false,
+      Call::remove_liquidity { .. } => true,
+    }
+  }
+}
+
+/// An event from the genesis liquidity.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
-  GenesisLiquidityAdded { by: SeraiAddress, balance: ExternalBalance },
-  GenesisLiquidityRemoved { by: SeraiAddress, balance: ExternalBalance },
-  GenesisLiquidityAddedToPool { coin: ExternalBalance, sri: Amount },
+  /// Genesis liquidity added.
+  GenesisLiquidityAdded {
+    /// The recipient of the genesis liquidity.
+    recipient: SeraiAddress,
+    /// The coins added as genesis liquidity.
+    balance: ExternalBalance,
+  },
+  /// Genesis liquidity removed.
+  GenesisLiquidityRemoved {
+    /// The account which removed the genesis liquidity.
+    origin: SeraiAddress,
+    /// The amount of genesis liquidity removed.
+    balance: ExternalBalance,
+  },
 }

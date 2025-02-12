@@ -1,25 +1,70 @@
-use serai_primitives::{Balance, SeraiAddress};
+use borsh::{BorshSerialize, BorshDeserialize};
 
-pub use serai_coins_primitives as primitives;
-use primitives::OutInstructionWithBalance;
+use serai_primitives::{
+  address::SeraiAddress, balance::Balance, instructions::OutInstructionWithBalance,
+};
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
+/// A call to coins.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {
-  transfer { to: SeraiAddress, balance: Balance },
-  burn { balance: Balance },
-  burn_with_instruction { instruction: OutInstructionWithBalance },
+  /// Transfer these coins to the specified address.
+  transfer {
+    /// The address to transfer to.
+    to: SeraiAddress,
+    /// The coins to transfer.
+    coins: Balance,
+  },
+  /// Burn these coins.
+  burn {
+    /// The coins to burn.
+    coins: Balance,
+  },
+  /// Burn these coins with an `OutInstruction` specified.
+  burn_with_instruction {
+    /// The `OutInstruction`, with the coins to burn.
+    instruction: OutInstructionWithBalance,
+  },
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
+impl Call {
+  pub(crate) fn is_signed(&self) -> bool {
+    match self {
+      Call::transfer { .. } | Call::burn { .. } | Call::burn_with_instruction { .. } => true,
+    }
+  }
+}
+
+/// An event from the system.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
-  Mint { to: SeraiAddress, balance: Balance },
-  Burn { from: SeraiAddress, balance: Balance },
-  BurnWithInstruction { from: SeraiAddress, instruction: OutInstructionWithBalance },
-  Transfer { from: SeraiAddress, to: SeraiAddress, balance: Balance },
+  /// The specified coins were minted.
+  Mint {
+    /// The address minted to.
+    to: SeraiAddress,
+    /// The coins minted.
+    coins: Balance,
+  },
+  /// The specified coins were burnt.
+  Burn {
+    /// The address burnt from.
+    from: SeraiAddress,
+    /// The coins burnt.
+    coins: Balance,
+  },
+  /// The specified coins were burnt with an `OutInstruction` specified.
+  BurnWithInstruction {
+    /// The address burnt from.
+    from: SeraiAddress,
+    /// The `OutInstruction` specified, and the coins burnt.
+    instruction: OutInstructionWithBalance,
+  },
+  /// The specified coins were transferred.
+  Transfer {
+    /// The address transferred from.
+    from: SeraiAddress,
+    /// The address transferred to.
+    to: SeraiAddress,
+    /// The coins transferred.
+    coins: Balance,
+  },
 }

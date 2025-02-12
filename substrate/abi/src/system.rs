@@ -1,13 +1,11 @@
-use frame_support::dispatch::{DispatchInfo, DispatchError};
+use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::SeraiAddress;
-
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
+/// An event from the system.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
-  ExtrinsicSuccess { dispatch_info: DispatchInfo },
-  ExtrinsicFailed { dispatch_error: DispatchError, dispatch_info: DispatchInfo },
-  CodeUpdated,
-  NewAccount { account: SeraiAddress },
-  KilledAccount { account: SeraiAddress },
-  Remarked { sender: SeraiAddress, hash: [u8; 32] },
+  /// The transaction successfully executed.
+  TransactionSuccess,
+  /// The transaction failed to execute.
+  // TODO: Add an error to this
+  TransactionFailed,
 }

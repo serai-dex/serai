@@ -1,168 +1,79 @@
-#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(feature = "std")]
+extern crate alloc;
+
 use zeroize::Zeroize;
+use ::borsh::{BorshSerialize, BorshDeserialize};
 
-#[cfg(feature = "borsh")]
-use borsh::{BorshSerialize, BorshDeserialize};
-#[cfg(feature = "serde")]
-use serde::{Serialize, Deserialize};
+/// Wrappers to implement Borsh on non-Borsh-implementing types.
+#[doc(hidden)]
+pub mod sp_borsh;
+pub(crate) use sp_borsh::*;
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
+/// Constants within the Serai protocol.
+pub mod constants;
 
-#[cfg(test)]
-use sp_io::TestExternalities;
+/// Cryptographic types.
+pub mod crypto;
 
-#[cfg(test)]
-use frame_support::{pallet_prelude::*, Identity, traits::StorageInstance};
+/// Address types.
+pub mod address;
 
-use sp_core::{ConstU32, bounded::BoundedVec};
-pub use sp_application_crypto as crypto;
+/// Types for identifying coins.
+pub mod coin;
 
-mod amount;
-pub use amount::*;
+/// The `Amount`, `ExternalBalance`, and `Balance` types.
+pub mod balance;
 
-mod block;
-pub use block::*;
+/// Types for genesis.
+pub mod genesis;
 
-mod networks;
-pub use networks::*;
+/// Types for identifying networks and their properties.
+pub mod network_id;
 
-mod balance;
-pub use balance::*;
+/// Types for identifying and working with validator sets.
+pub mod validator_sets;
 
-mod account;
-pub use account::*;
+/// Types for signaling.
+pub mod signals;
 
-mod constants;
-pub use constants::*;
+/// Instruction types.
+pub mod instructions;
 
-mod dex;
-#[allow(unused_imports)]
-pub use dex::*;
-
-pub type BlockNumber = u64;
-pub type Header = sp_runtime::generic::Header<BlockNumber, sp_runtime::traits::BlakeTwo256>;
-
-#[cfg(feature = "borsh")]
-pub fn borsh_serialize_bounded_vec<W: borsh::io::Write, T: BorshSerialize, const B: u32>(
-  bounded: &BoundedVec<T, ConstU32<B>>,
-  writer: &mut W,
-) -> Result<(), borsh::io::Error> {
-  borsh::BorshSerialize::serialize(bounded.as_slice(), writer)
-}
-
-#[cfg(feature = "borsh")]
-pub fn borsh_deserialize_bounded_vec<R: borsh::io::Read, T: BorshDeserialize, const B: u32>(
-  reader: &mut R,
-) -> Result<BoundedVec<T, ConstU32<B>>, borsh::io::Error> {
-  let vec: Vec<T> = borsh::BorshDeserialize::deserialize_reader(reader)?;
-  vec.try_into().map_err(|_| borsh::io::Error::other("bound exceeded"))
-}
-
-pub const MAX_ADDRESS_LEN: u32 = 512;
-
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
-#[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct ExternalAddress(
-  #[cfg_attr(
-    feature = "borsh",
-    borsh(
-      serialize_with = "borsh_serialize_bounded_vec",
-      deserialize_with = "borsh_deserialize_bounded_vec"
-    )
-  )]
-  BoundedVec<u8, ConstU32<{ MAX_ADDRESS_LEN }>>,
-);
-#[cfg(feature = "std")]
-impl Zeroize for ExternalAddress {
-  fn zeroize(&mut self) {
-    self.0.as_mut().zeroize()
+/// The type used to identify block numbers.
+///
+/// A block's number is its zero-indexed position on the list of blocks which form a blockchain.
+/// For non-linear structures, this would presumably be the zero-indexed position within some
+/// topological order.
+#[derive(
+  Clone, Copy, Default, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize,
+)]
+pub struct BlockNumber(pub u64);
+impl From<u64> for BlockNumber {
+  fn from(number: u64) -> BlockNumber {
+    BlockNumber(number)
   }
 }
 
-impl ExternalAddress {
-  #[cfg(feature = "std")]
-  pub fn new(address: Vec<u8>) -> Result<ExternalAddress, &'static str> {
-    Ok(ExternalAddress(address.try_into().map_err(|_| "address length exceeds {MAX_ADDRESS_LEN}")?))
-  }
-
-  #[cfg(feature = "std")]
-  pub fn consume(self) -> Vec<u8> {
-    self.0.into_inner()
-  }
-}
-
-impl AsRef<[u8]> for ExternalAddress {
-  fn as_ref(&self) -> &[u8] {
-    self.0.as_ref()
+/// The type used to identify block hashes.
+/*
+  Across all networks, block hashes may not be 32 bytes. There may be a network which targets 256
+  bits of security and accordingly has a 64-byte block hash. Serai only targets a 128-bit security
+  level so this is fine for our use-case. If we do ever see a 64-byte block hash, we can simply
+  hash it into a 32-byte hash or truncate it.
+*/
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+pub struct BlockHash(pub [u8; 32]);
+impl From<[u8; 32]> for BlockHash {
+  fn from(hash: [u8; 32]) -> BlockHash {
+    BlockHash(hash)
   }
 }
-
-/// Lexicographically reverses a given byte array.
-pub fn reverse_lexicographic_order<const N: usize>(bytes: [u8; N]) -> [u8; N] {
-  let mut res = [0u8; N];
-  for (i, byte) in bytes.iter().enumerate() {
-    res[i] = !*byte;
+impl From<sp_core::H256> for BlockHash {
+  fn from(hash: sp_core::H256) -> BlockHash {
+    BlockHash(hash.into())
   }
-  res
-}
-
-#[test]
-fn test_reverse_lexicographic_order() {
-  TestExternalities::default().execute_with(|| {
-    use rand_core::{RngCore, OsRng};
-
-    struct Storage;
-    impl StorageInstance for Storage {
-      fn pallet_prefix() -> &'static str {
-        "LexicographicOrder"
-      }
-
-      const STORAGE_PREFIX: &'static str = "storage";
-    }
-    type Map = StorageMap<Storage, Identity, [u8; 8], (), OptionQuery>;
-
-    struct StorageReverse;
-    impl StorageInstance for StorageReverse {
-      fn pallet_prefix() -> &'static str {
-        "LexicographicOrder"
-      }
-
-      const STORAGE_PREFIX: &'static str = "storagereverse";
-    }
-    type MapReverse = StorageMap<StorageReverse, Identity, [u8; 8], (), OptionQuery>;
-
-    // populate the maps
-    let mut amounts = vec![];
-    for _ in 0 .. 100 {
-      amounts.push(OsRng.next_u64());
-    }
-
-    let mut amounts_sorted = amounts.clone();
-    amounts_sorted.sort();
-    for a in amounts {
-      Map::set(a.to_be_bytes(), Some(()));
-      MapReverse::set(reverse_lexicographic_order(a.to_be_bytes()), Some(()));
-    }
-
-    // retrive back and check whether they are sorted as expected
-    let total_size = amounts_sorted.len();
-    let mut map_iter = Map::iter_keys();
-    let mut reverse_map_iter = MapReverse::iter_keys();
-    for i in 0 .. amounts_sorted.len() {
-      let first = map_iter.next().unwrap();
-      let second = reverse_map_iter.next().unwrap();
-
-      assert_eq!(u64::from_be_bytes(first), amounts_sorted[i]);
-      assert_eq!(
-        u64::from_be_bytes(reverse_lexicographic_order(second)),
-        amounts_sorted[total_size - (i + 1)]
-      );
-    }
-  });
 }

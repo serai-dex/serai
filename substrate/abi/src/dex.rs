@@ -1,75 +1,121 @@
-use sp_runtime::BoundedVec;
+use alloc::vec::Vec;
 
-use serai_primitives::*;
+use borsh::{BorshSerialize, BorshDeserialize};
 
-type PoolId = ExternalCoin;
-type MaxSwapPathLength = sp_core::ConstU32<3>;
+use serai_primitives::{
+  address::SeraiAddress,
+  coin::ExternalCoin,
+  balance::{Amount, ExternalBalance, Balance},
+};
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
+/// A call to the DEX.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {
+  /// Add liquidity.
   add_liquidity {
+    /// The coin to add liquidity for.
     coin: ExternalCoin,
-    coin_desired: SubstrateAmount,
-    sri_desired: SubstrateAmount,
-    coin_min: SubstrateAmount,
-    sri_min: SubstrateAmount,
-    mint_to: SeraiAddress,
+    /// The intended amount of SRI to add as liquidity.
+    sri_intended: Amount,
+    /// The intended amount of the coin to add as liquidity.
+    coin_intended: Amount,
+    /// The minimum amount of SRI to add as liquidity.
+    sri_minimum: Amount,
+    /// The minimum amount of the coin to add as liquidity.
+    coin_minimum: Amount,
   },
+  /// Transfer these liquidity tokens to the specified address.
+  transfer_liquidity {
+    /// The address to transfer to.
+    to: SeraiAddress,
+    /// The liquidity tokens to transfer.
+    liquidity_tokens: ExternalBalance,
+  },
+  /// Remove liquidity.
   remove_liquidity {
-    coin: ExternalCoin,
-    lp_token_burn: SubstrateAmount,
-    coin_min_receive: SubstrateAmount,
-    sri_min_receive: SubstrateAmount,
-    withdraw_to: SeraiAddress,
+    /// The liquidity tokens to burn, removing the underlying liquidity from the pool.
+    ///
+    /// The `coin` within the balance is the coin to remove liquidity for.
+    liquidity_tokens: ExternalBalance,
+    /// The minimum amount of SRI to receive.
+    sri_minimum: Amount,
+    /// The minimum amount of the coin to receive.
+    coin_minimum: Amount,
   },
-  swap_exact_tokens_for_tokens {
-    path: BoundedVec<Coin, MaxSwapPathLength>,
-    amount_in: SubstrateAmount,
-    amount_out_min: SubstrateAmount,
-    send_to: SeraiAddress,
+  /// Swap an exact amount of coins.
+  swap_exact {
+    /// The coins to swap.
+    coins_to_swap: Balance,
+    /// The minimum balance to receive.
+    minimum_to_receive: Balance,
   },
-  swap_tokens_for_exact_tokens {
-    path: BoundedVec<Coin, MaxSwapPathLength>,
-    amount_out: SubstrateAmount,
-    amount_in_max: SubstrateAmount,
-    send_to: SeraiAddress,
+  /// Swap for an exact amount of coins.
+  swap_for_exact {
+    /// The coins to receive.
+    coins_to_receive: Balance,
+    /// The maximum amount to swap.
+    maximum_to_swap: Balance,
   },
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
+impl Call {
+  pub(crate) fn is_signed(&self) -> bool {
+    match self {
+      Call::add_liquidity { .. } |
+      Call::transfer_liquidity { .. } |
+      Call::remove_liquidity { .. } |
+      Call::swap_exact { .. } |
+      Call::swap_for_exact { .. } => true,
+    }
+  }
+}
+
+/// An event from the DEX.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
-  PoolCreated {
-    pool_id: PoolId,
-    pool_account: SeraiAddress,
-  },
-
+  /// Liquidity was added to a pool.
   LiquidityAdded {
-    who: SeraiAddress,
-    mint_to: SeraiAddress,
-    pool_id: PoolId,
-    coin_amount: SubstrateAmount,
-    sri_amount: SubstrateAmount,
-    lp_token_minted: SubstrateAmount,
+    /// The account which added the liquidity.
+    origin: SeraiAddress,
+    /// The account which received the liquidity tokens.
+    recipient: SeraiAddress,
+    /// The pool liquidity was added to.
+    pool: ExternalCoin,
+    /// The amount of liquidity tokens which were minted.
+    liquidity_tokens_minted: Amount,
+    /// The amount of the coin which was added to the pool's liquidity.
+    coin_amount: Amount,
+    /// The amount of SRI which was added to the pool's liquidity.
+    sri_amount: Amount,
   },
 
+  /// Liquidity was removed from a pool.
   LiquidityRemoved {
-    who: SeraiAddress,
-    withdraw_to: SeraiAddress,
-    pool_id: PoolId,
-    coin_amount: SubstrateAmount,
-    sri_amount: SubstrateAmount,
-    lp_token_burned: SubstrateAmount,
+    /// The account which removed the liquidity.
+    origin: SeraiAddress,
+    /// The pool liquidity was removed from.
+    pool: ExternalCoin,
+    /// The mount of liquidity tokens which were burnt.
+    liquidity_tokens_burnt: Amount,
+    /// The amount of the coin which was removed from the pool's liquidity.
+    coin_amount: Amount,
+    /// The amount of SRI which was removed from the pool's liquidity.
+    sri_amount: Amount,
   },
 
-  SwapExecuted {
-    who: SeraiAddress,
-    send_to: SeraiAddress,
-    path: BoundedVec<Coin, MaxSwapPathLength>,
-    amount_in: SubstrateAmount,
-    amount_out: SubstrateAmount,
+  /// A swap through the liquidity pools occurred.
+  Swap {
+    /// The account which made the swap.
+    origin: SeraiAddress,
+    /// The recipient for the output of the swap.
+    recipient: SeraiAddress,
+    /// The deltas incurred by the pools.
+    ///
+    /// For a swap of sriABC to sriDEF, this would be
+    /// `[Balance { sriABC, 1 }, Balance { SRI, 2 }, Balance { sriDEF, 3 }]`, where
+    /// `Balance { sriABC, 1 }` was added to the `sriABC-SRI` pool, `Balance { SRI, 2 }` was
+    /// removed from the `sriABC-SRI` pool and added to the `sriDEF-SRI` pool, and
+    /// `Balance { sriDEF, 3 }` was removed from the `sriDEF-SRI` pool.
+    deltas: Vec<Balance>,
   },
 }

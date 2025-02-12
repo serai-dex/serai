@@ -1,59 +1,132 @@
-use serai_primitives::{NetworkId, SeraiAddress};
+use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_validator_sets_primitives::ValidatorSet;
+use serai_primitives::{
+  address::SeraiAddress, network_id::NetworkId, validator_sets::ValidatorSet, signals::Signal,
+};
 
-pub use serai_signals_primitives as primitives;
-use primitives::SignalId;
-
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
+/// A call to signals.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {
-  register_retirement_signal { in_favor_of: [u8; 32] },
-  revoke_retirement_signal { retirement_signal_id: [u8; 32] },
-  favor { signal_id: SignalId, for_network: NetworkId },
-  revoke_favor { signal_id: SignalId, for_network: NetworkId },
-  stand_against { signal_id: SignalId, for_network: NetworkId },
+  /// Register a retirement signal.
+  register_retirement_signal {
+    /// The protocol favored over the current protocol.
+    in_favor_of: [u8; 32],
+  },
+  /// Revoke a retirement signal.
+  revoke_retirement_signal {
+    /// The protocol which was favored over the current protocol
+    was_in_favor_of: [u8; 32],
+  },
+  /// Favor a signal.
+  favor {
+    /// The signal to favor.
+    signal: Signal,
+    /// The network this validator is expressing favor with.
+    ///
+    /// A validator may be an active validator for multiple networks. The validator must specify
+    /// which network they're expressing favor with in this call.
+    with_network: NetworkId,
+  },
+  /// Revoke favor for a signal.
+  revoke_favor {
+    /// The signal to revoke favor for.
+    signal: Signal,
+    /// The network this validator is revoking favor with.
+    ///
+    /// A validator may have expressed favor with multiple networks. The validator must specify
+    /// which network they're revoking favor with in this call.
+    with_network: NetworkId,
+  },
+  /// Stand against a signal.
+  ///
+  /// This has no effects other than emitting an event that this signal is stood against. If the
+  /// origin has prior expressed favor, they must still call `revoke_favor` for each network they
+  /// expressed favor with.
+  stand_against {
+    /// The signal to stand against.
+    signal: Signal,
+  },
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
+impl Call {
+  pub(crate) fn is_signed(&self) -> bool {
+    match self {
+      Call::register_retirement_signal { .. } |
+      Call::revoke_retirement_signal { .. } |
+      Call::favor { .. } |
+      Call::revoke_favor { .. } |
+      Call::stand_against { .. } => true,
+    }
+  }
+}
+
+/// An event from signals.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
+  /// A retirement signal has been registered.
   RetirementSignalRegistered {
-    signal_id: [u8; 32],
+    /// The retirement signal's ID.
+    signal: [u8; 32],
+    /// The protocol retirement is proposed in favor of.
     in_favor_of: [u8; 32],
+    /// The address which registered this signal.
     registrant: SeraiAddress,
   },
+  /// A retirement signal was revoked.
   RetirementSignalRevoked {
-    signal_id: [u8; 32],
+    /// The retirement signal's ID.
+    signal: [u8; 32],
   },
+  /// A signal was favored.
   SignalFavored {
-    signal_id: SignalId,
+    /// The signal favored.
+    signal: Signal,
+    /// The validator the signal was favored by.
     by: SeraiAddress,
-    for_network: NetworkId,
+    /// The network with which the signal was favored.
+    with_network: NetworkId,
   },
-  SetInFavor {
-    signal_id: SignalId,
-    set: ValidatorSet,
-  },
-  RetirementSignalLockedIn {
-    signal_id: [u8; 32],
-  },
-  SetNoLongerInFavor {
-    signal_id: SignalId,
-    set: ValidatorSet,
-  },
+  /// Favor for a signal was revoked.
   FavorRevoked {
-    signal_id: SignalId,
+    /// The signal whose favor was revoked.
+    signal: Signal,
+    /// The validator who revoked their favor for the signal.
     by: SeraiAddress,
-    for_network: NetworkId,
+    /// The network with which favor for the signal was revoked.
+    with_network: NetworkId,
   },
+  /// A supermajority of a validator set now favor a signal.
+  SetInFavor {
+    /// The signal which now has a supermajority of a validator set favoring it.
+    signal: Signal,
+    /// The validator set which is now considered to favor the signal.
+    set: ValidatorSet,
+  },
+  /// A validator set is no longer considered to favor a signal.
+  SetNoLongerInFavor {
+    /// The signal which no longer has the validator set considered in favor of it.
+    signal: Signal,
+    /// The validator set which is no longer considered to be in favor of the signal.
+    set: ValidatorSet,
+  },
+  /// A retirement signal has been locked in.
+  RetirementSignalLockedIn {
+    /// The signal which has been locked in.
+    signal: [u8; 32],
+  },
+  /// A validator set's ability to publish batches was halted.
+  ///
+  /// This also halts set rotation in effect, as handovers are via new sets starting to publish
+  /// batches.
+  SetHalted {
+    /// The signal which has been locked in.
+    signal: [u8; 32],
+  },
+  /// An account has stood against a signal.
   AgainstSignal {
-    signal_id: SignalId,
+    /// The signal stood against.
+    signal: Signal,
+    /// The account which stood against the signal.
     who: SeraiAddress,
-    for_network: NetworkId,
   },
 }

@@ -48,7 +48,7 @@ frame-executive = { git = "https://github.com/serai-dex/polkadot-sdk", branch = 
 frame-benchmarking = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false, optional = true }
 
 serai-primitives = { path = "../primitives", default-features = false }
-serai-abi = { path = "../abi", default-features = false, features = ["serde"] }
+serai-abi = { path = "../abi", default-features = false }
 
 pallet-timestamp = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 pallet-authorship = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
@@ -107,7 +107,6 @@ std = [
 
   "serai-primitives/std",
   "serai-abi/std",
-  "serai-abi/serde",
 
   "pallet-timestamp/std",
   "pallet-authorship/std",

@@ -1,8 +1,13 @@
-use serai_primitives::ExternalNetworkId;
+use borsh::{BorshSerialize, BorshDeserialize};
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+use serai_primitives::network_id::ExternalNetworkId;
+
+/// An event from economic security.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
-  EconomicSecurityReached { network: ExternalNetworkId },
+  /// Economic security was achieved for a network's validator set.
+  EconomicSecurityAchieved {
+    /// The network whose validator set achieved economic security.
+    network: ExternalNetworkId,
+  },
 }
