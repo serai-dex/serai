@@ -13,8 +13,11 @@ pub struct HeaderV1 {
   pub number: u64,
   /// The block this header builds upon.
   pub parent_hash: BlockHash,
+  /// The UNIX time in milliseconds this block was created at.
+  pub unix_time_in_millis: u64,
   /// The root of a Merkle tree commiting to the transactions within this block.
-  // TODO: Review the format of this defined by Substrate
+  // TODO: Review the format of this defined by Substrate. We don't want to commit to the signature
+  // TODO: Some transactions don't have unique hashes due to assuming vaalidators set unique keys
   pub transactions_root: [u8; 32],
   /// A commitment to the consensus data used to justify adding this block to the blockchain.
   pub consensus_commitment: [u8; 32],
@@ -106,11 +109,33 @@ mod substrate {
   }
 
   impl From<&SubstrateHeader> for Header {
-    fn from(header: &SubstrateHeader) -> Header {
+    fn from(header: &SubstrateHeader) -> Self {
+      use sp_consensus_babe::SlotDuration;
+      use sc_consensus_babe::CompatibleDigestItem;
+
       match header {
         SubstrateHeader::V1(header) => Header::V1(HeaderV1 {
           number: header.number,
           parent_hash: BlockHash(header.parent_hash.0),
+          unix_time_in_millis: header
+            .consensus
+            .digest
+            .logs()
+            .iter()
+            .find_map(|digest_item| {
+              digest_item.as_babe_pre_digest().map(|pre_digest| {
+                pre_digest
+                  .slot()
+                  .timestamp(SlotDuration::from_millis(
+                    serai_primitives::constants::TARGET_BLOCK_TIME.as_millis().try_into().unwrap(),
+                  ))
+                  // This returns `None` if the slot is so far in the future, it'd cause an
+                  // overflow.
+                  .unwrap_or(sp_timestamp::Timestamp::new(u64::MAX))
+                  .as_millis()
+              })
+            })
+            .unwrap_or(0),
           transactions_root: header.transactions_root.0,
           consensus_commitment: sp_core::blake2_256(&header.consensus.encode()),
         }),
