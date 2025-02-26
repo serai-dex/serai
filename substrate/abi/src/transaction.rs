@@ -478,8 +478,7 @@ mod substrate {
           match call.dispatch(None.into()) {
             Ok(res) => Ok(Ok(res)),
             // Unsigned transactions should only be included if valid in all regards
-            // This isn't actually a "mandatory" but the intent is the same
-            Err(_err) => Err(TransactionValidityError::Invalid(InvalidTransaction::BadMandatory)),
+            Err(_err) => Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(0))),
           }
         }
         Transaction::Signed {
@@ -490,24 +489,28 @@ mod substrate {
           // Start by paying the fee
           self.1.pay_fee(&signer, fee)?;
 
-          Ok(frame_support::storage::transactional::with_storage_layer(|| {
+          let _res = frame_support::storage::transactional::with_storage_layer(|| {
             for call in calls.0 {
               let call = Context::RuntimeCall::from(call);
               match call.dispatch(Some(signer).into()) {
                 Ok(_res) => {}
                 // Because this call errored, don't continue and revert all prior calls
-                Err(e) => Err(e)?,
+                Err(e) => return Err(e),
               }
             }
-            // Since all calls succeeded, return Ok
-            Ok(PostDispatchInfo {
-              // `None` stands for the worst case, which is what we want
-              actual_weight: None,
-              // Signed transactions always pay their fee
-              // TODO: Do we want to handle this so we can not charge fees on removing genesis
-              // liquidity?
-              pays_fee: Pays::Yes,
-            })
+            Ok(())
+          });
+
+          // We don't care if the individual calls succeeded or failed.
+          // The transaction was valid for inclusion and the fee was paid.
+          // Either the calls passed, as desired, or they failed and the storage was reverted.
+          Ok(Ok(PostDispatchInfo {
+            // `None` stands for the worst case, which is what we want
+            actual_weight: None,
+            // Signed transactions always pay their fee
+            // TODO: Do we want to handle this so we can not charge fees on removing genesis
+            // liquidity?
+            pays_fee: Pays::Yes,
           }))
         }
       }
