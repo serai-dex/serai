@@ -1,6 +1,6 @@
 use rand_core::{RngCore, OsRng};
 
-use sp_core::{Pair as PairTrait, bounded_vec::BoundedVec};
+use sp_core::{Pair as PairTrait, bounded::BoundedVec};
 
 use serai_abi::in_instructions::primitives::DexCall;
 

@@ -22,7 +22,7 @@
 
 use super::*;
 use frame_benchmarking::{benchmarks, whitelisted_caller};
-use frame_support::{assert_ok, storage::bounded_vec::BoundedVec};
+use frame_support::{assert_ok, storage::bounded::BoundedVec};
 use frame_system::RawOrigin as SystemOrigin;
 
 use sp_runtime::traits::StaticLookup;

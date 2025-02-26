@@ -20,6 +20,7 @@ zeroize = { version = "^1.5", features = ["derive"] }
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
 
 bitvec = { version = "1", default-features = false, features = ["alloc"] }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc", "ristretto"] }

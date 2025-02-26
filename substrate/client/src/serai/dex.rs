@@ -1,4 +1,4 @@
-use sp_core::bounded_vec::BoundedVec;
+use sp_core::bounded::BoundedVec;
 use serai_abi::primitives::{Amount, Coin, ExternalCoin, SeraiAddress};
 
 use crate::{SeraiError, TemporalSerai};

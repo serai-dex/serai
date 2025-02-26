@@ -23,6 +23,8 @@ const HUMAN_READABLE_PART: bech32::Hrp = bech32::Hrp::parse_unchecked("sri");
 
 /// The address for an account on Serai.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[rustfmt::skip]
+#[derive(scale::Encode, scale::Decode)] // This is safe as scale and borsh share an encoding here
 pub struct SeraiAddress(pub [u8; 32]);
 
 impl SeraiAddress {

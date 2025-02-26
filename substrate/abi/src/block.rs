@@ -11,14 +11,13 @@ pub struct HeaderV1 {
   ///
   /// The genesis block has number 0.
   pub number: u64,
-  /// The block this header builds upon.
-  pub parent_hash: BlockHash,
+  /// The commitment to the DAG this header builds upon.
+  pub builds_upon: BlockHash,
   /// The UNIX time in milliseconds this block was created at.
   pub unix_time_in_millis: u64,
-  /// The root of a Merkle tree commiting to the transactions within this block.
-  // TODO: Review the format of this defined by Substrate. We don't want to commit to the signature
-  // TODO: Some transactions don't have unique hashes due to assuming vaalidators set unique keys
-  pub transactions_root: [u8; 32],
+  /// The commitment to the transactions within this block.
+  // TODO: Some transactions don't have unique hashes due to assuming validators set unique keys
+  pub transactions_commitment: [u8; 32],
   /// A commitment to the consensus data used to justify adding this block to the blockchain.
   pub consensus_commitment: [u8; 32],
 }
@@ -37,16 +36,16 @@ impl Header {
       Header::V1(HeaderV1 { number, .. }) => *number,
     }
   }
-  /// Get the hash of the header.
-  pub fn parent_hash(&self) -> BlockHash {
+  /// Get the commitment to the DAG this header builds upon.
+  pub fn builds_upon(&self) -> BlockHash {
     match self {
-      Header::V1(HeaderV1 { parent_hash, .. }) => *parent_hash,
+      Header::V1(HeaderV1 { builds_upon, .. }) => *builds_upon,
     }
   }
-  /// Get the hash of the header.
-  pub fn transactions_root(&self) -> [u8; 32] {
+  /// The commitment to the transactions within this block.
+  pub fn transactions_commitment(&self) -> [u8; 32] {
     match self {
-      Header::V1(HeaderV1 { transactions_root, .. }) => *transactions_root,
+      Header::V1(HeaderV1 { transactions_commitment, .. }) => *transactions_commitment,
     }
   }
   /// Get the hash of the header.
@@ -69,16 +68,34 @@ pub struct Block {
 
 #[cfg(feature = "substrate")]
 mod substrate {
+  use core::fmt::Debug;
+
   use scale::{Encode, Decode};
   use scale_info::TypeInfo;
 
   use sp_core::H256;
   use sp_runtime::{
-    generic::Digest,
+    generic::{DigestItem, Digest},
     traits::{Header as HeaderTrait, HeaderProvider, Block as BlockTrait},
   };
 
   use super::*;
+  use crate::Call;
+
+  /// The digest for all of the Serai-specific header fields.
+  #[derive(Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+  pub struct SeraiDigest {
+    /// The commitment to the DAG this header builds upon.
+    pub builds_upon: BlockHash,
+    /// The UNIX time in milliseconds this block was created at.
+    pub unix_time_in_millis: u64,
+    /// The commitment to the transactions within this block.
+    pub transactions_commitment: [u8; 32],
+  }
+
+  impl SeraiDigest {
+    const CONSENSUS_ID: [u8; 4] = *b"SRID";
+  }
 
   /// The consensus data for a V1 header.
   ///
@@ -86,6 +103,12 @@ mod substrate {
   /// solely considered used for consensus now.
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, sp_runtime::Serialize)]
   pub struct ConsensusV1 {
+    /// The hash of the immediately preceding block.
+    parent_hash: H256,
+    /// The root for the Merkle tree of transactions, as defined by Substrate.
+    ///
+    /// The format of this differs from Serai's format for the commitment to the transactions.
+    transactions_root: H256,
     /// The state root.
     state_root: H256,
     /// The consensus digests.
@@ -96,8 +119,6 @@ mod substrate {
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, sp_runtime::Serialize)]
   pub struct SubstrateHeaderV1 {
     number: u64,
-    parent_hash: H256,
-    transactions_root: H256,
     consensus: ConsensusV1,
   }
 
@@ -110,45 +131,48 @@ mod substrate {
 
   impl From<&SubstrateHeader> for Header {
     fn from(header: &SubstrateHeader) -> Self {
-      use sp_consensus_babe::SlotDuration;
-      use sc_consensus_babe::CompatibleDigestItem;
-
       match header {
-        SubstrateHeader::V1(header) => Header::V1(HeaderV1 {
-          number: header.number,
-          parent_hash: BlockHash(header.parent_hash.0),
-          unix_time_in_millis: header
-            .consensus
-            .digest
-            .logs()
-            .iter()
-            .find_map(|digest_item| {
-              digest_item.as_babe_pre_digest().map(|pre_digest| {
-                pre_digest
-                  .slot()
-                  .timestamp(SlotDuration::from_millis(
-                    serai_primitives::constants::TARGET_BLOCK_TIME.as_millis().try_into().unwrap(),
-                  ))
-                  // This returns `None` if the slot is so far in the future, it'd cause an
-                  // overflow.
-                  .unwrap_or(sp_timestamp::Timestamp::new(u64::MAX))
-                  .as_millis()
-              })
-            })
-            .unwrap_or(0),
-          transactions_root: header.transactions_root.0,
-          consensus_commitment: sp_core::blake2_256(&header.consensus.encode()),
-        }),
+        SubstrateHeader::V1(header) => {
+          let digest =
+            header.consensus.digest.logs().iter().find_map(|digest_item| match digest_item {
+              DigestItem::PreRuntime(consensus, encoded)
+                if *consensus == SeraiDigest::CONSENSUS_ID =>
+              {
+                SeraiDigest::deserialize_reader(&mut encoded.as_slice()).ok()
+              }
+              _ => None,
+            });
+          Header::V1(HeaderV1 {
+            number: header.number,
+            builds_upon: digest
+              .as_ref()
+              .map(|digest| digest.builds_upon)
+              .unwrap_or(BlockHash::from([0; 32])),
+            unix_time_in_millis: digest
+              .as_ref()
+              .map(|digest| digest.unix_time_in_millis)
+              .unwrap_or(0),
+            transactions_commitment: digest
+              .as_ref()
+              .map(|digest| digest.transactions_commitment)
+              .unwrap_or([0; 32]),
+            consensus_commitment: sp_core::blake2_256(&header.consensus.encode()),
+          })
+        }
       }
     }
   }
 
   /// A block, as needed by Substrate.
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, sp_runtime::Serialize)]
-  pub struct SubstrateBlock {
+  #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, sp_runtime::Serialize)]
+  #[codec(encode_bound(skip_type_params(RuntimeCall)))]
+  #[codec(decode_bound(skip_type_params(RuntimeCall)))]
+  pub struct SubstrateBlock<
+    RuntimeCall: 'static + Send + Sync + Clone + PartialEq + Eq + Debug + From<Call>,
+  > {
     header: SubstrateHeader,
     #[serde(skip)] // This makes this unsafe to deserialize, but we don't impl `Deserialize`
-    transactions: Vec<Transaction>,
+    transactions: Vec<Transaction<RuntimeCall>>,
   }
 
   impl HeaderTrait for SubstrateHeader {
@@ -165,9 +189,12 @@ mod substrate {
     ) -> Self {
       SubstrateHeader::V1(SubstrateHeaderV1 {
         number,
-        parent_hash,
-        transactions_root: extrinsics_root,
-        consensus: ConsensusV1 { state_root, digest },
+        consensus: ConsensusV1 {
+          parent_hash,
+          transactions_root: extrinsics_root,
+          state_root,
+          digest,
+        },
       })
     }
 
@@ -186,13 +213,13 @@ mod substrate {
 
     fn extrinsics_root(&self) -> &Self::Hash {
       match self {
-        SubstrateHeader::V1(SubstrateHeaderV1 { transactions_root, .. }) => transactions_root,
+        SubstrateHeader::V1(SubstrateHeaderV1 { consensus, .. }) => &consensus.transactions_root,
       }
     }
     fn set_extrinsics_root(&mut self, extrinsics_root: Self::Hash) {
       match self {
-        SubstrateHeader::V1(SubstrateHeaderV1 { transactions_root, .. }) => {
-          *transactions_root = extrinsics_root;
+        SubstrateHeader::V1(SubstrateHeaderV1 { consensus, .. }) => {
+          consensus.transactions_root = extrinsics_root;
         }
       }
     }
@@ -212,13 +239,13 @@ mod substrate {
 
     fn parent_hash(&self) -> &Self::Hash {
       match self {
-        SubstrateHeader::V1(SubstrateHeaderV1 { parent_hash, .. }) => parent_hash,
+        SubstrateHeader::V1(SubstrateHeaderV1 { consensus, .. }) => &consensus.parent_hash,
       }
     }
     fn set_parent_hash(&mut self, parent_hash: Self::Hash) {
       match self {
-        SubstrateHeader::V1(SubstrateHeaderV1 { parent_hash: existing, .. }) => {
-          *existing = parent_hash;
+        SubstrateHeader::V1(SubstrateHeaderV1 { consensus, .. }) => {
+          consensus.parent_hash = parent_hash;
         }
       }
     }
@@ -239,12 +266,16 @@ mod substrate {
     }
   }
 
-  impl HeaderProvider for SubstrateBlock {
+  impl<RuntimeCall: 'static + Send + Sync + Clone + PartialEq + Eq + Debug + From<Call>>
+    HeaderProvider for SubstrateBlock<RuntimeCall>
+  {
     type HeaderT = SubstrateHeader;
   }
 
-  impl BlockTrait for SubstrateBlock {
-    type Extrinsic = Transaction;
+  impl<RuntimeCall: 'static + Send + Sync + Clone + PartialEq + Eq + Debug + From<Call>> BlockTrait
+    for SubstrateBlock<RuntimeCall>
+  {
+    type Extrinsic = Transaction<RuntimeCall>;
     type Header = SubstrateHeader;
     type Hash = H256;
     fn header(&self) -> &Self::Header {

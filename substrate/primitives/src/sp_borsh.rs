@@ -2,8 +2,6 @@ use borsh::{io::*, BorshSerialize, BorshDeserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
 
-// TODO: Don't serialize this as a Vec<u8>. Shorten the length-prefix, technically encoding as an
-// enum.
 pub fn borsh_serialize_bitvec<W: Write>(
   bitvec: &bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
   writer: &mut W,
@@ -21,6 +19,8 @@ pub fn borsh_deserialize_bitvec<R: Read>(
 
 type SerializeBoundedVecAs<T> = alloc::vec::Vec<T>;
 
+// TODO: Don't serialize this as a Vec<u8>. Shorten the length-prefix, technically encoding as an
+// enum.
 pub fn borsh_serialize_bounded_vec<W: Write, T: BorshSerialize, const B: u32>(
   bounded: &BoundedVec<T, ConstU32<B>>,
   writer: &mut W,

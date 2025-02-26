@@ -20,6 +20,7 @@ pub enum Call {
     /// The keys being set.
     key_pair: KeyPair,
     /// The participants in the validator set who signed off on these keys.
+    // TODO: Bound
     #[borsh(
       serialize_with = "serai_primitives::sp_borsh::borsh_serialize_bitvec",
       deserialize_with = "serai_primitives::sp_borsh::borsh_deserialize_bitvec"

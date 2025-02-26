@@ -6,7 +6,7 @@ use rand_core::OsRng;
 
 use sp_core::{
   ConstU32,
-  bounded_vec::BoundedVec,
+  bounded::BoundedVec,
   sr25519::{Pair, Signature},
   Pair as PairTrait,
 };
