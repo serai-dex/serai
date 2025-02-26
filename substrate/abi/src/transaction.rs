@@ -208,7 +208,7 @@ impl Transaction {
 
 #[cfg(feature = "substrate")]
 mod substrate {
-  use core::{marker::PhantomData, fmt::Debug};
+  use core::fmt::Debug;
   use alloc::vec;
 
   use scale::{Encode, Decode};
@@ -278,6 +278,12 @@ mod substrate {
     fn current_time(&self) -> Option<u64>;
     /// The next nonce for an account.
     fn next_nonce(&self, signer: &SeraiAddress) -> u32;
+    /// If the signer can pay the SRI fee.
+    fn can_pay_fee(
+      &self,
+      signer: &SeraiAddress,
+      fee: Amount,
+    ) -> Result<(), TransactionValidityError>;
     /// Have the transaction pay its SRI fee.
     fn pay_fee(&self, signer: &SeraiAddress, fee: Amount) -> Result<(), TransactionValidityError>;
   }
@@ -286,7 +292,7 @@ mod substrate {
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
   pub struct TransactionWithContext<Context: TransactionContext>(
     Transaction,
-    #[codec(skip)] PhantomData<Context>,
+    #[codec(skip)] Context,
   );
 
   impl ExtrinsicLike for Transaction {
@@ -337,41 +343,12 @@ mod substrate {
               .as_slice(),
             &sp_core::sr25519::Public::from(explicit_context.signer),
           ) {
-            Err(sp_runtime::transaction_validity::InvalidTransaction::BadProof)?;
+            Err(InvalidTransaction::BadProof)?;
           }
-
-          let ExplicitContext { historic_block, include_by, signer, nonce, fee } =
-            &explicit_context;
-          if !context.block_is_present_in_blockchain(historic_block) {
-            // We don't know if this is a block from a fundamentally distinct blockchain or a
-            // continuation of this blockchain we have yet to sync (which would be `Future`)
-            Err(TransactionValidityError::Unknown(UnknownTransaction::CannotLookup))?;
-          }
-          if let Some(include_by) = *include_by {
-            if let Some(current_time) = context.current_time() {
-              if current_time >= u64::from(include_by) {
-                // Since this transaction has a time bound which has passed, error
-                Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
-              }
-            } else {
-              // Since this transaction has a time bound, yet we don't know the time, error
-              Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
-            }
-          }
-          match context.next_nonce(signer).cmp(nonce) {
-            core::cmp::Ordering::Less => {
-              Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?
-            }
-            core::cmp::Ordering::Equal => {}
-            core::cmp::Ordering::Greater => {
-              Err(TransactionValidityError::Invalid(InvalidTransaction::Future))?
-            }
-          }
-          context.pay_fee(signer, *fee)?;
         }
       }
 
-      Ok(TransactionWithContext(self, PhantomData))
+      Ok(TransactionWithContext(self, context.clone()))
     }
 
     #[cfg(feature = "try-runtime")]
@@ -385,15 +362,12 @@ mod substrate {
     }
   }
 
-  impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> {
-    type Call = Context::RuntimeCall;
-
-    fn validate<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
+  impl<Context: TransactionContext> TransactionWithContext<Context> {
+    fn validate_except_fee<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
       &self,
-      source: sp_runtime::transaction_validity::TransactionSource,
-      info: &DispatchInfo,
-      _len: usize,
-    ) -> sp_runtime::transaction_validity::TransactionValidity {
+      source: TransactionSource,
+      mempool_priority_if_signed: u64,
+    ) -> TransactionValidity {
       match &self.0 {
         Transaction::Unsigned { call } => {
           let ValidTransaction { priority: _, requires, provides, longevity: _, propagate: _ } =
@@ -410,20 +384,42 @@ mod substrate {
           })
         }
         Transaction::Signed { calls: _, contextualized_signature } => {
-          let explicit_context = &contextualized_signature.explicit_context;
-          let requires = if let Some(prior_nonce) = explicit_context.nonce.checked_sub(1) {
-            vec![borsh::to_vec(&(explicit_context.signer, prior_nonce)).unwrap()]
+          let ExplicitContext { historic_block, include_by, signer, nonce, fee: _ } =
+            &contextualized_signature.explicit_context;
+          if !self.1.block_is_present_in_blockchain(historic_block) {
+            // We don't know if this is a block from a fundamentally distinct blockchain or a
+            // continuation of this blockchain we have yet to sync (which would be `Future`)
+            Err(TransactionValidityError::Unknown(UnknownTransaction::CannotLookup))?;
+          }
+          if let Some(include_by) = *include_by {
+            if let Some(current_time) = self.1.current_time() {
+              if current_time >= u64::from(include_by) {
+                // Since this transaction has a time bound which has passed, error
+                Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
+              }
+            } else {
+              // Since this transaction has a time bound, yet we don't know the time, error
+              Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
+            }
+          }
+          match self.1.next_nonce(signer).cmp(nonce) {
+            core::cmp::Ordering::Less => {
+              Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?
+            }
+            core::cmp::Ordering::Equal => {}
+            core::cmp::Ordering::Greater => {
+              Err(TransactionValidityError::Invalid(InvalidTransaction::Future))?
+            }
+          }
+
+          let requires = if let Some(prior_nonce) = nonce.checked_sub(1) {
+            vec![borsh::to_vec(&(signer, prior_nonce)).unwrap()]
           } else {
             vec![]
           };
-          let provides =
-            vec![borsh::to_vec(&(explicit_context.signer, explicit_context.nonce)).unwrap()];
+          let provides = vec![borsh::to_vec(&(signer, nonce)).unwrap()];
           Ok(ValidTransaction {
-            // Prioritize transactions by their fees
-            priority: {
-              let fee = explicit_context.fee.0;
-              Weight::from_all(fee).checked_div_per_component(&info.call_weight).unwrap_or(0)
-            },
+            priority: mempool_priority_if_signed,
             requires,
             provides,
             // This revalidates the transaction every block. This is required due to this being
@@ -434,12 +430,47 @@ mod substrate {
         }
       }
     }
+  }
+
+  impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> {
+    type Call = Context::RuntimeCall;
+
+    fn validate<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
+      &self,
+      source: TransactionSource,
+      info: &DispatchInfo,
+      _len: usize,
+    ) -> TransactionValidity {
+      let mempool_priority_if_signed = match &self.0 {
+        Transaction::Unsigned { .. } => {
+          // Since this is the priority if signed, and this isn't signed, we return 0
+          0
+        }
+        Transaction::Signed {
+          calls: _,
+          contextualized_signature:
+            ContextualizedSignature { explicit_context: ExplicitContext { signer, fee, .. }, .. },
+        } => {
+          self.1.can_pay_fee(signer, *fee)?;
+
+          // Prioritize transactions by their fees
+          {
+            let fee = fee.0;
+            Weight::from_all(fee).checked_div_per_component(&info.call_weight).unwrap_or(0)
+          }
+        }
+      };
+      self.validate_except_fee::<V>(source, mempool_priority_if_signed)
+    }
 
     fn apply<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
       self,
       _info: &DispatchInfo,
       _len: usize,
     ) -> sp_runtime::ApplyExtrinsicResultWithInfo<PostDispatchInfo> {
+      // We use 0 for the mempool priority, as this is no longer in the mempool so it's irrelevant
+      self.validate_except_fee::<V>(TransactionSource::InBlock, 0)?;
+
       match self.0 {
         Transaction::Unsigned { call } => {
           let call = Context::RuntimeCall::from(call.0);
@@ -451,17 +482,24 @@ mod substrate {
             Err(_err) => Err(TransactionValidityError::Invalid(InvalidTransaction::BadMandatory)),
           }
         }
-        Transaction::Signed { calls, contextualized_signature } => {
+        Transaction::Signed {
+          calls,
+          contextualized_signature:
+            ContextualizedSignature { explicit_context: ExplicitContext { signer, fee, .. }, .. },
+        } => {
+          // Start by paying the fee
+          self.1.pay_fee(&signer, fee)?;
+
           Ok(frame_support::storage::transactional::with_storage_layer(|| {
             for call in calls.0 {
               let call = Context::RuntimeCall::from(call);
-              match call.dispatch(Some(contextualized_signature.explicit_context.signer).into()) {
+              match call.dispatch(Some(signer).into()) {
                 Ok(_res) => {}
                 // Because this call errored, don't continue and revert all prior calls
                 Err(e) => Err(e)?,
               }
             }
-            // Since all calls errored, return all
+            // Since all calls succeeded, return Ok
             Ok(PostDispatchInfo {
               // `None` stands for the worst case, which is what we want
               actual_weight: None,
