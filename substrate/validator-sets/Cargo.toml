@@ -3,7 +3,7 @@ name = "serai-validator-sets-pallet"
 version = "0.1.0"
 description = "Validator sets pallet"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/substrate/validator-sets/pallet"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/validator-sets"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 rust-version = "1.85"
@@ -38,11 +38,10 @@ frame-support = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "s
 pallet-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 pallet-grandpa = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-serai-primitives = { path = "../../primitives", default-features = false }
-validator-sets-primitives = { package = "serai-validator-sets-primitives", path = "../primitives", default-features = false }
+serai-primitives = { path = "../primitives", default-features = false }
 
-coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
-dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
+coins-pallet = { package = "serai-coins-pallet", path = "../coins", default-features = false }
+dex-pallet = { package = "serai-dex-pallet", path = "../dex", default-features = false }
 
 [dev-dependencies]
 pallet-timestamp = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
@@ -84,7 +83,6 @@ std = [
   "pallet-timestamp/std",
 
   "serai-primitives/std",
-  "validator-sets-primitives/std",
 
   "coins-pallet/std",
   "dex-pallet/std",

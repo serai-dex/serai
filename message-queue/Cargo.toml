@@ -46,7 +46,7 @@ serai-db = { path = "../common/db", optional = true }
 
 serai-env = { path = "../common/env" }
 
-serai-primitives = { path = "../substrate/primitives", features = ["borsh"] }
+serai-primitives = { path = "../substrate/primitives", default-features = false, features = ["std"] }
 
 [features]
 parity-db = ["serai-db/parity-db"]

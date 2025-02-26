@@ -25,7 +25,7 @@ rand_core = { version = "0.6", default-features = false, features = ["std", "get
 
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
 
-serai-validator-sets-primitives = { path = "../../substrate/validator-sets/primitives", default-features = false, features = ["std"] }
+serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 
 log = { version = "0.4", default-features = false, features = ["std"] }
 

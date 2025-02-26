@@ -95,30 +95,16 @@ members = [
   "coordinator",
 
   "substrate/primitives",
-
-  "substrate/coins/primitives",
-  "substrate/coins/pallet",
-
-  "substrate/dex/pallet",
-
-  "substrate/validator-sets/primitives",
-  "substrate/validator-sets/pallet",
-
-  "substrate/genesis-liquidity/primitives",
-  "substrate/genesis-liquidity/pallet",
-
-  "substrate/emissions/primitives",
-  "substrate/emissions/pallet",
-
-  "substrate/economic-security/pallet",
-
-  "substrate/in-instructions/primitives",
-  "substrate/in-instructions/pallet",
-
-  "substrate/signals/primitives",
-  "substrate/signals/pallet",
-
   "substrate/abi",
+
+  "substrate/coins",
+  "substrate/validator-sets",
+  "substrate/signals",
+  "substrate/dex",
+  "substrate/genesis-liquidity",
+  "substrate/economic-security",
+  "substrate/emissions",
+  "substrate/in-instructions",
 
   "substrate/runtime",
   "substrate/node",

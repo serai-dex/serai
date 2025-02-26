@@ -1,7 +1,6 @@
 #[frame_support::pallet]
 mod core_pallet {
   use ::alloc::*;
-  use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
   #[pallet::storage]

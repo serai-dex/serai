@@ -3,7 +3,7 @@ name = "serai-economic-security-pallet"
 version = "0.1.0"
 description = "Economic Security pallet for Serai"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/substrate/economic-security/pallet"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/economic-security"
 authors = ["Akil Demir <akildemir72@gmail.com>"]
 edition = "2021"
 rust-version = "1.85"
@@ -25,17 +25,17 @@ scale-info = { version = "2", default-features = false, features = ["derive"] }
 frame-system = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
-coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
+dex-pallet = { package = "serai-dex-pallet", path = "../dex", default-features = false }
+coins-pallet = { package = "serai-coins-pallet", path = "../coins", default-features = false }
 
-serai-primitives = { path = "../../primitives", default-features = false }
+serai-primitives = { path = "../primitives", default-features = false }
 
 [dev-dependencies]
 pallet-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 pallet-grandpa = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 pallet-timestamp = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
+validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../validator-sets", default-features = false }
 
 sp-io = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }

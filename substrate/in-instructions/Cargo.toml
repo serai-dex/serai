@@ -3,6 +3,7 @@ name = "serai-in-instructions-pallet"
 version = "0.1.0"
 description = "Execute calls via In Instructions from unsigned transactions"
 license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/genesis-liquidity"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 publish = false
@@ -33,21 +34,20 @@ sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-n
 frame-system = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-serai-primitives = { path = "../../primitives", default-features = false }
-in-instructions-primitives = { package = "serai-in-instructions-primitives", path = "../primitives", default-features = false }
+serai-primitives = { path = "../primitives", default-features = false }
 
-coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
-dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
-validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
-genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = "../../genesis-liquidity/pallet", default-features = false }
-emissions-pallet = { package = "serai-emissions-pallet", path = "../../emissions/pallet", default-features = false }
+coins-pallet = { package = "serai-coins-pallet", path = "../coins", default-features = false }
+dex-pallet = { package = "serai-dex-pallet", path = "../dex", default-features = false }
+validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../validator-sets", default-features = false }
+genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = "../genesis-liquidity", default-features = false }
+emissions-pallet = { package = "serai-emissions-pallet", path = "../emissions", default-features = false }
 
 [dev-dependencies]
 pallet-babe = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 pallet-grandpa = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 pallet-timestamp = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-economic-security-pallet = { package = "serai-economic-security-pallet", path = "../../economic-security/pallet", default-features = false }
+economic-security-pallet = { package = "serai-economic-security-pallet", path = "../economic-security", default-features = false }
 
 [features]
 std = [
@@ -64,7 +64,6 @@ std = [
   "frame-support/std",
 
   "serai-primitives/std",
-  "in-instructions-primitives/std",
 
   "coins-pallet/std",
   "dex-pallet/std",

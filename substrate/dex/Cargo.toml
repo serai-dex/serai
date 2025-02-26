@@ -3,7 +3,7 @@ name = "serai-dex-pallet"
 version = "0.1.0"
 description = "DEX pallet for Serai"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/substrate/dex/pallet"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/dex"
 authors = ["Parity Technologies <admin@parity.io>, Akil Demir <akildemir72@gmail.com>"]
 edition = "2021"
 rust-version = "1.85"
@@ -32,9 +32,9 @@ frame-system = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "se
 frame-support = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 frame-benchmarking = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false, optional = true }
 
-coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
+coins-pallet = { package = "serai-coins-pallet", path = "../coins", default-features = false }
 
-serai-primitives = { path = "../../primitives", default-features = false }
+serai-primitives = { path = "../primitives", default-features = false }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }

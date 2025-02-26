@@ -3,7 +3,7 @@ name = "serai-signals-pallet"
 version = "0.1.0"
 description = "Signals pallet"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/substrate/signals/pallet"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/signals"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 rust-version = "1.85"
@@ -28,11 +28,10 @@ sp-io = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-nex
 frame-system = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-serai-primitives = { path = "../../primitives", default-features = false }
-serai-signals-primitives = { path = "../primitives", default-features = false }
+serai-primitives = { path = "../primitives", default-features = false }
 
-validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../../validator-sets/pallet", default-features = false }
-in-instructions-pallet = { package = "serai-in-instructions-pallet", path = "../../in-instructions/pallet", default-features = false }
+validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../validator-sets", default-features = false }
+in-instructions-pallet = { package = "serai-in-instructions-pallet", path = "../in-instructions", default-features = false }
 
 [features]
 std = [
@@ -46,7 +45,6 @@ std = [
   "frame-support/std",
 
   "serai-primitives/std",
-  "serai-signals-primitives/std",
 
   "validator-sets-pallet/std",
   "in-instructions-pallet/std",

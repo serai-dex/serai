@@ -30,7 +30,7 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = fals
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
 schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", default-features = false, features = ["std"] }
 
-serai-client = { path = "../../substrate/client", default-features = false, features = ["serai", "borsh"] }
+serai-client = { path = "../../substrate/client", default-features = false, features = ["serai"] }
 
 serai-db = { path = "../../common/db" }
 serai-task = { path = "../../common/task", version = "0.1" }
