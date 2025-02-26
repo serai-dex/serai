@@ -104,20 +104,18 @@ pub struct ContextualizedSignature {
 
 /// The Serai transaction type.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Transaction<RuntimeCall: 'static + From<Call> = Call> {
+pub struct Transaction {
   /// The calls, as defined in Serai's ABI.
   ///
   /// These calls are executed atomically. Either all successfully execute or none do. The
   /// transaction's fee is paid regardless.
   // TODO: if this is unsigned, we only allow a single call. Should we serialize that as 0?
   calls: BoundedVec<Call, ConstU32<{ MAX_CALLS }>>,
-  /// The calls, as defined by Substrate.
-  runtime_calls: Vec<RuntimeCall>,
   /// The signature, if present.
   contextualized_signature: Option<ContextualizedSignature>,
 }
 
-impl<RuntimeCall: 'static + From<Call>> BorshSerialize for Transaction<RuntimeCall> {
+impl BorshSerialize for Transaction {
   fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     // Write the calls
     self.calls.serialize(writer)?;
@@ -129,16 +127,11 @@ impl<RuntimeCall: 'static + From<Call>> BorshSerialize for Transaction<RuntimeCa
   }
 }
 
-impl<RuntimeCall: 'static + From<Call>> BorshDeserialize for Transaction<RuntimeCall> {
+impl BorshDeserialize for Transaction {
   fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     // Read the calls
     let calls =
       serai_primitives::sp_borsh::borsh_deserialize_bounded_vec::<_, Call, MAX_CALLS>(reader)?;
-    // Populate the runtime calls
-    let mut runtime_calls = Vec::with_capacity(calls.len());
-    for call in calls.iter().cloned() {
-      runtime_calls.push(RuntimeCall::from(call));
-    }
 
     // Determine if this is signed or unsigned
     let mut signed = None;
@@ -159,11 +152,11 @@ impl<RuntimeCall: 'static + From<Call>> BorshDeserialize for Transaction<Runtime
     let contextualized_signature =
       if signed { Some(<ContextualizedSignature>::deserialize_reader(reader)?) } else { None };
 
-    Ok(Transaction { calls, runtime_calls, contextualized_signature })
+    Ok(Transaction { calls, contextualized_signature })
   }
 }
 
-impl<RuntimeCall: 'static + From<Call>> Transaction<RuntimeCall> {
+impl Transaction {
   /// The message to sign to produce a signature, for calls which may or may not be signed and are
   /// unchecked.
   fn signature_message_unchecked(
@@ -198,13 +191,8 @@ impl<RuntimeCall: 'static + From<Call>> Transaction<RuntimeCall> {
     signature: Signature,
   ) -> Self {
     let calls = calls.0;
-    let mut runtime_calls = Vec::with_capacity(calls.len());
-    for call in calls.iter().cloned() {
-      runtime_calls.push(call.into());
-    }
     Self {
       calls,
-      runtime_calls,
       contextualized_signature: Some(ContextualizedSignature { explicit_context, signature }),
     }
   }
@@ -216,7 +204,6 @@ impl<RuntimeCall: 'static + From<Call>> Transaction<RuntimeCall> {
       calls: vec![call.clone()]
         .try_into()
         .expect("couldn't convert a length-1 Vec to a BoundedVec"),
-      runtime_calls: vec![call.into()],
       contextualized_signature: None,
     }
   }
@@ -242,12 +229,12 @@ mod substrate {
 
   use super::*;
 
-  impl<RuntimeCall: 'static + From<Call>> Encode for Transaction<RuntimeCall> {
+  impl Encode for Transaction {
     fn encode(&self) -> Vec<u8> {
       borsh::to_vec(self).unwrap()
     }
   }
-  impl<RuntimeCall: 'static + From<Call>> Decode for Transaction<RuntimeCall> {
+  impl Decode for Transaction {
     fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
       struct ScaleRead<'a, I: scale::Input>(&'a mut I, Option<scale::Error>);
       impl<I: scale::Input> borsh::io::Read for ScaleRead<'_, I> {
@@ -274,11 +261,18 @@ mod substrate {
   }
 
   /// The context which transactions are executed in.
-  pub trait TransactionContext<RuntimeCall: 'static + From<Call>>:
-    'static + Send + Sync + Clone + PartialEq + Eq + Debug
-  {
+  pub trait TransactionContext: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
     /// The base weight for a signed transaction.
     const SIGNED_WEIGHT: Weight;
+
+    /// The call type for the runtime.
+    type RuntimeCall: From<Call>
+      + GetDispatchInfo
+      + Dispatchable<
+        RuntimeOrigin: From<Option<SeraiAddress>>,
+        Info = DispatchInfo,
+        PostInfo = PostDispatchInfo,
+      >;
 
     /// The implicit context to verify transactions with.
     fn implicit_context() -> &'static ImplicitContext;
@@ -297,12 +291,12 @@ mod substrate {
 
   /// A transaction with the context necessary to evaluate it within Substrate.
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-  pub struct TransactionWithContext<
-    RuntimeCall: 'static + From<Call>,
-    Context: TransactionContext<RuntimeCall>,
-  >(Transaction<RuntimeCall>, #[codec(skip)] PhantomData<Context>);
+  pub struct TransactionWithContext<Context: TransactionContext>(
+    Transaction,
+    #[codec(skip)] PhantomData<Context>,
+  );
 
-  impl<RuntimeCall: 'static + From<Call>> ExtrinsicLike for Transaction<RuntimeCall> {
+  impl ExtrinsicLike for Transaction {
     fn is_signed(&self) -> Option<bool> {
       Some(Transaction::is_signed(self))
     }
@@ -311,11 +305,7 @@ mod substrate {
     }
   }
 
-  impl<
-      RuntimeCall: 'static + From<Call> + GetDispatchInfo,
-      Context: TransactionContext<RuntimeCall>,
-    > GetDispatchInfo for TransactionWithContext<RuntimeCall, Context>
-  {
+  impl<Context: TransactionContext> GetDispatchInfo for TransactionWithContext<Context> {
     fn get_dispatch_info(&self) -> DispatchInfo {
       let (extension_weight, class, pays_fee) = if Transaction::is_signed(&self.0) {
         (Context::SIGNED_WEIGHT, DispatchClass::Normal, Pays::Yes)
@@ -328,7 +318,7 @@ mod substrate {
           .calls
           .iter()
           .cloned()
-          .map(|call| RuntimeCall::from(call).get_dispatch_info().call_weight)
+          .map(|call| Context::RuntimeCall::from(call).get_dispatch_info().call_weight)
           .fold(Weight::zero(), |accum, item| accum + item),
         extension_weight,
         class,
@@ -337,10 +327,8 @@ mod substrate {
     }
   }
 
-  impl<RuntimeCall: 'static + From<Call>, Context: TransactionContext<RuntimeCall>>
-    Checkable<Context> for Transaction<RuntimeCall>
-  {
-    type Checked = TransactionWithContext<RuntimeCall, Context>;
+  impl<Context: TransactionContext> Checkable<Context> for Transaction {
+    type Checked = TransactionWithContext<Context>;
 
     fn check(self, context: &Context) -> Result<Self::Checked, TransactionValidityError> {
       if let Some(ContextualizedSignature { explicit_context, signature }) =
@@ -373,7 +361,7 @@ mod substrate {
           }
         }
         if !sp_core::sr25519::Signature::from(*signature).verify(
-          Transaction::<RuntimeCall>::signature_message_unchecked(
+          Transaction::signature_message_unchecked(
             &self.calls,
             Context::implicit_context(),
             explicit_context,
@@ -400,22 +388,10 @@ mod substrate {
     }
   }
 
-  impl<
-      RuntimeCall: 'static
-        + Send
-        + Sync
-        + From<Call>
-        + Dispatchable<
-          RuntimeOrigin: From<Option<SeraiAddress>>,
-          Info = DispatchInfo,
-          PostInfo = PostDispatchInfo,
-        >,
-      Context: TransactionContext<RuntimeCall>,
-    > Applyable for TransactionWithContext<RuntimeCall, Context>
-  {
-    type Call = RuntimeCall;
+  impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> {
+    type Call = Context::RuntimeCall;
 
-    fn validate<V: ValidateUnsigned<Call = RuntimeCall>>(
+    fn validate<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
       &self,
       source: sp_runtime::transaction_validity::TransactionSource,
       info: &DispatchInfo,
@@ -423,7 +399,7 @@ mod substrate {
     ) -> sp_runtime::transaction_validity::TransactionValidity {
       if !self.0.is_signed() {
         let ValidTransaction { priority: _, requires, provides, longevity: _, propagate: _ } =
-          V::validate_unsigned(source, &self.0.runtime_calls[0])?;
+          V::validate_unsigned(source, &Context::RuntimeCall::from(self.0.calls[0].clone()))?;
         Ok(ValidTransaction {
           // We should always try to include unsigned transactions prior to signed
           priority: u64::MAX,
@@ -459,14 +435,15 @@ mod substrate {
       }
     }
 
-    fn apply<V: ValidateUnsigned<Call = RuntimeCall>>(
+    fn apply<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
       mut self,
       _info: &DispatchInfo,
       _len: usize,
     ) -> sp_runtime::ApplyExtrinsicResultWithInfo<PostDispatchInfo> {
       if !self.0.is_signed() {
-        V::pre_dispatch(&self.0.runtime_calls[0])?;
-        match self.0.runtime_calls.remove(0).dispatch(None.into()) {
+        let call = Context::RuntimeCall::from(self.0.calls.remove(0));
+        V::pre_dispatch(&call)?;
+        match call.dispatch(None.into()) {
           Ok(res) => Ok(Ok(res)),
           // Unsigned transactions should only be included if valid in all regards
           // This isn't actually a "mandatory" but the intent is the same
@@ -474,7 +451,8 @@ mod substrate {
         }
       } else {
         Ok(frame_support::storage::transactional::with_storage_layer(|| {
-          for call in self.0.runtime_calls {
+          for call in self.0.calls {
+            let call = Context::RuntimeCall::from(call);
             match call.dispatch(
               Some(self.0.contextualized_signature.as_ref().unwrap().explicit_context.signer)
                 .into(),

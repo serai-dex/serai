@@ -80,7 +80,6 @@ mod substrate {
   };
 
   use super::*;
-  use crate::Call;
 
   /// The digest for all of the Serai-specific header fields.
   #[derive(Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
@@ -165,14 +164,10 @@ mod substrate {
 
   /// A block, as needed by Substrate.
   #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, sp_runtime::Serialize)]
-  #[codec(encode_bound(skip_type_params(RuntimeCall)))]
-  #[codec(decode_bound(skip_type_params(RuntimeCall)))]
-  pub struct SubstrateBlock<
-    RuntimeCall: 'static + Send + Sync + Clone + PartialEq + Eq + Debug + From<Call>,
-  > {
+  pub struct SubstrateBlock {
     header: SubstrateHeader,
     #[serde(skip)] // This makes this unsafe to deserialize, but we don't impl `Deserialize`
-    transactions: Vec<Transaction<RuntimeCall>>,
+    transactions: Vec<Transaction>,
   }
 
   impl HeaderTrait for SubstrateHeader {
@@ -266,16 +261,12 @@ mod substrate {
     }
   }
 
-  impl<RuntimeCall: 'static + Send + Sync + Clone + PartialEq + Eq + Debug + From<Call>>
-    HeaderProvider for SubstrateBlock<RuntimeCall>
-  {
+  impl HeaderProvider for SubstrateBlock {
     type HeaderT = SubstrateHeader;
   }
 
-  impl<RuntimeCall: 'static + Send + Sync + Clone + PartialEq + Eq + Debug + From<Call>> BlockTrait
-    for SubstrateBlock<RuntimeCall>
-  {
-    type Extrinsic = Transaction<RuntimeCall>;
+  impl BlockTrait for SubstrateBlock {
+    type Extrinsic = Transaction;
     type Header = SubstrateHeader;
     type Hash = H256;
     fn header(&self) -> &Self::Header {
