@@ -1,5 +1,5 @@
 use core::num::NonZero;
-use alloc::{vec, vec::Vec};
+use alloc::vec::Vec;
 
 use borsh::{io, BorshSerialize, BorshDeserialize};
 
@@ -22,8 +22,12 @@ pub enum SignedCallsError {
 }
 
 /// A `Vec` of signed calls.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct SignedCalls(BoundedVec<Call, ConstU32<{ MAX_CALLS }>>);
+// We don't implement BorshDeserialize due to to maintained invariants on this struct.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize)]
+pub struct SignedCalls(
+  #[borsh(serialize_with = "serai_primitives::sp_borsh::borsh_serialize_bounded_vec")]
+  BoundedVec<Call, ConstU32<{ MAX_CALLS }>>,
+);
 impl TryFrom<Vec<Call>> for SignedCalls {
   type Error = SignedCallsError;
   fn try_from(calls: Vec<Call>) -> Result<Self, Self::Error> {
@@ -47,7 +51,8 @@ pub enum UnsignedCallError {
 }
 
 /// An unsigned call.
-#[derive(Clone, PartialEq, Eq, Debug)]
+// We don't implement BorshDeserialize due to to maintained invariants on this struct.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize)]
 pub struct UnsignedCall(Call);
 impl TryFrom<Call> for UnsignedCall {
   type Error = UnsignedCallError;
@@ -102,70 +107,95 @@ pub struct ContextualizedSignature {
   signature: Signature,
 }
 
-/// The Serai transaction type.
+/// A Serai transaction.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Transaction {
-  /// The calls, as defined in Serai's ABI.
-  ///
-  /// These calls are executed atomically. Either all successfully execute or none do. The
-  /// transaction's fee is paid regardless.
-  // TODO: if this is unsigned, we only allow a single call. Should we serialize that as 0?
-  calls: BoundedVec<Call, ConstU32<{ MAX_CALLS }>>,
-  /// The signature, if present.
-  contextualized_signature: Option<ContextualizedSignature>,
+pub enum Transaction {
+  /// An unsigned transaction.
+  Unsigned {
+    /// The contained call.
+    call: UnsignedCall,
+  },
+  /// A signed transaction.
+  Signed {
+    /// The calls.
+    ///
+    /// These calls are executed atomically. Either all successfully execute or none do. The
+    /// transaction's fee is paid regardless.
+    calls: SignedCalls,
+    /// The signature for this transaction.
+    ///
+    /// This is not checked on deserializtion and may be invalid.
+    contextualized_signature: ContextualizedSignature,
+  },
 }
 
 impl BorshSerialize for Transaction {
   fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    // Write the calls
-    self.calls.serialize(writer)?;
-    // Write the signature, if present. Presence is deterministic to the calls
-    if let Some(contextualized_signature) = self.contextualized_signature.as_ref() {
-      contextualized_signature.serialize(writer)?;
+    match self {
+      Transaction::Unsigned { call } => {
+        /*
+          `Signed` `Transaction`s encode the length of their `Vec<Call>` here. Since that `Vec` is
+          bound to be non-empty, it will never write `0`, enabling `Unsigned` to use it.
+
+          The benefit to these not overlapping is in the ability to determine if the `Transaction`
+          has a signature or not. If this wrote a `1`, for the amount of `Call`s present in the
+          `Transaction`, that `Call` would have to be introspected for if its signed or not. With
+          the usage of `0`, given how low `MAX_CALLS` is, this `Transaction` can technically be
+          defined as an enum of
+          `0 Call, 1 Call ContextualizedSignature, 2 Call Call ContextualizedSignature ...`, to
+          maintain compatbility with the borsh specification without wrapper functions. The checks
+          here on `Call` types/quantity could be moved to later validation functions.
+        */
+        writer.write_all(&[0])?;
+        call.serialize(writer)
+      }
+      Transaction::Signed { calls, contextualized_signature } => {
+        serai_primitives::sp_borsh::borsh_serialize_bounded_vec(&calls.0, writer)?;
+        contextualized_signature.serialize(writer)
+      }
     }
-    Ok(())
   }
 }
 
 impl BorshDeserialize for Transaction {
   fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    // Read the calls
-    let calls =
-      serai_primitives::sp_borsh::borsh_deserialize_bounded_vec::<_, Call, MAX_CALLS>(reader)?;
+    let mut len = [0xff];
+    reader.read_exact(&mut len)?;
+    let len = len[0];
 
-    // Determine if this is signed or unsigned
-    let mut signed = None;
-    for call in &calls {
-      let call_is_signed = call.is_signed();
-      if signed.is_none() {
-        signed = Some(call_is_signed)
-      };
-      if signed != Some(call_is_signed) {
-        Err(io::Error::new(io::ErrorKind::Other, "calls were a mixture of signed and unsigned"))?;
+    if len == 0 {
+      let call = Call::deserialize_reader(reader)?;
+      if call.is_signed() {
+        Err(io::Error::new(io::ErrorKind::Other, "call was signed but marked unsigned"))?;
       }
+      Ok(Transaction::Unsigned { call: UnsignedCall(call) })
+    } else {
+      if u32::from(len) > MAX_CALLS {
+        Err(io::Error::new(io::ErrorKind::Other, "too many calls"))?;
+      }
+      let mut calls = BoundedVec::with_bounded_capacity(len.into());
+      for _ in 0 .. len {
+        let call = Call::deserialize_reader(reader)?;
+        if !call.is_signed() {
+          Err(io::Error::new(io::ErrorKind::Other, "call was unsigned but included as signed"))?;
+        }
+        calls.try_push(call).unwrap();
+      }
+      let contextualized_signature = ContextualizedSignature::deserialize_reader(reader)?;
+      Ok(Transaction::Signed { calls: SignedCalls(calls), contextualized_signature })
     }
-    let Some(signed) = signed else {
-      Err(io::Error::new(io::ErrorKind::Other, "transaction had no calls"))?
-    };
-
-    // Read the signature, if these calls are signed
-    let contextualized_signature =
-      if signed { Some(<ContextualizedSignature>::deserialize_reader(reader)?) } else { None };
-
-    Ok(Transaction { calls, contextualized_signature })
   }
 }
 
 impl Transaction {
-  /// The message to sign to produce a signature, for calls which may or may not be signed and are
-  /// unchecked.
-  fn signature_message_unchecked(
-    calls: &[Call],
+  /// The message to sign to produce a signature.
+  pub fn signature_message(
+    calls: &SignedCalls,
     implicit_context: &ImplicitContext,
     explicit_context: &ExplicitContext,
   ) -> Vec<u8> {
     let mut message = Vec::with_capacity(
-      (calls.len() * 64) +
+      (calls.0.len() * 64) +
         core::mem::size_of::<ImplicitContext>() +
         core::mem::size_of::<ExplicitContext>(),
     );
@@ -174,49 +204,12 @@ impl Transaction {
     explicit_context.serialize(&mut message).unwrap();
     message
   }
-
-  /// The message to sign to produce a signature.
-  pub fn signature_message(
-    calls: &SignedCalls,
-    implicit_context: &ImplicitContext,
-    explicit_context: &ExplicitContext,
-  ) -> Vec<u8> {
-    Self::signature_message_unchecked(&calls.0, implicit_context, explicit_context)
-  }
-
-  /// A transaction with signed calls.
-  pub fn signed(
-    calls: SignedCalls,
-    explicit_context: ExplicitContext,
-    signature: Signature,
-  ) -> Self {
-    let calls = calls.0;
-    Self {
-      calls,
-      contextualized_signature: Some(ContextualizedSignature { explicit_context, signature }),
-    }
-  }
-
-  /// A transaction with an unsigned call.
-  pub fn unsigned(call: UnsignedCall) -> Self {
-    let call = call.0;
-    Self {
-      calls: vec![call.clone()]
-        .try_into()
-        .expect("couldn't convert a length-1 Vec to a BoundedVec"),
-      contextualized_signature: None,
-    }
-  }
-
-  /// If the transaction is signed.
-  pub fn is_signed(&self) -> bool {
-    self.calls[0].is_signed()
-  }
 }
 
 #[cfg(feature = "substrate")]
 mod substrate {
   use core::{marker::PhantomData, fmt::Debug};
+  use alloc::vec;
 
   use scale::{Encode, Decode};
   use sp_runtime::{
@@ -298,31 +291,33 @@ mod substrate {
 
   impl ExtrinsicLike for Transaction {
     fn is_signed(&self) -> Option<bool> {
-      Some(Transaction::is_signed(self))
+      Some(matches!(self, Transaction::Signed { .. }))
     }
     fn is_bare(&self) -> bool {
-      !Transaction::is_signed(self)
+      matches!(self, Transaction::Unsigned { .. })
     }
   }
 
   impl<Context: TransactionContext> GetDispatchInfo for TransactionWithContext<Context> {
     fn get_dispatch_info(&self) -> DispatchInfo {
-      let (extension_weight, class, pays_fee) = if Transaction::is_signed(&self.0) {
-        (Context::SIGNED_WEIGHT, DispatchClass::Normal, Pays::Yes)
-      } else {
-        (Weight::zero(), DispatchClass::Operational, Pays::No)
-      };
-      DispatchInfo {
-        call_weight: self
-          .0
-          .calls
-          .iter()
-          .cloned()
-          .map(|call| Context::RuntimeCall::from(call).get_dispatch_info().call_weight)
-          .fold(Weight::zero(), |accum, item| accum + item),
-        extension_weight,
-        class,
-        pays_fee,
+      match &self.0 {
+        Transaction::Unsigned { call } => DispatchInfo {
+          call_weight: Context::RuntimeCall::from(call.0.clone()).get_dispatch_info().call_weight,
+          extension_weight: Weight::zero(),
+          class: DispatchClass::Operational,
+          pays_fee: Pays::No,
+        },
+        Transaction::Signed { calls, .. } => DispatchInfo {
+          call_weight: calls
+            .0
+            .iter()
+            .cloned()
+            .map(|call| Context::RuntimeCall::from(call).get_dispatch_info().call_weight)
+            .fold(Weight::zero(), |accum, item| accum + item),
+          extension_weight: Context::SIGNED_WEIGHT,
+          class: DispatchClass::Normal,
+          pays_fee: Pays::Yes,
+        },
       }
     }
   }
@@ -331,47 +326,49 @@ mod substrate {
     type Checked = TransactionWithContext<Context>;
 
     fn check(self, context: &Context) -> Result<Self::Checked, TransactionValidityError> {
-      if let Some(ContextualizedSignature { explicit_context, signature }) =
-        &self.contextualized_signature
-      {
-        let ExplicitContext { historic_block, include_by, signer, nonce, fee } = &explicit_context;
-        if !context.block_is_present_in_blockchain(historic_block) {
-          // We don't know if this is a block from a fundamentally distinct blockchain or a
-          // continuation of this blockchain we have yet to sync (which would be `Future`)
-          Err(TransactionValidityError::Unknown(UnknownTransaction::CannotLookup))?;
-        }
-        if let Some(include_by) = *include_by {
-          if let Some(current_time) = context.current_time() {
-            if current_time >= u64::from(include_by) {
-              // Since this transaction has a time bound which has passed, error
+      match &self {
+        Transaction::Unsigned { .. } => {}
+        Transaction::Signed {
+          calls,
+          contextualized_signature: ContextualizedSignature { explicit_context, signature },
+        } => {
+          if !sp_core::sr25519::Signature::from(*signature).verify(
+            Transaction::signature_message(calls, Context::implicit_context(), explicit_context)
+              .as_slice(),
+            &sp_core::sr25519::Public::from(explicit_context.signer),
+          ) {
+            Err(sp_runtime::transaction_validity::InvalidTransaction::BadProof)?;
+          }
+
+          let ExplicitContext { historic_block, include_by, signer, nonce, fee } =
+            &explicit_context;
+          if !context.block_is_present_in_blockchain(historic_block) {
+            // We don't know if this is a block from a fundamentally distinct blockchain or a
+            // continuation of this blockchain we have yet to sync (which would be `Future`)
+            Err(TransactionValidityError::Unknown(UnknownTransaction::CannotLookup))?;
+          }
+          if let Some(include_by) = *include_by {
+            if let Some(current_time) = context.current_time() {
+              if current_time >= u64::from(include_by) {
+                // Since this transaction has a time bound which has passed, error
+                Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
+              }
+            } else {
+              // Since this transaction has a time bound, yet we don't know the time, error
               Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
             }
-          } else {
-            // Since this transaction has a time bound, yet we don't know the time, error
-            Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
           }
-        }
-        match context.next_nonce(signer).cmp(nonce) {
-          core::cmp::Ordering::Less => {
-            Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?
+          match context.next_nonce(signer).cmp(nonce) {
+            core::cmp::Ordering::Less => {
+              Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?
+            }
+            core::cmp::Ordering::Equal => {}
+            core::cmp::Ordering::Greater => {
+              Err(TransactionValidityError::Invalid(InvalidTransaction::Future))?
+            }
           }
-          core::cmp::Ordering::Equal => {}
-          core::cmp::Ordering::Greater => {
-            Err(TransactionValidityError::Invalid(InvalidTransaction::Future))?
-          }
+          context.pay_fee(signer, *fee)?;
         }
-        if !sp_core::sr25519::Signature::from(*signature).verify(
-          Transaction::signature_message_unchecked(
-            &self.calls,
-            Context::implicit_context(),
-            explicit_context,
-          )
-          .as_slice(),
-          &sp_core::sr25519::Public::from(*signer),
-        ) {
-          Err(sp_runtime::transaction_validity::InvalidTransaction::BadProof)?;
-        }
-        context.pay_fee(signer, *fee)?;
       }
 
       Ok(TransactionWithContext(self, PhantomData))
@@ -397,81 +394,84 @@ mod substrate {
       info: &DispatchInfo,
       _len: usize,
     ) -> sp_runtime::transaction_validity::TransactionValidity {
-      if !self.0.is_signed() {
-        let ValidTransaction { priority: _, requires, provides, longevity: _, propagate: _ } =
-          V::validate_unsigned(source, &Context::RuntimeCall::from(self.0.calls[0].clone()))?;
-        Ok(ValidTransaction {
-          // We should always try to include unsigned transactions prior to signed
-          priority: u64::MAX,
-          requires,
-          provides,
-          // This is valid until included
-          longevity: u64::MAX,
-          // Ensure this is propagated
-          propagate: true,
-        })
-      } else {
-        let explicit_context = &self.0.contextualized_signature.as_ref().unwrap().explicit_context;
-        let requires = if let Some(prior_nonce) = explicit_context.nonce.checked_sub(1) {
-          vec![borsh::to_vec(&(explicit_context.signer, prior_nonce)).unwrap()]
-        } else {
-          vec![]
-        };
-        let provides =
-          vec![borsh::to_vec(&(explicit_context.signer, explicit_context.nonce)).unwrap()];
-        Ok(ValidTransaction {
-          // Prioritize transactions by their fees
-          priority: {
-            let fee = explicit_context.fee.0;
-            Weight::from_all(fee).checked_div_per_component(&info.call_weight).unwrap_or(0)
-          },
-          requires,
-          provides,
-          // This revalidates the transaction every block. This is required due to this being
-          // denominated in blocks, and our transaction expiration being denominated in seconds.
-          longevity: 1,
-          propagate: true,
-        })
+      match &self.0 {
+        Transaction::Unsigned { call } => {
+          let ValidTransaction { priority: _, requires, provides, longevity: _, propagate: _ } =
+            V::validate_unsigned(source, &Context::RuntimeCall::from(call.0.clone()))?;
+          Ok(ValidTransaction {
+            // We should always try to include unsigned transactions prior to signed
+            priority: u64::MAX,
+            requires,
+            provides,
+            // This is valid until included
+            longevity: u64::MAX,
+            // Ensure this is propagated
+            propagate: true,
+          })
+        }
+        Transaction::Signed { calls: _, contextualized_signature } => {
+          let explicit_context = &contextualized_signature.explicit_context;
+          let requires = if let Some(prior_nonce) = explicit_context.nonce.checked_sub(1) {
+            vec![borsh::to_vec(&(explicit_context.signer, prior_nonce)).unwrap()]
+          } else {
+            vec![]
+          };
+          let provides =
+            vec![borsh::to_vec(&(explicit_context.signer, explicit_context.nonce)).unwrap()];
+          Ok(ValidTransaction {
+            // Prioritize transactions by their fees
+            priority: {
+              let fee = explicit_context.fee.0;
+              Weight::from_all(fee).checked_div_per_component(&info.call_weight).unwrap_or(0)
+            },
+            requires,
+            provides,
+            // This revalidates the transaction every block. This is required due to this being
+            // denominated in blocks, and our transaction expiration being denominated in seconds.
+            longevity: 1,
+            propagate: true,
+          })
+        }
       }
     }
 
     fn apply<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
-      mut self,
+      self,
       _info: &DispatchInfo,
       _len: usize,
     ) -> sp_runtime::ApplyExtrinsicResultWithInfo<PostDispatchInfo> {
-      if !self.0.is_signed() {
-        let call = Context::RuntimeCall::from(self.0.calls.remove(0));
-        V::pre_dispatch(&call)?;
-        match call.dispatch(None.into()) {
-          Ok(res) => Ok(Ok(res)),
-          // Unsigned transactions should only be included if valid in all regards
-          // This isn't actually a "mandatory" but the intent is the same
-          Err(_err) => Err(TransactionValidityError::Invalid(InvalidTransaction::BadMandatory)),
-        }
-      } else {
-        Ok(frame_support::storage::transactional::with_storage_layer(|| {
-          for call in self.0.calls {
-            let call = Context::RuntimeCall::from(call);
-            match call.dispatch(
-              Some(self.0.contextualized_signature.as_ref().unwrap().explicit_context.signer)
-                .into(),
-            ) {
-              Ok(_res) => {}
-              // Because this call errored, don't continue and revert all prior calls
-              Err(e) => Err(e)?,
-            }
+      match self.0 {
+        Transaction::Unsigned { call } => {
+          let call = Context::RuntimeCall::from(call.0);
+          V::pre_dispatch(&call)?;
+          match call.dispatch(None.into()) {
+            Ok(res) => Ok(Ok(res)),
+            // Unsigned transactions should only be included if valid in all regards
+            // This isn't actually a "mandatory" but the intent is the same
+            Err(_err) => Err(TransactionValidityError::Invalid(InvalidTransaction::BadMandatory)),
           }
-          // Since all calls errored, return all
-          Ok(PostDispatchInfo {
-            // `None` stands for the worst case, which is what we want
-            actual_weight: None,
-            // Signed transactions always pay their fee
-            // TODO: Do we want to handle this so we can not charge fees on removing genesis
-            // liquidity?
-            pays_fee: Pays::Yes,
-          })
-        }))
+        }
+        Transaction::Signed { calls, contextualized_signature } => {
+          Ok(frame_support::storage::transactional::with_storage_layer(|| {
+            for call in calls.0 {
+              let call = Context::RuntimeCall::from(call);
+              match call.dispatch(Some(contextualized_signature.explicit_context.signer).into()) {
+                Ok(_res) => {}
+                // Because this call errored, don't continue and revert all prior calls
+                Err(e) => Err(e)?,
+              }
+            }
+            // Since all calls errored, return all
+            Ok(PostDispatchInfo {
+              // `None` stands for the worst case, which is what we want
+              actual_weight: None,
+              // Signed transactions always pay their fee
+              // TODO: Do we want to handle this so we can not charge fees on removing genesis
+              // liquidity?
+              pays_fee: Pays::Yes,
+            })
+          }))
+        }
       }
     }
   }
