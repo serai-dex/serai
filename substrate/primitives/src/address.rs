@@ -27,6 +27,10 @@ const HUMAN_READABLE_PART: bech32::Hrp = bech32::Hrp::parse_unchecked("sri");
 #[derive(scale::Encode, scale::Decode)] // This is safe as scale and borsh share an encoding here
 pub struct SeraiAddress(pub [u8; 32]);
 
+// These share encodings as 32-byte arrays
+impl scale::EncodeLike<Public> for SeraiAddress {}
+impl scale::EncodeLike<Public> for &SeraiAddress {}
+
 impl SeraiAddress {
   /// Generate an address for use by the system.
   ///

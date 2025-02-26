@@ -48,9 +48,7 @@ pub mod instructions;
 /// A block's number is its zero-indexed position on the list of blocks which form a blockchain.
 /// For non-linear structures, this would presumably be the zero-indexed position within some
 /// topological order.
-#[derive(
-  Clone, Copy, Default, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 pub struct BlockNumber(pub u64);
 impl From<u64> for BlockNumber {
   fn from(number: u64) -> BlockNumber {
@@ -66,6 +64,8 @@ impl From<u64> for BlockNumber {
   hash it into a 32-byte hash or truncate it.
 */
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[rustfmt::skip]
+#[derive(scale::Encode, scale::Decode)] // This is safe as scale and borsh share an encoding here
 pub struct BlockHash(pub [u8; 32]);
 impl From<[u8; 32]> for BlockHash {
   fn from(hash: [u8; 32]) -> BlockHash {
@@ -77,3 +77,7 @@ impl From<sp_core::H256> for BlockHash {
     BlockHash(hash.into())
   }
 }
+
+// These share encodings as 32-byte arrays
+impl scale::EncodeLike<sp_core::H256> for BlockHash {}
+impl scale::EncodeLike<sp_core::H256> for &BlockHash {}

@@ -1,11 +1,261 @@
-#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
-#![recursion_limit = "256"]
 
 #[cfg(feature = "std")]
 include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
+extern crate alloc;
+
+use ::alloc::{borrow::Cow, vec::Vec};
+
+use sp_core::sr25519::Public;
+use sp_runtime::{Perbill, Weight, traits::Header as _};
+use sp_version::RuntimeVersion;
+
+#[rustfmt::skip]
+use serai_abi::{
+  primitives::address::SeraiAddress, SubstrateHeader as Header, SubstrateBlock,
+};
+
+mod core_pallet;
+
+type Block = SubstrateBlock;
+
+/// The lookup for a SeraiAddress -> Public.
+pub struct Lookup;
+impl sp_runtime::traits::StaticLookup for Lookup {
+  type Source = SeraiAddress;
+  type Target = Public;
+  fn lookup(source: SeraiAddress) -> Result<Public, sp_runtime::traits::LookupError> {
+    Ok(source.into())
+  }
+  fn unlookup(source: Public) -> SeraiAddress {
+    source.into()
+  }
+}
+
+// TODO: Remove
+#[sp_version::runtime_version]
+pub const VERSION: RuntimeVersion = RuntimeVersion {
+  spec_name: Cow::Borrowed("serai"),
+  impl_name: Cow::Borrowed("core"),
+  authoring_version: 0,
+  spec_version: 0,
+  impl_version: 0,
+  apis: RUNTIME_API_VERSIONS,
+  transaction_version: 0,
+  system_version: 0,
+};
+
+frame_support::parameter_types! {
+  pub const Version: RuntimeVersion = VERSION;
+
+  // TODO
+  pub BlockLength: frame_system::limits::BlockLength =
+    frame_system::limits::BlockLength::max_with_normal_ratio(0, Perbill::from_percent(0));
+  // TODO
+  pub BlockWeights: frame_system::limits::BlockWeights =
+    frame_system::limits::BlockWeights::with_sensible_defaults(
+      Weight::from_parts(0, 0),
+      Perbill::from_percent(0),
+    );
+}
+
+#[frame_support::runtime]
+mod runtime {
+  use super::*;
+
+  #[runtime::runtime]
+  #[runtime::derive(RuntimeCall, RuntimeEvent, RuntimeError, RuntimeOrigin)]
+  pub struct Runtime;
+
+  #[runtime::pallet_index(0)]
+  pub type System = frame_system::Pallet<Runtime>;
+
+  #[runtime::pallet_index(1)]
+  pub type Core = core_pallet::Pallet<Runtime>;
+}
+
+impl frame_system::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type BaseCallFilter = frame_support::traits::Everything;
+  type BlockWeights = BlockWeights;
+  type BlockLength = BlockLength;
+  type RuntimeOrigin = RuntimeOrigin;
+  type RuntimeCall = RuntimeCall;
+  type RuntimeTask = ();
+  type Nonce = u32;
+  type Hash = <Self::Block as sp_runtime::traits::Block>::Hash;
+  type Hashing = sp_runtime::traits::BlakeTwo256;
+  type AccountId = sp_core::sr25519::Public;
+  type Lookup = Lookup;
+  type Block = Block;
+  // Don't track old block hashes within the System pallet
+  // We use not a number -> hash index, but a hash -> () index, in our own pallet
+  type BlockHashCount = sp_core::ConstU64<1>;
+  type DbWeight = frame_support::weights::constants::RocksDbWeight;
+  type Version = Version;
+  type PalletInfo = PalletInfo;
+  type AccountData = ();
+  type OnNewAccount = ();
+  type OnKilledAccount = ();
+  // We use the default weights as we never expose/call any of these methods
+  type SystemWeightInfo = ();
+  // We also don't use the provided extensions framework
+  type ExtensionsWeightInfo = ();
+  // We don't invoke any hooks on-set-code as we don't perform upgrades via the blockchain yet via
+  // nodes, ensuring everyone who upgrades consents to the rules they upgrade to
+  type OnSetCode = ();
+  type MaxConsumers = sp_core::ConstU32<{ u32::MAX }>;
+  // No migrations set
+  type SingleBlockMigrations = ();
+  type MultiBlockMigrator = ();
+  // We don't define any block-level hooks at this time
+  type PreInherents = ();
+  type PostInherents = ();
+  type PostTransactions = ();
+}
+
+impl core_pallet::Config for Runtime {}
+
+impl From<Option<SeraiAddress>> for RuntimeOrigin {
+  fn from(signer: Option<SeraiAddress>) -> Self {
+    match signer {
+      None => RuntimeOrigin::none(),
+      Some(signer) => RuntimeOrigin::signed(signer.into()),
+    }
+  }
+}
+
+impl From<serai_abi::Call> for RuntimeCall {
+  fn from(call: serai_abi::Call) -> Self {
+    match call {
+      serai_abi::Call::Coins(call) => {
+        use serai_abi::coins::Call;
+        match call {
+          Call::transfer { .. } | Call::burn { .. } | Call::burn_with_instruction { .. } => {
+            todo!("TODO")
+          }
+        }
+      }
+      serai_abi::Call::ValidatorSets(call) => {
+        use serai_abi::validator_sets::Call;
+        match call {
+          Call::set_keys { .. } |
+          Call::report_slashes { .. } |
+          Call::set_embedded_elliptic_curve_keys { .. } |
+          Call::allocate { .. } |
+          Call::deallocate { .. } |
+          Call::claim_deallocation { .. } => todo!("TODO"),
+        }
+      }
+      serai_abi::Call::Signals(call) => {
+        use serai_abi::signals::Call;
+        match call {
+          Call::register_retirement_signal { .. } |
+          Call::revoke_retirement_signal { .. } |
+          Call::favor { .. } |
+          Call::revoke_favor { .. } |
+          Call::stand_against { .. } => todo!("TODO"),
+        }
+      }
+      serai_abi::Call::Dex(call) => {
+        use serai_abi::dex::Call;
+        match call {
+          Call::add_liquidity { .. } |
+          Call::transfer_liquidity { .. } |
+          Call::remove_liquidity { .. } |
+          Call::swap_exact { .. } |
+          Call::swap_for_exact { .. } => todo!("TODO"),
+        }
+      }
+      serai_abi::Call::GenesisLiquidity(call) => {
+        use serai_abi::genesis_liquidity::Call;
+        match call {
+          Call::oraclize_values { .. } | Call::remove_liquidity { .. } => todo!("TODO"),
+        }
+      }
+      serai_abi::Call::InInstructions(call) => {
+        use serai_abi::in_instructions::Call;
+        match call {
+          Call::execute_batch { .. } => todo!("TODO"),
+        }
+      }
+    }
+  }
+}
+
+type Executive = frame_executive::Executive<Runtime, Block, Context, Runtime, AllPalletsWithSystem>;
+
+sp_api::impl_runtime_apis! {
+  impl sp_api::Core<Block> for Runtime {
+    fn version() -> RuntimeVersion {
+      VERSION
+    }
+    fn initialize_block(header: &Header) -> sp_runtime::ExtrinsicInclusionMode {
+      core_pallet::Blocks::<Runtime>::set(header.parent_hash(), Some(()));
+      Executive::initialize_block(header)
+    }
+    fn execute_block(block: Block) {
+      Executive::execute_block(block);
+    }
+  }
+}
+
+#[derive(Clone, Default, PartialEq, Eq, Debug)]
+struct Context;
+impl serai_abi::TransactionContext for Context {
+  // TODO
+  const SIGNED_WEIGHT: Weight = Weight::zero();
+
+  type RuntimeCall = RuntimeCall;
+
+  /// The implicit context to verify transactions with.
+  fn implicit_context() -> serai_abi::ImplicitContext {
+    serai_abi::ImplicitContext {
+      genesis: System::block_hash(0).into(),
+      protocol_id: [0; 32], // TODO via build script
+    }
+  }
+
+  /// If a block is present in the blockchain.
+  fn block_is_present_in_blockchain(&self, hash: &serai_abi::primitives::BlockHash) -> bool {
+    core_pallet::Blocks::<Runtime>::get(hash).is_some()
+  }
+  /// The time embedded into the current block.
+  fn current_time(&self) -> Option<u64> {
+    todo!("TODO")
+  }
+  /// Get, and consume, the next nonce for an account.
+  fn get_and_consume_next_nonce(&self, signer: &SeraiAddress) -> u32 {
+    core_pallet::NextNonce::<Runtime>::mutate(signer, |value| {
+      // Copy the current value for the next nonce
+      let next_nonce = *value;
+      // Increment the next nonce in the DB, consuming the current value
+      *value += 1;
+      // Return the existing value
+      next_nonce
+    })
+  }
+  /// If the signer can pay the SRI fee.
+  fn can_pay_fee(
+    &self,
+    signer: &SeraiAddress,
+    fee: serai_abi::primitives::balance::Amount,
+  ) -> Result<(), sp_runtime::transaction_validity::TransactionValidityError> {
+    todo!("TODO")
+  }
+  /// Have the transaction pay its SRI fee.
+  fn pay_fee(
+    &self,
+    signer: &SeraiAddress,
+    fee: serai_abi::primitives::balance::Amount,
+  ) -> Result<(), sp_runtime::transaction_validity::TransactionValidityError> {
+    todo!("TODO")
+  }
+}
+
+/*
 use core::marker::PhantomData;
 
 // Re-export all components
@@ -73,28 +323,13 @@ use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
 use babe::AuthorityId as BabeId;
 use grandpa::AuthorityId as GrandpaId;
 
-mod abi;
-
-/// Nonce of a transaction in the chain, for a given account.
-pub type Nonce = u32;
-
 /// A hash of some data used by the chain.
 pub type Hash = sp_core::H256;
 
 pub type SignedExtra = (
   system::CheckNonZeroSender<Runtime>,
-  system::CheckSpecVersion<Runtime>,
-  system::CheckTxVersion<Runtime>,
-  system::CheckGenesis<Runtime>,
-  system::CheckEra<Runtime>,
-  system::CheckNonce<Runtime>,
-  system::CheckWeight<Runtime>,
-  transaction_payment::ChargeTransactionPayment<Runtime>,
+  system::CheckWeight<Runtime>, TODO
 );
-
-pub type Transaction = serai_abi::tx::Transaction<RuntimeCall, SignedExtra>;
-pub type Block = generic::Block<Header, Transaction>;
-pub type BlockId = generic::BlockId<Block>;
 
 pub mod opaque {
   use super::*;
@@ -107,22 +342,6 @@ pub mod opaque {
   }
 }
 
-#[sp_version::runtime_version]
-pub const VERSION: RuntimeVersion = RuntimeVersion {
-  spec_name: create_runtime_str!("serai"),
-  impl_name: create_runtime_str!("core"),
-  spec_version: 1,
-  impl_version: 1,
-  apis: RUNTIME_API_VERSIONS,
-  transaction_version: 1,
-  state_version: 1,
-};
-
-#[cfg(feature = "std")]
-pub fn native_version() -> NativeVersion {
-  NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
-}
-
 pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
 pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
   sp_consensus_babe::BabeEpochConfiguration {
@@ -133,7 +352,6 @@ pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
 parameter_types! {
-  pub const BlockHashCount: BlockNumber = 2400;
   pub const Version: RuntimeVersion = VERSION;
 
   pub const SS58Prefix: u8 = 42; // TODO: Remove for Bech32m
@@ -146,44 +364,6 @@ parameter_types! {
       Weight::from_parts(2u64 * WEIGHT_REF_TIME_PER_SECOND, u64::MAX),
       NORMAL_DISPATCH_RATIO,
     );
-}
-
-pub struct CallFilter;
-impl Contains<RuntimeCall> for CallFilter {
-  fn contains(call: &RuntimeCall) -> bool {
-    // If the call is defined in our ABI, it's allowed
-    let call: Result<serai_abi::Call, ()> = call.clone().try_into();
-    call.is_ok()
-  }
-}
-
-impl system::Config for Runtime {
-  type BaseCallFilter = CallFilter;
-  type BlockWeights = BlockWeights;
-  type BlockLength = BlockLength;
-  type AccountId = PublicKey;
-  type RuntimeCall = RuntimeCall;
-  type Lookup = AccountLookup;
-  type Hash = Hash;
-  type Hashing = BlakeTwo256;
-  type Nonce = Nonce;
-  type Block = Block;
-  type RuntimeOrigin = RuntimeOrigin;
-  type RuntimeEvent = RuntimeEvent;
-  type BlockHashCount = BlockHashCount;
-  type DbWeight = RocksDbWeight;
-  type Version = Version;
-  type PalletInfo = PalletInfo;
-
-  type OnNewAccount = ();
-  type OnKilledAccount = ();
-  type OnSetCode = ();
-
-  type AccountData = ();
-  type SystemWeightInfo = ();
-  type SS58Prefix = SS58Prefix; // TODO: Remove for Bech32m
-
-  type MaxConsumers = support::traits::ConstU32<16>;
 }
 
 impl timestamp::Config for Runtime {
@@ -318,14 +498,6 @@ impl grandpa::Config for Runtime {
   type EquivocationReportSystem =
     grandpa::EquivocationReportSystem<Self, ValidatorSets, ValidatorSets, ReportLongevity>;
 }
-
-pub type Executive = frame_executive::Executive<
-  Runtime,
-  Block,
-  system::ChainContext<Runtime>,
-  Runtime,
-  AllPalletsWithSystem,
->;
 
 construct_runtime!(
   pub enum Runtime {
@@ -627,3 +799,4 @@ sp_api::impl_runtime_apis! {
     }
   }
 }
+*/

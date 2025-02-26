@@ -268,7 +268,7 @@ mod substrate {
       >;
 
     /// The implicit context to verify transactions with.
-    fn implicit_context() -> &'static ImplicitContext;
+    fn implicit_context() -> ImplicitContext;
 
     /// If a block is present in the blockchain.
     fn block_is_present_in_blockchain(&self, hash: &BlockHash) -> bool;
@@ -276,8 +276,8 @@ mod substrate {
     ///
     /// Returns `None` if the time has yet to be set.
     fn current_time(&self) -> Option<u64>;
-    /// The next nonce for an account.
-    fn next_nonce(&self, signer: &SeraiAddress) -> u32;
+    /// Get, and consume, the next nonce for an account.
+    fn get_and_consume_next_nonce(&self, signer: &SeraiAddress) -> u32;
     /// If the signer can pay the SRI fee.
     fn can_pay_fee(
       &self,
@@ -339,7 +339,7 @@ mod substrate {
           contextualized_signature: ContextualizedSignature { explicit_context, signature },
         } => {
           if !sp_core::sr25519::Signature::from(*signature).verify(
-            Transaction::signature_message(calls, Context::implicit_context(), explicit_context)
+            Transaction::signature_message(calls, &Context::implicit_context(), explicit_context)
               .as_slice(),
             &sp_core::sr25519::Public::from(explicit_context.signer),
           ) {
@@ -402,7 +402,7 @@ mod substrate {
               Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
             }
           }
-          match self.1.next_nonce(signer).cmp(nonce) {
+          match self.1.get_and_consume_next_nonce(signer).cmp(nonce) {
             core::cmp::Ordering::Less => {
               Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?
             }
@@ -454,6 +454,7 @@ mod substrate {
           self.1.can_pay_fee(signer, *fee)?;
 
           // Prioritize transactions by their fees
+          // TODO: Re-evaluate this
           {
             let fee = fee.0;
             Weight::from_all(fee).checked_div_per_component(&info.call_weight).unwrap_or(0)
