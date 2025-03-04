@@ -204,6 +204,26 @@ impl Transaction {
     explicit_context.serialize(&mut message).unwrap();
     message
   }
+
+  /// The unique hash of this transaction.
+  ///
+  /// No two transactions on the blockchain will share a hash, making this a unique identifier.
+  /// For signed transactions, this is due to the `(signer, nonce)` pair present within the
+  /// `ExplicitContext`. For unsigned transactions, this is due to inherent properties of their
+  /// execution (e.g. only being able to set a `ValidatorSet`'s keys once).
+  pub fn hash(&self) -> [u8; 32] {
+    sp_core::blake2_256(&match self {
+      Transaction::Unsigned { call } => borsh::to_vec(&call).unwrap(),
+      Transaction::Signed {
+        calls,
+        contextualized_signature: ContextualizedSignature { explicit_context, signature: _ },
+      } => {
+        // We explicitly don't hash the signature, so signatures can be replaced in the future if
+        // desired (such as with half-aggregated Schnorr signatures)
+        borsh::to_vec(&(calls, explicit_context)).unwrap()
+      }
+    })
+  }
 }
 
 #[cfg(feature = "substrate")]
@@ -276,16 +296,23 @@ mod substrate {
     ///
     /// Returns `None` if the time has yet to be set.
     fn current_time(&self) -> Option<u64>;
-    /// Get, and consume, the next nonce for an account.
-    fn get_and_consume_next_nonce(&self, signer: &SeraiAddress) -> u32;
+    /// Get the next nonce for an account.
+    fn next_nonce(&self, signer: &SeraiAddress) -> u32;
     /// If the signer can pay the SRI fee.
     fn can_pay_fee(
       &self,
       signer: &SeraiAddress,
       fee: Amount,
     ) -> Result<(), TransactionValidityError>;
+
+    /// Begin execution of a transaction.
+    fn start_transaction(&self);
+    /// Consume the next nonce for an account.
+    fn consume_next_nonce(&self, signer: &SeraiAddress);
     /// Have the transaction pay its SRI fee.
     fn pay_fee(&self, signer: &SeraiAddress, fee: Amount) -> Result<(), TransactionValidityError>;
+    /// End execution of a transaction.
+    fn end_transaction(&self, transaction_hash: [u8; 32]);
   }
 
   /// A transaction with the context necessary to evaluate it within Substrate.
@@ -402,7 +429,7 @@ mod substrate {
               Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
             }
           }
-          match self.1.get_and_consume_next_nonce(signer).cmp(nonce) {
+          match self.1.next_nonce(signer).cmp(nonce) {
             core::cmp::Ordering::Less => {
               Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?
             }
@@ -472,7 +499,12 @@ mod substrate {
       // We use 0 for the mempool priority, as this is no longer in the mempool so it's irrelevant
       self.validate_except_fee::<V>(TransactionSource::InBlock, 0)?;
 
-      match self.0 {
+      // Start the transaction
+      self.1.start_transaction();
+
+      let transaction_hash = self.0.hash();
+
+      let res = match self.0 {
         Transaction::Unsigned { call } => {
           let call = Context::RuntimeCall::from(call.0);
           V::pre_dispatch(&call)?;
@@ -487,7 +519,9 @@ mod substrate {
           contextualized_signature:
             ContextualizedSignature { explicit_context: ExplicitContext { signer, fee, .. }, .. },
         } => {
-          // Start by paying the fee
+          // Consume the signer's next nonce
+          self.1.consume_next_nonce(&signer);
+          // Pay the fee
           self.1.pay_fee(&signer, fee)?;
 
           let _res = frame_support::storage::transactional::with_storage_layer(|| {
@@ -514,7 +548,14 @@ mod substrate {
             pays_fee: Pays::Yes,
           }))
         }
-      }
+      };
+
+      // TODO: TransactionSuccess/TransactionFailure event?
+
+      // End the transaction
+      self.1.end_transaction(transaction_hash);
+
+      res
     }
   }
 }

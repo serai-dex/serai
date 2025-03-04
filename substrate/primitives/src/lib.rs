@@ -43,6 +43,9 @@ pub mod signals;
 /// Instruction types.
 pub mod instructions;
 
+/// Merkle trees.
+pub mod merkle;
+
 /// The type used to identify block numbers.
 ///
 /// A block's number is its zero-indexed position on the list of blocks which form a blockchain.

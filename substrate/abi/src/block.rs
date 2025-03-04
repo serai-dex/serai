@@ -2,7 +2,20 @@ use alloc::vec::Vec;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use crate::{primitives::BlockHash, Transaction};
+use crate::{
+  primitives::{BlockHash, merkle::UnbalancedMerkleTree},
+  Transaction,
+};
+
+/// The tag for the hash of a transaction's event, forming a leaf of the Merkle tree of its events.
+pub const EVENTS_COMMITMENT_TRANSACTION_EVENT_TAG: u8 = 0;
+/// The tag for the branch hashes of transaction events.
+pub const EVENTS_COMMITMENT_TRANSACTION_EVENTS_TAG: u8 = 1;
+/// The tag for the hash of a transaction's hash and its events' Merkle root, forming a leaf of the
+/// Merkle tree which is the events commitment.
+pub const EVENTS_COMMITMENT_TRANSACTION_TAG: u8 = 2;
+/// The tag for for the branch hashes of the Merkle tree which is the events commitments.
+pub const EVENTS_COMMITMENT_TRANSACTIONS_TAG: u8 = 3;
 
 /// A V1 header for a block.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
@@ -18,6 +31,8 @@ pub struct HeaderV1 {
   /// The commitment to the transactions within this block.
   // TODO: Some transactions don't have unique hashes due to assuming validators set unique keys
   pub transactions_commitment: [u8; 32],
+  /// The commitment to the events within this block.
+  pub events_commitment: UnbalancedMerkleTree,
   /// A commitment to the consensus data used to justify adding this block to the blockchain.
   pub consensus_commitment: [u8; 32],
 }
@@ -90,6 +105,8 @@ mod substrate {
     pub unix_time_in_millis: u64,
     /// The commitment to the transactions within this block.
     pub transactions_commitment: [u8; 32],
+    /// The commitment to the events within this block.
+    pub events_commitment: UnbalancedMerkleTree,
   }
 
   impl SeraiDigest {
@@ -155,6 +172,11 @@ mod substrate {
               .as_ref()
               .map(|digest| digest.transactions_commitment)
               .unwrap_or([0; 32]),
+            events_commitment: digest
+              .as_ref()
+              .map(|digest| digest.events_commitment)
+              .unwrap_or(UnbalancedMerkleTree::EMPTY),
+            // TODO: This hashes the digest *including seals*, doesn't it?
             consensus_commitment: sp_core::blake2_256(&header.consensus.encode()),
           })
         }
