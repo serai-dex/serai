@@ -18,6 +18,8 @@ ignored = ["scale", "scale-info"]
 workspace = true
 
 [dependencies]
+borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
+
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 

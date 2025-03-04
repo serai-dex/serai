@@ -8,14 +8,14 @@ use crate::{
 };
 
 /// The tag for the hash of a transaction's event, forming a leaf of the Merkle tree of its events.
-pub const EVENTS_COMMITMENT_TRANSACTION_EVENT_TAG: u8 = 0;
+pub const TRANSACTION_EVENTS_COMMITMENT_LEAF_TAG: u8 = 0;
 /// The tag for the branch hashes of transaction events.
-pub const EVENTS_COMMITMENT_TRANSACTION_EVENTS_TAG: u8 = 1;
+pub const TRANSACTION_EVENTS_COMMITMENT_BRANCH_TAG: u8 = 1;
 /// The tag for the hash of a transaction's hash and its events' Merkle root, forming a leaf of the
 /// Merkle tree which is the events commitment.
-pub const EVENTS_COMMITMENT_TRANSACTION_TAG: u8 = 2;
+pub const EVENTS_COMMITMENT_LEAF_TAG: u8 = 2;
 /// The tag for for the branch hashes of the Merkle tree which is the events commitments.
-pub const EVENTS_COMMITMENT_TRANSACTIONS_TAG: u8 = 3;
+pub const EVENTS_COMMITMENT_BRANCH_TAG: u8 = 3;
 
 /// A V1 header for a block.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
@@ -25,13 +25,27 @@ pub struct HeaderV1 {
   /// The genesis block has number 0.
   pub number: u64,
   /// The commitment to the DAG this header builds upon.
-  pub builds_upon: BlockHash,
+  ///
+  /// This is defined as an unbalanced Merkle tree so light clients may sync one header per epoch,
+  /// and then may prove the inclusion of any header in logarithmic depth (without providing the
+  /// entire header chain).
+  ///
+  /// Alternative popular options would be a Merkle Mountain Range, which makes more recent blocks
+  /// cheaper to prove at the sacrifice of older blocks being more expensive to prove. An MMR isn't
+  /// used in order to minimize the protocol's surface area. Additionally, even though the
+  /// unbalanced Merkle tree doesn't achieve such notably short paths for recent blocks, it does
+  /// inherently provide lower-depth paths to more recent items *on imbalance*.
+  pub builds_upon: UnbalancedMerkleTree,
   /// The UNIX time in milliseconds this block was created at.
   pub unix_time_in_millis: u64,
   /// The commitment to the transactions within this block.
-  // TODO: Some transactions don't have unique hashes due to assuming validators set unique keys
-  pub transactions_commitment: [u8; 32],
+  pub transactions_commitment: UnbalancedMerkleTree,
   /// The commitment to the events within this block.
+  ///
+  /// The leaves of this tree will be of the form
+  /// `(EVENTS_COMMITMENT_LEAF_TAG, transaction hash, transaction's events' Merkle tree root)`.
+  /// A transaction may have the same event multiple times, yet an event may be uniquely identified
+  /// by its path within the tree.
   pub events_commitment: UnbalancedMerkleTree,
   /// A commitment to the consensus data used to justify adding this block to the blockchain.
   pub consensus_commitment: [u8; 32],
@@ -52,15 +66,21 @@ impl Header {
     }
   }
   /// Get the commitment to the DAG this header builds upon.
-  pub fn builds_upon(&self) -> BlockHash {
+  pub fn builds_upon(&self) -> UnbalancedMerkleTree {
     match self {
       Header::V1(HeaderV1 { builds_upon, .. }) => *builds_upon,
     }
   }
   /// The commitment to the transactions within this block.
-  pub fn transactions_commitment(&self) -> [u8; 32] {
+  pub fn transactions_commitment(&self) -> UnbalancedMerkleTree {
     match self {
       Header::V1(HeaderV1 { transactions_commitment, .. }) => *transactions_commitment,
+    }
+  }
+  /// The commitment to the events within this block.
+  pub fn events_commitment(&self) -> UnbalancedMerkleTree {
+    match self {
+      Header::V1(HeaderV1 { events_commitment, .. }) => *events_commitment,
     }
   }
   /// Get the hash of the header.
@@ -96,21 +116,33 @@ mod substrate {
 
   use super::*;
 
-  /// The digest for all of the Serai-specific header fields.
+  /// The digest for all of the Serai-specific header fields added before execution of the block.
   #[derive(Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
-  pub struct SeraiDigest {
-    /// The commitment to the DAG this header builds upon.
-    pub builds_upon: BlockHash,
+  pub struct SeraiPreExecutionDigest {
     /// The UNIX time in milliseconds this block was created at.
     pub unix_time_in_millis: u64,
+  }
+
+  /// The digest for all of the Serai-specific header fields determined during execution of the
+  /// block.
+  #[derive(Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+  pub struct SeraiExecutionDigest {
+    /// The commitment to the DAG this header builds upon.
+    pub builds_upon: UnbalancedMerkleTree,
     /// The commitment to the transactions within this block.
-    pub transactions_commitment: [u8; 32],
+    pub transactions_commitment: UnbalancedMerkleTree,
     /// The commitment to the events within this block.
     pub events_commitment: UnbalancedMerkleTree,
   }
 
-  impl SeraiDigest {
-    const CONSENSUS_ID: [u8; 4] = *b"SRID";
+  impl SeraiPreExecutionDigest {
+    /// The consensus ID for a Serai pre-execution digest.
+    pub const CONSENSUS_ID: [u8; 4] = *b"SRIP";
+  }
+
+  impl SeraiExecutionDigest {
+    /// The consensus ID for a Serai execution digest.
+    pub const CONSENSUS_ID: [u8; 4] = *b"SRIE";
   }
 
   /// The consensus data for a V1 header.
@@ -149,34 +181,43 @@ mod substrate {
     fn from(header: &SubstrateHeader) -> Self {
       match header {
         SubstrateHeader::V1(header) => {
-          let digest =
-            header.consensus.digest.logs().iter().find_map(|digest_item| match digest_item {
+          let mut pre_execution_digest = None;
+          let mut execution_digest = None;
+          for log in header.consensus.digest.logs() {
+            match log {
               DigestItem::PreRuntime(consensus, encoded)
-                if *consensus == SeraiDigest::CONSENSUS_ID =>
+                if *consensus == SeraiExecutionDigest::CONSENSUS_ID =>
               {
-                SeraiDigest::deserialize_reader(&mut encoded.as_slice()).ok()
+                pre_execution_digest =
+                  SeraiPreExecutionDigest::deserialize_reader(&mut encoded.as_slice()).ok();
               }
-              _ => None,
-            });
+              DigestItem::Consensus(consensus, encoded)
+                if *consensus == SeraiExecutionDigest::CONSENSUS_ID =>
+              {
+                execution_digest =
+                  SeraiExecutionDigest::deserialize_reader(&mut encoded.as_slice()).ok();
+              }
+              _ => {}
+            }
+          }
           Header::V1(HeaderV1 {
             number: header.number,
-            builds_upon: digest
+            builds_upon: execution_digest
               .as_ref()
               .map(|digest| digest.builds_upon)
-              .unwrap_or(BlockHash::from([0; 32])),
-            unix_time_in_millis: digest
+              .unwrap_or(UnbalancedMerkleTree::EMPTY),
+            unix_time_in_millis: pre_execution_digest
               .as_ref()
               .map(|digest| digest.unix_time_in_millis)
               .unwrap_or(0),
-            transactions_commitment: digest
+            transactions_commitment: execution_digest
               .as_ref()
               .map(|digest| digest.transactions_commitment)
-              .unwrap_or([0; 32]),
-            events_commitment: digest
+              .unwrap_or(UnbalancedMerkleTree::EMPTY),
+            events_commitment: execution_digest
               .as_ref()
               .map(|digest| digest.events_commitment)
               .unwrap_or(UnbalancedMerkleTree::EMPTY),
-            // TODO: This hashes the digest *including seals*, doesn't it?
             consensus_commitment: sp_core::blake2_256(&header.consensus.encode()),
           })
         }

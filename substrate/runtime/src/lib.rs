@@ -110,10 +110,10 @@ impl frame_system::Config for Runtime {
   // No migrations set
   type SingleBlockMigrations = ();
   type MultiBlockMigrator = ();
-  // We don't define any block-level hooks at this time
-  type PreInherents = ();
+
+  type PreInherents = core_pallet::StartOfBlock<Runtime>;
   type PostInherents = ();
-  type PostTransactions = ();
+  type PostTransactions = core_pallet::EndOfBlock<Runtime>;
 }
 
 impl core_pallet::Config for Runtime {}
@@ -226,16 +226,9 @@ impl serai_abi::TransactionContext for Context {
   fn current_time(&self) -> Option<u64> {
     todo!("TODO")
   }
-  /// Get, and consume, the next nonce for an account.
-  fn get_and_consume_next_nonce(&self, signer: &SeraiAddress) -> u32 {
-    core_pallet::NextNonce::<Runtime>::mutate(signer, |value| {
-      // Copy the current value for the next nonce
-      let next_nonce = *value;
-      // Increment the next nonce in the DB, consuming the current value
-      *value += 1;
-      // Return the existing value
-      next_nonce
-    })
+  /// Get the next nonce for an account.
+  fn next_nonce(&self, signer: &SeraiAddress) -> u32 {
+    core_pallet::NextNonce::<Runtime>::get(signer)
   }
   /// If the signer can pay the SRI fee.
   fn can_pay_fee(
@@ -245,6 +238,14 @@ impl serai_abi::TransactionContext for Context {
   ) -> Result<(), sp_runtime::transaction_validity::TransactionValidityError> {
     todo!("TODO")
   }
+
+  fn start_transaction(&self) {
+    Core::start_transaction();
+  }
+  /// Consume the next nonce for an account.
+  fn consume_next_nonce(&self, signer: &SeraiAddress) {
+    core_pallet::NextNonce::<Runtime>::mutate(signer, |value| *value += 1);
+  }
   /// Have the transaction pay its SRI fee.
   fn pay_fee(
     &self,
@@ -252,6 +253,9 @@ impl serai_abi::TransactionContext for Context {
     fee: serai_abi::primitives::balance::Amount,
   ) -> Result<(), sp_runtime::transaction_validity::TransactionValidityError> {
     todo!("TODO")
+  }
+  fn end_transaction(&self, transaction_hash: [u8; 32]) {
+    Core::end_transaction(transaction_hash);
   }
 }
 
