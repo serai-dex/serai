@@ -110,6 +110,10 @@ impl core::str::FromStr for SeraiAddress {
 
 /// An address for an external network.
 #[derive(Clone, PartialEq, Eq, Debug, borsh::BorshSerialize, borsh::BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct ExternalAddress(
   #[borsh(
     serialize_with = "crate::borsh_serialize_bounded_vec",
@@ -124,6 +128,7 @@ impl ExternalAddress {
 }
 
 /// An error when converting from a `Vec`.
+#[derive(Debug)]
 pub enum FromVecError {
   /// The source `Vec` was too long to be converted.
   TooLong,

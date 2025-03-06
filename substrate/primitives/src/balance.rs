@@ -10,11 +10,15 @@ use crate::coin::{ExternalCoin, Coin};
 pub type AmountRepr = u64;
 
 /// A wrapper used to represent amounts.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[rustfmt::skip] // Prevent rustfmt from expanding the following derive into a 10-line monstrosity
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Debug)]
+#[derive(Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
 )]
+#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
 pub struct Amount(pub AmountRepr);
 
 impl Add for Amount {
@@ -44,6 +48,8 @@ impl Mul for Amount {
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
 )]
+#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
 pub struct ExternalBalance {
   /// The coin this is a balance for.
   pub coin: ExternalCoin,
@@ -78,6 +84,8 @@ impl Mul<Amount> for ExternalBalance {
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
 )]
+#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
 pub struct Balance {
   /// The coin this is a balance for.
   pub coin: Coin,

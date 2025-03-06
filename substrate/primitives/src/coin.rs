@@ -13,6 +13,8 @@ use crate::network_id::{ExternalNetworkId, NetworkId};
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
 )]
+#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
 #[non_exhaustive]
 pub enum ExternalCoin {
   /// Bitcoin, from the Bitcoin network.
@@ -39,6 +41,8 @@ impl ExternalCoin {
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
 )]
+#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
 pub enum Coin {
   /// The Serai coin.
   Serai,
@@ -121,6 +125,19 @@ impl Coin {
     match self {
       Coin::Serai => NetworkId::Serai,
       Coin::External(c) => c.network().into(),
+    }
+  }
+
+  /// The decimals used for a single human unit of this coin.
+  ///
+  /// This may be less than the decimals used for a single human unit of this coin *by defined
+  /// convention*. If so, that means Serai is *truncating* the decimals. A coin which is defined
+  /// as having 8 decimals, while Serai claims it has 4 decimals, will have `0.00019999`
+  /// interpreted as `0.0001` (in human units, in atomic units, 19999 will be interpreted as 1).
+  pub fn decimals(&self) -> u32 {
+    match self {
+      Coin::Serai => 9,
+      Coin::External(c) => c.decimals(),
     }
   }
 }

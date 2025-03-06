@@ -1,18 +1,18 @@
-use crate::{mock::*, primitives::*};
-
+use sp_core::{Pair as _, sr25519::Pair};
 use frame_system::RawOrigin;
-use sp_core::Pair;
 
-use serai_primitives::*;
+use serai_primitives::{coin::*, balance::*, address::*, instructions::*};
 
-pub type CoinsEvent = crate::Event<Test, ()>;
+use crate::mock::*;
+
+pub type CoinsEvent = crate::Event<Test, crate::CoinsInstance>;
 
 #[test]
 fn mint() {
   new_test_ext().execute_with(|| {
     // minting u64::MAX should work
     let coin = Coin::Serai;
-    let to = insecure_pair_from_name("random1").public();
+    let to = Pair::generate().0.public();
     let balance = Balance { coin, amount: Amount(u64::MAX) };
 
     Coins::mint(to, balance).unwrap();
@@ -22,7 +22,7 @@ fn mint() {
     assert!(Coins::mint(to, Balance { coin, amount: Amount(1) }).is_err());
 
     // supply now should be equal to sum of the accounts balance sum
-    assert_eq!(Coins::supply(coin), balance.amount.0);
+    assert_eq!(Coins::supply(coin), balance.amount);
 
     // test events
     let mint_events = System::events()
@@ -49,19 +49,19 @@ fn burn_with_instruction() {
   new_test_ext().execute_with(|| {
     // mint some coin
     let coin = Coin::External(ExternalCoin::Bitcoin);
-    let to = insecure_pair_from_name("random1").public();
+    let to = Pair::generate().0.public();
     let balance = Balance { coin, amount: Amount(10 * 10u64.pow(coin.decimals())) };
 
     Coins::mint(to, balance).unwrap();
     assert_eq!(Coins::balance(to, coin), balance.amount);
-    assert_eq!(Coins::supply(coin), balance.amount.0);
+    assert_eq!(Coins::supply(coin), balance.amount);
 
     // we shouldn't be able to burn more than what we have
     let mut instruction = OutInstructionWithBalance {
-      instruction: OutInstruction { address: ExternalAddress::new(vec![]).unwrap() },
+      instruction: OutInstruction::Transfer(ExternalAddress::try_from(vec![]).unwrap()),
       balance: ExternalBalance {
         coin: coin.try_into().unwrap(),
-        amount: Amount(balance.amount.0 + 1),
+        amount: (balance.amount + Amount(1)).unwrap(),
       },
     };
     assert!(
@@ -74,7 +74,7 @@ fn burn_with_instruction() {
 
     // balance & supply now should be back to 0
     assert_eq!(Coins::balance(to, coin), Amount(0));
-    assert_eq!(Coins::supply(coin), 0);
+    assert_eq!(Coins::supply(coin), Amount(0));
 
     let burn_events = System::events()
       .iter()
@@ -100,19 +100,19 @@ fn transfer() {
   new_test_ext().execute_with(|| {
     // mint some coin
     let coin = Coin::External(ExternalCoin::Bitcoin);
-    let from = insecure_pair_from_name("random1").public();
+    let from = Pair::generate().0.public();
     let balance = Balance { coin, amount: Amount(10 * 10u64.pow(coin.decimals())) };
 
     Coins::mint(from, balance).unwrap();
     assert_eq!(Coins::balance(from, coin), balance.amount);
-    assert_eq!(Coins::supply(coin), balance.amount.0);
+    assert_eq!(Coins::supply(coin), balance.amount);
 
     // we can't send more than what we have
-    let to = insecure_pair_from_name("random2").public();
+    let to = Pair::generate().0.public();
     assert!(Coins::transfer(
       RawOrigin::Signed(from).into(),
       to,
-      Balance { coin, amount: Amount(balance.amount.0 + 1) }
+      Balance { coin, amount: (balance.amount + Amount(1)).unwrap() }
     )
     .is_err());
 
@@ -124,6 +124,6 @@ fn transfer() {
     assert_eq!(Coins::balance(to, coin), balance.amount);
 
     // supply shouldn't change
-    assert_eq!(Coins::supply(coin), balance.amount.0);
+    assert_eq!(Coins::supply(coin), balance.amount);
   })
 }

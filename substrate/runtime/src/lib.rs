@@ -17,6 +17,8 @@ use serai_abi::{
   primitives::address::SeraiAddress, SubstrateHeader as Header, SubstrateBlock,
 };
 
+use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance};
+
 mod core_pallet;
 
 type Block = SubstrateBlock;
@@ -74,6 +76,12 @@ mod runtime {
 
   #[runtime::pallet_index(1)]
   pub type Core = core_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(2)]
+  pub type Coins = serai_coins_pallet::Pallet<Runtime, CoinsInstance>;
+
+  #[runtime::pallet_index(3)]
+  pub type LiquidityTokens = serai_coins_pallet::Pallet<Runtime, LiquidityTokensInstance>;
 }
 
 impl frame_system::Config for Runtime {
@@ -118,6 +126,15 @@ impl frame_system::Config for Runtime {
 
 impl core_pallet::Config for Runtime {}
 
+impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type AllowMint = serai_coins_pallet::AlwaysAllowMint; // TODO
+}
+impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+  type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+}
+
 impl From<Option<SeraiAddress>> for RuntimeOrigin {
   fn from(signer: Option<SeraiAddress>) -> Self {
     match signer {
@@ -133,8 +150,14 @@ impl From<serai_abi::Call> for RuntimeCall {
       serai_abi::Call::Coins(call) => {
         use serai_abi::coins::Call;
         match call {
-          Call::transfer { .. } | Call::burn { .. } | Call::burn_with_instruction { .. } => {
-            todo!("TODO")
+          Call::transfer { to, coins } => {
+            RuntimeCall::Coins(serai_coins_pallet::Call::transfer { to: to.into(), balance: coins })
+          }
+          Call::burn { coins } => {
+            RuntimeCall::Coins(serai_coins_pallet::Call::burn { balance: coins })
+          }
+          Call::burn_with_instruction { instruction } => {
+            RuntimeCall::Coins(serai_coins_pallet::Call::burn_with_instruction { instruction })
           }
         }
       }
@@ -162,8 +185,13 @@ impl From<serai_abi::Call> for RuntimeCall {
       serai_abi::Call::Dex(call) => {
         use serai_abi::dex::Call;
         match call {
+          Call::transfer_liquidity { to, liquidity_tokens } => {
+            RuntimeCall::LiquidityTokens(serai_coins_pallet::Call::transfer {
+              to: to.into(),
+              balance: liquidity_tokens.into(),
+            })
+          }
           Call::add_liquidity { .. } |
-          Call::transfer_liquidity { .. } |
           Call::remove_liquidity { .. } |
           Call::swap_exact { .. } |
           Call::swap_for_exact { .. } => todo!("TODO"),
@@ -236,7 +264,14 @@ impl serai_abi::TransactionContext for Context {
     signer: &SeraiAddress,
     fee: serai_abi::primitives::balance::Amount,
   ) -> Result<(), sp_runtime::transaction_validity::TransactionValidityError> {
-    todo!("TODO")
+    use serai_abi::primitives::coin::Coin;
+    if serai_coins_pallet::Pallet::<Runtime, CoinsInstance>::balance(signer, Coin::Serai) >= fee {
+      Ok(())
+    } else {
+      Err(sp_runtime::transaction_validity::TransactionValidityError::Invalid(
+        sp_runtime::transaction_validity::InvalidTransaction::Payment,
+      ))
+    }
   }
 
   fn start_transaction(&self) {
@@ -252,7 +287,16 @@ impl serai_abi::TransactionContext for Context {
     signer: &SeraiAddress,
     fee: serai_abi::primitives::balance::Amount,
   ) -> Result<(), sp_runtime::transaction_validity::TransactionValidityError> {
-    todo!("TODO")
+    use serai_abi::primitives::{coin::*, balance::*};
+    serai_coins_pallet::Pallet::<Runtime, CoinsInstance>::burn(
+      RuntimeOrigin::signed(Public::from(*signer)),
+      Balance { coin: Coin::Serai, amount: fee },
+    )
+    .map_err(|_| {
+      sp_runtime::transaction_validity::TransactionValidityError::Invalid(
+        sp_runtime::transaction_validity::InvalidTransaction::Payment,
+      )
+    })
   }
   fn end_transaction(&self, transaction_hash: [u8; 32]) {
     Core::end_transaction(transaction_hash);
