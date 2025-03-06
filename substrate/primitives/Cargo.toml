@@ -32,5 +32,6 @@ bech32 = { version = "0.11", default-features = false }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
 [features]
+non_canonical_scale_derivations = []
 std = ["zeroize/std", "borsh/std", "ciphersuite/std", "dkg/std", "sp-core/std", "bech32/std"]
 default = ["std"]

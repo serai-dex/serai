@@ -9,6 +9,10 @@ use crate::network_id::{ExternalNetworkId, NetworkId};
 /// This type serializes to a subset of `Coin`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[borsh(use_discriminant = true)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 #[non_exhaustive]
 pub enum ExternalCoin {
   /// Bitcoin, from the Bitcoin network.
@@ -31,6 +35,10 @@ impl ExternalCoin {
 
 /// The type used to identify coins.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub enum Coin {
   /// The Serai coin.
   Serai,

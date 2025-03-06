@@ -10,18 +10,10 @@ use crate::coin::{ExternalCoin, Coin};
 pub type AmountRepr = u64;
 
 /// A wrapper used to represent amounts.
-#[derive(
-  Clone,
-  Copy,
-  PartialEq,
-  Eq,
-  PartialOrd,
-  Ord,
-  Hash,
-  Debug,
-  Zeroize,
-  BorshSerialize,
-  BorshDeserialize,
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
 )]
 pub struct Amount(pub AmountRepr);
 
@@ -48,6 +40,10 @@ impl Mul for Amount {
 
 /// An ExternalCoin and an Amount, forming a balance for an external coin.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct ExternalBalance {
   /// The coin this is a balance for.
   pub coin: ExternalCoin,
@@ -78,6 +74,10 @@ impl Mul<Amount> for ExternalBalance {
 
 /// A Coin and an Amount, forming a balance for a coin.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct Balance {
   /// The coin this is a balance for.
   pub coin: Coin,

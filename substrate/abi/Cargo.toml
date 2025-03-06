@@ -47,6 +47,6 @@ std = [
 
   "serai-primitives/std",
 ]
-substrate = ["serde", "scale", "scale-info", "sp-runtime", "frame-support"]
+substrate = ["serde", "scale", "scale-info", "sp-runtime", "frame-support", "serai-primitives/non_canonical_scale_derivations"]
 try-runtime = ["sp-runtime/try-runtime"]
 default = ["std"]
