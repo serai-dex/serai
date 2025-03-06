@@ -10,6 +10,14 @@ use serai_primitives::{
   validator_sets::*,
 };
 
+/// Key(s) on embedded elliptic curve(s).
+///
+/// This may be a single key if the external network uses the same embedded elliptic curve as
+/// used for the key to oraclize onto Serai. Else, it'll be a key on the embedded elliptic curve
+/// used for the key to oraclize onto Serai concatenated with the key on the embedded elliptic
+/// curve used for the external network.
+pub type EmbeddedEllipticCurveKeys = BoundedVec<u8, ConstU32<{ 2 * ExternalKey::MAX_LEN }>>;
+
 /// A call to the validator sets.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {
@@ -43,14 +51,11 @@ pub enum Call {
     /// The network the origin is setting their embedded elliptic curve keys for.
     network: ExternalNetworkId,
     /// The keys on the embedded elliptic curves.
-    ///
-    /// This may be a single key if the external network uses the same embedded elliptic curve as
-    /// used for the key to oraclize onto Serai.
     #[borsh(
       serialize_with = "serai_primitives::sp_borsh::borsh_serialize_bounded_vec",
       deserialize_with = "serai_primitives::sp_borsh::borsh_deserialize_bounded_vec"
     )]
-    keys: BoundedVec<u8, ConstU32<{ 2 * ExternalKey::MAX_LEN }>>,
+    keys: EmbeddedEllipticCurveKeys,
   },
   /// Allocate stake to a network.
   allocate {

@@ -18,6 +18,10 @@ pub enum EmbeddedEllipticCurve {
 /// This type serializes to a subset of `NetworkId`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[borsh(use_discriminant = true)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 #[non_exhaustive]
 pub enum ExternalNetworkId {
   /// The Bitcoin network.
@@ -63,6 +67,10 @@ impl ExternalNetworkId {
 
 /// The type used to identify networks.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub enum NetworkId {
   /// The Serai network.
   Serai,

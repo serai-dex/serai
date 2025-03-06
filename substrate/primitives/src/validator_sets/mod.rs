@@ -6,6 +6,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
 
 use crate::{
+  constants::MAX_KEY_SHARES_PER_SET,
   crypto::{Public, KeyPair},
   network_id::{ExternalNetworkId, NetworkId},
 };
@@ -73,4 +74,37 @@ impl ExternalValidatorSet {
   pub fn set_keys_message(&self, key_pair: &KeyPair) -> Vec<u8> {
     borsh::to_vec(&(b"ValidatorSets-set_keys", self, key_pair)).unwrap()
   }
+}
+
+/// For a set of validators whose key shares may exceed the maximum, reduce until they are less
+/// than or equal to the maximum.
+///
+/// This runs in time linear to the exceed key shares and assumes the excess fits within a usize,
+/// panicking otherwise.
+///
+/// Reduction occurs by reducing each validator in a reverse round-robin. This means the worst
+/// validators lose their key shares first.
+pub fn amortize_excess_key_shares(validators: &mut [(Public, u64)]) {
+  let total_key_shares = validators.iter().map(|(_, shares)| shares).sum::<u64>();
+  for i in 0 .. usize::try_from(total_key_shares.saturating_sub(u64::from(MAX_KEY_SHARES_PER_SET)))
+    .unwrap()
+  {
+    validators[validators.len() - ((i % validators.len()) + 1)].1 -= 1;
+  }
+}
+
+/// Returns the post-amortization key shares for the top validator.
+///
+/// May panic when `validators == 0` or
+/// `(top_validator_key_shares * validators) < total_key_shares`.
+pub fn post_amortization_key_shares_for_top_validator(
+  validators: usize,
+  top_validator_key_shares: u64,
+  total_key_shares: u64,
+) -> u64 {
+  let excess = total_key_shares.saturating_sub(MAX_KEY_SHARES_PER_SET.into());
+  // Since the top validator is amortized last, the question is how many complete iterations of
+  // the round robin occur
+  let round_robin_iterations = excess / u64::try_from(validators).unwrap();
+  top_validator_key_shares - round_robin_iterations
 }
