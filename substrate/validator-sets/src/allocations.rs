@@ -1,10 +1,70 @@
-use core::marker::PhantomData;
-
 use sp_core::{Encode, sr25519::Public};
 
 use serai_primitives::{constants::MAX_KEY_SHARES_PER_SET, network_id::NetworkId, balance::Amount};
 
-use frame_support::storage::{StorageMap, StoragePrefixedMap as Spm};
+use frame_support::storage::{StorageMap, StoragePrefixedMap};
+
+/// The key to use for the allocations map.
+type AllocationsKey = (NetworkId, Public);
+/// The key to use for the sorted allocations map.
+type SortedAllocationsKey = (NetworkId, [u8; 8], [u8; 16], Public);
+
+/// The storage underlying `Allocations`.
+///
+/// This storage is expected to be owned by the `Allocations` interface and not directly read/write
+/// to.
+pub(crate) trait AllocationsStorage {
+  /// An opaque map storing allocations.
+  type Allocations: StorageMap<AllocationsKey, Amount, Query = Option<Amount>>;
+  /// An opaque map storing allocations in a sorted manner.
+  ///
+  /// This MUST be instantiated with a map using `Identity` for its hasher.
+  /*
+    This is premised on the underlying trie iterating from keys with low-bytes to keys with
+    high-bytes.
+
+    We use Identity so we don't have a hasher add pseudorandom bytes to the start of the keys. This
+    does remove the protection using a hash algorithm here offers against spam attacks (by flooding
+    the DB with layers, increasing lookup time and Merkle proof sizes, not that we use Merkle
+    proofs as Polkadot does).
+
+    Since amounts are represented with just 8 bytes, only 16 nibbles are present. This caps the
+    potential depth caused by spam at 16 layers (as the underlying DB operates on nibbles). While
+    there is an entire 32-byte public key after this, a Blake hash of the key is inserted after the
+    amount to prevent the key from also being used to cause layer spam. We use a `[u8; 16]` to
+    represent this, and not a explicit `Blake2_128Concat` hasher, to ensure all prior keys are part
+    part of the hash. A Substrate-hasher would only hash the immediately following key.
+
+    There's also a minimum stake requirement, which further reduces the potential for spam.
+  */
+  type SortedAllocations: StorageMap<SortedAllocationsKey, (), Query = Option<()>>
+    + StoragePrefixedMap<()>;
+}
+
+/// An interface for managing validators' allocations.
+pub(crate) trait Allocations {
+  /// Set an allocation.
+  ///
+  /// Returns the validator's prior allocation.
+  fn set_allocation(network: NetworkId, key: Public, amount: Amount) -> Option<Amount>;
+
+  /// Get an allocation.
+  fn get_allocation(network: NetworkId, key: Public) -> Option<Amount>;
+
+  /// Iterate over allocations for a network, yielding the highest-valued allocations.
+  ///
+  /// This will yield all validators present whose allocation is greater than or equal to the
+  /// specified minimum.
+  ///
+  /// If two validators share an allocation, the order is deterministic yet otherwise undefined.
+  fn iter_allocations(
+    network: NetworkId,
+    minimum_allocation: Amount,
+  ) -> impl Iterator<Item = (Public, Amount)>;
+
+  /// Calculate the expected key shares for a network, per the current allocations.
+  fn expected_key_shares(network: NetworkId, allocation_per_key_share: Amount) -> u64;
+}
 
 /// Reverses the lexicographic order of a given byte array.
 ///
@@ -17,159 +77,92 @@ fn reverse_lexicographic_order<const N: usize>(bytes: [u8; N]) -> [u8; N] {
   res
 }
 
-/// The key to use for the allocations map.
-type AllocationsKey = (NetworkId, Public);
-/// The key to use for the sorted allocations map.
-type SortedAllocationsKey = (NetworkId, [u8; 8], [u8; 16], Public);
+/// The storage key to use with the sorted allocations map.
+#[inline]
+fn sorted_allocation_storage_key(
+  network: NetworkId,
+  key: Public,
+  amount: Amount,
+) -> (NetworkId, [u8; 8], [u8; 16], Public) {
+  // We want the accounts with the highest allocations to be first. Since the DB iterates from
+  // low to high, we take the BE bytes of the amount (meaning the lowest-value allocations have
+  // the lowest lexicographic order and will be first), then reverse their order.
+  let amount = reverse_lexicographic_order(amount.0.to_be_bytes());
+  // Hash all of the keys to best defend against layer-spam attacks
+  let hash = sp_io::hashing::blake2_128(&(network, amount, key).encode());
+  (network, amount, hash, key)
+}
 
-/// An interface for managing validators' allocations.
-///
-/// `SortedAllocationsMap` MUST be instantiated with a map using `Identity` for its hasher.
-/*
-  This is premised on the underlying trie iterating from keys with low-bytes to keys with
-  high-bytes.
+// Recover the user's public key from a storage key.
+fn recover_key_from_sorted_allocation_storage_key(key: &[u8]) -> Public {
+  <Public as From<[u8; 32]>>::from(key[(key.len() - 32) ..].try_into().unwrap())
+}
 
-  We use Identity so we don't have a hasher add pseudorandom bytes to the start of the keys. This
-  does remove the protection using a hash algorithm here offers against spam attacks (by flooding
-  the DB with layers, increasing lookup time and Merkle proof sizes, not that we use Merkle proofs
-  proofs as Polkadot does).
+// Recover the amount allocated from a storage key.
+fn recover_amount_from_sorted_allocation_storage_key(key: &[u8]) -> Amount {
+  // We read the amount from the end of the key as everything after the amount is fixed-length
+  let distance_from_end = 8 + 16 + 32;
+  let start_pos = key.len() - distance_from_end;
+  let raw: [u8; 8] = key[start_pos .. (start_pos + 8)].try_into().unwrap();
+  // Take advantage of how this is a bijective mapping
+  let raw = reverse_lexicographic_order(raw);
+  Amount(u64::from_be_bytes(raw))
+}
 
-  Since amounts are represented with just 8 bytes, only 16 nibbles are present. This caps the
-  potential depth caused by spam at 16 layers (as the underlying DB operates on nibbles). While
-  there is an entire 32-byte public key after this, a Blake hash of the key is inserted after the
-  amount to prevent the key from also being used to cause layer spam. We use a `[u8; 16]` to
-  represent this, and not a explicit `Blake2_128Concat` hasher, to ensure all prior keys are part
-  part of the hash. A Substrate-hasher would only hash the immediately following key.
-
-  There's also a minimum stake requirement, which further reduces the potential for spam.
-*/
-pub(crate) struct Allocations<
-  AllocationsMap: StorageMap<AllocationsKey, Amount, Query = Option<Amount>>,
-  SortedAllocationsMap: StorageMap<SortedAllocationsKey, (), Query = Option<()>> + Spm<()>,
->(PhantomData<(AllocationsMap, SortedAllocationsMap)>);
-impl<
-    AllocationsMap: StorageMap<AllocationsKey, Amount, Query = Option<Amount>>,
-    SortedAllocationsMap: StorageMap<SortedAllocationsKey, (), Query = Option<()>> + Spm<()>,
-  > Allocations<AllocationsMap, SortedAllocationsMap>
-{
-  /// The storage key to use with the sorted allocations map.
-  #[inline]
-  fn sorted_allocation_storage_key(
-    network: NetworkId,
-    key: Public,
-    amount: Amount,
-  ) -> (NetworkId, [u8; 8], [u8; 16], Public) {
-    // We want the accounts with the highest allocations to be first. Since the DB iterates from
-    // low to high, we take the BE bytes of the amount (meaning the lowest-value allocations have
-    // the lowest lexicographic order and will be first), then reverse their order.
-    let amount = reverse_lexicographic_order(amount.0.to_be_bytes());
-    // Hash all of the keys to best defend against layer-spam attacks
-    let hash = sp_io::hashing::blake2_128(&(network, amount, key).encode());
-    (network, amount, hash, key)
-  }
-
-  // Recover the user's public key from a storage key.
-  fn recover_key_from_sorted_allocation_storage_key(key: &[u8]) -> Public {
-    <Public as From<[u8; 32]>>::from(key[(key.len() - 32) ..].try_into().unwrap())
-  }
-
-  // Recover the amount allocated from a storage key.
-  fn recover_amount_from_sorted_allocation_storage_key(key: &[u8]) -> Amount {
-    // We read the amount from the end of the key as everything after the amount is fixed-length
-    let distance_from_end = 8 + 16 + 32;
-    let start_pos = key.len() - distance_from_end;
-    let raw: [u8; 8] = key[start_pos .. (start_pos + 8)].try_into().unwrap();
-    // Take advantage of how this is a bijective mapping
-    let raw = reverse_lexicographic_order(raw);
-    Amount(u64::from_be_bytes(raw))
-  }
-
-  /// Set an allocation.
-  ///
-  /// Returns the validator's prior allocation.
-  pub(crate) fn set(network: NetworkId, key: Public, amount: Amount) -> Option<Amount> {
-    let prior = AllocationsMap::take((network, key));
+impl<Storage: AllocationsStorage> Allocations for Storage {
+  fn set_allocation(network: NetworkId, key: Public, amount: Amount) -> Option<Amount> {
+    // Remove their existing allocation, if one exists
+    let prior = Storage::Allocations::take((network, key));
     if let Some(amount) = prior {
-      SortedAllocationsMap::remove(Self::sorted_allocation_storage_key(network, key, amount));
+      Storage::SortedAllocations::remove(sorted_allocation_storage_key(network, key, amount));
     }
+    // If we're setting a non-zero allocation, add it back to the maps
     if amount.0 != 0 {
-      AllocationsMap::set((network, key), Some(amount));
-      SortedAllocationsMap::set(
-        Self::sorted_allocation_storage_key(network, key, amount),
+      Storage::Allocations::set((network, key), Some(amount));
+      Storage::SortedAllocations::set(
+        sorted_allocation_storage_key(network, key, amount),
         Some(()),
       );
     }
     prior
   }
 
-  /// Get an allocation.
-  pub(crate) fn get(network: NetworkId, key: Public) -> Option<Amount> {
-    AllocationsMap::get((network, key))
+  fn get_allocation(network: NetworkId, key: Public) -> Option<Amount> {
+    Storage::Allocations::get((network, key))
   }
 
-  /// Iterate over allocations for a network, yielding the highest-valued allocations.
-  ///
-  /// This will yield all validators present whose allocation is greater than or equal to the
-  /// specified minimum.
-  ///
-  /// If two validators share an allocation, the order is deterministic yet otherwise undefined.
-  pub(crate) fn iter(
+  fn iter_allocations(
     network: NetworkId,
     minimum_allocation: Amount,
   ) -> impl Iterator<Item = (Public, Amount)> {
-    let mut prefix = SortedAllocationsMap::final_prefix().to_vec();
+    // Iterate over the sorted allocations for this network
+    let mut prefix = Storage::SortedAllocations::final_prefix().to_vec();
     prefix.extend(&network.encode());
+    // Decode the read keys into (key, amount) tuples
     frame_support::storage::PrefixIterator::<_, ()>::new(prefix.clone(), prefix, |key, _value| {
       Ok((
-        Self::recover_key_from_sorted_allocation_storage_key(key),
-        Self::recover_amount_from_sorted_allocation_storage_key(key),
+        recover_key_from_sorted_allocation_storage_key(key),
+        recover_amount_from_sorted_allocation_storage_key(key),
       ))
     })
+    // Filter by the specified minimum allocation
     .filter(move |(_key, allocation)| *allocation >= minimum_allocation)
   }
 
-  /// Check if a fresh sample will be BFT for f > 0.
-  pub(crate) fn will_be_bft_for_any_nonzero_f(
-    network: NetworkId,
-    allocation_per_key_share: Amount,
-  ) -> bool {
+  fn expected_key_shares(network: NetworkId, allocation_per_key_share: Amount) -> u64 {
     let mut validators_len = 0;
-    let mut top_validator_key_shares = None;
     let mut total_key_shares = 0;
-    for (_, amount) in Self::iter(network, allocation_per_key_share) {
+    for (_, amount) in Self::iter_allocations(network, allocation_per_key_share) {
       validators_len += 1;
 
       let key_shares = amount.0 / allocation_per_key_share.0;
       total_key_shares += key_shares;
-      // If this is the first validator, they're the top validator, due to this being sorted
-      if top_validator_key_shares.is_none() {
-        top_validator_key_shares = Some(key_shares);
-      }
 
-      if total_key_shares > u64::from(MAX_KEY_SHARES_PER_SET) {
+      if total_key_shares >= u64::from(MAX_KEY_SHARES_PER_SET) {
         break;
       }
     }
-
-    let Some(top_validator_key_shares) = top_validator_key_shares else {
-      // This network has n = 0 so f = 0
-      return false;
-    };
-
-    // `total_key_shares` may exceed `MAX_KEY_SHARES_PER_SET`, which will cause a round robin
-    // reduction of each validator's key shares until their sum is `MAX_KEY_SHARES_PER_SET`.
-    // `post_amortization_key_shares_for_top_validator` yields what the top validator's key shares
-    // would be after such a reduction, letting us evaluate this correctly
-    let top_validator_key_shares =
-      serai_primitives::validator_sets::post_amortization_key_shares_for_top_validator(
-        validators_len,
-        top_validator_key_shares,
-        total_key_shares,
-      );
-    let total_key_shares = total_key_shares.min(MAX_KEY_SHARES_PER_SET.into());
-    // We achieve BFT under n=3f+1. Accordingly, for the top validator's key shares to be `f`, and
-    // still have `3f < n`, we tolerate the top validator being faulty
-    (top_validator_key_shares * 3) < total_key_shares
+    total_key_shares
   }
 }
 
@@ -250,7 +243,7 @@ fn test_allocations() {
         "Allocations"
       }
 
-      const STORAGE_PREFIX: &'static str = "AllocationsMap";
+      const STORAGE_PREFIX: &'static str = "Storage::Allocations";
     }
     type AllocationsMap =
       StorageMap<Storage, Blake2_128Concat, AllocationsKey, Amount, OptionQuery>;
@@ -261,10 +254,16 @@ fn test_allocations() {
         "Allocations"
       }
 
-      const STORAGE_PREFIX: &'static str = "SortedAllocationsMap";
+      const STORAGE_PREFIX: &'static str = "Storage::SortedAllocations";
     }
     type SortedAllocationsMap =
       StorageMap<StorageSorted, Identity, SortedAllocationsKey, (), OptionQuery>;
+
+    struct Allocations;
+    impl AllocationsStorage for Allocations {
+      type Allocations = AllocationsMap;
+      type SortedAllocations = SortedAllocationsMap;
+    }
 
     let before = NetworkId::deserialize_reader(&mut [0].as_slice()).unwrap();
     let network = NetworkId::deserialize_reader(&mut [1].as_slice()).unwrap();
@@ -283,10 +282,7 @@ fn test_allocations() {
     for _ in 0 .. ALLOCATIONS {
       let (key, amount) = rand_allocation();
       allocations.push((key, amount));
-      assert_eq!(
-        Allocations::<AllocationsMap, SortedAllocationsMap>::set(network, key, amount),
-        None
-      );
+      assert_eq!(Allocations::set_allocation(network, key, amount), None);
     }
     // Sort them from highest amount to lowest
     allocations.sort_by_key(|item| item.1);
@@ -296,19 +292,13 @@ fn test_allocations() {
     // these allocations. This ensures we don't read from another network accidentally
     {
       let (key, amount) = rand_allocation();
-      assert_eq!(
-        Allocations::<AllocationsMap, SortedAllocationsMap>::set(before, key, amount),
-        None
-      );
-      assert_eq!(
-        Allocations::<AllocationsMap, SortedAllocationsMap>::set(after, key, amount),
-        None
-      );
+      assert_eq!(Allocations::set_allocation(before, key, amount), None);
+      assert_eq!(Allocations::set_allocation(after, key, amount), None);
     }
 
     // Check the iterator works
     {
-      let mut a = Allocations::<AllocationsMap, SortedAllocationsMap>::iter(network, Amount(0));
+      let mut a = Allocations::iter_allocations(network, Amount(0));
       let mut b = allocations.clone().into_iter();
       for _ in 0 .. ALLOCATIONS {
         assert_eq!(a.next(), b.next());
@@ -320,11 +310,11 @@ fn test_allocations() {
     // Check the minimum works
     {
       assert_eq!(
-        Allocations::<AllocationsMap, SortedAllocationsMap>::iter(network, allocations[0].1).next(),
+        Allocations::iter_allocations(network, allocations[0].1).next(),
         Some(allocations[0])
       );
       assert_eq!(
-        Allocations::<AllocationsMap, SortedAllocationsMap>::iter(
+        Allocations::iter_allocations(
           network,
           // Fails with probability ~1/2**57
           (allocations[0].1 + Amount(1)).unwrap()

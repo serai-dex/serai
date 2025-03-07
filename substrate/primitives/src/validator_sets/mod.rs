@@ -16,10 +16,18 @@ pub use slashes::*;
 
 /// The type used to identify a specific session of validators.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct Session(pub u32);
 
 /// The type used to identify a specific set of validators for an external network.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct ExternalValidatorSet {
   /// The network this set of validators are for.
   pub network: ExternalNetworkId,
@@ -29,6 +37,10 @@ pub struct ExternalValidatorSet {
 
 /// The type used to identify a specific set of validators.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct ValidatorSet {
   /// The network this set of validators are for.
   pub network: NetworkId,
@@ -84,27 +96,11 @@ impl ExternalValidatorSet {
 ///
 /// Reduction occurs by reducing each validator in a reverse round-robin. This means the worst
 /// validators lose their key shares first.
-pub fn amortize_excess_key_shares(validators: &mut [(Public, u64)]) {
-  let total_key_shares = validators.iter().map(|(_, shares)| shares).sum::<u64>();
+pub fn amortize_excess_key_shares(validators: &mut [(sp_core::sr25519::Public, u64)]) {
+  let total_key_shares = validators.iter().map(|(_key, shares)| shares).sum::<u64>();
   for i in 0 .. usize::try_from(total_key_shares.saturating_sub(u64::from(MAX_KEY_SHARES_PER_SET)))
     .unwrap()
   {
     validators[validators.len() - ((i % validators.len()) + 1)].1 -= 1;
   }
-}
-
-/// Returns the post-amortization key shares for the top validator.
-///
-/// May panic when `validators == 0` or
-/// `(top_validator_key_shares * validators) < total_key_shares`.
-pub fn post_amortization_key_shares_for_top_validator(
-  validators: usize,
-  top_validator_key_shares: u64,
-  total_key_shares: u64,
-) -> u64 {
-  let excess = total_key_shares.saturating_sub(MAX_KEY_SHARES_PER_SET.into());
-  // Since the top validator is amortized last, the question is how many complete iterations of
-  // the round robin occur
-  let round_robin_iterations = excess / u64::try_from(validators).unwrap();
-  top_validator_key_shares - round_robin_iterations
 }
