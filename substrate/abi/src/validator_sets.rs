@@ -3,20 +3,12 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use sp_core::{ConstU32, bounded::BoundedVec};
 
 use serai_primitives::{
-  crypto::{ExternalKey, KeyPair, Signature},
+  crypto::{ExternalKey, EmbeddedEllipticCurveKeys, KeyPair, Signature},
   address::SeraiAddress,
   balance::Amount,
   network_id::*,
   validator_sets::*,
 };
-
-/// Key(s) on embedded elliptic curve(s).
-///
-/// This may be a single key if the external network uses the same embedded elliptic curve as
-/// used for the key to oraclize onto Serai. Else, it'll be a key on the embedded elliptic curve
-/// used for the key to oraclize onto Serai concatenated with the key on the embedded elliptic
-/// curve used for the external network.
-pub type EmbeddedEllipticCurveKeys = BoundedVec<u8, ConstU32<{ 2 * ExternalKey::MAX_LEN }>>;
 
 /// A call to the validator sets.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]

@@ -5,6 +5,10 @@ use sp_core::{ConstU32, bounded::BoundedVec};
 
 /// A Ristretto public key.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct Public(pub [u8; 32]);
 impl From<sp_core::sr25519::Public> for Public {
   fn from(public: sp_core::sr25519::Public) -> Self {
@@ -19,6 +23,10 @@ impl From<Public> for sp_core::sr25519::Public {
 
 /// A sr25519 signature.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct Signature(pub [u8; 64]);
 impl From<sp_core::sr25519::Signature> for Signature {
   fn from(signature: sp_core::sr25519::Signature) -> Self {
@@ -33,6 +41,10 @@ impl From<Signature> for sp_core::sr25519::Signature {
 
 /// A key for an external network.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct ExternalKey(
   #[borsh(
     serialize_with = "crate::borsh_serialize_bounded_vec",
@@ -58,9 +70,21 @@ impl ExternalKey {
   pub const MAX_LEN: u32 = 96;
 }
 
+/// Key(s) on embedded elliptic curve(s).
+///
+/// This may be a single key if the external network uses the same embedded elliptic curve as
+/// used for the key to oraclize onto Serai. Else, it'll be a key on the embedded elliptic curve
+/// used for the key to oraclize onto Serai concatenated with the key on the embedded elliptic
+/// curve used for the external network.
+pub type EmbeddedEllipticCurveKeys = BoundedVec<u8, ConstU32<{ 2 * ExternalKey::MAX_LEN }>>;
+
 /// The key pair for a validator set.
 ///
 /// This is their Ristretto key, used for publishing data onto Serai, and their key on the external
 /// network.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct KeyPair(pub Public, pub ExternalKey);

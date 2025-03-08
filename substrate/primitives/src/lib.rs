@@ -84,3 +84,15 @@ impl From<sp_core::H256> for BlockHash {
 // These share encodings as 32-byte arrays
 impl scale::EncodeLike<sp_core::H256> for BlockHash {}
 impl scale::EncodeLike<sp_core::H256> for &BlockHash {}
+
+#[doc(hidden)]
+pub mod prelude {
+  pub use crate::{BlockNumber, BlockHash};
+  pub use crate::constants::*;
+  pub use crate::address::*;
+  pub use crate::coin::*;
+  pub use crate::balance::*;
+  pub use crate::network_id::*;
+  pub use crate::validator_sets::*;
+  pub use crate::instructions::*;
+}

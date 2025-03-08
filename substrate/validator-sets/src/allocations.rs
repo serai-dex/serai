@@ -5,9 +5,9 @@ use serai_primitives::{constants::MAX_KEY_SHARES_PER_SET, network_id::NetworkId,
 use frame_support::storage::{StorageMap, StoragePrefixedMap};
 
 /// The key to use for the allocations map.
-type AllocationsKey = (NetworkId, Public);
+pub(crate) type AllocationsKey = (NetworkId, Public);
 /// The key to use for the sorted allocations map.
-type SortedAllocationsKey = (NetworkId, [u8; 8], [u8; 16], Public);
+pub(crate) type SortedAllocationsKey = (NetworkId, [u8; 8], [u8; 16], Public);
 
 /// The storage underlying `Allocations`.
 ///
@@ -150,11 +150,8 @@ impl<Storage: AllocationsStorage> Allocations for Storage {
   }
 
   fn expected_key_shares(network: NetworkId, allocation_per_key_share: Amount) -> u64 {
-    let mut validators_len = 0;
     let mut total_key_shares = 0;
     for (_, amount) in Self::iter_allocations(network, allocation_per_key_share) {
-      validators_len += 1;
-
       let key_shares = amount.0 / allocation_per_key_share.0;
       total_key_shares += key_shares;
 

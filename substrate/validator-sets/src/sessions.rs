@@ -7,21 +7,21 @@ use serai_primitives::{
   validator_sets::{Session, ValidatorSet, amortize_excess_key_shares},
 };
 
-use frame_support::storage::{StorageValue, StorageMap, StoragePrefixedMap};
+use frame_support::storage::{StorageValue, StorageMap, StorageDoubleMap, StoragePrefixedMap};
 
 use crate::allocations::*;
 
 /// The list of genesis validators.
-type GenesisValidators = BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES_PER_SET_U32 }>>;
+pub(crate) type GenesisValidators = BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES_PER_SET_U32 }>>;
 
 /// The key for the SelectedValidators map.
-type SelectedValidatorsKey = (ValidatorSet, [u8; 16], Public);
+pub(crate) type SelectedValidatorsKey = (ValidatorSet, [u8; 16], Public);
 
 pub(crate) trait SessionsStorage: AllocationsStorage {
   /// The genesis validators
   ///
   /// The usage of is shared with the rest of the pallet. `Sessions` only reads it.
-  type GenesisValidators: StorageValue<GenesisValidators, Query = GenesisValidators>;
+  type GenesisValidators: StorageValue<GenesisValidators, Query = Option<GenesisValidators>>;
 
   /// The allocation required for a key share.
   ///
@@ -44,12 +44,17 @@ pub(crate) trait SessionsStorage: AllocationsStorage {
   ///
   /// This is opaque and to be exclusively read/write by `Sessions`.
   // The value is how many key shares the validator has.
-  type SelectedValidators: StorageMap<SelectedValidatorsKey, u64> + StoragePrefixedMap<()>;
+  type SelectedValidators: StorageMap<SelectedValidatorsKey, u64> + StoragePrefixedMap<u64>;
 
   /// The total allocated stake for a network.
   ///
   /// This is opaque and to be exclusively read/write by `Sessions`.
   type TotalAllocatedStake: StorageMap<NetworkId, Amount, Query = Option<Amount>>;
+
+  /// The delayed deallocations.
+  ///
+  /// This is opaque and to be exclusively read/write by `Sessions`.
+  type DelayedDeallocations: StorageDoubleMap<Public, Session, Amount, Query = Option<Amount>>;
 }
 
 /// The storage key for the SelectedValidators map.
@@ -58,7 +63,7 @@ fn selected_validators_key(set: ValidatorSet, key: Public) -> SelectedValidators
   (set, hash, key)
 }
 
-fn selected_validators<Storage: StorageMap<SelectedValidatorsKey, u64> + StoragePrefixedMap<()>>(
+fn selected_validators<Storage: StoragePrefixedMap<u64>>(
   set: ValidatorSet,
 ) -> impl Iterator<Item = (Public, u64)> {
   let mut prefix = Storage::final_prefix().to_vec();
@@ -77,11 +82,7 @@ fn selected_validators<Storage: StorageMap<SelectedValidatorsKey, u64> + Storage
   )
 }
 
-fn clear_selected_validators<
-  Storage: StorageMap<SelectedValidatorsKey, u64> + StoragePrefixedMap<()>,
->(
-  set: ValidatorSet,
-) {
+fn clear_selected_validators<Storage: StoragePrefixedMap<u64>>(set: ValidatorSet) {
   let mut prefix = Storage::final_prefix().to_vec();
   prefix.extend(&set.encode());
   assert!(matches!(
@@ -94,6 +95,17 @@ pub(crate) enum AllocationError {
   NoAllocationPerKeyShareSet,
   AllocationLessThanKeyShare,
   IntroducesSinglePointOfFailure,
+}
+
+#[must_use]
+pub(crate) enum DeallocationTimeline {
+  Immediate,
+  Delayed { unlocks_at: Session },
+}
+pub(crate) enum DeallocationError {
+  NoAllocationPerKeyShareSet,
+  NotEnoughAllocated,
+  RemainingAllocationLessThanKeyShare,
 }
 
 pub(crate) trait Sessions {
@@ -115,11 +127,6 @@ pub(crate) trait Sessions {
   /// latest-decided session.
   fn accept_handover(network: NetworkId);
 
-  /// Retire a validator set.
-  ///
-  /// This MUST be called only for sessions which are no longer current.
-  fn retire(set: ValidatorSet);
-
   /// Increase a validator's allocation.
   ///
   /// This does not perform any transfers of any coins/tokens. It solely performs the book-keeping
@@ -129,6 +136,16 @@ pub(crate) trait Sessions {
     validator: Public,
     amount: Amount,
   ) -> Result<(), AllocationError>;
+
+  /// Decrease a validator's allocation.
+  ///
+  /// This does not perform any transfers of any coins/tokens. It solely performs the book-keeping
+  /// of it.
+  fn decrease_allocation(
+    network: NetworkId,
+    validator: Public,
+    amount: Amount,
+  ) -> Result<DeallocationTimeline, DeallocationError>;
 }
 
 impl<Storage: SessionsStorage> Sessions for Storage {
@@ -176,6 +193,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
 
     if include_genesis_validators {
       let mut genesis_validators = Storage::GenesisValidators::get()
+        .expect("genesis validators wasn't set")
         .into_iter()
         .map(|validator| (validator, 1))
         .collect::<Vec<_>>();
@@ -232,16 +250,14 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     }
     // Update the total allocated stake variable to the current session
     Storage::TotalAllocatedStake::set(network, Some(total_allocated_stake));
-  }
 
-  fn retire(set: ValidatorSet) {
-    assert!(
-      Some(set.session).map(|session| session.0) <
-        Storage::CurrentSession::get(set.network).map(|session| session.0),
-      "retiring a set which is active/upcoming"
-    );
-    // Clean-up this set's storage
-    clear_selected_validators::<Storage::SelectedValidators>(set);
+    // Clean-up the historic set's storage, if one exists
+    if let Some(historic_session) = current.0.checked_sub(2).map(Session) {
+      clear_selected_validators::<Storage::SelectedValidators>(ValidatorSet {
+        network,
+        session: historic_session,
+      });
+    }
   }
 
   fn increase_allocation(
@@ -309,5 +325,87 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     }
 
     Ok(())
+  }
+
+  fn decrease_allocation(
+    network: NetworkId,
+    validator: Public,
+    amount: Amount,
+  ) -> Result<DeallocationTimeline, DeallocationError> {
+    /*
+      Decrease the allocation.
+
+      This doesn't affect the key shares, as that's immutable after creation, and doesn't affect
+      affect the `TotalAllocatedStake` as the validator either isn't current or the deallocation
+      will be queued *but is still considered allocated for this session*.
+
+      When the next set is selected, and becomes current, `TotalAllocatedStake` will be updated
+      per the allocations as-is.
+    */
+    {
+      let Some(allocation_per_key_share) = Storage::AllocationPerKeyShare::get(network) else {
+        Err(DeallocationError::NoAllocationPerKeyShareSet)?
+      };
+
+      let existing_allocation = Self::get_allocation(network, validator).unwrap_or(Amount(0));
+      let new_allocation =
+        (existing_allocation - amount).ok_or(DeallocationError::NotEnoughAllocated)?;
+      if (new_allocation != Amount(0)) && (new_allocation < allocation_per_key_share) {
+        Err(DeallocationError::RemainingAllocationLessThanKeyShare)?
+      }
+
+      Self::set_allocation(network, validator, new_allocation);
+    }
+
+    /*
+      For a validator present in set #n, they should only be able to deallocate once set #n+2 is
+      current. That means if set #n is malicious, and they rotate to a malicious set #n+1 with a
+      reduced stake requirement, further handovers can be stopped during set #n+1 (along with
+      stopping any pending deallocations).
+    */
+    {
+      let check_presence = |session| {
+        Storage::SelectedValidators::contains_key(selected_validators_key(
+          ValidatorSet { network, session },
+          validator,
+        ))
+      };
+      // Find the latest set this validator was present in, which isn't historic
+      let find_latest_session = || {
+        // Check the latest decided session
+        if let Some(latest) = Storage::LatestDecidedSession::get(network) {
+          if check_presence(latest) {
+            return Some(latest);
+          }
+
+          // If there was a latest decided session, but we weren't in it, check current
+          if let Some(current) = Storage::CurrentSession::get(network) {
+            if check_presence(current) {
+              return Some(current);
+            }
+            // Finally, check the prior session, as we shouldn't be able to deallocate from a
+            // session we were in solely because we weren't selected for further sessions
+            if let Some(prior) = current.0.checked_sub(1).map(Session) {
+              if check_presence(prior) {
+                return Some(prior);
+              }
+            }
+          }
+        }
+        None
+      };
+      if let Some(present) = find_latest_session() {
+        // Because they were present in this session, determine the session this unlocks at
+        let unlocks_at = Session(present.0 + 2);
+        Storage::DelayedDeallocations::mutate(validator, unlocks_at, |delayed| {
+          *delayed = Some((delayed.unwrap_or(Amount(0)) + amount).unwrap());
+        });
+        return Ok(DeallocationTimeline::Delayed { unlocks_at });
+      }
+    }
+
+    // Because the network either doesn't have a current session, or this validator wasn't present,
+    // immediately handle the deallocation
+    Ok(DeallocationTimeline::Immediate)
   }
 }

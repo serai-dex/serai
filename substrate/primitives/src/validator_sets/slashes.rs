@@ -20,6 +20,10 @@ fn downtime_per_slash_point(validators: NonZero<u16>) -> Duration {
 
 /// A slash for a validator.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub enum Slash {
   /// The slash points accumulated by this validator.
   ///
@@ -198,6 +202,10 @@ impl Slash {
 
 /// A report of all slashes incurred for a `ValidatorSet`.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct SlashReport(
   #[borsh(
     serialize_with = "crate::borsh_serialize_bounded_vec",
