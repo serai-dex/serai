@@ -28,6 +28,11 @@ pub(crate) fn test_key() -> (Scalar, PublicKey) {
 }
 
 #[test]
+fn test_identity_key() {
+  assert!(PublicKey::new(ProjectivePoint::IDENTITY).is_none());
+}
+
+#[test]
 fn test_odd_key() {
   // We generate a valid key to ensure there's not some distinct reason this key is invalid
   let (_, key) = test_key();

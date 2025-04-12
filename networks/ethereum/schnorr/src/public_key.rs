@@ -1,5 +1,5 @@
 use subtle::Choice;
-use group::ff::PrimeField;
+use group::{ff::PrimeField, Group};
 use k256::{
   elliptic_curve::{
     ops::Reduce,
@@ -22,6 +22,10 @@ impl PublicKey {
   /// bounds such as parity).
   #[must_use]
   pub fn new(A: ProjectivePoint) -> Option<PublicKey> {
+    if bool::from(A.is_identity()) {
+      None?;
+    }
+
     let affine = A.to_affine();
 
     // Only allow even keys to save a word within Ethereum
