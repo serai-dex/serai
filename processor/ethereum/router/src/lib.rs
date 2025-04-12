@@ -292,13 +292,22 @@ impl Router {
     self.address
   }
 
+  /// Get the signature data signed in place of the actual signature.
+  fn signature_data(chain_id: U256, router_address: Address, nonce: u64) -> abi::Signature {
+    let mut s = [0; 32];
+    s[.. 20].copy_from_slice(router_address.as_slice());
+    s[24 ..].copy_from_slice(&nonce.to_be_bytes());
+    abi::Signature { c: chain_id.into(), s: s.into() }
+  }
+
   /// Get the message to be signed in order to confirm the next key for Serai.
-  pub fn confirm_next_serai_key_message(chain_id: U256, nonce: u64) -> Vec<u8> {
-    abi::confirmNextSeraiKeyCall::new((abi::Signature {
-      c: chain_id.into(),
-      s: U256::try_from(nonce).unwrap().into(),
-    },))
-    .abi_encode()
+  pub fn confirm_next_serai_key_message(
+    chain_id: U256,
+    router_address: Address,
+    nonce: u64,
+  ) -> Vec<u8> {
+    abi::confirmNextSeraiKeyCall::new((Self::signature_data(chain_id, router_address, nonce),))
+      .abi_encode()
   }
 
   /// Construct a transaction to confirm the next key representing Serai.
@@ -313,9 +322,14 @@ impl Router {
   }
 
   /// Get the message to be signed in order to update the key for Serai.
-  pub fn update_serai_key_message(chain_id: U256, nonce: u64, key: &PublicKey) -> Vec<u8> {
+  pub fn update_serai_key_message(
+    chain_id: U256,
+    router_address: Address,
+    nonce: u64,
+    key: &PublicKey,
+  ) -> Vec<u8> {
     abi::updateSeraiKeyCall::new((
-      abi::Signature { c: chain_id.into(), s: U256::try_from(nonce).unwrap().into() },
+      Self::signature_data(chain_id, router_address, nonce),
       key.eth_repr().into(),
     ))
     .abi_encode()
@@ -371,13 +385,14 @@ impl Router {
   /// Get the message to be signed in order to execute a series of `OutInstruction`s.
   pub fn execute_message(
     chain_id: U256,
+    router_address: Address,
     nonce: u64,
     coin: Coin,
     fee: U256,
     outs: OutInstructions,
   ) -> Vec<u8> {
     abi::executeCall::new((
-      abi::Signature { c: chain_id.into(), s: U256::try_from(nonce).unwrap().into() },
+      Self::signature_data(chain_id, router_address, nonce),
       Address::from(coin),
       fee,
       outs.0,
@@ -399,12 +414,14 @@ impl Router {
   }
 
   /// Get the message to be signed in order to trigger the escape hatch.
-  pub fn escape_hatch_message(chain_id: U256, nonce: u64, escape_to: Address) -> Vec<u8> {
-    abi::escapeHatchCall::new((
-      abi::Signature { c: chain_id.into(), s: U256::try_from(nonce).unwrap().into() },
-      escape_to,
-    ))
-    .abi_encode()
+  pub fn escape_hatch_message(
+    chain_id: U256,
+    router_address: Address,
+    nonce: u64,
+    escape_to: Address,
+  ) -> Vec<u8> {
+    abi::escapeHatchCall::new((Self::signature_data(chain_id, router_address, nonce), escape_to))
+      .abi_encode()
   }
 
   /// Construct a transaction to trigger the escape hatch.

@@ -8,7 +8,12 @@ use crate::tests::*;
 
 impl Test {
   pub(crate) fn escape_hatch_tx(&self, escape_to: Address) -> TxLegacy {
-    let msg = Router::escape_hatch_message(self.chain_id, self.state.next_nonce, escape_to);
+    let msg = Router::escape_hatch_message(
+      self.chain_id,
+      self.router.address(),
+      self.state.next_nonce,
+      escape_to,
+    );
     let sig = sign(self.state.key.unwrap(), &msg);
     let mut tx = self.router.escape_hatch(escape_to, &sig);
     tx.gas_limit = Router::ESCAPE_HATCH_GAS + 5_000;

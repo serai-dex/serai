@@ -185,6 +185,10 @@ contract Router is IRouterWithoutCollisions {
     // Read _nextNonce into memory as the nonce we'll use
     nonceUsed = _nextNonce;
 
+    // We overwrite the signature response with the Router contract's address concatenated with the
+    // nonce. This is safe until the nonce exceeds 2**96, which is infeasible to do on-chain
+    uint256 signatureResponseOverwrite = (uint256(uint160(address(this))) << 96) | nonceUsed;
+
     // Declare memory to copy the signature out to
     bytes32 signatureC;
     bytes32 signatureS;
@@ -199,7 +203,7 @@ contract Router is IRouterWithoutCollisions {
       // Overwrite the signature challenge with the chain ID
       mstore(add(message, 36), chainID)
       // Overwrite the signature response with the nonce
-      mstore(add(message, 68), nonceUsed)
+      mstore(add(message, 68), signatureResponseOverwrite)
 
       // Calculate the message hash
       messageHash := keccak256(add(message, 32), messageLen)

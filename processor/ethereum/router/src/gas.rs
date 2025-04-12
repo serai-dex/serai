@@ -151,11 +151,11 @@ impl Router {
     the correct set of prices for the network they're operating on.
   */
   /// The gas used by `confirmSeraiKey`.
-  pub const CONFIRM_NEXT_SERAI_KEY_GAS: u64 = 57_736;
+  pub const CONFIRM_NEXT_SERAI_KEY_GAS: u64 = 57_753;
   /// The gas used by `updateSeraiKey`.
-  pub const UPDATE_SERAI_KEY_GAS: u64 = 60_045;
+  pub const UPDATE_SERAI_KEY_GAS: u64 = 60_062;
   /// The gas used by `escapeHatch`.
-  pub const ESCAPE_HATCH_GAS: u64 = 61_094;
+  pub const ESCAPE_HATCH_GAS: u64 = 61_111;
 
   /// The key to use when performing gas estimations.
   ///
@@ -278,7 +278,7 @@ impl Router {
       // Use a nonce of 1
       ProjectivePoint::GENERATOR,
       &public_key,
-      &Self::execute_message(CHAIN_ID, 1, coin, shimmed_fee, outs.clone()),
+      &Self::execute_message(CHAIN_ID, self.address, 1, coin, shimmed_fee, outs.clone()),
     );
     let s = Scalar::ONE + (c * private_key);
     let sig = Signature::new(c, s).unwrap();
