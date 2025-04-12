@@ -540,8 +540,8 @@ async fn test_empty_execute() {
   test.confirm_next_serai_key().await;
 
   {
-    let gas = test.router.execute_gas(Coin::Ether, U256::from(1), &[].as_slice().into());
-    let fee = U256::from(gas);
+    let (gas, fee) =
+      test.router.execute_gas_and_fee(Coin::Ether, U256::from(1), &[].as_slice().into());
 
     let () = test
       .provider
@@ -581,8 +581,8 @@ async fn test_empty_execute() {
       assert_eq!(test.provider.estimate_gas(call).await.unwrap(), 21_000 + 16);
     }
 
-    let gas = test.router.execute_gas(Coin::Erc20(token), U256::from(0), &[].as_slice().into());
-    let fee = U256::from(0);
+    let (gas, fee) =
+      test.router.execute_gas_and_fee(Coin::Erc20(token), U256::from(0), &[].as_slice().into());
     let (_tx, gas_used) = test.execute(Coin::Erc20(token), fee, [].as_slice().into(), vec![]).await;
     const UNUSED_GAS: u64 = Router::GAS_FOR_ERC20_CALL - 16;
     assert_eq!(gas_used + UNUSED_GAS, gas);
@@ -600,8 +600,7 @@ async fn test_eth_address_out_instruction() {
   let out_instructions =
     OutInstructions::from([(SeraiEthereumAddress::Address(rand_address), amount_out)].as_slice());
 
-  let gas = test.router.execute_gas(Coin::Ether, U256::from(1), &out_instructions);
-  let fee = U256::from(gas);
+  let (gas, fee) = test.router.execute_gas_and_fee(Coin::Ether, U256::from(1), &out_instructions);
 
   let () = test
     .provider
@@ -638,8 +637,7 @@ async fn test_erc20_address_out_instruction() {
   let out_instructions =
     OutInstructions::from([(SeraiEthereumAddress::Address(rand_address), amount_out)].as_slice());
 
-  let gas = test.router.execute_gas(coin, U256::from(1), &out_instructions);
-  let fee = U256::from(gas);
+  let (gas, fee) = test.router.execute_gas_and_fee(coin, U256::from(1), &out_instructions);
 
   // Mint to the Router the necessary amount of the ERC20
   erc20.mint(&test, test.router.address(), amount_out + fee).await;
@@ -674,8 +672,7 @@ async fn test_eth_code_out_instruction() {
     .as_slice(),
   );
 
-  let gas = test.router.execute_gas(Coin::Ether, U256::from(1), &out_instructions);
-  let fee = U256::from(gas);
+  let (gas, fee) = test.router.execute_gas_and_fee(Coin::Ether, U256::from(1), &out_instructions);
   let (tx, gas_used) = test.execute(Coin::Ether, fee, out_instructions, vec![true]).await;
 
   // We use call-traces here to determine how much gas was allowed but unused due to the complexity
@@ -721,8 +718,7 @@ async fn test_eth_code_out_instruction_reverts() {
     .as_slice(),
   );
 
-  let gas = test.router.execute_gas(Coin::Ether, U256::from(1), &out_instructions);
-  let fee = U256::from(gas);
+  let (gas, fee) = test.router.execute_gas_and_fee(Coin::Ether, U256::from(1), &out_instructions);
   let (tx, gas_used) = test.execute(Coin::Ether, fee, out_instructions, vec![true]).await;
 
   let unused_gas = test.gas_unused_by_calls(&tx).await;
@@ -744,8 +740,7 @@ async fn test_erc20_code_out_instruction() {
       .as_slice(),
   );
 
-  let gas = test.router.execute_gas(coin, U256::from(1), &out_instructions);
-  let fee = U256::from(gas);
+  let (gas, fee) = test.router.execute_gas_and_fee(coin, U256::from(1), &out_instructions);
 
   // Mint to the Router the necessary amount of the ERC20
   erc20.mint(&test, test.router.address(), amount_out + fee).await;
@@ -777,11 +772,11 @@ async fn test_result_decoding() {
     .as_slice(),
   );
 
-  let gas = test.router.execute_gas(Coin::Ether, U256::from(0), &out_instructions);
+  let (gas, fee) = test.router.execute_gas_and_fee(Coin::Ether, U256::from(0), &out_instructions);
 
   // We should decode these in the correct order (not `false, true, true`)
   let (_tx, gas_used) =
-    test.execute(Coin::Ether, U256::from(0), out_instructions, vec![true, true, false]).await;
+    test.execute(Coin::Ether, fee, out_instructions, vec![true, true, false]).await;
   // We don't check strict equality as we don't know how much gas was used by the reverted call
   // (even with the trace), solely that it used less than or equal to the limit
   assert!(gas_used <= gas);
@@ -817,9 +812,8 @@ async fn test_reentrancy() {
     .as_slice(),
   );
 
-  let gas = test.router.execute_gas(Coin::Ether, U256::from(0), &out_instructions);
-  let (_tx, gas_used) =
-    test.execute(Coin::Ether, U256::from(0), out_instructions, vec![true]).await;
+  let (gas, fee) = test.router.execute_gas_and_fee(Coin::Ether, U256::from(0), &out_instructions);
+  let (_tx, gas_used) = test.execute(Coin::Ether, fee, out_instructions, vec![true]).await;
   // Even though this doesn't have failed `OutInstruction`s, our logic is incomplete upon any
   // failed internal calls for some reason. That's fine, as the gas yielded is still the worst-case
   // (which this isn't a counter-example to) and is validated to be the worst-case, but is peculiar
@@ -883,8 +877,7 @@ async fn fuzz_test_out_instructions_gas() {
     };
 
     let fee_per_gas = U256::from(1) + U256::from(OsRng.next_u64() % 10);
-    let gas = test.router.execute_gas(coin, fee_per_gas, &out_instructions);
-    let fee = U256::from(gas) * fee_per_gas;
+    let (gas, fee) = test.router.execute_gas_and_fee(coin, fee_per_gas, &out_instructions);
     // All of these should have succeeded
     let (tx, gas_used) =
       test.execute(coin, fee, out_instructions.clone(), vec![true; out_instructions.0.len()]).await;
@@ -895,4 +888,68 @@ async fn fuzz_test_out_instructions_gas() {
       "{coin:?} {fee_per_gas:?} {out_instructions_original:?}"
     );
   }
+}
+
+#[tokio::test]
+async fn test_gas_increases_then_decreases() {
+  /*
+    This specific batch of `OutInstruction`s causes the gas to be initially calculated, and then
+    increase as the proper fee is written in (due to the increased amount of non-zero bytes). But
+    then, as the fee is updated until the final fee no longer increases the gas used, the gas
+    actually goes *back down*. To then derive the fee from this reduced gas causes the gas to go
+    back up.
+
+    A prior version of this library would return the reduced amount of gas fee in this edge case,
+    which only rarely appeared via the fuzz test (yet did once, yielding this). Then, it'd derive
+    the fee from it, and expect the realized transaction to have parity (causing a test failure as
+    it didn't). Now, `execute_gas` is `execute_gas_and_fee`, yielding both the gas which is
+    expected *and the fee for it*. This fee is guaranteed to cost the reported amount of gas,
+    resolving this issue.
+  */
+  #[rustfmt::skip]
+  let out_instructions = vec![
+    (SeraiEthereumAddress::Address(**Address::from([73, 151, 53, 42, 64, 102, 196, 80, 244, 167, 149, 81, 236, 231, 65, 18, 68, 196, 173, 20])), U256::from(1u8)),
+    (SeraiEthereumAddress::Address(**Address::from([7, 232, 97, 33, 54, 141, 246, 45, 29, 138, 221, 30, 2, 179, 142, 165, 169, 45, 143, 126])), U256::from(1u8)),
+    (SeraiEthereumAddress::Contract(ContractDeployment::new(100000, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), U256::from(1u8)),
+    (SeraiEthereumAddress::Contract(ContractDeployment::new(100000, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), U256::from(1u8)),
+    (SeraiEthereumAddress::Address(**Address::from([73, 151, 53, 42, 64, 102, 196, 80, 244, 167, 149, 81, 236, 231, 65, 18, 68, 196, 173, 20])), U256::from(0u8)),
+    (SeraiEthereumAddress::Contract(ContractDeployment::new(100000, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), U256::from(1u8)),
+    (SeraiEthereumAddress::Address(**Address::from([34, 132, 167, 44, 12, 171, 57, 177, 197, 88, 60, 255, 68, 75, 2, 139, 76, 138, 78, 222])), U256::from(1u8)),
+    (SeraiEthereumAddress::Address(**Address::from([221, 218, 210, 119, 213, 189, 65, 118, 205, 113, 19, 11, 83, 58, 129, 203, 123, 76, 202, 99])), U256::from(0u8)),
+    (SeraiEthereumAddress::Contract(ContractDeployment::new(100000, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), U256::from(0u8)),
+    (SeraiEthereumAddress::Address(**Address::from([34, 132, 167, 44, 12, 171, 57, 177, 197, 88, 60, 255, 68, 75, 2, 139, 76, 138, 78, 222])), U256::from(0u8)),
+    (SeraiEthereumAddress::Address(**Address::from([82, 31, 116, 111, 9, 110, 56, 51, 122, 38, 10, 227, 36, 134, 181, 185, 255, 149, 195, 254])), U256::from(1u8)),
+    (SeraiEthereumAddress::Address(**Address::from([36, 68, 76, 140, 254, 107, 233, 107, 186, 85, 5, 37, 65, 201, 63, 17, 135, 244, 148, 1])), U256::from(1u8)),
+    (SeraiEthereumAddress::Contract(ContractDeployment::new(100000, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), U256::from(1u8)),
+    (SeraiEthereumAddress::Contract(ContractDeployment::new(100000, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), U256::from(0u8)),
+    (SeraiEthereumAddress::Address(**Address::from([34, 132, 167, 44, 12, 171, 57, 177, 197, 88, 60, 255, 68, 75, 2, 139, 76, 138, 78, 222])), U256::from(1u8)),
+    (SeraiEthereumAddress::Address(**Address::from([26, 54, 156, 184, 48, 50, 23, 219, 43, 54, 56, 131, 245, 126, 70, 17, 235, 56, 130, 124])), U256::from(1u8)),
+    (SeraiEthereumAddress::Address(**Address::from([152, 27, 239, 11, 196, 99, 61, 136, 23, 8, 58, 242, 166, 235, 106, 167, 45, 175, 69, 247])), U256::from(0u8)),
+    (SeraiEthereumAddress::Address(**Address::from([152, 27, 239, 11, 196, 99, 61, 136, 23, 8, 58, 242, 166, 235, 106, 167, 45, 175, 69, 247])), U256::from(0u8)),
+    (SeraiEthereumAddress::Contract(ContractDeployment::new(100000, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), U256::from(0u8)),
+    (SeraiEthereumAddress::Contract(ContractDeployment::new(100000, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), U256::from(0u8)),
+    (SeraiEthereumAddress::Address(**Address::from([7, 232, 97, 33, 54, 141, 246, 45, 29, 138, 221, 30, 2, 179, 142, 165, 169, 45, 143, 126])), U256::from(0u8)),
+    (SeraiEthereumAddress::Contract(ContractDeployment::new(100000, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), U256::from(0u8)),
+    (SeraiEthereumAddress::Contract(ContractDeployment::new(100000, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), U256::from(0u8)),
+    (SeraiEthereumAddress::Contract(ContractDeployment::new(100000, vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]).unwrap()), U256::from(1u8))
+  ];
+
+  let mut test = Test::new().await;
+  test.confirm_next_serai_key().await;
+
+  let out_instructions = OutInstructions::from(out_instructions.as_slice());
+
+  let coin = {
+    let erc20 = Erc20::deploy(&test).await;
+    erc20.mint(&test, test.router.address(), U256::from(1_000_000_000)).await;
+    Coin::Erc20(erc20.address())
+  };
+
+  let fee_per_gas = U256::from(4);
+  let (gas, fee) = test.router.execute_gas_and_fee(coin, fee_per_gas, &out_instructions);
+  assert!((U256::from(gas) * fee_per_gas) != fee);
+  let (tx, gas_used) =
+    test.execute(coin, fee, out_instructions.clone(), vec![true; out_instructions.0.len()]).await;
+  let unused_gas = test.gas_unused_by_calls(&tx).await;
+  assert_eq!(gas_used + unused_gas, gas);
 }

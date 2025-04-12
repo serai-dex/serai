@@ -241,9 +241,12 @@ impl Router {
   }
 
   /// The worst-case gas cost for a legacy transaction which executes this batch.
-  ///
-  /// This assumes the fee will be non-zero.
-  pub fn execute_gas(&self, coin: Coin, fee_per_gas: U256, outs: &OutInstructions) -> u64 {
+  pub fn execute_gas_and_fee(
+    &self,
+    coin: Coin,
+    fee_per_gas: U256,
+    outs: &OutInstructions,
+  ) -> (u64, U256) {
     // Unfortunately, we can't cache this in self, despite the following code being written such
     // that a common EVM instance could be used, as revm's types aren't Send/Sync and we expect the
     // Router to be send/sync
@@ -252,10 +255,11 @@ impl Router {
       Coin::Erc20(erc20) => Some(erc20),
     });
 
-    let fee = match coin {
+    let shimmed_fee = match coin {
       Coin::Ether => {
-        // Use a fee of 1 so the fee payment is recognized as positive-value
-        let fee = U256::from(1);
+        // Use a fee of 1 so the fee payment is recognized as positive-value, if the fee is
+        // non-zero
+        let fee = if fee_per_gas == U256::ZERO { U256::ZERO } else { U256::ONE };
 
         // Set a balance of the amount sent out to ensure we don't error on that premise
         gas_estimator.data.ctx.modify_db(|db| {
@@ -274,7 +278,7 @@ impl Router {
       // Use a nonce of 1
       ProjectivePoint::GENERATOR,
       &public_key,
-      &Self::execute_message(CHAIN_ID, 1, coin, fee, outs.clone()),
+      &Self::execute_message(CHAIN_ID, 1, coin, shimmed_fee, outs.clone()),
     );
     let s = Scalar::ONE + (c * private_key);
     let sig = Signature::new(c, s).unwrap();
@@ -305,7 +309,7 @@ impl Router {
       tx.data = abi::executeCall::new((
         abi::Signature::from(&sig),
         Address::from(coin),
-        fee,
+        shimmed_fee,
         outs.0.clone(),
       ))
       .abi_encode()
@@ -330,8 +334,14 @@ impl Router {
     };
     gas += gas_estimator.into_inspector().unused_gas;
 
-    // The transaction uses gas based on the amount of non-zero bytes in the calldata, which is
-    // variable to the fee, which is variable to the gas used. This iterates until parity
+    /*
+      The transaction pays an initial gas fee which is dependent on the length of the calldata and
+      the amount of non-zero bytes in the calldata. This is variable to the fee, which was prior
+      shimmed to be `1`.
+
+      Here, we calculate the actual fee, and update the initial gas fee accordingly. We then update
+      the fee again, until the initial gas fee stops increasing.
+    */
     let initial_gas = |fee, sig| {
       let gas = calculate_initial_tx_gas(
         SPEC_ID,
@@ -344,26 +354,37 @@ impl Router {
       assert_eq!(gas.floor_gas, 0);
       gas.initial_gas
     };
-    let mut current_initial_gas = initial_gas(fee, abi::Signature::from(&sig));
+    let mut current_initial_gas = initial_gas(shimmed_fee, abi::Signature::from(&sig));
+    // Remove the current initial gas from the transaction's gas
+    gas -= current_initial_gas;
     loop {
-      let fee = fee_per_gas * U256::from(gas);
+      // Calculate the would-be fee
+      let fee = fee_per_gas * U256::from(gas + current_initial_gas);
+      // Calculate the would-be gas for this fee
       let new_initial_gas =
         initial_gas(fee, abi::Signature { c: [0xff; 32].into(), s: [0xff; 32].into() });
+      // If the values are equal, or if it went down, return
+      /*
+        The gas will decrease if the new fee has more zero bytes in its encoding. Further
+        iterations are unhelpful as they'll simply loop infinitely for some inputs. Accordingly, we
+        return the current fee (which is for a very slightly higher gas rate) with the decreased
+        gas to ensure this algorithm terminates.
+      */
       if current_initial_gas >= new_initial_gas {
-        return gas;
+        return (gas + new_initial_gas, fee);
       }
-
-      gas += new_initial_gas - current_initial_gas;
+      // Update what the current initial gas is
       current_initial_gas = new_initial_gas;
     }
   }
 
-  /// The estimated fee for this `OutInstruction`.
+  /// The estimated gas for this `OutInstruction`.
   ///
   /// This does not model the quadratic costs incurred when in a batch, nor other misc costs such
   /// as the potential to cause one less zero byte in the fee's encoding. This is intended to
-  /// produce a per-`OutInstruction` fee to deduct from each `OutInstruction`, before all
-  /// `OutInstruction`s incur an amortized fee of what remains for the batch itself.
+  /// produce a per-`OutInstruction` value which can be ratioed against others to decide the fee to
+  /// deduct from each `OutInstruction`, before all `OutInstruction`s incur an amortized fee of
+  /// what remains for the batch itself.
   pub fn execute_out_instruction_gas_estimate(
     &mut self,
     coin: Coin,
@@ -372,11 +393,12 @@ impl Router {
     #[allow(clippy::map_entry)] // clippy doesn't realize the multiple mutable borrows
     if !self.empty_execute_gas.contains_key(&coin) {
       // This can't be de-duplicated across ERC20s due to the zero bytes in the address
-      let gas = self.execute_gas(coin, U256::from(0), &OutInstructions(vec![]));
+      let (gas, _fee) = self.execute_gas_and_fee(coin, U256::from(0), &OutInstructions(vec![]));
       self.empty_execute_gas.insert(coin, gas);
     }
 
-    let gas = self.execute_gas(coin, U256::from(0), &OutInstructions(vec![instruction]));
+    let (gas, _fee) =
+      self.execute_gas_and_fee(coin, U256::from(0), &OutInstructions(vec![instruction]));
     gas - self.empty_execute_gas[&coin]
   }
 }
