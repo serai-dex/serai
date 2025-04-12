@@ -3,7 +3,7 @@ use std::io;
 use ciphersuite::Secp256k1;
 use frost::dkg::ThresholdKeys;
 
-use alloy_core::primitives::U256;
+use alloy_core::primitives::{U256, Address as EthereumAddress};
 
 use serai_client::networks::ethereum::Address;
 
@@ -17,8 +17,20 @@ use crate::{output::OutputId, machine::ClonableTransctionMachine};
 
 #[derive(Clone, PartialEq, Debug)]
 pub(crate) enum Action {
-  SetKey { chain_id: U256, nonce: u64, key: PublicKey },
-  Batch { chain_id: U256, nonce: u64, coin: Coin, fee: U256, outs: Vec<(Address, U256)> },
+  SetKey {
+    chain_id: U256,
+    router_address: EthereumAddress,
+    nonce: u64,
+    key: PublicKey,
+  },
+  Batch {
+    chain_id: U256,
+    router_address: EthereumAddress,
+    nonce: u64,
+    coin: Coin,
+    fee: U256,
+    outs: Vec<(Address, U256)>,
+  },
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -33,25 +45,28 @@ impl Action {
 
   pub(crate) fn message(&self) -> Vec<u8> {
     match self {
-      Action::SetKey { chain_id, nonce, key } => {
-        Router::update_serai_key_message(*chain_id, *nonce, key)
+      Action::SetKey { chain_id, router_address, nonce, key } => {
+        Router::update_serai_key_message(*chain_id, *router_address, *nonce, key)
       }
-      Action::Batch { chain_id, nonce, coin, fee, outs } => Router::execute_message(
-        *chain_id,
-        *nonce,
-        *coin,
-        *fee,
-        OutInstructions::from(outs.as_ref()),
-      ),
+      Action::Batch { chain_id, router_address, nonce, coin, fee, outs } => {
+        Router::execute_message(
+          *chain_id,
+          *router_address,
+          *nonce,
+          *coin,
+          *fee,
+          OutInstructions::from(outs.as_ref()),
+        )
+      }
     }
   }
 
   pub(crate) fn eventuality(&self) -> Eventuality {
     Eventuality(match self {
-      Self::SetKey { chain_id: _, nonce, key } => {
+      Self::SetKey { chain_id: _, router_address: _, nonce, key } => {
         Executed::NextSeraiKeySet { nonce: *nonce, key: key.eth_repr() }
       }
-      Self::Batch { chain_id: _, nonce, .. } => {
+      Self::Batch { chain_id: _, router_address: _, nonce, .. } => {
         Executed::Batch { nonce: *nonce, message_hash: keccak256(self.message()), results: vec![] }
       }
     })
@@ -89,6 +104,10 @@ impl SignableTransaction for Action {
     reader.read_exact(&mut chain_id)?;
     let chain_id = U256::from_be_bytes(chain_id);
 
+    let mut router_address = [0; 20];
+    reader.read_exact(&mut router_address)?;
+    let router_address = EthereumAddress::from(router_address);
+
     let mut nonce = [0; 8];
     reader.read_exact(&mut nonce)?;
     let nonce = u64::from_le_bytes(nonce);
@@ -100,7 +119,7 @@ impl SignableTransaction for Action {
         let key =
           PublicKey::from_eth_repr(key).ok_or_else(|| io::Error::other("invalid key in Action"))?;
 
-        Action::SetKey { chain_id, nonce, key }
+        Action::SetKey { chain_id, router_address, nonce, key }
       }
       1 => {
         let coin = borsh::from_reader(reader)?;
@@ -123,22 +142,24 @@ impl SignableTransaction for Action {
 
           outs.push((address, amount));
         }
-        Action::Batch { chain_id, nonce, coin, fee, outs }
+        Action::Batch { chain_id, router_address, nonce, coin, fee, outs }
       }
       _ => unreachable!(),
     })
   }
   fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
     match self {
-      Self::SetKey { chain_id, nonce, key } => {
+      Self::SetKey { chain_id, router_address, nonce, key } => {
         writer.write_all(&[0])?;
         writer.write_all(&chain_id.to_be_bytes::<32>())?;
+        writer.write_all(router_address.as_slice())?;
         writer.write_all(&nonce.to_le_bytes())?;
         writer.write_all(&key.eth_repr())
       }
-      Self::Batch { chain_id, nonce, coin, fee, outs } => {
+      Self::Batch { chain_id, router_address, nonce, coin, fee, outs } => {
         writer.write_all(&[1])?;
         writer.write_all(&chain_id.to_be_bytes::<32>())?;
+        writer.write_all(router_address.as_slice())?;
         writer.write_all(&nonce.to_le_bytes())?;
         borsh::BorshSerialize::serialize(coin, writer)?;
         writer.write_all(&fee.as_le_bytes())?;

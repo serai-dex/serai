@@ -87,8 +87,10 @@ impl<D: Db> signers::TransactionPublisher<Transaction> for TransactionPublisher<
       let nonce = tx.0.nonce();
       // Convert from an Action (an internal representation of a signable event) to a TxLegacy
       let tx = match tx.0 {
-        Action::SetKey { chain_id: _, nonce: _, key } => router.update_serai_key(&key, &tx.1),
-        Action::Batch { chain_id: _, nonce: _, coin, fee, outs } => {
+        Action::SetKey { chain_id: _, router_address: _, nonce: _, key } => {
+          router.update_serai_key(&key, &tx.1)
+        }
+        Action::Batch { chain_id: _, router_address: _, nonce: _, coin, fee, outs } => {
           router.execute(coin, fee, OutInstructions::from(outs.as_ref()), &tx.1)
         }
       };

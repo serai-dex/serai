@@ -50,6 +50,7 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
   ) -> (Self::SignableTransaction, EventualityFor<Rpc<D>>) {
     let action = Action::SetKey {
       chain_id: self.chain_id,
+      router_address: if true { todo!("TODO") } else { Default::default() },
       nonce,
       key: PublicKey::new(new_key).expect("rotating to an invald key"),
     };
@@ -139,6 +140,7 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
 
         res.push(Action::Batch {
           chain_id: self.chain_id,
+          router_address: if true { todo!("TODO") } else { Default::default() },
           nonce,
           coin: coin_to_ethereum_coin(coin),
           fee: U256::try_from(total_gas).unwrap() * fee_per_gas,
