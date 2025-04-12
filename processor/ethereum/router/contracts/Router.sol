@@ -148,8 +148,8 @@ contract Router is IRouterWithoutCollisions {
 
   /**
    * @dev Verify a signature of the calldata, placed immediately after the function selector. The
-   *  calldata should be signed with the nonce taking the place of the signature's commitment to
-   *  its nonce, and the signature solution zeroed.
+   *  calldata should be signed with the chain ID taking the place of the signature's challenge, and
+   *  the smart contract's nonce taking the place of the signature's response.
    */
   /// @param key The key to verify the signature with
   function verifySignature(bytes32 key)
