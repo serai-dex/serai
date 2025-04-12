@@ -86,13 +86,13 @@ impl Erc20 {
     let call = TransactionRequest::default().to(self.0).input(TransactionInput::new(
       abi::TestERC20::balanceOfCall::new((account,)).abi_encode().into(),
     ));
-    U256::abi_decode(&test.provider.call(&call).await.unwrap(), true).unwrap()
+    U256::abi_decode(&test.provider.call(call).await.unwrap()).unwrap()
   }
 
   pub(crate) async fn router_approval(&self, test: &Test, account: Address) -> U256 {
     let call = TransactionRequest::default().to(self.0).input(TransactionInput::new(
       abi::TestERC20::allowanceCall::new((test.router.address(), account)).abi_encode().into(),
     ));
-    U256::abi_decode(&test.provider.call(&call).await.unwrap(), true).unwrap()
+    U256::abi_decode(&test.provider.call(call).await.unwrap()).unwrap()
   }
 }

@@ -5,13 +5,12 @@
 use k256::{elliptic_curve::sec1::ToEncodedPoint, ProjectivePoint};
 
 use alloy_core::{
-  primitives::{Address, U256, Bytes, PrimitiveSignature, TxKind},
+  primitives::{Address, U256, Bytes, Signature, TxKind},
   hex::FromHex,
 };
 use alloy_consensus::{SignableTransaction, TxLegacy, Signed};
 
 use alloy_rpc_types_eth::TransactionReceipt;
-use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
 use ethereum_primitives::{keccak256, deterministically_sign};
@@ -24,7 +23,7 @@ fn address(point: &ProjectivePoint) -> [u8; 20] {
 }
 
 /// Fund an account.
-pub async fn fund_account(provider: &RootProvider<SimpleRequest>, address: Address, value: U256) {
+pub async fn fund_account(provider: &RootProvider, address: Address, value: U256) {
   let _: () = provider
     .raw_request("anvil_setBalance".into(), [address.to_string(), value.to_string()])
     .await
@@ -32,10 +31,7 @@ pub async fn fund_account(provider: &RootProvider<SimpleRequest>, address: Addre
 }
 
 /// Publish an already-signed transaction.
-pub async fn publish_tx(
-  provider: &RootProvider<SimpleRequest>,
-  tx: Signed<TxLegacy>,
-) -> TransactionReceipt {
+pub async fn publish_tx(provider: &RootProvider, tx: Signed<TxLegacy>) -> TransactionReceipt {
   // Fund the sender's address
   fund_account(
     provider,
@@ -55,7 +51,7 @@ pub async fn publish_tx(
 ///
 /// The contract deployment will be done by a random account.
 pub async fn deploy_contract(
-  provider: &RootProvider<SimpleRequest>,
+  provider: &RootProvider,
   file_path: &str,
   constructor_arguments: &[u8],
 ) -> Address {
@@ -88,7 +84,7 @@ pub async fn deploy_contract(
 ///
 /// This assumes the wallet is funded.
 pub async fn send(
-  provider: &RootProvider<SimpleRequest>,
+  provider: &RootProvider,
   wallet: &k256::ecdsa::SigningKey,
   mut tx: TxLegacy,
 ) -> TransactionReceipt {
@@ -111,7 +107,7 @@ pub async fn send(
   );
 
   let mut bytes = vec![];
-  tx.into_signed(PrimitiveSignature::from(sig)).eip2718_encode(&mut bytes);
+  tx.into_signed(Signature::from(sig)).eip2718_encode(&mut bytes);
   let pending_tx = provider.send_raw_transaction(&bytes).await.unwrap();
   pending_tx.get_receipt().await.unwrap()
 }

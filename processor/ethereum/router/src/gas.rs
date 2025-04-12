@@ -1,26 +1,130 @@
+use core::convert::Infallible;
+
 use k256::{Scalar, ProjectivePoint};
 
-use alloy_core::primitives::{Address, U160, U256};
+use alloy_core::primitives::{Address, U256, Bytes};
 use alloy_sol_types::SolCall;
 
 use revm::{
-  primitives::*,
-  interpreter::{gas::*, opcode::InstructionTables, *},
-  db::{emptydb::EmptyDB, in_memory_db::InMemoryDB},
-  Handler, Context, EvmBuilder, Evm,
+  primitives::hardfork::SpecId,
+  bytecode::Bytecode,
+  state::AccountInfo,
+  database::{empty_db::EmptyDB, in_memory_db::InMemoryDB},
+  interpreter::{
+    gas::calculate_initial_tx_gas,
+    interpreter_action::{CallInputs, CallOutcome},
+    interpreter::EthInterpreter,
+    Interpreter,
+  },
+  handler::{
+    instructions::EthInstructions, PrecompileProvider, EthPrecompiles, EthFrame, MainnetHandler,
+  },
+  context::{
+    result::{EVMError, InvalidTransaction, ExecutionResult},
+    evm::{EvmData, Evm},
+    context::Context,
+    *,
+  },
+  inspector::{Inspector, InspectorHandler},
 };
 
 use ethereum_schnorr::{PublicKey, Signature};
 
 use crate::*;
 
+// The specification this uses
+const SPEC_ID: SpecId = SpecId::CANCUN;
+
 // The chain ID used for gas estimation
 const CHAIN_ID: U256 = U256::from_be_slice(&[1]);
+
+type RevmContext = Context<BlockEnv, TxEnv, CfgEnv, InMemoryDB, Journal<InMemoryDB>, ()>;
+
+fn precompiles() -> EthPrecompiles {
+  let mut precompiles = EthPrecompiles::default();
+  PrecompileProvider::<RevmContext>::set_spec(&mut precompiles, SPEC_ID);
+  precompiles
+}
+
+/*
+  Instead of attempting to solve the halting problem, we assume all CALLs take the worst-case
+  amount of gas (as we do have bounds on the gas they're allowed to take). This assumption is
+  implemented via an revm Inspector.
+
+  The Inspector is allowed to override the CALL directly. We don't do this due to the amount of
+  side effects a CALL has. Instead, we override the result.
+
+  In the case the ERC20 is called, we additionally have it return `true` (as expected for compliant
+  ERC20s, and as will trigger the worst-case gas consumption by the Router itself). This is done by
+  hooking `call_end`.
+*/
+pub(crate) struct WorstCaseCallInspector {
+  erc20: Option<Address>,
+  call_depth: usize,
+  unused_gas: u64,
+  override_immediate_call_return_value: bool,
+}
+impl Inspector<RevmContext> for WorstCaseCallInspector {
+  fn call(&mut self, _context: &mut RevmContext, _inputs: &mut CallInputs) -> Option<CallOutcome> {
+    self.call_depth += 1;
+    // Don't override the CALL immediately for prior described reasons
+    None
+  }
+
+  fn call_end(
+    &mut self,
+    _context: &mut RevmContext,
+    inputs: &CallInputs,
+    outcome: &mut CallOutcome,
+  ) {
+    self.call_depth -= 1;
+
+    /*
+      Mark the amount of gas left unused, for us to later assume will be used in practice.
+
+      This only runs if the call-depth is 1 (so only the Router-made calls have their gas so
+      tracked), and if it's not to a precompile. This latter condition isn't solely because we can
+      perfectly model precompiles (which wouldn't be worth the complexity) yet because the Router
+      does call precompiles (ecrecover) and accordingly has to model the gas of that correctly.
+    */
+    if (self.call_depth == 1) && (!precompiles().contains(&inputs.target_address)) {
+      let unused_gas = inputs.gas_limit - outcome.result.gas.spent();
+      self.unused_gas += unused_gas;
+
+      // Now that the CALL is over, flag we should normalize the values on the stack
+      self.override_immediate_call_return_value = true;
+    }
+
+    // If ERC20, provide the expected ERC20 return data
+    if Some(inputs.target_address) == self.erc20 {
+      outcome.result.output = true.abi_encode().into();
+    }
+  }
+
+  fn step(&mut self, interpreter: &mut Interpreter, _context: &mut RevmContext) {
+    if self.override_immediate_call_return_value {
+      // We fix this result to having succeeded, which triggers the most-expensive pathing within
+      // the Router contract itself (some paths return early if a CALL fails)
+      let return_value = interpreter.stack.pop().unwrap();
+      assert!((return_value == U256::ZERO) || (return_value == U256::ONE));
+      assert!(
+        interpreter.stack.push(U256::ONE),
+        "stack capacity couldn't fit item after popping an item"
+      );
+      self.override_immediate_call_return_value = false;
+    }
+  }
+}
 
 /// The object used for estimating gas.
 ///
 /// Due to `execute` heavily branching, we locally simulate calls with revm.
-pub(crate) type GasEstimator = Evm<'static, (), InMemoryDB>;
+pub(crate) type GasEstimator = Evm<
+  RevmContext,
+  WorstCaseCallInspector,
+  EthInstructions<EthInterpreter, RevmContext>,
+  EthPrecompiles,
+>;
 
 impl Router {
   const SMART_CONTRACT_NONCE_STORAGE_SLOT: U256 = U256::from_be_slice(&[0]);
@@ -114,114 +218,26 @@ impl Router {
       db
     };
 
-    // Create a custom handler so we can assume every CALL is the worst-case
-    let handler = {
-      let mut instructions = InstructionTables::<'_, _>::new_plain::<CancunSpec>();
-      instructions.update_boxed(revm::interpreter::opcode::CALL, {
-        move |call_op, interpreter, host: &mut Context<_, _>| {
-          let (address_called, value, return_addr, return_len) = {
-            let stack = &mut interpreter.stack;
-
-            let address = stack.peek(1).unwrap();
-            let value = stack.peek(2).unwrap();
-            let return_addr = stack.peek(5).unwrap();
-            let return_len = stack.peek(6).unwrap();
-
-            (
-              address,
-              value,
-              usize::try_from(return_addr).unwrap(),
-              usize::try_from(return_len).unwrap(),
-            )
-          };
-          let address_called =
-            Address::from(U160::from_be_slice(&address_called.to_be_bytes::<32>()[12 ..]));
-
-          // Have the original call op incur its costs as programmed
-          call_op(interpreter, host);
-
-          /*
-            Unfortunately, the call opcode executed only sets itself up, it doesn't handle the
-            entire inner call for us. We manually do so here by shimming the intended result. The
-            other option, on this path chosen, would be to shim the call-frame execution ourselves
-            and only then manipulate the result.
-
-            Ideally, we wouldn't override CALL, yet STOP/RETURN (the tail of the CALL) to avoid all
-            of this. Those overrides weren't being successfully hit in initial experiments, and
-            while this solution does appear overly complicated, it's sufficiently tested to justify
-            itself.
-
-            revm does cost the entire gas limit during the call setup. After the call completes,
-            it refunds whatever was unused. Since we manually complete the call here ourselves,
-            but don't implement that refund logic as we want the worst-case scenario, we do
-            successfully implement complete costing of the gas limit.
-          */
-
-          // Perform the call value transfer, which also marks the recipient as warm
-          assert!(host
-            .evm
-            .inner
-            .journaled_state
-            .transfer(
-              &interpreter.contract.target_address,
-              &address_called,
-              value,
-              &mut host.evm.inner.db
-            )
-            .unwrap()
-            .is_none());
-
-          // Clear the call-to-be
-          debug_assert!(matches!(interpreter.next_action, InterpreterAction::Call { .. }));
-          interpreter.next_action = InterpreterAction::None;
-          interpreter.instruction_result = InstructionResult::Continue;
-
-          // Clear the existing return data
-          interpreter.return_data_buffer.clear();
-
-          /*
-            If calling an ERC20, trigger the return data's worst-case by returning `true`
-            (as expected by compliant ERC20s). Else return none, as we expect none or won't bother
-            copying/decoding the return data.
-
-            This doesn't affect calls to ecrecover as those use STATICCALL and this overrides CALL
-            alone.
-          */
-          if Some(address_called) == erc20 {
-            interpreter.return_data_buffer = true.abi_encode().into();
-          }
-          // Also copy the return data into memory
-          let return_len = return_len.min(interpreter.return_data_buffer.len());
-          let needed_memory_size = return_addr + return_len;
-          if interpreter.shared_memory.len() < needed_memory_size {
-            assert!(interpreter.resize_memory(needed_memory_size));
-          }
-          interpreter
-            .shared_memory
-            .slice_mut(return_addr, return_len)
-            .copy_from_slice(&interpreter.return_data_buffer[.. return_len]);
-
-          // Finally, push the result of the call onto the stack
-          interpreter.stack.push(U256::from(1)).unwrap();
-        }
-      });
-      let mut handler = Handler::mainnet::<CancunSpec>();
-      handler.set_instruction_table(instructions);
-
-      handler
-    };
-
-    EvmBuilder::default()
-      .with_db(db)
-      .with_handler(handler)
-      .modify_cfg_env(|cfg| {
-        cfg.chain_id = CHAIN_ID.try_into().unwrap();
-      })
-      .modify_tx_env(|tx| {
-        tx.gas_limit = u64::MAX;
-        tx.transact_to = self.address.into();
-      })
-      .build()
+    Evm {
+      data: EvmData {
+        ctx: RevmContext::new(db, SPEC_ID)
+          .modify_cfg_chained(|cfg| {
+            cfg.chain_id = CHAIN_ID.try_into().unwrap();
+          })
+          .modify_tx_chained(|tx: &mut TxEnv| {
+            tx.gas_limit = u64::MAX;
+            tx.kind = self.address.into();
+          }),
+        inspector: WorstCaseCallInspector {
+          erc20,
+          call_depth: 0,
+          unused_gas: 0,
+          override_immediate_call_return_value: false,
+        },
+      },
+      instruction: EthInstructions::default(),
+      precompiles: precompiles(),
+    }
   }
 
   /// The worst-case gas cost for a legacy transaction which executes this batch.
@@ -242,11 +258,10 @@ impl Router {
         let fee = U256::from(1);
 
         // Set a balance of the amount sent out to ensure we don't error on that premise
-        {
-          let db = gas_estimator.db_mut();
+        gas_estimator.data.ctx.modify_db(|db| {
           let account = db.load_account(self.address).unwrap();
           account.info.balance = fee + outs.0.iter().map(|out| out.amount).sum::<U256>();
-        }
+        });
 
         fee
       }
@@ -271,8 +286,7 @@ impl Router {
       consistent use of nonce #1 shows storage read/writes aren't being persisted. They're solely
       returned upon execution in a `state` field we ignore.
     */
-    {
-      let tx = gas_estimator.tx_mut();
+    gas_estimator.data.ctx.modify_tx(|tx| {
       tx.caller = Address::from({
         /*
           We assume the transaction sender is not the destination of any `OutInstruction`, making
@@ -296,25 +310,35 @@ impl Router {
       ))
       .abi_encode()
       .into();
-    }
+    });
 
     // Execute the transaction
-    let mut gas = match gas_estimator.transact().unwrap().result {
+    let mut gas = match MainnetHandler::<
+      _,
+      EVMError<Infallible, InvalidTransaction>,
+      EthFrame<_, _, _>,
+    >::default()
+    .inspect_run(&mut gas_estimator)
+    .unwrap()
+    .result
+    {
       ExecutionResult::Success { gas_used, gas_refunded, .. } => {
         assert_eq!(gas_refunded, 0);
         gas_used
       }
       res => panic!("estimated execute transaction failed: {res:?}"),
     };
+    gas += gas_estimator.into_inspector().unused_gas;
 
     // The transaction uses gas based on the amount of non-zero bytes in the calldata, which is
-    // variable to the fee, which is variable to the gad used. This iterates until parity
+    // variable to the fee, which is variable to the gas used. This iterates until parity
     let initial_gas = |fee, sig| {
       let gas = calculate_initial_tx_gas(
-        SpecId::CANCUN,
+        SPEC_ID,
         &abi::executeCall::new((sig, Address::from(coin), fee, outs.0.clone())).abi_encode(),
         false,
-        &[],
+        0,
+        0,
         0,
       );
       assert_eq!(gas.floor_gas, 0);

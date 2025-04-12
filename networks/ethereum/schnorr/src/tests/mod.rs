@@ -32,7 +32,7 @@ mod abi {
   pub(crate) use TestSchnorr::*;
 }
 
-async fn setup_test() -> (AnvilInstance, Arc<RootProvider<SimpleRequest>>, Address) {
+async fn setup_test() -> (AnvilInstance, Arc<RootProvider>, Address) {
   let anvil = Anvil::new().spawn();
 
   let provider = Arc::new(RootProvider::new(
@@ -61,7 +61,7 @@ async fn setup_test() -> (AnvilInstance, Arc<RootProvider<SimpleRequest>>, Addre
 }
 
 async fn call_verify(
-  provider: &RootProvider<SimpleRequest>,
+  provider: &RootProvider,
   address: Address,
   public_key: &PublicKey,
   message: &[u8],
@@ -80,10 +80,8 @@ async fn call_verify(
     .abi_encode()
     .into(),
   ));
-  let bytes = provider.call(&call).await.unwrap();
-  let res = abi::verifyCall::abi_decode_returns(&bytes, true).unwrap();
-
-  res._0
+  let bytes = provider.call(call).await.unwrap();
+  abi::verifyCall::abi_decode_returns(&bytes).unwrap()
 }
 
 #[tokio::test]

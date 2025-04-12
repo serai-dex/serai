@@ -31,14 +31,14 @@ frost = { package = "modular-frost", path = "../../crypto/frost", default-featur
 
 k256 = { version = "^0.13.1", default-features = false, features = ["std"] }
 
-alloy-core = { version = "0.8", default-features = false }
+alloy-core = { version = "1", default-features = false }
 alloy-rlp  = { version = "0.3", default-features = false }
 
-alloy-rpc-types-eth = { version = "0.9", default-features = false }
-alloy-transport = { version = "0.9", default-features = false }
+alloy-rpc-types-eth = { version = "0.14", default-features = false }
+alloy-transport = { version = "0.14", default-features = false }
 alloy-simple-request-transport = { path = "../../networks/ethereum/alloy-simple-request-transport", default-features = false }
-alloy-rpc-client = { version = "0.9", default-features = false }
-alloy-provider = { version = "0.9", default-features = false }
+alloy-rpc-client = { version = "0.14", default-features = false }
+alloy-provider = { version = "0.14", default-features = false }
 
 serai-client = { path = "../../substrate/client", default-features = false, features = ["ethereum"] }
 

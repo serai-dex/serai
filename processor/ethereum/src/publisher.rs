@@ -4,7 +4,6 @@ use std::sync::Arc;
 use alloy_rlp::Encodable;
 
 use alloy_transport::{TransportErrorKind, RpcError};
-use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::RootProvider;
 
 use tokio::{
@@ -26,13 +25,13 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct TransactionPublisher<D: Db> {
   db: D,
-  rpc: Arc<RootProvider<SimpleRequest>>,
+  rpc: Arc<RootProvider>,
   router: Arc<RwLock<Option<Router>>>,
   relayer_url: String,
 }
 
 impl<D: Db> TransactionPublisher<D> {
-  pub(crate) fn new(db: D, rpc: Arc<RootProvider<SimpleRequest>>, relayer_url: String) -> Self {
+  pub(crate) fn new(db: D, rpc: Arc<RootProvider>, relayer_url: String) -> Self {
     Self { db, rpc, router: Arc::new(RwLock::new(None)), relayer_url }
   }
 

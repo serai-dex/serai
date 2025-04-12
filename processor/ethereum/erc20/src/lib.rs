@@ -11,7 +11,6 @@ use alloy_sol_types::{SolInterface, SolEvent};
 
 use alloy_rpc_types_eth::{Log, Filter, TransactionTrait};
 use alloy_transport::{TransportErrorKind, RpcError};
-use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
 use ethereum_primitives::LogIndex;
@@ -94,7 +93,7 @@ impl Erc20 {
   // Yielding THE top-level transfer would require tracing the transaction execution and isn't
   // worth the effort.
   async fn top_level_transfer(
-    provider: &RootProvider<SimpleRequest>,
+    provider: &RootProvider,
     erc20: Address,
     transaction_hash: [u8; 32],
     transfer_logs: &[Log],
@@ -112,15 +111,13 @@ impl Erc20 {
       return Ok(None);
     }
 
-    // Don't validate the encoding as this can't be re-encoded to an identical bytestring due
-    // to the additional data appended after the call itself
-    let Ok(call) = IERC20Calls::abi_decode(transaction.inner.input(), false) else {
+    let Ok(call) = IERC20Calls::abi_decode(transaction.inner.input()) else {
       return Ok(None);
     };
 
     // Extract the top-level call's from/to/value
     let (from, to, value) = match call {
-      IERC20Calls::transfer(transferCall { to, value }) => (transaction.from, to, value),
+      IERC20Calls::transfer(transferCall { to, value }) => (transaction.inner.signer(), to, value),
       IERC20Calls::transferFrom(transferFromCall { from, to, value }) => (from, to, value),
       // Treat any other function selectors as unrecognized
       _ => return Ok(None),
@@ -149,7 +146,7 @@ impl Erc20 {
       }
 
       // Read the data appended after
-      let data = if let Ok(call) = SeraiIERC20Calls::abi_decode(transaction.inner.input(), true) {
+      let data = if let Ok(call) = SeraiIERC20Calls::abi_decode(transaction.inner.input()) {
         match call {
           SeraiIERC20Calls::transferWithInInstruction01BB244A8A(
             transferWithInInstructionCall { inInstruction, .. },
@@ -180,7 +177,7 @@ impl Erc20 {
   ///
   /// The `transfers` in the result are unordered. The `logs` are sorted by index.
   pub async fn top_level_transfers_unordered(
-    provider: &RootProvider<SimpleRequest>,
+    provider: &RootProvider,
     blocks: RangeInclusive<u64>,
     erc20: Address,
     to: Address,

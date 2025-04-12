@@ -7,7 +7,7 @@ use ::borsh::{BorshSerialize, BorshDeserialize};
 use group::ff::PrimeField;
 use k256::Scalar;
 
-use alloy_primitives::PrimitiveSignature;
+use alloy_primitives::Signature;
 use alloy_consensus::{SignableTransaction, Signed, TxLegacy};
 
 mod borsh;
@@ -68,8 +68,7 @@ pub fn deterministically_sign(tx: TxLegacy) -> Signed<TxLegacy> {
   let s = Scalar::ONE;
   let r_bytes: [u8; 32] = r.to_repr().into();
   let s_bytes: [u8; 32] = s.to_repr().into();
-  let signature =
-    PrimitiveSignature::from_scalars_and_parity(r_bytes.into(), s_bytes.into(), false);
+  let signature = Signature::from_scalars_and_parity(r_bytes.into(), s_bytes.into(), false);
 
   let res = tx.into_signed(signature);
   debug_assert!(res.recover_signer().is_ok());

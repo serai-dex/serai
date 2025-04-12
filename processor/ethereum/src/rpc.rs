@@ -2,9 +2,8 @@ use core::future::Future;
 use std::{sync::Arc, collections::HashSet};
 
 use alloy_core::primitives::B256;
-use alloy_rpc_types_eth::{Header, BlockTransactionsKind, BlockNumberOrTag};
+use alloy_rpc_types_eth::{Header, BlockNumberOrTag};
 use alloy_transport::{RpcError, TransportErrorKind};
-use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
 use serai_client::primitives::{ExternalNetworkId, ExternalCoin, Amount};
@@ -26,7 +25,7 @@ use crate::{
 #[derive(Clone)]
 pub(crate) struct Rpc<D: Db> {
   pub(crate) db: D,
-  pub(crate) provider: Arc<RootProvider<SimpleRequest>>,
+  pub(crate) provider: Arc<RootProvider>,
 }
 
 impl<D: Db> ScannerFeed for Rpc<D> {
@@ -49,7 +48,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
     async move {
       let actual_number = self
         .provider
-        .get_block(BlockNumberOrTag::Finalized.into(), BlockTransactionsKind::Hashes)
+        .get_block(BlockNumberOrTag::Finalized.into())
         .await?
         .ok_or_else(|| {
           TransportErrorKind::Custom("there was no finalized block".to_string().into())
@@ -77,7 +76,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
     async move {
       let header = self
         .provider
-        .get_block(BlockNumberOrTag::Number(number).into(), BlockTransactionsKind::Hashes)
+        .get_block(BlockNumberOrTag::Number(number).into())
         .await?
         .ok_or_else(|| {
           TransportErrorKind::Custom(
@@ -105,7 +104,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
       } else {
         self
           .provider
-          .get_block((start - 1).into(), BlockTransactionsKind::Hashes)
+          .get_block((start - 1).into())
           .await?
           .ok_or_else(|| {
             TransportErrorKind::Custom(
@@ -120,7 +119,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
 
       let end_header = self
         .provider
-        .get_block((start + 31).into(), BlockTransactionsKind::Hashes)
+        .get_block((start + 31).into())
         .await?
         .ok_or_else(|| {
           TransportErrorKind::Custom(
@@ -177,7 +176,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
       while to_check != epoch.prior_end_hash {
         let to_check_block = self
           .provider
-          .get_block(B256::from(to_check).into(), BlockTransactionsKind::Hashes)
+          .get_block(B256::from(to_check).into())
           .await?
           .ok_or_else(|| {
             TransportErrorKind::Custom(

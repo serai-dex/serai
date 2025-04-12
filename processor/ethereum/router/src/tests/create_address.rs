@@ -6,7 +6,7 @@ use alloy_consensus::TxLegacy;
 use alloy_rpc_types_eth::{TransactionInput, TransactionRequest};
 use alloy_provider::Provider;
 
-use revm::{primitives::SpecId, interpreter::gas::calculate_initial_tx_gas};
+use revm::{primitives::hardfork::SpecId, interpreter::gas::calculate_initial_tx_gas};
 
 use crate::tests::Test;
 
@@ -65,13 +65,13 @@ async fn test_create_address() {
     let call =
       TransactionRequest::default().to(address).input(TransactionInput::new(input.clone().into()));
     assert_eq!(
-      &test.provider.call(&call).await.unwrap().as_ref()[12 ..],
+      &test.provider.call(call.clone()).await.unwrap().as_ref()[12 ..],
       address.create(nonce).as_slice(),
     );
 
     // Check the function is constant-gas
-    let gas_used = test.provider.estimate_gas(&call).await.unwrap();
-    let initial_gas = calculate_initial_tx_gas(SpecId::CANCUN, &input, false, &[], 0).initial_gas;
+    let gas_used = test.provider.estimate_gas(call).await.unwrap();
+    let initial_gas = calculate_initial_tx_gas(SpecId::CANCUN, &input, false, 0, 0, 0).initial_gas;
     let this_call = gas_used - initial_gas;
     if gas.is_none() {
       gas = Some(this_call);

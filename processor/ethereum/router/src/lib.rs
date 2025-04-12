@@ -19,7 +19,6 @@ use alloy_consensus::TxLegacy;
 
 use alloy_rpc_types_eth::{BlockId, Log, Filter, TransactionInput, TransactionRequest};
 use alloy_transport::{TransportErrorKind, RpcError};
-use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
 use scale::Encode;
@@ -48,6 +47,7 @@ mod _irouter_abi {
 #[expect(warnings)]
 #[expect(needless_pass_by_value)]
 #[expect(clippy::all)]
+#[expect(clippy::unused_self)]
 #[expect(clippy::ignored_unit_patterns)]
 #[expect(clippy::redundant_closure_for_method_calls)]
 mod _router_abi {
@@ -236,7 +236,7 @@ pub struct Escape {
 /// A view of the Router for Serai.
 #[derive(Clone, Debug)]
 pub struct Router {
-  provider: Arc<RootProvider<SimpleRequest>>,
+  provider: Arc<RootProvider>,
   address: Address,
   empty_execute_gas: HashMap<Coin, u64>,
 }
@@ -272,7 +272,7 @@ impl Router {
   /// This performs an on-chain lookup for the first deployed Router constructed with this public
   /// key. This lookup is of a constant amount of calls and does not read any logs.
   pub async fn new(
-    provider: Arc<RootProvider<SimpleRequest>>,
+    provider: Arc<RootProvider>,
     initial_serai_key: &PublicKey,
   ) -> Result<Option<Self>, RpcError<TransportErrorKind>> {
     let Some(deployer) = Deployer::new(provider.clone()).await? else {
@@ -573,7 +573,7 @@ impl Router {
             if log.topics().first() != Some(&Transfer::SIGNATURE_HASH) {
               continue;
             }
-            let Ok(transfer) = Transfer::decode_log(&log.inner.clone(), true) else { continue };
+            let Ok(transfer) = Transfer::decode_log(&log.inner.clone()) else { continue };
             // Check if this aligns with the InInstruction
             if (transfer.from == in_instruction.from) &&
               (transfer.to == self.address) &&
@@ -743,11 +743,11 @@ impl Router {
   ) -> Result<Option<PublicKey>, RpcError<TransportErrorKind>> {
     let call =
       TransactionRequest::default().to(self.address).input(TransactionInput::new(call.into()));
-    let bytes = self.provider.call(&call).block(block).await?;
+    let bytes = self.provider.call(call).block(block).await?;
     // This is fine as both key calls share a return type
-    let res = abi::nextSeraiKeyCall::abi_decode_returns(&bytes, true)
+    let res = abi::nextSeraiKeyCall::abi_decode_returns(&bytes)
       .map_err(|e| TransportErrorKind::Custom(format!("failed to decode key: {e:?}").into()))?;
-    let eth_repr = <[u8; 32]>::from(res._0);
+    let eth_repr = <[u8; 32]>::from(res);
     Ok(if eth_repr == [0; 32] {
       None
     } else {
@@ -778,10 +778,10 @@ impl Router {
     let call = TransactionRequest::default()
       .to(self.address)
       .input(TransactionInput::new(abi::nextNonceCall::new(()).abi_encode().into()));
-    let bytes = self.provider.call(&call).block(block).await?;
-    let res = abi::nextNonceCall::abi_decode_returns(&bytes, true)
+    let bytes = self.provider.call(call).block(block).await?;
+    let res = abi::nextNonceCall::abi_decode_returns(&bytes)
       .map_err(|e| TransportErrorKind::Custom(format!("failed to decode nonce: {e:?}").into()))?;
-    Ok(u64::try_from(res._0).map_err(|_| {
+    Ok(u64::try_from(res).map_err(|_| {
       TransportErrorKind::Custom("nonce returned exceeded 2**64".to_string().into())
     })?)
   }
@@ -794,10 +794,10 @@ impl Router {
     let call = TransactionRequest::default()
       .to(self.address)
       .input(TransactionInput::new(abi::escapedToCall::new(()).abi_encode().into()));
-    let bytes = self.provider.call(&call).block(block).await?;
-    let res = abi::escapedToCall::abi_decode_returns(&bytes, true).map_err(|e| {
+    let bytes = self.provider.call(call).block(block).await?;
+    let res = abi::escapedToCall::abi_decode_returns(&bytes).map_err(|e| {
       TransportErrorKind::Custom(format!("failed to decode the address escaped to: {e:?}").into())
     })?;
-    Ok(if res._0 == Address([0; 20].into()) { None } else { Some(res._0) })
+    Ok(if res == Address::ZERO { None } else { Some(res) })
   }
 }

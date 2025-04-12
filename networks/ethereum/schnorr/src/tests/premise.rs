@@ -18,7 +18,7 @@ use crate::{Signature, tests::test_key};
 fn ecrecover(message: Scalar, odd_y: bool, r: Scalar, s: Scalar) -> Option<[u8; 20]> {
   let sig = ecdsa::Signature::from_scalars(r, s).ok()?;
   let message: [u8; 32] = message.to_repr().into();
-  alloy_core::primitives::PrimitiveSignature::from_signature_and_parity(sig, odd_y)
+  alloy_core::primitives::Signature::from_signature_and_parity(sig, odd_y)
     .recover_address_from_prehash(&alloy_core::primitives::B256::from(message))
     .ok()
     .map(Into::into)

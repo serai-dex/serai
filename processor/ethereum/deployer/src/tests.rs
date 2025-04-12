@@ -76,9 +76,9 @@ async fn test_deployer() {
       let call = TransactionRequest::default()
         .to(Deployer::address())
         .input(TransactionInput::new(deploy_tx.tx().input.clone()));
-      let call_err = provider.call(&call).await.unwrap_err();
+      let call_err = provider.call(call).await.unwrap_err();
       assert!(matches!(
-        call_err.as_error_resp().unwrap().as_decoded_error::<DeployerErrors>(true).unwrap(),
+        call_err.as_error_resp().unwrap().as_decoded_interface_error::<DeployerErrors>().unwrap(),
         DeployerErrors::PriorDeployed(PriorDeployed {}),
       ));
     }
@@ -97,9 +97,9 @@ async fn test_deployer() {
       let call = TransactionRequest::default()
         .to(Deployer::address())
         .input(TransactionInput::new(deploy_tx.tx().input.clone()));
-      let call_err = provider.call(&call).await.unwrap_err();
+      let call_err = provider.call(call).await.unwrap_err();
       assert!(matches!(
-        call_err.as_error_resp().unwrap().as_decoded_error::<DeployerErrors>(true).unwrap(),
+        call_err.as_error_resp().unwrap().as_decoded_interface_error::<DeployerErrors>().unwrap(),
         DeployerErrors::DeploymentFailed(DeploymentFailed {}),
       ));
     }

@@ -11,7 +11,6 @@ use alloy_sol_types::SolCall;
 
 use alloy_rpc_types_eth::{TransactionInput, TransactionRequest};
 use alloy_transport::{TransportErrorKind, RpcError};
-use alloy_simple_request_transport::SimpleRequest;
 use alloy_provider::{Provider, RootProvider};
 
 #[cfg(test)]
@@ -44,7 +43,7 @@ const INITCODE: &[u8] = {
 /// of the EVM. It then supports retrieving the deployed contracts addresses (which aren't
 /// deterministic) using a single call.
 #[derive(Clone, Debug)]
-pub struct Deployer(Arc<RootProvider<SimpleRequest>>);
+pub struct Deployer(Arc<RootProvider>);
 impl Deployer {
   /// Obtain the transaction to deploy this contract, already signed.
   ///
@@ -119,7 +118,7 @@ impl Deployer {
   ///
   /// This will return `None` if the Deployer has yet to be deployed on-chain.
   pub async fn new(
-    provider: Arc<RootProvider<SimpleRequest>>,
+    provider: Arc<RootProvider>,
   ) -> Result<Option<Self>, RpcError<TransportErrorKind>> {
     let address = Self::address();
     let code = provider.get_code_at(address).await?;
@@ -138,16 +137,14 @@ impl Deployer {
     let call = TransactionRequest::default().to(Self::address()).input(TransactionInput::new(
       abi::Deployer::deploymentsCall::new((init_code_hash.into(),)).abi_encode().into(),
     ));
-    let bytes = self.0.call(&call).await?;
-    let deployment = abi::Deployer::deploymentsCall::abi_decode_returns(&bytes, true)
-      .map_err(|e| {
-        TransportErrorKind::Custom(
-          format!("node returned a non-address for function returning address: {e:?}").into(),
-        )
-      })?
-      ._0;
+    let bytes = self.0.call(call).await?;
+    let deployment = abi::Deployer::deploymentsCall::abi_decode_returns(&bytes).map_err(|e| {
+      TransportErrorKind::Custom(
+        format!("node returned a non-address for function returning address: {e:?}").into(),
+      )
+    })?;
 
-    if **deployment == [0; 20] {
+    if deployment == Address::ZERO {
       return Ok(None);
     }
     Ok(Some(deployment))

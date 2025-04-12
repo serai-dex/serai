@@ -29,14 +29,14 @@ rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
 k256 = { version = "^0.13.1", default-features = false, features = ["ecdsa"] }
 
-alloy-core = { version = "0.8", default-features = false }
-alloy-sol-types = { version = "0.8", default-features = false }
+alloy-core = { version = "1", default-features = false }
+alloy-sol-types = { version = "1", default-features = false }
 
 alloy-simple-request-transport = { path = "../../../networks/ethereum/alloy-simple-request-transport", default-features = false }
-alloy-rpc-types-eth = { version = "0.9", default-features = false }
-alloy-rpc-client = { version = "0.9", default-features = false }
-alloy-provider = { version = "0.9", default-features = false }
+alloy-rpc-types-eth = { version = "0.14", default-features = false }
+alloy-rpc-client = { version = "0.14", default-features = false }
+alloy-provider = { version = "0.14", default-features = false }
 
-alloy-node-bindings = { version = "0.9", default-features = false }
+alloy-node-bindings = { version = "0.14", default-features = false }
 
 tokio = { version = "1", default-features = false, features = ["macros"] }

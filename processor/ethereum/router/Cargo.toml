@@ -22,19 +22,18 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 group = { version = "0.13", default-features = false }
 k256 = { version = "0.13", default-features = false, features = ["std", "arithmetic"] }
 
-alloy-core = { version = "0.8", default-features = false }
+alloy-core = { version = "1", default-features = false }
 
-alloy-sol-types = { version = "0.8", default-features = false }
-alloy-sol-macro = { version = "0.8", default-features = false }
+alloy-sol-types = { version = "1", default-features = false }
+alloy-sol-macro = { version = "1", default-features = false }
 
-alloy-consensus = { version = "0.9", default-features = false }
+alloy-consensus = { version = "0.14", default-features = false }
 
-alloy-rpc-types-eth = { version = "0.9", default-features = false }
-alloy-transport = { version = "0.9", default-features = false }
-alloy-simple-request-transport = { path = "../../../networks/ethereum/alloy-simple-request-transport", default-features = false }
-alloy-provider = { version = "0.9", default-features = false }
+alloy-rpc-types-eth = { version = "0.14", default-features = false }
+alloy-transport = { version = "0.14", default-features = false }
+alloy-provider = { version = "0.14", default-features = false }
 
-revm = { version = "19", default-features = false, features = ["std"] }
+revm = { version = "22", default-features = false, features = ["std"] }
 
 ethereum-schnorr = { package = "ethereum-schnorr-contract", path = "../../../networks/ethereum/schnorr", default-features = false }
 
@@ -52,18 +51,19 @@ build-solidity-contracts = { path = "../../../networks/ethereum/build-contracts"
 
 syn = { version = "2", default-features = false, features = ["proc-macro"] }
 
-syn-solidity = { version = "0.8", default-features = false }
-alloy-sol-macro-input = { version = "0.8", default-features = false }
-alloy-sol-macro-expander = { version = "0.8", default-features = false }
+syn-solidity = { version = "1", default-features = false }
+alloy-sol-macro-input = { version = "1", default-features = false }
+alloy-sol-macro-expander = { version = "1", default-features = false }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
 k256 = { version = "0.13", default-features = false, features = ["std"] }
 
-alloy-provider = { version = "0.9", default-features = false, features = ["debug-api", "trace-api"] }
-alloy-rpc-client = { version = "0.9", default-features = false }
-alloy-node-bindings = { version = "0.9", default-features = false }
+alloy-simple-request-transport = { path = "../../../networks/ethereum/alloy-simple-request-transport", default-features = false }
+alloy-provider = { version = "0.14", default-features = false, features = ["debug-api", "trace-api"] }
+alloy-rpc-client = { version = "0.14", default-features = false }
+alloy-node-bindings = { version = "0.14", default-features = false }
 
 tokio = { version = "1.0", default-features = false, features = ["rt-multi-thread", "macros"] }
 

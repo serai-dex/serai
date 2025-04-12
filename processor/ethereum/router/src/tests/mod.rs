@@ -63,7 +63,7 @@ struct CalldataAgnosticGas;
 impl CalldataAgnosticGas {
   #[must_use]
   fn calculate(input: &[u8], mut constant_zero_bytes: usize, gas_used: u64) -> u64 {
-    use revm::{primitives::SpecId, interpreter::gas::calculate_initial_tx_gas};
+    use revm::{primitives::hardfork::SpecId, interpreter::gas::calculate_initial_tx_gas};
 
     let mut without_variable_zero_bytes = Vec::with_capacity(input.len());
     for byte in input {
@@ -76,9 +76,9 @@ impl CalldataAgnosticGas {
       }
     }
     gas_used +
-      (calculate_initial_tx_gas(SpecId::CANCUN, &without_variable_zero_bytes, false, &[], 0)
+      (calculate_initial_tx_gas(SpecId::CANCUN, &without_variable_zero_bytes, false, 0, 0, 0)
         .initial_gas -
-        calculate_initial_tx_gas(SpecId::CANCUN, input, false, &[], 0).initial_gas)
+        calculate_initial_tx_gas(SpecId::CANCUN, input, false, 0, 0, 0).initial_gas)
   }
 }
 
@@ -92,7 +92,7 @@ struct RouterState {
 struct Test {
   #[allow(unused)]
   anvil: AnvilInstance,
-  provider: Arc<RootProvider<SimpleRequest>>,
+  provider: Arc<RootProvider>,
   chain_id: U256,
   router: Router,
   state: RouterState,
@@ -173,8 +173,8 @@ impl Test {
     let call = TransactionRequest::default()
       .to(self.router.address())
       .input(TransactionInput::new(tx.input));
-    let call_err = self.provider.call(&call).await.unwrap_err();
-    call_err.as_error_resp().unwrap().as_decoded_error::<IRouterErrors>(true).unwrap()
+    let call_err = self.provider.call(call).await.unwrap_err();
+    call_err.as_error_resp().unwrap().as_decoded_interface_error::<IRouterErrors>().unwrap()
   }
 
   fn confirm_next_serai_key_tx(&self) -> TxLegacy {
@@ -574,11 +574,11 @@ async fn test_empty_execute() {
         TransactionRequest::default().to(token).input(TransactionInput::new(vec![].into()));
       // Check it returns the expected result
       assert_eq!(
-        test.provider.call(&call).await.unwrap().as_ref(),
+        test.provider.call(call.clone()).await.unwrap().as_ref(),
         U256::from(1).abi_encode().as_slice()
       );
       // Check it has the expected gas cost (16 is documented in `return_true_code`)
-      assert_eq!(test.provider.estimate_gas(&call).await.unwrap(), 21_000 + 16);
+      assert_eq!(test.provider.estimate_gas(call).await.unwrap(), 21_000 + 16);
     }
 
     let gas = test.router.execute_gas(Coin::Erc20(token), U256::from(0), &[].as_slice().into());
@@ -698,6 +698,35 @@ async fn test_eth_code_out_instruction() {
   assert_eq!(test.provider.get_balance(deployed).await.unwrap(), amount_out);
   // The init code we use returns true, which will become the deployed contract's code
   assert_eq!(test.provider.get_code_at(deployed).await.unwrap().to_vec(), true.abi_encode());
+}
+
+#[tokio::test]
+async fn test_eth_code_out_instruction_reverts() {
+  let mut test = Test::new().await;
+  test.confirm_next_serai_key().await;
+  let () = test
+    .provider
+    .raw_request("anvil_setBalance".into(), (test.router.address(), 1_000_000))
+    .await
+    .unwrap();
+
+  // [REVERT], which will cause `executeArbitraryCode`'s call to CREATE to fail
+  let code = vec![0xfd];
+  let amount_out = U256::from(0);
+  let out_instructions = OutInstructions::from(
+    [(
+      SeraiEthereumAddress::Contract(ContractDeployment::new(50_000, code.clone()).unwrap()),
+      amount_out,
+    )]
+    .as_slice(),
+  );
+
+  let gas = test.router.execute_gas(Coin::Ether, U256::from(1), &out_instructions);
+  let fee = U256::from(gas);
+  let (tx, gas_used) = test.execute(Coin::Ether, fee, out_instructions, vec![true]).await;
+
+  let unused_gas = test.gas_unused_by_calls(&tx).await;
+  assert_eq!(gas_used + unused_gas, gas);
 }
 
 #[tokio::test]
