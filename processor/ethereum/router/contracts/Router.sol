@@ -149,7 +149,8 @@ contract Router is IRouterWithoutCollisions {
   /**
    * @dev Verify a signature of the calldata, placed immediately after the function selector. The
    *  calldata should be signed with the chain ID taking the place of the signature's challenge, and
-   *  the smart contract's nonce taking the place of the signature's response.
+   *  the signature's response replaced by the contract's address shifted into the high bits with
+   *  the contract's nonce as the low bits.
    */
   /// @param key The key to verify the signature with
   function verifySignature(bytes32 key)
@@ -202,7 +203,7 @@ contract Router is IRouterWithoutCollisions {
 
       // Overwrite the signature challenge with the chain ID
       mstore(add(message, 36), chainID)
-      // Overwrite the signature response with the nonce
+      // Overwrite the signature response with the contract's address, nonce
       mstore(add(message, 68), signatureResponseOverwrite)
 
       // Calculate the message hash
