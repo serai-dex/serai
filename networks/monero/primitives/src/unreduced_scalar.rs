@@ -54,7 +54,7 @@ impl UnreducedScalar {
   // This matches Monero's `slide` function and intentionally gives incorrect outputs under
   // certain conditions in order to match Monero.
   //
-  // This function does not execute in constant time.
+  // This function does not execute in constant time and must only be used with public data.
   fn non_adjacent_form(&self) -> [i8; 256] {
     let bits = self.as_bits();
     let mut naf = [0i8; 256];
@@ -107,15 +107,17 @@ impl UnreducedScalar {
     naf
   }
 
-  /// Recover the scalar that an array of bytes was incorrectly interpreted as by Monero's `slide`
-  /// function.
+  /// Recover the scalar that an array of bytes was incorrectly interpreted as by ref10's `slide`
+  /// function (as used by the reference Monero implementation in C++).
   ///
-  /// In Borromean range proofs, Monero was not checking that the scalars used were
-  /// reduced. This lead to the scalar stored being interpreted as a different scalar.
-  /// This function recovers that scalar.
+  /// For Borromean range proofs, Monero did not check the scalars used were reduced. This led to
+  /// some scalars serialized being interpreted as distinct scalars. This function recovers these
+  /// distinct scalars, as required to verify Borromean range proofs within the Monero protocol.
   ///
   /// See <https://github.com/monero-project/monero/issues/8438> for more info.
-  pub fn recover_monero_slide_scalar(&self) -> Scalar {
+  //
+  /// This function does not execute in constant time and must only be used with public data.
+  pub fn ref10_slide_scalar_vartime(&self) -> Scalar {
     if self.0[31] & 128 == 0 {
       // Computing the w-NAF of a number can only give an output with 1 more bit than
       // the number, so even if the number isn't reduced, the `slide` function will be

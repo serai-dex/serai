@@ -56,13 +56,13 @@ impl BorromeanSignatures {
       let LL = EdwardsPoint::vartime_double_scalar_mul_basepoint(
         &self.ee,
         &keys_a[i],
-        &self.s0[i].recover_monero_slide_scalar(),
+        &self.s0[i].ref10_slide_scalar_vartime(),
       );
       #[allow(non_snake_case)]
       let LV = EdwardsPoint::vartime_double_scalar_mul_basepoint(
         &keccak256_to_scalar(LL.compress().as_bytes()),
         &keys_b[i],
-        &self.s1[i].recover_monero_slide_scalar(),
+        &self.s1[i].ref10_slide_scalar_vartime(),
       );
       transcript[(i * 32) .. ((i + 1) * 32)].copy_from_slice(LV.compress().as_bytes());
     }
