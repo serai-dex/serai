@@ -6,7 +6,7 @@ use curve25519_dalek::{
   edwards::EdwardsPoint,
 };
 
-pub(crate) use monero_generators::{MAX_COMMITMENTS, COMMITMENT_BITS, LOG_COMMITMENT_BITS};
+pub(crate) use monero_generators::{MAX_COMMITMENTS, COMMITMENT_BITS};
 
 pub(crate) fn multiexp(pairs: &[(Scalar, EdwardsPoint)]) -> EdwardsPoint {
   let mut buf_scalars = Vec::with_capacity(pairs.len());

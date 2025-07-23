@@ -71,7 +71,7 @@ impl Input {
         let amount = if amount == 0 { None } else { Some(amount) };
         Input::ToKey {
           amount,
-          key_offsets: read_vec(read_varint, r)?,
+          key_offsets: read_vec(read_varint, None, r)?,
           key_image: read_torsion_free_point(r)?,
         }
       }
@@ -241,7 +241,7 @@ impl TransactionPrefix {
   pub fn read<R: Read>(r: &mut R, version: u64) -> io::Result<TransactionPrefix> {
     let additional_timelock = Timelock::read(r)?;
 
-    let inputs = read_vec(|r| Input::read(r), r)?;
+    let inputs = read_vec(|r| Input::read(r), None, r)?;
     if inputs.is_empty() {
       Err(io::Error::other("transaction had no inputs"))?;
     }
@@ -250,10 +250,10 @@ impl TransactionPrefix {
     let mut prefix = TransactionPrefix {
       additional_timelock,
       inputs,
-      outputs: read_vec(|r| Output::read((!is_miner_tx) && (version == 2), r), r)?,
+      outputs: read_vec(|r| Output::read((!is_miner_tx) && (version == 2), r), None, r)?,
       extra: vec![],
     };
-    prefix.extra = read_vec(read_byte, r)?;
+    prefix.extra = read_vec(read_byte, None, r)?;
     Ok(prefix)
   }
 
