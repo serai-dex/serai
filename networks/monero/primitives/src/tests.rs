@@ -8,7 +8,7 @@ fn recover_scalars() {
     let stored = UnreducedScalar(hex::decode(stored).unwrap().try_into().unwrap());
     let recovered =
       Scalar::from_canonical_bytes(hex::decode(recovered).unwrap().try_into().unwrap()).unwrap();
-    assert_eq!(stored.recover_monero_slide_scalar(), recovered);
+    assert_eq!(stored.ref10_slide_scalar_vartime(), recovered);
   };
 
   // https://www.moneroinflation.com/static/data_py/report_scalars_df.pdf
