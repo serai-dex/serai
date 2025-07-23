@@ -19,7 +19,8 @@ use crate::ClsagMultisig;
 #[cfg(feature = "multisig")]
 use frost::{
   Participant,
-  tests::{key_gen, algorithm_machines, sign},
+  sign::AlgorithmMachine,
+  tests::{key_gen, algorithm_machines_without_clone, sign_without_clone},
 };
 
 const RING_LEN: u64 = 11;
@@ -99,21 +100,32 @@ fn clsag_multisig() {
     ring.push([dest, Commitment::new(mask, amount).calculate()]);
   }
 
-  let (algorithm, mask_send) = ClsagMultisig::new(
-    RecommendedTranscript::new(b"Monero Serai CLSAG Test"),
-    ClsagContext::new(
-      Decoys::new((1 ..= RING_LEN).collect(), RING_INDEX, ring.clone()).unwrap(),
-      Commitment::new(randomness, AMOUNT),
-    )
-    .unwrap(),
-  );
-  mask_send.send(Scalar::random(&mut OsRng));
+  let mask = Scalar::random(&mut OsRng);
+  let params = || {
+    let (algorithm, mask_send) = ClsagMultisig::new(
+      RecommendedTranscript::new(b"Monero Serai CLSAG Test"),
+      ClsagContext::new(
+        Decoys::new((1 ..= RING_LEN).collect(), RING_INDEX, ring.clone()).unwrap(),
+        Commitment::new(randomness, AMOUNT),
+      )
+      .unwrap(),
+    );
+    mask_send.send(mask);
+    algorithm
+  };
 
-  sign(
+  sign_without_clone(
     &mut OsRng,
-    &algorithm,
     keys.clone(),
-    algorithm_machines(&mut OsRng, &algorithm, &keys),
+    keys.values().map(|keys| (keys.params().i(), params())).collect(),
+    algorithm_machines_without_clone(
+      &mut OsRng,
+      &keys,
+      keys
+        .values()
+        .map(|keys| (keys.params().i(), AlgorithmMachine::new(params(), keys.clone())))
+        .collect(),
+    ),
     &[1; 32],
   );
 }

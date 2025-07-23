@@ -37,10 +37,10 @@ pub fn clone_without<K: Clone + core::cmp::Eq + core::hash::Hash, V: Clone>(
 }
 
 /// Spawn algorithm machines for a random selection of signers, each executing the given algorithm.
-pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
+pub fn algorithm_machines_without_clone<R: RngCore, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
-  algorithm: &A,
   keys: &HashMap<Participant, ThresholdKeys<C>>,
+  machines: HashMap<Participant, AlgorithmMachine<C, A>>,
 ) -> HashMap<Participant, AlgorithmMachine<C, A>> {
   let mut included = vec![];
   while included.len() < usize::from(keys[&Participant::new(1).unwrap()].params().t()) {
@@ -54,16 +54,26 @@ pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
     included.push(n);
   }
 
-  keys
-    .iter()
-    .filter_map(|(i, keys)| {
-      if included.contains(i) {
-        Some((*i, AlgorithmMachine::new(algorithm.clone(), keys.clone())))
-      } else {
-        None
-      }
-    })
+  machines
+    .into_iter()
+    .filter_map(|(i, machine)| if included.contains(&i) { Some((i, machine)) } else { None })
     .collect()
+}
+
+/// Spawn algorithm machines for a random selection of signers, each executing the given algorithm.
+pub fn algorithm_machines<R: RngCore, C: Curve, A: Clone + Algorithm<C>>(
+  rng: &mut R,
+  algorithm: &A,
+  keys: &HashMap<Participant, ThresholdKeys<C>>,
+) -> HashMap<Participant, AlgorithmMachine<C, A>> {
+  algorithm_machines_without_clone(
+    rng,
+    keys,
+    keys
+      .values()
+      .map(|keys| (keys.params().i(), AlgorithmMachine::new(algorithm.clone(), keys.clone())))
+      .collect(),
+  )
 }
 
 // Run the preprocess step
@@ -165,10 +175,10 @@ pub fn sign_without_caching<R: RngCore + CryptoRng, M: PreprocessMachine>(
 
 /// Execute the signing protocol, randomly caching various machines to ensure they can cache
 /// successfully.
-pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
+pub fn sign_without_clone<R: RngCore + CryptoRng, M: PreprocessMachine>(
   rng: &mut R,
-  params: &<M::SignMachine as SignMachine<M::Signature>>::Params,
   mut keys: HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::Keys>,
+  mut params: HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::Params>,
   machines: HashMap<Participant, M>,
   msg: &[u8],
 ) -> M::Signature {
@@ -183,13 +193,30 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
           let cache = machines.remove(&i).unwrap().cache();
           machines.insert(
             i,
-            M::SignMachine::from_cache(params.clone(), keys.remove(&i).unwrap(), cache).0,
+            M::SignMachine::from_cache(params.remove(&i).unwrap(), keys.remove(&i).unwrap(), cache)
+              .0,
           );
         }
       }
     },
     msg,
   )
+}
+
+/// Execute the signing protocol, randomly caching various machines to ensure they can cache
+/// successfully.
+pub fn sign<
+  R: RngCore + CryptoRng,
+  M: PreprocessMachine<SignMachine: SignMachine<M::Signature, Params: Clone>>,
+>(
+  rng: &mut R,
+  params: &<M::SignMachine as SignMachine<M::Signature>>::Params,
+  keys: HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::Keys>,
+  machines: HashMap<Participant, M>,
+  msg: &[u8],
+) -> M::Signature {
+  let params = keys.keys().map(|i| (*i, params.clone())).collect();
+  sign_without_clone(rng, keys, params, machines, msg)
 }
 
 /// Test a basic Schnorr signature with the provided keys.
