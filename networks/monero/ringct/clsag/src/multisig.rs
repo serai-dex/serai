@@ -56,8 +56,7 @@ impl ClsagContext {
 
 /// A channel to send the mask to use for the pseudo-out (rerandomized commitment) with.
 ///
-/// A mask must be sent along this channel before any preprocess addendums are handled. Breaking
-/// this rule will cause a panic.
+/// A mask must be sent along this channel before any preprocess addendums are handled.
 #[derive(Clone, Debug)]
 pub struct ClsagMultisigMaskSender {
   buf: Arc<Mutex<Option<Scalar>>>,
@@ -78,8 +77,8 @@ impl ClsagMultisigMaskSender {
   }
 }
 impl ClsagMultisigMaskReceiver {
-  fn recv(self) -> Scalar {
-    self.buf.lock().unwrap()
+  fn recv(self) -> Option<Scalar> {
+    *self.buf.lock()
   }
 }
 
@@ -114,7 +113,7 @@ struct Interim {
 
 /// FROST-inspired algorithm for producing a CLSAG signature.
 ///
-/// Before this has its `process_addendum` called, a mask must be set. Else this will panic.
+/// Before this has its `process_addendum` called, a mask must be set.
 ///
 /// The message signed is expected to be a 32-byte value. Per Monero, it's the keccak256 hash of
 /// the transaction data which is signed. This will panic if the message is not a 32-byte value.
@@ -218,7 +217,14 @@ impl Algorithm<Ed25519> for ClsagMultisig {
       // Fetch the mask from the Mutex
       // We set it to a variable to ensure our view of it is consistent
       // It was this or a mpsc channel... std doesn't have oneshot :/
-      self.mask = Some(self.mask_recv.take().unwrap().recv());
+      self.mask = Some(
+        self
+          .mask_recv
+          .take()
+          .unwrap()
+          .recv()
+          .ok_or(FrostError::InternalError("CLSAG mask was not provided"))?,
+      );
       // Transcript the mask
       self.transcript.append_message(b"mask", self.mask.expect("mask wasn't set").to_bytes());
 
