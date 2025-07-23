@@ -31,7 +31,7 @@ const RING_INDEX: u8 = 3;
 #[test]
 fn clsag() {
   for real in 0 .. RING_LEN {
-    let msg = [1; 32];
+    let msg_hash = [1; 32];
 
     let mut secrets = (Zeroizing::new(Scalar::ZERO), Scalar::ZERO);
     let mut ring = vec![];
@@ -61,18 +61,18 @@ fn clsag() {
         .unwrap(),
       )],
       Scalar::random(&mut OsRng),
-      msg,
+      msg_hash,
     )
     .unwrap()
     .swap_remove(0);
 
     let image =
       hash_to_point((ED25519_BASEPOINT_TABLE * secrets.0.deref()).compress().0) * secrets.0.deref();
-    clsag.verify(&ring, &image, &pseudo_out, &msg).unwrap();
+    clsag.verify(&ring, &image, &pseudo_out, &msg_hash).unwrap();
 
     // make sure verification fails if we throw a random `c1` at it.
     clsag.c1 = Scalar::random(&mut OsRng);
-    assert!(clsag.verify(&ring, &image, &pseudo_out, &msg).is_err());
+    assert!(clsag.verify(&ring, &image, &pseudo_out, &msg_hash).is_err());
   }
 }
 

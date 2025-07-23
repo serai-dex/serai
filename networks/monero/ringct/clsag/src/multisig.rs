@@ -132,7 +132,7 @@ pub struct ClsagMultisig {
   mask_recv: Option<ClsagMultisigMaskReceiver>,
   mask: Option<Scalar>,
 
-  msg: Option<[u8; 32]>,
+  msg_hash: Option<[u8; 32]>,
   interim: Option<Interim>,
 }
 
@@ -156,7 +156,7 @@ impl ClsagMultisig {
         mask_recv: Some(mask_recv),
         mask: None,
 
-        msg: None,
+        msg_hash: None,
         interim: None,
       },
       mask_send,
@@ -253,7 +253,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     view: &ThresholdView<Ed25519>,
     nonce_sums: &[Vec<dfg::EdwardsPoint>],
     nonces: Vec<Zeroizing<dfg::Scalar>>,
-    msg: &[u8],
+    msg_hash: &[u8],
   ) -> dfg::Scalar {
     // Use the transcript to get a seeded random number generator
     //
@@ -264,14 +264,14 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     // opening of the commitment being re-randomized (and what it's re-randomized to)
     let mut rng = ChaCha20Rng::from_seed(self.transcript.rng_seed(b"decoy_responses"));
 
-    self.msg = Some(msg.try_into().expect("CLSAG message should be 32-bytes"));
+    self.msg_hash = Some(msg_hash.try_into().expect("CLSAG message hash should be 32-bytes"));
 
     let sign_core = Clsag::sign_core(
       &mut rng,
       &self.image.expect("verifying a share despite never processing any addendums").0,
       &self.context,
       self.mask.expect("mask wasn't set"),
-      self.msg.as_ref().unwrap(),
+      self.msg_hash.as_ref().unwrap(),
       nonce_sums[0][0].0,
       nonce_sums[0][1].0,
     );
@@ -303,7 +303,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
         self.context.decoys.ring(),
         &self.image.expect("verifying a signature despite never processing any addendums").0,
         &interim.pseudo_out,
-        self.msg.as_ref().unwrap(),
+        self.msg_hash.as_ref().unwrap(),
       )
       .is_ok()
     {
