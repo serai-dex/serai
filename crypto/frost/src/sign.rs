@@ -47,7 +47,7 @@ impl<T: Writable> Writable for Vec<T> {
 }
 
 // Pairing of an Algorithm with a ThresholdKeys instance.
-#[derive(Clone, Zeroize)]
+#[derive(Zeroize)]
 struct Params<C: Curve, A: Algorithm<C>> {
   // Skips the algorithm due to being too large a bound to feasibly enforce on users
   #[zeroize(skip)]
@@ -193,7 +193,7 @@ impl<C: Curve> SignatureShare<C> {
 /// Trait for the second machine of a two-round signing protocol.
 pub trait SignMachine<S>: Send + Sync + Sized {
   /// Params used to instantiate this machine which can be used to rebuild from a cache.
-  type Params: Clone;
+  type Params;
   /// Keys used for signing operations.
   type Keys;
   /// Preprocess message for this machine.
@@ -397,7 +397,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
     Ok((
       AlgorithmSignatureMachine {
-        params: self.params.clone(),
+        params: self.params,
         view,
         B,
         Rs,

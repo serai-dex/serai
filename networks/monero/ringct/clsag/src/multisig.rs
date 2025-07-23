@@ -57,11 +57,11 @@ impl ClsagContext {
 /// A channel to send the mask to use for the pseudo-out (rerandomized commitment) with.
 ///
 /// A mask must be sent along this channel before any preprocess addendums are handled.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ClsagMultisigMaskSender {
   buf: Arc<Mutex<Option<Scalar>>>,
 }
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct ClsagMultisigMaskReceiver {
   buf: Arc<Mutex<Option<Scalar>>>,
 }
@@ -73,6 +73,8 @@ impl ClsagMultisigMaskSender {
 
   /// Send a mask to a CLSAG multisig instance.
   pub fn send(self, mask: Scalar) {
+    // There is no risk this was prior set as this consumes `self`, which does not implement
+    // `Clone`
     *self.buf.lock() = Some(mask);
   }
 }
@@ -118,7 +120,7 @@ struct Interim {
 /// The message signed is expected to be a 32-byte value. Per Monero, it's the keccak256 hash of
 /// the transaction data which is signed. This will panic if the message is not a 32-byte value.
 #[allow(non_snake_case)]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct ClsagMultisig {
   transcript: RecommendedTranscript,
 
