@@ -100,7 +100,7 @@ fn core(
   ring: &[[EdwardsPoint; 2]],
   I: &EdwardsPoint,
   pseudo_out: &EdwardsPoint,
-  msg: &[u8; 32],
+  msg_hash: &[u8; 32],
   D: &EdwardsPoint,
   s: &[Scalar],
   A_c1: &Mode,
@@ -156,7 +156,7 @@ fn core(
   // Unfortunately, it's I D pseudo_out instead of pseudo_out I D, meaning this needs to be
   // truncated just to add it back
   to_hash.extend(pseudo_out.compress().to_bytes());
-  to_hash.extend(msg);
+  to_hash.extend(msg_hash);
 
   // Configure the loop based on if we're signing or verifying
   let start;
@@ -245,7 +245,7 @@ impl Clsag {
     I: &EdwardsPoint,
     input: &ClsagContext,
     mask: Scalar,
-    msg: &[u8; 32],
+    msg_hash: &[u8; 32],
     A: EdwardsPoint,
     AH: EdwardsPoint,
   ) -> ClsagSignCore {
@@ -261,7 +261,7 @@ impl Clsag {
       s.push(Scalar::random(rng));
     }
     let ((D, c_p, c_c), c1) =
-      core(input.decoys.ring(), I, &pseudo_out, msg, &D, &s, &Mode::Sign(r, A, AH));
+      core(input.decoys.ring(), I, &pseudo_out, msg_hash, &D, &s, &Mode::Sign(r, A, AH));
 
     ClsagSignCore {
       incomplete_clsag: Clsag { D, s, c1 },
@@ -288,11 +288,15 @@ impl Clsag {
   /// `inputs` is of the form (discrete logarithm of the key, context).
   ///
   /// `sum_outputs` is for the sum of the output commitments' masks.
+  ///
+  /// WARNING: This follows the Fiat-Shamir transcript format used by the Monero protocol, which
+  /// makes assumptions on what has already been transcripted and bound to within `msg_hash`. Do
+  /// not use this if you don't know what you're doing.
   pub fn sign<R: RngCore + CryptoRng>(
     rng: &mut R,
     mut inputs: Vec<(Zeroizing<Scalar>, ClsagContext)>,
     sum_outputs: Scalar,
-    msg: [u8; 32],
+    msg_hash: [u8; 32],
   ) -> Result<Vec<(Clsag, EdwardsPoint)>, ClsagError> {
     // Create the key images
     let mut key_image_generators = vec![];
@@ -329,7 +333,7 @@ impl Clsag {
           &key_images[i],
           &inputs[i].1,
           mask,
-          &msg,
+          &msg_hash,
           nonce.deref() * ED25519_BASEPOINT_TABLE,
           nonce.deref() * key_image_generators[i],
         );
@@ -345,7 +349,7 @@ impl Clsag {
       nonce.zeroize();
 
       debug_assert!(clsag
-        .verify(inputs[i].1.decoys.ring(), &key_images[i], &pseudo_out, &msg)
+        .verify(inputs[i].1.decoys.ring(), &key_images[i], &pseudo_out, &msg_hash)
         .is_ok());
 
       res.push((clsag, pseudo_out));
@@ -360,7 +364,7 @@ impl Clsag {
     ring: &[[EdwardsPoint; 2]],
     I: &EdwardsPoint,
     pseudo_out: &EdwardsPoint,
-    msg: &[u8; 32],
+    msg_hash: &[u8; 32],
   ) -> Result<(), ClsagError> {
     // Preliminary checks
     // s, c1, and points must also be encoded canonically, which is checked at time of decode
@@ -379,7 +383,7 @@ impl Clsag {
       Err(ClsagError::InvalidD)?;
     }
 
-    let (_, c1) = core(ring, I, pseudo_out, msg, &D, &self.s, &Mode::Verify(self.c1));
+    let (_, c1) = core(ring, I, pseudo_out, msg_hash, &D, &self.s, &Mode::Verify(self.c1));
     if c1 != self.c1 {
       Err(ClsagError::InvalidC1)?;
     }
