@@ -456,7 +456,7 @@ impl SignableTransaction {
   /// defined serialization.
   pub fn read<R: io::Read>(r: &mut R) -> io::Result<SignableTransaction> {
     fn read_address<R: io::Read>(r: &mut R) -> io::Result<MoneroAddress> {
-      String::from_utf8(read_vec(read_byte, r)?)
+      String::from_utf8(read_vec(read_byte, None, r)?)
         .ok()
         .and_then(|str| MoneroAddress::from_str_with_unchecked_network(&str).ok())
         .ok_or_else(|| io::Error::other("invalid address"))
@@ -484,9 +484,9 @@ impl SignableTransaction {
       rct_type: RctType::try_from(read_byte(r)?)
         .map_err(|()| io::Error::other("unsupported/invalid RctType"))?,
       outgoing_view_key: Zeroizing::new(read_bytes(r)?),
-      inputs: read_vec(OutputWithDecoys::read, r)?,
-      payments: read_vec(read_payment, r)?,
-      data: read_vec(|r| read_vec(read_byte, r), r)?,
+      inputs: read_vec(OutputWithDecoys::read, None, r)?,
+      payments: read_vec(read_payment, None, r)?,
+      data: read_vec(|r| read_vec(read_byte, None, r), None, r)?,
       fee_rate: FeeRate::read(r)?,
     };
     match res.validate() {

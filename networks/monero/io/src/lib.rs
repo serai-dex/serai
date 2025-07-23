@@ -214,6 +214,20 @@ pub fn read_array<R: Read, T: Debug, F: Fn(&mut R) -> io::Result<T>, const N: us
 }
 
 /// Read a length-prefixed variable-length list of elements.
-pub fn read_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(f: F, r: &mut R) -> io::Result<Vec<T>> {
-  read_raw_vec(f, read_varint(r)?, r)
+///
+/// An optional bound on the length of the result may be provided. If `None`, the returned `Vec`
+/// will be of the length read off the reader, if successfully read. If `Some(_)`, an error will be
+/// raised if the length read off the read is greater than the bound.
+pub fn read_vec<R: Read, T, F: Fn(&mut R) -> io::Result<T>>(
+  f: F,
+  length_bound: Option<usize>,
+  r: &mut R,
+) -> io::Result<Vec<T>> {
+  let declared_length: usize = read_varint(r)?;
+  if let Some(length_bound) = length_bound {
+    if declared_length > length_bound {
+      Err(io::Error::other("vector exceeds bound on length"))?;
+    }
+  }
+  read_raw_vec(f, declared_length, r)
 }

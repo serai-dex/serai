@@ -17,13 +17,13 @@ use curve25519_dalek::edwards::EdwardsPoint;
 
 use monero_io::*;
 pub use monero_generators::MAX_COMMITMENTS;
+use monero_generators::COMMITMENT_BITS;
 use monero_primitives::Commitment;
 
 pub(crate) mod scalar_vector;
 pub(crate) mod point_vector;
 
 pub(crate) mod core;
-use crate::core::LOG_COMMITMENT_BITS;
 
 pub(crate) mod batch_verifier;
 use batch_verifier::{BulletproofsBatchVerifier, BulletproofsPlusBatchVerifier};
@@ -43,6 +43,11 @@ use crate::plus::{
 
 #[cfg(test)]
 mod tests;
+
+// The logarithm (over 2) of the amount of bits a value within a commitment may use.
+const LOG_COMMITMENT_BITS: usize = COMMITMENT_BITS.ilog2() as usize;
+// The maximum length of L/R `Vec`s.
+const MAX_LR: usize = (MAX_COMMITMENTS.ilog2() as usize) + LOG_COMMITMENT_BITS;
 
 /// An error from proving/verifying Bulletproofs(+).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -265,8 +270,8 @@ impl Bulletproof {
       tau_x: read_scalar(r)?,
       mu: read_scalar(r)?,
       ip: IpProof {
-        L: read_vec(read_point, r)?,
-        R: read_vec(read_point, r)?,
+        L: read_vec(read_point, Some(MAX_LR), r)?,
+        R: read_vec(read_point, Some(MAX_LR), r)?,
         a: read_scalar(r)?,
         b: read_scalar(r)?,
       },
@@ -284,8 +289,8 @@ impl Bulletproof {
         r_answer: read_scalar(r)?,
         s_answer: read_scalar(r)?,
         delta_answer: read_scalar(r)?,
-        L: read_vec(read_point, r)?.into_iter().collect(),
-        R: read_vec(read_point, r)?.into_iter().collect(),
+        L: read_vec(read_point, Some(MAX_LR), r)?.into_iter().collect(),
+        R: read_vec(read_point, Some(MAX_LR), r)?.into_iter().collect(),
       },
     }))
   }

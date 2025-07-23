@@ -51,8 +51,6 @@ pub fn H_pow_2() -> &'static [EdwardsPoint; 64] {
 pub const MAX_COMMITMENTS: usize = 16;
 /// The amount of bits a value within a commitment may use.
 pub const COMMITMENT_BITS: usize = 64;
-/// The logarithm (over 2) of the amount of bits a value within a commitment may use.
-pub const LOG_COMMITMENT_BITS: usize = 6; // 2 ** 6 == N
 
 /// Container struct for Bulletproofs(+) generators.
 #[allow(non_snake_case)]

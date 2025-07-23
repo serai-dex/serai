@@ -181,16 +181,10 @@ impl ExtraField {
         size
       }),
       1 => ExtraField::PublicKey(read_point(r)?),
-      2 => ExtraField::Nonce({
-        let nonce = read_vec(read_byte, r)?;
-        if nonce.len() > MAX_TX_EXTRA_NONCE_SIZE {
-          Err(io::Error::other("too long nonce"))?;
-        }
-        nonce
-      }),
+      2 => ExtraField::Nonce(read_vec(read_byte, Some(MAX_TX_EXTRA_NONCE_SIZE), r)?),
       3 => ExtraField::MergeMining(read_varint(r)?, read_bytes(r)?),
-      4 => ExtraField::PublicKeys(read_vec(read_point, r)?),
-      0xDE => ExtraField::MysteriousMinergate(read_vec(read_byte, r)?),
+      4 => ExtraField::PublicKeys(read_vec(read_point, None, r)?),
+      0xDE => ExtraField::MysteriousMinergate(read_vec(read_byte, None, r)?),
       _ => Err(io::Error::other("unknown extra field"))?,
     })
   }
