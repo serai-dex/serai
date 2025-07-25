@@ -51,7 +51,8 @@ svm use 0.8.25
 ### Install foundry (for tests)
 
 ```
-cargo install --git https://github.com/foundry-rs/foundry --profile local --locked forge cast chisel anvil
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
 ```
 
 ### Clone and Build Serai
