@@ -36,8 +36,8 @@ rustup target add wasm32-unknown-unknown --toolchain nightly
 
 ```
 cargo install svm-rs
-svm install 0.8.25
-svm use 0.8.25
+svm install 0.8.26
+svm use 0.8.26
 ```
 
 ### Install Solidity Compiler Version Manager
