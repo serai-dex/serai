@@ -121,7 +121,9 @@ async fn select_n(
         // Find which block this points to
         let i = distribution.partition_point(|s| *s < (highest_output_exclusive_bound - 1 - o));
         let prev = i.saturating_sub(1);
-        let n = distribution[i] - distribution[prev];
+        let n = distribution[i].checked_sub(distribution[prev]).ok_or_else(|| {
+          RpcError::InternalError("RPC returned non-monotonic distribution".to_string())
+        })?;
         if n != 0 {
           // Select an output from within this block
           let o = distribution[prev] + (rng.next_u64() % n);
