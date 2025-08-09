@@ -86,13 +86,16 @@ impl Bulletproof {
   /// Bulletproofs(+) are logarithmically sized yet linearly timed. Evaluating by their size alone
   /// accordingly doesn't properly represent the burden of the proof. Monero 'claws back' some of
   /// the weight lost by using a proof smaller than it is fast to compensate for this.
+  ///
+  /// If the amount of outputs specified exceeds the maximum amount of outputs, the result for the
+  /// maximum amount of outputs will be returned.
   // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
   //   src/cryptonote_basic/cryptonote_format_utils.cpp#L106-L124
   pub fn calculate_bp_clawback(plus: bool, n_outputs: usize) -> (usize, usize) {
     #[allow(non_snake_case)]
     let mut LR_len = 0;
     let mut n_padded_outputs = 1;
-    while n_padded_outputs < n_outputs {
+    while n_padded_outputs < n_outputs.min(MAX_COMMITMENTS) {
       LR_len += 1;
       n_padded_outputs = 1 << LR_len;
     }

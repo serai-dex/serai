@@ -232,7 +232,13 @@ impl InternalScanner {
 
         res.push(WalletOutput {
           absolute_id: AbsoluteId { transaction: tx_hash, index_in_transaction: o },
-          relative_id: RelativeId { index_on_blockchain: output_index_for_first_ringct_output + o },
+          relative_id: RelativeId {
+            index_on_blockchain: output_index_for_first_ringct_output.checked_add(o).ok_or(
+              ScanError::InvalidScannableBlock(
+                "transaction's output's index isn't representable as a u64",
+              ),
+            )?,
+          },
           data: OutputData { key: output_key, key_offset, commitment },
           metadata: Metadata {
             additional_timelock: tx.prefix().additional_timelock,

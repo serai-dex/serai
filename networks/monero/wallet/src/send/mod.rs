@@ -305,12 +305,13 @@ impl SignableTransaction {
       .payments
       .iter()
       .filter_map(|payment| match payment {
-        InternalPayment::Payment(_, amount) => Some(amount),
+        InternalPayment::Payment(_, amount) => Some(*amount),
         InternalPayment::Change(_) => None,
       })
-      .sum::<u64>();
+      .try_fold(0, u64::checked_add);
+    let payments_amount = payments_amount.ok_or(SendError::TooManyOutputs)?;
     let (weight, necessary_fee) = self.weight_and_necessary_fee();
-    if in_amount < (payments_amount + necessary_fee) {
+    if payments_amount.checked_add(necessary_fee).is_none_or(|total_out| in_amount < total_out) {
       Err(SendError::NotEnoughFunds {
         inputs: in_amount,
         outputs: payments_amount,

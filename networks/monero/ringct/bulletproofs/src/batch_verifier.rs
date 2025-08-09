@@ -23,6 +23,11 @@ pub(crate) struct InternalBatchVerifier {
 impl InternalBatchVerifier {
   #[must_use]
   fn verify(self, G: EdwardsPoint, H: EdwardsPoint, generators: &Generators) -> bool {
+    /*
+      Technically, this following line can overflow, and joining these `Vec`s _may_ panic if
+      they're individually acceptable lengths yet their sum isn't. This is so negligible, due to
+      the amount of memory required, it's dismissed.
+    */
     let capacity = 2 + self.g_bold.len() + self.h_bold.len() + self.other.len();
     let mut scalars = Vec::with_capacity(capacity);
     let mut points = Vec::with_capacity(capacity);
