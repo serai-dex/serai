@@ -10,7 +10,8 @@ runs:
         sudo apt remove -y "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
         sudo apt remove -y "*nodejs*" "*npm*" "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
         sudo apt remove -y "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
-        sudo apt update -y && sudo apt upgrade -y && sudo apt install --fix-missing -y python3 python3.12 libpython3-stdlib
+        sudo apt update -y && sudo apt install --fix-missing --fix-broken -y python3 python3.12 libpython3-stdlib && sudo apt upgrade -y
+        sudo apt remove -yf shim-signed
         sudo apt remove -y "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
         sudo apt autoremove -y
         sudo apt clean
