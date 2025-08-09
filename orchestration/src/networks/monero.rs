@@ -22,7 +22,7 @@ fn monero_internal(
 
   #[rustfmt::skip]
   let download_monero = format!(r#"
-FROM alpine:latest as monero
+FROM alpine:latest AS monero
 
 RUN apk --no-cache add gnupg
 

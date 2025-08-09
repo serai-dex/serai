@@ -2,7 +2,7 @@ use crate::Os;
 
 pub fn mimalloc(os: Os) -> &'static str {
   const ALPINE_MIMALLOC: &str = r#"
-FROM alpine:latest as mimalloc-alpine
+FROM alpine:latest AS mimalloc-alpine
 
 RUN apk update && apk upgrade && apk --no-cache add gcc g++ libc-dev make cmake git
 RUN git clone https://github.com/microsoft/mimalloc && \
@@ -16,7 +16,7 @@ RUN git clone https://github.com/microsoft/mimalloc && \
 "#;
 
   const DEBIAN_MIMALLOC: &str = r#"
-FROM debian:bookworm-slim as mimalloc-debian
+FROM debian:bookworm-slim AS mimalloc-debian
 
 RUN apt update && apt upgrade -y && apt install -y gcc g++ make cmake git
 RUN git clone https://github.com/microsoft/mimalloc && \

@@ -5,7 +5,7 @@ pub fn reth(network: Network) -> (String, String, String) {
 
   #[rustfmt::skip]
   const DOWNLOAD_RETH: &str = r#"
-FROM alpine:latest as reth
+FROM alpine:latest AS reth
 
 ENV RETH_VERSION=0.2.0-beta.6
 

@@ -92,7 +92,7 @@ fn os(os: Os, additional_root: &str, user: &str) -> String {
   match os {
     Os::Alpine => format!(
       r#"
-FROM alpine:latest as image
+FROM alpine:latest AS image
 
 COPY --from=mimalloc-alpine libmimalloc.so /usr/lib
 ENV LD_PRELOAD=libmimalloc.so
@@ -117,7 +117,7 @@ WORKDIR /home/{user}
 
     Os::Debian => format!(
       r#"
-FROM debian:bookworm-slim as image
+FROM debian:bookworm-slim AS image
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
@@ -146,7 +146,7 @@ fn build_serai_service(prelude: &str, release: bool, features: &str, package: &s
 
   format!(
     r#"
-FROM rust:1.89-slim-bookworm as builder
+FROM rust:1.89-slim-bookworm AS builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload

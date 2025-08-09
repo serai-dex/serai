@@ -5,7 +5,7 @@ pub fn lighthouse(network: Network) -> (String, String, String) {
 
   #[rustfmt::skip]
   const DOWNLOAD_LIGHTHOUSE: &str = r#"
-FROM alpine:latest as lighthouse
+FROM alpine:latest AS lighthouse
 
 ENV LIGHTHOUSE_VERSION=5.1.3
 
