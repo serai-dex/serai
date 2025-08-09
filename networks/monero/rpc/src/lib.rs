@@ -1146,7 +1146,13 @@ impl<R: Rpc> DecoyRpc for R {
         )))?;
       }
 
-      let expected_len = if zero_zero_case { 2 } else { (to - start_height) + 1 };
+      let expected_len = if zero_zero_case {
+        2
+      } else {
+        (to - start_height).checked_add(1).ok_or_else(|| {
+          RpcError::InternalError("expected length of distribution exceeded usize".to_string())
+        })?
+      };
       // Yet this is actually a height
       if expected_len != distribution.len() {
         Err(RpcError::InvalidNode(format!(
@@ -1161,6 +1167,20 @@ impl<R: Rpc> DecoyRpc for R {
       if zero_zero_case {
         distribution.pop();
       }
+
+      // Check the distribution monotonically increases
+      {
+        let mut monotonic = 0;
+        for d in &distribution {
+          if *d < monotonic {
+            Err(RpcError::InvalidNode(
+              "received output distribution didn't increase monotonically".to_string(),
+            ))?;
+          }
+          monotonic = *d;
+        }
+      }
+
       Ok(distribution)
     }
   }
@@ -1271,8 +1291,8 @@ impl<R: Rpc> DecoyRpc for R {
               // https://github.com/monero-project/monero/blob
               //   /cc73fe71162d564ffda8e549b79a350bca53c454/src/cryptonote_core
               //   /blockchain.cpp#L3836
-              ((out.height + DEFAULT_LOCK_WINDOW) <= height) &&
-                (Timelock::Block(height - 1 + ACCEPTED_TIMELOCK_DELTA) >=
+              out.height.checked_add(DEFAULT_LOCK_WINDOW).is_some_and(|locked| locked <= height) &&
+                (Timelock::Block(height.wrapping_add(ACCEPTED_TIMELOCK_DELTA - 1)) >=
                   txs[i].prefix().additional_timelock)
             } else {
               out.unlocked

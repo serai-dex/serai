@@ -166,7 +166,14 @@ impl Decoys {
   /// `offsets` are the positions of each ring member within the Monero blockchain, offset from the
   /// prior member's position (with the initial ring member offset from 0).
   pub fn new(offsets: Vec<u64>, signer_index: u8, ring: Vec<[EdwardsPoint; 2]>) -> Option<Self> {
-    if (offsets.len() != ring.len()) || (usize::from(signer_index) >= ring.len()) {
+    if (offsets.len() > usize::from(u8::MAX)) ||
+      (offsets.len() != ring.len()) ||
+      (usize::from(signer_index) >= ring.len())
+    {
+      None?;
+    }
+    // Check these offsets form representable positions
+    if offsets.iter().copied().try_fold(0, u64::checked_add).is_none() {
       None?;
     }
     Some(Decoys { offsets, signer_index, ring })

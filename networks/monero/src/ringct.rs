@@ -343,7 +343,13 @@ impl RctPrunable {
     Ok(match rct_type {
       RctType::AggregateMlsagBorromean => RctPrunable::AggregateMlsagBorromean {
         borromean: read_raw_vec(BorromeanRange::read, outputs, r)?,
-        mlsag: Mlsag::read(ring_length, inputs + 1, r)?,
+        mlsag: Mlsag::read(
+          ring_length,
+          inputs.checked_add(1).ok_or_else(|| {
+            io::Error::other("reading a MLSAG for more inputs than representable")
+          })?,
+          r,
+        )?,
       },
       RctType::MlsagBorromean => RctPrunable::MlsagBorromean {
         borromean: read_raw_vec(BorromeanRange::read, outputs, r)?,

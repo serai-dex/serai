@@ -18,7 +18,7 @@ use crate::{
 };
 
 const RECENT_WINDOW: u64 = 15;
-const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
+const BLOCKS_PER_YEAR: usize = (365 * 24 * 60 * 60) / BLOCK_TIME;
 #[allow(clippy::cast_precision_loss)]
 const TIP_APPLICATION: f64 = (DEFAULT_LOCK_WINDOW * BLOCK_TIME) as f64;
 

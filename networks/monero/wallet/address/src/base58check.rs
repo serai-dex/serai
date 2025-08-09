@@ -94,11 +94,10 @@ pub(crate) fn encode_check(mut data: Vec<u8>) -> String {
 
 // Decode an arbitrary-length stream of data, with a checksum
 pub(crate) fn decode_check(data: &str) -> Option<Vec<u8>> {
-  if data.len() < CHECKSUM_LEN {
+  let mut res = decode(data)?;
+  if res.len() < CHECKSUM_LEN {
     None?;
   }
-
-  let mut res = decode(data)?;
   let checksum_pos = res.len() - CHECKSUM_LEN;
   if keccak256(&res[.. checksum_pos])[.. CHECKSUM_LEN] != res[checksum_pos ..] {
     None?;
