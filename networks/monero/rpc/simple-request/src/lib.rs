@@ -7,6 +7,7 @@ use std::{sync::Arc, io::Read, time::Duration};
 
 use tokio::sync::Mutex;
 
+use zeroize::Zeroizing;
 use digest_auth::{WwwAuthenticateHeader, AuthContext};
 use simple_request::{
   hyper::{StatusCode, header::HeaderValue, Request},
@@ -25,8 +26,8 @@ enum Authentication {
   // This ensures that if a nonce is requested, another caller doesn't make a request invalidating
   // it
   Authenticated {
-    username: String,
-    password: String,
+    username: Zeroizing<String>,
+    password: Zeroizing<String>,
     #[allow(clippy::type_complexity)]
     connection: Arc<Mutex<(Option<(WwwAuthenticateHeader, u64)>, Client)>>,
   },
@@ -77,7 +78,7 @@ impl SimpleRequestRpc {
   ) -> Result<SimpleRequestRpc, RpcError> {
     let authentication = if url.contains('@') {
       // Parse out the username and password
-      let url_clone = url;
+      let url_clone = Zeroizing::new(url);
       let split_url = url_clone.split('@').collect::<Vec<_>>();
       if split_url.len() != 2 {
         Err(RpcError::ConnectionError("invalid amount of login specifications".to_string()))?;
@@ -114,8 +115,8 @@ impl SimpleRequestRpc {
           .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?,
       )?;
       Authentication::Authenticated {
-        username: split_userpass[0].to_string(),
-        password: (*split_userpass.get(1).unwrap_or(&"")).to_string(),
+        username: Zeroizing::new(split_userpass[0].to_string()),
+        password: Zeroizing::new((*split_userpass.get(1).unwrap_or(&"")).to_string()),
         connection: Arc::new(Mutex::new((challenge, client))),
       }
     } else {
@@ -180,8 +181,8 @@ impl SimpleRequestRpc {
             *cnonce += 1;
 
             let mut context = AuthContext::new_post::<_, _, _, &[u8]>(
-              username,
-              password,
+              <_ as AsRef<str>>::as_ref(username),
+              <_ as AsRef<str>>::as_ref(password),
               "/".to_string() + route,
               None,
             );

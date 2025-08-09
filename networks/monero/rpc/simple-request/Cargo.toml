@@ -17,6 +17,7 @@ workspace = true
 
 [dependencies]
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
+zeroize = { version = "^1.5", default-features = false, features = ["alloc", "std"] }
 digest_auth = { version = "0.3", default-features = false }
 simple-request = { path = "../../../../common/request", version = "0.1", default-features = false, features = ["tls"] }
 tokio = { version = "1", default-features = false }

@@ -5008,6 +5008,7 @@ dependencies = [
  "monero-rpc",
  "simple-request",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]
