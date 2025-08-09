@@ -66,6 +66,7 @@ runs:
       uses: docker/setup-docker-action@b60f85385d03ac8acfca6d9996982511d8620a19
       with:
         rootless: true
+        set-host: true
       if: runner.os == 'Linux'
 
     # - name: Cache Rust
