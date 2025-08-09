@@ -89,8 +89,8 @@ impl ClsagContext {
 
 #[allow(clippy::large_enum_variant)]
 enum Mode {
-  Sign(usize, EdwardsPoint, EdwardsPoint),
-  Verify(Scalar),
+  Sign { signer_index: u8, A: EdwardsPoint, AH: EdwardsPoint },
+  Verify { c1: Scalar, D_serialized: EdwardsPoint },
 }
 
 // Core of the CLSAG algorithm, applicable to both sign and verify with minimal differences
@@ -101,17 +101,17 @@ fn core(
   I: &EdwardsPoint,
   pseudo_out: &EdwardsPoint,
   msg_hash: &[u8; 32],
-  D: &EdwardsPoint,
+  D_torsion_free: &EdwardsPoint,
   s: &[Scalar],
   A_c1: &Mode,
 ) -> ((EdwardsPoint, Scalar, Scalar), Scalar) {
   let n = ring.len();
 
   let images_precomp = match A_c1 {
-    Mode::Sign(..) => None,
-    Mode::Verify(..) => Some(VartimeEdwardsPrecomputation::new([I, D])),
+    Mode::Sign { .. } => None,
+    Mode::Verify { .. } => Some(VartimeEdwardsPrecomputation::new([I, D_torsion_free])),
   };
-  let D_INV_EIGHT = D * INV_EIGHT();
+  let D_inv_eight = D_torsion_free * INV_EIGHT();
 
   // Generate the transcript
   // Instead of generating multiple, a single transcript is created and then edited as needed
@@ -140,7 +140,14 @@ fn core(
   }
 
   to_hash.extend(I.compress().to_bytes());
-  to_hash.extend(D_INV_EIGHT.compress().to_bytes());
+  match A_c1 {
+    Mode::Sign { .. } => {
+      to_hash.extend(D_inv_eight.compress().to_bytes());
+    }
+    Mode::Verify { D_serialized, .. } => {
+      to_hash.extend(D_serialized.compress().to_bytes());
+    }
+  }
   to_hash.extend(pseudo_out.compress().to_bytes());
   // mu_P with agg_0
   let mu_P = keccak256_to_scalar(&to_hash);
@@ -163,15 +170,16 @@ fn core(
   let end;
   let mut c;
   match A_c1 {
-    Mode::Sign(r, A, AH) => {
-      start = r + 1;
-      end = r + n;
+    Mode::Sign { signer_index, A, AH } => {
+      let signer_index = usize::from(*signer_index);
+      start = signer_index + 1;
+      end = signer_index + n;
       to_hash.extend(A.compress().to_bytes());
       to_hash.extend(AH.compress().to_bytes());
       c = keccak256_to_scalar(&to_hash);
     }
 
-    Mode::Verify(c1) => {
+    Mode::Verify { c1, .. } => {
       start = 0;
       end = n;
       c = *c1;
@@ -186,10 +194,10 @@ fn core(
 
     // (s_i * G) + (c_p * P_i) + (c_c * C_i)
     let L = match A_c1 {
-      Mode::Sign(..) => {
+      Mode::Sign { .. } => {
         EdwardsPoint::multiscalar_mul([s[i], c_p, c_c], [ED25519_BASEPOINT_POINT, P[i], C[i]])
       }
-      Mode::Verify(..) => {
+      Mode::Verify { .. } => {
         G_PRECOMP().vartime_mixed_multiscalar_mul([s[i]], [c_p, c_c], [P[i], C[i]])
       }
     };
@@ -198,8 +206,10 @@ fn core(
 
     // (c_p * I) + (c_c * D) + (s_i * PH)
     let R = match A_c1 {
-      Mode::Sign(..) => EdwardsPoint::multiscalar_mul([c_p, c_c, s[i]], [I, D, &PH]),
-      Mode::Verify(..) => images_precomp
+      Mode::Sign { .. } => {
+        EdwardsPoint::multiscalar_mul([c_p, c_c, s[i]], [I, D_torsion_free, &PH])
+      }
+      Mode::Verify { .. } => images_precomp
         .as_ref()
         .expect("value populated when verifying wasn't populated")
         .vartime_mixed_multiscalar_mul([c_p, c_c], [s[i]], [PH]),
@@ -217,7 +227,7 @@ fn core(
   }
 
   // This first tuple is needed to continue signing, the latter is the c to be tested/worked with
-  ((D_INV_EIGHT, c * mu_P, c * mu_C), c1)
+  ((D_inv_eight, c * mu_P, c * mu_C), c1)
 }
 
 /// The CLSAG signature, as used in Monero.
@@ -250,19 +260,26 @@ impl Clsag {
     A: EdwardsPoint,
     AH: EdwardsPoint,
   ) -> ClsagSignCore {
-    let r: usize = input.decoys.signer_index().into();
+    let signer_index = input.decoys.signer_index();
 
     let pseudo_out = Commitment::new(mask, input.commitment.amount).calculate();
     let mask_delta = input.commitment.mask - mask;
 
-    let H = hash_to_point(input.decoys.ring()[r][0].compress().0);
+    let H = hash_to_point(input.decoys.ring()[usize::from(signer_index)][0].compress().0);
     let D = H * mask_delta;
     let mut s = Vec::with_capacity(input.decoys.ring().len());
     for _ in 0 .. input.decoys.ring().len() {
       s.push(Scalar::random(rng));
     }
-    let ((D, c_p, c_c), c1) =
-      core(input.decoys.ring(), I, &pseudo_out, msg_hash, &D, &s, &Mode::Sign(r, A, AH));
+    let ((D, c_p, c_c), c1) = core(
+      input.decoys.ring(),
+      I,
+      &pseudo_out,
+      msg_hash,
+      &D,
+      &s,
+      &Mode::Sign { signer_index, A, AH },
+    );
 
     ClsagSignCore {
       incomplete_clsag: Clsag { D, s, c1 },
@@ -379,12 +396,20 @@ impl Clsag {
       Err(ClsagError::InvalidImage)?;
     }
 
-    let D = self.D.mul_by_cofactor();
-    if D.is_identity() {
+    let D_torsion_free = self.D.mul_by_cofactor();
+    if D_torsion_free.is_identity() {
       Err(ClsagError::InvalidD)?;
     }
 
-    let (_, c1) = core(ring, I, pseudo_out, msg_hash, &D, &self.s, &Mode::Verify(self.c1));
+    let (_, c1) = core(
+      ring,
+      I,
+      pseudo_out,
+      msg_hash,
+      &D_torsion_free,
+      &self.s,
+      &Mode::Verify { c1: self.c1, D_serialized: self.D },
+    );
     if c1 != self.c1 {
       Err(ClsagError::InvalidC1)?;
     }
