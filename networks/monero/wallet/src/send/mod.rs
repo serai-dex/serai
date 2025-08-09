@@ -177,6 +177,17 @@ pub enum SendError {
   /// The created transaction was too large.
   #[cfg_attr(feature = "std", error("too large of a transaction"))]
   TooLargeTransaction,
+  /// The transactions' amounts could not be represented within a `u64`.
+  #[cfg_attr(
+    feature = "std",
+    error("transaction amounts exceed u64::MAX (in {in_amount}, out {out_amount})")
+  )]
+  AmountsUnrepresentable {
+    /// The amount in (via inputs).
+    in_amount: u128,
+    /// The amount which would be out (between outputs and the fee).
+    out_amount: u128,
+  },
   /// This transaction could not pay for itself.
   #[cfg_attr(
     feature = "std",
@@ -300,23 +311,34 @@ impl SignableTransaction {
     }
 
     // Make sure we have enough funds
-    let in_amount = self.inputs.iter().map(|input| input.commitment().amount).sum::<u64>();
-    let payments_amount = self
-      .payments
-      .iter()
-      .filter_map(|payment| match payment {
-        InternalPayment::Payment(_, amount) => Some(*amount),
-        InternalPayment::Change(_) => None,
-      })
-      .try_fold(0, u64::checked_add);
-    let payments_amount = payments_amount.ok_or(SendError::TooManyOutputs)?;
-    let (weight, necessary_fee) = self.weight_and_necessary_fee();
-    if payments_amount.checked_add(necessary_fee).is_none_or(|total_out| in_amount < total_out) {
-      Err(SendError::NotEnoughFunds {
-        inputs: in_amount,
-        outputs: payments_amount,
-        necessary_fee: Some(necessary_fee),
-      })?;
+    let weight;
+    {
+      let in_amount: u128 =
+        self.inputs.iter().map(|input| u128::from(input.commitment().amount)).sum();
+      let payments_amount: u128 = self
+        .payments
+        .iter()
+        .filter_map(|payment| match payment {
+          InternalPayment::Payment(_, amount) => Some(u128::from(*amount)),
+          InternalPayment::Change(_) => None,
+        })
+        .sum();
+      let necessary_fee;
+      (weight, necessary_fee) = self.weight_and_necessary_fee();
+      let out_amount = payments_amount + u128::from(necessary_fee);
+      let in_out_amount = u64::try_from(in_amount)
+        .and_then(|in_amount| u64::try_from(out_amount).map(|out_amount| (in_amount, out_amount)));
+      let Ok((in_amount, out_amount)) = in_out_amount else {
+        Err(SendError::AmountsUnrepresentable { in_amount, out_amount })?
+      };
+      if in_amount < out_amount {
+        Err(SendError::NotEnoughFunds {
+          inputs: in_amount,
+          outputs: u64::try_from(payments_amount)
+            .expect("total out fit within u64 but not part of total out"),
+          necessary_fee: Some(necessary_fee),
+        })?;
+      }
     }
 
     // The limit is half the no-penalty block size

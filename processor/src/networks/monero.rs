@@ -390,6 +390,8 @@ impl Monero {
           MakeSignableTransactionResult::SignableTransaction(signable)
         }
       })),
+      // AmountsUnrepresentable is unreachable on Monero without 100% of the supply before tail
+      // emission or fundamental corruption
       Err(e) => match e {
         SendError::UnsupportedRctType => {
           panic!("trying to use an RctType unsupported by monero-wallet")
@@ -398,6 +400,7 @@ impl Monero {
         SendError::InvalidDecoyQuantity |
         SendError::NoOutputs |
         SendError::TooManyOutputs |
+        SendError::AmountsUnrepresentable { .. } |
         SendError::NoChange |
         SendError::TooMuchArbitraryData |
         SendError::TooLargeTransaction |
