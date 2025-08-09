@@ -321,7 +321,7 @@ impl SignableTransaction {
 
     // The limit is half the no-penalty block size
     // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
-    //   /src/wallet/wallet2.cpp#L110766-L11085
+    //   /src/wallet/wallet2.cpp#L11076-L11085
     // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
     //   /src/cryptonote_config.h#L61
     // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c454
