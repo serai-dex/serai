@@ -21,4 +21,4 @@ jobs:
         run: cargo +1.85 install cargo-deny --version =0.18.3
 
       - name: Run cargo deny
-        run: cargo deny -L error --all-features check
+        run: cargo deny -L error --all-features check --hide-inclusion-graph
