@@ -227,8 +227,11 @@ impl<'a> AggregateRangeStatement<'a> {
     let x_ip = transcript;
 
     let ip = IpStatement::new_without_P_transcript(y_inv_pow_n, x_ip)
-      .prove(transcript, IpWitness::new(l, r).unwrap())
-      .unwrap();
+      .prove(
+        transcript,
+        IpWitness::new(l, r).expect("Bulletproofs::Original created an invalid IpWitness"),
+      )
+      .expect("Bulletproofs::Original failed to prove the inner-product");
 
     let res = AggregateRangeProof { A, S, T1, T2, tau_x, mu, t_hat, ip };
     #[cfg(debug_assertions)]

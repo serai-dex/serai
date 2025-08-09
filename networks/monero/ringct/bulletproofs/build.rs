@@ -16,8 +16,10 @@ fn generators(prefix: &'static str, path: &str) {
       generators_string.extend(
         format!(
           "
-          curve25519_dalek::edwards::CompressedEdwardsY({:?}).decompress().unwrap(),
-        ",
+          curve25519_dalek::edwards::CompressedEdwardsY({:?})
+            .decompress()
+            .expect(\"generator from build script wasn't on-curve\"),
+          ",
           generator.compress().to_bytes()
         )
         .chars(),
@@ -33,10 +35,10 @@ fn generators(prefix: &'static str, path: &str) {
   let mut H_str = String::new();
   serialize(&mut H_str, &generators.H);
 
-  let path = Path::new(&env::var("OUT_DIR").unwrap()).join(path);
+  let path = Path::new(&env::var("OUT_DIR").expect("cargo didn't set $OUT_DIR")).join(path);
   let _ = remove_file(&path);
   File::create(&path)
-    .unwrap()
+    .expect("failed to create file in $OUT_DIR")
     .write_all(
       format!(
         "
@@ -52,15 +54,15 @@ fn generators(prefix: &'static str, path: &str) {
       )
       .as_bytes(),
     )
-    .unwrap();
+    .expect("couldn't write generated source code to file on disk");
 }
 
 #[cfg(not(feature = "compile-time-generators"))]
 fn generators(prefix: &'static str, path: &str) {
-  let path = Path::new(&env::var("OUT_DIR").unwrap()).join(path);
+  let path = Path::new(&env::var("OUT_DIR").expect("cargo didn't set $OUT_DIR")).join(path);
   let _ = remove_file(&path);
   File::create(&path)
-    .unwrap()
+    .expect("failed to create file in $OUT_DIR")
     .write_all(
       format!(
         r#"
@@ -71,7 +73,7 @@ fn generators(prefix: &'static str, path: &str) {
       )
       .as_bytes(),
     )
-    .unwrap();
+    .expect("couldn't write generated source code to file on disk");
 }
 
 fn main() {

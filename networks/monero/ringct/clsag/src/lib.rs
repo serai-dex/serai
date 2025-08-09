@@ -199,9 +199,10 @@ fn core(
     // (c_p * I) + (c_c * D) + (s_i * PH)
     let R = match A_c1 {
       Mode::Sign(..) => EdwardsPoint::multiscalar_mul([c_p, c_c, s[i]], [I, D, &PH]),
-      Mode::Verify(..) => {
-        images_precomp.as_ref().unwrap().vartime_mixed_multiscalar_mul([c_p, c_c], [s[i]], [PH])
-      }
+      Mode::Verify(..) => images_precomp
+        .as_ref()
+        .expect("value populated when verifying wasn't populated")
+        .vartime_mixed_multiscalar_mul([c_p, c_c], [s[i]], [PH]),
     };
 
     to_hash.truncate(((2 * n) + 3) * 32);

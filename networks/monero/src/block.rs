@@ -51,7 +51,7 @@ impl BlockHeader {
   /// Serialize the BlockHeader to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
-    self.write(&mut serialized).unwrap();
+    self.write(&mut serialized).expect("write failed but <Vec as io::Write> doesn't fail");
     serialized
   }
 
@@ -111,7 +111,7 @@ impl Block {
   /// Serialize the Block to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
-    self.write(&mut serialized).unwrap();
+    self.write(&mut serialized).expect("write failed but <Vec as io::Write> doesn't fail");
     serialized
   }
 
@@ -122,7 +122,13 @@ impl Block {
   pub fn serialize_pow_hash(&self) -> Vec<u8> {
     let mut blob = self.header.serialize();
     blob.extend_from_slice(&merkle_root(self.miner_transaction.hash(), &self.transactions));
-    write_varint(&(1 + u64::try_from(self.transactions.len()).unwrap()), &mut blob).unwrap();
+    write_varint(
+      &(1 +
+        u64::try_from(self.transactions.len())
+          .expect("amount of transactions in block exceeded u64::MAX")),
+      &mut blob,
+    )
+    .expect("write failed but <Vec as io::Write> doesn't fail");
     blob
   }
 
@@ -132,7 +138,11 @@ impl Block {
     // Monero pre-appends a VarInt of the block-to-hash'ss length before getting the block hash,
     // but doesn't do this when getting the proof of work hash :)
     let mut hashing_blob = Vec::with_capacity(9 + hashable.len());
-    write_varint(&u64::try_from(hashable.len()).unwrap(), &mut hashing_blob).unwrap();
+    write_varint(
+      &u64::try_from(hashable.len()).expect("length of block hash's preimage exceeded u64::MAX"),
+      &mut hashing_blob,
+    )
+    .expect("write failed but <Vec as io::Write> doesn't fail");
     hashing_blob.append(&mut hashable);
 
     let hash = keccak256(hashing_blob);

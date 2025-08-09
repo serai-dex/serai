@@ -174,7 +174,11 @@ impl IpStatement {
       R_vec.push(R * INV_EIGHT());
 
       // Now that we've calculate L, R, transcript them to receive x (26-27)
-      transcript = Self::transcript_L_R(transcript, *L_vec.last().unwrap(), *R_vec.last().unwrap());
+      transcript = Self::transcript_L_R(
+        transcript,
+        *L_vec.last().expect("couldn't get last L_vec despite always being non-empty"),
+        *R_vec.last().expect("couldn't get last R_vec despite always being non-empty"),
+      );
       let x = transcript;
       let x_inv = x.invert();
 

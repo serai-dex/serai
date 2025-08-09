@@ -357,21 +357,21 @@ pub struct Address<const ADDRESS_BYTES: u128> {
 
 impl<const ADDRESS_BYTES: u128> fmt::Debug for Address<ADDRESS_BYTES> {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-    let hex = |bytes: &[u8]| -> String {
+    let hex = |bytes: &[u8]| -> Result<String, fmt::Error> {
       let mut res = String::with_capacity(2 + (2 * bytes.len()));
       res.push_str("0x");
       for b in bytes {
-        write!(&mut res, "{b:02x}").unwrap();
+        write!(&mut res, "{b:02x}")?;
       }
-      res
+      Ok(res)
     };
 
     fmt
       .debug_struct("Address")
       .field("network", &self.network)
       .field("kind", &self.kind)
-      .field("spend", &hex(&self.spend.compress().to_bytes()))
-      .field("view", &hex(&self.view.compress().to_bytes()))
+      .field("spend", &hex(&self.spend.compress().to_bytes())?)
+      .field("view", &hex(&self.view.compress().to_bytes())?)
       // This is not a real field yet is the most valuable thing to know when debugging
       .field("(address)", &self.to_string())
       .finish()
@@ -389,7 +389,8 @@ impl<const ADDRESS_BYTES: u128> fmt::Display for Address<ADDRESS_BYTES> {
     if let AddressType::Featured { subaddress, payment_id, guaranteed } = self.kind {
       let features_uint =
         (u8::from(guaranteed) << 2) + (u8::from(payment_id.is_some()) << 1) + u8::from(subaddress);
-      write_varint(&features_uint, &mut data).unwrap();
+      write_varint(&features_uint, &mut data)
+        .expect("write failed but <Vec as io::Write> doesn't fail");
     }
     if let Some(id) = self.kind.payment_id() {
       data.extend(id);

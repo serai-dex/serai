@@ -29,7 +29,11 @@ pub fn hash_to_point(bytes: [u8; 32]) -> EdwardsPoint {
     let uv3 = u * v3;
     let v7 = v3 * v3 * v;
     let uv7 = u * v7;
-    uv3 * uv7.pow((-FieldElement::from(5u8)) * FieldElement::from(8u8).invert().unwrap())
+    uv3 *
+      uv7.pow(
+        (-FieldElement::from(5u8)) *
+          FieldElement::from(8u8).invert().expect("eight was coprime with the prime 2^{255}-19"),
+      )
   };
   let x = X.square() * x;
 
@@ -45,9 +49,23 @@ pub fn hash_to_point(bytes: [u8; 32]) -> EdwardsPoint {
   #[allow(non_snake_case)]
   let mut Y = z - w;
 
-  Y *= Z.invert().unwrap();
+  /*
+    If sign, `z = -486662`, else, `z = -486662 * v`
+    `w = v + 1`
+
+    We need `z + w \ne 0`, which would require `z \cong -w \mod 2^{255}-19`. This requires:
+    - If `sign`, `v \mod 2^{255}-19 \ne 486661`.
+    - If `!sign`, `(v + 1) \mod 2^{255}-19 \ne (v * 486662) \mod 2^{255}-19` which is equivalent to
+      `(v * 486661) \mod 2^{255}-19 \ne 1`.
+
+    In summary, if `sign`, `v` must not `486661`, and if `!sign`, `v` must not be the
+    multiplicative inverse of `486661`. Since `v` is the output of a hash function, this should
+    have negligible probability. Additionally, since the definition of `sign` is dependent on `v`,
+    it may be truly impossible to reach.
+  */
+  Y *= Z.invert().expect("if sign, v was 486661. if !sign, v was 486661^{-1}");
   let mut bytes = Y.to_repr();
   bytes[31] |= sign.unwrap_u8() << 7;
 
-  decompress_point(bytes).unwrap().mul_by_cofactor()
+  decompress_point(bytes).expect("point from hash-to-curve wasn't on-curve").mul_by_cofactor()
 }

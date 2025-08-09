@@ -14,7 +14,8 @@ use monero_io::*;
 static PRECOMPUTED_SCALARS: LazyLock<[Scalar; 8]> = LazyLock::new(|| {
   let mut precomputed_scalars = [Scalar::ONE; 8];
   for (i, scalar) in precomputed_scalars.iter_mut().enumerate().skip(1) {
-    *scalar = Scalar::from(u8::try_from((i * 2) + 1).unwrap());
+    *scalar =
+      Scalar::from(u64::try_from((i * 2) + 1).expect("enumerating more than u64::MAX / 2 items"));
   }
   precomputed_scalars
 });
@@ -59,7 +60,7 @@ impl UnreducedScalar {
     let bits = self.as_bits();
     let mut naf = [0i8; 256];
     for (b, bit) in bits.into_iter().enumerate() {
-      naf[b] = i8::try_from(bit).unwrap();
+      naf[b] = i8::try_from(bit).expect("bit didn't fit within an i8");
     }
 
     for i in 0 .. 256 {
@@ -129,8 +130,13 @@ impl UnreducedScalar {
     for &numb in self.non_adjacent_form().iter().rev() {
       recovered += recovered;
       match numb.cmp(&0) {
-        Ordering::Greater => recovered += PRECOMPUTED_SCALARS[usize::try_from(numb).unwrap() / 2],
-        Ordering::Less => recovered -= PRECOMPUTED_SCALARS[usize::try_from(-numb).unwrap() / 2],
+        Ordering::Greater => {
+          recovered += PRECOMPUTED_SCALARS[usize::try_from(numb).expect("positive i8 -> usize") / 2]
+        }
+        Ordering::Less => {
+          recovered -=
+            PRECOMPUTED_SCALARS[usize::try_from(-numb).expect("negated negative i8 -> usize") / 2]
+        }
         Ordering::Equal => (),
       }
     }

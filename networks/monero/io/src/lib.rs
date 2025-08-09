@@ -18,10 +18,12 @@ use curve25519_dalek::{
 const VARINT_CONTINUATION_MASK: u8 = 0b1000_0000;
 
 mod sealed {
+  use core::fmt::Debug;
+
   /// A trait for a number readable/writable as a VarInt.
   ///
   /// This is sealed to prevent unintended implementations.
-  pub trait VarInt: TryInto<u64> + TryFrom<u64> + Copy {
+  pub trait VarInt: TryInto<u64, Error: Debug> + TryFrom<u64, Error: Debug> + Copy {
     const BITS: usize;
   }
 
@@ -34,6 +36,10 @@ mod sealed {
   impl VarInt for u64 {
     const BITS: usize = 64;
   }
+  // Don't compile for platforms where `usize` exceeds `u64`, preventing various possible runtime
+  // exceptions
+  const _NO_128_BIT_PLATFORMS: [(); (u64::BITS - usize::BITS) as usize] =
+    [(); (u64::BITS - usize::BITS) as usize];
   impl VarInt for usize {
     const BITS: usize = core::mem::size_of::<usize>() * 8;
   }
@@ -43,8 +49,12 @@ mod sealed {
 ///
 /// This function will panic if the VarInt exceeds u64::MAX.
 pub fn varint_len<V: sealed::VarInt>(varint: V) -> usize {
-  let varint_u64: u64 = varint.try_into().map_err(|_| "varint exceeded u64").unwrap();
-  ((usize::try_from(u64::BITS - varint_u64.leading_zeros()).unwrap().saturating_sub(1)) / 7) + 1
+  let varint_u64: u64 = varint.try_into().expect("varint exceeded u64");
+  ((usize::try_from(u64::BITS - varint_u64.leading_zeros())
+    .expect("64 > usize::MAX")
+    .saturating_sub(1)) /
+    7) +
+    1
 }
 
 /// Write a byte.
@@ -58,9 +68,10 @@ pub fn write_byte<W: Write>(byte: &u8, w: &mut W) -> io::Result<()> {
 ///
 /// This will panic if the VarInt exceeds u64::MAX.
 pub fn write_varint<W: Write, U: sealed::VarInt>(varint: &U, w: &mut W) -> io::Result<()> {
-  let mut varint: u64 = (*varint).try_into().map_err(|_| "varint exceeded u64").unwrap();
+  let mut varint: u64 = (*varint).try_into().expect("varint exceeded u64");
   while {
-    let mut b = u8::try_from(varint & u64::from(!VARINT_CONTINUATION_MASK)).unwrap();
+    let mut b = u8::try_from(varint & u64::from(!VARINT_CONTINUATION_MASK))
+      .expect("& eight_bit_mask left more than 8 bits set");
     varint >>= 7;
     if varint != 0 {
       b |= VARINT_CONTINUATION_MASK;
@@ -210,7 +221,11 @@ pub fn read_array<R: Read, T: Debug, F: Fn(&mut R) -> io::Result<T>, const N: us
   f: F,
   r: &mut R,
 ) -> io::Result<[T; N]> {
-  read_raw_vec(f, N, r).map(|vec| vec.try_into().unwrap())
+  read_raw_vec(f, N, r).map(|vec| {
+    vec.try_into().expect(
+      "read vector of specific length yet couldn't transform to an array of the same length",
+    )
+  })
 }
 
 /// Read a length-prefixed variable-length list of elements.

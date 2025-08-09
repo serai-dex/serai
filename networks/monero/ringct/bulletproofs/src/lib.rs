@@ -5,7 +5,6 @@
 #![allow(non_snake_case)]
 
 use std_shims::{
-  vec,
   vec::Vec,
   io::{self, Read, Write},
 };
@@ -124,9 +123,15 @@ impl Bulletproof {
     let commitments = outputs.iter().map(Commitment::calculate).collect::<Vec<_>>();
     Ok(Bulletproof::Original(
       OriginalStatement::new(&commitments)
-        .unwrap()
-        .prove(rng, OriginalWitness::new(outputs).unwrap())
-        .unwrap(),
+        .expect("failed to create statement despite checking amount of commitments")
+        .prove(
+          rng,
+          OriginalWitness::new(outputs)
+            .expect("failed to create witness despite checking amount of commitments"),
+        )
+        .expect(
+          "failed to prove Bulletproof::Original despite ensuring statement/witness consistency",
+        ),
     ))
   }
 
@@ -144,9 +149,15 @@ impl Bulletproof {
     let commitments = outputs.iter().map(Commitment::calculate).collect::<Vec<_>>();
     Ok(Bulletproof::Plus(
       PlusStatement::new(&commitments)
-        .unwrap()
-        .prove(rng, &Zeroizing::new(PlusWitness::new(outputs).unwrap()))
-        .unwrap(),
+        .expect("failed to create statement despite checking amount of commitments")
+        .prove(
+          rng,
+          &Zeroizing::new(
+            PlusWitness::new(outputs)
+              .expect("failed to create witness despite checking amount of commitments"),
+          ),
+        )
+        .expect("failed to prove Bulletproof::Plus despite ensuring statement/witness consistency"),
     ))
   }
 
@@ -255,8 +266,8 @@ impl Bulletproof {
 
   /// Serialize a Bulletproof(+) to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
-    let mut serialized = vec![];
-    self.write(&mut serialized).unwrap();
+    let mut serialized = Vec::with_capacity(512);
+    self.write(&mut serialized).expect("write failed but <Vec as io::Write> doesn't fail");
     serialized
   }
 

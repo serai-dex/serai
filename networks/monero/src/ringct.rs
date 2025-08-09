@@ -326,7 +326,9 @@ impl RctPrunable {
   /// Serialize the RctPrunable to a `Vec<u8>`.
   pub fn serialize(&self, rct_type: RctType) -> Vec<u8> {
     let mut serialized = vec![];
-    self.write(&mut serialized, rct_type).unwrap();
+    self
+      .write(&mut serialized, rct_type)
+      .expect("write failed but <Vec as io::Write> doesn't fail");
     serialized
   }
 
@@ -441,7 +443,7 @@ impl RctProofs {
   /// Serialize the RctProofs to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = vec![];
-    self.write(&mut serialized).unwrap();
+    self.write(&mut serialized).expect("write failed but <Vec as io::Write> doesn't fail");
     serialized
   }
 

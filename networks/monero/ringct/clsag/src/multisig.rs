@@ -223,7 +223,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
         self
           .mask_recv
           .take()
-          .unwrap()
+          .expect("image was none multiple times, despite setting to Some on first iteration")
           .recv()
           .ok_or(FrostError::InternalError("CLSAG mask was not provided"))?,
       );
@@ -243,7 +243,8 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     // Accumulate the interpolated share
     let interpolated_key_image_share =
       addendum.key_image_share * lagrange::<dfg::Scalar>(l, view.included());
-    *self.image.as_mut().unwrap() += interpolated_key_image_share;
+    *self.image.as_mut().expect("image populated on first iteration wasn't Some") +=
+      interpolated_key_image_share;
 
     self
       .key_image_shares
@@ -272,14 +273,15 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     // opening of the commitment being re-randomized (and what it's re-randomized to)
     let mut rng = ChaCha20Rng::from_seed(self.transcript.rng_seed(b"decoy_responses"));
 
-    self.msg_hash = Some(msg_hash.try_into().expect("CLSAG message hash should be 32-bytes"));
+    let msg_hash = msg_hash.try_into().expect("CLSAG message hash should be 32-bytes");
+    self.msg_hash = Some(msg_hash);
 
     let sign_core = Clsag::sign_core(
       &mut rng,
       &self.image.expect("verifying a share despite never processing any addendums").0,
       &self.context,
       self.mask.expect("mask wasn't set"),
-      self.msg_hash.as_ref().unwrap(),
+      &msg_hash,
       nonce_sums[0][0].0,
       nonce_sums[0][1].0,
     );
@@ -301,7 +303,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     _: &[Vec<dfg::EdwardsPoint>],
     sum: dfg::Scalar,
   ) -> Option<Self::Signature> {
-    let interim = self.interim.as_ref().unwrap();
+    let interim = self.interim.as_ref().expect("verify called before sign_share");
     let mut clsag = interim.clsag.clone();
     // We produced shares as `r - p x`, yet the signature is actually `r - p x - c x`
     // Substract `c x` (saved as `c`) now
@@ -311,7 +313,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
         self.context.decoys.ring(),
         &self.image.expect("verifying a signature despite never processing any addendums").0,
         &interim.pseudo_out,
-        self.msg_hash.as_ref().unwrap(),
+        self.msg_hash.as_ref().expect("verify called before sign_share"),
       )
       .is_ok()
     {
@@ -326,7 +328,7 @@ impl Algorithm<Ed25519> for ClsagMultisig {
     nonces: &[Vec<dfg::EdwardsPoint>],
     share: dfg::Scalar,
   ) -> Result<Vec<(dfg::Scalar, dfg::EdwardsPoint)>, ()> {
-    let interim = self.interim.as_ref().unwrap();
+    let interim = self.interim.as_ref().expect("verify_share called before sign_share");
 
     // For a share `r - p x`, the following two equalities should hold:
     // - `(r - p x)G == R.0 - pV`, where `V = xG`

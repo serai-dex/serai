@@ -17,7 +17,7 @@ use crate::{
   WalletOutput,
 };
 
-const RECENT_WINDOW: usize = 15;
+const RECENT_WINDOW: u64 = 15;
 const BLOCKS_PER_YEAR: usize = 365 * 24 * 60 * 60 / BLOCK_TIME;
 #[allow(clippy::cast_precision_loss)]
 const TIP_APPLICATION: f64 = (DEFAULT_LOCK_WINDOW * BLOCK_TIME) as f64;
@@ -27,7 +27,7 @@ async fn select_n(
   rpc: &impl DecoyRpc,
   height: usize,
   real_output: u64,
-  ring_len: usize,
+  ring_len: u8,
   fingerprintable_deterministic: bool,
 ) -> Result<Vec<(u64, [EdwardsPoint; 2])>, RpcError> {
   if height < DEFAULT_LOCK_WINDOW {
@@ -48,8 +48,9 @@ async fn select_n(
   // This assumes that each miner TX had one output (as sane) and checks we have sufficient
   // outputs even when excluding them (due to their own timelock requirements)
   // Considering this a temporal error for very new chains, it's sufficiently sane to have
-  if highest_output_exclusive_bound.saturating_sub(u64::try_from(COINBASE_LOCK_WINDOW).unwrap()) <
-    u64::try_from(ring_len).unwrap()
+  if highest_output_exclusive_bound.saturating_sub(
+    u64::try_from(COINBASE_LOCK_WINDOW).expect("coinbase lock window exceeds 2^{64}"),
+  ) < u64::from(ring_len)
   {
     Err(RpcError::InternalError("not enough decoy candidates".to_string()))?;
   }
@@ -67,7 +68,7 @@ async fn select_n(
   let mut do_not_select = HashSet::new();
   do_not_select.insert(real_output);
 
-  let decoy_count = ring_len - 1;
+  let decoy_count = usize::from(ring_len - 1);
   let mut res = Vec::with_capacity(decoy_count);
 
   let mut iters = 0;
@@ -87,8 +88,9 @@ async fn select_n(
     // We check both that we aren't at the maximum amount of iterations and that the not-yet
     // selected candidates exceed the amount of candidates necessary to trigger the next iteration
     if (iters == MAX_ITERS) ||
-      ((highest_output_exclusive_bound - u64::try_from(do_not_select.len()).unwrap()) <
-        u64::try_from(ring_len).unwrap())
+      ((highest_output_exclusive_bound -
+        u64::try_from(do_not_select.len()).expect("amount of ignored decoys exceeds 2^{64}")) <
+        u64::from(ring_len))
     {
       Err(RpcError::InternalError("hit decoy selection round limit".to_string()))?;
     }
@@ -99,13 +101,18 @@ async fn select_n(
       // Use a gamma distribution, as Monero does
       // https://github.com/monero-project/monero/blob/cc73fe71162d564ffda8e549b79a350bca53c45
       //   /src/wallet/wallet2.cpp#L142-L143
-      let mut age = Gamma::<f64>::new(19.28, 1.0 / 1.61).unwrap().sample(rng).exp();
+      let mut age = Gamma::<f64>::new(19.28, 1.0 / 1.61)
+        .expect("constant Gamma distribution could no longer be created")
+        .sample(rng)
+        .exp();
       #[allow(clippy::cast_precision_loss)]
       if age > TIP_APPLICATION {
         age -= TIP_APPLICATION;
       } else {
         // f64 does not have try_from available, which is why these are written with `as`
-        age = (rng.next_u64() % u64::try_from(RECENT_WINDOW * BLOCK_TIME).unwrap()) as f64;
+        age = (rng.next_u64() %
+          (RECENT_WINDOW * u64::try_from(BLOCK_TIME).expect("BLOCK_TIME exceeded u64::MAX")))
+          as f64;
       }
 
       #[allow(clippy::cast_sign_loss, clippy::cast_possible_truncation)]
@@ -135,7 +142,11 @@ async fn select_n(
       candidates.push(real_output);
       // Sort candidates so the real spends aren't the ones at the end
       candidates.sort();
-      Some(candidates.binary_search(&real_output).unwrap())
+      Some(
+        candidates
+          .binary_search(&real_output)
+          .expect("selected a ring which didn't include the real spend"),
+      )
     } else {
       None
     };
@@ -169,11 +180,15 @@ async fn select_n(
 async fn select_decoys<R: RngCore + CryptoRng>(
   rng: &mut R,
   rpc: &impl DecoyRpc,
-  ring_len: usize,
+  ring_len: u8,
   height: usize,
   input: &WalletOutput,
   fingerprintable_deterministic: bool,
 ) -> Result<Decoys, RpcError> {
+  if ring_len == 0 {
+    Err(RpcError::InternalError("requesting a ring of length 0".to_string()))?;
+  }
+
   // Select all decoys for this transaction, assuming we generate a sane transaction
   // We should almost never naturally generate an insane transaction, hence why this doesn't
   // bother with an overage
@@ -215,10 +230,13 @@ async fn select_decoys<R: RngCore + CryptoRng>(
     Decoys::new(
       offsets,
       // Binary searches for the real spend since we don't know where it sorted to
-      u8::try_from(ring.partition_point(|x| x.0 < input.relative_id.index_on_blockchain)).unwrap(),
+      // TODO: Define our own collection whose `len` function returns `u8` to ensure this bound
+      // with types
+      u8::try_from(ring.partition_point(|x| x.0 < input.relative_id.index_on_blockchain))
+        .expect("ring of size <= u8::MAX had an index exceeding u8::MAX"),
       ring.into_iter().map(|output| output.1).collect(),
     )
-    .unwrap(),
+    .expect("selected a syntactically-invalid set of Decoys"),
   )
 }
 
@@ -234,7 +252,7 @@ impl OutputWithDecoys {
   pub async fn new(
     rng: &mut (impl Send + Sync + RngCore + CryptoRng),
     rpc: &impl DecoyRpc,
-    ring_len: usize,
+    ring_len: u8,
     height: usize,
     output: WalletOutput,
   ) -> Result<OutputWithDecoys, RpcError> {
@@ -253,7 +271,7 @@ impl OutputWithDecoys {
   pub async fn fingerprintable_deterministic_new(
     rng: &mut (impl Send + Sync + RngCore + CryptoRng),
     rpc: &impl DecoyRpc,
-    ring_len: usize,
+    ring_len: u8,
     height: usize,
     output: WalletOutput,
   ) -> Result<OutputWithDecoys, RpcError> {
@@ -297,7 +315,7 @@ impl OutputWithDecoys {
   /// defined serialization.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(128);
-    self.write(&mut serialized).unwrap();
+    self.write(&mut serialized).expect("write failed but <Vec as io::Write> doesn't fail");
     serialized
   }
 

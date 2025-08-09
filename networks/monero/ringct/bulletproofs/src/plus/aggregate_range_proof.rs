@@ -106,7 +106,9 @@ impl<'a> AggregateRangeStatement<'a> {
 
     let mut d = ScalarVector::new(mn);
     for j in 1 ..= V.len() {
-      z_pow.push(*z_pow.last().unwrap() * z_pow[0]);
+      z_pow.push(
+        *z_pow.last().expect("couldn't get last z_pow despite always being non-empty") * z_pow[0],
+      );
       d = d + &(Self::d_j(j, V.len()) * (z_pow[j - 1]));
     }
 
@@ -229,8 +231,15 @@ impl<'a> AggregateRangeStatement<'a> {
     Some(AggregateRangeProof {
       A,
       wip: WipStatement::new(generators, A_hat, y)
-        .prove(rng, transcript, &Zeroizing::new(WipWitness::new(a_l, a_r, alpha).unwrap()))
-        .unwrap(),
+        .prove(
+          rng,
+          transcript,
+          &Zeroizing::new(
+            WipWitness::new(a_l, a_r, alpha)
+              .expect("Bulletproofs::Plus created an invalid WipWitness"),
+          ),
+        )
+        .expect("Bulletproof::Plus failed to prove the weighted inner-product"),
     })
   }
 
