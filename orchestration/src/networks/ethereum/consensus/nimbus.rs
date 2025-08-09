@@ -20,7 +20,7 @@ pub fn nimbus(network: Network) -> (String, String, String) {
 
   #[rustfmt::skip]
   let download_nimbus = format!(r#"
-FROM alpine:latest as nimbus
+FROM alpine:latest AS nimbus
 
 ENV NIMBUS_VERSION=24.3.0
 ENV NIMBUS_COMMIT=dc19b082
