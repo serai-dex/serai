@@ -122,6 +122,10 @@ impl Mlsag {
   }
 
   /// Verify a MLSAG.
+  ///
+  /// WARNING: This follows the Fiat-Shamir transcript format used by the Monero protocol, which
+  /// makes assumptions on what has already been transcripted and bound to within `msg`. Do not use
+  /// this if you don't know what you're doing.
   pub fn verify(
     &self,
     msg: &[u8; 32],

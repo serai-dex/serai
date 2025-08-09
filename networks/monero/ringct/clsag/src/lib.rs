@@ -377,6 +377,10 @@ impl Clsag {
   }
 
   /// Verify a CLSAG signature for the provided context.
+  ///
+  /// WARNING: This follows the Fiat-Shamir transcript format used by the Monero protocol, which
+  /// makes assumptions on what has already been transcripted and bound to within `msg_hash`. Do
+  /// not use this if you don't know what you're doing.
   pub fn verify(
     &self,
     ring: &[[EdwardsPoint; 2]],
