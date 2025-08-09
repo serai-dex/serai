@@ -79,5 +79,5 @@ jobs:
       - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
       - name: Verify all dependencies are in use
         run: |
-          cargo +1.85 install cargo-machete
+          cargo +1.85 install cargo-machete --version 0.8.0
           cargo +1.85 machete
