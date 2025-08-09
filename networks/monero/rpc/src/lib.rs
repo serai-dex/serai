@@ -401,6 +401,11 @@ pub trait Rpc: Sync + Clone {
             txs.missed_tx.iter().map(|hash| hash_hex(hash)).collect::<Result<_, _>>()?,
           ))?;
         }
+        if txs.txs.len() != this_count {
+          Err(RpcError::InvalidNode(
+            "not missing any transactions yet didn't return all transactions".to_string(),
+          ))?;
+        }
 
         all_txs.extend(txs.txs);
       }
