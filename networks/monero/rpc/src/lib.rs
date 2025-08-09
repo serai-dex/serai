@@ -121,7 +121,7 @@ impl FeeRate {
   /// defined serialization.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(16);
-    self.write(&mut res).unwrap();
+    self.write(&mut res).expect("write failed but <Vec as io::Write> doesn't fail");
     res
   }
 
@@ -139,15 +139,22 @@ impl FeeRate {
   ///
   /// This function may panic upon overflow.
   pub fn calculate_fee_from_weight(&self, weight: usize) -> u64 {
-    let fee = self.per_weight * u64::try_from(weight).unwrap();
+    let fee =
+      self.per_weight * u64::try_from(weight).expect("couldn't convert weight (usize) to u64");
     let fee = fee.div_ceil(self.mask) * self.mask;
-    debug_assert_eq!(weight, self.calculate_weight_from_fee(fee), "Miscalculated weight from fee");
+    debug_assert_eq!(
+      Some(weight),
+      self.calculate_weight_from_fee(fee),
+      "Miscalculated weight from fee"
+    );
     fee
   }
 
   /// Calculate the weight from the fee.
-  pub fn calculate_weight_from_fee(&self, fee: u64) -> usize {
-    usize::try_from(fee / self.per_weight).unwrap()
+  ///
+  /// Returns `None` if the weight would not fit within a `usize`.
+  pub fn calculate_weight_from_fee(&self, fee: u64) -> Option<usize> {
+    usize::try_from(fee / self.per_weight).ok()
   }
 }
 
@@ -272,8 +279,14 @@ pub trait Rpc: Sync + Clone {
       let res = self
         .post(
           route,
-          if let Some(params) = params {
-            serde_json::to_string(&params).unwrap().into_bytes()
+          if let Some(params) = params.as_ref() {
+            serde_json::to_string(params)
+              .map_err(|e| {
+                RpcError::InternalError(format!(
+                  "couldn't convert parameters ({params:?}) to JSON: {e:?}"
+                ))
+              })?
+              .into_bytes()
           } else {
             vec![]
           },
@@ -295,7 +308,10 @@ pub trait Rpc: Sync + Clone {
     async move {
       let mut req = json!({ "method": method });
       if let Some(params) = params {
-        req.as_object_mut().unwrap().insert("params".into(), params);
+        req
+          .as_object_mut()
+          .expect("accessing object as object failed?")
+          .insert("params".into(), params);
       }
       Ok(self.rpc_call::<_, JsonRpcResponse<Response>>("json_rpc", Some(req)).await?.result)
     }

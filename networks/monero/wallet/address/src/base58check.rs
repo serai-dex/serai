@@ -76,8 +76,10 @@ pub(crate) fn decode(data: &str) -> Option<Vec<u8>> {
         break;
       }
     }
+    let used_bytes = used_bytes
+      .expect("chunk of bounded length exhaustively searched but couldn't find matching length");
     // Only push on the used bytes
-    res.extend(&sum.to_be_bytes()[(BLOCK_LEN - used_bytes.unwrap()) ..]);
+    res.extend(&sum.to_be_bytes()[(BLOCK_LEN - used_bytes) ..]);
   }
 
   Some(res)

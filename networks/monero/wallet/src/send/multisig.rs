@@ -251,7 +251,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     }
 
     let tx = tx.transaction_without_signatures();
-    let msg = tx.signature_hash().unwrap();
+    let msg = tx.signature_hash().expect("signing a transaction which isn't signed?");
 
     // Iterate over each CLSAG calling sign
     let mut shares = Vec::with_capacity(to_sign.len());

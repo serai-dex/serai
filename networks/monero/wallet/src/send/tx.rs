@@ -73,7 +73,9 @@ impl SignableTransaction {
     {
       let id = (u64::from_le_bytes(id) ^ u64::from_le_bytes(*id_xor)).to_le_bytes();
       let mut id_vec = Vec::with_capacity(1 + 8);
-      PaymentId::Encrypted(id).write(&mut id_vec).unwrap();
+      PaymentId::Encrypted(id)
+        .write(&mut id_vec)
+        .expect("write failed but <Vec as io::Write> doesn't fail");
       extra.push_nonce(id_vec);
     } else {
       /*
@@ -96,7 +98,9 @@ impl SignableTransaction {
           .expect("multiple change outputs?");
         let mut id_vec = Vec::with_capacity(1 + 8);
         // The dummy payment ID is [0; 8], which when xor'd with the mask, is just the mask
-        PaymentId::Encrypted(*payment_id_xor).write(&mut id_vec).unwrap();
+        PaymentId::Encrypted(*payment_id_xor)
+          .write(&mut id_vec)
+          .expect("write failed but <Vec as io::Write> doesn't fail");
         extra.push_nonce(id_vec);
       }
     }
@@ -109,7 +113,7 @@ impl SignableTransaction {
     }
 
     let mut serialized = Vec::with_capacity(32 * amount_of_keys);
-    extra.write(&mut serialized).unwrap();
+    extra.write(&mut serialized).expect("write failed but <Vec as io::Write> doesn't fail");
     serialized
   }
 
@@ -180,7 +184,8 @@ impl SignableTransaction {
             push_scalar(&mut bp);
           }
           for _ in 0 .. 2 {
-            write_varint(&lr_len, &mut bp).unwrap();
+            write_varint(&lr_len, &mut bp)
+              .expect("write failed but <Vec as io::Write> doesn't fail");
             for _ in 0 .. lr_len {
               push_point(&mut bp);
             }
@@ -204,7 +209,8 @@ impl SignableTransaction {
             push_scalar(&mut bp);
           }
           for _ in 0 .. 2 {
-            write_varint(&lr_len, &mut bp).unwrap();
+            write_varint(&lr_len, &mut bp)
+              .expect("write failed but <Vec as io::Write> doesn't fail");
             for _ in 0 .. lr_len {
               push_point(&mut bp);
             }
@@ -261,7 +267,8 @@ impl SignableTransaction {
         break;
       }
     }
-    weight_and_fee.unwrap()
+    weight_and_fee
+      .expect("length of highest possible fee was greater than highest possible fee length")
   }
 }
 

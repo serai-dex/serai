@@ -124,7 +124,7 @@ impl Commitment {
   /// defined serialization.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(32 + 8);
-    self.write(&mut res).unwrap();
+    self.write(&mut res).expect("write failed but <Vec as io::Write> doesn't fail");
     res
   }
 
@@ -230,7 +230,7 @@ impl Decoys {
   pub fn serialize(&self) -> Vec<u8> {
     let mut res =
       Vec::with_capacity((1 + (2 * self.offsets.len())) + 1 + 1 + (self.ring.len() * 64));
-    self.write(&mut res).unwrap();
+    self.write(&mut res).expect("write failed but <Vec as io::Write> doesn't fail");
     res
   }
 

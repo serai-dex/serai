@@ -28,7 +28,7 @@ fn keccak256(data: &[u8]) -> [u8; 32] {
 #[allow(non_snake_case)]
 pub static H: LazyLock<EdwardsPoint> = LazyLock::new(|| {
   decompress_point(keccak256(&ED25519_BASEPOINT_POINT.compress().to_bytes()))
-    .unwrap()
+    .expect("known on-curve point wasn't on-curve")
     .mul_by_cofactor()
 });
 
@@ -78,11 +78,11 @@ pub fn bulletproofs_generators(dst: &'static [u8]) -> Generators {
     let i = 2 * i;
 
     let mut even = preimage.clone();
-    write_varint(&i, &mut even).unwrap();
+    write_varint(&i, &mut even).expect("write failed but <Vec as io::Write> doesn't fail");
     res.H.push(hash_to_point(keccak256(&even)));
 
     let mut odd = preimage.clone();
-    write_varint(&(i + 1), &mut odd).unwrap();
+    write_varint(&(i + 1), &mut odd).expect("write failed but <Vec as io::Write> doesn't fail");
     res.G.push(hash_to_point(keccak256(&odd)));
   }
   res

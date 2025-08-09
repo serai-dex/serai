@@ -53,7 +53,7 @@ impl Input {
   /// Serialize the Input to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = vec![];
-    self.write(&mut res).unwrap();
+    self.write(&mut res).expect("write failed but <Vec as io::Write> doesn't fail");
     res
   }
 
@@ -106,7 +106,7 @@ impl Output {
   /// Write the Output to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(8 + 1 + 32);
-    self.write(&mut res).unwrap();
+    self.write(&mut res).expect("write failed but <Vec as io::Write> doesn't fail");
     res
   }
 
@@ -163,7 +163,7 @@ impl Timelock {
   /// Serialize the Timelock to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(1);
-    self.write(&mut res).unwrap();
+    self.write(&mut res).expect("write failed but <Vec as io::Write> doesn't fail");
     res
   }
 
@@ -259,8 +259,8 @@ impl TransactionPrefix {
 
   fn hash(&self, version: u64) -> [u8; 32] {
     let mut buf = vec![];
-    write_varint(&version, &mut buf).unwrap();
-    self.write(&mut buf).unwrap();
+    write_varint(&version, &mut buf).expect("write failed but <Vec as io::Write> doesn't fail");
+    self.write(&mut buf).expect("write failed but <Vec as io::Write> doesn't fail");
     keccak256(buf)
   }
 }
@@ -451,7 +451,7 @@ impl<P: PotentiallyPruned> Transaction<P> {
   /// Write the Transaction to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(2048);
-    self.write(&mut res).unwrap();
+    self.write(&mut res).expect("write failed but <Vec as io::Write> doesn't fail");
     res
   }
 
@@ -493,15 +493,16 @@ impl<P: PotentiallyPruned> Transaction<P> {
         let mut buf = Vec::with_capacity(512);
 
         // We don't use `self.write` as that may write the signatures (if this isn't pruned)
-        write_varint(&self.version(), &mut buf).unwrap();
-        prefix.write(&mut buf).unwrap();
+        write_varint(&self.version(), &mut buf)
+          .expect("write failed but <Vec as io::Write> doesn't fail");
+        prefix.write(&mut buf).expect("write failed but <Vec as io::Write> doesn't fail");
 
         // We explicitly write the signatures ourselves here
         let PrunableHash::V1(signatures) = prunable else {
           panic!("hashing v1 TX with non-v1 prunable data")
         };
         for signature in signatures {
-          signature.write(&mut buf).unwrap();
+          signature.write(&mut buf).expect("write failed but <Vec as io::Write> doesn't fail");
         }
 
         keccak256(buf)
@@ -513,7 +514,10 @@ impl<P: PotentiallyPruned> Transaction<P> {
 
         if let Some(proofs) = proofs {
           let mut buf = Vec::with_capacity(512);
-          proofs.base().write(&mut buf, proofs.rct_type()).unwrap();
+          proofs
+            .base()
+            .write(&mut buf, proofs.rct_type())
+            .expect("write failed but <Vec as io::Write> doesn't fail");
           hashes.extend(keccak256(&buf));
         } else {
           // Serialization of RctBase::Null
@@ -540,7 +544,10 @@ impl Transaction<NotPruned> {
       Transaction::V2 { proofs, .. } => {
         self.hash_with_prunable_hash(PrunableHash::V2(if let Some(proofs) = proofs {
           let mut buf = Vec::with_capacity(1024);
-          proofs.prunable.write(&mut buf, proofs.rct_type()).unwrap();
+          proofs
+            .prunable
+            .write(&mut buf, proofs.rct_type())
+            .expect("write failed but <Vec as io::Write> doesn't fail");
           keccak256(buf)
         } else {
           [0; 32]
@@ -563,7 +570,10 @@ impl Transaction<NotPruned> {
       Transaction::V2 { proofs, .. } => self.hash_with_prunable_hash({
         let Some(proofs) = proofs else { None? };
         let mut buf = Vec::with_capacity(1024);
-        proofs.prunable.signature_write(&mut buf).unwrap();
+        proofs
+          .prunable
+          .signature_write(&mut buf)
+          .expect("write failed but <Vec as io::Write> doesn't fail");
         PrunableHash::V2(keccak256(buf))
       }),
     })

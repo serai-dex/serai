@@ -61,7 +61,7 @@ impl SharedKeyDerivations {
         // If Gen, this should be the only input, making this loop somewhat pointless
         // This works and even if there were somehow multiple inputs, it'd be a false negative
         Input::Gen(height) => {
-          write_varint(height, &mut u).unwrap();
+          write_varint(height, &mut u).expect("write failed but <Vec as io::Write> doesn't fail");
         }
         Input::ToKey { key_image, .. } => u.extend(key_image.compress().to_bytes()),
       }
@@ -83,7 +83,8 @@ impl SharedKeyDerivations {
     // || o
     {
       let output_derivation: &mut Vec<u8> = output_derivation.as_mut();
-      write_varint(&o, output_derivation).unwrap();
+      write_varint(&o, output_derivation)
+        .expect("write failed but <Vec as io::Write> doesn't fail");
     }
 
     let view_tag = keccak256([b"view_tag".as_ref(), &output_derivation].concat())[0];
@@ -145,7 +146,11 @@ impl SharedKeyDerivations {
         let amount_scalar = Scalar::from_bytes_mod_order(*amount) - amount_shared_sec_scalar;
 
         // d2b from rctTypes.cpp
-        let amount = u64::from_le_bytes(amount_scalar.to_bytes()[0 .. 8].try_into().unwrap());
+        let amount = u64::from_le_bytes(
+          amount_scalar.to_bytes()[.. 8]
+            .try_into()
+            .expect("32-byte array couldn't have an 8-byte slice taken"),
+        );
 
         Commitment::new(mask, amount)
       }

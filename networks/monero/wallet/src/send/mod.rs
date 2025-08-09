@@ -446,7 +446,7 @@ impl SignableTransaction {
   /// defined serialization.
   pub fn serialize(&self) -> Vec<u8> {
     let mut buf = Vec::with_capacity(256);
-    self.write(&mut buf).unwrap();
+    self.write(&mut buf).expect("write failed but <Vec as io::Write> doesn't fail");
     buf
   }
 
@@ -553,9 +553,13 @@ impl SignableTransaction {
     let mut tx = tx.transaction_without_signatures();
 
     // Sign the CLSAGs
-    let clsags_and_pseudo_outs =
-      Clsag::sign(rng, clsag_signs, mask_sum, tx.signature_hash().unwrap())
-        .map_err(SendError::ClsagError)?;
+    let clsags_and_pseudo_outs = Clsag::sign(
+      rng,
+      clsag_signs,
+      mask_sum,
+      tx.signature_hash().expect("signing a transaction which isn't signed?"),
+    )
+    .map_err(SendError::ClsagError)?;
 
     // Fill in the CLSAGs/pseudo-outs
     let inputs_len = tx.prefix().inputs.len();

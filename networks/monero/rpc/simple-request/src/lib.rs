@@ -135,35 +135,13 @@ impl SimpleRequestRpc {
     };
 
     async fn body_from_response(response: Response<'_>) -> Result<Vec<u8>, RpcError> {
-      /*
-      let length = usize::try_from(
-        response
-          .headers()
-          .get("content-length")
-          .ok_or(RpcError::InvalidNode("no content-length header"))?
-          .to_str()
-          .map_err(|_| RpcError::InvalidNode("non-ascii content-length value"))?
-          .parse::<u32>()
-          .map_err(|_| RpcError::InvalidNode("non-u32 content-length value"))?,
-      )
-      .unwrap();
-      // Only pre-allocate 1 MB so a malicious node which claims a content-length of 1 GB actually
-      // has to send 1 GB of data to cause a 1 GB allocation
-      let mut res = Vec::with_capacity(length.max(1024 * 1024));
-      let mut body = response.into_body();
-      while res.len() < length {
-        let Some(data) = body.data().await else { break };
-        res.extend(data.map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?.as_ref());
-      }
-      */
-
       let mut res = Vec::with_capacity(128);
       response
         .body()
         .await
         .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?
         .read_to_end(&mut res)
-        .unwrap();
+        .map_err(|e| RpcError::ConnectionError(format!("{e:?}")))?;
       Ok(res)
     }
 
@@ -219,7 +197,12 @@ impl SimpleRequestRpc {
                   })?
                   .to_header_string(),
               )
-              .unwrap(),
+              .map_err(|_| {
+                RpcError::InternalError(
+                  "digest-auth challenge response wasn't a valid string for an HTTP header"
+                    .to_string(),
+                )
+              })?,
             );
           }
 
@@ -269,7 +252,7 @@ impl SimpleRequestRpc {
               ))?
             }
           } else {
-            body_from_response(response.unwrap()).await?
+            body_from_response(response.expect("no response yet also no error?")).await?
           }
         }
       });

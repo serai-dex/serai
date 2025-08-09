@@ -228,14 +228,11 @@ impl InternalScanner {
         // Decrypt the payment ID
         let payment_id = payment_id.map(|id| id ^ SharedKeyDerivations::payment_id_xor(ecdh));
 
+        let o = u64::try_from(o).expect("couldn't convert output index (usize) to u64");
+
         res.push(WalletOutput {
-          absolute_id: AbsoluteId {
-            transaction: tx_hash,
-            index_in_transaction: o.try_into().unwrap(),
-          },
-          relative_id: RelativeId {
-            index_on_blockchain: output_index_for_first_ringct_output + u64::try_from(o).unwrap(),
-          },
+          absolute_id: AbsoluteId { transaction: tx_hash, index_in_transaction: o },
+          relative_id: RelativeId { index_on_blockchain: output_index_for_first_ringct_output + o },
           data: OutputData { key: output_key, key_offset, commitment },
           metadata: Metadata {
             additional_timelock: tx.prefix().additional_timelock,
@@ -295,7 +292,8 @@ impl InternalScanner {
 
       // Update the RingCT starting index for the next TX
       if matches!(tx, Transaction::V2 { .. }) {
-        output_index_for_first_ringct_output += u64::try_from(tx.prefix().outputs.len()).unwrap()
+        output_index_for_first_ringct_output += u64::try_from(tx.prefix().outputs.len())
+          .expect("couldn't convert amount of outputs (usize) to u64")
       }
     }
 

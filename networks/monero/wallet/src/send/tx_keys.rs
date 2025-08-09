@@ -21,7 +21,9 @@ fn seeded_rng(
   mut input_keys: Vec<EdwardsPoint>,
 ) -> ChaCha20Rng {
   // Apply the DST
-  let mut transcript = Zeroizing::new(vec![u8::try_from(dst.len()).unwrap()]);
+  let mut transcript = Zeroizing::new(vec![
+    u8::try_from(dst.len()).expect("internal RNG with constant DST had a too-long DST specified")
+  ]);
   transcript.extend(dst);
 
   // Bind to the outgoing view key to prevent foreign entities from rebuilding the transcript
@@ -116,12 +118,12 @@ impl SignableTransaction {
   fn transaction_keys(&self) -> (Zeroizing<Scalar>, Vec<Zeroizing<Scalar>>) {
     let mut tx_keys = TransactionKeys::new(&self.outgoing_view_key, self.input_keys());
 
-    let tx_key = tx_keys.next().unwrap();
+    let tx_key = tx_keys.next().expect("TransactionKeys (never-ending) was exhausted");
 
     let mut additional_keys = vec![];
     if self.should_use_additional_keys() {
       for _ in 0 .. self.payments.len() {
-        additional_keys.push(tx_keys.next().unwrap());
+        additional_keys.push(tx_keys.next().expect("TransactionKeys (never-ending) was exhausted"));
       }
     }
     (tx_key, additional_keys)

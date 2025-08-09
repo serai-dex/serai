@@ -18,7 +18,7 @@ use crate::{
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub(crate) struct AbsoluteId {
   pub(crate) transaction: [u8; 32],
-  pub(crate) index_in_transaction: u32,
+  pub(crate) index_in_transaction: u64,
 }
 
 impl core::fmt::Debug for AbsoluteId {
@@ -46,7 +46,7 @@ impl AbsoluteId {
   /// This is not a Monero protocol defined struct, and this is accordingly not a Monero protocol
   /// defined serialization.
   fn read<R: Read>(r: &mut R) -> io::Result<AbsoluteId> {
-    Ok(AbsoluteId { transaction: read_bytes(r)?, index_in_transaction: read_u32(r)? })
+    Ok(AbsoluteId { transaction: read_bytes(r)?, index_in_transaction: read_u64(r)? })
   }
 }
 
@@ -128,11 +128,11 @@ impl OutputData {
     self.commitment.write(w)
   }
 
-  /*
+  /* Commented as it's unused, due to self being private
   /// Serialize the OutputData to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(32 + 32 + 40);
-    self.write(&mut res).unwrap();
+    self.write(&mut res).expect("write failed but <Vec as io::Write> doesn't fail");
     res
   }
   */
@@ -194,9 +194,17 @@ impl Metadata {
       w.write_all(&[0])?;
     }
 
-    w.write_all(&u32::try_from(self.arbitrary_data.len()).unwrap().to_le_bytes())?;
+    w.write_all(
+      &u64::try_from(self.arbitrary_data.len())
+        .expect("amount of arbitrary data chunks exceeded u64::MAX")
+        .to_le_bytes(),
+    )?;
     for part in &self.arbitrary_data {
-      w.write_all(&[u8::try_from(part.len()).unwrap()])?;
+      // TODO: Define our own collection whose `len` function returns `u8` to ensure this bound
+      // with types
+      w.write_all(&[
+        u8::try_from(part.len()).expect("piece of arbitrary data exceeded max length of u8::MAX")
+      ])?;
       w.write_all(part)?;
     }
     Ok(())
@@ -224,7 +232,7 @@ impl Metadata {
       payment_id: if read_byte(r)? == 1 { PaymentId::read(r).ok() } else { None },
       arbitrary_data: {
         let mut data = vec![];
-        for _ in 0 .. read_u32(r)? {
+        for _ in 0 .. read_u64(r)? {
           let len = read_byte(r)?;
           data.push(read_raw_vec(read_byte, usize::from(len), r)?);
         }
@@ -260,7 +268,7 @@ impl WalletOutput {
   }
 
   /// The index of the output within the transaction.
-  pub fn index_in_transaction(&self) -> u32 {
+  pub fn index_in_transaction(&self) -> u64 {
     self.absolute_id.index_in_transaction
   }
 
@@ -349,7 +357,7 @@ impl WalletOutput {
   /// defined serialization.
   pub fn serialize(&self) -> Vec<u8> {
     let mut serialized = Vec::with_capacity(128);
-    self.write(&mut serialized).unwrap();
+    self.write(&mut serialized).expect("write failed but <Vec as io::Write> doesn't fail");
     serialized
   }
 

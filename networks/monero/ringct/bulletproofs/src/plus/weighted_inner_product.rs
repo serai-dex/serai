@@ -230,7 +230,9 @@ impl WipStatement {
       let c_l = a1.clone().weighted_inner_product(&b2, &y);
       let c_r = (a2.clone() * y_n_hat).weighted_inner_product(&b1, &y);
 
-      let y_inv_n_hat = y_inv.pop().unwrap();
+      let y_inv_n_hat = y_inv
+        .pop()
+        .expect("couldn't pop y_inv despite y_inv being of same length as times iterated");
 
       let mut L_terms = (a1.clone() * y_inv_n_hat)
         .0
@@ -331,7 +333,9 @@ impl WipStatement {
       let mut res = Vec::with_capacity(y.len());
       res.push(inv_y);
       while res.len() < y.len() {
-        res.push(inv_y * res.last().unwrap());
+        res.push(
+          inv_y * res.last().expect("couldn't get last inv_y despite inv_y always being non-empty"),
+        );
       }
       res
     };

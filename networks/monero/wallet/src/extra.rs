@@ -67,7 +67,7 @@ impl PaymentId {
   /// Serialize the PaymentId to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(1 + 8);
-    self.write(&mut res).unwrap();
+    self.write(&mut res).expect("write failed but <Vec as io::Write> doesn't fail");
     res
   }
 
@@ -100,7 +100,7 @@ pub enum ExtraField {
   ///
   /// This is used within miner transactions who are merge-mining Monero to specify the foreign
   /// block they mined.
-  MergeMining(usize, [u8; 32]),
+  MergeMining(u64, [u8; 32]),
   /// The additional transaction keys.
   ///
   /// These are the per-output commitments to the randomness used for deriving outputs.
@@ -132,7 +132,7 @@ impl ExtraField {
       }
       ExtraField::MergeMining(height, merkle) => {
         w.write_all(&[3])?;
-        write_varint(&u64::try_from(*height).unwrap(), w)?;
+        write_varint(height, w)?;
         w.write_all(merkle)?;
       }
       ExtraField::PublicKeys(keys) => {
@@ -150,7 +150,7 @@ impl ExtraField {
   /// Serialize the ExtraField to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut res = Vec::with_capacity(1 + 8);
-    self.write(&mut res).unwrap();
+    self.write(&mut res).expect("write failed but <Vec as io::Write> doesn't fail");
     res
   }
 
@@ -280,7 +280,7 @@ impl Extra {
   /// Serialize the Extra to a `Vec<u8>`.
   pub fn serialize(&self) -> Vec<u8> {
     let mut buf = vec![];
-    self.write(&mut buf).unwrap();
+    self.write(&mut buf).expect("write failed but <Vec as io::Write> doesn't fail");
     buf
   }
 
