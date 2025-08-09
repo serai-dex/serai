@@ -1,5 +1,5 @@
-# rust:1.80.0-slim-bookworm as of July 27th, 2024 (GMT)
-FROM --platform=linux/amd64 rust@sha256:37e6f90f98b3afd15c2526d7abb257a1f4cb7d49808fe3729d9d62020b07b544 as deterministic
+# rust:1.89.0-slim-bookworm as of July 27th, 2024 (GMT)
+FROM --platform=linux/amd64 rust@sha256:703cfb0f80db8eb8a3452bf5151162472039c1b37fe4fb2957b495a6f0104ae7 as deterministic
 
 # Move to a Debian package snapshot
 RUN rm -rf /etc/apt/sources.list.d/debian.sources && \
