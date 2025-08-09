@@ -13,9 +13,6 @@ runs:
         sudo apt remove -y --allow-remove-essential -f shim-signed
         # This command would fail, due to shim-signed having unmet dependencies, hence its removal
         sudo apt remove -y "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
-        sudo apt autoremove -y
-        sudo apt clean
-        docker system prune -a --volumes
       if: runner.os == 'Linux'
 
     - name: Remove unused packages
@@ -46,6 +43,28 @@ runs:
         cargo install svm-rs
         svm install 0.8.25
         svm use 0.8.25
+
+    - name: Remove preinstalled Docker
+      shell: bash
+      run: |
+        docker system prune -a --volumes
+        sudo apt remove -y *docker*
+      if: runner.os == "Linux"
+
+    - name: Update system dependencies
+      shell: bash
+      run: |
+        sudo apt update -y
+        sudo apt upgrade -y
+        sudo apt autoremove -y
+        sudo apt clean
+      if: runner.os == "Linux"
+
+    - name: Install rootless Docker
+      uses: docker/setup-docker-action@b60f85385d03ac8acfca6d9996982511d8620a19
+      with:
+        rootless: true
+      if: runner.os == "Linux"
 
     # - name: Cache Rust
     #   uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43
