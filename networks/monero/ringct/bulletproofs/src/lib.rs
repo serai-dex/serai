@@ -91,7 +91,7 @@ impl Bulletproof {
   /// maximum amount of outputs will be returned.
   // https://github.com/monero-project/monero/blob/94e67bf96bbc010241f29ada6abc89f49a81759c/
   //   src/cryptonote_basic/cryptonote_format_utils.cpp#L106-L124
-  pub fn calculate_bp_clawback(plus: bool, n_outputs: usize) -> (usize, usize) {
+  pub fn calculate_clawback(plus: bool, n_outputs: usize) -> (usize, usize) {
     #[allow(non_snake_case)]
     let mut LR_len = 0;
     let mut n_padded_outputs = 1;
@@ -101,15 +101,15 @@ impl Bulletproof {
     }
     LR_len += LOG_COMMITMENT_BITS;
 
-    let mut bp_clawback = 0;
+    let mut clawback = 0;
     if n_padded_outputs > 2 {
       let fields = Bulletproof::bp_fields(plus);
       let base = ((fields + (2 * (LOG_COMMITMENT_BITS + 1))) * 32) / 2;
       let size = (fields + (2 * LR_len)) * 32;
-      bp_clawback = ((base * n_padded_outputs) - size) * 4 / 5;
+      clawback = ((base * n_padded_outputs) - size) * 4 / 5;
     }
 
-    (bp_clawback, LR_len)
+    (clawback, LR_len)
   }
 
   /// Prove the list of commitments are within [0 .. 2^64) with an aggregate Bulletproof.

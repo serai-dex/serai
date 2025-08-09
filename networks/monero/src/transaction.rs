@@ -609,7 +609,7 @@ impl Transaction<NotPruned> {
       blob_size
     } else {
       blob_size +
-        Bulletproof::calculate_bp_clawback(
+        Bulletproof::calculate_clawback(
           bp_plus,
           match self {
             Transaction::V1 { .. } => panic!("v1 transaction was BP(+)"),
