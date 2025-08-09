@@ -73,7 +73,11 @@ pub fn keccak256_to_scalar(data: impl AsRef<[u8]>) -> Scalar {
   // This library acknowledges its practical impossibility of it occurring, and doesn't bother to
   // code in logic to handle it. That said, if it ever occurs, something must happen in order to
   // not generate/verify a proof we believe to be valid when it isn't
-  assert!(scalar != Scalar::ZERO, "ZERO HASH: {:?}", data.as_ref());
+  assert!(
+    scalar != Scalar::ZERO,
+    "keccak256(preimage) \\cong 0 \\mod l! Preimage: {:?}",
+    data.as_ref()
+  );
   scalar
 }
 
