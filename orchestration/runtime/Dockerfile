@@ -8,7 +8,7 @@ RUN rm -rf /etc/apt/sources.list.d/debian.sources && \
   apt update
 
 # Install dependencies
-RUN apt update && apt upgrade && apt install clang -y
+RUN apt update && apt upgrade && apt install -y --fix-missing --fix-broken clang
 
 # Add the wasm toolchain
 RUN rustup target add wasm32-unknown-unknown
