@@ -67,6 +67,7 @@ runs:
       with:
         rootless: true
         set-host: true
+        version: type=image,tag=27.5.1
       if: runner.os == 'Linux'
 
     # - name: Cache Rust
