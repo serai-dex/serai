@@ -12,9 +12,9 @@ ENV BITCOIN_VERSION=27.1
 RUN apk --no-cache add wget git gnupg
 
 # Download Bitcoin
-RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz
-RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS
-RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS.asc
+RUN wget -4 https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz
+RUN wget -4 https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS
+RUN wget -4 https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS.asc
 
 # Verify all sigs and check for a valid signature from laanwj -- 71A3
 RUN git clone https://github.com/bitcoin-core/guix.sigs && \

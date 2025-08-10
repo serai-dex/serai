@@ -27,7 +27,7 @@ FROM alpine:latest AS monero
 RUN apk --no-cache add wget gnupg
 
 # Download Monero
-RUN wget https://downloads.getmonero.org/cli/monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2
+RUN wget -4 https://downloads.getmonero.org/cli/monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2
 
 # Verify Binary -- fingerprint from https://github.com/monero-project/monero-site/issues/1949
 ADD orchestration/{}/networks/monero/hashes-v{MONERO_VERSION}.txt .
