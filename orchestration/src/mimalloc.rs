@@ -16,7 +16,7 @@ RUN git clone https://github.com/microsoft/mimalloc && \
 "#;
 
   const DEBIAN_MIMALLOC: &str = r#"
-FROM debian:bullseye-slim AS mimalloc-debian
+FROM debian:bookworm-slim AS mimalloc-debian
 
 RUN apt update && apt upgrade -y && apt install -y gcc g++ make cmake git
 RUN git clone https://github.com/microsoft/mimalloc && \

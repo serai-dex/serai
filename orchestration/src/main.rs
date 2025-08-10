@@ -117,7 +117,7 @@ WORKDIR /home/{user}
 
     Os::Debian => format!(
       r#"
-FROM debian:bullseye-slim AS image
+FROM debian:bookworm-slim AS image
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
@@ -146,7 +146,7 @@ fn build_serai_service(prelude: &str, release: bool, features: &str, package: &s
 
   format!(
     r#"
-FROM rust:1.89-slim-bullseye AS builder
+FROM rust:1.89-slim-bookworm AS builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
