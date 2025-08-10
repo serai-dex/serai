@@ -58,7 +58,7 @@ macro_rules! serai_test {
             tokio::time::sleep(core::time::Duration::from_secs(1)).await;
             ticks += 1;
 
-            let Ok(serai_rpc) = ops.handle(handle).host_port(9944) else { continue };
+            let Some(serai_rpc) = ops.handle(handle).host_port(9944) else { continue };
             let serai_rpc = format!("http://{}:{}", serai_rpc.0, serai_rpc.1);
 
             let Ok(client) = Serai::new(serai_rpc.clone()).await else { continue };
