@@ -9,7 +9,7 @@ FROM alpine:latest AS reth
 
 ENV RETH_VERSION=0.2.0-beta.6
 
-RUN apk --no-cache add git gnupg
+RUN apk --no-cache add wget git gnupg
 
 # Download reth
 RUN wget https://github.com/paradigmxyz/reth/releases/download/v${RETH_VERSION}/reth-v${RETH_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz

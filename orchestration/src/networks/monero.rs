@@ -24,7 +24,7 @@ fn monero_internal(
   let download_monero = format!(r#"
 FROM alpine:latest AS monero
 
-RUN apk --no-cache add gnupg
+RUN apk --no-cache add wget gnupg
 
 # Download Monero
 RUN wget https://downloads.getmonero.org/cli/monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2

@@ -9,7 +9,7 @@ FROM alpine:latest AS lighthouse
 
 ENV LIGHTHOUSE_VERSION=5.1.3
 
-RUN apk --no-cache add git gnupg
+RUN apk --no-cache add wget git gnupg
 
 # Download lighthouse
 RUN wget https://github.com/sigp/lighthouse/releases/download/v${LIGHTHOUSE_VERSION}/lighthouse-v${LIGHTHOUSE_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz
