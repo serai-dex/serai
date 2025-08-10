@@ -6,6 +6,9 @@ the Monero protocol.
 This library is usable under no-std when the `std` feature (on by default) is
 disabled.
 
+Recommended usage of the library is with `overflow-checks = true`, even for
+release builds.
+
 ### Wallet Functionality
 
 monero-serai originally included wallet functionality. That has been moved to
