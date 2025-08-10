@@ -9,7 +9,7 @@ FROM alpine:latest AS bitcoin
 
 ENV BITCOIN_VERSION=27.1
 
-RUN apk --no-cache add git gnupg
+RUN apk --no-cache add wget git gnupg
 
 # Download Bitcoin
 RUN wget https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz
