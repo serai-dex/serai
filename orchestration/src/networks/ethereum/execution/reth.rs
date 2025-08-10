@@ -12,8 +12,8 @@ ENV RETH_VERSION=0.2.0-beta.6
 RUN apk --no-cache add wget git gnupg
 
 # Download reth
-RUN wget https://github.com/paradigmxyz/reth/releases/download/v${RETH_VERSION}/reth-v${RETH_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz
-RUN wget https://github.com/paradigmxyz/reth/releases/download/v${RETH_VERSION}/reth-v${RETH_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz.asc
+RUN wget -4 https://github.com/paradigmxyz/reth/releases/download/v${RETH_VERSION}/reth-v${RETH_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz
+RUN wget -4 https://github.com/paradigmxyz/reth/releases/download/v${RETH_VERSION}/reth-v${RETH_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz.asc
 
 # Verify the signature
 gpg --keyserver keyserver.ubuntu.com --recv-keys A3AE097C89093A124049DF1F5391A3C4100530B4
