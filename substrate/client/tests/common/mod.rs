@@ -40,7 +40,7 @@ macro_rules! serai_test {
         .set_handle(handle)
         .set_start_policy(StartPolicy::Strict)
         .set_log_options(Some(LogOptions {
-          action: LogAction::ForwardToStdOut,
+          action: LogAction::Forward,
           policy: LogPolicy::Always,
           source: LogSource::Both,
         }));
