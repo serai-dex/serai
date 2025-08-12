@@ -40,7 +40,7 @@ runs:
     - name: Install solc
       shell: bash
       run: |
-        cargo install svm-rs
+        cargo +1.89 install svm-rs --version =0.5.18
         svm install 0.8.25
         svm use 0.8.25
 
