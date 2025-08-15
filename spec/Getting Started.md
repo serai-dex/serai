@@ -27,9 +27,9 @@ brew install rustup
 ```
 rustup update
 rustup toolchain install stable
-rustup target add wasm32-unknown-unknown
+rustup target add wasm32v1-none
 rustup toolchain install nightly
-rustup target add wasm32-unknown-unknown --toolchain nightly
+rustup target add wasm32v1-none --toolchain nightly
 ```
 
 ### Install Solidity

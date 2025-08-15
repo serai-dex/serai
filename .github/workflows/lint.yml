@@ -26,7 +26,7 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Install nightly rust
-        run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32-unknown-unknown -c clippy
+        run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32v1-none -c clippy
 
       - name: Run Clippy
         run: cargo +${{ steps.nightly.outputs.version }} clippy --all-features --all-targets -- -D warnings -A clippy::items_after_test_module
