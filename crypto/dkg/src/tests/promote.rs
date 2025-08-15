@@ -28,6 +28,10 @@ impl<C: Ciphersuite> Ciphersuite for AltGenerator<C> {
     C::G::generator() * <C as Ciphersuite>::hash_to_F(b"DKG Promotion Test", b"generator")
   }
 
+  fn reduce_512(scalar: [u8; 64]) -> Self::F {
+    <C as Ciphersuite>::reduce_512(scalar)
+  }
+
   fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
     <C as Ciphersuite>::hash_to_F(dst, data)
   }

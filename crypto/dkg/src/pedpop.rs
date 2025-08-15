@@ -22,9 +22,9 @@ use multiexp::{multiexp_vartime, BatchVerifier};
 use schnorr::SchnorrSignature;
 
 use crate::{
-  Participant, DkgError, ThresholdParams, ThresholdCore, validate_map,
+  Participant, DkgError, ThresholdParams, Interpolation, ThresholdCore, validate_map,
   encryption::{
-    ReadWrite, EncryptionKeyMessage, EncryptedMessage, Encryption, EncryptionKeyProof,
+    ReadWrite, EncryptionKeyMessage, EncryptedMessage, Encryption, Decryption, EncryptionKeyProof,
     DecryptionError,
   },
 };
@@ -32,10 +32,10 @@ use crate::{
 type FrostError<C> = DkgError<EncryptionKeyProof<C>>;
 
 #[allow(non_snake_case)]
-fn challenge<C: Ciphersuite>(context: &str, l: Participant, R: &[u8], Am: &[u8]) -> C::F {
+fn challenge<C: Ciphersuite>(context: [u8; 32], l: Participant, R: &[u8], Am: &[u8]) -> C::F {
   let mut transcript = RecommendedTranscript::new(b"DKG FROST v0.2");
   transcript.domain_separate(b"schnorr_proof_of_knowledge");
-  transcript.append_message(b"context", context.as_bytes());
+  transcript.append_message(b"context", context);
   transcript.append_message(b"participant", l.to_bytes());
   transcript.append_message(b"nonce", R);
   transcript.append_message(b"commitments", Am);
@@ -86,15 +86,15 @@ impl<C: Ciphersuite> ReadWrite for Commitments<C> {
 #[derive(Debug, Zeroize)]
 pub struct KeyGenMachine<C: Ciphersuite> {
   params: ThresholdParams,
-  context: String,
+  context: [u8; 32],
   _curve: PhantomData<C>,
 }
 
 impl<C: Ciphersuite> KeyGenMachine<C> {
   /// Create a new machine to generate a key.
   ///
-  /// The context string should be unique among multisigs.
-  pub fn new(params: ThresholdParams, context: String) -> KeyGenMachine<C> {
+  /// The context should be unique among multisigs.
+  pub fn new(params: ThresholdParams, context: [u8; 32]) -> KeyGenMachine<C> {
     KeyGenMachine { params, context, _curve: PhantomData }
   }
 
@@ -129,11 +129,11 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
       // There's no reason to spend the time and effort to make this deterministic besides a
       // general obsession with canonicity and determinism though
       r,
-      challenge::<C>(&self.context, self.params.i(), nonce.to_bytes().as_ref(), &cached_msg),
+      challenge::<C>(self.context, self.params.i(), nonce.to_bytes().as_ref(), &cached_msg),
     );
 
     // Additionally create an encryption mechanism to protect the secret shares
-    let encryption = Encryption::new(self.context.clone(), Some(self.params.i), rng);
+    let encryption = Encryption::new(self.context, self.params.i, rng);
 
     // Step 4: Broadcast
     let msg =
@@ -225,7 +225,7 @@ impl<F: PrimeField> ReadWrite for SecretShare<F> {
 #[derive(Zeroize)]
 pub struct SecretShareMachine<C: Ciphersuite> {
   params: ThresholdParams,
-  context: String,
+  context: [u8; 32],
   coefficients: Vec<Zeroizing<C::F>>,
   our_commitments: Vec<C::G>,
   encryption: Encryption<C>,
@@ -274,7 +274,7 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
         &mut batch,
         l,
         msg.commitments[0],
-        challenge::<C>(&self.context, l, msg.sig.R.to_bytes().as_ref(), &msg.cached_msg),
+        challenge::<C>(self.context, l, msg.sig.R.to_bytes().as_ref(), &msg.cached_msg),
       );
 
       commitments.insert(l, msg.commitments.drain(..).collect::<Vec<_>>());
@@ -472,9 +472,10 @@ impl<C: Ciphersuite> KeyMachine<C> {
     let KeyMachine { commitments, encryption, params, secret } = self;
     Ok(BlameMachine {
       commitments,
-      encryption,
+      encryption: encryption.into_decryption(),
       result: Some(ThresholdCore {
         params,
+        interpolation: Interpolation::Lagrange,
         secret_share: secret,
         group_key: stripes[0],
         verification_shares,
@@ -486,7 +487,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
 /// A machine capable of handling blame proofs.
 pub struct BlameMachine<C: Ciphersuite> {
   commitments: HashMap<Participant, Vec<C::G>>,
-  encryption: Encryption<C>,
+  encryption: Decryption<C>,
   result: Option<ThresholdCore<C>>,
 }
 
@@ -505,7 +506,6 @@ impl<C: Ciphersuite> Zeroize for BlameMachine<C> {
     for commitments in self.commitments.values_mut() {
       commitments.zeroize();
     }
-    self.encryption.zeroize();
     self.result.zeroize();
   }
 }
@@ -598,14 +598,13 @@ impl<C: Ciphersuite> AdditionalBlameMachine<C> {
   /// authenticated as having come from the supposed party and verified as valid. Usage of invalid
   /// commitments is considered undefined behavior, and may cause everything from inaccurate blame
   /// to panics.
-  pub fn new<R: RngCore + CryptoRng>(
-    rng: &mut R,
-    context: String,
+  pub fn new(
+    context: [u8; 32],
     n: u16,
     mut commitment_msgs: HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
   ) -> Result<Self, FrostError<C>> {
     let mut commitments = HashMap::new();
-    let mut encryption = Encryption::new(context, None, rng);
+    let mut encryption = Decryption::new(context);
     for i in 1 ..= n {
       let i = Participant::new(i).unwrap();
       let Some(msg) = commitment_msgs.remove(&i) else { Err(DkgError::MissingParticipant(i))? };

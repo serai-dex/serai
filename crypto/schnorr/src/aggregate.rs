@@ -31,9 +31,8 @@ fn weight<D: Send + Clone + SecureDigest, F: PrimeField>(digest: &mut DigestTran
   // Derive a scalar from enough bits of entropy that bias is < 2^128
   // This can't be const due to its usage of a generic
   // Also due to the usize::try_from, yet that could be replaced with an `as`
-  // The + 7 forces it to round up
   #[allow(non_snake_case)]
-  let BYTES: usize = usize::try_from(((F::NUM_BITS + 128) + 7) / 8).unwrap();
+  let BYTES: usize = usize::try_from((F::NUM_BITS + 128).div_ceil(8)).unwrap();
 
   let mut remaining = BYTES;
 

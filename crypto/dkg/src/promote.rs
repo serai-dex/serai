@@ -113,6 +113,7 @@ impl<C1: Ciphersuite, C2: Ciphersuite<F = C1::F, G = C1::G>> GeneratorPromotion<
     Ok(ThresholdKeys {
       core: Arc::new(ThresholdCore::new(
         params,
+        self.base.core.interpolation.clone(),
         self.base.secret_share().clone(),
         verification_shares,
       )),

@@ -154,18 +154,20 @@ pub fn test_group<R: RngCore, G: Group>(rng: &mut R) {
 
 /// Test encoding and decoding of group elements.
 pub fn test_encoding<G: PrimeGroup>() {
-  let test = |point: G, msg| {
+  let test = |point: G, msg| -> G {
     let bytes = point.to_bytes();
     let mut repr = G::Repr::default();
     repr.as_mut().copy_from_slice(bytes.as_ref());
-    assert_eq!(point, G::from_bytes(&repr).unwrap(), "{msg} couldn't be encoded and decoded");
+    let decoded = G::from_bytes(&repr).unwrap();
+    assert_eq!(point, decoded, "{msg} couldn't be encoded and decoded");
     assert_eq!(
       point,
       G::from_bytes_unchecked(&repr).unwrap(),
       "{msg} couldn't be encoded and decoded",
     );
+    decoded
   };
-  test(G::identity(), "identity");
+  assert!(bool::from(test(G::identity(), "identity").is_identity()));
   test(G::generator(), "generator");
   test(G::generator() + G::generator(), "(generator * 2)");
 }

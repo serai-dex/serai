@@ -66,6 +66,12 @@ impl Ciphersuite for Ed448 {
     Point::generator()
   }
 
+  fn reduce_512(mut scalar: [u8; 64]) -> Self::F {
+    let res = Self::hash_to_F(b"Ciphersuite-reduce_512", &scalar);
+    scalar.zeroize();
+    res
+  }
+
   fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
     Scalar::wide_reduce(Self::H::digest([dst, data].concat()).as_ref().try_into().unwrap())
   }

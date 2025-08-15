@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dleq"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
-rust-version = "1.79"
+rust-version = "1.81"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -18,7 +18,7 @@ workspace = true
 [dependencies]
 rustversion = "1"
 
-thiserror = { version = "1", optional = true }
+thiserror = { version = "2", default-features = false, optional = true }
 rand_core = { version = "0.6", default-features = false }
 
 zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
@@ -44,7 +44,7 @@ dalek-ff-group = { path = "../dalek-ff-group" }
 transcript = { package = "flexible-transcript", path = "../transcript", features = ["recommended"] }
 
 [features]
-std = ["rand_core/std", "zeroize/std", "digest/std", "transcript/std", "ff/std", "multiexp?/std"]
+std = ["thiserror?/std", "rand_core/std", "zeroize/std", "digest/std", "transcript/std", "ff/std", "multiexp?/std"]
 serialize = ["std"]
 
 # Needed for cross-group DLEqs

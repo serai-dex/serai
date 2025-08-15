@@ -92,7 +92,7 @@ impl<G: PrimeGroup> Generators<G> {
 }
 
 /// Error for cross-group DLEq proofs.
-#[derive(Error, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum DLEqError {
   /// Invalid proof length.
   #[error("invalid proof length")]
