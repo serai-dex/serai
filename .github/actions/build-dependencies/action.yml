@@ -11,10 +11,11 @@ runs:
         sudo apt remove -y "*nodejs*" "*npm*" "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
         sudo apt remove -y "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
 
-        # The following removal command requires explicitly installing python/removing shim-signed
-        sudo apt install --fix-missing --fix-broken -y python3 python3.12 libpython3-stdlib
-        sudo apt remove -y --allow-remove-essential -f shim-signed
+        sudo apt remove -y --allow-remove-essential -f shim-signed *python3*
+        # This removal command requires the prior removals due to unmet dependencies otherwise
         sudo apt remove -y "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
+        # Reinstall python3 as a general dependency of a functional operating system
+        sudo apt install python3
       if: runner.os == 'Linux'
 
     - name: Remove unused packages
