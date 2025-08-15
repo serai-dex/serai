@@ -130,6 +130,7 @@ monero-serai = { opt-level = 3 }
 
 [profile.release]
 panic = "unwind"
+overflow-checks = true
 
 [patch.crates-io]
 # https://github.com/rust-lang-nursery/lazy-static.rs/issues/201
