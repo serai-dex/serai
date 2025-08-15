@@ -19,5 +19,3 @@ pub use frost_schnorrkel;
 */
 
 pub use bitcoin_serai;
-
-pub use monero_wallet;

@@ -43,20 +43,6 @@ members = [
   "networks/ethereum",
   "networks/ethereum/relayer",
 
-  "networks/monero/io",
-  "networks/monero/generators",
-  "networks/monero/primitives",
-  "networks/monero/ringct/mlsag",
-  "networks/monero/ringct/clsag",
-  "networks/monero/ringct/borromean",
-  "networks/monero/ringct/bulletproofs",
-  "networks/monero",
-  "networks/monero/rpc",
-  "networks/monero/rpc/simple-request",
-  "networks/monero/wallet/address",
-  "networks/monero/wallet",
-  "networks/monero/verify-chain",
-
   "message-queue",
 
   "processor/messages",
@@ -126,13 +112,20 @@ minimal-ed448 = { opt-level = 3 }
 
 multiexp = { opt-level = 3 }
 
-monero-serai = { opt-level = 3 }
+monero-oxide = { opt-level = 3 }
 
 [profile.release]
 panic = "unwind"
 overflow-checks = true
 
 [patch.crates-io]
+# Dependencies from monero-oxide which originate from within our own tree
+std-shims = { path = "common/std-shims" }
+simple-request = { path = "common/request" }
+dalek-ff-group = { path = "crypto/dalek-ff-group" }
+flexible-transcript = { path = "crypto/transcript" }
+modular-frost = { path = "crypto/frost" }
+
 # https://github.com/rust-lang-nursery/lazy-static.rs/issues/201
 lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
 

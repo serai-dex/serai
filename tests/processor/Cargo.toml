@@ -31,8 +31,8 @@ bitcoin-serai = { path = "../../networks/bitcoin" }
 k256 = "0.13"
 ethereum-serai = { path = "../../networks/ethereum" }
 
-monero-simple-request-rpc = { path = "../../networks/monero/rpc/simple-request" }
-monero-wallet = { path = "../../networks/monero/wallet" }
+monero-simple-request-rpc = { git = "https://github.com/monero-oxide/monero-oxide", rev = "f19b0f57fe7cbbd643b51091c63de29afb0976e4" }
+monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "f19b0f57fe7cbbd643b51091c63de29afb0976e4" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 

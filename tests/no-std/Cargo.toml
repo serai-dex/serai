@@ -34,5 +34,3 @@ dkg = { path = "../../crypto/dkg", default-features = false }
 # frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }
 
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["hazmat"] }
-
-monero-wallet = { path = "../../networks/monero/wallet", default-features = false, features = ["compile-time-generators"] }

@@ -52,8 +52,8 @@ ethereum-serai = { path = "../networks/ethereum", default-features = false, opti
 
 # Monero
 dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"], optional = true }
-monero-simple-request-rpc = { path = "../networks/monero/rpc/simple-request", default-features = false, optional = true }
-monero-wallet = { path = "../networks/monero/wallet", default-features = false, features = ["std", "multisig", "compile-time-generators"], optional = true }
+monero-simple-request-rpc = { git = "https://github.com/monero-oxide/monero-oxide", rev = "f19b0f57fe7cbbd643b51091c63de29afb0976e4", default-features = false, optional = true }
+monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "f19b0f57fe7cbbd643b51091c63de29afb0976e4", default-features = false, features = ["std", "multisig", "compile-time-generators"], optional = true }
 
 # Application
 log = { version = "0.4", default-features = false, features = ["std"] }

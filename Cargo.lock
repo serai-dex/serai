@@ -4845,15 +4845,11 @@ dependencies = [
 [[package]]
 name = "monero-address"
 version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
 dependencies = [
  "curve25519-dalek",
- "hex",
- "hex-literal",
  "monero-io",
  "monero-primitives",
- "rand_core",
- "serde",
- "serde_json",
  "std-shims",
  "thiserror 1.0.64",
  "zeroize",
@@ -4862,6 +4858,7 @@ dependencies = [
 [[package]]
 name = "monero-borromean"
 version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -4874,9 +4871,9 @@ dependencies = [
 [[package]]
 name = "monero-bulletproofs"
 version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
 dependencies = [
  "curve25519-dalek",
- "hex-literal",
  "monero-generators",
  "monero-io",
  "monero-primitives",
@@ -4889,6 +4886,7 @@ dependencies = [
 [[package]]
 name = "monero-clsag"
 version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
 dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
@@ -4909,11 +4907,11 @@ dependencies = [
 [[package]]
 name = "monero-generators"
 version = "0.4.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
 dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
  "group",
- "hex",
  "monero-io",
  "sha3",
  "std-shims",
@@ -4923,6 +4921,7 @@ dependencies = [
 [[package]]
 name = "monero-io"
 version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
 dependencies = [
  "curve25519-dalek",
  "std-shims",
@@ -4931,6 +4930,7 @@ dependencies = [
 [[package]]
 name = "monero-mlsag"
 version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -4942,11 +4942,29 @@ dependencies = [
 ]
 
 [[package]]
-name = "monero-primitives"
-version = "0.1.0"
+name = "monero-oxide"
+version = "0.1.4-alpha"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
 dependencies = [
  "curve25519-dalek",
- "hex",
+ "hex-literal",
+ "monero-borromean",
+ "monero-bulletproofs",
+ "monero-clsag",
+ "monero-generators",
+ "monero-io",
+ "monero-mlsag",
+ "monero-primitives",
+ "std-shims",
+ "zeroize",
+]
+
+[[package]]
+name = "monero-primitives"
+version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+dependencies = [
+ "curve25519-dalek",
  "monero-generators",
  "monero-io",
  "sha3",
@@ -4957,11 +4975,12 @@ dependencies = [
 [[package]]
 name = "monero-rpc"
 version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
 dependencies = [
  "curve25519-dalek",
  "hex",
  "monero-address",
- "monero-serai",
+ "monero-oxide",
  "serde",
  "serde_json",
  "std-shims",
@@ -4970,47 +4989,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "monero-serai"
-version = "0.1.4-alpha"
-dependencies = [
- "curve25519-dalek",
- "hex",
- "hex-literal",
- "monero-borromean",
- "monero-bulletproofs",
- "monero-clsag",
- "monero-generators",
- "monero-io",
- "monero-mlsag",
- "monero-primitives",
- "serde",
- "serde_json",
- "std-shims",
- "zeroize",
-]
-
-[[package]]
-name = "monero-serai-verify-chain"
-version = "0.1.0"
-dependencies = [
- "curve25519-dalek",
- "hex",
- "monero-rpc",
- "monero-serai",
- "monero-simple-request-rpc",
- "rand_core",
- "serde",
- "serde_json",
- "tokio",
-]
-
-[[package]]
 name = "monero-simple-request-rpc"
 version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
 dependencies = [
  "digest_auth",
  "hex",
- "monero-address",
  "monero-rpc",
  "simple-request",
  "tokio",
@@ -5020,6 +5004,7 @@ dependencies = [
 [[package]]
 name = "monero-wallet"
 version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
 dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
@@ -5029,18 +5014,14 @@ dependencies = [
  "modular-frost",
  "monero-address",
  "monero-clsag",
+ "monero-oxide",
  "monero-rpc",
- "monero-serai",
- "monero-simple-request-rpc",
  "rand",
  "rand_chacha",
  "rand_core",
  "rand_distr",
- "serde",
- "serde_json",
  "std-shims",
  "thiserror 1.0.64",
- "tokio",
  "zeroize",
 ]
 
@@ -8346,7 +8327,6 @@ dependencies = [
  "dleq",
  "flexible-transcript",
  "minimal-ed448",
- "monero-wallet",
  "multiexp",
  "schnorr-signatures",
 ]
