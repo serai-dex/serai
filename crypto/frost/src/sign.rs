@@ -203,14 +203,15 @@ pub trait SignMachine<S>: Send + Sync + Sized {
   /// SignatureMachine this SignMachine turns into.
   type SignatureMachine: SignatureMachine<S, SignatureShare = Self::SignatureShare>;
 
-  /// Cache this preprocess for usage later. This cached preprocess MUST only be used once. Reuse
-  /// of it enables recovery of your private key share. Third-party recovery of a cached preprocess
-  /// also enables recovery of your private key share, so this MUST be treated with the same
-  /// security as your private key share.
+  /// Cache this preprocess for usage later.
+  ///
+  /// This cached preprocess MUST only be used once. Reuse of it enables recovery of your private
+  /// key share. Third-party recovery of a cached preprocess also enables recovery of your private
+  /// key share, so this MUST be treated with the same security as your private key share.
   fn cache(self) -> CachedPreprocess;
 
   /// Create a sign machine from a cached preprocess.
-
+  ///
   /// After this, the preprocess must be deleted so it's never reused. Any reuse will presumably
   /// cause the signer to leak their secret share.
   fn from_cache(
@@ -219,11 +220,14 @@ pub trait SignMachine<S>: Send + Sync + Sized {
     cache: CachedPreprocess,
   ) -> (Self, Self::Preprocess);
 
-  /// Read a Preprocess message. Despite taking self, this does not save the preprocess.
-  /// It must be externally cached and passed into sign.
+  /// Read a Preprocess message.
+  ///
+  /// Despite taking self, this does not save the preprocess. It must be externally cached and
+  /// passed into sign.
   fn read_preprocess<R: Read>(&self, reader: &mut R) -> io::Result<Self::Preprocess>;
 
   /// Sign a message.
+  ///
   /// Takes in the participants' preprocess messages. Returns the signature share to be broadcast
   /// to all participants, over an authenticated channel. The parties who participate here will
   /// become the signing set for this session.

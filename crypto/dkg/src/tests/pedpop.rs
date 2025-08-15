@@ -14,7 +14,7 @@ use crate::{
 type PedPoPEncryptedMessage<C> = EncryptedMessage<C, SecretShare<<C as Ciphersuite>::F>>;
 type PedPoPSecretShares<C> = HashMap<Participant, PedPoPEncryptedMessage<C>>;
 
-const CONTEXT: &str = "DKG Test Key Generation";
+const CONTEXT: [u8; 32] = *b"DKG Test Key Generation         ";
 
 // Commit, then return commitment messages, enc keys, and shares
 #[allow(clippy::type_complexity)]
@@ -31,7 +31,7 @@ fn commit_enc_keys_and_shares<R: RngCore + CryptoRng, C: Ciphersuite>(
   let mut enc_keys = HashMap::new();
   for i in (1 ..= PARTICIPANTS).map(Participant) {
     let params = ThresholdParams::new(THRESHOLD, PARTICIPANTS, i).unwrap();
-    let machine = KeyGenMachine::<C>::new(params, CONTEXT.to_string());
+    let machine = KeyGenMachine::<C>::new(params, CONTEXT);
     let (machine, these_commitments) = machine.generate_coefficients(rng);
     machines.insert(i, machine);
 
@@ -147,14 +147,12 @@ mod literal {
 
       // Verify machines constructed with AdditionalBlameMachine::new work
       assert_eq!(
-        AdditionalBlameMachine::new(
-          &mut OsRng,
-          CONTEXT.to_string(),
-          PARTICIPANTS,
-          commitment_msgs.clone()
-        )
-        .unwrap()
-        .blame(ONE, TWO, msg.clone(), blame.clone()),
+        AdditionalBlameMachine::new(CONTEXT, PARTICIPANTS, commitment_msgs.clone()).unwrap().blame(
+          ONE,
+          TWO,
+          msg.clone(),
+          blame.clone()
+        ),
         ONE,
       );
     }

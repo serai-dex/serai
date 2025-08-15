@@ -35,7 +35,7 @@ impl_modulus!(
 type ResidueType = Residue<FieldModulus, { FieldModulus::LIMBS }>;
 
 /// A constant-time implementation of the Ed25519 field.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
 pub struct FieldElement(ResidueType);
 
 // Square root of -1.
@@ -92,7 +92,7 @@ impl Neg for FieldElement {
   }
 }
 
-impl<'a> Neg for &'a FieldElement {
+impl Neg for &FieldElement {
   type Output = FieldElement;
   fn neg(self) -> Self::Output {
     (*self).neg()

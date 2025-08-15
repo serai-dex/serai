@@ -17,7 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-thiserror = "1"
+thiserror = { version = "2", default-features = false, features = ["std"] }
 
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
