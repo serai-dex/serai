@@ -26,7 +26,7 @@ group = "0.13"
 
 ciphersuite = { path = "../ciphersuite", version = "^0.4.1", features = ["std", "ristretto"] }
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1" }
-frost = { path = "../frost", package = "modular-frost", version = "^0.8.1", features = ["ristretto"] }
+frost = { path = "../frost", package = "modular-frost", version = "^0.9.0", features = ["ristretto"] }
 
 schnorrkel = { version = "0.11" }
 

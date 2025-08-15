@@ -1,13 +1,13 @@
 [package]
 name = "modular-frost"
-version = "0.8.1"
+version = "0.9.0"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/frost"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["frost", "multisig", "threshold"]
 edition = "2021"
-rust-version = "1.79"
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true

@@ -1,13 +1,13 @@
 [package]
 name = "std-shims"
-version = "0.1.1"
+version = "0.1.2"
 description = "A series of std shims to make alloc more feasible"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/common/std-shims"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["nostd", "no_std", "alloc", "io"]
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true
