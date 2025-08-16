@@ -7,7 +7,10 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{
+  group::{ff::Field, GroupEncoding},
+  Ciphersuite,
+};
 
 use transcript::{Transcript, RecommendedTranscript};
 use dleq::DLEqProof;
@@ -117,7 +120,8 @@ impl<C1: Ciphersuite, C2: Ciphersuite<F = C1::F, G = C1::G>> GeneratorPromotion<
         self.base.secret_share().clone(),
         verification_shares,
       )),
-      offset: None,
+      scalar: C2::F::ONE,
+      offset: C2::F::ZERO,
     })
   }
 }
