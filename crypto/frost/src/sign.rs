@@ -357,12 +357,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 
       // Re-format into the FROST-expected rho transcript
       let mut rho_transcript = A::Transcript::new(b"FROST_rho");
-      rho_transcript.append_message(
-        b"group_key",
-        (self.params.keys.group_key() +
-          (C::generator() * self.params.keys.current_offset().unwrap_or(C::F::ZERO)))
-        .to_bytes(),
-      );
+      rho_transcript.append_message(b"group_key", self.params.keys.group_key().to_bytes());
       rho_transcript.append_message(b"message", C::hash_msg(msg));
       rho_transcript.append_message(
         b"preprocesses",
