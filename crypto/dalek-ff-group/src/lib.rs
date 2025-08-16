@@ -40,11 +40,19 @@ pub use field::FieldElement;
 
 // Use black_box when possible
 #[rustversion::since(1.66)]
-use core::hint::black_box;
-#[rustversion::before(1.66)]
-fn black_box<T>(val: T) -> T {
-  val
+mod black_box {
+  pub(crate) fn black_box<T>(val: T) -> T {
+    #[allow(clippy::incompatible_msrv)]
+    core::hint::black_box(val)
+  }
 }
+#[rustversion::before(1.66)]
+mod black_box {
+  pub(crate) fn black_box<T>(val: T) -> T {
+    val
+  }
+}
+use black_box::black_box;
 
 fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   let bit_ref = black_box(bit_ref);
