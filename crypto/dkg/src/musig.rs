@@ -111,6 +111,7 @@ pub fn musig<C: Ciphersuite>(
   let mut group_key = C::G::identity();
   for l in 1 ..= keys_len {
     let key = keys[usize::from(l) - 1];
+    // TODO: Use a multiexp for this
     group_key += key * binding[usize::from(l - 1)];
 
     // These errors also shouldn't be possible, for the same reasons as documented above

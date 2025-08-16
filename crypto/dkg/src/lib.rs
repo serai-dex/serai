@@ -412,14 +412,17 @@ mod lib {
     #[zeroize(skip)]
     pub(crate) core: Arc<ThresholdCore<C>>,
 
+    // Scalar applied to these keys.
+    pub(crate) scalar: C::F,
     // Offset applied to these keys.
-    pub(crate) offset: Option<C::F>,
+    pub(crate) offset: C::F,
   }
 
-  /// View of keys, interpolated and offset for usage.
+  /// View of keys, interpolated and with the expected linear combination taken for usage.
   #[derive(Clone)]
   pub struct ThresholdView<C: Ciphersuite> {
     interpolation: Interpolation<C::F>,
+    scalar: C::F,
     offset: C::F,
     group_key: C::G,
     included: Vec<Participant>,
@@ -433,6 +436,7 @@ mod lib {
       fmt
         .debug_struct("ThresholdView")
         .field("interpolation", &self.interpolation)
+        .field("scalar", &self.scalar)
         .field("offset", &self.offset)
         .field("group_key", &self.group_key)
         .field("included", &self.included)
@@ -444,6 +448,7 @@ mod lib {
 
   impl<C: Ciphersuite> Zeroize for ThresholdView<C> {
     fn zeroize(&mut self) {
+      self.scalar.zeroize();
       self.offset.zeroize();
       self.group_key.zeroize();
       self.included.zeroize();
@@ -460,25 +465,42 @@ mod lib {
   impl<C: Ciphersuite> ThresholdKeys<C> {
     /// Create a new set of ThresholdKeys from a ThresholdCore.
     pub fn new(core: ThresholdCore<C>) -> ThresholdKeys<C> {
-      ThresholdKeys { core: Arc::new(core), offset: None }
+      ThresholdKeys { core: Arc::new(core), scalar: C::F::ONE, offset: C::F::ZERO }
+    }
+
+    /// Scale the keys by a given scalar to allow for various account and privacy schemes.
+    ///
+    /// This scalar is ephemeral and will not be included when these keys are serialized. The
+    /// scalar is applied on top of any already-existing scalar/offset.
+    ///
+    /// Returns `None` if the scalar is equal to `0`.
+    #[must_use]
+    pub fn scale(mut self, scalar: C::F) -> Option<ThresholdKeys<C>> {
+      if bool::from(scalar.is_zero()) {
+        None?;
+      }
+      self.scalar *= scalar;
+      self.offset *= scalar;
+      Some(self)
     }
 
     /// Offset the keys by a given scalar to allow for various account and privacy schemes.
     ///
-    /// This offset is ephemeral and will not be included when these keys are serialized. It also
-    /// accumulates, so calling offset multiple times will produce a offset of the offsets' sum.
+    /// This offset is ephemeral and will not be included when these keys are serialized. The
+    /// offset is applied on top of any already-existing scalar/offset.
     #[must_use]
-    pub fn offset(&self, offset: C::F) -> ThresholdKeys<C> {
-      let mut res = self.clone();
-      // Carry any existing offset
-      // Enables schemes like Monero's subaddresses which have a per-subaddress offset and then a
-      // one-time-key offset
-      res.offset = Some(offset + res.offset.unwrap_or(C::F::ZERO));
-      res
+    pub fn offset(mut self, offset: C::F) -> ThresholdKeys<C> {
+      self.offset += offset;
+      self
+    }
+
+    /// Return the current scalar in-use for these keys.
+    pub fn current_scalar(&self) -> C::F {
+      self.scalar
     }
 
     /// Return the current offset in-use for these keys.
-    pub fn current_offset(&self) -> Option<C::F> {
+    pub fn current_offset(&self) -> C::F {
       self.offset
     }
 
@@ -492,9 +514,9 @@ mod lib {
       &self.core.secret_share
     }
 
-    /// Return the group key, with any offset applied.
+    /// Return the group key, with the expected linear combination taken.
     pub fn group_key(&self) -> C::G {
-      self.core.group_key + (C::generator() * self.offset.unwrap_or(C::F::ZERO))
+      (self.core.group_key * self.scalar) + (C::generator() * self.offset)
     }
 
     /// Return all participants' verification shares without any offsetting.
@@ -507,8 +529,8 @@ mod lib {
       self.core.serialize()
     }
 
-    /// Obtain a view of these keys, with any offset applied, interpolated for the specified signing
-    /// set.
+    /// Obtain a view of these keys, interpolated for the specified signing set, with the specified
+    /// linear combination taken.
     pub fn view(&self, mut included: Vec<Participant>) -> Result<ThresholdView<C>, DkgError<()>> {
       if (included.len() < self.params().t.into()) ||
         (usize::from(self.params().n()) < included.len())
@@ -517,26 +539,36 @@ mod lib {
       }
       included.sort();
 
+      // The interpolation occurs multiplicatively, letting us scale by the scalar now
+      let secret_share_scaled = Zeroizing::new(self.scalar * self.secret_share().deref());
       let mut secret_share = Zeroizing::new(
         self.core.interpolation.interpolation_factor(self.params().i(), &included) *
-          self.secret_share().deref(),
+          secret_share_scaled.deref(),
       );
 
       let mut verification_shares = self.verification_shares();
       for (i, share) in &mut verification_shares {
-        *share *= self.core.interpolation.interpolation_factor(*i, &included);
+        *share *= self.scalar * self.core.interpolation.interpolation_factor(*i, &included);
       }
 
-      // The offset is included by adding it to the participant with the lowest ID
-      let offset = self.offset.unwrap_or(C::F::ZERO);
+      /*
+        The offset is included by adding it to the participant with the lowest ID.
+
+        This is done after interpolating to ensure, regardless of the method of interpolation, that
+        the method of interpolation does not scale the offset. For Lagrange interpolation, we could
+        add the offset to every key share before interpolating, yet for Constant interpolation, we
+        _have_ to add it as we do here (which also works even when we intend to perform Lagrange
+        interpolation).
+      */
       if included[0] == self.params().i() {
-        *secret_share += offset;
+        *secret_share += self.offset;
       }
-      *verification_shares.get_mut(&included[0]).unwrap() += C::generator() * offset;
+      *verification_shares.get_mut(&included[0]).unwrap() += C::generator() * self.offset;
 
       Ok(ThresholdView {
         interpolation: self.core.interpolation.clone(),
-        offset,
+        scalar: self.scalar,
+        offset: self.offset,
         group_key: self.group_key(),
         secret_share,
         original_verification_shares: self.verification_shares(),
@@ -553,7 +585,12 @@ mod lib {
   }
 
   impl<C: Ciphersuite> ThresholdView<C> {
-    /// Return the offset for this view.
+    /// Return the scalar applied to this view.
+    pub fn scalar(&self) -> C::F {
+      self.scalar
+    }
+
+    /// Return the offset applied to this view.
     pub fn offset(&self) -> C::F {
       self.offset
     }
@@ -576,7 +613,7 @@ mod lib {
       Some(self.interpolation.interpolation_factor(participant, &self.included))
     }
 
-    /// Return the interpolated, offset secret share.
+    /// Return the interpolated secret share, with the expected linear combination taken.
     pub fn secret_share(&self) -> &Zeroizing<C::F> {
       &self.secret_share
     }
@@ -586,7 +623,8 @@ mod lib {
       self.original_verification_shares[&l]
     }
 
-    /// Return the interpolated, offset verification share for the specified participant.
+    /// Return the interpolated verification share, with the expected linear combination taken,
+    /// for the specified participant.
     pub fn verification_share(&self, l: Participant) -> C::G {
       self.verification_shares[&l]
     }
