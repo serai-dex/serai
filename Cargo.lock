@@ -2222,7 +2222,7 @@ dependencies = [
  "rand_core",
  "schnorr-signatures",
  "std-shims",
- "thiserror 1.0.64",
+ "thiserror 2.0.14",
  "zeroize",
 ]
 
@@ -2241,7 +2241,7 @@ dependencies = [
  "multiexp",
  "rand_core",
  "rustversion",
- "thiserror 1.0.64",
+ "thiserror 2.0.14",
  "zeroize",
 ]
 
@@ -4838,7 +4838,7 @@ dependencies = [
  "schnorr-signatures",
  "serde_json",
  "subtle",
- "thiserror 1.0.64",
+ "thiserror 2.0.14",
  "zeroize",
 ]
 
