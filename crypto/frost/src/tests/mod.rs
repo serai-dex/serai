@@ -251,10 +251,11 @@ pub fn test_offset_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &m
   let mut keys = key_gen(&mut *rng);
   let group_key = keys[&Participant::new(1).unwrap()].group_key();
 
+  let scalar = C::F::from(3);
   let offset = C::F::from(5);
-  let offset_key = group_key + (C::generator() * offset);
+  let offset_key = (group_key * scalar) + (C::generator() * offset);
   for keys in keys.values_mut() {
-    *keys = keys.offset(offset);
+    *keys = keys.clone().scale(scalar).unwrap().offset(offset);
     assert_eq!(keys.group_key(), offset_key);
   }
 
