@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use rand_core::OsRng;
 
 use ciphersuite::group::GroupEncoding;
-use frost::{Participant, dkg::tests::key_gen};
+use frost::{Participant, tests::key_gen};
 
 use tokio::time::timeout;
 

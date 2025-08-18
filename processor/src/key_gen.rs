@@ -10,7 +10,7 @@ use ciphersuite::group::GroupEncoding;
 use dkg_pedpop::*;
 use frost::{
   curve::{Ciphersuite, Ristretto},
-  dkg::{DkgError, Participant, ThresholdParams, ThresholdCore, ThresholdKeys},
+  dkg::{Participant, ThresholdParams, ThresholdKeys},
 };
 
 use log::info;
@@ -54,8 +54,8 @@ impl GeneratedKeysDb {
     let mut substrate_keys = vec![];
     let mut network_keys = vec![];
     while !keys_ref.is_empty() {
-      substrate_keys.push(ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap()));
-      let mut these_network_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys_ref).unwrap());
+      substrate_keys.push(ThresholdKeys::read(&mut keys_ref).unwrap());
+      let mut these_network_keys = ThresholdKeys::read(&mut keys_ref).unwrap();
       N::tweak_keys(&mut these_network_keys);
       network_keys.push(these_network_keys);
     }
@@ -65,7 +65,7 @@ impl GeneratedKeysDb {
   fn save_keys<N: Network>(
     txn: &mut impl DbTxn,
     id: &KeyGenId,
-    substrate_keys: &[ThresholdCore<Ristretto>],
+    substrate_keys: &[ThresholdKeys<Ristretto>],
     network_keys: &[ThresholdKeys<N::Curve>],
   ) {
     let mut keys = Zeroizing::new(vec![]);
@@ -181,15 +181,19 @@ impl<N: Network, D: Db> KeyGen<N, D> {
   ) -> ProcessorMessage {
     const SUBSTRATE_KEY_CONTEXT: &str = "substrate";
     const NETWORK_KEY_CONTEXT: &str = "network";
-    let context = |id: &KeyGenId, key| {
+    let context = |id: &KeyGenId, key| -> [u8; 32] {
       // TODO2: Also embed the chain ID/genesis block
-      format!(
-        "Serai Key Gen. Session: {:?}, Network: {:?}, Attempt: {}, Key: {}",
-        id.session,
-        N::NETWORK,
-        id.attempt,
-        key,
+      <blake2::Blake2s256 as blake2::digest::Digest>::digest(
+        format!(
+          "Serai Key Gen. Session: {:?}, Network: {:?}, Attempt: {}, Key: {}",
+          id.session,
+          N::NETWORK,
+          id.attempt,
+          key,
+        )
+        .as_bytes(),
       )
+      .into()
     };
 
     let rng = |label, id: KeyGenId| {
@@ -246,19 +250,10 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         match machine.generate_secret_shares(rng, commitments) {
           Ok(res) => Ok(res),
           Err(e) => match e {
-            DkgError::ZeroParameter(_, _) |
-            DkgError::InvalidThreshold(_, _) |
-            DkgError::InvalidParticipant(_, _) |
-            DkgError::InvalidSigningSet |
-            DkgError::InvalidShare { .. } => unreachable!("{e:?}"),
-            DkgError::InvalidParticipantQuantity(_, _) |
-            DkgError::DuplicatedParticipant(_) |
-            DkgError::MissingParticipant(_) => {
-              panic!("coordinator sent invalid DKG commitments: {e:?}")
-            }
-            DkgError::InvalidCommitments(i) => {
+            PedPoPError::InvalidCommitments(i) => {
               Err(ProcessorMessage::InvalidCommitments { id, faulty: i })?
             }
+            _ => panic!("unknown error: {e:?}"),
           },
         }
       }
@@ -396,7 +391,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           m: usize,
           machine: KeyMachine<C>,
           shares_ref: &mut HashMap<Participant, &[u8]>,
-        ) -> Result<ThresholdCore<C>, ProcessorMessage> {
+        ) -> Result<ThresholdKeys<C>, ProcessorMessage> {
           let params = ThresholdParams::new(
             params.t(),
             params.n(),
@@ -421,17 +416,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
             (match machine.calculate_share(rng, shares) {
               Ok(res) => res,
               Err(e) => match e {
-                DkgError::ZeroParameter(_, _) |
-                DkgError::InvalidThreshold(_, _) |
-                DkgError::InvalidParticipant(_, _) |
-                DkgError::InvalidSigningSet |
-                DkgError::InvalidCommitments(_) => unreachable!("{e:?}"),
-                DkgError::InvalidParticipantQuantity(_, _) |
-                DkgError::DuplicatedParticipant(_) |
-                DkgError::MissingParticipant(_) => {
-                  panic!("coordinator sent invalid DKG shares: {e:?}")
-                }
-                DkgError::InvalidShare { participant, blame } => {
+                PedPoPError::InvalidShare { participant, blame } => {
                   Err(ProcessorMessage::InvalidShare {
                     id,
                     accuser: params.i(),
@@ -439,6 +424,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
                     blame: Some(blame.map(|blame| blame.serialize())).flatten(),
                   })?
                 }
+                _ => panic!("unknown error: {e:?}"),
               },
             })
             .complete(),
@@ -468,7 +454,7 @@ impl<N: Network, D: Db> KeyGen<N, D> {
               Ok(keys) => keys,
               Err(msg) => return msg,
             };
-          let these_network_keys =
+          let mut these_network_keys =
             match handle_machine(&mut rng, id, params, m, machines.1, &mut shares_ref) {
               Ok(keys) => keys,
               Err(msg) => return msg,
@@ -487,7 +473,6 @@ impl<N: Network, D: Db> KeyGen<N, D> {
             }
           }
 
-          let mut these_network_keys = ThresholdKeys::new(these_network_keys);
           N::tweak_keys(&mut these_network_keys);
 
           substrate_keys.push(these_substrate_keys);
@@ -556,7 +541,6 @@ impl<N: Network, D: Db> KeyGen<N, D> {
           blame.clone().and_then(|blame| EncryptionKeyProof::read(&mut blame.as_slice()).ok());
 
         let substrate_blame = AdditionalBlameMachine::new(
-          &mut rand_core::OsRng,
           context(&id, SUBSTRATE_KEY_CONTEXT),
           params.n(),
           substrate_commitment_msgs,
@@ -564,7 +548,6 @@ impl<N: Network, D: Db> KeyGen<N, D> {
         .unwrap()
         .blame(accuser, accused, substrate_share, substrate_blame);
         let network_blame = AdditionalBlameMachine::new(
-          &mut rand_core::OsRng,
           context(&id, NETWORK_KEY_CONTEXT),
           params.n(),
           network_commitment_msgs,

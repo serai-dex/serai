@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ciphersuite::{Ciphersuite, Ristretto};
 
 use dockertest::DockerTest;

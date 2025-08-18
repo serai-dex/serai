@@ -10,7 +10,7 @@ use sp_core::{
 };
 
 use ciphersuite::{Ciphersuite, Ristretto};
-use frost::dkg::musig::musig;
+use dkg_musig::musig;
 use schnorrkel::Schnorrkel;
 
 use serai_client::{
@@ -46,8 +46,7 @@ pub async fn set_keys(
     assert_eq!(Ristretto::generator() * secret_key, pub_keys[i]);
 
     threshold_keys.push(
-      musig::<Ristretto>(&musig_context(set.into()), &Zeroizing::new(secret_key), &pub_keys)
-        .unwrap(),
+      musig::<Ristretto>(musig_context(set.into()), Zeroizing::new(secret_key), &pub_keys).unwrap(),
     );
   }
 

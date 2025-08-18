@@ -4,7 +4,7 @@ use rand_core::{RngCore, OsRng};
 use zeroize::Zeroizing;
 
 use ciphersuite::{Ciphersuite, Ristretto};
-use frost::dkg::musig::musig;
+use dkg_musig::musig;
 use schnorrkel::Schnorrkel;
 
 use sp_core::{sr25519::Signature, Pair as PairTrait};
@@ -99,7 +99,7 @@ async fn set_values(serai: &Serai, values: &Values) {
 
   assert_eq!(Ristretto::generator() * secret_key, public_key);
   let threshold_keys =
-    musig::<Ristretto>(&musig_context(set), &Zeroizing::new(secret_key), &[public_key]).unwrap();
+    musig::<Ristretto>(musig_context(set), Zeroizing::new(secret_key), &[public_key]).unwrap();
 
   let sig = frost::tests::sign_without_caching(
     &mut OsRng,

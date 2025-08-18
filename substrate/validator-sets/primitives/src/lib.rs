@@ -112,7 +112,7 @@ pub fn musig_context(set: ValidatorSet) -> [u8; 32] {
   const DST: &[u8] = b"ValidatorSets-musig_key";
   context[.. DST.len()].copy_from_slice(DST);
   let set = set.encode();
-  context[DST.len() .. (DST.len() + set.len())].copy_from_slice(set.len());
+  context[DST.len() .. (DST.len() + set.len())].copy_from_slice(&set);
   context
 }
 

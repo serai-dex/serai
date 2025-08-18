@@ -34,6 +34,7 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 serde_json = { version = "1", default-features = false, features = ["std"] }
 
 # Cryptography
+blake2 = { version = "0.10", default-features = false, features = ["std"] }
 ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std", "ristretto"] }
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", default-features = false, features = ["std"] }

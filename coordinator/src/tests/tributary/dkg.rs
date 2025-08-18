@@ -361,8 +361,8 @@ async fn dkg_test() {
       assert!(signature.verify(
         &*serai_client::validator_sets::primitives::set_keys_message(&set, &[], &key_pair),
         &serai_client::Public(
-          frost::dkg::musig::musig_key::<Ristretto>(
-            &serai_client::validator_sets::primitives::musig_context(set.into()),
+          dkg_musig::musig_key_vartime::<Ristretto>(
+            serai_client::validator_sets::primitives::musig_context(set.into()),
             &self.spec.validators().into_iter().map(|(validator, _)| validator).collect::<Vec<_>>()
           )
           .unwrap()
