@@ -104,12 +104,12 @@ impl<C1: Ciphersuite, C2: Ciphersuite<F = C1::F, G = C1::G>> GeneratorPromotion<
   ) -> (GeneratorPromotion<C1, C2>, GeneratorProof<C1>) {
     // Do a DLEqProof for the new generator
     let proof = GeneratorProof {
-      share: C2::generator() * base.secret_share().deref(),
+      share: C2::generator() * base.original_secret_share().deref(),
       proof: DLEqProof::prove(
         rng,
         &mut transcript(&base.original_group_key(), base.params().i()),
         &[C1::generator(), C2::generator()],
-        base.secret_share(),
+        base.original_secret_share(),
       ),
     };
 
@@ -159,7 +159,7 @@ impl<C1: Ciphersuite, C2: Ciphersuite<F = C1::F, G = C1::G>> GeneratorPromotion<
       ThresholdKeys::new(
         params,
         self.base.interpolation().clone(),
-        self.base.secret_share().clone(),
+        self.base.original_secret_share().clone(),
         verification_shares,
       )
       .unwrap(),

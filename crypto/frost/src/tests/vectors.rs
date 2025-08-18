@@ -133,7 +133,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<Participant,
     assert_eq!(usize::from(these_keys.params().n()), shares.len());
     let participant = Participant::new(i).unwrap();
     assert_eq!(these_keys.params().i(), participant);
-    assert_eq!(these_keys.secret_share().deref(), &shares[usize::from(i - 1)]);
+    assert_eq!(these_keys.original_secret_share().deref(), &shares[usize::from(i - 1)]);
     assert_eq!(hex::encode(these_keys.group_key().to_bytes().as_ref()), vectors.group_key);
     keys.insert(participant, these_keys);
   }
@@ -346,14 +346,21 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
 
       // Calculate the expected nonces
       let mut expected = (C::generator() *
-        C::random_nonce(keys[i].secret_share(), &mut TransparentRng(vec![randomness.0])).deref())
+        C::random_nonce(
+          keys[i].original_secret_share(),
+          &mut TransparentRng(vec![randomness.0]),
+        )
+        .deref())
       .to_bytes()
       .as_ref()
       .to_vec();
       expected.extend(
         (C::generator() *
-          C::random_nonce(keys[i].secret_share(), &mut TransparentRng(vec![randomness.1]))
-            .deref())
+          C::random_nonce(
+            keys[i].original_secret_share(),
+            &mut TransparentRng(vec![randomness.1]),
+          )
+          .deref())
         .to_bytes()
         .as_ref(),
       );

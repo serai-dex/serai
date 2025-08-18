@@ -125,8 +125,11 @@ impl<C: Curve, A: Algorithm<C>> AlgorithmMachine<C, A> {
     let mut params = self.params;
 
     let mut rng = ChaCha20Rng::from_seed(*seed.0);
-    let (nonces, commitments) =
-      Commitments::new::<_>(&mut rng, params.keys.secret_share(), &params.algorithm.nonces());
+    let (nonces, commitments) = Commitments::new::<_>(
+      &mut rng,
+      params.keys.original_secret_share(),
+      &params.algorithm.nonces(),
+    );
     let addendum = params.algorithm.preprocess_addendum(&mut rng, &params.keys);
 
     let preprocess = Preprocess { commitments, addendum };
