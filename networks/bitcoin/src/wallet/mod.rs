@@ -39,9 +39,9 @@ pub use send::*;
 /// from being spent via a script. To have keys which have spendable script paths, further offsets
 /// from this position must be used.
 ///
-/// After adding an unspendable script path, the key is incremented until its even. This means the
-/// existence of the unspendable script path may not provable, without an understanding of the
-/// algorithm used here.
+/// After adding an unspendable script path, the key is negated if odd.
+///
+/// This has a neligible probability of returning keys whose group key is the point at infinity.
 #[cfg(feature = "std")]
 pub fn tweak_keys(keys: ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
   // Adds the unspendable script path per

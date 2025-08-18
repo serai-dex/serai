@@ -7,15 +7,18 @@ use k256::{
 
 use bitcoin::key::XOnlyPublicKey;
 
-/// Get the x coordinate of a non-infinity, even point. Panics on invalid input.
-pub fn x(key: &ProjectivePoint) -> [u8; 32] {
+/// Get the x coordinate of a non-infinity point.
+///
+/// Panics on invalid input.
+fn x(key: &ProjectivePoint) -> [u8; 32] {
   let encoded = key.to_encoded_point(true);
-  assert_eq!(encoded.tag(), Tag::CompressedEvenY, "x coordinate of odd key");
   (*encoded.x().expect("point at infinity")).into()
 }
 
-/// Convert a non-infinity even point to a XOnlyPublicKey. Panics on invalid input.
-pub fn x_only(key: &ProjectivePoint) -> XOnlyPublicKey {
+/// Convert a non-infinity point to a XOnlyPublicKey (dropping its sign).
+///
+/// Panics on invalid input.
+pub(crate) fn x_only(key: &ProjectivePoint) -> XOnlyPublicKey {
   XOnlyPublicKey::from_slice(&x(key)).expect("x_only was passed a point which was infinity or odd")
 }
 
@@ -46,9 +49,9 @@ mod frost_crypto {
 
   /// A BIP-340 compatible HRAm for use with the modular-frost Schnorr Algorithm.
   ///
-  /// If passed an odd nonce, it will have the generator added until it is even.
+  /// If passed an odd nonce, the challenge will be negated.
   ///
-  /// If the key is odd, this will panic.
+  /// If either `R` or `A` is the point at infinity, this will panic.
   #[derive(Clone, Copy, Debug)]
   pub struct Hram;
   #[allow(non_snake_case)]
@@ -72,9 +75,12 @@ mod frost_crypto {
 
   /// BIP-340 Schnorr signature algorithm.
   ///
-  /// This must be used with a ThresholdKeys whose group key is even. If it is odd, this may panic.
+  /// This may panic if called with nonces/a group key which are the point at infinity (which have
+  /// a negligible probability for a well-reasoned caller, even with malicious participants
+  /// present).
   ///
-  /// `verify`, `verify_share` must be called after `sign_share` is called.
+  /// `verify`, `verify_share` MUST be called after `sign_share` is called. Otherwise, this library
+  /// MAY panic.
   #[derive(Clone)]
   pub struct Schnorr(FrostSchnorr<Secp256k1, Hram>);
   impl Schnorr {
