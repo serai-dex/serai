@@ -37,6 +37,7 @@ jobs:
             -p dleq \
             -p dkg \
             -p dkg-recovery \
+            -p dkg-dealer \
             -p dkg-promote \
             -p dkg-musig \
             -p dkg-pedpop \

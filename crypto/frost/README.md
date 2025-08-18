@@ -12,6 +12,10 @@ This library offers ciphersuites compatible with the
 [IETF draft](https://github.com/cfrg/draft-irtf-cfrg-frost). Currently, version
 15 is supported.
 
+A variety of testing utilities are provided under the `tests` feature. These
+are provided with no guarantees and may have completely arbitrary behavior,
+including panicking for completely well-reasoned input.
+
 This library was
 [audited by Cypher Stack in March 2023](https://github.com/serai-dex/serai/raw/e1bb2c191b7123fd260d008e31656d090d559d21/audits/Cypher%20Stack%20crypto%20March%202023/Audit.pdf),
 culminating in commit

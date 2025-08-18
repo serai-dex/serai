@@ -14,6 +14,7 @@ pub use schnorr_signatures;
 
 pub use dkg;
 pub use dkg_recovery;
+pub use dkg_dealer;
 pub use dkg_musig;
 /*
 pub use modular_frost;

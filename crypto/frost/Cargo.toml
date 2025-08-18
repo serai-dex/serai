@@ -41,6 +41,7 @@ schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5
 
 dkg = { path = "../dkg", version = "0.6", default-features = false, features = ["std"] }
 dkg-recovery = { path = "../dkg/recovery", default-features = false, features = ["std"], optional = true }
+dkg-dealer = { path = "../dkg/dealer", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 hex = "0.4"
@@ -48,6 +49,7 @@ serde_json = { version = "1", default-features = false, features = ["std"] }
 
 dkg = { path = "../dkg", default-features = false, features = ["std"] }
 dkg-recovery = { path = "../dkg/recovery", default-features = false, features = ["std"] }
+dkg-dealer = { path = "../dkg/dealer", default-features = false, features = ["std"] }
 
 [features]
 ed25519 = ["dalek-ff-group", "ciphersuite/ed25519"]
@@ -58,4 +60,4 @@ p256 = ["ciphersuite/p256"]
 
 ed448 = ["minimal-ed448", "ciphersuite/ed448"]
 
-tests = ["hex", "rand_core/getrandom", "dkg-recovery"]
+tests = ["hex", "rand_core/getrandom", "dkg-dealer" ,"dkg-recovery"]

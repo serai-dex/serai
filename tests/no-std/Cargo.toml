@@ -31,6 +31,7 @@ schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
 
 dkg = { path = "../../crypto/dkg", default-features = false }
 dkg-recovery = { path = "../../crypto/dkg/recovery", default-features = false }
+dkg-dealer = { path = "../../crypto/dkg/dealer", default-features = false }
 dkg-musig = { path = "../../crypto/dkg/musig", default-features = false }
 # modular-frost = { path = "../../crypto/frost", default-features = false }
 # frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }
