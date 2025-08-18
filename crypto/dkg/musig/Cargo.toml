@@ -1,0 +1,49 @@
+[package]
+name = "dkg-musig"
+version = "0.6.0"
+description = "The MuSig key aggregation protocol"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dkg/musig"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["dkg", "multisig", "threshold", "ff", "group"]
+edition = "2021"
+rust-version = "1.80"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+thiserror = { version = "2", default-features = false }
+
+rand_core = { version = "0.6", default-features = false }
+
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+
+std-shims = { version = "0.1", path = "../../../common/std-shims", default-features = false }
+
+multiexp = { path = "../../multiexp", version = "0.4", default-features = false }
+ciphersuite = { path = "../../ciphersuite", version = "^0.4.1", default-features = false }
+dkg = { path = "../", default-features = false }
+
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
+ciphersuite = { path = "../../ciphersuite", default-features = false, features = ["ristretto"] }
+dkg-recovery = { path = "../recovery", default-features = false, features = ["std"] }
+
+[features]
+std = [
+  "thiserror/std",
+
+  "rand_core/std",
+
+  "std-shims/std",
+
+  "multiexp/std",
+  "ciphersuite/std",
+  "dkg/std",
+]
+default = ["std"]

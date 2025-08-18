@@ -34,6 +34,10 @@ members = [
   "crypto/schnorr",
   "crypto/dleq",
   "crypto/dkg",
+  "crypto/dkg/recovery",
+  "crypto/dkg/promote",
+  "crypto/dkg/musig",
+  "crypto/dkg/pedpop",
   "crypto/frost",
   "crypto/schnorrkel",
 

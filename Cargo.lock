@@ -2211,17 +2211,65 @@ dependencies = [
 
 [[package]]
 name = "dkg"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "borsh",
+ "ciphersuite",
+ "std-shims",
+ "thiserror 2.0.14",
+ "zeroize",
+]
+
+[[package]]
+name = "dkg-musig"
+version = "0.6.0"
+dependencies = [
+ "ciphersuite",
+ "dkg",
+ "dkg-recovery",
+ "multiexp",
+ "rand_core",
+ "std-shims",
+ "thiserror 2.0.14",
+ "zeroize",
+]
+
+[[package]]
+name = "dkg-pedpop"
+version = "0.6.0"
+dependencies = [
  "chacha20",
  "ciphersuite",
+ "dkg",
  "dleq",
  "flexible-transcript",
  "multiexp",
  "rand_core",
  "schnorr-signatures",
- "std-shims",
+ "thiserror 2.0.14",
+ "zeroize",
+]
+
+[[package]]
+name = "dkg-promote"
+version = "0.6.0"
+dependencies = [
+ "ciphersuite",
+ "dkg",
+ "dkg-recovery",
+ "dleq",
+ "flexible-transcript",
+ "rand_core",
+ "thiserror 2.0.14",
+ "zeroize",
+]
+
+[[package]]
+name = "dkg-recovery"
+version = "0.6.0"
+dependencies = [
+ "ciphersuite",
+ "dkg",
  "thiserror 2.0.14",
  "zeroize",
 ]
@@ -8324,6 +8372,8 @@ dependencies = [
  "ciphersuite",
  "dalek-ff-group",
  "dkg",
+ "dkg-musig",
+ "dkg-recovery",
  "dleq",
  "flexible-transcript",
  "minimal-ed448",

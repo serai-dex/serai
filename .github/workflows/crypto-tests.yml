@@ -36,5 +36,9 @@ jobs:
             -p schnorr-signatures \
             -p dleq \
             -p dkg \
+            -p dkg-recovery \
+            -p dkg-promote \
+            -p dkg-musig \
+            -p dkg-pedpop \
             -p modular-frost \
             -p frost-schnorrkel

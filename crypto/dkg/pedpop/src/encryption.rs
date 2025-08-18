@@ -21,7 +21,7 @@ use multiexp::BatchVerifier;
 use schnorr::SchnorrSignature;
 use dleq::DLEqProof;
 
-use crate::{Participant, ThresholdParams};
+use dkg::{Participant, ThresholdParams};
 
 mod sealed {
   use super::*;
@@ -69,7 +69,7 @@ impl<C: Ciphersuite, M: Message> EncryptionKeyMessage<C, M> {
     buf
   }
 
-  #[cfg(any(test, feature = "tests"))]
+  #[cfg(test)]
   pub(crate) fn enc_key(&self) -> C::G {
     self.enc_key
   }
