@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use thiserror::Error;
 
 /// Distributed key generation protocol.
-pub use dkg::{self, Participant, ThresholdParams, ThresholdCore, ThresholdKeys, ThresholdView};
+pub use dkg::{self, Participant, ThresholdParams, ThresholdKeys, ThresholdView};
 
 /// Curve trait and provided curves/HRAMs, forming various ciphersuites.
 pub mod curve;

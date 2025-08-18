@@ -1,11 +1,18 @@
+use core::ops::Deref;
 use std::collections::HashMap;
 
+use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
 
-pub use dkg::tests::{key_gen, musig_key_gen, recover_key};
+use ciphersuite::{
+  group::ff::{Field, PrimeField},
+  Ciphersuite,
+};
+use dkg::Interpolation;
+pub use dkg_recovery::recover_key;
 
 use crate::{
-  Curve, Participant, ThresholdKeys, FrostError,
+  Curve, Participant, ThresholdParams, ThresholdKeys, FrostError,
   algorithm::{Algorithm, Hram, IetfSchnorr},
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
 };
@@ -25,6 +32,56 @@ mod literal;
 pub const PARTICIPANTS: u16 = 5;
 /// Constant threshold of participants to use when signing.
 pub const THRESHOLD: u16 = ((PARTICIPANTS * 2) / 3) + 1;
+
+/// Create a key, for testing purposes.
+pub fn key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
+  rng: &mut R,
+) -> HashMap<Participant, ThresholdKeys<C>> {
+  let coefficients: [_; THRESHOLD as usize] =
+    core::array::from_fn(|_| Zeroizing::new(C::F::random(&mut *rng)));
+
+  fn polynomial<F: PrimeField + Zeroize>(
+    coefficients: &[Zeroizing<F>],
+    l: Participant,
+  ) -> Zeroizing<F> {
+    let l = F::from(u64::from(u16::from(l)));
+    // This should never be reached since Participant is explicitly non-zero
+    assert!(l != F::ZERO, "zero participant passed to polynomial");
+    let mut share = Zeroizing::new(F::ZERO);
+    for (idx, coefficient) in coefficients.iter().rev().enumerate() {
+      *share += coefficient.deref();
+      if idx != (coefficients.len() - 1) {
+        *share *= l;
+      }
+    }
+    share
+  }
+
+  let group_key = C::generator() * *coefficients[0];
+  let mut secret_shares = HashMap::with_capacity(PARTICIPANTS as usize);
+  let mut verification_shares = HashMap::with_capacity(PARTICIPANTS as usize);
+  for i in 1 ..= PARTICIPANTS {
+    let i = Participant::new(i).unwrap();
+    let secret_share = polynomial(&coefficients, i);
+    secret_shares.insert(i, secret_share.clone());
+    verification_shares.insert(i, C::generator() * *secret_share);
+  }
+
+  let mut res = HashMap::with_capacity(PARTICIPANTS as usize);
+  for i in 1 ..= PARTICIPANTS {
+    let i = Participant::new(i).unwrap();
+    let keys = ThresholdKeys::new(
+      ThresholdParams::new(THRESHOLD, PARTICIPANTS, i).unwrap(),
+      Interpolation::Lagrange,
+      secret_shares.remove(&i).unwrap(),
+      verification_shares.clone(),
+    )
+    .unwrap();
+    assert_eq!(keys.group_key(), group_key);
+    res.insert(i, keys);
+  }
+  res
+}
 
 /// Clone a map without a specific value.
 pub fn clone_without<K: Clone + core::cmp::Eq + core::hash::Hash, V: Clone>(
@@ -238,12 +295,6 @@ pub fn test_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   test_schnorr_with_keys::<_, _, H>(&mut *rng, &keys)
 }
 
-/// Test a basic Schnorr signature, yet with MuSig.
-pub fn test_musig_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
-  let keys = musig_key_gen(&mut *rng);
-  test_schnorr_with_keys::<_, _, H>(&mut *rng, &keys)
-}
-
 /// Test an offset Schnorr signature.
 pub fn test_offset_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   const MSG: &[u8] = b"Hello, World!";
@@ -290,7 +341,6 @@ pub fn test_schnorr_blame<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mu
 /// Run a variety of tests against a ciphersuite.
 pub fn test_ciphersuite<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   test_schnorr::<R, C, H>(rng);
-  test_musig_schnorr::<R, C, H>(rng);
   test_offset_schnorr::<R, C, H>(rng);
   test_schnorr_blame::<R, C, H>(rng);
 
