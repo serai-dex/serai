@@ -3,7 +3,7 @@ use std::{
   time::{SystemTime, Duration},
 };
 
-use dkg::{Participant, tests::clone_without};
+use dkg::Participant;
 
 use messages::{sign::SignId, SubstrateContext};
 

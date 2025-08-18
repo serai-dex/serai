@@ -8483,6 +8483,7 @@ dependencies = [
  "ciphersuite",
  "const-hex",
  "dalek-ff-group",
+ "dkg-pedpop",
  "dockertest",
  "env_logger",
  "ethereum-serai",
@@ -8667,7 +8668,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite",
- "dkg",
+ "dkg-musig",
  "parity-scale-codec",
  "scale-info",
  "serai-primitives",
