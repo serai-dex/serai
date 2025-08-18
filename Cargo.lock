@@ -1979,7 +1979,7 @@ dependencies = [
 
 [[package]]
 name = "dalek-ff-group"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "crypto-bigint",
  "curve25519-dalek",
@@ -4812,7 +4812,7 @@ dependencies = [
 
 [[package]]
 name = "minimal-ed448"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "crypto-bigint",
  "ff",

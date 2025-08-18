@@ -27,7 +27,7 @@ std-shims = { version = "0.1", path = "../../../common/std-shims", default-featu
 
 multiexp = { path = "../../multiexp", version = "0.4", default-features = false }
 ciphersuite = { path = "../../ciphersuite", version = "^0.4.1", default-features = false }
-dkg = { path = "../", default-features = false }
+dkg = { path = "../", version = "0.6", default-features = false }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
