@@ -1068,7 +1068,7 @@ dependencies = [
  "bitcoin",
  "hex",
  "k256",
- "modular-frost 0.10.1",
+ "modular-frost",
  "rand_core",
  "secp256k1",
  "serde",
@@ -1542,24 +1542,6 @@ dependencies = [
  "rand_core",
  "sha2",
  "sha3",
- "std-shims",
- "subtle",
- "zeroize",
-]
-
-[[package]]
-name = "ciphersuite"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b7efe73ee654c605e965df90f3f938607ea601446414a681d3889f2b98c6799"
-dependencies = [
- "dalek-ff-group",
- "digest 0.10.7",
- "ff",
- "flexible-transcript",
- "group",
- "rand_core",
- "sha2",
  "std-shims",
  "subtle",
  "zeroize",
@@ -2229,28 +2211,10 @@ dependencies = [
 
 [[package]]
 name = "dkg"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9227585f6f00523c55bec967434dc1db2ee8f54baf902d76ed45d2c6bd37425f"
-dependencies = [
- "chacha20",
- "ciphersuite 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "dleq 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "flexible-transcript",
- "multiexp 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand_core",
- "schnorr-signatures 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "std-shims",
- "thiserror 1.0.64",
- "zeroize",
-]
-
-[[package]]
-name = "dkg"
 version = "0.6.1"
 dependencies = [
  "borsh",
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "std-shims",
  "thiserror 2.0.14",
  "zeroize",
@@ -2260,8 +2224,8 @@ dependencies = [
 name = "dkg-dealer"
 version = "0.6.0"
 dependencies = [
- "ciphersuite 0.4.1",
- "dkg 0.6.1",
+ "ciphersuite",
+ "dkg",
  "rand_core",
  "std-shims",
  "zeroize",
@@ -2271,10 +2235,10 @@ dependencies = [
 name = "dkg-musig"
 version = "0.6.0"
 dependencies = [
- "ciphersuite 0.4.1",
- "dkg 0.6.1",
+ "ciphersuite",
+ "dkg",
  "dkg-recovery",
- "multiexp 0.4.0",
+ "multiexp",
  "rand_core",
  "std-shims",
  "thiserror 2.0.14",
@@ -2286,13 +2250,13 @@ name = "dkg-pedpop"
 version = "0.6.0"
 dependencies = [
  "chacha20",
- "ciphersuite 0.4.1",
- "dkg 0.6.1",
- "dleq 0.4.1",
+ "ciphersuite",
+ "dkg",
+ "dleq",
  "flexible-transcript",
- "multiexp 0.4.0",
+ "multiexp",
  "rand_core",
- "schnorr-signatures 0.5.1",
+ "schnorr-signatures",
  "thiserror 2.0.14",
  "zeroize",
 ]
@@ -2301,10 +2265,10 @@ dependencies = [
 name = "dkg-promote"
 version = "0.6.1"
 dependencies = [
- "ciphersuite 0.4.1",
- "dkg 0.6.1",
+ "ciphersuite",
+ "dkg",
  "dkg-recovery",
- "dleq 0.4.1",
+ "dleq",
  "flexible-transcript",
  "rand_core",
  "thiserror 2.0.14",
@@ -2315,8 +2279,8 @@ dependencies = [
 name = "dkg-recovery"
 version = "0.6.0"
 dependencies = [
- "ciphersuite 0.4.1",
- "dkg 0.6.1",
+ "ciphersuite",
+ "dkg",
  "thiserror 2.0.14",
  "zeroize",
 ]
@@ -2333,25 +2297,10 @@ dependencies = [
  "group",
  "hex-literal",
  "k256",
- "multiexp 0.4.0",
+ "multiexp",
  "rand_core",
  "rustversion",
  "thiserror 2.0.14",
- "zeroize",
-]
-
-[[package]]
-name = "dleq"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8d3af08cb0a3253930b6b9629fd61202ea34da117940b59ab58f3e6f5e1ba6c"
-dependencies = [
- "digest 0.10.7",
- "ff",
- "flexible-transcript",
- "group",
- "rand_core",
- "rustversion",
  "zeroize",
 ]
 
@@ -2584,7 +2533,7 @@ dependencies = [
  "flexible-transcript",
  "group",
  "k256",
- "modular-frost 0.10.1",
+ "modular-frost",
  "rand_core",
  "thiserror 1.0.64",
  "tokio",
@@ -2968,12 +2917,12 @@ dependencies = [
 name = "frost-schnorrkel"
 version = "0.2.0"
 dependencies = [
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "flexible-transcript",
  "group",
- "modular-frost 0.10.1",
+ "modular-frost",
  "rand_core",
- "schnorr-signatures 0.5.1",
+ "schnorr-signatures",
  "schnorrkel",
  "zeroize",
 ]
@@ -4933,41 +4882,21 @@ dependencies = [
 
 [[package]]
 name = "modular-frost"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f85df4c42042f3264b98a24cc309ad9add42d1fede4c78cbf00377237bc2c946"
-dependencies = [
- "ciphersuite 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "dalek-ff-group",
- "digest 0.10.7",
- "dkg 0.5.1",
- "flexible-transcript",
- "multiexp 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand_chacha",
- "rand_core",
- "schnorr-signatures 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "subtle",
- "thiserror 1.0.64",
- "zeroize",
-]
-
-[[package]]
-name = "modular-frost"
 version = "0.10.1"
 dependencies = [
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "dalek-ff-group",
  "digest 0.10.7",
- "dkg 0.6.1",
+ "dkg",
  "dkg-dealer",
  "dkg-recovery",
  "flexible-transcript",
  "hex",
  "minimal-ed448",
- "multiexp 0.4.0",
+ "multiexp",
  "rand_chacha",
  "rand_core",
- "schnorr-signatures 0.5.1",
+ "schnorr-signatures",
  "serde_json",
  "subtle",
  "thiserror 2.0.14",
@@ -4977,20 +4906,20 @@ dependencies = [
 [[package]]
 name = "monero-address"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "curve25519-dalek",
  "monero-io",
  "monero-primitives",
  "std-shims",
- "thiserror 1.0.64",
+ "thiserror 2.0.14",
  "zeroize",
 ]
 
 [[package]]
 name = "monero-borromean"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -5003,7 +4932,7 @@ dependencies = [
 [[package]]
 name = "monero-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -5011,20 +4940,20 @@ dependencies = [
  "monero-primitives",
  "rand_core",
  "std-shims",
- "thiserror 1.0.64",
+ "thiserror 2.0.14",
  "zeroize",
 ]
 
 [[package]]
 name = "monero-clsag"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
  "flexible-transcript",
  "group",
- "modular-frost 0.9.0",
+ "modular-frost",
  "monero-generators",
  "monero-io",
  "monero-primitives",
@@ -5032,14 +4961,14 @@ dependencies = [
  "rand_core",
  "std-shims",
  "subtle",
- "thiserror 1.0.64",
+ "thiserror 2.0.14",
  "zeroize",
 ]
 
 [[package]]
 name = "monero-generators"
 version = "0.4.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
@@ -5053,7 +4982,7 @@ dependencies = [
 [[package]]
 name = "monero-io"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "curve25519-dalek",
  "std-shims",
@@ -5062,21 +4991,21 @@ dependencies = [
 [[package]]
 name = "monero-mlsag"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
  "monero-io",
  "monero-primitives",
  "std-shims",
- "thiserror 1.0.64",
+ "thiserror 2.0.14",
  "zeroize",
 ]
 
 [[package]]
 name = "monero-oxide"
 version = "0.1.4-alpha"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "curve25519-dalek",
  "hex-literal",
@@ -5094,7 +5023,7 @@ dependencies = [
 [[package]]
 name = "monero-primitives"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -5107,7 +5036,7 @@ dependencies = [
 [[package]]
 name = "monero-rpc"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "curve25519-dalek",
  "hex",
@@ -5116,14 +5045,14 @@ dependencies = [
  "serde",
  "serde_json",
  "std-shims",
- "thiserror 1.0.64",
+ "thiserror 2.0.14",
  "zeroize",
 ]
 
 [[package]]
 name = "monero-simple-request-rpc"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "digest_auth",
  "hex",
@@ -5136,14 +5065,14 @@ dependencies = [
 [[package]]
 name = "monero-wallet"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=f19b0f57fe7cbbd643b51091c63de29afb0976e4#f19b0f57fe7cbbd643b51091c63de29afb0976e4"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a74f41c2270707e340a9cb57fcd97a762d04975b#a74f41c2270707e340a9cb57fcd97a762d04975b"
 dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
  "flexible-transcript",
  "group",
  "hex",
- "modular-frost 0.9.0",
+ "modular-frost",
  "monero-address",
  "monero-clsag",
  "monero-oxide",
@@ -5153,7 +5082,7 @@ dependencies = [
  "rand_core",
  "rand_distr",
  "std-shims",
- "thiserror 1.0.64",
+ "thiserror 2.0.14",
  "zeroize",
 ]
 
@@ -5195,20 +5124,6 @@ dependencies = [
  "ff",
  "group",
  "k256",
- "rand_core",
- "rustversion",
- "std-shims",
- "zeroize",
-]
-
-[[package]]
-name = "multiexp"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25a383da1ae933078ddb1e4141f1dd617b512b4183779d6977e6451b0e644806"
-dependencies = [
- "ff",
- "group",
  "rand_core",
  "rustversion",
  "std-shims",
@@ -7931,27 +7846,13 @@ dependencies = [
 name = "schnorr-signatures"
 version = "0.5.1"
 dependencies = [
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "dalek-ff-group",
  "flexible-transcript",
  "hex",
- "multiexp 0.4.0",
+ "multiexp",
  "rand_core",
  "sha2",
- "std-shims",
- "zeroize",
-]
-
-[[package]]
-name = "schnorr-signatures"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9262fa48d8270b9d937aa68fb09fe3281aded9a671d999e8b82ce1065e952d6"
-dependencies = [
- "ciphersuite 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
- "flexible-transcript",
- "multiexp 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
- "rand_core",
  "std-shims",
  "zeroize",
 ]
@@ -8147,12 +8048,12 @@ dependencies = [
  "async-lock",
  "bitcoin",
  "blake2",
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "dockertest",
  "frame-system",
  "frost-schnorrkel",
  "hex",
- "modular-frost 0.10.1",
+ "modular-frost",
  "monero-wallet",
  "multiaddr",
  "parity-scale-codec",
@@ -8206,7 +8107,7 @@ dependencies = [
  "async-trait",
  "blake2",
  "borsh",
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "env_logger",
  "flexible-transcript",
  "frost-schnorrkel",
@@ -8214,10 +8115,10 @@ dependencies = [
  "hex",
  "libp2p",
  "log",
- "modular-frost 0.10.1",
+ "modular-frost",
  "parity-scale-codec",
  "rand_core",
- "schnorr-signatures 0.5.1",
+ "schnorr-signatures",
  "serai-client",
  "serai-db",
  "serai-env",
@@ -8238,8 +8139,8 @@ dependencies = [
  "async-trait",
  "blake2",
  "borsh",
- "ciphersuite 0.4.1",
- "dkg 0.6.1",
+ "ciphersuite",
+ "dkg",
  "dockertest",
  "hex",
  "parity-scale-codec",
@@ -8445,14 +8346,14 @@ name = "serai-message-queue"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "env_logger",
  "flexible-transcript",
  "hex",
  "log",
  "once_cell",
  "rand_core",
- "schnorr-signatures 0.5.1",
+ "schnorr-signatures",
  "serai-db",
  "serai-env",
  "serai-primitives",
@@ -8465,7 +8366,7 @@ dependencies = [
 name = "serai-message-queue-tests"
 version = "0.1.0"
 dependencies = [
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "dockertest",
  "hex",
  "rand_core",
@@ -8481,17 +8382,17 @@ name = "serai-no-std-tests"
 version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "dalek-ff-group",
- "dkg 0.6.1",
+ "dkg",
  "dkg-dealer",
  "dkg-musig",
  "dkg-recovery",
- "dleq 0.4.1",
+ "dleq",
  "flexible-transcript",
  "minimal-ed448",
- "multiexp 0.4.0",
- "schnorr-signatures 0.5.1",
+ "multiexp",
+ "schnorr-signatures",
 ]
 
 [[package]]
@@ -8544,7 +8445,7 @@ dependencies = [
 name = "serai-orchestrator"
 version = "0.0.1"
 dependencies = [
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "flexible-transcript",
  "hex",
  "home",
@@ -8579,7 +8480,7 @@ dependencies = [
  "async-trait",
  "bitcoin-serai",
  "borsh",
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "const-hex",
  "dalek-ff-group",
  "dkg-pedpop",
@@ -8591,7 +8492,7 @@ dependencies = [
  "hex",
  "k256",
  "log",
- "modular-frost 0.10.1",
+ "modular-frost",
  "monero-simple-request-rpc",
  "monero-wallet",
  "parity-scale-codec",
@@ -8617,7 +8518,7 @@ name = "serai-processor-messages"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "dkg 0.6.1",
+ "dkg",
  "parity-scale-codec",
  "serai-coins-primitives",
  "serai-in-instructions-primitives",
@@ -8631,9 +8532,9 @@ version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
  "borsh",
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "curve25519-dalek",
- "dkg 0.6.1",
+ "dkg",
  "dockertest",
  "ethereum-serai",
  "hex",
@@ -8766,7 +8667,7 @@ name = "serai-validator-sets-primitives"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "dkg-musig",
  "parity-scale-codec",
  "scale-info",
@@ -10507,7 +10408,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "blake2",
- "ciphersuite 0.4.1",
+ "ciphersuite",
  "flexible-transcript",
  "futures-channel",
  "futures-util",
@@ -10516,7 +10417,7 @@ dependencies = [
  "parity-scale-codec",
  "rand",
  "rand_chacha",
- "schnorr-signatures 0.5.1",
+ "schnorr-signatures",
  "serai-db",
  "subtle",
  "tendermint-machine",
