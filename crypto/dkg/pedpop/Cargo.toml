@@ -30,7 +30,7 @@ ciphersuite = { path = "../../ciphersuite", version = "^0.4.1", default-features
 schnorr = { package = "schnorr-signatures", path = "../../schnorr", version = "^0.5.1", default-features = false, features = ["std"] }
 dleq = { path = "../../dleq", version = "^0.4.1", default-features = false, features = ["std", "serialize"] }
 
-dkg = { path = "../", default-features = false, features = ["std"] }
+dkg = { path = "../", version = "0.6", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
