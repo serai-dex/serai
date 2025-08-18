@@ -1075,6 +1075,7 @@ dependencies = [
  "serde_json",
  "simple-request",
  "std-shims",
+ "subtle",
  "thiserror 1.0.64",
  "tokio",
  "zeroize",

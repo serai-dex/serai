@@ -135,6 +135,8 @@ pub trait Hram<C: Curve>: Send + Sync + Clone {
 }
 
 /// Schnorr signature algorithm ((R, s) where s = r + cx).
+///
+/// `verify`, `verify_share` must be called after `sign_share` is called.
 #[derive(Clone)]
 pub struct Schnorr<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> {
   transcript: T,

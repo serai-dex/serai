@@ -1,3 +1,5 @@
+use subtle::{Choice, ConstantTimeEq, ConditionallySelectable};
+
 use k256::{
   elliptic_curve::sec1::{Tag, ToEncodedPoint},
   ProjectivePoint,
@@ -17,17 +19,9 @@ pub fn x_only(key: &ProjectivePoint) -> XOnlyPublicKey {
   XOnlyPublicKey::from_slice(&x(key)).expect("x_only was passed a point which was infinity or odd")
 }
 
-/// Make a point even by adding the generator until it is even.
-///
-/// Returns the even point and the amount of additions required.
-#[cfg(any(feature = "std", feature = "hazmat"))]
-pub fn make_even(mut key: ProjectivePoint) -> (ProjectivePoint, u64) {
-  let mut c = 0;
-  while key.to_encoded_point(true).tag() == Tag::CompressedOddY {
-    key += ProjectivePoint::GENERATOR;
-    c += 1;
-  }
-  (key, c)
+/// Return if a point must be negated to have an even Y coordinate and be eligible for use.
+pub(crate) fn needs_negation(key: &ProjectivePoint) -> Choice {
+  u8::from(key.to_encoded_point(true).tag()).ct_eq(&u8::from(Tag::CompressedOddY))
 }
 
 #[cfg(feature = "std")]
@@ -60,25 +54,27 @@ mod frost_crypto {
   #[allow(non_snake_case)]
   impl HramTrait<Secp256k1> for Hram {
     fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
-      // Convert the nonce to be even
-      let (R, _) = make_even(*R);
-
       const TAG_HASH: Sha256 = Sha256::const_hash(b"BIP0340/challenge");
 
       let mut data = Sha256::engine();
       data.input(TAG_HASH.as_ref());
       data.input(TAG_HASH.as_ref());
-      data.input(&x(&R));
+      data.input(&x(R));
       data.input(&x(A));
       data.input(m);
 
-      Scalar::reduce(U256::from_be_slice(Sha256::from_engine(data).as_ref()))
+      let c = Scalar::reduce(U256::from_be_slice(Sha256::from_engine(data).as_ref()));
+      // If the nonce was odd, sign `r - cx` instead of `r + cx`, allowing us to negate `s` at the
+      // end to sign as `-r + cx`
+      <_>::conditional_select(&c, &-c, needs_negation(R))
     }
   }
 
   /// BIP-340 Schnorr signature algorithm.
   ///
-  /// This must be used with a ThresholdKeys whose group key is even. If it is odd, this will panic.
+  /// This must be used with a ThresholdKeys whose group key is even. If it is odd, this may panic.
+  ///
+  /// `verify`, `verify_share` must be called after `sign_share` is called.
   #[derive(Clone)]
   pub struct Schnorr(FrostSchnorr<Secp256k1, Hram>);
   impl Schnorr {
@@ -141,11 +137,7 @@ mod frost_crypto {
       sum: Scalar,
     ) -> Option<Self::Signature> {
       self.0.verify(group_key, nonces, sum).map(|mut sig| {
-        // Make the R of the final signature even
-        let offset;
-        (sig.R, offset) = make_even(sig.R);
-        // s = r + cx. Since we added to the r, add to s
-        sig.s += Scalar::from(offset);
+        sig.s = <_>::conditional_select(&sum, &-sum, needs_negation(&sig.R));
         // Convert to a Bitcoin signature by dropping the byte for the point's sign bit
         sig.serialize()[1 ..].try_into().unwrap()
       })

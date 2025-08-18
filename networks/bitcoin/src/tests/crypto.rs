@@ -2,7 +2,6 @@ use rand_core::OsRng;
 
 use secp256k1::{Secp256k1 as BContext, Message, schnorr::Signature};
 
-use k256::Scalar;
 use frost::{
   curve::Secp256k1,
   Participant,
@@ -11,7 +10,8 @@ use frost::{
 
 use crate::{
   bitcoin::hashes::{Hash as HashTrait, sha256::Hash},
-  crypto::{x_only, make_even, Schnorr},
+  crypto::{x_only, Schnorr},
+  wallet::tweak_keys,
 };
 
 #[test]
@@ -20,8 +20,7 @@ fn test_algorithm() {
   const MESSAGE: &[u8] = b"Hello, World!";
 
   for keys in keys.values_mut() {
-    let (_, offset) = make_even(keys.group_key());
-    *keys = keys.offset(Scalar::from(offset));
+    *keys = tweak_keys(keys.clone());
   }
 
   let algo = Schnorr::new();
