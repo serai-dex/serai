@@ -99,13 +99,16 @@ fn test_generator_promotion() {
   for (i, promoting) in promotions.drain() {
     let promoted = promoting.complete(&clone_without(&proofs, &i)).unwrap();
     assert_eq!(keys[usize::from(u16::from(i) - 1)].params(), promoted.params());
-    assert_eq!(keys[usize::from(u16::from(i) - 1)].secret_share(), promoted.secret_share());
+    assert_eq!(
+      keys[usize::from(u16::from(i) - 1)].original_secret_share(),
+      promoted.original_secret_share()
+    );
     assert_eq!(new_group_key, promoted.group_key());
     for l in 0 .. PARTICIPANTS {
       let verification_share =
         promoted.original_verification_share(Participant::new(l + 1).unwrap());
       assert_eq!(
-        AltGenerator::<Ristretto>::generator() * **keys[usize::from(l)].secret_share(),
+        AltGenerator::<Ristretto>::generator() * **keys[usize::from(l)].original_secret_share(),
         verification_share
       );
     }

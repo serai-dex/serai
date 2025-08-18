@@ -444,8 +444,8 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     (self.core.group_key * self.scalar) + (C::generator() * self.offset)
   }
 
-  /// Return the secret share for these keys.
-  pub fn secret_share(&self) -> &Zeroizing<C::F> {
+  /// Return the underlying secret share for these keys, without any tweaks applied.
+  pub fn original_secret_share(&self) -> &Zeroizing<C::F> {
     &self.core.secret_share
   }
 
@@ -489,7 +489,7 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
     }
 
     // The interpolation occurs multiplicatively, letting us scale by the scalar now
-    let secret_share_scaled = Zeroizing::new(self.scalar * self.secret_share().deref());
+    let secret_share_scaled = Zeroizing::new(self.scalar * self.original_secret_share().deref());
     let mut secret_share = Zeroizing::new(
       self.core.interpolation.interpolation_factor(self.params().i(), &included) *
         secret_share_scaled.deref(),

@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.10.0"
+version = "0.10.1"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/frost"
@@ -39,7 +39,7 @@ multiexp = { path = "../multiexp", version = "0.4", default-features = false, fe
 
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false, features = ["std"] }
 
-dkg = { path = "../dkg", version = "0.6", default-features = false, features = ["std"] }
+dkg = { path = "../dkg", version = "0.6.1", default-features = false, features = ["std"] }
 dkg-recovery = { path = "../dkg/recovery", version = "0.6", default-features = false, features = ["std"], optional = true }
 dkg-dealer = { path = "../dkg/dealer", version = "0.6", default-features = false, features = ["std"], optional = true }
 

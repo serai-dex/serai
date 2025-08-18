@@ -1,6 +1,6 @@
 [package]
 name = "dkg"
-version = "0.6.0"
+version = "0.6.1"
 description = "Distributed key generation over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dkg"

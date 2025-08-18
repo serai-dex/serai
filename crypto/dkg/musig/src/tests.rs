@@ -47,7 +47,7 @@ pub fn test_musig() {
 
       verification_shares.insert(
         these_keys.params().i(),
-        <Ristretto as Ciphersuite>::generator() * **these_keys.secret_share(),
+        <Ristretto as Ciphersuite>::generator() * **these_keys.original_secret_share(),
       );
 
       assert_eq!(these_keys.group_key(), group_key);

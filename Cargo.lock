@@ -1068,7 +1068,7 @@ dependencies = [
  "bitcoin",
  "hex",
  "k256",
- "modular-frost 0.10.0",
+ "modular-frost 0.10.1",
  "rand_core",
  "secp256k1",
  "serde",
@@ -2247,7 +2247,7 @@ dependencies = [
 
 [[package]]
 name = "dkg"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.1",
@@ -2261,7 +2261,7 @@ name = "dkg-dealer"
 version = "0.6.0"
 dependencies = [
  "ciphersuite 0.4.1",
- "dkg 0.6.0",
+ "dkg 0.6.1",
  "rand_core",
  "std-shims",
  "zeroize",
@@ -2272,7 +2272,7 @@ name = "dkg-musig"
 version = "0.6.0"
 dependencies = [
  "ciphersuite 0.4.1",
- "dkg 0.6.0",
+ "dkg 0.6.1",
  "dkg-recovery",
  "multiexp 0.4.0",
  "rand_core",
@@ -2287,7 +2287,7 @@ version = "0.6.0"
 dependencies = [
  "chacha20",
  "ciphersuite 0.4.1",
- "dkg 0.6.0",
+ "dkg 0.6.1",
  "dleq 0.4.1",
  "flexible-transcript",
  "multiexp 0.4.0",
@@ -2299,10 +2299,10 @@ dependencies = [
 
 [[package]]
 name = "dkg-promote"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "ciphersuite 0.4.1",
- "dkg 0.6.0",
+ "dkg 0.6.1",
  "dkg-recovery",
  "dleq 0.4.1",
  "flexible-transcript",
@@ -2316,7 +2316,7 @@ name = "dkg-recovery"
 version = "0.6.0"
 dependencies = [
  "ciphersuite 0.4.1",
- "dkg 0.6.0",
+ "dkg 0.6.1",
  "thiserror 2.0.14",
  "zeroize",
 ]
@@ -2584,7 +2584,7 @@ dependencies = [
  "flexible-transcript",
  "group",
  "k256",
- "modular-frost 0.10.0",
+ "modular-frost 0.10.1",
  "rand_core",
  "thiserror 1.0.64",
  "tokio",
@@ -2748,7 +2748,7 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "flexible-transcript"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "blake2",
  "digest 0.10.7",
@@ -2971,7 +2971,7 @@ dependencies = [
  "ciphersuite 0.4.1",
  "flexible-transcript",
  "group",
- "modular-frost 0.10.0",
+ "modular-frost 0.10.1",
  "rand_core",
  "schnorr-signatures 0.5.1",
  "schnorrkel",
@@ -4953,12 +4953,12 @@ dependencies = [
 
 [[package]]
 name = "modular-frost"
-version = "0.10.0"
+version = "0.10.1"
 dependencies = [
  "ciphersuite 0.4.1",
  "dalek-ff-group",
  "digest 0.10.7",
- "dkg 0.6.0",
+ "dkg 0.6.1",
  "dkg-dealer",
  "dkg-recovery",
  "flexible-transcript",
@@ -8152,7 +8152,7 @@ dependencies = [
  "frame-system",
  "frost-schnorrkel",
  "hex",
- "modular-frost 0.10.0",
+ "modular-frost 0.10.1",
  "monero-wallet",
  "multiaddr",
  "parity-scale-codec",
@@ -8214,7 +8214,7 @@ dependencies = [
  "hex",
  "libp2p",
  "log",
- "modular-frost 0.10.0",
+ "modular-frost 0.10.1",
  "parity-scale-codec",
  "rand_core",
  "schnorr-signatures 0.5.1",
@@ -8239,7 +8239,7 @@ dependencies = [
  "blake2",
  "borsh",
  "ciphersuite 0.4.1",
- "dkg 0.6.0",
+ "dkg 0.6.1",
  "dockertest",
  "hex",
  "parity-scale-codec",
@@ -8483,7 +8483,7 @@ dependencies = [
  "bitcoin-serai",
  "ciphersuite 0.4.1",
  "dalek-ff-group",
- "dkg 0.6.0",
+ "dkg 0.6.1",
  "dkg-dealer",
  "dkg-musig",
  "dkg-recovery",
@@ -8591,7 +8591,7 @@ dependencies = [
  "hex",
  "k256",
  "log",
- "modular-frost 0.10.0",
+ "modular-frost 0.10.1",
  "monero-simple-request-rpc",
  "monero-wallet",
  "parity-scale-codec",
@@ -8617,7 +8617,7 @@ name = "serai-processor-messages"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "dkg 0.6.0",
+ "dkg 0.6.1",
  "parity-scale-codec",
  "serai-coins-primitives",
  "serai-in-instructions-primitives",
@@ -8633,7 +8633,7 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.1",
  "curve25519-dalek",
- "dkg 0.6.0",
+ "dkg 0.6.1",
  "dockertest",
  "ethereum-serai",
  "hex",
