@@ -2221,6 +2221,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "dkg-dealer"
+version = "0.6.0"
+dependencies = [
+ "ciphersuite",
+ "dkg",
+ "rand_core",
+ "std-shims",
+ "zeroize",
+]
+
+[[package]]
 name = "dkg-musig"
 version = "0.6.0"
 dependencies = [
@@ -4877,6 +4888,7 @@ dependencies = [
  "dalek-ff-group",
  "digest 0.10.7",
  "dkg",
+ "dkg-dealer",
  "dkg-recovery",
  "flexible-transcript",
  "hex",
@@ -8373,6 +8385,7 @@ dependencies = [
  "ciphersuite",
  "dalek-ff-group",
  "dkg",
+ "dkg-dealer",
  "dkg-musig",
  "dkg-recovery",
  "dleq",

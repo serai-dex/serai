@@ -35,6 +35,7 @@ members = [
   "crypto/dleq",
   "crypto/dkg",
   "crypto/dkg/recovery",
+  "crypto/dkg/dealer",
   "crypto/dkg/promote",
   "crypto/dkg/musig",
   "crypto/dkg/pedpop",

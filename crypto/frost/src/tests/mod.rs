@@ -1,18 +1,12 @@
-use core::ops::Deref;
 use std::collections::HashMap;
 
-use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
 
-use ciphersuite::{
-  group::ff::{Field, PrimeField},
-  Ciphersuite,
-};
-use dkg::Interpolation;
+use ciphersuite::Ciphersuite;
 pub use dkg_recovery::recover_key;
 
 use crate::{
-  Curve, Participant, ThresholdParams, ThresholdKeys, FrostError,
+  Curve, Participant, ThresholdKeys, FrostError,
   algorithm::{Algorithm, Hram, IetfSchnorr},
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
 };
@@ -37,49 +31,11 @@ pub const THRESHOLD: u16 = ((PARTICIPANTS * 2) / 3) + 1;
 pub fn key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
   rng: &mut R,
 ) -> HashMap<Participant, ThresholdKeys<C>> {
-  let coefficients: [_; THRESHOLD as usize] =
-    core::array::from_fn(|_| Zeroizing::new(C::F::random(&mut *rng)));
-
-  fn polynomial<F: PrimeField + Zeroize>(
-    coefficients: &[Zeroizing<F>],
-    l: Participant,
-  ) -> Zeroizing<F> {
-    let l = F::from(u64::from(u16::from(l)));
-    // This should never be reached since Participant is explicitly non-zero
-    assert!(l != F::ZERO, "zero participant passed to polynomial");
-    let mut share = Zeroizing::new(F::ZERO);
-    for (idx, coefficient) in coefficients.iter().rev().enumerate() {
-      *share += coefficient.deref();
-      if idx != (coefficients.len() - 1) {
-        *share *= l;
-      }
-    }
-    share
-  }
-
-  let group_key = C::generator() * *coefficients[0];
-  let mut secret_shares = HashMap::with_capacity(PARTICIPANTS as usize);
-  let mut verification_shares = HashMap::with_capacity(PARTICIPANTS as usize);
-  for i in 1 ..= PARTICIPANTS {
-    let i = Participant::new(i).unwrap();
-    let secret_share = polynomial(&coefficients, i);
-    secret_shares.insert(i, secret_share.clone());
-    verification_shares.insert(i, C::generator() * *secret_share);
-  }
-
-  let mut res = HashMap::with_capacity(PARTICIPANTS as usize);
-  for i in 1 ..= PARTICIPANTS {
-    let i = Participant::new(i).unwrap();
-    let keys = ThresholdKeys::new(
-      ThresholdParams::new(THRESHOLD, PARTICIPANTS, i).unwrap(),
-      Interpolation::Lagrange,
-      secret_shares.remove(&i).unwrap(),
-      verification_shares.clone(),
-    )
-    .unwrap();
-    assert_eq!(keys.group_key(), group_key);
-    res.insert(i, keys);
-  }
+  let res = dkg_dealer::key_gen::<R, C>(rng, THRESHOLD, PARTICIPANTS).unwrap();
+  assert_eq!(
+    C::generator() * *recover_key(&res.values().cloned().collect::<Vec<_>>()).unwrap(),
+    res.values().next().unwrap().group_key()
+  );
   res
 }
 
