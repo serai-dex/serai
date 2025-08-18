@@ -1,7 +1,8 @@
 # Distributed Key Generation - Promote
 
-This crate implements 'promotions' for keys from the [`dkg`](https://docs.rs/dkg) crate. A promotion
-takes a set of keys and maps it to a different `Ciphersuite`.
+This crate implements 'promotions' for keys from the
+[`dkg`](https://docs.rs/dkg) crate. A promotion takes a set of keys and maps it
+to a different `Ciphersuite`.
 
 This crate was originally part of the `dkg` crate, which was
 [audited by Cypher Stack in March 2023](

@@ -1,11 +1,11 @@
-# Distributed Key Generation
+# Distributed Key Generation - Recovery
 
-A crate implementing a type for keys, presumably the result of a distributed key generation
-protocol, and utilities from there.
+A utility function to recover a key from its secret shares.
 
-This crate used to host implementations of distributed key generation protocols as well (hence the
-name). Those have been smashed into their own crates, such as
-[`dkg-musig`](https://docs.rs/dkg-musig) and [`dkg-pedpop`](https://docs.rs/dkg-pedpop)
+Keys likely SHOULD NOT ever be recovered, making this primarily intended for
+testing purposes. Instead, the shares of the key should be used to produce
+shares for the desired action, allowing using the key while never
+reconstructing it.
 
 Before being smashed, this crate was [audited by Cypher Stack in March 2023](
   https://github.com/serai-dex/serai/raw/e1bb2c191b7123fd260d008e31656d090d559d21/audits/Cypher%20Stack%20crypto%20March%202023/Audit.pdf
