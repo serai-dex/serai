@@ -15,6 +15,15 @@ mod send;
 pub(crate) const COORDINATORS: usize = 4;
 pub(crate) const THRESHOLD: usize = ((COORDINATORS * 2) / 3) + 1;
 
+fn clone_without<K: Clone + core::cmp::Eq + core::hash::Hash, V: Clone>(
+  map: &HashMap<K, V>,
+  without: &K,
+) -> HashMap<K, V> {
+  let mut res = map.clone();
+  res.remove(without).unwrap();
+  res
+}
+
 fn new_test(
   network: ExternalNetworkId,
 ) -> (Vec<(Handles, <Ristretto as Ciphersuite>::F)>, DockerTest) {

@@ -7,11 +7,10 @@ use rand_chacha::ChaCha20Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::group::GroupEncoding;
+use dkg_pedpop::*;
 use frost::{
   curve::{Ciphersuite, Ristretto},
-  dkg::{
-    DkgError, Participant, ThresholdParams, ThresholdCore, ThresholdKeys, encryption::*, pedpop::*,
-  },
+  dkg::{DkgError, Participant, ThresholdParams, ThresholdCore, ThresholdKeys},
 };
 
 use log::info;
