@@ -6,7 +6,7 @@ use ciphersuite::group::GroupEncoding;
 use frost::{
   curve::Ristretto,
   Participant,
-  dkg::tests::{key_gen, clone_without},
+  tests::{key_gen, clone_without},
 };
 
 use sp_application_crypto::{RuntimePublic, sr25519::Public};

@@ -6,7 +6,7 @@ use rand_core::{RngCore, OsRng};
 use ciphersuite::group::GroupEncoding;
 use frost::{
   Participant, ThresholdKeys,
-  dkg::tests::{key_gen, clone_without},
+  tests::{key_gen, clone_without},
 };
 
 use serai_db::{DbTxn, Db, MemDb};

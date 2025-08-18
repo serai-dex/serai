@@ -67,12 +67,8 @@ use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
   Ciphersuite, Ristretto,
 };
-use frost::{
-  FrostError,
-  dkg::{Participant, musig::musig},
-  ThresholdKeys,
-  sign::*,
-};
+use dkg_musig::musig;
+use frost::{FrostError, dkg::Participant, ThresholdKeys, sign::*};
 use frost_schnorrkel::Schnorrkel;
 
 use scale::Encode;
@@ -119,7 +115,7 @@ impl<T: DbTxn, C: Encode> SigningProtocol<'_, T, C> {
 
     let algorithm = Schnorrkel::new(b"substrate");
     let keys: ThresholdKeys<Ristretto> =
-      musig(&musig_context(self.spec.set().into()), self.key, participants)
+      musig(musig_context(self.spec.set().into()), self.key.clone(), participants)
         .expect("signing for a set we aren't in/validator present multiple times")
         .into();
 

@@ -8050,6 +8050,7 @@ dependencies = [
  "bitcoin",
  "blake2",
  "ciphersuite",
+ "dkg-musig",
  "dockertest",
  "frame-system",
  "frost-schnorrkel",
@@ -8109,6 +8110,7 @@ dependencies = [
  "blake2",
  "borsh",
  "ciphersuite",
+ "dkg-musig",
  "env_logger",
  "flexible-transcript",
  "frost-schnorrkel",
@@ -8480,6 +8482,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "bitcoin-serai",
+ "blake2",
  "borsh",
  "ciphersuite",
  "const-hex",

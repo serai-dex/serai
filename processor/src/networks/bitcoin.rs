@@ -648,7 +648,7 @@ impl Network for Bitcoin {
   const MAX_OUTPUTS: usize = MAX_OUTPUTS;
 
   fn tweak_keys(keys: &mut ThresholdKeys<Self::Curve>) {
-    *keys = tweak_keys(keys);
+    *keys = tweak_keys(keys.clone());
     // Also create a scanner to assert these keys, and all expected paths, are usable
     scanner(keys.group_key());
   }

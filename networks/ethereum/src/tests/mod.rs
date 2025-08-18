@@ -37,7 +37,7 @@ pub fn key_gen() -> (HashMap<Participant, ThresholdKeys<Secp256k1>>, PublicKey) 
     group_key += ProjectivePoint::GENERATOR;
   }
   for keys in keys.values_mut() {
-    *keys = keys.offset(offset);
+    *keys = keys.clone().offset(offset);
   }
   let public_key = PublicKey::new(group_key).unwrap();
 

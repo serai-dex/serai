@@ -408,7 +408,7 @@ impl<D: Db> Network for Ethereum<D> {
 
   fn tweak_keys(keys: &mut ThresholdKeys<Self::Curve>) {
     while PublicKey::new(keys.group_key()).is_none() {
-      *keys = keys.offset(<Secp256k1 as Ciphersuite>::F::ONE);
+      *keys = keys.clone().offset(<Secp256k1 as Ciphersuite>::F::ONE);
     }
   }
 
