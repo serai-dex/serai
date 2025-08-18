@@ -1,25 +1,52 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+// This crate requires `dleq` which doesn't support no-std via std-shims
+// #![cfg_attr(not(feature = "std"), no_std)]
+
 use core::{marker::PhantomData, ops::Deref};
 use std::{
   io::{self, Read, Write},
-  sync::Arc,
   collections::HashMap,
 };
 
 use rand_core::{RngCore, CryptoRng};
 
-use ciphersuite::{
-  group::{ff::Field, GroupEncoding},
-  Ciphersuite,
-};
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use transcript::{Transcript, RecommendedTranscript};
 use dleq::DLEqProof;
 
-use crate::{Participant, DkgError, ThresholdCore, ThresholdKeys, validate_map};
+pub use dkg::*;
 
-/// Promote a set of keys to another Ciphersuite definition.
-pub trait CiphersuitePromote<C2: Ciphersuite> {
-  fn promote(self) -> ThresholdKeys<C2>;
+#[cfg(test)]
+mod tests;
+
+/// Errors encountered when promoting keys.
+#[derive(Clone, PartialEq, Eq, Debug, thiserror::Error)]
+pub enum PromotionError {
+  /// Invalid participant identifier.
+  #[error("invalid participant (1 <= participant <= {n}, yet participant is {participant})")]
+  InvalidParticipant {
+    /// The total amount of participants.
+    n: u16,
+    /// The specified participant.
+    participant: Participant,
+  },
+
+  /// An incorrect amount of participants was specified.
+  #[error("incorrect amount of participants. {t} <= amount <= {n}, yet amount is {amount}")]
+  IncorrectAmountOfParticipants {
+    /// The threshold required.
+    t: u16,
+    /// The total amount of participants.
+    n: u16,
+    /// The amount of participants specified.
+    amount: usize,
+  },
+
+  /// Participant provided an invalid proof.
+  #[error("invalid proof {0}")]
+  InvalidProof(Participant),
 }
 
 fn transcript<G: GroupEncoding>(key: &G, i: Participant) -> RecommendedTranscript {
@@ -68,8 +95,9 @@ pub struct GeneratorPromotion<C1: Ciphersuite, C2: Ciphersuite> {
 }
 
 impl<C1: Ciphersuite, C2: Ciphersuite<F = C1::F, G = C1::G>> GeneratorPromotion<C1, C2> {
-  /// Begin promoting keys from one generator to another. Returns a proof this share was properly
-  /// promoted.
+  /// Begin promoting keys from one generator to another.
+  ///
+  /// Returns a proof this share was properly promoted.
   pub fn promote<R: RngCore + CryptoRng>(
     rng: &mut R,
     base: ThresholdKeys<C1>,
@@ -79,7 +107,7 @@ impl<C1: Ciphersuite, C2: Ciphersuite<F = C1::F, G = C1::G>> GeneratorPromotion<
       share: C2::generator() * base.secret_share().deref(),
       proof: DLEqProof::prove(
         rng,
-        &mut transcript(&base.core.group_key(), base.params().i),
+        &mut transcript(&base.original_group_key(), base.params().i()),
         &[C1::generator(), C2::generator()],
         base.secret_share(),
       ),
@@ -92,36 +120,49 @@ impl<C1: Ciphersuite, C2: Ciphersuite<F = C1::F, G = C1::G>> GeneratorPromotion<
   pub fn complete(
     self,
     proofs: &HashMap<Participant, GeneratorProof<C1>>,
-  ) -> Result<ThresholdKeys<C2>, DkgError<()>> {
+  ) -> Result<ThresholdKeys<C2>, PromotionError> {
     let params = self.base.params();
-    validate_map(proofs, &(1 ..= params.n).map(Participant).collect::<Vec<_>>(), params.i)?;
-
-    let original_shares = self.base.verification_shares();
+    if proofs.len() != (usize::from(params.n()) - 1) {
+      Err(PromotionError::IncorrectAmountOfParticipants {
+        t: params.n(),
+        n: params.n(),
+        amount: proofs.len() + 1,
+      })?;
+    }
+    for i in proofs.keys().copied() {
+      if u16::from(i) > params.n() {
+        Err(PromotionError::InvalidParticipant { n: params.n(), participant: i })?;
+      }
+    }
 
     let mut verification_shares = HashMap::new();
-    verification_shares.insert(params.i, self.proof.share);
-    for (i, proof) in proofs {
-      let i = *i;
+    verification_shares.insert(params.i(), self.proof.share);
+    for i in 1 ..= params.n() {
+      let i = Participant::new(i).unwrap();
+      if i == params.i() {
+        continue;
+      }
+
+      let proof = proofs.get(&i).unwrap();
       proof
         .proof
         .verify(
-          &mut transcript(&self.base.core.group_key(), i),
+          &mut transcript(&self.base.original_group_key(), i),
           &[C1::generator(), C2::generator()],
-          &[original_shares[&i], proof.share],
+          &[self.base.original_verification_share(i), proof.share],
         )
-        .map_err(|_| DkgError::InvalidCommitments(i))?;
+        .map_err(|_| PromotionError::InvalidProof(i))?;
       verification_shares.insert(i, proof.share);
     }
 
-    Ok(ThresholdKeys {
-      core: Arc::new(ThresholdCore::new(
+    Ok(
+      ThresholdKeys::new(
         params,
-        self.base.core.interpolation.clone(),
+        self.base.interpolation().clone(),
         self.base.secret_share().clone(),
         verification_shares,
-      )),
-      scalar: C2::F::ONE,
-      offset: C2::F::ZERO,
-    })
+      )
+      .unwrap(),
+    )
   }
 }

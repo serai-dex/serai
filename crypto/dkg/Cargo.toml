@@ -1,6 +1,6 @@
 [package]
 name = "dkg"
-version = "0.5.1"
+version = "0.6.0"
 description = "Distributed key generation over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dkg"
@@ -17,50 +17,28 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive", "alloc"] }
+
 thiserror = { version = "2", default-features = false }
-
-rand_core = { version = "0.6", default-features = false }
-
-zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
 
 std-shims = { version = "0.1", path = "../../common/std-shims", default-features = false }
 
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
 
-transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false, features = ["recommended"] }
-chacha20 = { version = "0.9", default-features = false, features = ["zeroize"] }
-
-ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false }
-multiexp = { path = "../multiexp", version = "0.4", default-features = false }
-
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false }
-dleq = { path = "../dleq", version = "^0.4.1", default-features = false }
+ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
-rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 ciphersuite = { path = "../ciphersuite", default-features = false, features = ["ristretto"] }
 
 [features]
 std = [
   "thiserror/std",
 
-  "rand_core/std",
-
   "std-shims/std",
 
   "borsh?/std",
 
-  "transcript/std",
-  "chacha20/std",
-
   "ciphersuite/std",
-  "multiexp/std",
-  "multiexp/batch",
-
-  "schnorr/std",
-  "dleq/std",
-  "dleq/serialize"
 ]
 borsh = ["dep:borsh"]
-tests = ["rand_core/getrandom"]
 default = ["std"]

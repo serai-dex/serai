@@ -1,15 +1,20 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+// This crate requires `dleq` which doesn't support no-std via std-shims
+// #![cfg_attr(not(feature = "std"), no_std)]
+
 use core::{marker::PhantomData, ops::Deref, fmt};
 use std::{
   io::{self, Read, Write},
   collections::HashMap,
 };
 
-use rand_core::{RngCore, CryptoRng};
-
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use rand_core::{RngCore, CryptoRng};
 
 use transcript::{Transcript, RecommendedTranscript};
 
+use multiexp::{multiexp_vartime, BatchVerifier};
 use ciphersuite::{
   group::{
     ff::{Field, PrimeField},
@@ -17,29 +22,75 @@ use ciphersuite::{
   },
   Ciphersuite,
 };
-use multiexp::{multiexp_vartime, BatchVerifier};
 
 use schnorr::SchnorrSignature;
 
-use crate::{
-  Participant, DkgError, ThresholdParams, Interpolation, ThresholdCore, validate_map,
-  encryption::{
-    ReadWrite, EncryptionKeyMessage, EncryptedMessage, Encryption, Decryption, EncryptionKeyProof,
-    DecryptionError,
-  },
-};
+pub use dkg::*;
 
-type FrostError<C> = DkgError<EncryptionKeyProof<C>>;
+mod encryption;
+pub use encryption::*;
+
+#[cfg(test)]
+mod tests;
+
+/// Errors possible during key generation.
+#[derive(Clone, PartialEq, Eq, Debug, thiserror::Error)]
+pub enum PedPoPError<C: Ciphersuite> {
+  /// An incorrect amount of participants was provided.
+  #[error("incorrect amount of participants (expected {expected}, found {found})")]
+  IncorrectAmountOfParticipants { expected: usize, found: usize },
+  /// An invalid proof of knowledge was provided.
+  #[error("invalid proof of knowledge (participant {0})")]
+  InvalidCommitments(Participant),
+  /// An invalid DKG share was provided.
+  #[error("invalid share (participant {participant}, blame {blame})")]
+  InvalidShare { participant: Participant, blame: Option<EncryptionKeyProof<C>> },
+  /// A participant was missing.
+  #[error("missing participant {0}")]
+  MissingParticipant(Participant),
+  /// An error propagated from the underlying `dkg` crate.
+  #[error("error from dkg ({0})")]
+  DkgError(DkgError),
+}
+
+// Validate a map of values to have the expected included participants
+fn validate_map<T, C: Ciphersuite>(
+  map: &HashMap<Participant, T>,
+  included: &[Participant],
+  ours: Participant,
+) -> Result<(), PedPoPError<C>> {
+  if (map.len() + 1) != included.len() {
+    Err(PedPoPError::IncorrectAmountOfParticipants {
+      expected: included.len(),
+      found: map.len() + 1,
+    })?;
+  }
+
+  for included in included {
+    if *included == ours {
+      if map.contains_key(included) {
+        Err(PedPoPError::DkgError(DkgError::DuplicatedParticipant(*included)))?;
+      }
+      continue;
+    }
+
+    if !map.contains_key(included) {
+      Err(PedPoPError::MissingParticipant(*included))?;
+    }
+  }
+
+  Ok(())
+}
 
 #[allow(non_snake_case)]
 fn challenge<C: Ciphersuite>(context: [u8; 32], l: Participant, R: &[u8], Am: &[u8]) -> C::F {
-  let mut transcript = RecommendedTranscript::new(b"DKG FROST v0.2");
+  let mut transcript = RecommendedTranscript::new(b"DKG PedPoP v0.2");
   transcript.domain_separate(b"schnorr_proof_of_knowledge");
   transcript.append_message(b"context", context);
   transcript.append_message(b"participant", l.to_bytes());
   transcript.append_message(b"nonce", R);
   transcript.append_message(b"commitments", Am);
-  C::hash_to_F(b"DKG-FROST-proof_of_knowledge-0", &transcript.challenge(b"schnorr"))
+  C::hash_to_F(b"DKG-PedPoP-proof_of_knowledge-0", &transcript.challenge(b"schnorr"))
 }
 
 /// The commitments message, intended to be broadcast to all other parties.
@@ -98,7 +149,7 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
     KeyGenMachine { params, context, _curve: PhantomData }
   }
 
-  /// Start generating a key according to the FROST DKG spec.
+  /// Start generating a key according to the PedPoP DKG specification present in the FROST paper.
   ///
   /// Returns a commitments message to be sent to all parties over an authenticated channel. If any
   /// party submits multiple sets of commitments, they MUST be treated as malicious.
@@ -106,7 +157,7 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
     self,
     rng: &mut R,
   ) -> (SecretShareMachine<C>, EncryptionKeyMessage<C, Commitments<C>>) {
-    let t = usize::from(self.params.t);
+    let t = usize::from(self.params.t());
     let mut coefficients = Vec::with_capacity(t);
     let mut commitments = Vec::with_capacity(t);
     let mut cached_msg = vec![];
@@ -133,7 +184,7 @@ impl<C: Ciphersuite> KeyGenMachine<C> {
     );
 
     // Additionally create an encryption mechanism to protect the secret shares
-    let encryption = Encryption::new(self.context, self.params.i, rng);
+    let encryption = Encryption::new(self.context, self.params.i(), rng);
 
     // Step 4: Broadcast
     let msg =
@@ -250,21 +301,21 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
     &mut self,
     rng: &mut R,
     mut commitment_msgs: HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
-  ) -> Result<HashMap<Participant, Vec<C::G>>, FrostError<C>> {
+  ) -> Result<HashMap<Participant, Vec<C::G>>, PedPoPError<C>> {
     validate_map(
       &commitment_msgs,
-      &(1 ..= self.params.n()).map(Participant).collect::<Vec<_>>(),
+      &self.params.all_participant_indexes().collect::<Vec<_>>(),
       self.params.i(),
     )?;
 
     let mut batch = BatchVerifier::<Participant, C::G>::new(commitment_msgs.len());
     let mut commitments = HashMap::new();
-    for l in (1 ..= self.params.n()).map(Participant) {
+    for l in self.params.all_participant_indexes() {
       let Some(msg) = commitment_msgs.remove(&l) else { continue };
       let mut msg = self.encryption.register(l, msg);
 
       if msg.commitments.len() != self.params.t().into() {
-        Err(FrostError::InvalidCommitments(l))?;
+        Err(PedPoPError::InvalidCommitments(l))?;
       }
 
       // Step 5: Validate each proof of knowledge
@@ -280,9 +331,9 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
       commitments.insert(l, msg.commitments.drain(..).collect::<Vec<_>>());
     }
 
-    batch.verify_vartime_with_vartime_blame().map_err(FrostError::InvalidCommitments)?;
+    batch.verify_vartime_with_vartime_blame().map_err(PedPoPError::InvalidCommitments)?;
 
-    commitments.insert(self.params.i, self.our_commitments.drain(..).collect());
+    commitments.insert(self.params.i(), self.our_commitments.drain(..).collect());
     Ok(commitments)
   }
 
@@ -299,13 +350,13 @@ impl<C: Ciphersuite> SecretShareMachine<C> {
     commitments: HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
   ) -> Result<
     (KeyMachine<C>, HashMap<Participant, EncryptedMessage<C, SecretShare<C::F>>>),
-    FrostError<C>,
+    PedPoPError<C>,
   > {
     let commitments = self.verify_r1(&mut *rng, commitments)?;
 
     // Step 1: Generate secret shares for all other parties
     let mut res = HashMap::new();
-    for l in (1 ..= self.params.n()).map(Participant) {
+    for l in self.params.all_participant_indexes() {
       // Don't insert our own shares to the byte buffer which is meant to be sent around
       // An app developer could accidentally send it. Best to keep this black boxed
       if l == self.params.i() {
@@ -413,10 +464,10 @@ impl<C: Ciphersuite> KeyMachine<C> {
     mut self,
     rng: &mut R,
     mut shares: HashMap<Participant, EncryptedMessage<C, SecretShare<C::F>>>,
-  ) -> Result<BlameMachine<C>, FrostError<C>> {
+  ) -> Result<BlameMachine<C>, PedPoPError<C>> {
     validate_map(
       &shares,
-      &(1 ..= self.params.n()).map(Participant).collect::<Vec<_>>(),
+      &self.params.all_participant_indexes().collect::<Vec<_>>(),
       self.params.i(),
     )?;
 
@@ -427,7 +478,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
         self.encryption.decrypt(rng, &mut batch, BatchId::Decryption(l), l, share_bytes);
       let share =
         Zeroizing::new(Option::<C::F>::from(C::F::from_repr(share_bytes.0)).ok_or_else(|| {
-          FrostError::InvalidShare { participant: l, blame: Some(blame.clone()) }
+          PedPoPError::InvalidShare { participant: l, blame: Some(blame.clone()) }
         })?);
       share_bytes.zeroize();
       *self.secret += share.deref();
@@ -444,7 +495,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
         BatchId::Decryption(l) => (l, None),
         BatchId::Share(l) => (l, Some(blames.remove(&l).unwrap())),
       };
-      FrostError::InvalidShare { participant: l, blame }
+      PedPoPError::InvalidShare { participant: l, blame }
     })?;
 
     // Stripe commitments per t and sum them in advance. Calculating verification shares relies on
@@ -458,7 +509,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
 
     // Calculate each user's verification share
     let mut verification_shares = HashMap::new();
-    for i in (1 ..= self.params.n()).map(Participant) {
+    for i in self.params.all_participant_indexes() {
       verification_shares.insert(
         i,
         if i == self.params.i() {
@@ -473,13 +524,10 @@ impl<C: Ciphersuite> KeyMachine<C> {
     Ok(BlameMachine {
       commitments,
       encryption: encryption.into_decryption(),
-      result: Some(ThresholdCore {
-        params,
-        interpolation: Interpolation::Lagrange,
-        secret_share: secret,
-        group_key: stripes[0],
-        verification_shares,
-      }),
+      result: Some(
+        ThresholdKeys::new(params, Interpolation::Lagrange, secret, verification_shares)
+          .map_err(PedPoPError::DkgError)?,
+      ),
     })
   }
 }
@@ -488,7 +536,7 @@ impl<C: Ciphersuite> KeyMachine<C> {
 pub struct BlameMachine<C: Ciphersuite> {
   commitments: HashMap<Participant, Vec<C::G>>,
   encryption: Decryption<C>,
-  result: Option<ThresholdCore<C>>,
+  result: Option<ThresholdKeys<C>>,
 }
 
 impl<C: Ciphersuite> fmt::Debug for BlameMachine<C> {
@@ -520,7 +568,7 @@ impl<C: Ciphersuite> BlameMachine<C> {
   /// territory of consensus protocols. This library does not handle that nor does it provide any
   /// tooling to do so. This function is solely intended to force users to acknowledge they're
   /// completing the protocol, not processing any blame.
-  pub fn complete(self) -> ThresholdCore<C> {
+  pub fn complete(self) -> ThresholdKeys<C> {
     self.result.unwrap()
   }
 
@@ -602,12 +650,12 @@ impl<C: Ciphersuite> AdditionalBlameMachine<C> {
     context: [u8; 32],
     n: u16,
     mut commitment_msgs: HashMap<Participant, EncryptionKeyMessage<C, Commitments<C>>>,
-  ) -> Result<Self, FrostError<C>> {
+  ) -> Result<Self, PedPoPError<C>> {
     let mut commitments = HashMap::new();
     let mut encryption = Decryption::new(context);
     for i in 1 ..= n {
       let i = Participant::new(i).unwrap();
-      let Some(msg) = commitment_msgs.remove(&i) else { Err(DkgError::MissingParticipant(i))? };
+      let Some(msg) = commitment_msgs.remove(&i) else { Err(PedPoPError::MissingParticipant(i))? };
       commitments.insert(i, encryption.register(i, msg).commitments);
     }
     Ok(AdditionalBlameMachine(BlameMachine { commitments, encryption, result: None }))

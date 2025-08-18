@@ -39,13 +39,13 @@ multiexp = { path = "../multiexp", version = "0.4", default-features = false, fe
 
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false, features = ["std"] }
 
-dkg = { path = "../dkg", version = "^0.5.1", default-features = false, features = ["std"] }
+dkg = { path = "../dkg", version = "0.6", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 hex = "0.4"
 serde_json = { version = "1", default-features = false, features = ["std"] }
 
-dkg = { path = "../dkg", features = ["tests"] }
+dkg = { path = "../dkg" }
 
 [features]
 ed25519 = ["dalek-ff-group", "ciphersuite/ed25519"]
@@ -56,4 +56,4 @@ p256 = ["ciphersuite/p256"]
 
 ed448 = ["minimal-ed448", "ciphersuite/ed448"]
 
-tests = ["hex", "rand_core/getrandom", "dkg/tests"]
+tests = ["hex", "rand_core/getrandom"]
