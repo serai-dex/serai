@@ -1,7 +1,7 @@
 # Distributed Key Generation - PedPoP
 
-This implements the PedPoP distributed key generation protocol for the [`dkg`](https://docs.rs/dkg)
-crate's types.
+This implements the PedPoP distributed key generation protocol for the
+[`dkg`](https://docs.rs/dkg) crate's types.
 
 This crate was originally part of the `dkg` crate, which was
 [audited by Cypher Stack in March 2023](
