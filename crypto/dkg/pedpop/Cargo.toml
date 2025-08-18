@@ -22,7 +22,7 @@ thiserror = { version = "2", default-features = false, features = ["std"] }
 zeroize = { version = "^1.5", default-features = false, features = ["std", "zeroize_derive"] }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
-transcript = { package = "flexible-transcript", path = "../../transcript", version = "^0.3.2", default-features = false, features = ["std", "recommended"] }
+transcript = { package = "flexible-transcript", path = "../../transcript", version = "^0.3.3", default-features = false, features = ["std", "recommended"] }
 chacha20 = { version = "0.9", default-features = false, features = ["std", "zeroize"] }
 
 multiexp = { path = "../../multiexp", version = "0.4", default-features = false, features = ["std"] }
