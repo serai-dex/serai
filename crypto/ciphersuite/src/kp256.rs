@@ -6,7 +6,7 @@ use group::ff::PrimeField;
 
 use elliptic_curve::{
   generic_array::GenericArray,
-  bigint::{NonZero, CheckedAdd, Encoding, U384, U512},
+  bigint::{NonZero, CheckedAdd, Encoding, U384},
   hash2curve::{Expander, ExpandMsg, ExpandMsgXmd},
 };
 
