@@ -359,7 +359,12 @@ macro_rules! dalek_group {
     $BASEPOINT_POINT: ident,
     $BASEPOINT_TABLE: ident
   ) => {
-    /// Wrapper around the dalek Point type. For Ed25519, this is restricted to the prime subgroup.
+    /// Wrapper around the dalek Point type.
+    ///
+    /// All operations will be restricted to a prime-order subgroup (equivalent to the group itself
+    /// in the case of Ristretto). The exposure of the internal element does allow bypassing this
+    /// however, which may lead to undefined/computationally-unsafe behavior, and is entirely at
+    /// the user's risk.
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Point(pub $DPoint);
     deref_borrow!($Point, $DPoint);
