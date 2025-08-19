@@ -223,6 +223,13 @@ impl FieldElement {
     FieldElement(Residue::new(u256))
   }
 
+  /// Create a `FieldElement` from the reduction of a 512-bit number.
+  ///
+  /// The bytes are interpreted in little-endian format.
+  pub fn wide_reduce(value: [u8; 64]) -> Self {
+    FieldElement(reduce(U512::from_le_bytes(value)))
+  }
+
   /// Interpret the value as a little-endian integer, square it, and reduce it into a FieldElement.
   pub fn from_square(value: [u8; 32]) -> FieldElement {
     let value = U256::from_le_bytes(value);
