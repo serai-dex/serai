@@ -48,7 +48,7 @@ mod std_oncelock {
         Self { value: Cell::new(core::ptr::null_mut()), init: RwLock::new(false) }
       }
       /// Shim for `std::sync::OnceLock::get_or_init`.
-      pub fn get_or_init<F>(&'a self, f: F) -> &'a T
+      pub fn get_or_init<F>(&self, f: F) -> &T
       where
         F: FnOnce() -> T,
       {
@@ -72,7 +72,9 @@ mod std_oncelock {
     // multiple times
     impl<T> Drop for OnceLock<T> {
       fn drop(&mut self) {
-        unsafe { drop(Box::from_raw(self.value.get())) }
+        if *self.init.read().unwrap() {
+          unsafe { drop(Box::from_raw(self.value.get())) }
+        }
       }
     }
   }
