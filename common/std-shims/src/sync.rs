@@ -26,6 +26,6 @@ mod mutex_shim {
 pub use mutex_shim::{ShimMutex as Mutex, MutexGuard};
 
 #[cfg(feature = "std")]
-pub use std::sync::LazyLock;
+pub use std::sync::{OnceLock, LazyLock};
 #[cfg(not(feature = "std"))]
-pub use spin::Lazy as LazyLock;
+pub use spin::{Once as OnceLock, Lazy as LazyLock};
