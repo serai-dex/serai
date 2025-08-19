@@ -216,6 +216,13 @@ impl PrimeFieldBits for FieldElement {
 }
 
 impl FieldElement {
+  /// Create a FieldElement from a `crypto_bigint::U256`.
+  ///
+  /// This will reduce the `U256` by the modulus, into a member of the field.
+  pub const fn from_u256(u256: &U256) -> Self {
+    FieldElement(Residue::new(u256))
+  }
+
   /// Interpret the value as a little-endian integer, square it, and reduce it into a FieldElement.
   pub fn from_square(value: [u8; 32]) -> FieldElement {
     let value = U256::from_le_bytes(value);
