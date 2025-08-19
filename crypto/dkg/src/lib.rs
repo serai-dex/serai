@@ -6,6 +6,8 @@ use core::{
   ops::Deref,
   fmt::{self, Debug},
 };
+#[allow(unused_imports)]
+use std_shims::prelude::*;
 use std_shims::{sync::Arc, vec, vec::Vec, collections::HashMap, io};
 
 use zeroize::{Zeroize, Zeroizing};
