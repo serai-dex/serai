@@ -62,12 +62,6 @@ pub trait Ciphersuite:
   // While group does provide this in its API, privacy coins may want to use a custom basepoint
   fn generator() -> Self::G;
 
-  /// Reduce 512 bits into a uniform scalar.
-  ///
-  /// If 512 bits is insufficient to perform a reduction into a uniform scalar, the ciphersuite
-  /// will perform a hash to sample the necessary bits.
-  fn reduce_512(scalar: [u8; 64]) -> Self::F;
-
   /// Hash the provided domain-separation tag and message to a scalar. Ciphersuites MAY naively
   /// prefix the tag to the message, enabling transpotion between the two. Accordingly, this
   /// function should NOT be used in any scheme where one tag is a valid substring of another

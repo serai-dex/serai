@@ -31,22 +31,6 @@ macro_rules! kp_curve {
         $lib::ProjectivePoint::GENERATOR
       }
 
-      fn reduce_512(scalar: [u8; 64]) -> Self::F {
-        let mut modulus = [0; 64];
-        modulus[32 ..].copy_from_slice(&(Self::F::ZERO - Self::F::ONE).to_bytes());
-        let modulus = U512::from_be_slice(&modulus).checked_add(&U512::ONE).unwrap();
-
-        let mut wide =
-          U512::from_be_bytes(scalar).rem(&NonZero::new(modulus).unwrap()).to_be_bytes();
-
-        let mut array = *GenericArray::from_slice(&wide[32 ..]);
-        let res = $lib::Scalar::from_repr(array).unwrap();
-
-        wide.zeroize();
-        array.zeroize();
-        res
-      }
-
       fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
         // While one of these two libraries does support directly hashing to the Scalar field, the
         // other doesn't. While that's probably an oversight, this is a universally working method
