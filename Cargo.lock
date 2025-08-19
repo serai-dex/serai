@@ -9695,6 +9695,7 @@ name = "std-shims"
 version = "0.1.2"
 dependencies = [
  "hashbrown 0.14.5",
+ "rustversion",
  "spin 0.10.0",
 ]
 
