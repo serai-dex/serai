@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
-use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::ff::Field, Ciphersuite};
 
 use dkg_recovery::recover_key;
 use crate::*;

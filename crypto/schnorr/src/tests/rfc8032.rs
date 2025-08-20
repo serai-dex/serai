@@ -5,8 +5,8 @@
 
 use sha2::{Digest, Sha512};
 
-use dalek_ff_group::Scalar;
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ed25519};
+use dalek_ff_group::{Scalar, Ed25519};
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use crate::SchnorrSignature;
 

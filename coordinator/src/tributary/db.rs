@@ -3,7 +3,8 @@ use std::collections::HashMap;
 use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use frost::Participant;
 
 use serai_client::validator_sets::primitives::{KeyPair, ExternalValidatorSet};

@@ -3,7 +3,8 @@ use std::{sync::Arc, collections::HashSet};
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use tokio::sync::broadcast;
 

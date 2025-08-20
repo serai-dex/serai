@@ -1,0 +1,55 @@
+[package]
+name = "ciphersuite-kp256"
+version = "0.4.0"
+description = "Ciphersuites built around ff/group"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ciphersuite/kp256"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["ciphersuite", "ff", "group"]
+edition = "2021"
+rust-version = "1.66"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+rand_core = { version = "0.6", default-features = false }
+
+zeroize = { version = "^1.5", default-features = false, features = ["derive"] }
+
+sha2 = { version = "0.10", default-features = false }
+
+elliptic-curve = { version = "0.13", default-features = false, features = ["hash2curve"] }
+p256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"] }
+k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"] }
+
+ciphersuite = { path = "../", version = "0.4", default-features = false }
+
+[dev-dependencies]
+hex = { version = "0.4", default-features = false, features = ["std"] }
+
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
+ff-group-tests = { version = "0.13", path = "../../ff-group-tests" }
+
+[features]
+alloc = ["ciphersuite/alloc"]
+std = [
+  "rand_core/std",
+
+  "zeroize/std",
+
+  "sha2/std",
+
+  "elliptic-curve/std",
+  "p256/std",
+  "k256/std",
+
+  "ciphersuite/std",
+]
+
+default = ["std"]

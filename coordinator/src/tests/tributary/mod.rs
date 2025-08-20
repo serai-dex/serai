@@ -2,7 +2,8 @@ use core::fmt::Debug;
 
 use rand_core::{RngCore, OsRng};
 
-use ciphersuite::{group::Group, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::Group, Ciphersuite};
 
 use scale::{Encode, Decode};
 use serai_client::{

@@ -2,7 +2,8 @@ use core::{str::FromStr, fmt};
 
 use scale::{Encode, Decode};
 
-use ciphersuite::{Ciphersuite, Ed25519};
+use dalek_ff_group::Ed25519;
+use ciphersuite::Ciphersuite;
 
 use monero_wallet::address::{AddressError, Network, AddressType, MoneroAddress};
 

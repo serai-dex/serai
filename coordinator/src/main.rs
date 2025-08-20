@@ -8,12 +8,13 @@ use std::{
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::OsRng;
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{
     ff::{Field, PrimeField},
     GroupEncoding,
   },
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 use schnorr::SchnorrSignature;
 use frost::Participant;

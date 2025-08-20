@@ -18,7 +18,8 @@ workspace = true
 [dependencies]
 zeroize = { version = "^1.5", features = ["derive"], optional = true }
 
-ciphersuite = { path = "../../../crypto/ciphersuite", version = "0.4", default-features = false, features = ["alloc", "ristretto"] }
+dalek-ff-group = { path = "../../../crypto/dalek-ff-group", default-features = false, features = ["alloc"] }
+ciphersuite = { path = "../../../crypto/ciphersuite", version = "0.4", default-features = false, features = ["alloc"] }
 dkg-musig = { path = "../../../crypto/dkg/musig", default-features = false }
 
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }

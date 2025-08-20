@@ -63,9 +63,10 @@ use rand_core::OsRng;
 
 use blake2::{Digest, Blake2s256};
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 use dkg_musig::musig;
 use frost::{FrostError, dkg::Participant, ThresholdKeys, sign::*};

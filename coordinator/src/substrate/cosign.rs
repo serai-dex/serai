@@ -14,7 +14,8 @@
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::Ciphersuite;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 

@@ -31,7 +31,7 @@ dkg = { path = "../", version = "0.6", default-features = false }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
-ciphersuite = { path = "../../ciphersuite", default-features = false, features = ["ristretto"] }
+dalek-ff-group = { path = "../../dalek-ff-group" }
 dkg-recovery = { path = "../recovery", default-features = false, features = ["std"] }
 
 [features]

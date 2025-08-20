@@ -19,10 +19,11 @@ workspace = true
 [dependencies]
 flexible-transcript = { path = "../../crypto/transcript", default-features = false, features = ["recommended", "merlin"] }
 
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false }
-minimal-ed448 = { path = "../../crypto/ed448", default-features = false }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["alloc"] }
+minimal-ed448 = { path = "../../crypto/ed448", default-features = false, features = ["alloc"] }
 
-ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc", "secp256k1", "p256", "ed25519", "ristretto", "ed448"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
+ciphersuite-kp256 = { path = "../../crypto/ciphersuite/kp256", default-features = false, features = ["alloc"] }
 
 multiexp = { path = "../../crypto/multiexp", default-features = false, features = ["batch"] }
 

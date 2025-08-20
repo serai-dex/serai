@@ -3,9 +3,9 @@ use zeroize::Zeroize;
 use sha2::{Digest, Sha512};
 
 use group::Group;
-use dalek_ff_group::Scalar;
+use crate::Scalar;
 
-use crate::Ciphersuite;
+use ciphersuite::Ciphersuite;
 
 macro_rules! dalek_curve {
   (
@@ -15,7 +15,7 @@ macro_rules! dalek_curve {
     $Point:       ident,
     $ID:          literal
   ) => {
-    use dalek_ff_group::$Point;
+    use crate::$Point;
 
     impl Ciphersuite for $Ciphersuite {
       type F = Scalar;
@@ -40,12 +40,9 @@ macro_rules! dalek_curve {
 /// hash_to_F is implemented with a naive concatenation of the dst and data, allowing transposition
 /// between the two. This means `dst: b"abc", data: b"def"`, will produce the same scalar as
 /// `dst: "abcdef", data: b""`. Please use carefully, not letting dsts be substrings of each other.
-#[cfg(any(test, feature = "ristretto"))]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Ristretto;
-#[cfg(any(test, feature = "ristretto"))]
 dalek_curve!("ristretto", Ristretto, RistrettoPoint, b"ristretto");
-#[cfg(any(test, feature = "ristretto"))]
 #[test]
 fn test_ristretto() {
   ff_group_tests::group::test_prime_group_bits::<_, RistrettoPoint>(&mut rand_core::OsRng);
@@ -71,12 +68,9 @@ fn test_ristretto() {
 /// hash_to_F is implemented with a naive concatenation of the dst and data, allowing transposition
 /// between the two. This means `dst: b"abc", data: b"def"`, will produce the same scalar as
 /// `dst: "abcdef", data: b""`. Please use carefully, not letting dsts be substrings of each other.
-#[cfg(feature = "ed25519")]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Ed25519;
-#[cfg(feature = "ed25519")]
 dalek_curve!("ed25519", Ed25519, EdwardsPoint, b"edwards25519");
-#[cfg(feature = "ed25519")]
 #[test]
 fn test_ed25519() {
   ff_group_tests::group::test_prime_group_bits::<_, EdwardsPoint>(&mut rand_core::OsRng);

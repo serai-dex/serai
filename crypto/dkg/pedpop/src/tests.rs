@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng, OsRng};
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::Ciphersuite;
 
 use crate::*;
 

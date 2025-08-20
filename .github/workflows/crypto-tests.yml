@@ -32,6 +32,7 @@ jobs:
             -p dalek-ff-group \
             -p minimal-ed448 \
             -p ciphersuite \
+            -p ciphersuite-kp256 \
             -p multiexp \
             -p schnorr-signatures \
             -p dleq \

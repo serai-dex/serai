@@ -3,9 +3,10 @@ use core::ops::Deref;
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
+use dalek_ff_group::Ed25519;
 use ciphersuite::{
   group::{ff::Field, Group},
-  Ciphersuite, Ed25519,
+  Ciphersuite,
 };
 use multiexp::BatchVerifier;
 

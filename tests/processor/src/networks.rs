@@ -90,7 +90,7 @@ pub enum Wallet {
   },
   Ethereum {
     rpc_url: String,
-    key: <ciphersuite::Secp256k1 as Ciphersuite>::F,
+    key: <ciphersuite_kp256::Secp256k1 as Ciphersuite>::F,
     nonce: u64,
   },
   Monero {
@@ -149,7 +149,8 @@ impl Wallet {
       }
 
       ExternalNetworkId::Ethereum => {
-        use ciphersuite::{group::ff::Field, Secp256k1};
+        use ciphersuite::group::ff::Field;
+        use ciphersuite_kp256::Secp256k1;
         use ethereum_serai::alloy::{
           primitives::{U256, Address},
           simple_request_transport::SimpleRequest,
@@ -321,7 +322,7 @@ impl Wallet {
         ));
 
         let to_as_key = PublicKey::new(
-          <ciphersuite::Secp256k1 as Ciphersuite>::read_G(&mut to.as_slice()).unwrap(),
+          <ciphersuite_kp256::Secp256k1 as Ciphersuite>::read_G(&mut to.as_slice()).unwrap(),
         )
         .unwrap();
         let router_addr = {
@@ -502,7 +503,7 @@ impl Wallet {
         .unwrap()
       }
       Wallet::Ethereum { key, .. } => ExternalAddress::new(
-        ethereum_serai::crypto::address(&(ciphersuite::Secp256k1::generator() * key)).into(),
+        ethereum_serai::crypto::address(&(ciphersuite_kp256::Secp256k1::generator() * key)).into(),
       )
       .unwrap(),
       Wallet::Monero { view_pair, .. } => {

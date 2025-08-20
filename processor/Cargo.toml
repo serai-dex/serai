@@ -35,7 +35,8 @@ serde_json = { version = "1", default-features = false, features = ["std"] }
 
 # Cryptography
 blake2 = { version = "0.10", default-features = false, features = ["std"] }
-ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std", "ristretto"] }
+dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"] }
+ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std"] }
 
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", default-features = false, features = ["std"] }
 dkg-pedpop = { path = "../crypto/dkg/pedpop", default-features = false }
@@ -50,10 +51,10 @@ secp256k1 = { version = "0.29", default-features = false, features = ["std", "gl
 bitcoin-serai = { path = "../networks/bitcoin", default-features = false, features = ["std"], optional = true }
 
 # Ethereum
+ciphersuite-kp256 = { path = "../crypto/ciphersuite/kp256", default-features = false, features = ["std"], optional = true }
 ethereum-serai = { path = "../networks/ethereum", default-features = false, optional = true }
 
 # Monero
-dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"], optional = true }
 monero-simple-request-rpc = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a74f41c2270707e340a9cb57fcd97a762d04975b", default-features = false, optional = true }
 monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a74f41c2270707e340a9cb57fcd97a762d04975b", default-features = false, features = ["std", "multisig", "compile-time-generators"], optional = true }
 
@@ -86,9 +87,9 @@ serai-docker-tests = { path = "../tests/docker" }
 secp256k1 = ["k256", "frost/secp256k1"]
 bitcoin = ["dep:secp256k1", "secp256k1", "bitcoin-serai", "serai-client/bitcoin"]
 
-ethereum = ["secp256k1", "ethereum-serai/tests"]
+ethereum = ["secp256k1", "ciphersuite-kp256", "ethereum-serai/tests"]
 
-ed25519 = ["dalek-ff-group", "frost/ed25519"]
+ed25519 = ["frost/ed25519"]
 monero = ["ed25519", "monero-simple-request-rpc", "monero-wallet", "serai-client/monero"]
 
 binaries = ["env_logger", "serai-env", "message-queue"]

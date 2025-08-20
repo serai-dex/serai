@@ -1529,22 +1529,30 @@ dependencies = [
 name = "ciphersuite"
 version = "0.4.2"
 dependencies = [
- "dalek-ff-group",
  "digest 0.10.7",
- "elliptic-curve",
  "ff",
  "ff-group-tests",
  "flexible-transcript",
  "group",
  "hex",
+ "rand_core",
+ "std-shims",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "ciphersuite-kp256"
+version = "0.4.0"
+dependencies = [
+ "ciphersuite",
+ "elliptic-curve",
+ "ff-group-tests",
+ "hex",
  "k256",
- "minimal-ed448",
  "p256",
  "rand_core",
  "sha2",
- "sha3",
- "std-shims",
- "subtle",
  "zeroize",
 ]
 
@@ -1982,14 +1990,17 @@ dependencies = [
 name = "dalek-ff-group"
 version = "0.4.3"
 dependencies = [
+ "ciphersuite",
  "crypto-bigint",
  "curve25519-dalek",
  "digest 0.10.7",
  "ff",
  "ff-group-tests",
  "group",
+ "hex",
  "rand_core",
  "rustversion",
+ "sha2",
  "subtle",
  "zeroize",
 ]
@@ -2237,6 +2248,7 @@ name = "dkg-musig"
 version = "0.6.0"
 dependencies = [
  "ciphersuite",
+ "dalek-ff-group",
  "dkg",
  "dkg-recovery",
  "multiexp",
@@ -2252,6 +2264,7 @@ version = "0.6.0"
 dependencies = [
  "chacha20",
  "ciphersuite",
+ "dalek-ff-group",
  "dkg",
  "dleq",
  "flexible-transcript",
@@ -2267,6 +2280,7 @@ name = "dkg-promote"
 version = "0.6.1"
 dependencies = [
  "ciphersuite",
+ "dalek-ff-group",
  "dkg",
  "dkg-recovery",
  "dleq",
@@ -2918,6 +2932,7 @@ name = "frost-schnorrkel"
 version = "0.2.0"
 dependencies = [
  "ciphersuite",
+ "dalek-ff-group",
  "flexible-transcript",
  "group",
  "modular-frost",
@@ -4814,6 +4829,7 @@ dependencies = [
 name = "minimal-ed448"
 version = "0.4.1"
 dependencies = [
+ "ciphersuite",
  "crypto-bigint",
  "ff",
  "ff-group-tests",
@@ -4822,6 +4838,7 @@ dependencies = [
  "hex",
  "rand_core",
  "rustversion",
+ "sha3",
  "subtle",
  "zeroize",
 ]
@@ -4885,6 +4902,7 @@ name = "modular-frost"
 version = "0.10.1"
 dependencies = [
  "ciphersuite",
+ "ciphersuite-kp256",
  "dalek-ff-group",
  "digest 0.10.7",
  "dkg",
@@ -8049,6 +8067,7 @@ dependencies = [
  "bitcoin",
  "blake2",
  "ciphersuite",
+ "dalek-ff-group",
  "dkg-musig",
  "dockertest",
  "frame-system",
@@ -8109,6 +8128,7 @@ dependencies = [
  "blake2",
  "borsh",
  "ciphersuite",
+ "dalek-ff-group",
  "dkg-musig",
  "env_logger",
  "flexible-transcript",
@@ -8142,6 +8162,8 @@ dependencies = [
  "blake2",
  "borsh",
  "ciphersuite",
+ "ciphersuite-kp256",
+ "dalek-ff-group",
  "dkg",
  "dockertest",
  "hex",
@@ -8349,6 +8371,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite",
+ "dalek-ff-group",
  "env_logger",
  "flexible-transcript",
  "hex",
@@ -8369,6 +8392,7 @@ name = "serai-message-queue-tests"
 version = "0.1.0"
 dependencies = [
  "ciphersuite",
+ "dalek-ff-group",
  "dockertest",
  "hex",
  "rand_core",
@@ -8385,6 +8409,7 @@ version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
  "ciphersuite",
+ "ciphersuite-kp256",
  "dalek-ff-group",
  "dkg",
  "dkg-dealer",
@@ -8448,6 +8473,7 @@ name = "serai-orchestrator"
 version = "0.0.1"
 dependencies = [
  "ciphersuite",
+ "dalek-ff-group",
  "flexible-transcript",
  "hex",
  "home",
@@ -8536,7 +8562,9 @@ dependencies = [
  "bitcoin-serai",
  "borsh",
  "ciphersuite",
+ "ciphersuite-kp256",
  "curve25519-dalek",
+ "dalek-ff-group",
  "dkg",
  "dockertest",
  "ethereum-serai",
@@ -8671,6 +8699,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite",
+ "dalek-ff-group",
  "dkg-musig",
  "parity-scale-codec",
  "scale-info",
@@ -10419,6 +10448,7 @@ dependencies = [
  "async-trait",
  "blake2",
  "ciphersuite",
+ "dalek-ff-group",
  "flexible-transcript",
  "futures-channel",
  "futures-util",

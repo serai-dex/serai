@@ -5,7 +5,8 @@ use std::sync::{OnceLock, Mutex};
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
-use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::ff::PrimeField, Ciphersuite};
 
 use serai_client::primitives::ExternalNetworkId;
 use messages::{ProcessorMessage, CoordinatorMessage};

@@ -286,7 +286,8 @@ mod monero {
 mod ethereum {
   use super::*;
 
-  use ciphersuite::{Ciphersuite, Secp256k1};
+  use ciphersuite::Ciphersuite;
+  use ciphersuite_kp256::Secp256k1;
 
   use serai_client::validator_sets::primitives::Session;
 

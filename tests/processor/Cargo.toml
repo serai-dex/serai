@@ -23,7 +23,9 @@ zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 
 curve25519-dalek = "4"
-ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["secp256k1", "ristretto"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false }
+ciphersuite-kp256 = { path = "../../crypto/ciphersuite/kp256", default-features = false }
 dkg = { path = "../../crypto/dkg", default-features = false }
 
 bitcoin-serai = { path = "../../networks/bitcoin" }

@@ -34,6 +34,7 @@ dalek-ff-group = { path = "../dalek-ff-group", version = "0.4", default-features
 minimal-ed448 = { path = "../ed448", version = "0.4", default-features = false, features = ["std"], optional = true }
 
 ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["std"] }
+ciphersuite-kp256 = { path = "../ciphersuite/kp256", version = "0.4", default-features = false, features = ["std"], optional = true }
 
 multiexp = { path = "../multiexp", version = "0.4", default-features = false, features = ["std", "batch"] }
 
@@ -52,12 +53,12 @@ dkg-recovery = { path = "../dkg/recovery", default-features = false, features = 
 dkg-dealer = { path = "../dkg/dealer", default-features = false, features = ["std"] }
 
 [features]
-ed25519 = ["dalek-ff-group", "ciphersuite/ed25519"]
-ristretto = ["dalek-ff-group", "ciphersuite/ristretto"]
+ed25519 = ["dalek-ff-group"]
+ristretto = ["dalek-ff-group"]
 
-secp256k1 = ["ciphersuite/secp256k1"]
-p256 = ["ciphersuite/p256"]
+secp256k1 = ["ciphersuite-kp256"]
+p256 = ["ciphersuite-kp256"]
 
-ed448 = ["minimal-ed448", "ciphersuite/ed448"]
+ed448 = ["minimal-ed448"]
 
-tests = ["hex", "rand_core/getrandom", "dkg-dealer" ,"dkg-recovery"]
+tests = ["hex", "rand_core/getrandom", "dkg-dealer", "dkg-recovery"]

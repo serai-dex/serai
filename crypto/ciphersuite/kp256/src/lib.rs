@@ -1,8 +1,9 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(not(feature = "std"), no_std)]
+
 use zeroize::Zeroize;
 
 use sha2::Sha256;
-
-use group::ff::PrimeField;
 
 use elliptic_curve::{
   generic_array::GenericArray,
@@ -10,7 +11,7 @@ use elliptic_curve::{
   hash2curve::{Expander, ExpandMsg, ExpandMsgXmd},
 };
 
-use crate::Ciphersuite;
+use ciphersuite::{group::ff::PrimeField, Ciphersuite};
 
 macro_rules! kp_curve {
   (
@@ -107,12 +108,9 @@ fn test_oversize_dst<C: Ciphersuite>() {
 /// Ciphersuite for Secp256k1.
 ///
 /// hash_to_F is implemented via the IETF draft for hash to curve's hash_to_field (v16).
-#[cfg(feature = "secp256k1")]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Secp256k1;
-#[cfg(feature = "secp256k1")]
 kp_curve!("secp256k1", k256, Secp256k1, b"secp256k1");
-#[cfg(feature = "secp256k1")]
 #[test]
 fn test_secp256k1() {
   ff_group_tests::group::test_prime_group_bits::<_, k256::ProjectivePoint>(&mut rand_core::OsRng);
@@ -145,12 +143,9 @@ fn test_secp256k1() {
 /// Ciphersuite for P-256.
 ///
 /// hash_to_F is implemented via the IETF draft for hash to curve's hash_to_field (v16).
-#[cfg(feature = "p256")]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct P256;
-#[cfg(feature = "p256")]
 kp_curve!("p256", p256, P256, b"P-256");
-#[cfg(feature = "p256")]
 #[test]
 fn test_p256() {
   ff_group_tests::group::test_prime_group_bits::<_, p256::ProjectivePoint>(&mut rand_core::OsRng);

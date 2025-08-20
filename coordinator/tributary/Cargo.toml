@@ -27,7 +27,8 @@ rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 blake2 = { version = "0.10", default-features = false, features = ["std"] }
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["std", "recommended"] }
 
-ciphersuite = { package = "ciphersuite", path = "../../crypto/ciphersuite", default-features = false, features = ["std", "ristretto"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
+ciphersuite = { package = "ciphersuite", path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
 schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", default-features = false, features = ["std"] }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }

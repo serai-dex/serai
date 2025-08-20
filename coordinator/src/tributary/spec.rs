@@ -3,7 +3,8 @@ use std::{io, collections::HashMap};
 
 use transcript::{Transcript, RecommendedTranscript};
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use frost::Participant;
 
 use scale::Encode;

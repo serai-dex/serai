@@ -6,9 +6,10 @@ use thiserror::Error;
 
 use blake2::{Digest, Blake2b512};
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{Group, GroupEncoding},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 use schnorr::SchnorrSignature;
 

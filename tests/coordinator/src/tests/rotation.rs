@@ -1,6 +1,6 @@
 use tokio::time::{sleep, Duration};
 
-use ciphersuite::Secp256k1;
+use ciphersuite_kp256::Secp256k1;
 
 use serai_client::{
   primitives::{insecure_pair_from_name, NetworkId},

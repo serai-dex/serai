@@ -5,7 +5,8 @@ use async_trait::async_trait;
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::Ciphersuite;
 
 use scale::Decode;
 use futures_channel::mpsc::UnboundedReceiver;

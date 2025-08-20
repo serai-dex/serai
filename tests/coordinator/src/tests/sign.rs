@@ -5,7 +5,7 @@ use std::{
 
 use rand_core::{RngCore, OsRng};
 
-use ciphersuite::Secp256k1;
+use ciphersuite_kp256::Secp256k1;
 
 use dkg::Participant;
 

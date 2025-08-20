@@ -7,7 +7,8 @@ use std::{
 
 use async_trait::async_trait;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite_kp256::Secp256k1;
 use frost::ThresholdKeys;
 
 use ethereum_serai::{

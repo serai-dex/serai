@@ -4,9 +4,10 @@ use std::collections::HashMap;
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::OsRng;
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{ff::Field, Group},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 
 use dkg::*;

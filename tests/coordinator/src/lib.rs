@@ -14,9 +14,10 @@ use rand_core::{RngCore, OsRng};
 
 use zeroize::Zeroizing;
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 
 use serai_client::primitives::ExternalNetworkId;

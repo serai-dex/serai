@@ -3,7 +3,8 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;

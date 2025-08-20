@@ -1,6 +1,7 @@
 use std::collections::{VecDeque, HashSet};
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use serai_db::{Get, DbTxn, Db};
 

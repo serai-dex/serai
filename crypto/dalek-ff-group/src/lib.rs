@@ -38,6 +38,9 @@ use group::{
 mod field;
 pub use field::FieldElement;
 
+mod ciphersuite;
+pub use crate::ciphersuite::{Ed25519, Ristretto};
+
 // Use black_box when possible
 #[rustversion::since(1.66)]
 mod black_box {

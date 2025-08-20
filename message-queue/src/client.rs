@@ -3,9 +3,10 @@ use core::ops::Deref;
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::OsRng;
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::ff::{Field, PrimeField},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 use schnorr_signatures::SchnorrSignature;
 

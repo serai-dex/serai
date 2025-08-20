@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use frost::dkg::Participant;
 
 use scale::{Encode, Decode};

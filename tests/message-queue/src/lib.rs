@@ -2,9 +2,10 @@ use std::collections::HashMap;
 
 use rand_core::OsRng;
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{ff::Field, GroupEncoding},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 
 use serai_primitives::{ExternalNetworkId, EXTERNAL_NETWORKS};

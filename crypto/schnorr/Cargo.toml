@@ -36,7 +36,7 @@ rand_core = { version = "0.6", features = ["std"] }
 sha2 = "0.10"
 
 dalek-ff-group = { path =  "../dalek-ff-group" }
-ciphersuite = { path = "../ciphersuite", features = ["ed25519"] }
+ciphersuite = { path = "../ciphersuite" }
 
 [features]
 aggregate = ["transcript"]

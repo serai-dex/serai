@@ -28,6 +28,7 @@ members = [
   "crypto/dalek-ff-group",
   "crypto/ed448",
   "crypto/ciphersuite",
+  "crypto/ciphersuite/kp256",
 
   "crypto/multiexp",
 

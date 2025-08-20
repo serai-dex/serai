@@ -27,9 +27,6 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 
 ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["alloc"] }
 
-[dev-dependencies]
-ciphersuite = { path = "../ciphersuite", default-features = false, features = ["ristretto"] }
-
 [features]
 std = [
   "thiserror/std",

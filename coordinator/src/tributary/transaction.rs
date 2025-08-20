@@ -7,9 +7,10 @@ use rand_core::{RngCore, CryptoRng};
 use blake2::{Digest, Blake2s256};
 use transcript::{Transcript, RecommendedTranscript};
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{ff::Field, GroupEncoding},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 use schnorr::SchnorrSignature;
 use frost::Participant;

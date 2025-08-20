@@ -18,12 +18,13 @@ use rand_chacha::ChaCha20Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{
     ff::{Field, PrimeField},
     GroupEncoding,
   },
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 
 mod mimalloc;

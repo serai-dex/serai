@@ -24,8 +24,11 @@ rand_core = { version = "0.6", default-features = false }
 zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
 subtle = { version = "^2.4", default-features = false }
 
+sha3 = { version = "0.10", default-features = false }
+
 ff = { version = "0.13", default-features = false, features = ["bits"] }
 group = { version = "0.13", default-features = false }
+ciphersuite = { path = "../ciphersuite", default-features = false }
 
 generic-array = { version = "1", default-features = false }
 crypto-bigint = { version = "0.5", default-features = false, features = ["zeroize"] }
@@ -38,5 +41,6 @@ rand_core = { version = "0.6", default-features = false, features = ["std"] }
 ff-group-tests = { path = "../ff-group-tests" }
 
 [features]
-std = ["rand_core/std", "zeroize/std", "subtle/std", "ff/std"]
+alloc = ["zeroize/alloc", "ciphersuite/alloc"]
+std = ["alloc", "rand_core/std", "zeroize/std", "subtle/std", "sha3/std", "ff/std", "ciphersuite/std"]
 default = ["std"]

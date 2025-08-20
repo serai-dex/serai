@@ -6,6 +6,7 @@ pub use dalek_ff_group;
 pub use minimal_ed448;
 
 pub use ciphersuite;
+pub use ciphersuite_kp256;
 
 pub use multiexp;
 

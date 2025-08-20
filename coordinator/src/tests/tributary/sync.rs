@@ -3,7 +3,8 @@ use std::{sync::Arc, collections::HashSet};
 
 use rand_core::OsRng;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use tokio::{
   sync::{mpsc, broadcast},

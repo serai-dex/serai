@@ -3,7 +3,8 @@ use std::{sync::Arc, collections::HashMap};
 use zeroize::Zeroizing;
 use rand::{RngCore, rngs::OsRng};
 
-use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::ff::Field, Ciphersuite};
 
 use tendermint::ext::Commit;
 

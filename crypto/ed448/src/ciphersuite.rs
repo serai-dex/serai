@@ -1,15 +1,17 @@
 use zeroize::Zeroize;
 
-use digest::{
-  typenum::U114, core_api::BlockSizeUser, Update, Output, OutputSizeUser, FixedOutput,
-  ExtendableOutput, XofReader, HashMarker, Digest,
+use sha3::{
+  digest::{
+    typenum::U114, core_api::BlockSizeUser, Update, Output, OutputSizeUser, FixedOutput,
+    ExtendableOutput, XofReader, HashMarker, Digest,
+  },
+  Shake256,
 };
-use sha3::Shake256;
 
 use group::Group;
-use minimal_ed448::{Scalar, Point};
+use crate::{Scalar, Point};
 
-use crate::Ciphersuite;
+use ciphersuite::Ciphersuite;
 
 /// Shake256, fixed to a 114-byte output, as used by Ed448.
 #[derive(Clone, Default)]

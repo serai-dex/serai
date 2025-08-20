@@ -26,15 +26,6 @@ mod mutex_shim {
 pub use mutex_shim::{ShimMutex as Mutex, MutexGuard};
 
 #[cfg(not(feature = "std"))]
-pub use spin::Once as OnceLock;
-#[rustversion::before(1.70)]
-#[cfg(feature = "std")]
-pub use spin::Once as OnceLock;
-#[rustversion::since(1.70)]
-#[cfg(feature = "std")]
-pub use std::sync::OnceLock;
-
-#[cfg(not(feature = "std"))]
 pub use spin::Lazy as LazyLock;
 #[rustversion::before(1.80)]
 #[cfg(feature = "std")]

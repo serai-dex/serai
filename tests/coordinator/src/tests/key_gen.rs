@@ -6,10 +6,12 @@ use std::{
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{ff::Field, GroupEncoding},
-  Ciphersuite, Ristretto, Secp256k1,
+  Ciphersuite,
 };
+use ciphersuite_kp256::Secp256k1;
 use dkg::ThresholdParams;
 
 use serai_client::{

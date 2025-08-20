@@ -3,7 +3,8 @@ pub(crate) use std::{
   collections::HashMap,
 };
 
-pub(crate) use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+pub(crate) use ciphersuite::{group::GroupEncoding, Ciphersuite};
 pub(crate) use schnorr_signatures::SchnorrSignature;
 
 pub(crate) use serai_primitives::ExternalNetworkId;

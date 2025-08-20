@@ -7,9 +7,10 @@ use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng, OsRng};
 use futures_util::{task::Poll, poll};
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{ff::Field, GroupEncoding},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 
 use sp_application_crypto::sr25519;

@@ -11,12 +11,13 @@ use rand_chacha::ChaCha12Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{
     GroupEncoding,
     ff::{Field, PrimeField},
   },
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 use schnorr::{
   SchnorrSignature,

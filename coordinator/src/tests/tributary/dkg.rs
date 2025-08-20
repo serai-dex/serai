@@ -4,7 +4,8 @@ use std::collections::HashMap;
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use frost::Participant;
 
 use sp_runtime::traits::Verify;

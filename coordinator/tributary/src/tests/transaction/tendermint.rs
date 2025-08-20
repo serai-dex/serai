@@ -3,7 +3,8 @@ use std::sync::Arc;
 use zeroize::Zeroizing;
 use rand::{RngCore, rngs::OsRng};
 
-use ciphersuite::{Ristretto, Ciphersuite, group::ff::Field};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{Ciphersuite, group::ff::Field};
 
 use scale::Encode;
 

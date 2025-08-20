@@ -9,7 +9,8 @@ use sp_core::{
   Pair as PairTrait,
 };
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::Ciphersuite;
 use dkg_musig::musig;
 use schnorrkel::Schnorrkel;
 

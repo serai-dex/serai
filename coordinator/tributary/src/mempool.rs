@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::Ciphersuite;
 
 use serai_db::{DbTxn, Db};
 
