@@ -65,7 +65,7 @@ borsh = ["serai-abi/borsh"]
 
 networks = []
 bitcoin = ["networks", "dep:bitcoin"]
-monero = ["networks", "dalek-ff-group", "monero-wallet"]
+monero = ["networks", "dalek-ff-group", "ciphersuite", "monero-wallet"]
 
 # Assumes the default usage is to use Serai as a DEX, which doesn't actually
 # require connecting to a Serai node
