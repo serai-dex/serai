@@ -5,6 +5,8 @@
 #[cfg(not(feature = "std"))]
 #[macro_use]
 extern crate alloc;
+#[allow(unused_imports)]
+use std_shims::prelude::*;
 use std_shims::vec::Vec;
 
 use zeroize::Zeroize;
@@ -175,7 +177,9 @@ fn algorithm(len: usize) -> Algorithm {
 
 /// Performs a multiexponentiation, automatically selecting the optimal algorithm based on the
 /// amount of pairs.
-pub fn multiexp<G: Group<Scalar: PrimeFieldBits + Zeroize>>(pairs: &[(G::Scalar, G)]) -> G {
+pub fn multiexp<G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>(
+  pairs: &[(G::Scalar, G)],
+) -> G {
   match algorithm(pairs.len()) {
     Algorithm::Null => Group::identity(),
     Algorithm::Single => pairs[0].1 * pairs[0].0,

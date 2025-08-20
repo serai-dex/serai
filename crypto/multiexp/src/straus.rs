@@ -24,12 +24,12 @@ fn prep_tables<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<G>> {
 
 // Straus's algorithm for multiexponentiation, as published in The American Mathematical Monthly
 // DOI: 10.2307/2310929
-pub(crate) fn straus<G: Group<Scalar: PrimeFieldBits + Zeroize>>(
+pub(crate) fn straus<G: Zeroize + Group<Scalar: PrimeFieldBits>>(
   pairs: &[(G::Scalar, G)],
   window: u8,
 ) -> G {
   let mut groupings = prep_bits(pairs, window);
-  let tables = prep_tables(pairs, window);
+  let mut tables = prep_tables(pairs, window);
 
   let mut res = G::identity();
   for b in (0 .. groupings[0].len()).rev() {
@@ -45,6 +45,7 @@ pub(crate) fn straus<G: Group<Scalar: PrimeFieldBits + Zeroize>>(
   }
 
   groupings.zeroize();
+  tables.zeroize();
   res
 }
 
