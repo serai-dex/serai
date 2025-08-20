@@ -17,7 +17,7 @@ use crypto_bigint::{
   impl_modulus,
 };
 
-use group::ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
+use group::ff::{Field, PrimeField, FieldBits, PrimeFieldBits, FromUniformBytes};
 
 use crate::{u8_from_bool, constant_time, math_op, math};
 
@@ -308,6 +308,12 @@ impl FieldElement {
     r.conditional_negate(r.is_odd());
 
     (correct_sign | flipped_sign, r)
+  }
+}
+
+impl FromUniformBytes<64> for FieldElement {
+  fn from_uniform_bytes(bytes: &[u8; 64]) -> Self {
+    Self::wide_reduce(*bytes)
   }
 }
 
