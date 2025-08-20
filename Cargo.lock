@@ -8510,6 +8510,7 @@ dependencies = [
  "blake2",
  "borsh",
  "ciphersuite",
+ "ciphersuite-kp256",
  "const-hex",
  "dalek-ff-group",
  "dkg-pedpop",
