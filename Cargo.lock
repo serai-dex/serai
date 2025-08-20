@@ -1527,7 +1527,7 @@ dependencies = [
 
 [[package]]
 name = "ciphersuite"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "dalek-ff-group",
  "digest 0.10.7",
@@ -1980,7 +1980,7 @@ dependencies = [
 
 [[package]]
 name = "dalek-ff-group"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "crypto-bigint",
  "curve25519-dalek",

@@ -30,7 +30,7 @@ use dalek::{
 pub use constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
 
 use group::{
-  ff::{Field, PrimeField, FieldBits, PrimeFieldBits},
+  ff::{Field, PrimeField, FieldBits, PrimeFieldBits, FromUniformBytes},
   Group, GroupEncoding,
   prime::PrimeGroup,
 };
@@ -319,6 +319,12 @@ impl PrimeFieldBits for Scalar {
 
   fn char_le_bits() -> FieldBits<Self::ReprBits> {
     BASEPOINT_ORDER.to_bytes().into()
+  }
+}
+
+impl FromUniformBytes<64> for Scalar {
+  fn from_uniform_bytes(bytes: &[u8; 64]) -> Self {
+    Self::from_bytes_mod_order_wide(bytes)
   }
 }
 
