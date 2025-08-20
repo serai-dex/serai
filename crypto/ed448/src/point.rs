@@ -50,11 +50,23 @@ fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
 }
 
 /// Ed448 point.
-#[derive(Clone, Copy, Debug, Zeroize)]
+#[derive(Clone, Copy, Debug)]
 pub struct Point {
   x: FieldElement,
   y: FieldElement,
   z: FieldElement,
+}
+
+impl Zeroize for Point {
+  fn zeroize(&mut self) {
+    self.x.zeroize();
+    self.y.zeroize();
+    self.z.zeroize();
+    let identity = Self::identity();
+    self.x = identity.x;
+    self.y = identity.y;
+    self.z = identity.z;
+  }
 }
 
 const G: Point = Point { x: G_X, y: G_Y, z: FieldElement::ONE };

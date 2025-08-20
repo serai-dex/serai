@@ -4827,7 +4827,7 @@ dependencies = [
 
 [[package]]
 name = "minimal-ed448"
-version = "0.4.1"
+version = "0.4.2"
 dependencies = [
  "ciphersuite",
  "crypto-bigint",
