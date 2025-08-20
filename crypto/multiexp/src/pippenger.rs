@@ -25,13 +25,14 @@ pub(crate) fn pippenger<G: Zeroize + Group<Scalar: PrimeFieldBits>>(
     for p in 0 .. bits.len() {
       buckets[usize::from(bits[p][n])] += pairs[p].1;
     }
-    buckets.zeroize();
 
     let mut intermediate_sum = G::identity();
     for b in (1 .. buckets.len()).rev() {
       intermediate_sum += buckets[b];
       res += intermediate_sum;
     }
+
+    buckets.zeroize();
   }
 
   bits.zeroize();

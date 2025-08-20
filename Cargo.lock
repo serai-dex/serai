@@ -2705,7 +2705,6 @@ dependencies = [
  "merlin",
  "sha2",
  "std-shims",
- "subtle",
  "zeroize",
 ]
 
