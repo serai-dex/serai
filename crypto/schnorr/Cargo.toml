@@ -1,6 +1,6 @@
 [package]
 name = "schnorr-signatures"
-version = "0.5.1"
+version = "0.5.2"
 description = "Minimal Schnorr signatures crate hosting common code"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/schnorr"
@@ -39,5 +39,6 @@ dalek-ff-group = { path =  "../dalek-ff-group" }
 ciphersuite = { path = "../ciphersuite", features = ["ed25519"] }
 
 [features]
+aggregate = []
 std = ["std-shims/std", "rand_core/std", "zeroize/std", "transcript/std", "ciphersuite/std", "multiexp/std"]
 default = ["std"]

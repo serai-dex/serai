@@ -9,10 +9,9 @@ use ciphersuite::{
 };
 use multiexp::BatchVerifier;
 
-use crate::{
-  SchnorrSignature,
-  aggregate::{SchnorrAggregator, SchnorrAggregate},
-};
+use crate::SchnorrSignature;
+#[cfg(feature = "aggregate")]
+use crate::aggregate::{SchnorrAggregator, SchnorrAggregate};
 
 mod rfc8032;
 
@@ -77,6 +76,7 @@ pub(crate) fn batch_verify<C: Ciphersuite>() {
   }
 }
 
+#[cfg(feature = "aggregate")]
 pub(crate) fn aggregate<C: Ciphersuite>() {
   const DST: &[u8] = b"Schnorr Aggregator Test";
 
@@ -117,5 +117,6 @@ fn test() {
   sign::<Ed25519>();
   verify::<Ed25519>();
   batch_verify::<Ed25519>();
+  #[cfg(feature = "aggregate")]
   aggregate::<Ed25519>();
 }
