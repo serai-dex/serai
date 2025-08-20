@@ -1,13 +1,13 @@
 [package]
 name = "flexible-transcript"
-version = "0.3.3"
+version = "0.3.4"
 description = "A simple transcript trait definition, along with viable options"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/transcript"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["transcript"]
 edition = "2021"
-rust-version = "1.73"
+rust-version = "1.66"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -17,7 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-rustversion = "1"
+std-shims = { path = "../../common/std-shims", version = "0.1.4", default-features = false }
 
 subtle = { version = "^2.4", default-features = false }
 zeroize = { version = "^1.5", default-features = false }
@@ -32,8 +32,7 @@ sha2 = { version = "0.10", default-features = false }
 blake2 = { version = "0.10", default-features = false }
 
 [features]
-std = ["subtle/std", "zeroize/std", "digest/std", "blake2?/std", "merlin?/std"]
+std = ["std-shims/std", "subtle/std", "zeroize/std", "digest/std", "blake2?/std", "merlin?/std"]
 recommended = ["blake2"]
-merlin = ["dep:merlin"]
 tests = []
 default = ["std"]

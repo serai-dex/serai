@@ -2698,13 +2698,13 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "flexible-transcript"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "blake2",
  "digest 0.10.7",
  "merlin",
- "rustversion",
  "sha2",
+ "std-shims",
  "subtle",
  "zeroize",
 ]

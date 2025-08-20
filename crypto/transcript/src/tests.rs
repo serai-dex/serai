@@ -1,6 +1,8 @@
 use crate::Transcript;
 
 /// Test the sanity of a transcript.
+///
+/// This will panic if sanity checks fail.
 pub fn test_transcript<T: Transcript<Challenge: PartialEq>>() {
   // Ensure distinct names cause distinct challenges
   {

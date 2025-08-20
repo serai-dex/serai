@@ -2,6 +2,9 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
 
+#[allow(unused_imports)]
+use std_shims::prelude::*;
+
 use zeroize::Zeroize;
 
 use digest::{
@@ -159,33 +162,10 @@ where
     // These writes may be optimized out if they're never read
     // Attempt to get them marked as read
 
-    #[rustversion::since(1.66)]
     fn mark_read<D: Send + Clone + SecureDigest>(transcript: &DigestTranscript<D>) {
       // Just get a challenge from the state
       let mut challenge = core::hint::black_box(transcript.0.clone().finalize());
       challenge.as_mut().zeroize();
-    }
-
-    #[rustversion::before(1.66)]
-    fn mark_read<D: Send + Clone + SecureDigest>(transcript: &mut DigestTranscript<D>) {
-      // Get a challenge
-      let challenge = transcript.0.clone().finalize();
-
-      // Attempt to use subtle's, non-exposed black_box function, by creating a Choice from this
-      // challenge
-
-      let mut read = 0;
-      for byte in challenge.as_ref() {
-        read ^= byte;
-      }
-      challenge.as_mut().zeroize();
-
-      // Since this Choice isn't further read, its creation may be optimized out, including its
-      // internal black_box
-      // This remains our best attempt
-      let mut choice = bool::from(subtle::Choice::from(read >> 7));
-      read.zeroize();
-      choice.zeroize();
     }
 
     mark_read(self)
