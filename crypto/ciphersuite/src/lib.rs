@@ -3,11 +3,11 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::fmt::Debug;
+#[cfg(any(feature = "alloc", feature = "std"))]
 #[allow(unused_imports)]
-use std_shims::{
-  prelude::*,
-  io::{self, Read},
-};
+use std_shims::prelude::*;
+#[cfg(any(feature = "alloc", feature = "std"))]
+use std_shims::io::{self, Read};
 
 use rand_core::{RngCore, CryptoRng};
 
