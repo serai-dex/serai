@@ -230,12 +230,6 @@ impl FieldElement {
     FieldElement(reduce(U512::from_le_bytes(value)))
   }
 
-  /// Interpret the value as a little-endian integer, square it, and reduce it into a FieldElement.
-  pub fn from_square(value: [u8; 32]) -> FieldElement {
-    let value = U256::from_le_bytes(value);
-    FieldElement(reduce(U512::from(value.mul_wide(&value))))
-  }
-
   /// Perform an exponentiation.
   pub fn pow(&self, other: FieldElement) -> FieldElement {
     let mut table = [FieldElement::ONE; 16];

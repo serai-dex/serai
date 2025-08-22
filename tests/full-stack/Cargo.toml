@@ -27,8 +27,8 @@ rand_core = { version = "0.6", default-features = false }
 curve25519-dalek = { version = "4", features = ["rand_core"] }
 
 bitcoin-serai = { path = "../../networks/bitcoin" }
-monero-simple-request-rpc = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a74f41c2270707e340a9cb57fcd97a762d04975b" }
-monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a74f41c2270707e340a9cb57fcd97a762d04975b" }
+monero-simple-request-rpc = { git = "https://github.com/monero-oxide/monero-oxide", rev = "32e6b5fe5ba9e1ea3e68da882550005122a11d22" }
+monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "32e6b5fe5ba9e1ea3e68da882550005122a11d22" }
 
 scale = { package = "parity-scale-codec", version = "3" }
 serde = "1"
