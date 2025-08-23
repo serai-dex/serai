@@ -33,7 +33,6 @@ members = [
 
   "crypto/multiexp",
   "crypto/schnorr",
-  "crypto/dleq",
 
   "crypto/evrf/secq256k1",
   "crypto/evrf/embedwards25519",
@@ -41,9 +40,7 @@ members = [
   "crypto/dkg",
   "crypto/dkg/recovery",
   "crypto/dkg/dealer",
-  "crypto/dkg/promote",
   "crypto/dkg/musig",
-  "crypto/dkg/pedpop",
   "crypto/dkg/evrf",
   "crypto/frost",
   "crypto/schnorrkel",

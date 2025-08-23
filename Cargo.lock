@@ -1563,15 +1563,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "block-padding"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8894febbff9f758034a5b8e12d87918f56dfc64a8e1fe757d65e29041538d93"
-dependencies = [
- "generic-array 0.14.7",
-]
-
-[[package]]
 name = "bls12_381"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2802,62 +2793,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "dkg-pedpop"
-version = "0.6.0"
-dependencies = [
- "chacha20",
- "ciphersuite 0.4.2",
- "dalek-ff-group",
- "dkg",
- "dleq",
- "flexible-transcript",
- "multiexp",
- "rand_core 0.6.4",
- "schnorr-signatures",
- "thiserror 2.0.16",
- "zeroize",
-]
-
-[[package]]
-name = "dkg-promote"
-version = "0.6.1"
-dependencies = [
- "ciphersuite 0.4.2",
- "dalek-ff-group",
- "dkg",
- "dkg-recovery",
- "dleq",
- "flexible-transcript",
- "rand_core 0.6.4",
- "thiserror 2.0.16",
- "zeroize",
-]
-
-[[package]]
 name = "dkg-recovery"
 version = "0.6.0"
 dependencies = [
  "ciphersuite 0.4.2",
  "dkg",
- "thiserror 2.0.16",
- "zeroize",
-]
-
-[[package]]
-name = "dleq"
-version = "0.4.1"
-dependencies = [
- "blake2",
- "dalek-ff-group",
- "digest 0.10.7",
- "ff",
- "flexible-transcript",
- "group",
- "hex-literal",
- "k256",
- "multiexp",
- "rand_core 0.6.4",
- "rustversion",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -4574,7 +4514,6 @@ version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
 dependencies = [
- "block-padding",
  "generic-array 0.14.7",
 ]
 
@@ -10259,7 +10198,6 @@ dependencies = [
  "ciphersuite 0.4.2",
  "dalek-ff-group",
  "dkg",
- "dleq",
  "embedwards25519",
  "flexible-transcript",
  "minimal-ed448",

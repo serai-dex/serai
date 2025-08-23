@@ -9,7 +9,6 @@ pub use ciphersuite;
 
 pub use multiexp;
 
-pub use dleq;
 pub use schnorr_signatures;
 
 pub use secq256k1;
