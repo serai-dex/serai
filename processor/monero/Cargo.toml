@@ -26,12 +26,12 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
-ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std", "ed25519"] }
-dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "evrf-ed25519"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std", "ed25519"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
 
-monero-wallet = { path = "../../networks/monero/wallet", default-features = false, features = ["std", "multisig"] }
-monero-simple-request-rpc = { path = "../../networks/monero/rpc/simple-request", default-features = false }
+monero-wallet = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e", default-features = false, features = ["std", "multisig"] }
+monero-simple-request-rpc = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e", default-features = false }
 
 serai-client = { path = "../../substrate/client", default-features = false, features = ["monero"] }
 

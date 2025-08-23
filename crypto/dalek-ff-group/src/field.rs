@@ -17,7 +17,7 @@ use crypto_bigint::{
   impl_modulus,
 };
 
-use group::ff::{Field, PrimeField, FieldBits, PrimeFieldBits};
+use group::ff::{Field, PrimeField, FieldBits, PrimeFieldBits, FromUniformBytes};
 
 use crate::{u8_from_bool, constant_time, math_op, math};
 
@@ -36,6 +36,7 @@ type ResidueType = Residue<FieldModulus, { FieldModulus::LIMBS }>;
 
 /// A constant-time implementation of the Ed25519 field.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug, Zeroize)]
+#[repr(transparent)]
 pub struct FieldElement(ResidueType);
 
 // Square root of -1.
@@ -216,10 +217,18 @@ impl PrimeFieldBits for FieldElement {
 }
 
 impl FieldElement {
-  /// Interpret the value as a little-endian integer, square it, and reduce it into a FieldElement.
-  pub fn from_square(value: [u8; 32]) -> FieldElement {
-    let value = U256::from_le_bytes(value);
-    FieldElement(reduce(U512::from(value.mul_wide(&value))))
+  /// Create a FieldElement from a `crypto_bigint::U256`.
+  ///
+  /// This will reduce the `U256` by the modulus, into a member of the field.
+  pub const fn from_u256(u256: &U256) -> Self {
+    FieldElement(Residue::new(u256))
+  }
+
+  /// Create a `FieldElement` from the reduction of a 512-bit number.
+  ///
+  /// The bytes are interpreted in little-endian format.
+  pub fn wide_reduce(value: [u8; 64]) -> Self {
+    FieldElement(reduce(U512::from_le_bytes(value)))
   }
 
   /// Perform an exponentiation.
@@ -294,6 +303,12 @@ impl FieldElement {
     r.conditional_negate(r.is_odd());
 
     (correct_sign | flipped_sign, r)
+  }
+}
+
+impl FromUniformBytes<64> for FieldElement {
+  fn from_uniform_bytes(bytes: &[u8; 64]) -> Self {
+    Self::wide_reduce(*bytes)
   }
 }
 

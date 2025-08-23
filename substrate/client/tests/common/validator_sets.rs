@@ -11,8 +11,9 @@ use sp_core::{
   Pair as PairTrait,
 };
 
-use ciphersuite::{Ciphersuite, Ristretto};
-use frost::dkg::musig::musig;
+use dalek_ff_group::Ristretto;
+use ciphersuite::Ciphersuite;
+use dkg_musig::musig;
 use schnorrkel::Schnorrkel;
 
 use serai_client::{
@@ -49,8 +50,7 @@ pub async fn set_keys(
     assert_eq!(Ristretto::generator() * secret_key, pub_keys[i]);
 
     threshold_keys.push(
-      musig::<Ristretto>(&musig_context(set.into()), &Zeroizing::new(secret_key), &pub_keys)
-        .unwrap(),
+      musig::<Ristretto>(musig_context(set.into()), Zeroizing::new(secret_key), &pub_keys).unwrap(),
     );
   }
 

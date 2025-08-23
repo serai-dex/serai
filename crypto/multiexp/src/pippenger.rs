@@ -7,7 +7,7 @@ use crate::prep_bits;
 
 // Pippenger's algorithm for multiexponentiation, as published in the SIAM Journal on Computing
 // DOI: 10.1137/0209022
-pub(crate) fn pippenger<G: Group<Scalar: PrimeFieldBits>>(
+pub(crate) fn pippenger<G: Zeroize + Group<Scalar: PrimeFieldBits>>(
   pairs: &[(G::Scalar, G)],
   window: u8,
 ) -> G {
@@ -31,6 +31,8 @@ pub(crate) fn pippenger<G: Group<Scalar: PrimeFieldBits>>(
       intermediate_sum += buckets[b];
       res += intermediate_sum;
     }
+
+    buckets.zeroize();
   }
 
   bits.zeroize();

@@ -49,17 +49,24 @@ macro_rules! serai_test {
         test.provide_container(composition);
         test.run_async(|ops| async move {
           // Sleep until the Substrate RPC starts
-          let serai_rpc = ops.handle(handle).host_port(9944).unwrap();
-          let serai_rpc = format!("http://{}:{}", serai_rpc.0, serai_rpc.1);
-          // Bound execution to 60 seconds
-          for _ in 0 .. 60 {
+          let mut ticks = 0;
+          let serai_rpc = loop {
+            // Bound execution to 60 seconds
+            if ticks > 60 {
+              panic!("Serai node didn't start within 60 seconds");
+            }
             tokio::time::sleep(core::time::Duration::from_secs(1)).await;
+            ticks += 1;
+
+            let Some(serai_rpc) = ops.handle(handle).host_port(9944) else { continue };
+            let serai_rpc = format!("http://{}:{}", serai_rpc.0, serai_rpc.1);
+
             let Ok(client) = Serai::new(serai_rpc.clone()).await else { continue };
             if client.latest_finalized_block_hash().await.is_err() {
               continue;
             }
-            break;
-          }
+            break serai_rpc;
+          };
           #[allow(clippy::redundant_closure_call)]
           $test(Serai::new(serai_rpc).await.unwrap()).await;
         }).await;

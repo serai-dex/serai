@@ -7,13 +7,15 @@ runs:
     - name: Remove unused packages
       shell: bash
       run: |
-        sudo apt remove -y "*msbuild*" "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
+        sudo apt remove -y "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
         sudo apt remove -y "*nodejs*" "*npm*" "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
         sudo apt remove -y "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
+
+        sudo apt remove -y --allow-remove-essential -f shim-signed *python3*
+        # This removal command requires the prior removals due to unmet dependencies otherwise
         sudo apt remove -y "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
-        sudo apt autoremove -y
-        sudo apt clean
-        docker system prune -a --volumes
+        # Reinstall python3 as a general dependency of a functional operating system
+        sudo apt install python3
       if: runner.os == 'Linux'
 
     - name: Remove unused packages
@@ -41,9 +43,34 @@ runs:
     - name: Install solc
       shell: bash
       run: |
-        cargo install svm-rs
+        cargo +1.89 install svm-rs --version =0.5.18
         svm install 0.8.26
         svm use 0.8.26
+
+    - name: Remove preinstalled Docker
+      shell: bash
+      run: |
+        docker system prune -a --volumes
+        sudo apt remove -y *docker*
+        # Install uidmap which will be required for the explicitly installed Docker
+        sudo apt install uidmap
+      if: runner.os == 'Linux'
+
+    - name: Update system dependencies
+      shell: bash
+      run: |
+        sudo apt update -y
+        sudo apt upgrade -y
+        sudo apt autoremove -y
+        sudo apt clean
+      if: runner.os == 'Linux'
+
+    - name: Install rootless Docker
+      uses: docker/setup-docker-action@b60f85385d03ac8acfca6d9996982511d8620a19
+      with:
+        rootless: true
+        set-host: true
+      if: runner.os == 'Linux'
 
     # - name: Cache Rust
     #   uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43

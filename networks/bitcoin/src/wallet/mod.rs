@@ -26,7 +26,7 @@ use bitcoin::{hashes::Hash, consensus::encode::Decodable, TapTweakHash};
 
 use crate::crypto::x_only;
 #[cfg(feature = "std")]
-use crate::crypto::make_even;
+use crate::crypto::needs_negation;
 
 #[cfg(feature = "std")]
 mod send;
@@ -39,11 +39,11 @@ pub use send::*;
 /// from being spent via a script. To have keys which have spendable script paths, further offsets
 /// from this position must be used.
 ///
-/// After adding an unspendable script path, the key is incremented until its even. This means the
-/// existence of the unspendable script path may not provable, without an understanding of the
-/// algorithm used here.
+/// After adding an unspendable script path, the key is negated if odd.
+///
+/// This has a neligible probability of returning keys whose group key is the point at infinity.
 #[cfg(feature = "std")]
-pub fn tweak_keys(keys: &ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
+pub fn tweak_keys(keys: ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
   // Adds the unspendable script path per
   // https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki#cite_note-23
   let keys = {
@@ -64,11 +64,14 @@ pub fn tweak_keys(keys: &ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
     )))
   };
 
-  // This doesn't risk re-introducing a script path as you'd have to find a preimage for the tweak
-  // hash with whatever increment, or manipulate the key so that the tweak hash and increment
-  // equals the desired offset, yet manipulating the key would change the tweak hash
-  let (_, offset) = make_even(keys.group_key());
-  keys.offset(Scalar::from(offset))
+  let needs_negation = needs_negation(&keys.group_key());
+  keys
+    .scale(<_ as subtle::ConditionallySelectable>::conditional_select(
+      &Scalar::ONE,
+      &-Scalar::ONE,
+      needs_negation,
+    ))
+    .expect("scaling keys by 1 or -1 yet interpreted as 0?")
 }
 
 /// Return the Taproot address payload for a public key.

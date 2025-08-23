@@ -22,7 +22,7 @@ flexible-transcript = { path = "../../crypto/transcript", default-features = fal
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false }
 minimal-ed448 = { path = "../../crypto/ed448", default-features = false }
 
-ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc", "secp256k1", "p256", "ed25519", "ristretto", "ed448"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
 
 multiexp = { path = "../../crypto/multiexp", default-features = false, features = ["batch"] }
 
@@ -31,15 +31,9 @@ schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
 
 secq256k1 = { path = "../../crypto/evrf/secq256k1", default-features = false }
 embedwards25519 = { path = "../../crypto/evrf/embedwards25519", default-features = false }
-generalized-bulletproofs = { path = "../../crypto/evrf/generalized-bulletproofs", default-features = false }
-generalized-bulletproofs-circuit-abstraction = { path = "../../crypto/evrf/circuit-abstraction", default-features = false }
-ec-divisors = { path = "../../crypto/evrf/divisors", default-features = false }
-generalized-bulletproofs-ec-gadgets = { path = "../../crypto/evrf/ec-gadgets", default-features = false }
 
 dkg = { path = "../../crypto/dkg", default-features = false }
 # modular-frost = { path = "../../crypto/frost", default-features = false }
 # frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }
 
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["hazmat"] }
-
-monero-wallet = { path = "../../networks/monero/wallet", default-features = false, features = ["compile-time-generators"] }

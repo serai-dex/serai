@@ -1,9 +1,11 @@
 use std::{sync::Arc, io, collections::HashMap, fmt::Debug};
 
 use blake2::{Digest, Blake2s256};
+
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{ff::Field, Group},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 use schnorr::SchnorrSignature;
 

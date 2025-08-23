@@ -9,12 +9,10 @@ use transcript::{Transcript, RecommendedTranscript};
 
 use ciphersuite::group::{ff::Field, Group, GroupEncoding};
 
-pub use dkg::tests::{key_gen, recover_key};
-
 use crate::{
   Curve, Participant, ThresholdView, ThresholdKeys, FrostError,
   algorithm::Algorithm,
-  tests::{algorithm_machines, sign},
+  tests::{key_gen, algorithm_machines, sign},
 };
 
 #[derive(Clone)]

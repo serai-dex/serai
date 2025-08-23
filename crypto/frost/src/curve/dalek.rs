@@ -16,7 +16,7 @@ macro_rules! dalek_curve {
     $CONTEXT: literal,
     $chal: literal
   ) => {
-    pub use ciphersuite::$Curve;
+    pub use dalek_ff_group::$Curve;
 
     impl Curve for $Curve {
       const CONTEXT: &'static [u8] = $CONTEXT;

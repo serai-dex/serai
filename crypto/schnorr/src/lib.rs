@@ -25,6 +25,7 @@ use ciphersuite::{
 use multiexp::{multiexp_vartime, BatchVerifier};
 
 /// Half-aggregation from <https://eprint.iacr.org/2021/350>.
+#[cfg(feature = "aggregate")]
 pub mod aggregate;
 
 #[cfg(test)]

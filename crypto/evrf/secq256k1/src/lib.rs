@@ -2,6 +2,8 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[allow(unused_imports)]
+use std_shims::prelude::*;
 #[cfg(any(feature = "alloc", feature = "std"))]
 use std_shims::io::{self, Read};
 
@@ -37,10 +39,6 @@ impl ciphersuite::Ciphersuite for Secq256k1 {
     Point::generator()
   }
 
-  fn reduce_512(scalar: [u8; 64]) -> Self::F {
-    Scalar::wide_reduce(scalar)
-  }
-
   fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
     use blake2::Digest;
     Scalar::wide_reduce(Self::H::digest([dst, data].concat()).as_slice().try_into().unwrap())
@@ -57,7 +55,7 @@ impl ciphersuite::Ciphersuite for Secq256k1 {
     reader.read_exact(encoding.as_mut())?;
 
     let point = Option::<Self::G>::from(Self::G::from_bytes(&encoding))
-      .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "invalid point"))?;
+      .ok_or_else(|| io::Error::other("invalid point"))?;
     Ok(point)
   }
 }

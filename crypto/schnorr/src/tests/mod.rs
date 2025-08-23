@@ -3,16 +3,16 @@ use core::ops::Deref;
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
+use dalek_ff_group::Ed25519;
 use ciphersuite::{
   group::{ff::Field, Group},
-  Ciphersuite, Ed25519,
+  Ciphersuite,
 };
 use multiexp::BatchVerifier;
 
-use crate::{
-  SchnorrSignature,
-  aggregate::{SchnorrAggregator, SchnorrAggregate},
-};
+use crate::SchnorrSignature;
+#[cfg(feature = "aggregate")]
+use crate::aggregate::{SchnorrAggregator, SchnorrAggregate};
 
 mod rfc8032;
 
@@ -77,6 +77,7 @@ pub(crate) fn batch_verify<C: Ciphersuite>() {
   }
 }
 
+#[cfg(feature = "aggregate")]
 pub(crate) fn aggregate<C: Ciphersuite>() {
   const DST: &[u8] = b"Schnorr Aggregator Test";
 
@@ -117,5 +118,6 @@ fn test() {
   sign::<Ed25519>();
   verify::<Ed25519>();
   batch_verify::<Ed25519>();
+  #[cfg(feature = "aggregate")]
   aggregate::<Ed25519>();
 }

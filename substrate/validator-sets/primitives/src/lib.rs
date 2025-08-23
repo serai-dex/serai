@@ -5,7 +5,8 @@ use core::time::Duration;
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
@@ -121,8 +122,13 @@ impl Zeroize for KeyPair {
 }
 
 /// The MuSig context for a validator set.
-pub fn musig_context(set: ValidatorSet) -> Vec<u8> {
-  (b"ValidatorSets-musig_key".as_ref(), set).encode()
+pub fn musig_context(set: ValidatorSet) -> [u8; 32] {
+  let mut context = [0; 32];
+  const DST: &[u8] = b"ValidatorSets-musig_key";
+  context[.. DST.len()].copy_from_slice(DST);
+  let set = set.encode();
+  context[DST.len() .. (DST.len() + set.len())].copy_from_slice(&set);
+  context
 }
 
 /// The MuSig public key for a validator set.
@@ -136,7 +142,7 @@ pub fn musig_key(set: ValidatorSet, set_keys: &[Public]) -> Public {
         .expect("invalid participant"),
     );
   }
-  Public(dkg::musig::musig_key::<Ristretto>(&musig_context(set), &keys).unwrap().to_bytes())
+  Public(dkg_musig::musig_key_vartime::<Ristretto>(musig_context(set), &keys).unwrap().to_bytes())
 }
 
 /// The message for the `set_keys` signature.

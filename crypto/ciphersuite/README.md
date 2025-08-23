@@ -21,6 +21,8 @@ Their `hash_to_F` is the
 [IETF's hash to curve](https://www.ietf.org/archive/id/draft-irtf-cfrg-hash-to-curve-16.html),
 yet applied to their scalar field.
 
+Please see the [`ciphersuite-kp256`](https://docs.rs/ciphersuite-kp256) crate for more info.
+
 ### Ed25519/Ristretto
 
 Ed25519/Ristretto are offered via
@@ -33,6 +35,8 @@ the draft
 [RFC-RISTRETTO](https://www.ietf.org/archive/id/draft-irtf-cfrg-ristretto255-decaf448-05.html).
 The domain-separation tag is naively prefixed to the message.
 
+Please see the [`dalek-ff-group`](https://docs.rs/dalek-ff-group) crate for more info.
+
 ### Ed448
 
 Ed448 is offered via [minimal-ed448](https://crates.io/crates/minimal-ed448), an
@@ -42,3 +46,5 @@ to its prime-order subgroup.
 Its `hash_to_F` is the wide reduction of SHAKE256, with a 114-byte output, as
 used in [RFC-8032](https://www.rfc-editor.org/rfc/rfc8032). The
 domain-separation tag is naively prefixed to the message.
+
+Please see the [`minimal-ed448`](https://docs.rs/minimal-ed448) crate for more info.

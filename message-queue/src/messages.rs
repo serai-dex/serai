@@ -1,5 +1,6 @@
 use transcript::{Transcript, RecommendedTranscript};
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 

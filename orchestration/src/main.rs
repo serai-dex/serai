@@ -18,12 +18,13 @@ use rand_chacha::ChaCha20Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{
     ff::{Field, PrimeField},
     GroupEncoding,
   },
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
@@ -94,7 +95,7 @@ fn os(os: Os, additional_root: &str, user: &str) -> String {
   match os {
     Os::Alpine => format!(
       r#"
-FROM alpine:latest as image
+FROM alpine:latest AS image
 
 COPY --from=mimalloc-alpine libmimalloc.so /usr/lib
 ENV LD_PRELOAD=libmimalloc.so
@@ -119,7 +120,7 @@ WORKDIR /home/{user}
 
     Os::Debian => format!(
       r#"
-FROM debian:bookworm-slim as image
+FROM debian:bookworm-slim AS image
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
@@ -148,7 +149,7 @@ fn build_serai_service(prelude: &str, release: bool, features: &str, package: &s
 
   format!(
     r#"
-FROM rust:1.80-slim-bookworm as builder
+FROM rust:1.89-slim-bookworm AS builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
@@ -162,7 +163,7 @@ RUN apt install -y pkg-config clang
 RUN apt install -y make protobuf-compiler
 
 # Add the wasm toolchain
-RUN rustup target add wasm32-unknown-unknown
+RUN rustup target add wasm32v1-none
 
 {prelude}
 

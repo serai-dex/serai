@@ -1,13 +1,13 @@
 [package]
 name = "dkg"
-version = "0.5.1"
+version = "0.6.1"
 description = "Distributed key generation over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dkg"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["dkg", "multisig", "threshold", "ff", "group"]
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.66"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -17,82 +17,25 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive", "alloc"] }
+
 thiserror = { version = "2", default-features = false }
-
-rand_core = { version = "0.6", default-features = false }
-
-zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
 
 std-shims = { version = "0.1", path = "../../common/std-shims", default-features = false }
 
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
 
-transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false, features = ["recommended"] }
-chacha20 = { version = "0.9", default-features = false, features = ["zeroize"] }
-
-ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false }
-multiexp = { path = "../multiexp", version = "0.4", default-features = false }
-
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false }
-dleq = { path = "../dleq", version = "^0.4.1", default-features = false }
-
-# eVRF DKG dependencies
-generic-array = { version = "1", default-features = false, features = ["alloc"], optional = true }
-blake2 = { version = "0.10", default-features = false, features = ["std"], optional = true }
-rand_chacha = { version = "0.3", default-features = false, features = ["std"], optional = true }
-generalized-bulletproofs = { path = "../evrf/generalized-bulletproofs", default-features = false, optional = true }
-ec-divisors = { path = "../evrf/divisors", default-features = false, optional = true }
-generalized-bulletproofs-circuit-abstraction = { path = "../evrf/circuit-abstraction", optional = true }
-generalized-bulletproofs-ec-gadgets = { path = "../evrf/ec-gadgets", optional = true }
-
-secq256k1 = { path = "../evrf/secq256k1", optional = true }
-embedwards25519 = { path = "../evrf/embedwards25519", optional = true }
-
-[dev-dependencies]
-rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
-rand = { version = "0.8", default-features = false, features = ["std"] }
-ciphersuite = { path = "../ciphersuite", default-features = false, features = ["ristretto"] }
-generalized-bulletproofs = { path = "../evrf/generalized-bulletproofs", features = ["tests"] }
-ec-divisors = { path = "../evrf/divisors", features = ["pasta"] }
-pasta_curves = { git = "https://github.com/kayabaNerve/pasta_curves", rev = "a46b5be95cacbff54d06aad8d3bbcba42e05d616" }
+ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["alloc"] }
 
 [features]
 std = [
   "thiserror/std",
 
-  "rand_core/std",
-
   "std-shims/std",
 
   "borsh?/std",
 
-  "transcript/std",
-  "chacha20/std",
-
   "ciphersuite/std",
-  "multiexp/std",
-  "multiexp/batch",
-
-  "schnorr/std",
-  "dleq/std",
-  "dleq/serialize"
 ]
 borsh = ["dep:borsh"]
-evrf = [
-  "std",
-
-  "dep:generic-array",
-
-  "dep:blake2",
-  "dep:rand_chacha",
-
-  "dep:generalized-bulletproofs",
-  "dep:ec-divisors",
-  "dep:generalized-bulletproofs-circuit-abstraction",
-  "dep:generalized-bulletproofs-ec-gadgets",
-]
-evrf-secp256k1 = ["evrf", "ciphersuite/secp256k1", "secq256k1"]
-evrf-ed25519 = ["evrf", "ciphersuite/ed25519", "embedwards25519"]
-evrf-ristretto = ["evrf", "ciphersuite/ristretto", "embedwards25519"]
-tests = ["rand_core/getrandom"]
 default = ["std"]

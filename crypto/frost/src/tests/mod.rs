@@ -2,7 +2,8 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng};
 
-pub use dkg::tests::{key_gen, musig_key_gen, recover_key};
+use ciphersuite::Ciphersuite;
+pub use dkg_recovery::recover_key;
 
 use crate::{
   Curve, Participant, ThresholdKeys, FrostError,
@@ -26,6 +27,18 @@ pub const PARTICIPANTS: u16 = 5;
 /// Constant threshold of participants to use when signing.
 pub const THRESHOLD: u16 = ((PARTICIPANTS * 2) / 3) + 1;
 
+/// Create a key, for testing purposes.
+pub fn key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
+  rng: &mut R,
+) -> HashMap<Participant, ThresholdKeys<C>> {
+  let res = dkg_dealer::key_gen::<R, C>(rng, THRESHOLD, PARTICIPANTS).unwrap();
+  assert_eq!(
+    C::generator() * *recover_key(&res.values().cloned().collect::<Vec<_>>()).unwrap(),
+    res.values().next().unwrap().group_key()
+  );
+  res
+}
+
 /// Clone a map without a specific value.
 pub fn clone_without<K: Clone + core::cmp::Eq + core::hash::Hash, V: Clone>(
   map: &HashMap<K, V>,
@@ -37,10 +50,10 @@ pub fn clone_without<K: Clone + core::cmp::Eq + core::hash::Hash, V: Clone>(
 }
 
 /// Spawn algorithm machines for a random selection of signers, each executing the given algorithm.
-pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
+pub fn algorithm_machines_without_clone<R: RngCore, C: Curve, A: Algorithm<C>>(
   rng: &mut R,
-  algorithm: &A,
   keys: &HashMap<Participant, ThresholdKeys<C>>,
+  machines: HashMap<Participant, AlgorithmMachine<C, A>>,
 ) -> HashMap<Participant, AlgorithmMachine<C, A>> {
   let mut included = vec![];
   while included.len() < usize::from(keys[&Participant::new(1).unwrap()].params().t()) {
@@ -54,16 +67,26 @@ pub fn algorithm_machines<R: RngCore, C: Curve, A: Algorithm<C>>(
     included.push(n);
   }
 
-  keys
-    .iter()
-    .filter_map(|(i, keys)| {
-      if included.contains(i) {
-        Some((*i, AlgorithmMachine::new(algorithm.clone(), keys.clone())))
-      } else {
-        None
-      }
-    })
+  machines
+    .into_iter()
+    .filter_map(|(i, machine)| if included.contains(&i) { Some((i, machine)) } else { None })
     .collect()
+}
+
+/// Spawn algorithm machines for a random selection of signers, each executing the given algorithm.
+pub fn algorithm_machines<R: RngCore, C: Curve, A: Clone + Algorithm<C>>(
+  rng: &mut R,
+  algorithm: &A,
+  keys: &HashMap<Participant, ThresholdKeys<C>>,
+) -> HashMap<Participant, AlgorithmMachine<C, A>> {
+  algorithm_machines_without_clone(
+    rng,
+    keys,
+    keys
+      .values()
+      .map(|keys| (keys.params().i(), AlgorithmMachine::new(algorithm.clone(), keys.clone())))
+      .collect(),
+  )
 }
 
 // Run the preprocess step
@@ -165,10 +188,10 @@ pub fn sign_without_caching<R: RngCore + CryptoRng, M: PreprocessMachine>(
 
 /// Execute the signing protocol, randomly caching various machines to ensure they can cache
 /// successfully.
-pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
+pub fn sign_without_clone<R: RngCore + CryptoRng, M: PreprocessMachine>(
   rng: &mut R,
-  params: &<M::SignMachine as SignMachine<M::Signature>>::Params,
   mut keys: HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::Keys>,
+  mut params: HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::Params>,
   machines: HashMap<Participant, M>,
   msg: &[u8],
 ) -> M::Signature {
@@ -183,13 +206,30 @@ pub fn sign<R: RngCore + CryptoRng, M: PreprocessMachine>(
           let cache = machines.remove(&i).unwrap().cache();
           machines.insert(
             i,
-            M::SignMachine::from_cache(params.clone(), keys.remove(&i).unwrap(), cache).0,
+            M::SignMachine::from_cache(params.remove(&i).unwrap(), keys.remove(&i).unwrap(), cache)
+              .0,
           );
         }
       }
     },
     msg,
   )
+}
+
+/// Execute the signing protocol, randomly caching various machines to ensure they can cache
+/// successfully.
+pub fn sign<
+  R: RngCore + CryptoRng,
+  M: PreprocessMachine<SignMachine: SignMachine<M::Signature, Params: Clone>>,
+>(
+  rng: &mut R,
+  params: &<M::SignMachine as SignMachine<M::Signature>>::Params,
+  keys: HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::Keys>,
+  machines: HashMap<Participant, M>,
+  msg: &[u8],
+) -> M::Signature {
+  let params = keys.keys().map(|i| (*i, params.clone())).collect();
+  sign_without_clone(rng, keys, params, machines, msg)
 }
 
 /// Test a basic Schnorr signature with the provided keys.
@@ -211,12 +251,6 @@ pub fn test_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   test_schnorr_with_keys::<_, _, H>(&mut *rng, &keys)
 }
 
-/// Test a basic Schnorr signature, yet with MuSig.
-pub fn test_musig_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
-  let keys = musig_key_gen(&mut *rng);
-  test_schnorr_with_keys::<_, _, H>(&mut *rng, &keys)
-}
-
 /// Test an offset Schnorr signature.
 pub fn test_offset_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   const MSG: &[u8] = b"Hello, World!";
@@ -224,10 +258,11 @@ pub fn test_offset_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &m
   let mut keys = key_gen(&mut *rng);
   let group_key = keys[&Participant::new(1).unwrap()].group_key();
 
+  let scalar = C::F::from(3);
   let offset = C::F::from(5);
-  let offset_key = group_key + (C::generator() * offset);
+  let offset_key = (group_key * scalar) + (C::generator() * offset);
   for keys in keys.values_mut() {
-    *keys = keys.offset(offset);
+    *keys = keys.clone().scale(scalar).unwrap().offset(offset);
     assert_eq!(keys.group_key(), offset_key);
   }
 
@@ -262,7 +297,6 @@ pub fn test_schnorr_blame<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mu
 /// Run a variety of tests against a ciphersuite.
 pub fn test_ciphersuite<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   test_schnorr::<R, C, H>(rng);
-  test_musig_schnorr::<R, C, H>(rng);
   test_offset_schnorr::<R, C, H>(rng);
   test_schnorr_blame::<R, C, H>(rng);
 

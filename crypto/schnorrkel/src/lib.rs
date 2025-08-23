@@ -9,8 +9,11 @@ use zeroize::Zeroizing;
 
 use transcript::{Transcript, MerlinTranscript};
 
-use group::{ff::PrimeField, GroupEncoding};
-use ciphersuite::{Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{
+  group::{ff::PrimeField, GroupEncoding},
+  Ciphersuite,
+};
 use schnorr::SchnorrSignature;
 
 use ::frost::{

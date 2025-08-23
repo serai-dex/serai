@@ -1,7 +1,8 @@
 use std::path::Path;
 
 use zeroize::Zeroizing;
-use ciphersuite::{group::ff::PrimeField, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::ff::PrimeField, Ciphersuite};
 
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 

@@ -4,7 +4,8 @@ use scale::{Encode, Decode, IoReader};
 
 use blake2::{Digest, Blake2s256};
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::Ciphersuite;
 
 use crate::{
   transaction::{Transaction, TransactionKind, TransactionError},

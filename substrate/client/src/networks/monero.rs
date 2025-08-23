@@ -1,6 +1,9 @@
 use core::{str::FromStr, fmt};
 
-use ciphersuite::{Ciphersuite, Ed25519};
+use scale::{Encode, Decode};
+
+use dalek_ff_group::Ed25519;
+use ciphersuite::Ciphersuite;
 
 use monero_address::{Network, AddressType as MoneroAddressType, MoneroAddress};
 

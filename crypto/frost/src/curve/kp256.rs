@@ -11,7 +11,7 @@ macro_rules! kp_curve {
 
     $CONTEXT: literal
   ) => {
-    pub use ciphersuite::$Curve;
+    pub use ciphersuite_kp256::$Curve;
 
     impl Curve for $Curve {
       const CONTEXT: &'static [u8] = $CONTEXT;

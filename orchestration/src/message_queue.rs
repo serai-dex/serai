@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 

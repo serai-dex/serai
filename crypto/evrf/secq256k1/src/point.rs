@@ -376,6 +376,15 @@ impl PrimeGroup for Point {}
 
 impl ec_divisors::DivisorCurve for Point {
   type FieldElement = FieldElement;
+  type XyPoint = ec_divisors::Projective<Self>;
+
+  fn interpolator_for_scalar_mul() -> &'static ec_divisors::Interpolator<Self::FieldElement> {
+    static PRECOMPUTE: std_shims::sync::LazyLock<ec_divisors::Interpolator<FieldElement>> =
+      std_shims::sync::LazyLock::new(|| {
+        ec_divisors::Interpolator::new(usize::try_from(130).unwrap())
+      });
+    &PRECOMPUTE
+  }
 
   fn a() -> Self::FieldElement {
     FieldElement::from(0u64)

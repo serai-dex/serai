@@ -49,7 +49,7 @@ pallet-timestamp = { git = "https://github.com/serai-dex/substrate", default-fea
 
 sp-consensus-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
 
-ciphersuite = { path = "../../../crypto/ciphersuite", features = ["ristretto"] }
+ciphersuite = { path = "../../../crypto/ciphersuite", features = ["std"] }
 frost = { package = "modular-frost", path = "../../../crypto/frost", features = ["tests"] }
 schnorrkel = { path = "../../../crypto/schnorrkel", package = "frost-schnorrkel" }
 
@@ -71,7 +71,7 @@ std = [
   "sp-runtime/std",
   "sp-session/std",
   "sp-staking/std",
-  
+
   "sp-consensus-babe/std",
 
   "frame-system/std",

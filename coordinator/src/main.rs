@@ -4,9 +4,13 @@ use std::{sync::Arc, collections::HashMap, time::Instant};
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, OsRng};
 
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
-  group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite, Ristretto,
+  group::{
+    ff::{Field, PrimeField},
+    GroupEncoding,
+  },
+  Ciphersuite,
 };
 
 use borsh::BorshDeserialize;

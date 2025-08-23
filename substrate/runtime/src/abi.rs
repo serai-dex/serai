@@ -212,7 +212,6 @@ impl TryInto<Call> for RuntimeCall {
         coins::Call::burn_with_instruction { instruction } => {
           serai_abi::coins::Call::burn_with_instruction { instruction }
         }
-        _ => Err(())?,
       }),
       RuntimeCall::LiquidityTokens(call) => Call::LiquidityTokens(match call {
         coins::Call::transfer { to, balance } => {
@@ -266,7 +265,6 @@ impl TryInto<Call> for RuntimeCall {
             send_to: send_to.into(),
           }
         }
-        _ => Err(())?,
       }),
       RuntimeCall::GenesisLiquidity(call) => Call::GenesisLiquidity(match call {
         genesis_liquidity::Call::remove_coin_liquidity { balance } => {
@@ -275,7 +273,6 @@ impl TryInto<Call> for RuntimeCall {
         genesis_liquidity::Call::oraclize_values { values, signature } => {
           serai_abi::genesis_liquidity::Call::oraclize_values { values, signature }
         }
-        _ => Err(())?,
       }),
       RuntimeCall::ValidatorSets(call) => Call::ValidatorSets(match call {
         validator_sets::Call::set_keys { network, key_pair, signature_participants, signature } => {
@@ -304,13 +301,11 @@ impl TryInto<Call> for RuntimeCall {
         validator_sets::Call::claim_deallocation { network, session } => {
           serai_abi::validator_sets::Call::claim_deallocation { network, session }
         }
-        _ => Err(())?,
       }),
       RuntimeCall::InInstructions(call) => Call::InInstructions(match call {
         in_instructions::Call::execute_batch { batch } => {
           serai_abi::in_instructions::Call::execute_batch { batch }
         }
-        _ => Err(())?,
       }),
       RuntimeCall::Signals(call) => Call::Signals(match call {
         signals::Call::register_retirement_signal { in_favor_of } => {
@@ -328,7 +323,6 @@ impl TryInto<Call> for RuntimeCall {
         signals::Call::stand_against { signal_id, for_network } => {
           serai_abi::signals::Call::stand_against { signal_id, for_network }
         }
-        _ => Err(())?,
       }),
       RuntimeCall::Babe(call) => Call::Babe(match call {
         babe::Call::report_equivocation { equivocation_proof, key_owner_proof } => {
@@ -366,7 +360,6 @@ impl TryInto<Call> for RuntimeCall {
         }
         _ => Err(())?,
       }),
-      _ => Err(())?,
     })
   }
 }

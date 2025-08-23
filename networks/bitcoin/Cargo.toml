@@ -1,6 +1,6 @@
 [package]
 name = "bitcoin-serai"
-version = "0.3.0"
+version = "0.4.0"
 description = "A Bitcoin library for FROST-signing transactions"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/networks/bitcoin"
@@ -20,13 +20,14 @@ std-shims = { version = "0.1.1", path = "../../common/std-shims", default-featur
 
 thiserror = { version = "2", default-features = false }
 
+subtle = { version = "2", default-features = false }
 zeroize = { version = "^1.5", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
 bitcoin = { version = "0.32", default-features = false }
 
 k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits"] }
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.8", default-features = false, features = ["secp256k1"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.10", default-features = false, features = ["secp256k1"], optional = true }
 
 hex = { version = "0.4", default-features = false, optional = true }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
@@ -46,6 +47,7 @@ std = [
 
   "thiserror/std",
 
+  "subtle/std",
   "zeroize/std",
   "rand_core/std",
 

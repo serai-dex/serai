@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["serai"]
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.82"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -41,8 +41,9 @@ simple-request = { path = "../../common/request", version = "0.1", optional = tr
 
 bitcoin = { version = "0.32", optional = true }
 
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
 ciphersuite = { path = "../../crypto/ciphersuite", version = "0.4", optional = true }
-monero-address = { path = "../../networks/monero/wallet/address", version = "0.1.0", default-features = false, features = ["std"], optional = true }
+monero-address = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e", version = "0.1.0", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 rand_core = "0.6"
@@ -50,7 +51,9 @@ hex = "0.4"
 
 blake2 = "0.10"
 
-ciphersuite = { path = "../../crypto/ciphersuite", features = ["ristretto", "secp256k1"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
+ciphersuite = { path = "../../crypto/ciphersuite" }
+dkg-musig = { path = "../../crypto/dkg/musig" }
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
 schnorrkel = { path = "../../crypto/schnorrkel", package = "frost-schnorrkel" }
 
@@ -66,7 +69,7 @@ borsh = ["serai-abi/borsh"]
 networks = []
 bitcoin = ["networks", "dep:bitcoin"]
 ethereum = ["networks"]
-monero = ["networks", "ciphersuite/ed25519", "monero-address"]
+monero = ["networks", "dalek-ff-group", "ciphersuite", "monero-address"]
 
 # Assumes the default usage is to use Serai as a DEX, which doesn't actually
 # require connecting to a Serai node

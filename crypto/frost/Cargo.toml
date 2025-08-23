@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.8.1"
+version = "0.10.1"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/frost"
@@ -34,26 +34,31 @@ dalek-ff-group = { path = "../dalek-ff-group", version = "0.4", default-features
 minimal-ed448 = { path = "../ed448", version = "0.4", default-features = false, features = ["std"], optional = true }
 
 ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["std"] }
+ciphersuite-kp256 = { path = "../ciphersuite/kp256", version = "0.4", default-features = false, features = ["std"], optional = true }
 
 multiexp = { path = "../multiexp", version = "0.4", default-features = false, features = ["std", "batch"] }
 
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false, features = ["std"] }
 
-dkg = { path = "../dkg", version = "^0.5.1", default-features = false, features = ["std"] }
+dkg = { path = "../dkg", version = "0.6.1", default-features = false, features = ["std"] }
+dkg-recovery = { path = "../dkg/recovery", version = "0.6", default-features = false, features = ["std"], optional = true }
+dkg-dealer = { path = "../dkg/dealer", version = "0.6", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 hex = "0.4"
 serde_json = { version = "1", default-features = false, features = ["std"] }
 
-dkg = { path = "../dkg", features = ["tests"] }
+dkg = { path = "../dkg", default-features = false, features = ["std"] }
+dkg-recovery = { path = "../dkg/recovery", default-features = false, features = ["std"] }
+dkg-dealer = { path = "../dkg/dealer", default-features = false, features = ["std"] }
 
 [features]
-ed25519 = ["dalek-ff-group", "ciphersuite/ed25519"]
-ristretto = ["dalek-ff-group", "ciphersuite/ristretto"]
+ed25519 = ["dalek-ff-group"]
+ristretto = ["dalek-ff-group"]
 
-secp256k1 = ["ciphersuite/secp256k1"]
-p256 = ["ciphersuite/p256"]
+secp256k1 = ["ciphersuite-kp256"]
+p256 = ["ciphersuite-kp256"]
 
-ed448 = ["minimal-ed448", "ciphersuite/ed448"]
+ed448 = ["minimal-ed448"]
 
-tests = ["hex", "rand_core/getrandom", "dkg/tests"]
+tests = ["hex", "rand_core/getrandom", "dkg-dealer", "dkg-recovery"]

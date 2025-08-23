@@ -5,9 +5,10 @@ use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
 use blake2::{digest::typenum::U32, Digest, Blake2b};
+use dalek_ff_group::Ristretto;
 use ciphersuite::{
-  group::{ff::Field, Group, GroupEncoding},
-  Ciphersuite, Ristretto,
+  group::{Group, GroupEncoding},
+  Ciphersuite,
 };
 use schnorr::SchnorrSignature;
 

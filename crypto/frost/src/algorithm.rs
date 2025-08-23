@@ -25,7 +25,7 @@ pub trait Addendum: Send + Sync + Clone + PartialEq + Debug + WriteAddendum {}
 impl<A: Send + Sync + Clone + PartialEq + Debug + WriteAddendum> Addendum for A {}
 
 /// Algorithm trait usable by the FROST signing machine to produce signatures..
-pub trait Algorithm<C: Curve>: Send + Sync + Clone {
+pub trait Algorithm<C: Curve>: Send + Sync {
   /// The transcript format this algorithm uses. This likely should NOT be the IETF-compatible
   /// transcript included in this crate.
   type Transcript: Sync + Clone + Debug + Transcript;
@@ -135,6 +135,8 @@ pub trait Hram<C: Curve>: Send + Sync + Clone {
 }
 
 /// Schnorr signature algorithm ((R, s) where s = r + cx).
+///
+/// `verify`, `verify_share` must be called after `sign_share` is called.
 #[derive(Clone)]
 pub struct Schnorr<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> {
   transcript: T,

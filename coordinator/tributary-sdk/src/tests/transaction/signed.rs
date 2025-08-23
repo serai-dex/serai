@@ -2,7 +2,8 @@ use rand::rngs::OsRng;
 
 use blake2::{Digest, Blake2s256};
 
-use ciphersuite::{group::ff::Field, Ciphersuite, Ristretto};
+use dalek_ff_group::Ristretto;
+use ciphersuite::{group::ff::Field, Ciphersuite};
 
 use crate::{
   ReadWrite,

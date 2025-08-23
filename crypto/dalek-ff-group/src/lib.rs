@@ -30,7 +30,7 @@ use dalek::{
 pub use constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
 
 use group::{
-  ff::{Field, PrimeField, FieldBits, PrimeFieldBits},
+  ff::{Field, PrimeField, FieldBits, PrimeFieldBits, FromUniformBytes},
   Group, GroupEncoding,
   prime::PrimeGroup,
 };
@@ -38,13 +38,24 @@ use group::{
 mod field;
 pub use field::FieldElement;
 
+mod ciphersuite;
+pub use crate::ciphersuite::{Ed25519, Ristretto};
+
 // Use black_box when possible
 #[rustversion::since(1.66)]
-use core::hint::black_box;
-#[rustversion::before(1.66)]
-fn black_box<T>(val: T) -> T {
-  val
+mod black_box {
+  pub(crate) fn black_box<T>(val: T) -> T {
+    #[allow(clippy::incompatible_msrv)]
+    core::hint::black_box(val)
+  }
 }
+#[rustversion::before(1.66)]
+mod black_box {
+  pub(crate) fn black_box<T>(val: T) -> T {
+    val
+  }
+}
+use black_box::black_box;
 
 fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   let bit_ref = black_box(bit_ref);
@@ -314,6 +325,12 @@ impl PrimeFieldBits for Scalar {
   }
 }
 
+impl FromUniformBytes<64> for Scalar {
+  fn from_uniform_bytes(bytes: &[u8; 64]) -> Self {
+    Self::from_bytes_mod_order_wide(bytes)
+  }
+}
+
 impl Sum<Scalar> for Scalar {
   fn sum<I: Iterator<Item = Scalar>>(iter: I) -> Scalar {
     Self(DScalar::sum(iter))
@@ -351,7 +368,12 @@ macro_rules! dalek_group {
     $BASEPOINT_POINT: ident,
     $BASEPOINT_TABLE: ident
   ) => {
-    /// Wrapper around the dalek Point type. For Ed25519, this is restricted to the prime subgroup.
+    /// Wrapper around the dalek Point type.
+    ///
+    /// All operations will be restricted to a prime-order subgroup (equivalent to the group itself
+    /// in the case of Ristretto). The exposure of the internal element does allow bypassing this
+    /// however, which may lead to undefined/computationally-unsafe behavior, and is entirely at
+    /// the user's risk.
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
     pub struct $Point(pub $DPoint);
     deref_borrow!($Point, $DPoint);

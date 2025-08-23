@@ -32,6 +32,7 @@ jobs:
             -p dalek-ff-group \
             -p minimal-ed448 \
             -p ciphersuite \
+            -p ciphersuite-kp256 \
             -p multiexp \
             -p schnorr-signatures \
             -p dleq \
@@ -40,5 +41,11 @@ jobs:
             -p ec-divisors \
             -p generalized-bulletproofs-ec-gadgets \
             -p dkg \
+            -p dkg-recovery \
+            -p dkg-dealer \
+            -p dkg-promote \
+            -p dkg-musig \
+            -p dkg-pedpop \
+            -p dkg-evrf \
             -p modular-frost \
             -p frost-schnorrkel

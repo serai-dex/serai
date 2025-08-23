@@ -4,6 +4,9 @@
 
 use core::fmt::Debug;
 #[cfg(any(feature = "alloc", feature = "std"))]
+#[allow(unused_imports)]
+use std_shims::prelude::*;
+#[cfg(any(feature = "alloc", feature = "std"))]
 use std_shims::io::{self, Read};
 
 use rand_core::{RngCore, CryptoRng};
@@ -22,25 +25,6 @@ use group::{
 };
 #[cfg(any(feature = "alloc", feature = "std"))]
 use group::GroupEncoding;
-
-#[cfg(feature = "dalek")]
-mod dalek;
-#[cfg(feature = "ristretto")]
-pub use dalek::Ristretto;
-#[cfg(feature = "ed25519")]
-pub use dalek::Ed25519;
-
-#[cfg(feature = "kp256")]
-mod kp256;
-#[cfg(feature = "secp256k1")]
-pub use kp256::Secp256k1;
-#[cfg(feature = "p256")]
-pub use kp256::P256;
-
-#[cfg(feature = "ed448")]
-mod ed448;
-#[cfg(feature = "ed448")]
-pub use ed448::*;
 
 /// Unified trait defining a ciphersuite around an elliptic curve.
 pub trait Ciphersuite:
@@ -61,12 +45,6 @@ pub trait Ciphersuite:
   /// Generator for the group.
   // While group does provide this in its API, privacy coins may want to use a custom basepoint
   fn generator() -> Self::G;
-
-  /// Reduce 512 bits into a uniform scalar.
-  ///
-  /// If 512 bits is insufficient to perform a reduction into a uniform scalar, the ciphersuite
-  /// will perform a hash to sample the necessary bits.
-  fn reduce_512(scalar: [u8; 64]) -> Self::F;
 
   /// Hash the provided domain-separation tag and message to a scalar. Ciphersuites MAY naively
   /// prefix the tag to the message, enabling transpotion between the two. Accordingly, this
