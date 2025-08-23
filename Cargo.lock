@@ -1989,7 +1989,7 @@ dependencies = [
 
 [[package]]
 name = "dalek-ff-group"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "ciphersuite",
  "crypto-bigint",
