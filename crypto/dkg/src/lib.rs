@@ -39,6 +39,19 @@ impl Participant {
   pub const fn to_bytes(&self) -> [u8; 2] {
     self.0.to_le_bytes()
   }
+
+  /// Create an iterator over participant indexes.
+  pub fn iter() -> impl Iterator<Item = Participant> {
+    struct ParticipantIterator(u16);
+    impl Iterator for ParticipantIterator {
+      type Item = Participant;
+      fn next(&mut self) -> Option<Self::Item> {
+        self.0 = self.0.checked_add(1)?;
+        Some(Participant(self.0))
+      }
+    }
+    ParticipantIterator(0)
+  }
 }
 
 impl From<Participant> for u16 {

@@ -31,7 +31,7 @@ rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 # Cryptography
 blake2 = { version = "0.10", default-features = false, features = ["std"] }
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["std"] }
-ec-divisors = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e", default-features = false }
+ec-divisors = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "54da48f27a05fa8656014942919da1dfbab4d8e3", default-features = false }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std", "ristretto"] }

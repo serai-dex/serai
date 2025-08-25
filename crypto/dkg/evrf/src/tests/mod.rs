@@ -5,26 +5,26 @@ use rand_core::OsRng;
 use rand::seq::SliceRandom;
 
 use ciphersuite::{group::ff::Field, Ciphersuite};
+use embedwards25519::Embedwards25519;
 
-use crate::{
-  Participant,
-  evrf::*,
-  tests::{THRESHOLD, PARTICIPANTS, recover_key},
-};
+use dkg_recovery::recover_key;
+use crate::{Participant, Curves, Generators, VerifyResult, Dkg, Ristretto};
 
 mod proof;
-use proof::{Pallas, Vesta};
+
+const THRESHOLD: u16 = 3;
+const PARTICIPANTS: u16 = 5;
 
 #[test]
-fn evrf_dkg() {
-  let generators = EvrfGenerators::<Pallas>::new(THRESHOLD, PARTICIPANTS);
+fn dkg() {
+  let generators = Generators::<Ristretto>::new(THRESHOLD, PARTICIPANTS);
   let context = [0; 32];
 
   let mut priv_keys = vec![];
   let mut pub_keys = vec![];
   for i in 0 .. PARTICIPANTS {
-    let priv_key = <Vesta as Ciphersuite>::F::random(&mut OsRng);
-    pub_keys.push(<Vesta as Ciphersuite>::generator() * priv_key);
+    let priv_key = <Embedwards25519 as Ciphersuite>::F::random(&mut OsRng);
+    pub_keys.push(<Embedwards25519 as Ciphersuite>::generator() * priv_key);
     priv_keys.push((Participant::new(1 + i).unwrap(), Zeroizing::new(priv_key)));
   }
 
@@ -34,7 +34,7 @@ fn evrf_dkg() {
   for (i, priv_key) in priv_keys.iter().take(usize::from(THRESHOLD)) {
     participations.insert(
       *i,
-      EvrfDkg::<Pallas>::participate(
+      Dkg::<Ristretto>::participate(
         &mut OsRng,
         &generators,
         context,
@@ -46,7 +46,7 @@ fn evrf_dkg() {
     );
   }
 
-  let VerifyResult::Valid(dkg) = EvrfDkg::<Pallas>::verify(
+  let VerifyResult::Valid(dkg) = Dkg::<Ristretto>::verify(
     &mut OsRng,
     &generators,
     context,
@@ -67,13 +67,21 @@ fn evrf_dkg() {
     assert_eq!(keys.params().t(), THRESHOLD);
     assert_eq!(keys.params().n(), PARTICIPANTS);
     group_key = group_key.or(Some(keys.group_key()));
-    verification_shares = verification_shares.or(Some(keys.verification_shares()));
+    let these_verification_shares = Participant::iter()
+      .take(usize::from(PARTICIPANTS))
+      .map(|i| (i, keys.original_verification_share(i)))
+      .collect::<HashMap<_, _>>();
+    verification_shares = verification_shares.or(Some(these_verification_shares.clone()));
     assert_eq!(Some(keys.group_key()), group_key);
-    assert_eq!(Some(keys.verification_shares()), verification_shares);
+    assert_eq!(Some(these_verification_shares), verification_shares);
 
     all_keys.insert(i, keys);
   }
 
   // TODO: Test for all possible combinations of keys
-  assert_eq!(Pallas::generator() * recover_key(&all_keys), group_key.unwrap());
+  assert_eq!(
+    <<Ristretto as Curves>::ToweringCurve as Ciphersuite>::generator() *
+      *recover_key(&all_keys.values().cloned().collect::<Vec<_>>()).unwrap(),
+    group_key.unwrap()
+  );
 }

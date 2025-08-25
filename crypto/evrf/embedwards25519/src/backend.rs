@@ -91,7 +91,7 @@ macro_rules! field {
     use crypto_bigint::{Integer, NonZero, Encoding, impl_modulus};
 
     use ciphersuite::group::ff::{
-      Field, PrimeField, FieldBits, PrimeFieldBits, helpers::sqrt_ratio_generic,
+      Field, PrimeField, FieldBits, PrimeFieldBits, FromUniformBytes, helpers::sqrt_ratio_generic,
     };
 
     use $crate::backend::u8_from_bool;
@@ -255,6 +255,12 @@ macro_rules! field {
         let mut repr = [0; 32];
         repr.copy_from_slice(&MODULUS.to_le_bytes());
         repr.into()
+      }
+    }
+
+    impl FromUniformBytes<64> for $FieldName {
+      fn from_uniform_bytes(bytes: &[u8; 64]) -> Self {
+        $FieldName(Residue::new(&reduce(U512::from_le_slice(bytes))))
       }
     }
 

@@ -1916,25 +1916,10 @@ dependencies = [
 
 [[package]]
 name = "ciphersuite"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ae44ce6224d75ced726e5597265b8f334b9bf4767b8b42e058f2304005d8475"
+version = "0.4.99"
 dependencies = [
+ "ciphersuite 0.4.2",
  "dalek-ff-group",
- "digest 0.10.7",
- "elliptic-curve",
- "ff",
- "flexible-transcript",
- "group",
- "k256",
- "minimal-ed448",
- "p256",
- "rand_core 0.6.4",
- "sha2 0.10.9",
- "sha3",
- "std-shims",
- "subtle",
- "zeroize",
 ]
 
 [[package]]
@@ -2759,8 +2744,10 @@ version = "0.1.0"
 dependencies = [
  "blake2",
  "ciphersuite 0.4.2",
+ "ciphersuite-kp256",
  "dalek-ff-group",
  "dkg",
+ "dkg-recovery",
  "ec-divisors",
  "embedwards25519",
  "flexible-transcript",
@@ -2773,6 +2760,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "secq256k1",
+ "std-shims",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -2873,7 +2861,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 [[package]]
 name = "ec-divisors"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "crypto-bigint",
  "dalek-ff-group",
@@ -3545,10 +3533,10 @@ dependencies = [
 [[package]]
 name = "full-chain-membership-proofs"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "blake2",
- "ciphersuite 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ciphersuite 0.4.99",
  "ec-divisors",
  "generalized-bulletproofs",
  "generalized-bulletproofs-circuit-abstraction",
@@ -3758,10 +3746,10 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "blake2",
- "ciphersuite 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ciphersuite 0.4.99",
  "multiexp",
  "rand_core 0.6.4",
  "std-shims",
@@ -3771,9 +3759,9 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-circuit-abstraction"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
- "ciphersuite 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ciphersuite 0.4.99",
  "generalized-bulletproofs",
  "std-shims",
  "zeroize",
@@ -3782,9 +3770,9 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-ec-gadgets"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
- "ciphersuite 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ciphersuite 0.4.99",
  "generalized-bulletproofs-circuit-abstraction",
  "generic-array 1.2.0",
  "std-shims",
@@ -4002,10 +3990,10 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 [[package]]
 name = "helioselene"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "blake2",
- "ciphersuite 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ciphersuite 0.4.99",
  "crypto-bigint",
  "dalek-ff-group",
  "ec-divisors",
@@ -6074,7 +6062,7 @@ dependencies = [
 [[package]]
 name = "monero-address"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "curve25519-dalek",
  "monero-base58",
@@ -6086,7 +6074,7 @@ dependencies = [
 [[package]]
 name = "monero-base58"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "monero-primitives",
  "std-shims",
@@ -6095,7 +6083,7 @@ dependencies = [
 [[package]]
 name = "monero-borromean"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6108,7 +6096,7 @@ dependencies = [
 [[package]]
 name = "monero-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6123,7 +6111,7 @@ dependencies = [
 [[package]]
 name = "monero-clsag"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
@@ -6144,10 +6132,10 @@ dependencies = [
 [[package]]
 name = "monero-fcmp-plus-plus"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "blake2",
- "ciphersuite 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ciphersuite 0.4.99",
  "curve25519-dalek",
  "dalek-ff-group",
  "ec-divisors",
@@ -6166,10 +6154,10 @@ dependencies = [
 [[package]]
 name = "monero-generators"
 version = "0.4.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "blake2",
- "ciphersuite 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "ciphersuite 0.4.99",
  "crypto-bigint",
  "curve25519-dalek",
  "dalek-ff-group",
@@ -6186,7 +6174,7 @@ dependencies = [
 [[package]]
 name = "monero-io"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "curve25519-dalek",
  "std-shims",
@@ -6195,7 +6183,7 @@ dependencies = [
 [[package]]
 name = "monero-mlsag"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6209,7 +6197,7 @@ dependencies = [
 [[package]]
 name = "monero-oxide"
 version = "0.1.4-alpha"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "curve25519-dalek",
  "hex-literal",
@@ -6228,7 +6216,7 @@ dependencies = [
 [[package]]
 name = "monero-primitives"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6241,7 +6229,7 @@ dependencies = [
 [[package]]
 name = "monero-rpc"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "curve25519-dalek",
  "hex",
@@ -6257,7 +6245,7 @@ dependencies = [
 [[package]]
 name = "monero-simple-request-rpc"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "digest_auth",
  "hex",
@@ -6270,7 +6258,7 @@ dependencies = [
 [[package]]
 name = "monero-wallet"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e#b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e"
+source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
 dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
@@ -10198,6 +10186,7 @@ dependencies = [
  "ciphersuite 0.4.2",
  "dalek-ff-group",
  "dkg",
+ "dkg-evrf",
  "embedwards25519",
  "flexible-transcript",
  "minimal-ed448",

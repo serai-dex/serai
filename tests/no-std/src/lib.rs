@@ -15,6 +15,7 @@ pub use secq256k1;
 pub use embedwards25519;
 
 pub use dkg;
+pub use dkg_evrf;
 /*
 pub use modular_frost;
 pub use frost_schnorrkel;

@@ -1,0 +1,30 @@
+[package]
+name = "ciphersuite"
+version = "0.4.99"
+description = "Ciphersuites built around ff/group"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ciphersuite"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["ciphersuite", "ff", "group"]
+edition = "2021"
+rust-version = "1.66"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, optional = true }
+
+[features]
+alloc = ["ciphersuite/alloc"]
+std = [
+  "ciphersuite/std",
+  "dalek-ff-group?/std",
+]
+ed25519 = ["dalek-ff-group"]
+default = ["std"]

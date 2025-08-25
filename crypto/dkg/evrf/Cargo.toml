@@ -23,31 +23,37 @@ rand_core = { version = "0.6", default-features = false }
 
 zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
 
+std-shims = { version = "0.1", path = "../../../common/std-shims", default-features = false }
+
 transcript = { package = "flexible-transcript", path = "../../transcript", version = "^0.3.2", default-features = false, features = ["recommended"] }
 
-ciphersuite = { path = "../../ciphersuite", version = "^0.4.1", default-features = false }
+ciphersuite = { path = "../../ciphersuite", version = "^0.4.1", default-features = false, features = ["alloc"] }
 multiexp = { path = "../../multiexp", version = "0.4", default-features = false }
 
 generic-array = { version = "1", default-features = false, features = ["alloc"] }
-blake2 = { version = "0.10", default-features = false, features = ["std"] }
-rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
-generalized-bulletproofs = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e", default-features = false }
-ec-divisors = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e", default-features = false }
-generalized-bulletproofs-circuit-abstraction = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e" }
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e" }
+blake2 = { version = "0.10", default-features = false }
+rand_chacha = { version = "0.3", default-features = false }
+
+generalized-bulletproofs = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "54da48f27a05fa8656014942919da1dfbab4d8e3", default-features = false }
+ec-divisors = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "54da48f27a05fa8656014942919da1dfbab4d8e3", default-features = false }
+generalized-bulletproofs-circuit-abstraction = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "54da48f27a05fa8656014942919da1dfbab4d8e3", default-features = false }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "54da48f27a05fa8656014942919da1dfbab4d8e3", default-features = false }
 
 dkg = { path = ".." }
 
+ciphersuite-kp256 = { path = "../../ciphersuite/kp256", default-features = false, optional = true }
 secq256k1 = { path = "../../evrf/secq256k1", optional = true }
+dalek-ff-group = { path = "../../dalek-ff-group", default-features = false, optional = true }
 embedwards25519 = { path = "../../evrf/embedwards25519", optional = true }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 rand = { version = "0.8", default-features = false, features = ["std"] }
 ciphersuite = { path = "../../ciphersuite", default-features = false, features = ["std"]  }
+embedwards25519 = { path = "../../evrf/embedwards25519", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../../dalek-ff-group", default-features = false, features = ["std"] }
-generalized-bulletproofs = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e", features = ["tests"] }
-ec-divisors = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e" }
+generalized-bulletproofs = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "54da48f27a05fa8656014942919da1dfbab4d8e3", features = ["tests"] }
+dkg-recovery = { path = "../recovery" }
 
 [features]
 std = [
@@ -55,14 +61,32 @@ std = [
 
   "rand_core/std",
 
+  "zeroize/std",
+  "std-shims/std",
+
   "transcript/std",
 
   "ciphersuite/std",
   "multiexp/std",
   "multiexp/batch",
+
+  "blake2/std",
+  "rand_chacha/std",
+
+  "generalized-bulletproofs/std",
+  "ec-divisors/std",
+  "generalized-bulletproofs-circuit-abstraction/std",
+  "generalized-bulletproofs-ec-gadgets/std",
+
+  "dkg/std",
+
+  "ciphersuite-kp256?/std",
+  "secq256k1?/std",
+  "dalek-ff-group?/std",
+  "embedwards25519?/std",
 ]
-secp256k1 = ["secq256k1"]
-ed25519 = ["embedwards25519"]
-ristretto = ["embedwards25519"]
+secp256k1 = ["ciphersuite-kp256", "secq256k1"]
+ed25519 = ["dalek-ff-group", "embedwards25519"]
+ristretto = ["dalek-ff-group", "embedwards25519"]
 tests = ["rand_core/getrandom"]
 default = ["std"]

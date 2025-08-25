@@ -32,6 +32,7 @@ secq256k1 = { path = "../../crypto/evrf/secq256k1", default-features = false }
 embedwards25519 = { path = "../../crypto/evrf/embedwards25519", default-features = false }
 
 dkg = { path = "../../crypto/dkg", default-features = false }
+dkg-evrf = { path = "../../crypto/dkg/evrf", default-features = false }
 # modular-frost = { path = "../../crypto/frost", default-features = false }
 # frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }
 

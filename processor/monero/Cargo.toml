@@ -30,8 +30,8 @@ ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, fea
 dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std", "ed25519"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
 
-monero-wallet = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e", default-features = false, features = ["std", "multisig"] }
-monero-simple-request-rpc = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "b6dd1a9ff7ac6b96eb7cb488a4501fd1f6f2dd1e", default-features = false }
+monero-wallet = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "54da48f27a05fa8656014942919da1dfbab4d8e3", default-features = false, features = ["std", "multisig"] }
+monero-simple-request-rpc = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "54da48f27a05fa8656014942919da1dfbab4d8e3", default-features = false }
 
 serai-client = { path = "../../substrate/client", default-features = false, features = ["monero"] }
 
