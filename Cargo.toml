@@ -138,27 +138,23 @@ members = [
   "tests/reproducible-runtime",
 ]
 
+[profile.dev.package]
 # Always compile Monero (and a variety of dependencies) with optimizations due
 # to the extensive operations required for Bulletproofs
-[profile.dev.package]
 subtle = { opt-level = 3 }
+
+sha3 = { opt-level = 3 }
+blake2 = { opt-level = 3 }
 
 ff = { opt-level = 3 }
 group = { opt-level = 3 }
 
 crypto-bigint = { opt-level = 3 }
-secp256k1 = { opt-level = 3 }
 curve25519-dalek = { opt-level = 3 }
 dalek-ff-group = { opt-level = 3 }
-minimal-ed448 = { opt-level = 3 }
+helioselene = { opt-level = 3 }
 
 multiexp = { opt-level = 3 }
-
-secq256k1 = { opt-level = 3 }
-embedwards25519 = { opt-level = 3 }
-generalized-bulletproofs = { opt-level = 3 }
-generalized-bulletproofs-circuit-abstraction = { opt-level = 3 }
-generalized-bulletproofs-ec-gadgets = { opt-level = 3 }
 
 monero-generators = { opt-level = 3 }
 monero-borromean = { opt-level = 3 }
@@ -166,6 +162,28 @@ monero-bulletproofs = { opt-level = 3 }
 monero-mlsag = { opt-level = 3 }
 monero-clsag = { opt-level = 3 }
 monero-oxide = { opt-level = 3 }
+
+# Always compile the eVRF DKG tree with optimizations as well
+secp256k1 = { opt-level = 3 }
+secq256k1 = { opt-level = 3 }
+embedwards25519 = { opt-level = 3 }
+generalized-bulletproofs = { opt-level = 3 }
+generalized-bulletproofs-circuit-abstraction = { opt-level = 3 }
+generalized-bulletproofs-ec-gadgets = { opt-level = 3 }
+
+# revm also effectively requires being built with optimizations
+revm = { opt-level = 3 }
+revm-bytecode = { opt-level = 3 }
+revm-context = { opt-level = 3 }
+revm-context-interface = { opt-level = 3 }
+revm-database = { opt-level = 3 }
+revm-database-interface = { opt-level = 3 }
+revm-handler = { opt-level = 3 }
+revm-inspector = { opt-level = 3 }
+revm-interpreter = { opt-level = 3 }
+revm-precompile = { opt-level = 3 }
+revm-primitives = { opt-level = 3 }
+revm-state = { opt-level = 3 }
 
 [profile.release]
 panic = "unwind"
