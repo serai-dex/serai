@@ -26,6 +26,7 @@ zeroize = { version = "1", default-features = false, features = ["std"] }
 
 blake2 = { version = "0.10", default-features = false, features = ["std"] }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
 frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }
 

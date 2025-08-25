@@ -128,7 +128,6 @@ impl Algorithm<Ristretto> for Schnorrkel {
     )
   }
 
-  #[must_use]
   fn verify(
     &self,
     group_key: RistrettoPoint,

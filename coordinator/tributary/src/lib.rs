@@ -253,7 +253,7 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
         let signer = signer(signed);
 
         // Check the participant voted to be removed actually exists
-        if !self.validators.iter().any(|validator| *validator == participant) {
+        if !self.validators.contains(&participant) {
           TributaryDb::fatal_slash(
             self.tributary_txn,
             self.set.set,

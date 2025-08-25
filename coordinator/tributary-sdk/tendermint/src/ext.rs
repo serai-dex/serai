@@ -114,7 +114,6 @@ impl<S: SignatureScheme> SignatureScheme for Arc<S> {
     self.as_ref().aggregate(validators, msg, sigs)
   }
 
-  #[must_use]
   fn verify_aggregate(
     &self,
     signers: &[Self::ValidatorId],

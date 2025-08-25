@@ -1,6 +1,7 @@
 use zeroize::Zeroizing;
 
-use ciphersuite::{Ciphersuite, Ed25519};
+use ciphersuite::Ciphersuite;
+use dalek_ff_group::Ed25519;
 
 use monero_wallet::{address::SubaddressIndex, ViewPairError, GuaranteedViewPair};
 

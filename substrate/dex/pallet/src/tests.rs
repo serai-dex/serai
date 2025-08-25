@@ -1298,7 +1298,7 @@ fn cannot_block_pool_creation() {
     ));
     // Then, the attacker creates 14 tokens and sends one of each to the pool account
     // skip the coin1 and coin2 coins.
-    for coin in coins().into_iter().filter(|c| (*c != coin1 && *c != coin2)) {
+    for coin in coins().into_iter().filter(|c| (*c != coin1) && (*c != coin2)) {
       assert_ok!(CoinsPallet::<Test>::mint(attacker, Balance { coin, amount: Amount(1000) }));
       assert_ok!(CoinsPallet::<Test>::transfer_internal(
         attacker,

@@ -6,10 +6,7 @@ use rand_core::{RngCore, OsRng};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::{
-  group::{
-    ff::{Field, PrimeField},
-    GroupEncoding,
-  },
+  group::{ff::PrimeField, GroupEncoding},
   Ciphersuite,
 };
 

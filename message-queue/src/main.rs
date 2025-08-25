@@ -146,7 +146,7 @@ pub(crate) fn ack_message(from: Service, to: Service, id: u64, sig: SchnorrSigna
   // It's the second if we acknowledge messages before saving them as acknowledged
   // TODO: Check only a proper message is being acked
 
-  log::info!("Acknowledging From: {:?} To: {:?} ID: {}", from, to, id);
+  log::info!("Acknowledging From: {from:?} To: {to:?} ID: {id}");
 
   QUEUES.read().unwrap()[&(from, to)].write().unwrap().ack_message(id)
 }

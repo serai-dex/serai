@@ -2,7 +2,8 @@ use std::{io, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use ciphersuite::{Ciphersuite, Secp256k1};
+use ciphersuite::Ciphersuite;
+use ciphersuite_kp256::Secp256k1;
 use frost::{
   dkg::{Participant, ThresholdKeys},
   FrostError,

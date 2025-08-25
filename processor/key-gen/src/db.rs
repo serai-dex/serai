@@ -3,8 +3,8 @@ use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
-use dkg::{Participant, ThresholdCore, ThresholdKeys, evrf::EvrfCurve};
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use dkg::*;
 
 use serai_validator_sets_primitives::Session;
 
@@ -17,9 +17,9 @@ pub(crate) struct Params<P: KeyGenParams> {
   pub(crate) t: u16,
   pub(crate) n: u16,
   pub(crate) substrate_evrf_public_keys:
-    Vec<<<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G>,
+    Vec<<<Ristretto as Curves>::EmbeddedCurve as Ciphersuite>::G>,
   pub(crate) network_evrf_public_keys:
-    Vec<<<P::ExternalNetworkCiphersuite as EvrfCurve>::EmbeddedCurve as Ciphersuite>::G>,
+    Vec<<<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as Ciphersuite>::G>,
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -85,7 +85,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
         .substrate_evrf_public_keys
         .into_iter()
         .map(|key| {
-          <<Ristretto as EvrfCurve>::EmbeddedCurve as Ciphersuite>::read_G(&mut key.as_slice())
+          <<Ristretto as Curves>::EmbeddedCurve as Ciphersuite>::read_G(&mut key.as_slice())
             .unwrap()
         })
         .collect(),
@@ -93,7 +93,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
         .network_evrf_public_keys
         .into_iter()
         .map(|key| {
-          <<P::ExternalNetworkCiphersuite as EvrfCurve>::EmbeddedCurve as Ciphersuite>::read_G::<
+          <<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as Ciphersuite>::read_G::<
             &[u8],
           >(&mut key.as_ref())
           .unwrap()
@@ -117,8 +117,8 @@ impl<P: KeyGenParams> KeyGenDb<P> {
   pub(crate) fn set_key_shares(
     txn: &mut impl DbTxn,
     session: Session,
-    substrate_keys: &[ThresholdKeys<Ristretto>],
-    network_keys: &[ThresholdKeys<P::ExternalNetworkCiphersuite>],
+    substrate_keys: &[ThresholdKeys<<Ristretto as Curves>::ToweringCurve>],
+    network_keys: &[ThresholdKeys<<P::ExternalNetworkCiphersuite as Curves>::ToweringCurve>],
   ) {
     assert_eq!(substrate_keys.len(), network_keys.len());
 
@@ -134,16 +134,18 @@ impl<P: KeyGenParams> KeyGenDb<P> {
   pub(crate) fn key_shares(
     getter: &impl Get,
     session: Session,
-  ) -> Option<(Vec<ThresholdKeys<Ristretto>>, Vec<ThresholdKeys<P::ExternalNetworkCiphersuite>>)>
-  {
+  ) -> Option<(
+    Vec<ThresholdKeys<<Ristretto as Curves>::ToweringCurve>>,
+    Vec<ThresholdKeys<<P::ExternalNetworkCiphersuite as Curves>::ToweringCurve>>,
+  )> {
     let keys = _db::KeyShares::get(getter, &session)?;
     let mut keys: &[u8] = keys.as_ref();
 
     let mut substrate_keys = vec![];
     let mut network_keys = vec![];
     while !keys.is_empty() {
-      substrate_keys.push(ThresholdKeys::new(ThresholdCore::read(&mut keys).unwrap()));
-      let mut these_network_keys = ThresholdKeys::new(ThresholdCore::read(&mut keys).unwrap());
+      substrate_keys.push(ThresholdKeys::read(&mut keys).unwrap());
+      let mut these_network_keys = ThresholdKeys::read(&mut keys).unwrap();
       P::tweak_keys(&mut these_network_keys);
       network_keys.push(these_network_keys);
     }

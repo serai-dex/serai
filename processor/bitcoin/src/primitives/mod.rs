@@ -1,4 +1,5 @@
-use ciphersuite::{Ciphersuite, Secp256k1};
+use ciphersuite::Ciphersuite;
+use ciphersuite_kp256::Secp256k1;
 
 use bitcoin_serai::bitcoin::key::{Parity, XOnlyPublicKey};
 

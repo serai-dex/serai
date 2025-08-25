@@ -50,8 +50,10 @@ where
 {
   use substrate_frame_rpc_system::{System, SystemApiServer};
   use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
-  use ciphersuite::{Ciphersuite, Ed25519, Secp256k1};
-  use bitcoin_serai::{bitcoin, crypto::x_only};
+  use ciphersuite::Ciphersuite;
+  use ciphersuite_kp256::{k256::elliptic_curve::point::AffineCoordinates, Secp256k1};
+  use dalek_ff_group::Ed25519;
+  use bitcoin_serai::bitcoin;
 
   let mut module = RpcModule::new(());
   let FullDeps { id, client, pool, deny_unsafe, authority_discovery } = deps;
@@ -128,7 +130,11 @@ where
             .map_err(|_| Error::Custom("invalid key stored in db".to_string()))?;
 
           let addr = bitcoin::Address::p2tr_tweaked(
-            bitcoin::key::TweakedPublicKey::dangerous_assume_tweaked(x_only(&key)),
+            bitcoin::key::TweakedPublicKey::dangerous_assume_tweaked(
+              bitcoin::key::XOnlyPublicKey::from_slice(key.to_affine().x().as_slice()).map_err(
+                |_| Error::Custom("x-coordinate for Bitcoin key was invalid".to_string()),
+              )?,
+            ),
             bitcoin::address::KnownHrp::Mainnet,
           );
 

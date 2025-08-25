@@ -26,6 +26,7 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 
 blake2 = { version = "0.10", default-features = false, features = ["std"] }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
 schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", default-features = false, features = ["std"] }
 

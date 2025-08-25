@@ -70,12 +70,13 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexTask<D, S> {
         Err(e) => Err(format!("couldn't fetch the latest finalized block number: {e:?}"))?,
       };
 
+      #[allow(clippy::uninlined_format_args)]
       if latest_finalized < our_latest_finalized {
         // Explicitly log this as an error as returned ephemeral errors are logged with debug
         // This doesn't panic as the node should sync along our indexed chain, and if it doesn't,
         // we'll panic at that point in time
         log::error!(
-          "node is out of sync, latest finalized {} is behind our indexed {}",
+          "node is out of sync, latest finalized ({}) is behind our indexed ({})",
           latest_finalized,
           our_latest_finalized
         );

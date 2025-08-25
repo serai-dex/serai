@@ -10,7 +10,9 @@ use blake2::{
   digest::{consts::U32, Digest},
   Blake2b,
 };
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto, Secp256k1};
+use ciphersuite::{group::GroupEncoding, Ciphersuite}
+use ciphersuite_kp256::Secp256k1;
+use dalek_ff_group::Ristretto;
 use dkg::Participant;
 
 use scale::Encode;

@@ -4,9 +4,9 @@ use zeroize::{Zeroize, Zeroizing};
 
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
-use dkg::evrf::EvrfCurve;
+use dkg::{Curves, Ristretto};
 
 use serai_client::validator_sets::primitives::Session;
 
@@ -100,8 +100,8 @@ fn key_gen<K: KeyGenParams>() -> KeyGen<K> {
     res
   }
   KeyGen::new(
-    read_key_from_env::<<Ristretto as EvrfCurve>::EmbeddedCurve>("SUBSTRATE_EVRF_KEY"),
-    read_key_from_env::<<K::ExternalNetworkCiphersuite as EvrfCurve>::EmbeddedCurve>(
+    read_key_from_env::<<Ristretto as Curves>::EmbeddedCurve>("SUBSTRATE_EVRF_KEY"),
+    read_key_from_env::<<K::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve>(
       "NETWORK_EVRF_KEY",
     ),
   )
@@ -170,11 +170,13 @@ impl Hooks for () {
 pub async fn main_loop<
   H: Hooks,
   S: ScannerFeed,
-  K: KeyGenParams<ExternalNetworkCiphersuite: Ciphersuite<G = KeyFor<S>>>,
+  K: KeyGenParams<ExternalNetworkCiphersuite: Curves<ToweringCurve: Ciphersuite<G = KeyFor<S>>>>,
   Sch: Clone
     + Scheduler<
       S,
-      SignableTransaction: SignableTransaction<Ciphersuite = K::ExternalNetworkCiphersuite>,
+      SignableTransaction: SignableTransaction<
+        Ciphersuite = <K::ExternalNetworkCiphersuite as Curves>::ToweringCurve,
+      >,
     >,
 >(
   mut db: Db,

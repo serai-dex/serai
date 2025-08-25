@@ -2,8 +2,9 @@ use crate::{mock::*, primitives::*};
 
 use std::collections::HashMap;
 
-use ciphersuite::{Ciphersuite, Ristretto};
-use frost::dkg::musig::musig;
+use ciphersuite::Ciphersuite;
+use dalek_ff_group::Ristretto;
+use dkg_musig::musig;
 use schnorrkel::Schnorrkel;
 
 use zeroize::Zeroizing;
@@ -87,14 +88,14 @@ fn set_keys_signature(set: &ExternalValidatorSet, key_pair: &KeyPair, pairs: &[P
     assert_eq!(Ristretto::generator() * secret_key, pub_keys[i]);
 
     threshold_keys.push(
-      musig::<Ristretto>(&musig_context((*set).into()), &Zeroizing::new(secret_key), &pub_keys)
+      musig::<Ristretto>(musig_context((*set).into()), Zeroizing::new(secret_key), &pub_keys)
         .unwrap(),
     );
   }
 
   let mut musig_keys = HashMap::new();
-  for tk in threshold_keys {
-    musig_keys.insert(tk.params().i(), tk.into());
+  for threshold_keys in threshold_keys {
+    musig_keys.insert(threshold_keys.params().i(), threshold_keys);
   }
 
   let sig = frost::tests::sign_without_caching(

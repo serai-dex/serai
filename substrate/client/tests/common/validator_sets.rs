@@ -55,8 +55,8 @@ pub async fn set_keys(
   }
 
   let mut musig_keys = HashMap::new();
-  for tk in threshold_keys {
-    musig_keys.insert(tk.params().i(), tk.into());
+  for threshold_keys in threshold_keys {
+    musig_keys.insert(threshold_keys.params().i(), threshold_keys);
   }
 
   let sig = frost::tests::sign_without_caching(

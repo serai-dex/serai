@@ -1,6 +1,6 @@
 use core::{marker::PhantomData, future::Future};
 
-use ciphersuite::Ristretto;
+use dalek_ff_group::Ristretto;
 use frost::dkg::ThresholdKeys;
 
 use serai_primitives::Signature;

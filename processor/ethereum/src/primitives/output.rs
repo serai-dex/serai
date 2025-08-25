@@ -1,6 +1,7 @@
 use std::io;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Secp256k1};
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite_kp256::Secp256k1;
 
 use alloy_core::primitives::U256;
 

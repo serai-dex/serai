@@ -1,4 +1,4 @@
-use ciphersuite::Ed25519;
+use dkg::Ed25519;
 
 pub(crate) struct KeyGenParams;
 impl key_gen::KeyGenParams for KeyGenParams {

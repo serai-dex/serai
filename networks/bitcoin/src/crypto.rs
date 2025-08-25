@@ -135,7 +135,6 @@ mod frost_crypto {
       self.0.sign_share(params, nonce_sums, nonces, msg)
     }
 
-    #[must_use]
     fn verify(
       &self,
       group_key: ProjectivePoint,

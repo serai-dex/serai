@@ -1,6 +1,7 @@
 use std::io;
 
-use ciphersuite::{group::Group, Ciphersuite, Ed25519};
+use ciphersuite::{group::Group, Ciphersuite};
+use dalek_ff_group::Ed25519;
 
 use monero_wallet::WalletOutput;
 

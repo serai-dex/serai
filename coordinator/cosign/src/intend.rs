@@ -155,7 +155,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
 
             // Tell each set of their expectation to cosign this block
             for set in global_session_info.sets {
-              log::debug!("{:?} will be cosigning block #{block_number}", set);
+              log::debug!("{set:?} will be cosigning block #{block_number}");
               IntendedCosigns::send(
                 &mut txn,
                 set,

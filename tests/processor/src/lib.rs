@@ -6,9 +6,11 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite, Secp256k1, Ed25519, Ristretto,
+  Ciphersuite,
 };
-use dkg::evrf::*;
+use ciphersuite_kp256::Secp256k1;
+use dalek_ff_group::{Ed25519, Ristretto};
+use dkg::*;
 
 use serai_client::primitives::{ExternalNetworkId, insecure_arbitrary_key_from_name};
 use messages::{ProcessorMessage, CoordinatorMessage};

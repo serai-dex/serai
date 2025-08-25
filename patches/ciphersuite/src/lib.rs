@@ -2,4 +2,4 @@
 
 pub use ciphersuite::*;
 #[cfg(feature = "ed25519")]
-use dalek_ff_group::Ed25519;
+pub use dalek_ff_group::Ed25519;

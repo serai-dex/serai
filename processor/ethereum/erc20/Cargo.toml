@@ -22,9 +22,9 @@ alloy-core = { version = "1", default-features = false }
 alloy-sol-types = { version = "1", default-features = false }
 alloy-sol-macro = { version = "1", default-features = false }
 
-alloy-rpc-types-eth = { version = "0.14", default-features = false }
-alloy-transport = { version = "0.14", default-features = false }
-alloy-provider = { version = "0.14", default-features = false }
+alloy-rpc-types-eth = { version = "1", default-features = false }
+alloy-transport = { version = "1", default-features = false }
+alloy-provider = { version = "1", default-features = false }
 
 ethereum-primitives = { package = "serai-processor-ethereum-primitives", path = "../primitives", default-features = false }
 

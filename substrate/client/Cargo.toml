@@ -51,8 +51,9 @@ hex = "0.4"
 
 blake2 = "0.10"
 
-dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
 ciphersuite = { path = "../../crypto/ciphersuite" }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
+ciphersuite-kp256 = { path = "../../crypto/ciphersuite/kp256" }
 dkg-musig = { path = "../../crypto/dkg/musig" }
 frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
 schnorrkel = { path = "../../crypto/schnorrkel", package = "frost-schnorrkel" }

@@ -121,7 +121,6 @@ impl<C: Curve> Algorithm<C> for MultiNonce<C> {
     res
   }
 
-  #[must_use]
   fn verify(&self, _: C::G, nonces: &[Vec<C::G>], sum: C::F) -> Option<Self::Signature> {
     verify_nonces::<C>(nonces);
     assert_eq!(&self.nonces.clone().unwrap(), nonces);

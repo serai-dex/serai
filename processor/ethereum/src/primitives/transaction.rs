@@ -1,6 +1,6 @@
 use std::io;
 
-use ciphersuite::Secp256k1;
+use ciphersuite_kp256::Secp256k1;
 use frost::dkg::ThresholdKeys;
 
 use alloy_core::primitives::{U256, Address as EthereumAddress};

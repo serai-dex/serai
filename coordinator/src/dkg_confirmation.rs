@@ -3,13 +3,11 @@ use std::{boxed::Box, collections::HashMap};
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use dalek_ff_group::Ristretto;
+use dkg::{Participant, musig};
 use frost_schnorrkel::{
-  frost::{
-    dkg::{Participant, musig::musig},
-    FrostError,
-    sign::*,
-  },
+  frost::{FrostError, sign::*},
   Schnorrkel,
 };
 
@@ -155,16 +153,15 @@ impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
     db: &mut CD,
     set: ExternalValidatorSet,
     attempt: u32,
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+    key: Zeroizing<<Ristretto as Ciphersuite>::F>,
     signer: &mut Option<Signer>,
   ) {
     // Perform the preprocess
+    let public_key = Ristretto::generator() * key.deref();
     let (machine, preprocess) = AlgorithmMachine::new(
       schnorrkel(),
       // We use a 1-of-1 Musig here as we don't know who will actually be in this Musig yet
-      musig(&musig_context(set.into()), key, &[Ristretto::generator() * key.deref()])
-        .unwrap()
-        .into(),
+      musig(musig_context(set.into()), key, &[public_key]).unwrap(),
     )
     .preprocess(&mut OsRng);
     // We take the preprocess so we can use it in a distinct machine with the actual Musig
@@ -199,7 +196,7 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
       // If we were sent a key to set, create the signer for it
       if self.signer.is_none() && KeysToConfirm::get(&self.db, self.set.set).is_some() {
         // Create and publish the initial preprocess
-        Self::preprocess(&mut self.db, self.set.set, 0, &self.key, &mut self.signer);
+        Self::preprocess(&mut self.db, self.set.set, 0, self.key.clone(), &mut self.signer);
 
         made_progress = true;
       }
@@ -219,7 +216,13 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
               id: messages::sign::SignId { attempt, .. },
             } => {
               // Create and publish the preprocess for the specified attempt
-              Self::preprocess(&mut self.db, self.set.set, attempt, &self.key, &mut self.signer);
+              Self::preprocess(
+                &mut self.db,
+                self.set.set,
+                attempt,
+                self.key.clone(),
+                &mut self.signer,
+              );
             }
             messages::sign::CoordinatorMessage::Preprocesses {
               id: messages::sign::SignId { attempt, .. },
@@ -258,9 +261,9 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                 })
                 .collect::<Vec<_>>();
 
-              let keys = musig(&musig_context(self.set.set.into()), &self.key, &musig_public_keys)
-                .unwrap()
-                .into();
+              let keys =
+                musig(musig_context(self.set.set.into()), self.key.clone(), &musig_public_keys)
+                  .unwrap();
 
               // Rebuild the machine
               let (machine, preprocess_from_cache) =

@@ -1,6 +1,6 @@
 use core::future::Future;
 
-use ciphersuite::Ristretto;
+use dalek_ff_group::Ristretto;
 use frost::dkg::ThresholdKeys;
 
 use scale::Encode;

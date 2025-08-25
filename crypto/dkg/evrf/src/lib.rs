@@ -47,12 +47,12 @@ mod tests;
 /// `Participation` is meant to be broadcast to all other participants over an authenticated,
 /// reliable broadcast channel.
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Participation<C: Ciphersuite> {
+pub struct Participation<C: Curves> {
   proof: Vec<u8>,
-  encrypted_secret_shares: HashMap<Participant, C::F>,
+  encrypted_secret_shares: HashMap<Participant, <C::ToweringCurve as Ciphersuite>::F>,
 }
 
-impl<C: Ciphersuite> Participation<C> {
+impl<C: Curves> Participation<C> {
   pub fn read<R: Read>(reader: &mut R, n: u16) -> io::Result<Self> {
     // Ban <32-bit platforms, allowing us to assume `u32` -> `usize` works
     const _NO_16_BIT_PLATFORMS: [(); (usize::BITS - u32::BITS) as usize] = [(); _];
@@ -79,7 +79,7 @@ impl<C: Ciphersuite> Participation<C> {
 
     let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
     for i in Participant::iter().take(usize::from(n)) {
-      encrypted_secret_shares.insert(i, C::read_F(reader)?);
+      encrypted_secret_shares.insert(i, <C::ToweringCurve as Ciphersuite>::read_F(reader)?);
     }
 
     Ok(Self { proof, encrypted_secret_shares })
@@ -190,7 +190,7 @@ impl<C: Curves> Dkg<C> {
     t: u16,
     evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
     evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
-  ) -> Result<Participation<C::ToweringCurve>, Error> {
+  ) -> Result<Participation<C>, Error> {
     let Ok(n) = u16::try_from(evrf_public_keys.len()) else {
       Err(Error::TooManyParticipants { provided: evrf_public_keys.len() })?
     };
@@ -311,7 +311,7 @@ impl<C: Curves> Dkg<C> {
     context: [u8; 32],
     t: u16,
     evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
-    participations: &HashMap<Participant, Participation<C::ToweringCurve>>,
+    participations: &HashMap<Participant, Participation<C>>,
   ) -> Result<VerifyResult<C>, Error> {
     let Ok(n) = u16::try_from(evrf_public_keys.len()) else {
       Err(Error::TooManyParticipants { provided: evrf_public_keys.len() })?

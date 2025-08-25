@@ -8,8 +8,9 @@ use blake2::{Digest, Blake2b512};
 
 use ciphersuite::{
   group::{Group, GroupEncoding},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
+use dalek_ff_group::Ristretto;
 use schnorr::SchnorrSignature;
 
 use crate::{TRANSACTION_SIZE_LIMIT, ReadWrite};

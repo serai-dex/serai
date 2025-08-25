@@ -5,8 +5,10 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{
   group::{ff::Field, GroupEncoding},
-  Ciphersuite, Ed25519, Secp256k1,
+  Ciphersuite,
 };
+use dalek_ff_group::Ed25519;
+use ciphersuite_kp256::Secp256k1;
 
 use sp_core::{
   Pair as PairTrait,
@@ -67,7 +69,7 @@ async fn test_external_address(serai: Serai) {
   set_network_keys::<Secp256k1>(
     &serai,
     ExternalValidatorSet { session: Session(0), network },
-    &[pair.clone()],
+    core::slice::from_ref(&pair),
   )
   .await;
 

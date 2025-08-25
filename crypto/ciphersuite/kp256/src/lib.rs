@@ -13,6 +13,9 @@ use elliptic_curve::{
 
 use ciphersuite::{group::ff::PrimeField, Ciphersuite};
 
+pub use k256;
+pub use p256;
+
 macro_rules! kp_curve {
   (
     $feature: literal,

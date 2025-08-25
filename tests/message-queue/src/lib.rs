@@ -4,8 +4,9 @@ use rand_core::OsRng;
 
 use ciphersuite::{
   group::{ff::Field, GroupEncoding},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
+use dalek_ff_group::Ristretto;
 
 use serai_primitives::{ExternalNetworkId, EXTERNAL_NETWORKS};
 

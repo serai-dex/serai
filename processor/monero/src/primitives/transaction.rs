@@ -2,7 +2,7 @@ use std::io;
 
 use rand_core::{RngCore, CryptoRng};
 
-use ciphersuite::Ed25519;
+use dalek_ff_group::Ed25519;
 use frost::{dkg::ThresholdKeys, sign::PreprocessMachine};
 
 use monero_wallet::{

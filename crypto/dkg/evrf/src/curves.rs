@@ -76,7 +76,6 @@ impl<C: Curves> Generators<C> {
   }
 }
 
-/* TODO
 /// Secp256k1, and an elliptic curve defined over its scalar field (secq256k1).
 #[cfg(feature = "secp256k1")]
 pub struct Secp256k1;
@@ -86,7 +85,6 @@ impl Curves for Secp256k1 {
   type EmbeddedCurve = secq256k1::Secq256k1;
   type EmbeddedCurveParameters = secq256k1::Secq256k1;
 }
-*/
 
 /// Ed25519, and an elliptic curve defined over its scalar field (embedwards25519).
 #[cfg(feature = "ed25519")]

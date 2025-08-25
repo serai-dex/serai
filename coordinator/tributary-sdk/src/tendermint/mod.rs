@@ -9,7 +9,6 @@ use rand_chacha::ChaCha12Rng;
 
 use transcript::{Transcript, RecommendedTranscript};
 
-use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{
     GroupEncoding,
@@ -17,6 +16,7 @@ use ciphersuite::{
   },
   Ciphersuite,
 };
+use dalek_ff_group::Ristretto;
 use schnorr::{
   SchnorrSignature,
   aggregate::{SchnorrAggregator, SchnorrAggregate},
@@ -164,7 +164,6 @@ impl SignatureScheme for Validators {
   type AggregateSignature = Vec<u8>;
   type Signer = Arc<Signer>;
 
-  #[must_use]
   fn verify(&self, validator: Self::ValidatorId, msg: &[u8], sig: &Self::Signature) -> bool {
     if !self.weights.contains_key(&validator) {
       return false;
@@ -197,7 +196,6 @@ impl SignatureScheme for Validators {
     aggregate.serialize()
   }
 
-  #[must_use]
   fn verify_aggregate(
     &self,
     signers: &[Self::ValidatorId],

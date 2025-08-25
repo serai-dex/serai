@@ -3,7 +3,8 @@ use std::{sync::Arc, io};
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use ciphersuite::Ciphersuite;
+use dalek_ff_group::Ristretto;
 
 use scale::Decode;
 use futures_channel::mpsc::UnboundedReceiver;

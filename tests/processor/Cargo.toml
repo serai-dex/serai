@@ -24,7 +24,9 @@ rand_core = { version = "0.6", default-features = false, features = ["getrandom"
 
 curve25519-dalek = "4"
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
-dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
+ciphersuite-kp256 = { path = "../../crypto/ciphersuite/kp256", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
+dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std"] }
 
 bitcoin-serai = { path = "../../networks/bitcoin" }
 

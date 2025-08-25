@@ -16,8 +16,9 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite, Ristretto,
+  Ciphersuite,
 };
+use dalek_ff_group::Ristretto;
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 

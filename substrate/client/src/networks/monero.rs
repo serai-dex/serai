@@ -1,7 +1,5 @@
 use core::{str::FromStr, fmt};
 
-use scale::{Encode, Decode};
-
 use dalek_ff_group::Ed25519;
 use ciphersuite::Ciphersuite;
 

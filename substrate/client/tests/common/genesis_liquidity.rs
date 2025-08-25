@@ -111,7 +111,7 @@ async fn set_values(serai: &Serai, values: &Values) {
     frost::tests::algorithm_machines(
       &mut OsRng,
       &Schnorrkel::new(b"substrate"),
-      &HashMap::from([(threshold_keys.params().i(), threshold_keys.into())]),
+      &HashMap::from([(threshold_keys.params().i(), threshold_keys)]),
     ),
     &oraclize_values_message(&set, values),
   );

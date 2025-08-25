@@ -29,7 +29,7 @@ transcript = { package = "flexible-transcript", path = "../crypto/transcript", d
 dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std"] }
 schnorr = { package = "schnorr-signatures", path = "../crypto/schnorr", default-features = false, features = ["std", "aggregate"] }
-dkg-musig = { path = "../crypto/dkg/musig", default-features = false, features = ["std"] }
+dkg = { package = "dkg-musig", path = "../crypto/dkg/musig", default-features = false, features = ["std"] }
 frost = { package = "modular-frost", path = "../crypto/frost" }
 frost-schnorrkel = { path = "../crypto/schnorrkel" }
 

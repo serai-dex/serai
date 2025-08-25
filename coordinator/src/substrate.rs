@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{Ciphersuite, Ristretto};
+use ciphersuite::Ciphersuite;
+use dalek_ff_group::Ristretto;
 
 use tokio::sync::mpsc;
 

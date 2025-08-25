@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
-use ciphersuite::{Ciphersuite, Ed25519};
+use ciphersuite::Ciphersuite;
+use dalek_ff_group::Ed25519;
 
 use monero_wallet::{
   block::Block as MBlock, rpc::ScannableBlock as MScannableBlock, ScanError, GuaranteedScanner,

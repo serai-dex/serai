@@ -4,7 +4,8 @@ use std::sync::Arc;
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 use blake2::{digest::typenum::U32, Digest, Blake2s};
-use ciphersuite::{Ciphersuite, Ristretto};
+use ciphersuite::Ciphersuite;
+use dalek_ff_group::Ristretto;
 
 use tokio::sync::mpsc;
 
@@ -67,9 +68,7 @@ async fn provide_transaction<TD: DbTrait, P: P2p>(
     // advancing
     Err(ProvidedError::LocalMismatchesOnChain) => loop {
       log::error!(
-        "Tributary {:?} was supposed to provide {:?} but peers disagree, halting Tributary",
-        set,
-        tx,
+        "Tributary {set:?} was supposed to provide {tx:?} but peers disagree, halting Tributary",
       );
       // Print this every five minutes as this does need to be handled
       tokio::time::sleep(Duration::from_secs(5 * 60)).await;

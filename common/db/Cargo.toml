@@ -18,7 +18,7 @@ workspace = true
 
 [dependencies]
 parity-db = { version = "0.4", default-features = false, optional = true }
-rocksdb = { version = "0.23", default-features = false, features = ["zstd"], optional = true }
+rocksdb = { version = "0.24", default-features = false, features = ["zstd"], optional = true }
 
 [features]
 parity-db = ["dep:parity-db"]

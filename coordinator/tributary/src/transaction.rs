@@ -5,11 +5,11 @@ use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
 use blake2::{digest::typenum::U32, Digest, Blake2b};
-use dalek_ff_group::Ristretto;
 use ciphersuite::{
-  group::{Group, GroupEncoding},
+  group::{ff::Field, Group, GroupEncoding},
   Ciphersuite,
 };
+use dalek_ff_group::Ristretto;
 use schnorr::SchnorrSignature;
 
 use scale::Encode;

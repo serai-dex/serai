@@ -210,7 +210,6 @@ impl<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> Algorithm<C> fo
     SchnorrSignature::<C>::sign(params.secret_share(), nonces.swap_remove(0), c).s
   }
 
-  #[must_use]
   fn verify(&self, group_key: C::G, nonces: &[Vec<C::G>], sum: C::F) -> Option<Self::Signature> {
     let sig = SchnorrSignature { R: nonces[0][0], s: sum };
     Some(sig).filter(|sig| sig.verify(group_key, self.c.unwrap()))

@@ -4,7 +4,7 @@ use std::{
   collections::HashMap,
 };
 
-use dkg::evrf::*;
+use dkg::*;
 
 use serai_validator_sets_primitives::MAX_KEY_SHARES_PER_SET;
 
@@ -21,14 +21,14 @@ use serai_validator_sets_primitives::MAX_KEY_SHARES_PER_SET;
 static GENERATORS: LazyLock<Mutex<HashMap<TypeId, &'static (dyn Send + Sync + Any)>>> =
   LazyLock::new(|| Mutex::new(HashMap::new()));
 
-pub(crate) fn generators<C: EvrfCurve>() -> &'static EvrfGenerators<C> {
+pub(crate) fn generators<C: 'static + Curves>() -> &'static Generators<C> {
   GENERATORS
     .lock()
     .unwrap()
     .entry(TypeId::of::<C>())
     .or_insert_with(|| {
       // If we haven't prior needed generators for this Ciphersuite, generate new ones
-      Box::leak(Box::new(EvrfGenerators::<C>::new(
+      Box::leak(Box::new(Generators::<C>::new(
         (MAX_KEY_SHARES_PER_SET * 2 / 3) + 1,
         MAX_KEY_SHARES_PER_SET,
       )))

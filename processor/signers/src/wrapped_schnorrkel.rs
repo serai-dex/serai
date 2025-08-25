@@ -5,7 +5,7 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use ciphersuite::Ristretto;
+use dalek_ff_group::Ristretto;
 use frost::{
   dkg::{Participant, ThresholdKeys},
   FrostError,

@@ -46,7 +46,6 @@ impl SignatureScheme for TestSignatureScheme {
   type AggregateSignature = Vec<[u8; 32]>;
   type Signer = TestSigner;
 
-  #[must_use]
   fn verify(&self, validator: u16, msg: &[u8], sig: &[u8; 32]) -> bool {
     (sig[.. 2] == validator.to_le_bytes()) && (sig[2 ..] == [msg, &[0; 30]].concat()[.. 30])
   }
@@ -60,7 +59,6 @@ impl SignatureScheme for TestSignatureScheme {
     sigs.to_vec()
   }
 
-  #[must_use]
   fn verify_aggregate(
     &self,
     signers: &[TestValidatorId],

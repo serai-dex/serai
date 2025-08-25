@@ -301,13 +301,13 @@ impl Serai {
   ///
   /// The binding occurs at time of call. This does not track the latest finalized block and update
   /// itself.
-  pub async fn as_of_latest_finalized_block(&self) -> Result<TemporalSerai, SeraiError> {
+  pub async fn as_of_latest_finalized_block(&self) -> Result<TemporalSerai<'_>, SeraiError> {
     let latest = self.latest_finalized_block_hash().await?;
     Ok(TemporalSerai { serai: self, block: latest, events: RwLock::new(None) })
   }
 
   /// Returns a TemporalSerai able to retrieve state as of the specified block.
-  pub fn as_of(&self, block: [u8; 32]) -> TemporalSerai {
+  pub fn as_of(&self, block: [u8; 32]) -> TemporalSerai<'_> {
     TemporalSerai { serai: self, block, events: RwLock::new(None) }
   }
 
@@ -424,11 +424,11 @@ impl TemporalSerai<'_> {
     SeraiValidatorSets(self)
   }
 
-  pub fn genesis_liquidity(&self) -> SeraiGenesisLiquidity {
+  pub fn genesis_liquidity(&self) -> SeraiGenesisLiquidity<'_> {
     SeraiGenesisLiquidity(self)
   }
 
-  pub fn liquidity_tokens(&self) -> SeraiLiquidityTokens {
+  pub fn liquidity_tokens(&self) -> SeraiLiquidityTokens<'_> {
     SeraiLiquidityTokens(self)
   }
 }

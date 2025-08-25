@@ -20,9 +20,9 @@ workspace = true
 k256 = { version = "0.13", default-features = false, features = ["std"] }
 
 alloy-core = { version = "1", default-features = false }
-alloy-consensus = { version = "0.14", default-features = false, features = ["std"] }
+alloy-consensus = { version = "1", default-features = false, features = ["std"] }
 
-alloy-rpc-types-eth = { version = "0.14", default-features = false }
-alloy-provider = { version = "0.14", default-features = false }
+alloy-rpc-types-eth = { version = "1", default-features = false }
+alloy-provider = { version = "1", default-features = false }
 
 ethereum-primitives = { package = "serai-processor-ethereum-primitives", path = "../primitives", default-features = false }

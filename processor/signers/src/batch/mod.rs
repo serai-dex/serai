@@ -2,7 +2,8 @@ use core::future::Future;
 use std::collections::HashSet;
 
 use blake2::{digest::typenum::U32, Digest, Blake2b};
-use ciphersuite::{group::GroupEncoding, Ristretto};
+use ciphersuite::group::GroupEncoding;
+use dalek_ff_group::Ristretto;
 use frost::dkg::ThresholdKeys;
 
 use scale::Encode;

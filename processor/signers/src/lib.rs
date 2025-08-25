@@ -7,8 +7,9 @@ use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
-use frost::dkg::{ThresholdCore, ThresholdKeys};
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use dalek_ff_group::Ristretto;
+use frost::dkg::ThresholdKeys;
 
 use serai_primitives::Signature;
 use serai_validator_sets_primitives::{Session, SlashReport};
@@ -262,11 +263,8 @@ impl<
       let mut substrate_keys = vec![];
       let mut external_keys = vec![];
       while !buf.is_empty() {
-        substrate_keys
-          .push(ThresholdKeys::from(ThresholdCore::<Ristretto>::read(&mut buf).unwrap()));
-        external_keys.push(ThresholdKeys::from(
-          ThresholdCore::<CiphersuiteFor<S, Sch>>::read(&mut buf).unwrap(),
-        ));
+        substrate_keys.push(ThresholdKeys::<Ristretto>::read(&mut buf).unwrap());
+        external_keys.push(ThresholdKeys::<CiphersuiteFor<S, Sch>>::read(&mut buf).unwrap());
       }
 
       tasks.insert(

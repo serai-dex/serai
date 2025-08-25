@@ -4,7 +4,8 @@ use zeroize::Zeroizing;
 use rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
-use ciphersuite::{Ciphersuite, Ed25519};
+use ciphersuite::Ciphersuite;
+use dalek_ff_group::Ed25519;
 
 use monero_wallet::rpc::{FeeRate, RpcError};
 
@@ -200,6 +201,9 @@ impl TransactionPlanner<Rpc, ()> for Planner {
         Err(SendError::TooLargeTransaction) => {
           panic!("too large transaction despite MAX_INPUTS/MAX_OUTPUTS")
         }
+        Err(SendError::AmountsUnrepresentable { .. }) => {
+          panic!("monero-wallet AmountsUnrepresentable")
+        }
         Err(
           SendError::WrongPrivateKey |
           SendError::MaliciousSerialization |
@@ -254,6 +258,9 @@ impl TransactionPlanner<Rpc, ()> for Planner {
         }
         Err(SendError::TooLargeTransaction) => {
           panic!("too large transaction despite MAX_INPUTS/MAX_OUTPUTS")
+        }
+        Err(SendError::AmountsUnrepresentable { .. }) => {
+          panic!("monero-wallet AmountsUnrepresentable")
         }
         Err(
           SendError::WrongPrivateKey |

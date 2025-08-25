@@ -2,7 +2,7 @@ use std::io;
 
 use rand_core::{RngCore, CryptoRng};
 
-use ciphersuite::Secp256k1;
+use ciphersuite_kp256::Secp256k1;
 use frost::{dkg::ThresholdKeys, sign::PreprocessMachine};
 
 use bitcoin_serai::{

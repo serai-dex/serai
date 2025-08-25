@@ -21,8 +21,8 @@ use revm::{
   },
   context::{
     result::{EVMError, InvalidTransaction, ExecutionResult},
-    evm::{EvmData, Evm},
     context::Context,
+    evm::Evm,
     *,
   },
   inspector::{Inspector, InspectorHandler},
@@ -124,6 +124,7 @@ pub(crate) type GasEstimator = Evm<
   WorstCaseCallInspector,
   EthInstructions<EthInterpreter, RevmContext>,
   EthPrecompiles,
+  EthFrame,
 >;
 
 impl Router {
@@ -218,26 +219,24 @@ impl Router {
       db
     };
 
-    Evm {
-      data: EvmData {
-        ctx: RevmContext::new(db, SPEC_ID)
-          .modify_cfg_chained(|cfg| {
-            cfg.chain_id = CHAIN_ID.try_into().unwrap();
-          })
-          .modify_tx_chained(|tx: &mut TxEnv| {
-            tx.gas_limit = u64::MAX;
-            tx.kind = self.address.into();
-          }),
-        inspector: WorstCaseCallInspector {
-          erc20,
-          call_depth: 0,
-          unused_gas: 0,
-          override_immediate_call_return_value: false,
-        },
+    Evm::new_with_inspector(
+      RevmContext::new(db, SPEC_ID)
+        .modify_cfg_chained(|cfg| {
+          cfg.chain_id = CHAIN_ID.try_into().unwrap();
+        })
+        .modify_tx_chained(|tx: &mut TxEnv| {
+          tx.gas_limit = u64::MAX;
+          tx.kind = self.address.into();
+        }),
+      WorstCaseCallInspector {
+        erc20,
+        call_depth: 0,
+        unused_gas: 0,
+        override_immediate_call_return_value: false,
       },
-      instruction: EthInstructions::default(),
-      precompiles: precompiles(),
-    }
+      EthInstructions::default(),
+      precompiles(),
+    )
   }
 
   /// The worst-case gas cost for a legacy transaction which executes this batch.
@@ -262,7 +261,7 @@ impl Router {
         let fee = if fee_per_gas == U256::ZERO { U256::ZERO } else { U256::ONE };
 
         // Set a balance of the amount sent out to ensure we don't error on that premise
-        gas_estimator.data.ctx.modify_db(|db| {
+        gas_estimator.ctx.modify_db(|db| {
           let account = db.load_account(self.address).unwrap();
           account.info.balance = fee + outs.0.iter().map(|out| out.amount).sum::<U256>();
         });
@@ -290,7 +289,7 @@ impl Router {
       consistent use of nonce #1 shows storage read/writes aren't being persisted. They're solely
       returned upon execution in a `state` field we ignore.
     */
-    gas_estimator.data.ctx.modify_tx(|tx| {
+    gas_estimator.ctx.modify_tx(|tx| {
       tx.caller = Address::from({
         /*
           We assume the transaction sender is not the destination of any `OutInstruction`, making
@@ -317,21 +316,17 @@ impl Router {
     });
 
     // Execute the transaction
-    let mut gas = match MainnetHandler::<
-      _,
-      EVMError<Infallible, InvalidTransaction>,
-      EthFrame<_, _, _>,
-    >::default()
-    .inspect_run(&mut gas_estimator)
-    .unwrap()
-    .result
-    {
-      ExecutionResult::Success { gas_used, gas_refunded, .. } => {
-        assert_eq!(gas_refunded, 0);
-        gas_used
-      }
-      res => panic!("estimated execute transaction failed: {res:?}"),
-    };
+    let mut gas =
+      match MainnetHandler::<_, EVMError<Infallible, InvalidTransaction>, EthFrame<_>>::default()
+        .inspect_run(&mut gas_estimator)
+        .unwrap()
+      {
+        ExecutionResult::Success { gas_used, gas_refunded, .. } => {
+          assert_eq!(gas_refunded, 0);
+          gas_used
+        }
+        res => panic!("estimated execute transaction failed: {res:?}"),
+      };
     gas += gas_estimator.into_inspector().unused_gas;
 
     /*

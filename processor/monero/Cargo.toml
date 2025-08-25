@@ -25,8 +25,8 @@ zeroize = { version = "1", default-features = false, features = ["std"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std", "ed25519"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
 
