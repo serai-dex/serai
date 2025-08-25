@@ -30,12 +30,24 @@ fn recover_y(x: FieldElement) -> CtOption<FieldElement> {
 }
 
 /// Point.
-#[derive(Clone, Copy, Debug, Zeroize)]
+#[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct Point {
   x: FieldElement, // / Z
   y: FieldElement, // / Z
   z: FieldElement,
+}
+
+impl Zeroize for Point {
+  fn zeroize(&mut self) {
+    self.x.zeroize();
+    self.y.zeroize();
+    self.z.zeroize();
+    let identity = Self::identity();
+    self.x = identity.x;
+    self.y = identity.y;
+    self.z = identity.z;
+  }
 }
 
 impl ConstantTimeEq for Point {
