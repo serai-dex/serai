@@ -7,8 +7,11 @@ use std_shims::prelude::*;
 #[cfg(any(feature = "alloc", feature = "std"))]
 use std_shims::io::{self, Read};
 
-use generic_array::typenum::{Sum, Diff, Quot, U, U1, U2};
-use ciphersuite::group::{ff::PrimeField, Group};
+use k256::elliptic_curve::{
+  zeroize::Zeroize,
+  generic_array::typenum::{Sum, Diff, Quot, U, U1, U2},
+  group::{ff::PrimeField, Group},
+};
 
 #[macro_use]
 mod backend;
@@ -26,8 +29,11 @@ pub use point::Point;
 /// hash_to_F is implemented with a naive concatenation of the dst and data, allowing transposition
 /// between the two. This means `dst: b"abc", data: b"def"`, will produce the same scalar as
 /// `dst: "abcdef", data: b""`. Please use carefully, not letting dsts be substrings of each other.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, zeroize::Zeroize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Secq256k1;
+impl Zeroize for Secq256k1 {
+  fn zeroize(&mut self) {}
+}
 impl ciphersuite::Ciphersuite for Secq256k1 {
   type F = Scalar;
   type G = Point;

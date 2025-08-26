@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["serai"]
 edition = "2021"
-rust-version = "1.82"
+rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true

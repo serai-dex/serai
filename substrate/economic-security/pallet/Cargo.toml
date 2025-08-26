@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/economic-security/pallet"
 authors = ["Akil Demir <akildemir72@gmail.com>"]
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -29,7 +29,6 @@ dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
-
 
 [dev-dependencies]
 pallet-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }

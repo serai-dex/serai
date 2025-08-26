@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dkg/evrf"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["dkg", "multisig", "threshold", "ff", "group"]
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.89"
 
 [package.metadata.docs.rs]
 all-features = true

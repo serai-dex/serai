@@ -7,7 +7,6 @@ repository = "https://github.com/serai-dex/serai/tree/develop/substrate/node"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 publish = false
-rust-version = "1.80"
 
 [package.metadata.docs.rs]
 all-features = true

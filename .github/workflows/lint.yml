@@ -91,6 +91,99 @@ jobs:
           cargo +1.89 install cargo-machete --version =0.8.0
           cargo +1.89 machete
 
+  msrv:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+      - name: Verify claimed `rust-version`
+        shell: bash
+        run: |
+          cargo +1.89 install cargo-msrv --version =0.18.4
+
+          function check_msrv {
+            # We `cd` into the directory passed as the first argument, but will return to the
+            # directory called from.
+            return_to=$(pwd)
+            echo "Checking $1"
+            cd $1
+
+            # We then find the existing `rust-version` using `grep` (for the right line) and then a
+            # regex (to strip to just the major and minor version).
+            existing=$(cat ./Cargo.toml | grep "rust-version" | grep -Eo "[0-9]+\.[0-9]+")
+
+            # We then backup the `Cargo.toml`, allowing us to restore it after, saving time on future
+            # MSRV checks (as they'll benefit from immediately exiting if the queried version is less
+            # than the declared MSRV).
+            mv ./Cargo.toml ./Cargo.toml.bak
+
+            # We then use an inverted (`-v`) grep to remove the existing `rust-version` from the
+            # `Cargo.toml`, as required because else earlier versions of Rust won't even attempt to
+            # compile this crate.
+            cat ./Cargo.toml.bak | grep -v "rust-version" > Cargo.toml
+
+            # We then find the actual `rust-version` using `cargo-msrv` (again stripping to just the
+            # major and minor version).
+            actual=$(cargo msrv find --output-format minimal | grep -Eo "^[0-9]+\.[0-9]+")
+
+            # Finally, we compare the two.
+            echo "Declared rust-version: $existing"
+            echo "Actual rust-version: $actual"
+            [ $existing == $actual ]
+            result=$?
+
+            # Restore the original `Cargo.toml`.
+            rm Cargo.toml
+            mv ./Cargo.toml.bak ./Cargo.toml
+
+            # Return to the directory called from and return the result.
+            cd $return_to
+            return $result
+          }
+
+          # Check each member of the workspace
+          function check_workspace {
+            # Get the members array from the workspace's `Cargo.toml`
+            cargo_toml_lines=$(cat ./Cargo.toml | wc -l)
+            members=$(cat Cargo.toml | grep "members\ \=\ \[" -m1 -A$cargo_toml_lines | grep "]" -m1 -B$cargo_toml_lines)
+            # Parse out any comments, including comments post-fixed on the same line as an entry
+            members=$(echo "$members" | grep -Ev "^[[:space:]]+#" | grep -Ev "^[[:space:]]?$" | awk -F',' '{print $1","}')
+            # Prune `members = [` to `[` by replacing the first line with just `[`
+            members=$(echo "$members" | sed "1s/.*/\[/")
+            # Remove the trailing comma by replacing the last line's "," with ""
+            members=$(echo "$members" | sed "$(($(echo "$members" | wc -l) - 1))s/\,//")
+            # Correct the last line, which was malleated to "]," when pruning comments
+            members=$(echo "$members" | sed "$(echo "$members" | wc -l)s/\]\,/\]/")
+
+            # Don't check the patches
+            members=$(echo "$members" | grep -v "patches")
+            # Don't check the following
+            # Most of these are binaries, with the exception of the Substrate runtime which has a
+            # bespoke build pipeline
+            members=$(echo "$members" | grep -v "networks/ethereum/relayer\"")
+            members=$(echo "$members" | grep -v "message-queue\"")
+            members=$(echo "$members" | grep -v "processor/bin\"")
+            members=$(echo "$members" | grep -v "processor/bitcoin\"")
+            members=$(echo "$members" | grep -v "processor/ethereum\"")
+            members=$(echo "$members" | grep -v "processor/monero\"")
+            members=$(echo "$members" | grep -v "coordinator\"")
+            members=$(echo "$members" | grep -v "substrate/runtime\"")
+            members=$(echo "$members" | grep -v "substrate/node\"")
+            members=$(echo "$members" | grep -v "orchestration\"")
+
+            # Don't check the tests
+            members=$(echo "$members" | grep -v "mini\"")
+            members=$(echo "$members" | grep -v "tests/")
+
+            echo $members | jq -r ".[]" | while read -r member; do
+              check_msrv $member
+              correct=$?
+              if [ $correct -ne 0 ]; then
+                return $correct
+              fi
+            done
+          }
+          check_workspace
+
   slither:
     runs-on: ubuntu-latest
     steps:

@@ -3,17 +3,16 @@ use core::{
   iter::Sum,
 };
 
-use rand_core::RngCore;
-
-use zeroize::Zeroize;
-use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable};
-
-use generic_array::{typenum::U33, GenericArray};
-
-use ciphersuite::group::{
-  ff::{Field, PrimeField, PrimeFieldBits},
-  Group, GroupEncoding,
-  prime::PrimeGroup,
+use k256::elliptic_curve::{
+  zeroize::Zeroize,
+  subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable},
+  generic_array::{typenum::U33, GenericArray},
+  rand_core::RngCore,
+  group::{
+    ff::{Field, PrimeField, PrimeFieldBits},
+    Group, GroupEncoding,
+    prime::PrimeGroup,
+  },
 };
 
 use crate::{backend::u8_from_bool, Scalar, FieldElement};

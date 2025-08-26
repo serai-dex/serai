@@ -1,8 +1,9 @@
-use zeroize::{DefaultIsZeroes, Zeroize};
-
-use crypto_bigint::{
-  U256, U512,
-  modular::constant_mod::{ResidueParams, Residue},
+use k256::elliptic_curve::{
+  zeroize::{DefaultIsZeroes, Zeroize},
+  bigint::{
+    U256, U512,
+    modular::constant_mod::{ResidueParams, Residue},
+  },
 };
 
 const MODULUS_STR: &str = "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F";

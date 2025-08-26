@@ -1,4 +1,4 @@
-use zeroize::Zeroize;
+use k256::elliptic_curve::zeroize::Zeroize;
 
 // Use black_box when possible
 #[rustversion::since(1.66)]
@@ -85,13 +85,13 @@ macro_rules! field {
       iter::{Sum, Product},
     };
 
-    use subtle::{Choice, CtOption, ConstantTimeEq, ConstantTimeLess, ConditionallySelectable};
-    use rand_core::RngCore;
-
-    use crypto_bigint::{Integer, NonZero, Encoding, impl_modulus};
-
-    use ciphersuite::group::ff::{
-      Field, PrimeField, FieldBits, PrimeFieldBits, FromUniformBytes, helpers::sqrt_ratio_generic,
+    use k256::elliptic_curve::{
+      subtle::{Choice, CtOption, ConstantTimeEq, ConstantTimeLess, ConditionallySelectable},
+      rand_core::RngCore,
+      bigint::{Integer, NonZero, Encoding, impl_modulus},
+      group::ff::{
+        Field, PrimeField, FieldBits, PrimeFieldBits, FromUniformBytes, helpers::sqrt_ratio_generic,
+      },
     };
 
     use $crate::backend::u8_from_bool;

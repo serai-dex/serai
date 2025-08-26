@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/crypto/evrf/embedw
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["curve25519", "ed25519", "ristretto255", "group"]
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.83"
 
 [package.metadata.docs.rs]
 all-features = true
