@@ -22,17 +22,17 @@ workspace = true
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 scale-info = { version = "2", default-features = false, features = ["derive"] }
 
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "2bfdaed4b3614de2fe7d10e4ece3e6a912833e90", default-features = false }
-sp-std = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "2bfdaed4b3614de2fe7d10e4ece3e6a912833e90", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "2bfdaed4b3614de2fe7d10e4ece3e6a912833e90", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "74839cba4a7f48023080215e5194fd6ab7e270e5", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "74839cba4a7f48023080215e5194fd6ab7e270e5", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "74839cba4a7f48023080215e5194fd6ab7e270e5", default-features = false }
 
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "2bfdaed4b3614de2fe7d10e4ece3e6a912833e90", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "2bfdaed4b3614de2fe7d10e4ece3e6a912833e90", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "74839cba4a7f48023080215e5194fd6ab7e270e5", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "74839cba4a7f48023080215e5194fd6ab7e270e5", default-features = false }
 
 serai-primitives = { path = "../primitives", default-features = false, features = ["serde", "non_canonical_scale_derivations"] }
 
 [dev-dependencies]
-sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "2bfdaed4b3614de2fe7d10e4ece3e6a912833e90", default-features = false, features = ["std"] }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "74839cba4a7f48023080215e5194fd6ab7e270e5", default-features = false, features = ["std"] }
 
 [features]
 std = [

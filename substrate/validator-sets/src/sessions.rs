@@ -135,6 +135,7 @@ pub(crate) trait Sessions {
     network: NetworkId,
     validator: Public,
     amount: Amount,
+    block_reward: bool,
   ) -> Result<(), AllocationError>;
 
   /// Decrease a validator's allocation.
@@ -264,6 +265,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     network: NetworkId,
     validator: Public,
     amount: Amount,
+    block_reward: bool,
   ) -> Result<(), AllocationError> {
     let Some(allocation_per_key_share) = Storage::AllocationPerKeyShare::get(network) else {
       Err(AllocationError::NoAllocationPerKeyShareSet)?
@@ -272,7 +274,8 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     let old_allocation = Self::get_allocation(network, validator).unwrap_or(Amount(0));
     // Safe so long as the SRI supply fits within a u64, per assumptions on how this is called
     let new_allocation = (old_allocation + amount).unwrap();
-    if new_allocation < allocation_per_key_share {
+    // Always allow a block reward to be added
+    if (!block_reward) && (new_allocation < allocation_per_key_share) {
       Err(AllocationError::AllocationLessThanKeyShare)?
     }
 

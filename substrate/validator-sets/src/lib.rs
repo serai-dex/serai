@@ -1,11 +1,16 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(test)]
-mod mock;
+extern crate alloc;
 
-#[cfg(test)]
-mod tests;
+mod allocations;
+use allocations::*;
 
+mod sessions;
+use sessions::{*, GenesisValidators as GenesisValidatorsContainer};
+
+/*
 use core::marker::PhantomData;
 
 use scale::{Encode, Decode};
@@ -63,32 +68,37 @@ impl<T: pallet::Config> GetValidatorCount for MembershipProof<T> {
     u32::try_from(Babe::<T>::authorities().len()).unwrap()
   }
 }
+*/
 
-#[allow(
-  deprecated,
-  unreachable_patterns,
-  clippy::let_unit_value,
-  clippy::cast_possible_truncation,
-  clippy::ignored_unit_patterns
-)] // TODO
 #[frame_support::pallet]
-pub mod pallet {
+mod pallet {
+  use sp_core::sr25519::Public;
+
+  use frame_system::pallet_prelude::*;
+  use frame_support::pallet_prelude::*;
+
+  use serai_primitives::{
+    crypto::KeyPair,
+    network_id::*,
+    coin::*,
+    balance::*,
+    validator_sets::*,
+    address::SeraiAddress,
+  };
+
+  use coins_pallet::Pallet as Coins;
+
   use super::*;
 
   #[pallet::config]
-  pub trait Config:
-    frame_system::Config<AccountId = Public>
-    + coins_pallet::Config
-    + dex_pallet::Config
-    + pallet_babe::Config
-    + pallet_grandpa::Config
-    + TypeInfo
-  {
+  #[pallet::disable_frame_system_supertrait_check]
+  pub trait Config: coins_pallet::Config {
     type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
 
-    type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
+    // type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
   }
 
+  /* TODO
   #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, serde::Serialize, serde::Deserialize)]
   pub struct AllEmbeddedEllipticCurveKeysAtGenesis {
     pub embedwards25519: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
@@ -112,26 +122,12 @@ pub mod pallet {
       GenesisConfig { networks: Default::default(), participants: Default::default() }
     }
   }
+  */
 
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
 
-  /// The current session for a network.
-  // Uses Identity for the lookup to avoid a hash of a severely limited fixed key-space.
-  #[pallet::storage]
-  #[pallet::getter(fn session)]
-  pub type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, Session, OptionQuery>;
-  impl<T: Config> Pallet<T> {
-    pub fn latest_decided_session(network: NetworkId) -> Option<Session> {
-      let session = Self::session(network);
-      // we already decided about the next session for serai.
-      if network == NetworkId::Serai {
-        return session.map(|s| Session(s.0 + 1));
-      }
-      session
-    }
-  }
-
+  /*
   /// The allocation required per key share.
   // Uses Identity for the lookup to avoid a hash of a severely limited fixed key-space.
   #[pallet::storage]
@@ -158,50 +154,8 @@ pub mod pallet {
   #[pallet::storage]
   pub(crate) type InSet<T: Config> =
     StorageDoubleMap<_, Identity, NetworkId, Blake2_128Concat, Public, u64, OptionQuery>;
-
-  impl<T: Config> Pallet<T> {
-    // This exists as InSet, for Serai, is the validators set for the next session, *not* the
-    // current set's validators
-    #[inline]
-    fn in_active_serai_set(account: Public) -> bool {
-      // TODO: is_member is internally O(n). Update Babe to use an O(1) storage lookup?
-      Babe::<T>::is_member(&BabeAuthorityId::from(account))
-    }
-
-    /// Returns true if the account is included in an active set.
-    ///
-    /// This will still include participants which were removed from the DKG.
-    pub fn in_active_set(network: NetworkId, account: Public) -> bool {
-      if network == NetworkId::Serai {
-        Self::in_active_serai_set(account)
-      } else {
-        InSet::<T>::contains_key(network, account)
-      }
-    }
-
-    /// Returns true if the account has been definitively included in an active or upcoming set.
-    ///
-    /// This will still include participants which were removed from the DKG.
-    pub fn in_set(network: NetworkId, account: Public) -> bool {
-      if InSet::<T>::contains_key(network, account) {
-        return true;
-      }
-
-      if network == NetworkId::Serai {
-        return Self::in_active_serai_set(account);
-      }
-
-      false
-    }
-
-    /// Returns true if the account is present in the latest decided set.
-    ///
-    /// This is useful when working with `allocation` and `total_allocated_stake`, which return the
-    /// latest information.
-    pub fn in_latest_decided_set(network: NetworkId, account: Public) -> bool {
-      InSet::<T>::contains_key(network, account)
-    }
   }
+  */
 
   /// A key on an embedded elliptic curve.
   #[pallet::storage]
@@ -210,133 +164,58 @@ pub mod pallet {
     Blake2_128Concat,
     Public,
     Identity,
-    EmbeddedEllipticCurve,
-    BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+    ExternalNetworkId,
+    serai_primitives::crypto::EmbeddedEllipticCurveKeys,
     OptionQuery,
   >;
 
-  /// The total stake allocated to this network by the active set of validators.
+  struct Abstractions<T: Config>(PhantomData<T>);
+
+  // Satisfy the `Allocations` abstraction
+
   #[pallet::storage]
-  #[pallet::getter(fn total_allocated_stake)]
-  pub type TotalAllocatedStake<T: Config> = StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
-
-  /// The current amount allocated to a validator set by a validator.
-  #[pallet::storage]
-  #[pallet::getter(fn allocation)]
-  pub type Allocations<T: Config> =
-    StorageMap<_, Blake2_128Concat, (NetworkId, Public), Amount, OptionQuery>;
-  /// A sorted view of the current allocations premised on the underlying DB itself being sorted.
-  /*
-    This uses Identity so we can take advantage of the DB's lexicographic ordering to iterate over
-    the key space from highest-to-lowest allocated.
-
-    This does remove the protection using a hash algorithm here offers against spam attacks (by
-    flooding the DB with layers, increasing lookup time and merkle proof sizes, not that we use
-    merkle proofs as Polkadot does).
-
-    Since amounts are represented with just 8 bytes, only 16 nibbles are presents. This caps the
-    potential depth caused by spam at 16 layers (as the underlying DB operates on nibbles).
-
-    While there is an entire 32-byte public key after this, a Blake hash of the key is inserted
-    after the amount to prevent the key from also being used to cause layer spam.
-
-    There's also a minimum stake requirement, which further reduces the potential for spam.
-  */
+  type Allocations<T: Config> =
+    StorageMap<_, Blake2_128Concat, AllocationsKey, Amount, OptionQuery>;
+  // This has to use `Identity` per the documentation of `AllocationsStorage`
   #[pallet::storage]
   type SortedAllocations<T: Config> =
-    StorageMap<_, Identity, (NetworkId, [u8; 8], [u8; 16], Public), (), OptionQuery>;
-  impl<T: Config> Pallet<T> {
-    #[inline]
-    fn sorted_allocation_key(
-      network: NetworkId,
-      key: Public,
-      amount: Amount,
-    ) -> (NetworkId, [u8; 8], [u8; 16], Public) {
-      let amount = reverse_lexicographic_order(amount.0.to_be_bytes());
-      let hash = sp_io::hashing::blake2_128(&(network, amount, key).encode());
-      (network, amount, hash, key)
-    }
-    fn recover_amount_from_sorted_allocation_key(key: &[u8]) -> Amount {
-      let distance_from_end = 8 + 16 + 32;
-      let start_pos = key.len() - distance_from_end;
-      let mut raw: [u8; 8] = key[start_pos .. (start_pos + 8)].try_into().unwrap();
-      for byte in &mut raw {
-        *byte = !*byte;
-      }
-      Amount(u64::from_be_bytes(raw))
-    }
-    fn recover_key_from_sorted_allocation_key(key: &[u8]) -> Public {
-      Public(key[(key.len() - 32) ..].try_into().unwrap())
-    }
-    // Returns if this validator already had an allocation set.
-    fn set_allocation(network: NetworkId, key: Public, amount: Amount) -> bool {
-      let prior = Allocations::<T>::take((network, key));
-      if let Some(amount) = prior {
-        SortedAllocations::<T>::remove(Self::sorted_allocation_key(network, key, amount));
-      }
-      if amount.0 != 0 {
-        Allocations::<T>::set((network, key), Some(amount));
-        SortedAllocations::<T>::set(Self::sorted_allocation_key(network, key, amount), Some(()));
-      }
-      prior.is_some()
-    }
+    StorageMap<_, Identity, SortedAllocationsKey, (), OptionQuery>;
+
+  impl<T: Config> AllocationsStorage for Abstractions<T> {
+    type Allocations = Allocations<T>;
+    type SortedAllocations = SortedAllocations<T>;
   }
 
-  // Doesn't use PrefixIterator as we need to yield the keys *and* values
-  // PrefixIterator only yields the values
-  struct SortedAllocationsIter<T: Config> {
-    _t: PhantomData<T>,
-    prefix: Vec<u8>,
-    last: Vec<u8>,
-    allocation_per_key_share: Amount,
-  }
-  impl<T: Config> SortedAllocationsIter<T> {
-    fn new(network: NetworkId) -> Self {
-      let mut prefix = SortedAllocations::<T>::final_prefix().to_vec();
-      prefix.extend(&network.encode());
-      Self {
-        _t: PhantomData,
-        prefix: prefix.clone(),
-        last: prefix,
-        allocation_per_key_share: Pallet::<T>::allocation_per_key_share(network).expect(
-          "SortedAllocationsIter iterating over a network without a set allocation per key share",
-        ),
-      }
-    }
-  }
-  impl<T: Config> Iterator for SortedAllocationsIter<T> {
-    type Item = (Public, Amount);
-    fn next(&mut self) -> Option<Self::Item> {
-      let next = sp_io::storage::next_key(&self.last)?;
-      if !next.starts_with(&self.prefix) {
-        None?;
-      }
-      let key = Pallet::<T>::recover_key_from_sorted_allocation_key(&next);
-      let amount = Pallet::<T>::recover_amount_from_sorted_allocation_key(&next);
+  // Satisfy the `Sessions` API
 
-      // We may have validators present, with less than the minimum allocation, due to block
-      // rewards
-      if amount.0 < self.allocation_per_key_share.0 {
-        None?;
-      }
-
-      self.last = next;
-      Some((key, amount))
-    }
-  }
-
-  /// Pending deallocations, keyed by the Session they become unlocked on.
+  // We use `Identity` as the hasher for `NetworkId` due to how constrained it is
   #[pallet::storage]
-  #[pallet::getter(fn pending_deallocations)]
-  type PendingDeallocations<T: Config> = StorageDoubleMap<
-    _,
-    Blake2_128Concat,
-    (NetworkId, Public),
-    Identity,
-    Session,
-    Amount,
-    OptionQuery,
-  >;
+  type GenesisValidators<T: Config> = StorageValue<_, GenesisValidatorsContainer, OptionQuery>;
+  #[pallet::storage]
+  type AllocationPerKeyShare<T: Config> = StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
+  #[pallet::storage]
+  type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, Session, OptionQuery>;
+  #[pallet::storage]
+  type LatestDecidedSession<T: Config> = StorageMap<_, Identity, NetworkId, Session, OptionQuery>;
+  // This has to use `Identity` per the documentation of `SessionsStorage`
+  #[pallet::storage]
+  type SelectedValidators<T: Config> =
+    StorageMap<_, Identity, SelectedValidatorsKey, u64, OptionQuery>;
+  #[pallet::storage]
+  type TotalAllocatedStake<T: Config> = StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
+  #[pallet::storage]
+  type DelayedDeallocations<T: Config> =
+    StorageDoubleMap<_, Blake2_128Concat, Public, Identity, Session, Amount, OptionQuery>;
+
+  impl<T: Config> SessionsStorage for Abstractions<T> {
+    type GenesisValidators = GenesisValidators<T>;
+    type AllocationPerKeyShare = AllocationPerKeyShare<T>;
+    type CurrentSession = CurrentSession<T>;
+    type LatestDecidedSession = LatestDecidedSession<T>;
+    type SelectedValidators = SelectedValidators<T>;
+    type TotalAllocatedStake = TotalAllocatedStake<T>;
+    type DelayedDeallocations = DelayedDeallocations<T>;
+  }
 
   /// The generated key pair for a given validator set instance.
   #[pallet::storage]
@@ -352,12 +231,6 @@ pub mod pallet {
   /// Disabled validators.
   #[pallet::storage]
   pub type SeraiDisabledIndices<T: Config> = StorageMap<_, Identity, u32, Public, OptionQuery>;
-
-  /// Mapping from session to its starting block number.
-  #[pallet::storage]
-  #[pallet::getter(fn session_begin_block)]
-  pub type SessionBeginBlock<T: Config> =
-    StorageDoubleMap<_, Identity, NetworkId, Identity, Session, u64, ValueQuery>;
 
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -399,61 +272,15 @@ pub mod pallet {
 
   impl<T: Config> Pallet<T> {
     fn new_set(network: NetworkId) {
+      // TODO
+      let include_genesis_validators = true;
       // TODO: prevent new set if it doesn't have enough stake for economic security.
+      Abstractions::<T>::attempt_new_session(network, include_genesis_validators)
 
-      // Update CurrentSession
-      let session = {
-        let new_session =
-          CurrentSession::<T>::get(network).map_or(Session(0), |session| Session(session.0 + 1));
-        CurrentSession::<T>::set(network, Some(new_session));
-        new_session
-      };
-
-      // Clear the current InSet
-      assert_eq!(
-        InSet::<T>::clear_prefix(network, MAX_KEY_SHARES_PER_SET_U32, None).maybe_cursor,
-        None
-      );
-
-      let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
-
-      let mut participants = vec![];
-      let mut total_allocated_stake = 0;
-      {
-        let mut iter = SortedAllocationsIter::<T>::new(network);
-        let mut key_shares = 0;
-        while key_shares < u64::from(MAX_KEY_SHARES_PER_SET_U32) {
-          let Some((key, amount)) = iter.next() else { break };
-
-          let these_key_shares =
-            (amount.0 / allocation_per_key_share).min(u64::from(MAX_KEY_SHARES_PER_SET_U32));
-          participants.push((key, these_key_shares));
-
-          total_allocated_stake += amount.0;
-          key_shares += these_key_shares;
-        }
-        amortize_excess_key_shares(&mut participants);
-      }
-
-      for (key, shares) in &participants {
-        InSet::<T>::set(network, key, Some(*shares));
-      }
-
+      /* TODO
       let set = ValidatorSet { network, session };
       Pallet::<T>::deposit_event(Event::NewSet { set });
-
-      // other networks set their Session(0) TAS once they set their keys but serai network
-      // doesn't have that so we set it here.
-      if network == NetworkId::Serai && session == Session(0) {
-        TotalAllocatedStake::<T>::set(network, Some(Amount(total_allocated_stake)));
-      }
-
-      Participants::<T>::set(network, Some(participants.try_into().unwrap()));
-      SessionBeginBlock::<T>::set(
-        network,
-        session,
-        <frame_system::Pallet<T>>::block_number().saturated_into::<u64>(),
-      );
+      */
     }
   }
 
@@ -494,6 +321,7 @@ pub mod pallet {
     DeallocationWouldRemoveEconomicSecurity,
   }
 
+  /* TODO
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_initialize(n: BlockNumberFor<T>) -> Weight {
@@ -513,7 +341,7 @@ pub mod pallet {
       for (id, stake) in self.networks.clone() {
         AllocationPerKeyShare::<T>::set(id, Some(stake));
         for participant in &self.participants {
-          if Pallet::<T>::set_allocation(id, participant.0, stake) {
+          if Abstractions::<T>::set_allocation(id, participant.0, stake) {
             panic!("participants contained duplicates");
           }
           EmbeddedEllipticCurveKeys::<T>::set(
@@ -531,12 +359,14 @@ pub mod pallet {
       }
     }
   }
+  */
 
   impl<T: Config> Pallet<T> {
     fn account() -> T::AccountId {
-      system_address(b"ValidatorSets").into()
+      SeraiAddress::system(b"ValidatorSets").into()
     }
 
+    /*
     // is_bft returns if the network is able to survive any single node becoming byzantine.
     fn is_bft(network: NetworkId) -> bool {
       let allocation_per_key_share = AllocationPerKeyShare::<T>::get(network).unwrap().0;
@@ -544,7 +374,7 @@ pub mod pallet {
       let mut validators_len = 0;
       let mut top = None;
       let mut key_shares = 0;
-      for (_, amount) in SortedAllocationsIter::<T>::new(network) {
+      for (_, amount) in Abstractions::<T>::iter_allocations(network, allocation_per_key_share) {
         validators_len += 1;
 
         key_shares += amount.0 / allocation_per_key_share;
@@ -573,53 +403,14 @@ pub mod pallet {
       amount: Amount,
       block_reward: bool,
     ) -> DispatchResult {
-      let old_allocation = Self::allocation((network, account)).unwrap_or(Amount(0)).0;
-      let new_allocation = old_allocation + amount.0;
-      let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
-      // If this is a block reward, we always allow it to be allocated
-      if (new_allocation < allocation_per_key_share) && (!block_reward) {
-        Err(Error::<T>::InsufficientAllocation)?;
-      }
-
-      let increased_key_shares =
-        (old_allocation / allocation_per_key_share) < (new_allocation / allocation_per_key_share);
-
-      // Check if the net exhibited the ability to handle any single node becoming byzantine
-      let mut was_bft = None;
-      if increased_key_shares {
-        was_bft = Some(Self::is_bft(network));
-      }
-
-      // Increase the allocation now
-      Self::set_allocation(network, account, Amount(new_allocation));
-      Self::deposit_event(Event::AllocationIncreased { validator: account, network, amount });
-
-      // Error if the net no longer can handle any single node becoming byzantine
-      if let Some(was_bft) = was_bft {
-        if was_bft && (!Self::is_bft(network)) {
-          Err(Error::<T>::AllocationWouldRemoveFaultTolerance)?;
-        }
-      }
-
+      /* TODO
       // The above is_bft calls are only used to check a BFT net doesn't become non-BFT
       // Check here if this call would prevent a non-BFT net from *ever* becoming BFT
       if (new_allocation / allocation_per_key_share) >= (MAX_KEY_SHARES_PER_SET_U32 / 3).into() {
         Err(Error::<T>::AllocationWouldPreventFaultTolerance)?;
       }
-
-      // If they're in the current set, and the current set has completed its handover (so its
-      // currently being tracked by TotalAllocatedStake), update the TotalAllocatedStake
-      if let Some(session) = Self::session(network) {
-        if InSet::<T>::contains_key(network, account) && Self::handover_completed(network, session)
-        {
-          TotalAllocatedStake::<T>::set(
-            network,
-            Some(Amount(TotalAllocatedStake::<T>::get(network).unwrap_or(Amount(0)).0 + amount.0)),
-          );
-        }
-      }
-
-      Ok(())
+      */
+      Abstractions::<T>::increase_allocation(network, account, amount, block_reward)
     }
 
     fn session_to_unlock_on_for_current_set(network: NetworkId) -> Option<Session> {
@@ -652,6 +443,7 @@ pub mod pallet {
       account: T::AccountId,
       amount: Amount,
     ) -> Result<bool, DispatchError> {
+      /* TODO
       // Check it's safe to decrease this set's stake by this amount
       if let NetworkId::External(n) = network {
         let new_total_staked = Self::total_allocated_stake(NetworkId::from(n))
@@ -665,18 +457,6 @@ pub mod pallet {
         }
       }
 
-      let old_allocation =
-        Self::allocation((network, account)).ok_or(Error::<T>::NonExistentValidator)?.0;
-      let new_allocation =
-        old_allocation.checked_sub(amount.0).ok_or(Error::<T>::NotEnoughAllocated)?;
-
-      // If we're not removing the entire allocation, yet the allocation is no longer at or above
-      // the threshold for a key share, error
-      let allocation_per_key_share = Self::allocation_per_key_share(network).unwrap().0;
-      if (new_allocation > 0) && (new_allocation < allocation_per_key_share) {
-        Err(Error::<T>::DeallocationWouldRemoveParticipant)?;
-      }
-
       let decreased_key_shares =
         (old_allocation / allocation_per_key_share) > (new_allocation / allocation_per_key_share);
 
@@ -687,48 +467,14 @@ pub mod pallet {
         was_bft = Some(Self::is_bft(network));
       }
 
-      // Decrease the allocation now
-      // Since we don't also update TotalAllocatedStake here, TotalAllocatedStake may be greater
-      // than the sum of all allocations, according to the Allocations StorageMap
-      // This is intentional as this allocation has only been queued for deallocation at this time
-      Self::set_allocation(network, account, Amount(new_allocation));
-
       if let Some(was_bft) = was_bft {
         if was_bft && (!Self::is_bft(network)) {
           Err(Error::<T>::DeallocationWouldRemoveFaultTolerance)?;
         }
       }
+      */
 
-      // If we're not in-set, allow immediate deallocation
-      if !Self::in_set(network, account) {
-        Self::deposit_event(Event::AllocationDecreased {
-          validator: account,
-          network,
-          amount,
-          delayed_until: None,
-        });
-        return Ok(true);
-      }
-
-      // Set it to PendingDeallocations, letting it be released upon a future session
-      // This unwrap should be fine as this account is active, meaning a session has occurred
-      let to_unlock_on = Self::session_to_unlock_on_for_current_set(network).unwrap();
-      let existing =
-        PendingDeallocations::<T>::get((network, account), to_unlock_on).unwrap_or(Amount(0));
-      PendingDeallocations::<T>::set(
-        (network, account),
-        to_unlock_on,
-        Some(Amount(existing.0 + amount.0)),
-      );
-
-      Self::deposit_event(Event::AllocationDecreased {
-        validator: account,
-        network,
-        amount,
-        delayed_until: Some(to_unlock_on),
-      });
-
-      Ok(false)
+      Sessions::<T>::decrease_allocation(network, account, amount)
     }
 
     // Checks if this session has completed the handover from the prior session.
@@ -779,15 +525,6 @@ pub mod pallet {
       }
     }
 
-    fn set_total_allocated_stake(network: NetworkId) {
-      let participants = Participants::<T>::get(network)
-        .expect("setting TotalAllocatedStake for a network without participants");
-      let total_stake = participants.iter().fold(0, |acc, (addr, _)| {
-        acc + Allocations::<T>::get((network, addr)).unwrap_or(Amount(0)).0
-      });
-      TotalAllocatedStake::<T>::set(network, Some(Amount(total_stake)));
-    }
-
     // TODO: This is called retire_set, yet just starts retiring the set
     // Update the nomenclature within this function
     pub fn retire_set(set: ValidatorSet) {
@@ -814,9 +551,6 @@ pub mod pallet {
       Self::deposit_event(Event::AcceptedHandover {
         set: ValidatorSet { network: set.network, session: Session(set.session.0 + 1) },
       });
-
-      // Update the total allocated stake to be for the current set
-      Self::set_total_allocated_stake(set.network);
     }
 
     /// Take the amount deallocatable.
@@ -938,9 +672,10 @@ pub mod pallet {
     fn slash_serai_validator(validator: Public) {
       let network = NetworkId::Serai;
 
-      let mut allocation = Self::allocation((network, validator)).unwrap_or(Amount(0));
+      let mut allocation = Abstractions::<T>::get_allocation((network, validator))
+      .unwrap_or(Amount(0));
       // reduce the current allocation to 0.
-      Self::set_allocation(network, validator, Amount(0));
+      Abstractions::<T>::set_allocation(network, validator, Amount(0));
 
       // Take the pending deallocation from the current session
       allocation.0 += PendingDeallocations::<T>::take(
@@ -1002,10 +737,12 @@ pub mod pallet {
 
       Some(keys.1.into_inner())
     }
+    */
   }
 
   #[pallet::call]
   impl<T: Config> Pallet<T> {
+    /*
     #[pallet::call_index(0)]
     #[pallet::weight(0)] // TODO
     pub fn set_keys(
@@ -1066,31 +803,18 @@ pub mod pallet {
 
       Ok(())
     }
+    */
 
     #[pallet::call_index(2)]
     #[pallet::weight(0)] // TODO
-    pub fn set_embedded_elliptic_curve_key(
+    pub fn set_embedded_elliptic_curve_keys(
       origin: OriginFor<T>,
-      embedded_elliptic_curve: EmbeddedEllipticCurve,
-      key: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
+      network: ExternalNetworkId,
+      keys: serai_primitives::crypto::EmbeddedEllipticCurveKeys,
     ) -> DispatchResult {
-      let validator = ensure_signed(origin)?;
-
-      // We don't have the curve formulas, nor the BigInt arithmetic, necessary here to validate
-      // these keys. Instead, we solely check the key lengths. Validators are responsible to not
-      // provide invalid keys.
-      let expected_len = match embedded_elliptic_curve {
-        EmbeddedEllipticCurve::Embedwards25519 => 32,
-        EmbeddedEllipticCurve::Secq256k1 => 33,
-      };
-      if key.len() != expected_len {
-        Err(Error::<T>::InvalidEmbeddedEllipticCurveKey)?;
-      }
-
-      // This does allow overwriting an existing key which... is unlikely to be done?
-      // Yet it isn't an issue as we'll fix to the key as of any set's declaration (uncaring to if
-      // it's distinct at the latest block)
-      EmbeddedEllipticCurveKeys::<T>::set(validator, embedded_elliptic_curve, Some(key));
+      let signer = ensure_signed(origin)?;
+      // TODO: Add PoKs and check validity
+      EmbeddedEllipticCurveKeys::<T>::set(signer, network, Some(keys));
       Ok(())
     }
 
@@ -1100,8 +824,8 @@ pub mod pallet {
       let validator = ensure_signed(origin)?;
       // If this network utilizes embedded elliptic curve(s), require the validator to have set the
       // appropriate key(s)
-      for embedded_elliptic_curve in network.embedded_elliptic_curves() {
-        if !EmbeddedEllipticCurveKeys::<T>::contains_key(validator, *embedded_elliptic_curve) {
+      if let Ok(network) = ExternalNetworkId::try_from(network) {
+        if !EmbeddedEllipticCurveKeys::<T>::contains_key(validator, network) {
           Err(Error::<T>::MissingEmbeddedEllipticCurveKey)?;
         }
       }
@@ -1110,7 +834,8 @@ pub mod pallet {
         Self::account(),
         Balance { coin: Coin::Serai, amount },
       )?;
-      Self::increase_allocation(network, validator, amount, false)
+      Abstractions::<T>::increase_allocation(network, validator, amount, false)?;
+      Ok(())
     }
 
     #[pallet::call_index(4)]
@@ -1118,8 +843,8 @@ pub mod pallet {
     pub fn deallocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let account = ensure_signed(origin)?;
 
-      let can_immediately_deallocate = Self::decrease_allocation(network, account, amount)?;
-      if can_immediately_deallocate {
+      let deallocation_timeline = Abstractions::<T>::decrease_allocation(network, account, amount)?;
+      if matches!(deallocation_timeline, DeallocationTimeline::Immediate) {
         Coins::<T>::transfer_internal(
           Self::account(),
           account,
@@ -1130,6 +855,7 @@ pub mod pallet {
       Ok(())
     }
 
+    /*
     #[pallet::call_index(5)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn claim_deallocation(
@@ -1149,8 +875,10 @@ pub mod pallet {
       Self::deposit_event(Event::DeallocationClaimed { validator: account, network, session });
       Ok(())
     }
+    */
   }
 
+  /*
   #[pallet::validate_unsigned]
   impl<T: Config> ValidateUnsigned for Pallet<T> {
     type Call = Call<T>;
@@ -1271,8 +999,8 @@ pub mod pallet {
     }
   }
 
-  #[rustfmt::skip]
-  impl<T: Config, V: Into<Public> + From<Public>> KeyOwnerProofSystem<(KeyTypeId, V)> for Pallet<T> {
+  impl<T: Config, V: Into<Public> + From<Public>> KeyOwnerProofSystem<(KeyTypeId, V)> for
+  Pallet<T> {
     type Proof = MembershipProof<T>;
     type IdentificationTuple = Public;
 
@@ -1371,18 +1099,21 @@ pub mod pallet {
       SeraiDisabledIndices::<T>::get(index).is_some()
     }
   }
+  */
 }
 
 sp_api::decl_runtime_apis! {
   #[api_version(1)]
   pub trait ValidatorSetsApi {
     /// Returns the validator set for a given network.
-    fn validators(network_id: NetworkId) -> Vec<PublicKey>;
+    fn validators(
+      network_id: serai_primitives::network_id::NetworkId,
+    ) -> Vec<serai_primitives::crypto::Public>;
 
     /// Returns the external network key for a given external network.
     fn external_network_key(
-      network: ExternalNetworkId,
-    ) -> Option<Vec<u8>>;
+      network: serai_primitives::network_id::ExternalNetworkId,
+    ) -> Option<serai_primitives::crypto::ExternalKey>;
   }
 }
 

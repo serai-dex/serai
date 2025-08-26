@@ -6,6 +6,16 @@ use crate::coin::{ExternalCoin, Coin};
 
 /// Identifier for an embedded elliptic curve.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
+)]
 pub enum EmbeddedEllipticCurve {
   /// The Embedwards25519 curve, defined over (embedded into) Ed25519's/Ristretto's scalar field.
   Embedwards25519,
@@ -50,14 +60,17 @@ impl ExternalNetworkId {
   ///
   /// This is guaranteed to return `[Embedwards25519]` or
   /// `[Embedwards25519, *network specific curve*]`.
-  pub fn embedded_elliptic_curves(&self) -> &'static [EmbeddedEllipticCurve] {
+  pub fn embedded_elliptic_curves(&self) -> impl Iterator<Item = EmbeddedEllipticCurve> {
     match self {
       // We need to generate a Ristretto key for oraclizing and a Secp256k1 key for the network
       Self::Bitcoin | Self::Ethereum => {
-        &[EmbeddedEllipticCurve::Embedwards25519, EmbeddedEllipticCurve::Secq256k1]
+        [EmbeddedEllipticCurve::Embedwards25519, EmbeddedEllipticCurve::Secq256k1]
+          .as_slice()
+          .iter()
+          .copied()
       }
       // Since the oraclizing key curve is the same as the network's curve, we only need it
-      Self::Monero => &[EmbeddedEllipticCurve::Embedwards25519],
+      Self::Monero => [EmbeddedEllipticCurve::Embedwards25519].as_slice().iter().copied(),
     }
   }
 
