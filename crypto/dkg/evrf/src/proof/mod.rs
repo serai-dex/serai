@@ -327,7 +327,7 @@ impl<C: Curves> Proof<C> {
     coefficients: usize,
     participant_public_keys: &[<<C as Curves>::EmbeddedCurve as Ciphersuite>::G],
     evrf_private_key: &Zeroizing<<<C as Curves>::EmbeddedCurve as Ciphersuite>::F>,
-  ) -> Result<ProveResult<C>, AcError> {
+  ) -> Result<ProveResult<C>, AcProveError> {
     let curve_spec = CurveSpec {
       a: <<C as Curves>::EmbeddedCurve as Ciphersuite>::G::a(),
       b: <<C as Curves>::EmbeddedCurve as Ciphersuite>::G::b(),
@@ -469,7 +469,7 @@ impl<C: Curves> Proof<C> {
       Vec::with_capacity(vector_commitment_tape.len().div_ceil(generators_to_use));
     for chunk in vector_commitment_tape.chunks(generators_to_use) {
       vector_commitments.push(PedersenVectorCommitment {
-        g_values: chunk.to_vec().into(),
+        g_values: chunk.into(),
         mask: <C::ToweringCurve as Ciphersuite>::F::random(&mut *rng),
       });
     }
@@ -496,7 +496,7 @@ impl<C: Curves> Proof<C> {
         .map(|commitment| {
           commitment
             .commit(generators.g_bold_slice(), generators.h())
-            .ok_or(AcError::NotEnoughGenerators)
+            .ok_or(AcProveError::IncorrectAmountOfGenerators)
         })
         .collect::<Result<_, _>>()?,
       commitments
@@ -521,7 +521,7 @@ impl<C: Curves> Proof<C> {
 
     let (statement, Some(witness)) = circuit
       .statement(
-        generators.reduce(generators_to_use).ok_or(AcError::NotEnoughGenerators)?,
+        generators.reduce(generators_to_use).ok_or(AcProveError::IncorrectAmountOfGenerators)?,
         commited_commitments,
       )
       .unwrap()

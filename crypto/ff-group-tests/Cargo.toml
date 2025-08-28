@@ -27,7 +27,3 @@ group = "0.13"
 [dev-dependencies]
 k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits"] }
 p256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits"] }
-
-bls12_381 = "0.8"
-
-pasta_curves = "0.5"

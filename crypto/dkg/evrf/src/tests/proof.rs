@@ -9,7 +9,7 @@ use ciphersuite::{
   Ciphersuite,
 };
 
-use generalized_bulletproofs::{Generators, tests::generators};
+use generalized_bulletproofs::{Generators, tests::insecure_test_generators};
 
 use crate::{
   Curves, Ristretto,
@@ -18,7 +18,7 @@ use crate::{
 };
 
 fn proof<C: Curves>() {
-  let generators = generators(2048);
+  let generators = insecure_test_generators(&mut OsRng, 2048).unwrap();
   let embedded_private_key =
     Zeroizing::new(<C::EmbeddedCurve as Ciphersuite>::F::random(&mut OsRng));
   let ecdh_public_keys: [_; PARTICIPANTS as usize] =

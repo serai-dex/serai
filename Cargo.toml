@@ -152,7 +152,6 @@ group = { opt-level = 3 }
 crypto-bigint = { opt-level = 3 }
 curve25519-dalek = { opt-level = 3 }
 dalek-ff-group = { opt-level = 3 }
-helioselene = { opt-level = 3 }
 
 multiexp = { opt-level = 3 }
 

@@ -222,21 +222,11 @@ impl<C: Curves> Dkg<C> {
       evrf_private_key,
     ) {
       Ok(res) => res,
-      Err(AcError::NotEnoughGenerators) => Err(Error::NotEnoughGenerators {
+      Err(AcProveError::IncorrectAmountOfGenerators) => Err(Error::NotEnoughGenerators {
         provided: generators.0.g_bold_slice().len(),
         required: Proof::<C>::generators_to_use(usize::from(t), evrf_public_keys.len()),
       })?,
-      Err(
-        AcError::DifferingLrLengths |
-        AcError::InconsistentAmountOfConstraints |
-        AcError::ConstrainedNonExistentTerm |
-        AcError::ConstrainedNonExistentCommitment |
-        AcError::InconsistentWitness |
-        AcError::Ip(_) |
-        AcError::IncompleteProof,
-      ) => {
-        panic!("failed to prove for the eVRF proof")
-      }
+      Err(AcProveError::InconsistentWitness) => panic!("failed to prove for the eVRF proof"),
     };
 
     let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));

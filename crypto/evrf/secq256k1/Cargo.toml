@@ -23,8 +23,8 @@ k256 = { version = "0.13", default-features = false, features = ["arithmetic"] }
 
 blake2 = { version = "0.10", default-features = false }
 ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false }
-ec-divisors = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "54da48f27a05fa8656014942919da1dfbab4d8e3", default-features = false }
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/kayabaNerve/monero-oxide", rev = "54da48f27a05fa8656014942919da1dfbab4d8e3", default-features = false }
+ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "59e3ae73b51c214afbc304efca8d748b3da62977", default-features = false }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "59e3ae73b51c214afbc304efca8d748b3da62977", default-features = false }
 
 [dev-dependencies]
 hex = "0.4"

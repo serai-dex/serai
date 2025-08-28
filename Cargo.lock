@@ -1578,19 +1578,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "bls12_381"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d7bc6d6292be3a19e6379786dac800f551e5865a5bb51ebbe3064ab80433f403"
-dependencies = [
- "ff",
- "group",
- "pairing",
- "rand_core 0.6.4",
- "subtle",
-]
-
-[[package]]
 name = "blst"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2876,9 +2863,8 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 [[package]]
 name = "ec-divisors"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=59e3ae73b51c214afbc304efca8d748b3da62977#59e3ae73b51c214afbc304efca8d748b3da62977"
 dependencies = [
- "crypto-bigint",
  "dalek-ff-group",
  "ff",
  "group",
@@ -3217,12 +3203,10 @@ dependencies = [
 name = "ff-group-tests"
 version = "0.13.2"
 dependencies = [
- "bls12_381",
  "ff",
  "group",
  "k256",
  "p256",
- "pasta_curves",
  "rand_core 0.6.4",
  "subtle",
 ]
@@ -3535,24 +3519,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "full-chain-membership-proofs"
-version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
-dependencies = [
- "blake2",
- "ciphersuite 0.4.99",
- "ec-divisors",
- "generalized-bulletproofs",
- "generalized-bulletproofs-circuit-abstraction",
- "generalized-bulletproofs-ec-gadgets",
- "generic-array 1.2.0",
- "multiexp",
- "rand_core 0.6.4",
- "std-shims",
- "zeroize",
-]
-
-[[package]]
 name = "funty"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3750,10 +3716,12 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=59e3ae73b51c214afbc304efca8d748b3da62977#59e3ae73b51c214afbc304efca8d748b3da62977"
 dependencies = [
  "blake2",
  "ciphersuite 0.4.99",
+ "ff",
+ "flexible-transcript",
  "multiexp",
  "rand_core 0.6.4",
  "std-shims",
@@ -3763,7 +3731,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-circuit-abstraction"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=59e3ae73b51c214afbc304efca8d748b3da62977#59e3ae73b51c214afbc304efca8d748b3da62977"
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs",
@@ -3774,7 +3742,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-ec-gadgets"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=59e3ae73b51c214afbc304efca8d748b3da62977#59e3ae73b51c214afbc304efca8d748b3da62977"
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs-circuit-abstraction",
@@ -4000,25 +3968,6 @@ name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
-
-[[package]]
-name = "helioselene"
-version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
-dependencies = [
- "blake2",
- "ciphersuite 0.4.99",
- "crypto-bigint",
- "dalek-ff-group",
- "ec-divisors",
- "ff",
- "group",
- "rand_core 0.6.4",
- "rustversion",
- "std-shims",
- "subtle",
- "zeroize",
-]
 
 [[package]]
 name = "hermit-abi"
@@ -4783,9 +4732,6 @@ dependencies = [
 name = "lazy_static"
 version = "1.5.0"
 source = "git+https://github.com/rust-lang-nursery/lazy-static.rs?rev=5735630d46572f1e5377c8f2ba0f79d18f53b10c#5735630d46572f1e5377c8f2ba0f79d18f53b10c"
-dependencies = [
- "spin 0.9.8",
-]
 
 [[package]]
 name = "leb128"
@@ -6081,7 +6027,7 @@ dependencies = [
 [[package]]
 name = "monero-address"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
  "monero-base58",
@@ -6093,7 +6039,7 @@ dependencies = [
 [[package]]
 name = "monero-base58"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "monero-primitives",
  "std-shims",
@@ -6102,7 +6048,7 @@ dependencies = [
 [[package]]
 name = "monero-borromean"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6115,7 +6061,7 @@ dependencies = [
 [[package]]
 name = "monero-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6130,7 +6076,7 @@ dependencies = [
 [[package]]
 name = "monero-clsag"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
@@ -6149,41 +6095,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "monero-fcmp-plus-plus"
-version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
-dependencies = [
- "blake2",
- "ciphersuite 0.4.99",
- "curve25519-dalek",
- "dalek-ff-group",
- "ec-divisors",
- "full-chain-membership-proofs",
- "generalized-bulletproofs",
- "generalized-bulletproofs-ec-gadgets",
- "generic-array 1.2.0",
- "helioselene",
- "monero-generators",
- "multiexp",
- "rand_core 0.6.4",
- "std-shims",
- "zeroize",
-]
-
-[[package]]
 name = "monero-generators"
 version = "0.4.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
- "blake2",
- "ciphersuite 0.4.99",
  "crypto-bigint",
  "curve25519-dalek",
  "dalek-ff-group",
- "full-chain-membership-proofs",
- "generalized-bulletproofs",
  "group",
- "helioselene",
  "monero-io",
  "sha3",
  "std-shims",
@@ -6193,7 +6112,7 @@ dependencies = [
 [[package]]
 name = "monero-io"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
  "std-shims",
@@ -6202,7 +6121,7 @@ dependencies = [
 [[package]]
 name = "monero-mlsag"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6216,14 +6135,13 @@ dependencies = [
 [[package]]
 name = "monero-oxide"
 version = "0.1.4-alpha"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
  "hex-literal",
  "monero-borromean",
  "monero-bulletproofs",
  "monero-clsag",
- "monero-fcmp-plus-plus",
  "monero-generators",
  "monero-io",
  "monero-mlsag",
@@ -6235,7 +6153,7 @@ dependencies = [
 [[package]]
 name = "monero-primitives"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6248,7 +6166,7 @@ dependencies = [
 [[package]]
 name = "monero-rpc"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
  "hex",
@@ -6264,7 +6182,7 @@ dependencies = [
 [[package]]
 name = "monero-simple-request-rpc"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "digest_auth",
  "hex",
@@ -6277,7 +6195,7 @@ dependencies = [
 [[package]]
 name = "monero-wallet"
 version = "0.1.0"
-source = "git+https://github.com/kayabaNerve/monero-oxide?rev=54da48f27a05fa8656014942919da1dfbab4d8e3#54da48f27a05fa8656014942919da1dfbab4d8e3"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
@@ -6792,15 +6710,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "pairing"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81fec4625e73cf41ef4bb6846cafa6d44736525f442ba45e407c4a000a13996f"
-dependencies = [
- "group",
-]
-
-[[package]]
 name = "pallet-authorship"
 version = "4.0.0-dev"
 source = "git+https://github.com/serai-dex/substrate#8587cd89bec74f789d4e23fdf776508a0ed5db6f"
@@ -7046,21 +6955,6 @@ name = "partial_sort"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7924d1d0ad836f665c9065e26d016c673ece3993f30d340068b16f282afc1156"
-
-[[package]]
-name = "pasta_curves"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3e57598f73cc7e1b2ac63c79c517b31a0877cd7c402cdcaa311b5208de7a095"
-dependencies = [
- "blake2b_simd",
- "ff",
- "group",
- "lazy_static",
- "rand 0.8.5",
- "static_assertions",
- "subtle",
-]
 
 [[package]]
 name = "paste"
@@ -11758,12 +11652,6 @@ name = "spin"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
-
-[[package]]
-name = "spin"
-version = "0.9.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6980e8d7511241f8acf4aebddbb1ff938df5eebe98691418c4468d0b72a96a67"
 
 [[package]]
 name = "spin"
