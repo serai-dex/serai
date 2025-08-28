@@ -309,12 +309,12 @@ fn embedded_curve_keys(network: Network) -> EmbeddedCurveKeys {
     embedwards25519: {
       let key = Zeroizing::new(<Embedwards25519 as Ciphersuite>::F::random(&mut rng));
       let pub_key = Embedwards25519::generator() * key.deref();
-      (Zeroizing::new(key.to_repr().as_slice().to_vec()), pub_key.to_bytes().to_vec())
+      (Zeroizing::new(key.to_repr().as_ref().to_vec()), pub_key.to_bytes().to_vec())
     },
     secq256k1: {
       let key = Zeroizing::new(<Secq256k1 as Ciphersuite>::F::random(&mut rng));
       let pub_key = Secq256k1::generator() * key.deref();
-      (Zeroizing::new(key.to_repr().as_slice().to_vec()), pub_key.to_bytes().to_vec())
+      (Zeroizing::new(key.to_repr().as_ref().to_vec()), pub_key.to_bytes().to_vec())
     },
   }
 }

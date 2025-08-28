@@ -8,18 +8,37 @@ use std_shims::prelude::*;
 use std_shims::io::{self, Read};
 
 use generic_array::typenum::{Sum, Diff, Quot, U, U1, U2};
-use ciphersuite::group::{ff::PrimeField, Group};
+use ciphersuite::group::{
+  ff::{PrimeField, FromUniformBytes},
+  Group,
+};
 
-#[macro_use]
-mod backend;
-
-mod scalar;
-pub use scalar::Scalar;
+prime_field::odd_prime_field!(
+  Scalar,
+  "0fffffffffffffffffffffffffffffffe53f4debb78ff96877063f0306eef96b",
+  "0a",
+  false
+);
 
 pub use dalek_ff_group::Scalar as FieldElement;
 
 mod point;
 pub use point::Point;
+
+pub(crate) fn u8_from_bool(bit_ref: &mut bool) -> u8 {
+  use core::hint::black_box;
+  use prime_field::zeroize::Zeroize;
+
+  let bit_ref = black_box(bit_ref);
+
+  let mut bit = black_box(*bit_ref);
+  let res = black_box(u8::from(bit));
+  bit.zeroize();
+  debug_assert!((res | 1) == 1);
+
+  bit_ref.zeroize();
+  res
+}
 
 /// Ciphersuite for Embedwards25519.
 ///
@@ -41,7 +60,9 @@ impl ciphersuite::Ciphersuite for Embedwards25519 {
 
   fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
     use blake2::Digest;
-    Scalar::wide_reduce(Self::H::digest([dst, data].concat()).as_slice().try_into().unwrap())
+    <Scalar as FromUniformBytes<64>>::from_uniform_bytes(
+      &Self::H::digest([dst, data].concat()).into(),
+    )
   }
 
   // We override the provided impl, which compares against the reserialization, because

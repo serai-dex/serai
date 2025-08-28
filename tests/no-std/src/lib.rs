@@ -11,6 +11,7 @@ pub use multiexp;
 
 pub use schnorr_signatures;
 
+pub use prime_field;
 pub use secq256k1;
 pub use embedwards25519;
 

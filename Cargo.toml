@@ -39,6 +39,7 @@ members = [
   "crypto/multiexp",
   "crypto/schnorr",
 
+  "crypto/prime-field",
   "crypto/evrf/secq256k1",
   "crypto/evrf/embedwards25519",
 

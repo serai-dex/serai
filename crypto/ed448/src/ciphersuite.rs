@@ -8,10 +8,12 @@ use sha3::{
   Shake256,
 };
 
-use group::Group;
-use crate::{Scalar, Point};
+use ciphersuite::{
+  group::{ff::FromUniformBytes, Group},
+  Ciphersuite,
+};
 
-use ciphersuite::Ciphersuite;
+use crate::{Scalar, Point};
 
 /// Shake256, fixed to a 114-byte output, as used by Ed448.
 #[derive(Clone, Default)]
@@ -69,13 +71,16 @@ impl Ciphersuite for Ed448 {
   }
 
   fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
-    Scalar::wide_reduce(Self::H::digest([dst, data].concat()).as_ref().try_into().unwrap())
+    let digest = Self::H::digest([dst, data].concat());
+    let mut wide_scalar = [0; 114];
+    wide_scalar.copy_from_slice(digest.as_ref());
+    Scalar::from_uniform_bytes(&wide_scalar)
   }
 }
 
 #[test]
 fn test_ed448() {
-  use ff::PrimeField;
+  use ciphersuite::group::ff::PrimeField;
 
   ff_group_tests::group::test_prime_group_bits::<_, Point>(&mut rand_core::OsRng);
 
@@ -94,7 +99,7 @@ fn test_ed448() {
       .unwrap()
     )
     .to_repr()
-    .to_vec(),
+    .as_ref(),
     hex::decode(
       "\
 67a6f023e77361707c6e894c625e809e80f33fdb310810053ae29e28\
@@ -102,5 +107,6 @@ e7011f3193b9020e73c183a98cc3a519160ed759376dd92c94831622\
 00"
     )
     .unwrap()
+    .as_slice()
   );
 }

@@ -3,49 +3,46 @@ use core::{
   iter::Sum,
 };
 
-use rand_core::RngCore;
+use prime_field::{
+  subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable},
+  zeroize::Zeroize,
+  rand_core::RngCore,
+  crypto_bigint::U512,
+};
 
-use zeroize::Zeroize;
-use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable};
-
-use crypto_bigint::{U448, modular::constant_mod::Residue};
-
-use group::{
+use ciphersuite::group::{
   ff::{Field, PrimeField, PrimeFieldBits},
   Group, GroupEncoding,
   prime::PrimeGroup,
 };
 
-use crate::{
-  backend::u8_from_bool,
-  scalar::Scalar,
-  field::{ResidueType, FieldElement, Q_4},
-};
+use crate::{u8_from_bool, Scalar, FieldElement};
 
-const D: FieldElement =
-  FieldElement(ResidueType::sub(&ResidueType::ZERO, &Residue::new(&U448::from_u16(39081))));
-
-const G_Y: FieldElement = FieldElement(Residue::new(&U448::from_be_hex(concat!(
+const G_Y: FieldElement = FieldElement::from(&U512::from_be_hex(concat!(
+  "0000000000000000",
   "693f46716eb6bc248876203756c9c7624bea73736ca3984087789c1e",
   "05a0c2d73ad3ff1ce67c39c4fdbd132c4ed7c8ad9808795bf230fa14",
-))));
+)));
 
-const G_X: FieldElement = FieldElement(Residue::new(&U448::from_be_hex(concat!(
+const G_X: FieldElement = FieldElement::from(&U512::from_be_hex(concat!(
+  "0000000000000000",
   "4f1970c66bed0ded221d15a622bf36da9e146570470f1767ea6de324",
   "a3d3a46412ae1af72ab66511433b80e18b00938e2626a82bc70cc05e",
-))));
+)));
 
 fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
+  #[allow(non_snake_case)]
+  let D = -<FieldElement as From<u16>>::from(39081u16);
+
   let ysq = y.square();
   #[allow(non_snake_case)]
   let D_ysq = D * ysq;
   (D_ysq - FieldElement::ONE).invert().and_then(|inverted| {
-    let temp = (ysq - FieldElement::ONE) * inverted;
-    let mut x = temp.pow(Q_4);
-    x.conditional_negate(x.is_odd());
-
-    let xsq = x.square();
-    CtOption::new(x, (xsq + ysq).ct_eq(&(FieldElement::ONE + (xsq * D_ysq))))
+    let xsq = (ysq - FieldElement::ONE) * inverted;
+    xsq.sqrt().and_then(|mut x| {
+      x.conditional_negate(x.is_odd());
+      CtOption::new(x, (xsq + ysq).ct_eq(&(FieldElement::ONE + (xsq * D_ysq))))
+    })
   })
 }
 
@@ -104,6 +101,9 @@ impl ConditionallySelectable for Point {
 impl Add for Point {
   type Output = Point;
   fn add(self, other: Self) -> Self {
+    #[allow(non_snake_case)]
+    let D = -<FieldElement as From<u16>>::from(39081u16);
+
     // 12 muls, 7 additions, 4 negations
     let xcp = self.x * other.x;
     let ycp = self.y * other.y;
@@ -302,7 +302,7 @@ impl GroupEncoding for Point {
 
   fn from_bytes(bytes: &Self::Repr) -> CtOption<Self> {
     // Extract and clear the sign bit
-    let sign = Choice::from(bytes[56] >> 7);
+    let sign = Choice::from(bytes.as_ref()[56] >> 7);
     let mut bytes = *bytes;
     let mut_ref: &mut [u8] = bytes.as_mut();
     mut_ref[56] &= !(1 << 7);
@@ -350,63 +350,48 @@ fn generator() {
 
 #[test]
 fn torsion() {
-  use generic_array::GenericArray;
-
   // Uses the originally suggested generator which had torsion
-  let old_y = FieldElement::from_repr(*GenericArray::from_slice(
-    &hex::decode(
-      "\
+  const TORSIONED_Y: &str = "\
 12796c1532041525945f322e414d434467cfd5c57c9a9af2473b2775\
 8c921c4828b277ca5f2891fc4f3d79afdf29a64c72fb28b59c16fa51\
-00",
-    )
-    .unwrap(),
-  ))
-  .unwrap();
+00";
+  let mut repr = <FieldElement as PrimeField>::Repr::default();
+  repr.as_mut().copy_from_slice(&hex::decode(TORSIONED_Y).unwrap());
+
+  let old_y = FieldElement::from_repr(repr).unwrap();
   let old = Point { x: -recover_x(old_y).unwrap(), y: old_y, z: FieldElement::ONE };
   assert!(bool::from(!old.is_torsion_free()));
+
+  assert!(bool::from(Point::from_bytes(&old.to_bytes()).is_none()));
 }
 
 #[test]
 fn vector() {
-  use generic_array::GenericArray;
-
-  assert_eq!(
-    Point::generator().double(),
-    Point::from_bytes(GenericArray::from_slice(
-      &hex::decode(
-        "\
+  const TWO_G: &str = "\
 ed8693eacdfbeada6ba0cdd1beb2bcbb98302a3a8365650db8c4d88a\
 726de3b7d74d8835a0d76e03b0c2865020d659b38d04d74a63e905ae\
-80"
-      )
-      .unwrap()
-    ))
-    .unwrap()
-  );
+80";
+  let mut two_g = <Point as GroupEncoding>::Repr::default();
+  two_g.as_mut().copy_from_slice(&hex::decode(TWO_G).unwrap());
+  assert_eq!(Point::generator().double(), Point::from_bytes(&two_g).unwrap());
 
-  assert_eq!(
-    Point::generator() *
-      Scalar::from_repr(*GenericArray::from_slice(
-        &hex::decode(
-          "\
+  const SCALAR: &str = "\
 6298e1eef3c379392caaed061ed8a31033c9e9e3420726f23b404158\
 a401cd9df24632adfe6b418dc942d8a091817dd8bd70e1c72ba52f3c\
-00"
-        )
-        .unwrap()
-      ))
-      .unwrap(),
-    Point::from_bytes(GenericArray::from_slice(
-      &hex::decode(
-        "\
+00";
+  let mut scalar = <Scalar as PrimeField>::Repr::default();
+  scalar.as_mut().copy_from_slice(&hex::decode(SCALAR).unwrap());
+
+  const SCALED_G: &str = "\
 3832f82fda00ff5365b0376df705675b63d2a93c24c6e81d40801ba2\
 65632be10f443f95968fadb70d10786827f30dc001c8d0f9b7c1d1b0\
-00"
-      )
-      .unwrap()
-    ))
-    .unwrap()
+00";
+  let mut scaled_g = <Point as GroupEncoding>::Repr::default();
+  scaled_g.as_mut().copy_from_slice(&hex::decode(SCALED_G).unwrap());
+
+  assert_eq!(
+    Point::generator() * Scalar::from_repr(scalar).unwrap(),
+    Point::from_bytes(&scaled_g).unwrap()
   );
 }
 

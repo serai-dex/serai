@@ -2,7 +2,10 @@ use digest::Digest;
 
 use minimal_ed448::{Scalar, Point};
 pub use minimal_ed448::Ed448;
-pub use ciphersuite::{group::GroupEncoding, Ciphersuite};
+pub use ciphersuite::{
+  group::{ff::FromUniformBytes, GroupEncoding},
+  Ciphersuite,
+};
 
 use crate::{curve::Curve, algorithm::Hram};
 
@@ -18,17 +21,18 @@ pub(crate) struct Ietf8032Ed448Hram;
 impl Ietf8032Ed448Hram {
   #[allow(non_snake_case)]
   pub(crate) fn hram(context: &[u8], R: &Point, A: &Point, m: &[u8]) -> Scalar {
-    Scalar::wide_reduce(
-      <Ed448 as Ciphersuite>::H::digest(
-        [
-          &[b"SigEd448".as_ref(), &[0, u8::try_from(context.len()).unwrap()]].concat(),
-          context,
-          &[R.to_bytes().as_ref(), A.to_bytes().as_ref(), m].concat(),
-        ]
-        .concat(),
+    Scalar::from_uniform_bytes(
+      &<[u8; 114]>::try_from(
+        <Ed448 as Ciphersuite>::H::digest(
+          [
+            &[b"SigEd448".as_ref(), &[0, u8::try_from(context.len()).unwrap()]].concat(),
+            context,
+            &[R.to_bytes().as_ref(), A.to_bytes().as_ref(), m].concat(),
+          ]
+          .concat(),
+        )
+        .as_slice(),
       )
-      .as_ref()
-      .try_into()
       .unwrap(),
     )
   }

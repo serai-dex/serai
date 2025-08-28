@@ -3,10 +3,11 @@ use core::{
   iter::Sum,
 };
 
-use rand_core::RngCore;
-
-use zeroize::Zeroize;
-use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable};
+use prime_field::{
+  subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable},
+  zeroize::Zeroize,
+  rand_core::RngCore,
+};
 
 use ciphersuite::group::{
   ff::{Field, PrimeField, PrimeFieldBits},
@@ -14,7 +15,7 @@ use ciphersuite::group::{
   prime::PrimeGroup,
 };
 
-use crate::{backend::u8_from_bool, Scalar, FieldElement};
+use crate::{u8_from_bool, Scalar, FieldElement};
 
 #[allow(non_snake_case)]
 fn B() -> FieldElement {

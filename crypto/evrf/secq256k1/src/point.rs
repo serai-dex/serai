@@ -15,7 +15,7 @@ use k256::elliptic_curve::{
   },
 };
 
-use crate::{backend::u8_from_bool, Scalar, FieldElement};
+use crate::{u8_from_bool, Scalar, FieldElement};
 
 fn recover_y(x: FieldElement) -> CtOption<FieldElement> {
   // x**3 + B since a = 0

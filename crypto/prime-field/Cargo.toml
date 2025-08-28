@@ -1,0 +1,31 @@
+[package]
+name = "prime-field"
+version = "0.1.0"
+description = "A library to declare an ff::PrimeField via crypto-bigint"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/prime-field"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["ff", "field", "prime", "crypto-bigint"]
+edition = "2021"
+rust-version = "1.86"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+paste = { version = "1", default-features = false }
+zeroize = { version = "^1.5", default-features = false }
+subtle = { version = "^2.4", default-features = false }
+rand_core = { version = "0.6", default-features = false }
+
+crypto-bigint = { version = "0.6", default-features = false, features = ["zeroize"] }
+
+ff = { version = "0.13", default-features = false, features = ["bits"] }
+
+ff-group-tests = { version = "0.13", path = "../ff-group-tests", optional = true }
+
+[features]
+alloc = ["zeroize/alloc", "crypto-bigint/alloc", "ff/alloc"]
+std = ["zeroize/std", "subtle/std", "rand_core/std", "ff/std", "ff-group-tests"]
+default = ["std"]

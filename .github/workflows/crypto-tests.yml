@@ -35,6 +35,9 @@ jobs:
             -p ciphersuite-kp256 \
             -p multiexp \
             -p schnorr-signatures \
+            -p prime-field \
+            -p secq256k1 \
+            -p embedwards25519 \
             -p dkg \
             -p dkg-recovery \
             -p dkg-dealer \

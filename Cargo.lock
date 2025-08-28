@@ -2298,7 +2298,19 @@ checksum = "0dc92fb57ca44df6db8059111ab3af99a63d5d0f8375d9972e319a379c6bab76"
 dependencies = [
  "generic-array 0.14.7",
  "rand_core 0.6.4",
- "serdect",
+ "serdect 0.2.0",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
+name = "crypto-bigint"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96272c2ff28b807e09250b180ad1fb7889a3258f7455759b5c3c58b719467130"
+dependencies = [
+ "num-traits",
+ "serdect 0.3.0",
  "subtle",
  "zeroize",
 ]
@@ -2419,7 +2431,7 @@ name = "dalek-ff-group"
 version = "0.4.4"
 dependencies = [
  "ciphersuite 0.4.2",
- "crypto-bigint",
+ "crypto-bigint 0.5.5",
  "curve25519-dalek",
  "digest 0.10.7",
  "ff",
@@ -2505,7 +2517,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.106",
 ]
 
 [[package]]
@@ -2884,7 +2896,7 @@ dependencies = [
  "digest 0.10.7",
  "elliptic-curve",
  "rfc6979",
- "serdect",
+ "serdect 0.2.0",
  "signature",
  "spki",
 ]
@@ -2956,7 +2968,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5e6043086bf7973472e0c7dff2142ea0b680d30e18d9cc40f267efbf222bd47"
 dependencies = [
  "base16ct",
- "crypto-bigint",
+ "crypto-bigint 0.5.5",
  "digest 0.10.7",
  "ff",
  "generic-array 0.14.7",
@@ -2964,7 +2976,7 @@ dependencies = [
  "pkcs8",
  "rand_core 0.6.4",
  "sec1",
- "serdect",
+ "serdect 0.2.0",
  "subtle",
  "tap",
  "zeroize",
@@ -2976,7 +2988,6 @@ version = "0.1.0"
 dependencies = [
  "blake2",
  "ciphersuite 0.4.2",
- "crypto-bigint",
  "dalek-ff-group",
  "ec-divisors",
  "ff-group-tests",
@@ -2984,10 +2995,9 @@ dependencies = [
  "generic-array 1.2.0",
  "hex",
  "hex-literal",
+ "prime-field",
  "rand_core 0.6.4",
- "rustversion",
  "std-shims",
- "subtle",
  "zeroize",
 ]
 
@@ -4181,7 +4191,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.8",
  "tokio",
  "tower-service",
  "tracing",
@@ -4672,7 +4682,7 @@ dependencies = [
  "ecdsa",
  "elliptic-curve",
  "once_cell",
- "serdect",
+ "serdect 0.2.0",
  "sha2 0.10.9",
 ]
 
@@ -4752,7 +4762,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "07033963ba89ebaf1584d767badaa2e8fcec21aedea6b8c0346d487d49c28667"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.53.3",
 ]
 
 [[package]]
@@ -5934,16 +5944,11 @@ name = "minimal-ed448"
 version = "0.4.2"
 dependencies = [
  "ciphersuite 0.4.2",
- "crypto-bigint",
- "ff",
  "ff-group-tests",
- "generic-array 1.2.0",
- "group",
  "hex",
+ "prime-field",
  "rand_core 0.6.4",
- "rustversion",
  "sha3",
- "subtle",
  "zeroize",
 ]
 
@@ -6099,7 +6104,7 @@ name = "monero-generators"
 version = "0.4.0"
 source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
- "crypto-bigint",
+ "crypto-bigint 0.5.5",
  "curve25519-dalek",
  "dalek-ff-group",
  "group",
@@ -6610,7 +6615,7 @@ version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77e878c846a8abae00dd069496dbe8751b16ac1c3d6bd2a7283a938e8228f90d"
 dependencies = [
- "proc-macro-crate 1.3.1",
+ "proc-macro-crate 3.2.0",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -7213,6 +7218,19 @@ checksum = "6c8646e95016a7a6c4adea95bafa8a16baab64b583356217f2c85db4a39d9a86"
 dependencies = [
  "proc-macro2",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "prime-field"
+version = "0.1.0"
+dependencies = [
+ "crypto-bigint 0.6.1",
+ "ff",
+ "ff-group-tests",
+ "paste",
+ "rand_core 0.6.4",
+ "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -9450,7 +9468,7 @@ dependencies = [
  "der",
  "generic-array 0.14.7",
  "pkcs8",
- "serdect",
+ "serdect 0.2.0",
  "subtle",
  "zeroize",
 ]
@@ -9520,8 +9538,8 @@ dependencies = [
  "hex",
  "hex-literal",
  "k256",
+ "prime-field",
  "rand_core 0.6.4",
- "rustversion",
  "std-shims",
 ]
 
@@ -10159,6 +10177,7 @@ dependencies = [
  "flexible-transcript",
  "minimal-ed448",
  "multiexp",
+ "prime-field",
  "schnorr-signatures",
  "secq256k1",
 ]
@@ -10794,6 +10813,16 @@ name = "serdect"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a84f14a19e9a014bb9f4512488d9829a68e04ecabffb0f9904cd1ace94598177"
+dependencies = [
+ "base16ct",
+ "serde",
+]
+
+[[package]]
+name = "serdect"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f42f67da2385b51a5f9652db9c93d78aeaf7610bf5ec366080b6de810604af53"
 dependencies = [
  "base16ct",
  "serde",
@@ -13283,7 +13312,7 @@ version = "0.1.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0978bf7171b3d90bac376700cb56d606feb40f251a475a5d6634613564460b22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]

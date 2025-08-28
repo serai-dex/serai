@@ -7,19 +7,19 @@ repository = "https://github.com/serai-dex/serai/tree/develop/crypto/evrf/secq25
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["secp256k1", "secq256k1", "group"]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.86"
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-rustversion = "1"
 hex-literal = { version = "0.4", default-features = false }
 
 std-shims = { version = "0.1", path = "../../../common/std-shims", default-features = false, optional = true }
 
 k256 = { version = "0.13", default-features = false, features = ["arithmetic"] }
+prime-field = { path = "../../prime-field", default-features = false }
 
 blake2 = { version = "0.10", default-features = false }
 ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false }
@@ -34,6 +34,6 @@ rand_core = { version = "0.6", features = ["std"] }
 ff-group-tests = { path = "../../ff-group-tests" }
 
 [features]
-alloc = ["std-shims", "k256/alloc", "ciphersuite/alloc"]
-std = ["std-shims/std", "k256/std", "blake2/std", "ciphersuite/std", "ec-divisors/std", "generalized-bulletproofs-ec-gadgets/std"]
+alloc = ["std-shims", "k256/alloc", "prime-field/alloc", "ciphersuite/alloc"]
+std = ["std-shims/std", "k256/std", "prime-field/std", "blake2/std", "ciphersuite/std", "ec-divisors/std", "generalized-bulletproofs-ec-gadgets/std"]
 default = ["std"]
