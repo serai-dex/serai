@@ -29,6 +29,7 @@ multiexp = { path = "../../crypto/multiexp", default-features = false, features 
 schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
 
 prime-field = { path = "../../crypto/prime-field", default-features = false, features = ["alloc"] }
+short-weierstrass = { path = "../../crypto/short-weierstrass", default-features = false, features = ["alloc"] }
 secq256k1 = { path = "../../crypto/evrf/secq256k1", default-features = false }
 embedwards25519 = { path = "../../crypto/evrf/embedwards25519", default-features = false }
 

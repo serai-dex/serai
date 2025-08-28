@@ -83,6 +83,15 @@ pub mod __prime_field_private {
   }
 }
 
+/// Construct a odd-prime field.
+///
+/// The length of the `modulus_as_be_hex` string will effect the size of the underlying
+/// representation and the encoding. It MAY have a "0x" prefix, if preferred.
+///
+/// `multiplicative_generator_as_be_hex` MAY have a "0x" prefix. It MAY be short and of a length
+/// less than `modulus_as_be_hex`.
+///
+/// `big_endian` controls if the encoded representation will be big-endian or not.
 #[macro_export]
 macro_rules! odd_prime_field {
   (

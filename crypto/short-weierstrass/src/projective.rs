@@ -1,0 +1,313 @@
+use core::{hint::black_box, borrow::Borrow, ops::*, iter::Sum};
+
+use subtle::{Choice, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable};
+use zeroize::{Zeroize, DefaultIsZeroes};
+
+use rand_core::RngCore;
+
+use group::{
+  ff::{Field, PrimeFieldBits},
+  Group,
+};
+
+use crate::{ShortWeierstrass, Affine};
+
+/// A point represented with projective coordinates.
+#[derive(Debug)]
+pub struct Projective<C: ShortWeierstrass> {
+  pub(crate) x: C::FieldElement,
+  pub(crate) y: C::FieldElement,
+  pub(crate) z: C::FieldElement,
+}
+impl<C: ShortWeierstrass> Clone for Projective<C> {
+  fn clone(&self) -> Self {
+    *self
+  }
+}
+impl<C: ShortWeierstrass> Copy for Projective<C> {}
+
+impl<C: ShortWeierstrass> From<Affine<C>> for Projective<C> {
+  fn from(affine: Affine<C>) -> Self {
+    Self { x: affine.x, y: affine.y, z: C::FieldElement::ONE }
+  }
+}
+
+impl<C: ShortWeierstrass> Default for Projective<C> {
+  fn default() -> Self {
+    Self::IDENTITY
+  }
+}
+impl<C: ShortWeierstrass> DefaultIsZeroes for Projective<C> {}
+
+impl<C: ShortWeierstrass> ConstantTimeEq for Projective<C> {
+  fn ct_eq(&self, other: &Self) -> Choice {
+    let c1 = (self.x * other.z).ct_eq(&(other.x * self.z));
+    let c2 = (self.y * other.z).ct_eq(&(other.y * self.z));
+    c1 & c2
+  }
+}
+impl<C: ShortWeierstrass> PartialEq for Projective<C> {
+  fn eq(&self, other: &Self) -> bool {
+    self.ct_eq(other).into()
+  }
+}
+impl<C: ShortWeierstrass> Eq for Projective<C> {}
+
+impl<C: ShortWeierstrass> ConditionallySelectable for Projective<C> {
+  fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+    let x = C::FieldElement::conditional_select(&a.x, &b.x, choice);
+    let y = C::FieldElement::conditional_select(&a.y, &b.y, choice);
+    let z = C::FieldElement::conditional_select(&a.z, &b.z, choice);
+    Projective { x, y, z }
+  }
+}
+
+impl<C: ShortWeierstrass> Neg for Projective<C> {
+  type Output = Self;
+  fn neg(mut self) -> Self::Output {
+    self.y = -self.y;
+    self
+  }
+}
+
+impl<C: ShortWeierstrass> ConditionallyNegatable for Projective<C> {
+  fn conditional_negate(&mut self, negate: Choice) {
+    self.y = <_>::conditional_select(&self.y, &-self.y, negate);
+  }
+}
+
+impl<C: ShortWeierstrass> Add for Projective<C> {
+  type Output = Self;
+  // add-1998-cmo-2
+  /*
+    We don't use the complete formulas from 2015 as they require the curve is prime order, when we
+    do not.
+  */
+  fn add(self, p2: Self) -> Self {
+    let Self { x: X1, y: Y1, z: Z1 } = self;
+    let Self { x: X2, y: Y2, z: Z2 } = p2;
+
+    let Y1Z2 = Y1 * Z2;
+    let X1Z2 = X1 * Z2;
+    let Z1Z2 = Z1 * Z2;
+    let u = (Y2 * Z1) - Y1Z2;
+    let uu = u.square();
+    let v = (X2 * Z1) - X1Z2;
+    let vv = v.square();
+    let vvv = v * vv;
+    let R = vv * X1Z2;
+    let A = (uu * Z1Z2) - vvv - R.double();
+    let X3 = v * A;
+    let Y3 = (u * (R - A)) - (vvv * Y1Z2);
+    let Z3 = vvv * Z1Z2;
+
+    let res = Self { x: X3, y: Y3, z: Z3 };
+
+    let same_x_coordinate = (self.x * p2.z).ct_eq(&(p2.x * self.z));
+    let same_y_coordinate = (self.y * p2.z).ct_eq(&(p2.y * self.z));
+    let res = <_>::conditional_select(
+      &res,
+      &Self::IDENTITY,
+      (self.is_identity_internal() & p2.is_identity_internal()) |
+        (same_x_coordinate & (!same_y_coordinate)),
+    );
+    let res =
+      <_>::conditional_select(&res, &self.double_internal(), same_x_coordinate & same_y_coordinate);
+    let res = <_>::conditional_select(&res, &p2, self.is_identity_internal());
+    <_>::conditional_select(&res, &self, p2.is_identity_internal())
+  }
+}
+impl<C: ShortWeierstrass> Sub for Projective<C> {
+  type Output = Self;
+  fn sub(self, p2: Self) -> Self {
+    self + -p2
+  }
+}
+impl<C: ShortWeierstrass> AddAssign for Projective<C> {
+  fn add_assign(&mut self, p2: Self) {
+    *self = *self + p2;
+  }
+}
+impl<C: ShortWeierstrass> SubAssign for Projective<C> {
+  fn sub_assign(&mut self, p2: Self) {
+    *self = *self - p2;
+  }
+}
+impl<C: ShortWeierstrass> Add<&Self> for Projective<C> {
+  type Output = Self;
+  fn add(self, p2: &Self) -> Self {
+    self + *p2
+  }
+}
+impl<C: ShortWeierstrass> Sub<&Self> for Projective<C> {
+  type Output = Self;
+  fn sub(self, p2: &Self) -> Self {
+    self - *p2
+  }
+}
+impl<C: ShortWeierstrass> AddAssign<&Self> for Projective<C> {
+  fn add_assign(&mut self, p2: &Self) {
+    *self = *self + p2;
+  }
+}
+impl<C: ShortWeierstrass> SubAssign<&Self> for Projective<C> {
+  fn sub_assign(&mut self, p2: &Self) {
+    *self = *self - p2;
+  }
+}
+
+impl<C: ShortWeierstrass> Projective<C> {
+  /// The additive identity, or point at infinity.
+  pub const IDENTITY: Self =
+    Projective { x: C::FieldElement::ZERO, y: C::FieldElement::ONE, z: C::FieldElement::ZERO };
+  /// A generator of this elliptic curve.
+  pub const GENERATOR: Self =
+    Projective { x: C::GENERATOR.x, y: C::GENERATOR.y, z: C::FieldElement::ONE };
+
+  fn is_identity_internal(&self) -> Choice {
+    self.z.ct_eq(&C::FieldElement::ZERO)
+  }
+
+  // dbl-1998-cmo-2
+  fn double_internal(&self) -> Self {
+    let Self { x: X1, y: Y1, z: Z1 } = *self;
+
+    let X1X1 = X1.square();
+    let w = (C::A * Z1.square()) + X1X1.double() + X1X1;
+    let s = Y1 * Z1;
+    let ss = s.square();
+    let sss = s * ss;
+    let R = Y1 * s;
+    let B = X1 * R;
+    let B4 = B.double().double();
+    let h = w.square() - B4.double();
+    let X3 = (h * s).double();
+    let Y3 = w * (B4 - h) - R.square().double().double().double();
+    let Z3 = sss.double().double().double();
+
+    let res = Self { x: X3, y: Y3, z: Z3 };
+    <_>::conditional_select(&res, &Self::IDENTITY, self.is_identity_internal())
+  }
+}
+
+impl<C: ShortWeierstrass> Sum for Projective<C> {
+  fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+    let mut res = Self::IDENTITY;
+    for item in iter {
+      res += item;
+    }
+    res
+  }
+}
+
+impl<'a, C: ShortWeierstrass> Sum<&'a Self> for Projective<C> {
+  fn sum<I: Iterator<Item = &'a Self>>(iter: I) -> Self {
+    let mut res = Self::IDENTITY;
+    for item in iter {
+      res += item;
+    }
+    res
+  }
+}
+
+impl<C: ShortWeierstrass<Scalar = ()>> Projective<C> {
+  /// Sample a random on-curve point with an unknown discrete logarithm w.r.t. any other points.
+  pub fn random(rng: impl RngCore) -> Self {
+    Self::from(Affine::random(rng))
+  }
+  /// If this point is the additive identity.
+  pub fn is_identity(&self) -> Choice {
+    self.is_identity_internal()
+  }
+  /// The sum of this point with itself.
+  pub fn double(&self) -> Self {
+    self.double_internal()
+  }
+}
+
+impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>, S: Borrow<C::Scalar>> Mul<S> for Projective<C> {
+  type Output = Self;
+  fn mul(self, scalar: S) -> Self {
+    let mut table = [Self::IDENTITY; 16];
+    table[1] = self;
+    for i in 2 .. 16 {
+      table[i] = table[i - 1] + self;
+    }
+
+    let mut res = Self::identity();
+    let mut bits = 0;
+    for (i, mut bit) in scalar.borrow().to_le_bits().iter_mut().rev().enumerate() {
+      fn u8_from_bool(bit_ref: &mut bool) -> u8 {
+        let bit_ref = black_box(bit_ref);
+
+        let mut bit = black_box(*bit_ref);
+        let res = black_box(u8::from(bit));
+        bit.zeroize();
+        debug_assert!((res | 1) == 1);
+
+        bit_ref.zeroize();
+        res
+      }
+
+      bits <<= 1;
+      let mut bit = u8_from_bool(bit.deref_mut());
+      bits |= bit;
+      bit.zeroize();
+
+      if ((i + 1) % 4) == 0 {
+        if i != 3 {
+          for _ in 0 .. 4 {
+            res = res.double();
+          }
+        }
+
+        let mut term = table[0];
+        for (j, candidate) in table[1 ..].iter().enumerate() {
+          let j = j + 1;
+          term = Self::conditional_select(&term, candidate, usize::from(bits).ct_eq(&j));
+        }
+        res += term;
+        bits = 0;
+      }
+    }
+    res
+  }
+}
+impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>, S: Borrow<C::Scalar>> MulAssign<S>
+  for Projective<C>
+{
+  fn mul_assign(&mut self, scalar: S) {
+    *self = *self * scalar.borrow();
+  }
+}
+/*
+impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> Mul<&C::Scalar> for Projective<C> {
+  type Output = Self;
+  fn mul(self, scalar: &C::Scalar) -> Self {
+    self * *scalar
+  }
+}
+impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> MulAssign<&C::Scalar> for Projective<C> {
+  fn mul_assign(&mut self, scalar: &C::Scalar) {
+    *self *= *scalar;
+  }
+}
+*/
+impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> Group for Projective<C> {
+  type Scalar = C::Scalar;
+  fn random(rng: impl RngCore) -> Self {
+    Self::from(Affine::<C>::random(rng))
+  }
+  fn identity() -> Self {
+    Self::IDENTITY
+  }
+  fn generator() -> Self {
+    C::GENERATOR.into()
+  }
+  fn is_identity(&self) -> Choice {
+    self.is_identity_internal()
+  }
+  fn double(&self) -> Self {
+    self.double_internal()
+  }
+}

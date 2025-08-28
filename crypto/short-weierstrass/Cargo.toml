@@ -1,0 +1,27 @@
+[package]
+name = "short-weierstrass"
+version = "0.1.0"
+description = "A library for working with curves in a short Weierstrass form"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/short-weierstrass"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["ff", "group", "elliptic-curve", "weierstrass"]
+edition = "2021"
+rust-version = "1.79"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+zeroize = { version = "^1.5", default-features = false }
+subtle = { version = "^2.4", default-features = false }
+rand_core = { version = "0.6", default-features = false }
+
+ff = { version = "0.13", default-features = false, features = ["bits"] }
+group = { version = "0.13", default-features = false }
+
+[features]
+alloc = ["zeroize/alloc", "rand_core/alloc", "ff/alloc", "group/alloc"]
+std = ["zeroize/std", "subtle/std", "rand_core/std", "ff/std"]
+default = ["std"]
