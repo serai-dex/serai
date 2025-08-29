@@ -9542,14 +9542,15 @@ version = "0.1.0"
 dependencies = [
  "blake2",
  "ciphersuite 0.4.2",
- "ec-divisors",
  "ff-group-tests",
  "generalized-bulletproofs-ec-gadgets",
+ "generic-array 1.2.0",
  "hex",
  "hex-literal",
  "k256",
  "prime-field",
  "rand_core 0.6.4",
+ "short-weierstrass",
  "std-shims",
 ]
 
@@ -10928,7 +10929,6 @@ version = "0.1.0"
 dependencies = [
  "ec-divisors",
  "ff",
- "generic-array 1.2.0",
  "group",
  "rand_core 0.6.4",
  "subtle",
