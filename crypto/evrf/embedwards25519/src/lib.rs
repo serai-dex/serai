@@ -67,6 +67,10 @@ impl ShortWeierstrass for Embedwards25519 {
 
     (repr, odd_y)
   }
+  // No points have a torsion element as this a prime-order curve
+  fn has_torsion_element(_point: Projective<Self>) -> Choice {
+    0.into()
+  }
 }
 
 pub type Point = Projective<Embedwards25519>;

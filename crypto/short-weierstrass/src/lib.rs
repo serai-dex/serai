@@ -15,10 +15,6 @@ mod projective;
 pub use projective::Projective;
 
 /// An elliptic curve represented in short Weierstrass form, with equation `y^2 = x^3 + A x + B`.
-///
-/// This elliptic curve is expected to be of prime order. If a generator of the elliptic curve has
-/// a composite order, the elliptic curve is defined solely as its largest odd-prime-order
-/// subgroup, further considered the entire group/elliptic curve.
 pub trait ShortWeierstrass: 'static + Sized + Debug {
   /// The field the elliptic curve is defined over.
   type FieldElement: Zeroize + PrimeField;
@@ -26,9 +22,9 @@ pub trait ShortWeierstrass: 'static + Sized + Debug {
   const A: Self::FieldElement;
   /// The constant `B` from the curve equation.
   const B: Self::FieldElement;
-  /// A generator of this elliptic curve.
+  /// A generator of this elliptic curve's largest prime-order subgroup.
   const GENERATOR: Affine<Self>;
-  /// The scalar type.
+  /// The scalar type for the elliptic curve's largest prime-order subgroup.
   ///
   /// This may be omitted by specifying `()`.
   type Scalar;
@@ -45,4 +41,9 @@ pub trait ShortWeierstrass: 'static + Sized + Debug {
   ///
   /// This is expected to return the `x` coordinate and if the `y` coordinate is odd.
   fn decode_compressed(bytes: &Self::Repr) -> (<Self::FieldElement as PrimeField>::Repr, Choice);
+
+  /// If the point is outside the largest prime-order subgroup and isn't the identity point.
+  ///
+  /// This may immediately return `Choice::new(0)` for curves of prime order.
+  fn has_torsion_element(point: Projective<Self>) -> Choice;
 }

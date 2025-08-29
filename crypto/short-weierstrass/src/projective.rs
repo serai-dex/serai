@@ -308,12 +308,20 @@ impl<C: ShortWeierstrass> GroupEncoding for Projective<C> {
 
     let (x, odd_y) = C::decode_compressed(bytes);
 
-    // Parse x, recover y, return the result
-    C::FieldElement::from_repr(x).and_then(|x| {
+    let result = C::FieldElement::from_repr(x).and_then(|x| {
+      // Parse x and recover y
       let non_identity_on_curve_point = Affine::decompress(x, odd_y).map(Projective::from);
+      // Set the identity, if the identity
       let identity = CtOption::new(Projective::IDENTITY, identity);
       non_identity_on_curve_point.or_else(|| identity)
-    })
+    });
+
+    let mut result_is_valid = result.is_some();
+    let result = result.unwrap_or(Projective::IDENTITY);
+    // Constrain points to the prime-order subgroup
+    result_is_valid &= !C::has_torsion_element(result);
+
+    CtOption::new(result, result_is_valid)
   }
   fn from_bytes_unchecked(bytes: &C::Repr) -> CtOption<Self> {
     Self::from_bytes(bytes)
@@ -341,6 +349,7 @@ impl<C: ShortWeierstrass> GroupEncoding for Projective<C> {
   }
 }
 
+/// We implement `PrimeGroup` due to constraining to a prime-order subgroup
 impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> PrimeGroup for Projective<C> {}
 
 #[cfg(feature = "alloc")]

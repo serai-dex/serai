@@ -79,8 +79,8 @@ impl<C: ShortWeierstrass> Affine<C> {
   /// Create an affine point from `x, y` coordinates, without performing any checks.
   ///
   /// This should NOT be used. It is solely intended for trusted data at compile-time. It MUST NOT
-  /// be used with any untrusted/unvalidated data. Providing any off-curve point may produce
-  /// completely undefined behavior.
+  /// be used with any untrusted/unvalidated data. Providing any point not within the largest
+  /// prime-order subgroup has completely undefined behavior.
   pub const fn from_xy_unchecked(x: C::FieldElement, y: C::FieldElement) -> Self {
     Self { x, y }
   }
