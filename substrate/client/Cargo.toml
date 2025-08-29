@@ -49,7 +49,7 @@ monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "
 rand_core = "0.6"
 hex = "0.4"
 
-blake2 = "0.10"
+blake2 = "0.11.0-rc.0"
 
 ciphersuite = { path = "../../crypto/ciphersuite" }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group" }

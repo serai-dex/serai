@@ -29,33 +29,16 @@ use dalek::{
 };
 pub use constants::{ED25519_BASEPOINT_TABLE, RISTRETTO_BASEPOINT_TABLE};
 
-use group::{
+use ::ciphersuite::group::{
   ff::{Field, PrimeField, FieldBits, PrimeFieldBits, FromUniformBytes},
   Group, GroupEncoding,
   prime::PrimeGroup,
 };
 
-mod field;
-pub use field::FieldElement;
-
 mod ciphersuite;
 pub use crate::ciphersuite::{Ed25519, Ristretto};
 
-// Use black_box when possible
-#[rustversion::since(1.66)]
-mod black_box {
-  pub(crate) fn black_box<T>(val: T) -> T {
-    #[allow(clippy::incompatible_msrv)]
-    core::hint::black_box(val)
-  }
-}
-#[rustversion::before(1.66)]
-mod black_box {
-  pub(crate) fn black_box<T>(val: T) -> T {
-    val
-  }
-}
-use black_box::black_box;
+use core::hint::black_box;
 
 fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   let bit_ref = black_box(bit_ref);
@@ -501,4 +484,31 @@ fn test_ed25519_group() {
 #[test]
 fn test_ristretto_group() {
   ff_group_tests::group::test_prime_group_bits::<_, RistrettoPoint>(&mut rand_core::OsRng);
+}
+
+type ThirtyTwoArray = [u8; 32];
+prime_field::odd_prime_field_with_specific_repr!(
+  FieldElement,
+  "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffed",
+  "02",
+  false,
+  crate::ThirtyTwoArray
+);
+
+impl FieldElement {
+  /// Create a FieldElement from a `crypto_bigint::U256`.
+  ///
+  /// This will reduce the `U256` by the modulus, into a member of the field.
+  #[deprecated]
+  pub const fn from_u256(u256: &crypto_bigint::U256) -> Self {
+    FieldElement::from(&prime_field::crypto_bigint::U256::from_words(*u256.as_words()))
+  }
+
+  /// Create a `FieldElement` from the reduction of a 512-bit number.
+  ///
+  /// The bytes are interpreted in little-endian format.
+  #[deprecated]
+  pub fn wide_reduce(value: [u8; 64]) -> Self {
+    <FieldElement as ::ciphersuite::group::ff::FromUniformBytes<_>>::from_uniform_bytes(&value)
+  }
 }

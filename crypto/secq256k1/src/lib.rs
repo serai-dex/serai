@@ -8,8 +8,10 @@ use std_shims::prelude::*;
 #[cfg(feature = "alloc")]
 use std_shims::io::{self, Read};
 
-// Doesn't use the `generic-array 0.14` exported by `k256::elliptic_curve` as we need `1.0`
-use generic_array::{typenum::U33, GenericArray};
+use sha2::{
+  digest::array::{typenum::U33, Array},
+  Sha512,
+};
 use k256::elliptic_curve::{
   subtle::{Choice, ConstantTimeEq, ConditionallySelectable},
   zeroize::Zeroize,
@@ -66,11 +68,11 @@ impl ShortWeierstrass for Secq256k1 {
   });
   type Scalar = Scalar;
 
-  type Repr = GenericArray<u8, U33>;
+  type Repr = Array<u8, U33>;
   /// Use the SEC1-encoded identity point, which happens to be all zeroes
-  const IDENTITY: Self::Repr = GenericArray::from_array([0; 33]);
+  const IDENTITY: Self::Repr = Array([0; 33]);
   fn encode_compressed(x: Self::FieldElement, odd_y: Choice) -> Self::Repr {
-    let mut res = GenericArray::default();
+    let mut res = Array([0; 33]);
     res[0] =
       <_>::conditional_select(&(Tag::CompressedEvenY as u8), &(Tag::CompressedOddY as u8), odd_y);
     {
@@ -110,7 +112,7 @@ pub type Point = Projective<Secq256k1>;
 impl ciphersuite::Ciphersuite for Secq256k1 {
   type F = Scalar;
   type G = Point;
-  type H = blake2::Blake2b512;
+  type H = Sha512;
 
   const ID: &'static [u8] = b"secq256k1";
 
@@ -136,7 +138,7 @@ impl ciphersuite::Ciphersuite for Secq256k1 {
 
 #[cfg(feature = "alloc")]
 impl generalized_bulletproofs_ec_gadgets::DiscreteLogParameter for Secq256k1 {
-  type ScalarBits = generic_array::typenum::U<{ Scalar::NUM_BITS as usize }>;
+  type ScalarBits = sha2::digest::array::typenum::U<{ Scalar::NUM_BITS as usize }>;
 }
 
 #[test]
@@ -149,7 +151,7 @@ fn generator() {
   use ciphersuite::group::GroupEncoding;
   assert_eq!(
     Point::generator(),
-    Point::from_bytes(GenericArray::from_slice(&hex_literal::hex!(
+    Point::from_bytes(&Array(hex_literal::hex!(
       "020000000000000000000000000000000000000000000000000000000000000001"
     )))
     .unwrap()

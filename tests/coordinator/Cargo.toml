@@ -22,7 +22,7 @@ hex = "0.4"
 zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
-blake2 = "0.10"
+blake2 = "0.11.0-rc.0"
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
 ciphersuite-kp256 = { path = "../../crypto/ciphersuite/kp256", default-features = false, features = ["std"] }

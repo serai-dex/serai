@@ -85,7 +85,7 @@ pub mod __prime_field_private {
   }
 }
 
-/// Construct a odd-prime field.
+/// Construct a odd-prime field with a specified `Repr`.
 ///
 /// The length of the `modulus_as_be_hex` string will effect the size of the underlying
 /// representation and the encoding. It MAY have a "0x" prefix, if preferred.
@@ -94,13 +94,15 @@ pub mod __prime_field_private {
 /// less than `modulus_as_be_hex`.
 ///
 /// `big_endian` controls if the encoded representation will be big-endian or not.
+#[doc(hidden)]
 #[macro_export]
-macro_rules! odd_prime_field {
+macro_rules! odd_prime_field_with_specific_repr {
   (
     $name: ident,
     $modulus_as_be_hex: expr,
     $multiplicative_generator_as_be_hex: expr,
-    $big_endian: literal
+    $big_endian: literal,
+    $repr: path
   ) => {
     prime_field::__prime_field_private::paste::paste! {
       mod [<$name __prime_field_private>] {
@@ -413,6 +415,7 @@ macro_rules! odd_prime_field {
           }
         }
 
+        /// The encoded representation of a `$name`.
         #[derive(Clone, Copy)]
         pub struct Repr([u8; MODULUS_BYTES]);
         impl Default for Repr {
@@ -432,7 +435,7 @@ macro_rules! odd_prime_field {
         }
 
         impl PrimeField for $name {
-          type Repr = Repr;
+          type Repr = $repr;
           const MODULUS: &str = $modulus_as_be_hex;
           const NUM_BITS: u32 = MODULUS.bits();
           const CAPACITY: u32 = Self::NUM_BITS - 1;
@@ -452,26 +455,30 @@ macro_rules! odd_prime_field {
           };
 
           fn to_repr(&self) -> Self::Repr {
-            let mut res = Repr([0; _]);
-            if $big_endian {
-              res.0.copy_from_slice(
-                &self.0.retrieve().to_be_bytes()[(UnderlyingUint::BYTES - MODULUS_BYTES) ..]
-              );
-            } else {
-              res.0.copy_from_slice(&self.0.retrieve().to_le_bytes()[.. MODULUS_BYTES]);
+            let mut res = Self::Repr::default();
+            {
+              let res: &mut [u8] = res.as_mut();
+              if $big_endian {
+                res.copy_from_slice(
+                  &self.0.retrieve().to_be_bytes()[(UnderlyingUint::BYTES - MODULUS_BYTES) ..]
+                );
+              } else {
+                res.copy_from_slice(&self.0.retrieve().to_le_bytes()[.. MODULUS_BYTES]);
+              }
             }
             res
           }
           fn from_repr(repr: Self::Repr) -> CtOption<Self> {
             let mut expanded_repr = [0; UnderlyingUint::BYTES];
+            let repr: &[u8] = repr.as_ref();
             let result = Self(if $big_endian {
-              expanded_repr[(UnderlyingUint::BYTES - MODULUS_BYTES) .. ].copy_from_slice(&repr.0);
+              expanded_repr[(UnderlyingUint::BYTES - MODULUS_BYTES) .. ].copy_from_slice(repr);
               Underlying::new(&UnderlyingUint::from_be_bytes(expanded_repr))
             } else {
-              expanded_repr[.. MODULUS_BYTES].copy_from_slice(&repr.0);
+              expanded_repr[.. MODULUS_BYTES].copy_from_slice(repr);
               Underlying::new(&UnderlyingUint::from_le_bytes(expanded_repr))
             });
-            CtOption::new(result, result.to_repr().0.ct_eq(&repr.0))
+            CtOption::new(result, repr.ct_eq(&result.to_repr().as_ref()))
           }
           fn is_odd(&self) -> Choice {
             self.0.retrieve().is_odd()
@@ -533,5 +540,32 @@ macro_rules! odd_prime_field {
 
       pub use [<$name __prime_field_private>]::$name;
     }
+  };
+}
+
+/// Construct a odd-prime field.
+///
+/// The length of the `modulus_as_be_hex` string will effect the size of the underlying
+/// representation and the encoding. It MAY have a "0x" prefix, if preferred.
+///
+/// `multiplicative_generator_as_be_hex` MAY have a "0x" prefix. It MAY be short and of a length
+/// less than `modulus_as_be_hex`.
+///
+/// `big_endian` controls if the encoded representation will be big-endian or not.
+#[macro_export]
+macro_rules! odd_prime_field {
+  (
+    $name: ident,
+    $modulus_as_be_hex: expr,
+    $multiplicative_generator_as_be_hex: expr,
+    $big_endian: literal
+  ) => {
+    prime_field::odd_prime_field_with_specific_repr!(
+      $name,
+      $modulus_as_be_hex,
+      $multiplicative_generator_as_be_hex,
+      $big_endian,
+      Repr
+    );
   };
 }

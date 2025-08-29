@@ -109,7 +109,7 @@ impl ciphersuite::Ciphersuite for Embedwards25519 {
 
 #[cfg(feature = "alloc")]
 impl generalized_bulletproofs_ec_gadgets::DiscreteLogParameter for Embedwards25519 {
-  type ScalarBits = generic_array::typenum::U<{ <Scalar as PrimeField>::NUM_BITS as usize }>;
+  type ScalarBits = typenum::U<{ <Scalar as PrimeField>::NUM_BITS as usize }>;
 }
 
 #[test]

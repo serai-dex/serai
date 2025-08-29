@@ -17,8 +17,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-rustversion = "1"
-
 zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
 subtle = { version = "^2.4", default-features = false }
 
@@ -27,8 +25,7 @@ rand_core = { version = "0.6", default-features = false }
 digest = { version = "0.10", default-features = false }
 sha2 = { version = "0.11.0-rc.0", default-features = false }
 
-ff = { version = "0.13", default-features = false, features = ["bits"] }
-group = { version = "0.13", default-features = false }
+prime-field = { path = "../prime-field", default-features = false }
 ciphersuite = { version = "0.4.2", path = "../ciphersuite", default-features = false }
 
 crypto-bigint = { version = "0.5", default-features = false, features = ["zeroize"] }
@@ -41,6 +38,6 @@ rand_core = { version = "0.6", default-features = false, features = ["std"] }
 ff-group-tests = { path = "../ff-group-tests" }
 
 [features]
-alloc = ["zeroize/alloc", "ciphersuite/alloc", "curve25519-dalek/alloc"]
-std = ["alloc", "zeroize/std", "subtle/std", "rand_core/std", "digest/std", "ciphersuite/std"]
+alloc = ["zeroize/alloc", "digest/alloc", "prime-field/alloc", "ciphersuite/alloc", "curve25519-dalek/alloc"]
+std = ["alloc", "zeroize/std", "subtle/std", "rand_core/std", "digest/std", "prime-field/std", "ciphersuite/std"]
 default = ["std"]

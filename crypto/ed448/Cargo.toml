@@ -32,6 +32,6 @@ rand_core = { version = "0.6", default-features = false, features = ["std"] }
 ff-group-tests = { path = "../ff-group-tests" }
 
 [features]
-alloc = ["zeroize/alloc", "prime-field/alloc", "ciphersuite/alloc"]
+alloc = ["zeroize/alloc", "sha3/alloc", "prime-field/alloc", "ciphersuite/alloc"]
 std = ["alloc", "zeroize/std", "prime-field/std", "ciphersuite/std"]
 default = ["std"]

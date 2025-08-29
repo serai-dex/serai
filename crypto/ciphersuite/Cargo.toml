@@ -38,7 +38,7 @@ rand_core = { version = "0.6", default-features = false, features = ["std"] }
 ff-group-tests = { version = "0.13", path = "../ff-group-tests" }
 
 [features]
-alloc = ["std-shims", "ff/alloc"]
+alloc = ["std-shims", "digest/alloc", "ff/alloc"]
 std = [
   "alloc",
 

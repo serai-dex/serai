@@ -29,7 +29,7 @@ rand_core = { version = "0.6", default-features = false, features = ["std", "get
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
 # Cryptography
-blake2 = { version = "0.10", default-features = false, features = ["std"] }
+blake2 = { version = "0.11.0-rc.0", default-features = false, features = ["alloc"] }
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", default-features = false, features = ["std"] }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
 dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std", "ristretto"] }

@@ -2,10 +2,9 @@ use zeroize::Zeroize;
 
 use sha2::Sha512;
 
-use group::Group;
-use crate::Scalar;
+use ciphersuite::{group::Group, Ciphersuite};
 
-use ciphersuite::Ciphersuite;
+use crate::Scalar;
 
 macro_rules! dalek_curve {
   (

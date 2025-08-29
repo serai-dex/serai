@@ -7,7 +7,7 @@ use rand_chacha::ChaCha20Rng;
 
 use blake2::{
   digest::{
-    generic_array::{typenum::U32, GenericArray},
+    array::{typenum::U32, Array},
     crypto_common::KeySizeUser,
     KeyInit, Mac,
   },
@@ -48,7 +48,7 @@ impl<C: Curves> Generators<C> {
   /// This is deterministic to the towering curve's (possibly truncated) ID and generator.
   pub fn new(max_threshold: u16, max_participants: u16) -> Generators<C> {
     let entropy = <Blake2s256Keyed as KeyInit>::new(&{
-      let mut key = GenericArray::<u8, <Blake2s256Keyed as KeySizeUser>::KeySize>::default();
+      let mut key = Array::<u8, <Blake2s256Keyed as KeySizeUser>::KeySize>::default();
       let key_len = key.len().min(<C::ToweringCurve as Ciphersuite>::ID.len());
       {
         let key: &mut [u8] = key.as_mut();
