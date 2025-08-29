@@ -2428,7 +2428,7 @@ dependencies = [
 
 [[package]]
 name = "dalek-ff-group"
-version = "0.4.4"
+version = "0.4.6"
 dependencies = [
  "ciphersuite 0.4.2",
  "crypto-bigint 0.5.5",
