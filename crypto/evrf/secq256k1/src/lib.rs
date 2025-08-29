@@ -47,6 +47,7 @@ impl ShortWeierstrass for Secq256k1 {
     let six = four.add(&two);
     six.add(&FieldElement::ONE)
   };
+  const PRIME_ORDER: bool = true;
   const GENERATOR: Affine<Self> = Affine::from_xy_unchecked(FieldElement::ONE, {
     let y_be =
       hex_literal::hex!("0c7c97045a2074634909abdf82c9bd0248916189041f2af0c1b800d1ffc278c0");

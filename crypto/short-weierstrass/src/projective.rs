@@ -77,16 +77,11 @@ impl<C: ShortWeierstrass> ConditionallyNegatable for Projective<C> {
   }
 }
 
-impl<C: ShortWeierstrass> Add for Projective<C> {
-  type Output = Self;
+impl<C: ShortWeierstrass> Projective<C> {
   // add-1998-cmo-2
-  /*
-    We don't use the complete formulas from 2015 as they require the curve is prime order, when we
-    do not.
-  */
-  fn add(self, p2: Self) -> Self {
+  fn add_if_composite_order(self, other: Self) -> Self {
     let Self { x: X1, y: Y1, z: Z1 } = self;
-    let Self { x: X2, y: Y2, z: Z2 } = p2;
+    let Self { x: X2, y: Y2, z: Z2 } = other;
 
     let Y1Z2 = Y1 * Z2;
     let X1Z2 = X1 * Z2;
@@ -104,18 +99,84 @@ impl<C: ShortWeierstrass> Add for Projective<C> {
 
     let res = Self { x: X3, y: Y3, z: Z3 };
 
-    let same_x_coordinate = (self.x * p2.z).ct_eq(&(p2.x * self.z));
-    let same_y_coordinate = (self.y * p2.z).ct_eq(&(p2.y * self.z));
+    let same_x_coordinate = (self.x * other.z).ct_eq(&(other.x * self.z));
+    let same_y_coordinate = (self.y * other.z).ct_eq(&(other.y * self.z));
     let res = <_>::conditional_select(
       &res,
       &Self::IDENTITY,
-      (self.is_identity_internal() & p2.is_identity_internal()) |
+      (self.is_identity_internal() & other.is_identity_internal()) |
         (same_x_coordinate & (!same_y_coordinate)),
     );
     let res =
       <_>::conditional_select(&res, &self.double_internal(), same_x_coordinate & same_y_coordinate);
-    let res = <_>::conditional_select(&res, &p2, self.is_identity_internal());
-    <_>::conditional_select(&res, &self, p2.is_identity_internal())
+    let res = <_>::conditional_select(&res, &other, self.is_identity_internal());
+    <_>::conditional_select(&res, &self, other.is_identity_internal())
+  }
+
+  // add-2015-rcb
+  fn add_if_prime_order(self, other: Self) -> Self {
+    let b3 = C::B + C::B + C::B;
+
+    let X1 = self.x;
+    let Y1 = self.y;
+    let Z1 = self.z;
+    let X2 = other.x;
+    let Y2 = other.y;
+    let Z2 = other.z;
+
+    let t0 = X1 * X2;
+    let t1 = Y1 * Y2;
+    let t2 = Z1 * Z2;
+    let t3 = X1 + Y1;
+    let t4 = X2 + Y2;
+    let t3 = t3 * t4;
+    let t4 = t0 + t1;
+    let t3 = t3 - t4;
+    let t4 = X1 + Z1;
+    let t5 = X2 + Z2;
+    let t4 = t4 * t5;
+    let t5 = t0 + t2;
+    let t4 = t4 - t5;
+    let t5 = Y1 + Z1;
+    let X3 = Y2 + Z2;
+    let t5 = t5 * X3;
+    let X3 = t1 + t2;
+    let t5 = t5 - X3;
+    let Z3 = C::A * t4;
+    let X3 = b3 * t2;
+    let Z3 = X3 + Z3;
+    let X3 = t1 - Z3;
+    let Z3 = t1 + Z3;
+    let Y3 = X3 * Z3;
+    let t1 = t0 + t0;
+    let t1 = t1 + t0;
+    let t2 = C::A * t2;
+    let t4 = b3 * t4;
+    let t1 = t1 + t2;
+    let t2 = t0 - t2;
+    let t2 = C::A * t2;
+    let t4 = t4 + t2;
+    let t0 = t1 * t4;
+    let Y3 = Y3 + t0;
+    let t0 = t5 * t4;
+    let X3 = t3 * X3;
+    let X3 = X3 - t0;
+    let t0 = t3 * t1;
+    let Z3 = t5 * Z3;
+    let Z3 = Z3 + t0;
+
+    Projective { x: X3, y: Y3, z: Z3 }
+  }
+}
+
+impl<C: ShortWeierstrass> Add for Projective<C> {
+  type Output = Self;
+  fn add(self, other: Self) -> Self {
+    if C::PRIME_ORDER {
+      self.add_if_prime_order(other)
+    } else {
+      self.add_if_composite_order(other)
+    }
   }
 }
 impl<C: ShortWeierstrass> Sub for Projective<C> {

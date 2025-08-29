@@ -22,6 +22,8 @@ pub trait ShortWeierstrass: 'static + Sized + Debug {
   const A: Self::FieldElement;
   /// The constant `B` from the curve equation.
   const B: Self::FieldElement;
+  /// If the elliptic curve is of prime order.
+  const PRIME_ORDER: bool;
   /// A generator of this elliptic curve's largest prime-order subgroup.
   const GENERATOR: Affine<Self>;
   /// The scalar type for the elliptic curve's largest prime-order subgroup.
@@ -44,6 +46,6 @@ pub trait ShortWeierstrass: 'static + Sized + Debug {
 
   /// If the point is outside the largest prime-order subgroup and isn't the identity point.
   ///
-  /// This may immediately return `Choice::new(0)` for curves of prime order.
+  /// This SHOULD immediately return `Choice::new(0)` for curves of prime order.
   fn has_torsion_element(point: Projective<Self>) -> Choice;
 }

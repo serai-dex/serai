@@ -37,6 +37,7 @@ impl ShortWeierstrass for Embedwards25519 {
   const B: FieldElement = FieldElement(DalekScalar::from_bits(hex_literal::hex!(
     "5f07603a853f20370b682036210d463e64903a23ea669d07ca26cfc13f594209"
   )));
+  const PRIME_ORDER: bool = true;
   const GENERATOR: Affine<Self> = Affine::from_xy_unchecked(
     FieldElement::ONE,
     FieldElement(DalekScalar::from_bits(hex_literal::hex!(
