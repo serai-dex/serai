@@ -30,8 +30,8 @@ schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
 
 prime-field = { path = "../../crypto/prime-field", default-features = false, features = ["alloc"] }
 short-weierstrass = { path = "../../crypto/short-weierstrass", default-features = false, features = ["alloc"] }
-secq256k1 = { path = "../../crypto/evrf/secq256k1", default-features = false }
-embedwards25519 = { path = "../../crypto/evrf/embedwards25519", default-features = false }
+secq256k1 = { path = "../../crypto/secq256k1", default-features = false }
+embedwards25519 = { path = "../../crypto/embedwards25519", default-features = false }
 
 dkg = { path = "../../crypto/dkg", default-features = false }
 dkg-evrf = { path = "../../crypto/dkg/evrf", default-features = false }

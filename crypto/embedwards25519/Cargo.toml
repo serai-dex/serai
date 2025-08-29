@@ -3,7 +3,7 @@ name = "embedwards25519"
 version = "0.1.0"
 description = "A curve defined over the Ed25519 scalar field"
 license = "MIT"
-repository = "https://github.com/serai-dex/serai/tree/develop/crypto/evrf/embedwards25519"
+repository = "https://github.com/serai-dex/serai/tree/develop/crypto/embedwards25519"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["curve25519", "ed25519", "ristretto255", "group"]
 edition = "2021"
@@ -16,19 +16,19 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 hex-literal = { version = "0.4", default-features = false }
 
-std-shims = { version = "0.1", path = "../../../common/std-shims", default-features = false, optional = true }
+std-shims = { version = "0.1", path = "../../common/std-shims", default-features = false, optional = true }
 
 zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
 
 generic-array = { version = "1", default-features = false }
 
-prime-field = { path = "../../prime-field", default-features = false }
-short-weierstrass = { path = "../../short-weierstrass", default-features = false }
+prime-field = { path = "../prime-field", default-features = false }
+short-weierstrass = { path = "../short-weierstrass", default-features = false }
 curve25519-dalek = { version = "4", default-features = false, features = ["legacy_compatibility"] }
-dalek-ff-group = { path = "../../dalek-ff-group", version = "0.4", default-features = false }
+dalek-ff-group = { path = "../dalek-ff-group", version = "0.4", default-features = false }
 
 blake2 = { version = "0.10", default-features = false }
-ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false }
+ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false }
 
 generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false, optional = true }
 
@@ -37,7 +37,7 @@ hex = "0.4"
 
 rand_core = { version = "0.6", features = ["std"] }
 
-ff-group-tests = { path = "../../ff-group-tests" }
+ff-group-tests = { path = "../ff-group-tests" }
 
 [features]
 alloc = ["std-shims", "zeroize/alloc", "prime-field/alloc", "short-weierstrass/alloc", "curve25519-dalek/alloc", "ciphersuite/alloc", "generalized-bulletproofs-ec-gadgets"]

@@ -41,8 +41,8 @@ members = [
 
   "crypto/prime-field",
   "crypto/short-weierstrass",
-  "crypto/evrf/secq256k1",
-  "crypto/evrf/embedwards25519",
+  "crypto/secq256k1",
+  "crypto/embedwards25519",
 
   "crypto/dkg",
   "crypto/dkg/recovery",

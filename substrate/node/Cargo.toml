@@ -29,8 +29,8 @@ schnorrkel = "0.11"
 ciphersuite = { path = "../../crypto/ciphersuite" }
 ciphersuite-kp256 = { path = "../../crypto/ciphersuite/kp256" }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
-embedwards25519 = { path = "../../crypto/evrf/embedwards25519" }
-secq256k1 = { path = "../../crypto/evrf/secq256k1" }
+embedwards25519 = { path = "../../crypto/embedwards25519" }
+secq256k1 = { path = "../../crypto/secq256k1" }
 
 libp2p = "0.52"
 
