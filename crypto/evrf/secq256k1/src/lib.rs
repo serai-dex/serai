@@ -19,6 +19,7 @@ use k256::elliptic_curve::{
     ff::{PrimeField, FromUniformBytes},
     Group,
   },
+  sec1::Tag,
 };
 
 prime_field::odd_prime_field!(
@@ -71,13 +72,12 @@ impl ShortWeierstrass for Secq256k1 {
   type Scalar = Scalar;
 
   type Repr = GenericArray<u8, U33>;
-  // Use an all-zero encoding for the identity as `0` isn't the `x` coordinate of an on-curve point
-  // This uses `unsafe` to construct a `GenericArray` at compile-time as ``
+  /// Use the SEC1-encoded identity point, which happens to be all zeroes
   const IDENTITY: Self::Repr = GenericArray::from_array([0; 33]);
-  fn compress(x: Self::FieldElement, odd_y: Choice) -> Self::Repr {
-    // If `y` is odd, followed by the big-endian `x` coordinate
+  fn encode_compressed(x: Self::FieldElement, odd_y: Choice) -> Self::Repr {
     let mut res = GenericArray::default();
-    res[0] = odd_y.unwrap_u8();
+    res[0] =
+      <_>::conditional_select(&(Tag::CompressedEvenY as u8), &(Tag::CompressedOddY as u8), odd_y);
     {
       let res: &mut [u8] = res.as_mut();
       res[1 ..].copy_from_slice(x.to_repr().as_ref());
@@ -86,9 +86,11 @@ impl ShortWeierstrass for Secq256k1 {
   }
   fn decode_compressed(bytes: &Self::Repr) -> (<Self::FieldElement as PrimeField>::Repr, Choice) {
     // Parse out if `y` is odd
-    let odd_y = Choice::from(bytes[0] & 1);
-    // Check if the extra byte was malleated
-    let invalid = !bytes[0].ct_eq(&odd_y.unwrap_u8());
+    let odd_y = bytes[0].ct_eq(&(Tag::CompressedOddY as u8));
+    // Check if the tag was malleated
+    let expected_tag =
+      <_>::conditional_select(&(Tag::CompressedEvenY as u8), &(Tag::CompressedOddY as u8), odd_y);
+    let invalid = !bytes[0].ct_eq(&expected_tag);
 
     // Copy the alleged `x` coordinate, overwriting with `0xffffff...` if the sign byte was
     // malleated (causing the `x` coordinate to be invalid)
@@ -164,7 +166,7 @@ fn generator() {
   assert_eq!(
     Point::generator(),
     Point::from_bytes(GenericArray::from_slice(&hex_literal::hex!(
-      "000000000000000000000000000000000000000000000000000000000000000001"
+      "020000000000000000000000000000000000000000000000000000000000000001"
     )))
     .unwrap()
   );

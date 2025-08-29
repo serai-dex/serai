@@ -89,8 +89,9 @@ impl<C: ShortWeierstrass> Affine<C> {
   pub fn decompress(x: C::FieldElement, odd_y: Choice) -> CtOption<Self> {
     let y_square = ((x.square() + C::A) * x) + C::B;
     y_square.sqrt().and_then(|mut y| {
-      y = <_>::conditional_select(&y, &-y, odd_y.ct_ne(&y.is_odd()));
-      CtOption::new(Self { x, y }, 1.into())
+      y = <_>::conditional_select(&y, &-y, y.is_odd().ct_ne(&odd_y));
+      // Handles the exceptional case of `y = 0, odd_y = 1`
+      CtOption::new(Self { x, y }, y.is_odd().ct_eq(&odd_y))
     })
   }
 

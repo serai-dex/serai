@@ -369,13 +369,11 @@ impl<C: ShortWeierstrass> GroupEncoding for Projective<C> {
 
     let (x, odd_y) = C::decode_compressed(bytes);
 
-    let result = C::FieldElement::from_repr(x).and_then(|x| {
-      // Parse x and recover y
-      let non_identity_on_curve_point = Affine::decompress(x, odd_y).map(Projective::from);
-      // Set the identity, if the identity
-      let identity = CtOption::new(Projective::IDENTITY, identity);
-      non_identity_on_curve_point.or_else(|| identity)
-    });
+    let result = C::FieldElement::from_repr(x)
+      .and_then(|x| Affine::decompress(x, odd_y).map(Projective::from));
+    // Set the identity, if the identity
+    let identity = CtOption::new(Projective::IDENTITY, identity);
+    let result = result.or_else(|| identity);
 
     let mut result_is_valid = result.is_some();
     let result = result.unwrap_or(Projective::IDENTITY);
@@ -394,7 +392,7 @@ impl<C: ShortWeierstrass> GroupEncoding for Projective<C> {
     let compressed_if_not_identity = {
       let affine_on_curve = affine_on_curve.unwrap_or(C::GENERATOR);
       let (x, y) = affine_on_curve.coordinates();
-      C::compress(x, y.is_odd())
+      C::encode_compressed(x, y.is_odd())
     };
 
     let mut res = C::Repr::default();

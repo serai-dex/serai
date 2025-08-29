@@ -35,13 +35,13 @@ pub trait ShortWeierstrass: 'static + Sized + Debug {
   type Repr: 'static + Send + Sync + Copy + Default + AsRef<[u8]> + AsMut<[u8]>;
   /// The representation of the identity point.
   const IDENTITY: Self::Repr;
-  /// Compress an affine point its byte encoding.
+  /// Encode a compresed, on-curve point to its byte encoding.
   ///
   /// The space of potential outputs MUST exclude `Self::IDENTITY`.
-  fn compress(x: Self::FieldElement, odd_y: Choice) -> Self::Repr;
-  /// Decode a compressed point.
+  fn encode_compressed(x: Self::FieldElement, odd_y: Choice) -> Self::Repr;
+  /// Decode the `x` coordinate and if the `y` coordinate is odd from a compressed representation.
   ///
-  /// This is expected to return the `x` coordinate and if the `y` coordinate is odd.
+  /// This MAY return any value if the bytes represent the identity.
   fn decode_compressed(bytes: &Self::Repr) -> (<Self::FieldElement as PrimeField>::Repr, Choice);
 
   /// If the point is outside the largest prime-order subgroup and isn't the identity point.

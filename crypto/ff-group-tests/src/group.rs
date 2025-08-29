@@ -158,16 +158,20 @@ pub fn test_encoding<G: PrimeGroup>() {
     let bytes = point.to_bytes();
     let mut repr = G::Repr::default();
     repr.as_mut().copy_from_slice(bytes.as_ref());
-    let decoded = G::from_bytes(&repr).unwrap();
+    let decoded = G::from_bytes(&repr).expect("couldn't decode encoded point");
     assert_eq!(point, decoded, "{msg} couldn't be encoded and decoded");
     assert_eq!(
       point,
-      G::from_bytes_unchecked(&repr).unwrap(),
-      "{msg} couldn't be encoded and decoded",
+      G::from_bytes_unchecked(&repr)
+        .expect("couldn't decode encoded point with `from_bytes_unchecked`"),
+      "{msg} couldn't be encoded and decoded with `from_bytes_unchecked`",
     );
     decoded
   };
-  assert!(bool::from(test(G::identity(), "identity").is_identity()));
+  assert!(
+    bool::from(test(G::identity(), "identity").is_identity()),
+    "decoded identity was no longer the identity"
+  );
   test(G::generator(), "generator");
   test(G::generator() + G::generator(), "(generator * 2)");
 }

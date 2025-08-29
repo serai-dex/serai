@@ -49,7 +49,7 @@ impl ShortWeierstrass for Embedwards25519 {
   type Repr = [u8; 32];
   // Use an all-zero encoding for the identity as `0` isn't the `x` coordinate of an on-curve point
   const IDENTITY: [u8; 32] = [0; 32];
-  fn compress(x: Self::FieldElement, odd_y: Choice) -> Self::Repr {
+  fn encode_compressed(x: Self::FieldElement, odd_y: Choice) -> Self::Repr {
     // The LE `x` coordinate, with if `y` is odd in the unused 256th bit
     let mut res = [0; 32];
     res.as_mut().copy_from_slice(x.to_repr().as_ref());
