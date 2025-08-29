@@ -5,7 +5,7 @@ use zeroize::DefaultIsZeroes;
 
 use rand_core::RngCore;
 
-use group::ff::Field;
+use group::ff::{Field, PrimeField};
 
 use crate::{ShortWeierstrass, Projective};
 
@@ -23,8 +23,14 @@ impl<C: ShortWeierstrass> Clone for Affine<C> {
 impl<C: ShortWeierstrass> Copy for Affine<C> {}
 
 impl<C: ShortWeierstrass> Affine<C> {
-  pub fn try_from(projective: Projective<C>) -> CtOption<Self> {
-    projective.z.invert().map(|z_inv| Self { x: projective.x * z_inv, y: projective.y * z_inv })
+  pub fn try_from(projective: &Projective<C>) -> CtOption<Self> {
+    let z_inv = projective.z.invert().unwrap_or(C::FieldElement::ZERO);
+    let if_non_identity = Self { x: projective.x * z_inv, y: projective.y * z_inv };
+    let identity = z_inv.ct_eq(&C::FieldElement::ZERO);
+    // If this isn't a valid affine point, switch to a valid affine point
+    let value = <_>::conditional_select(&if_non_identity, &C::GENERATOR, identity);
+    // This is valid if the projective point wasn't the identity
+    CtOption::new(value, !identity)
   }
 }
 
@@ -73,24 +79,35 @@ impl<C: ShortWeierstrass> Affine<C> {
   /// Create an affine point from `x, y` coordinates, without performing any checks.
   ///
   /// This should NOT be used. It is solely intended for trusted data at compile-time. It MUST NOT
-  /// be used with any untrusted/unvalidated data.
-  pub const fn from_xy_unchecked(x: C::FieldElement, y: C::FieldElement) -> Self { Self { x, y } }
+  /// be used with any untrusted/unvalidated data. Providing any off-curve point may produce
+  /// completely undefined behavior.
+  pub const fn from_xy_unchecked(x: C::FieldElement, y: C::FieldElement) -> Self {
+    Self { x, y }
+  }
+
+  /// Decompress a point from it's `x`-coordinate and the sign of the `y` coordinate.
+  pub fn decompress(x: C::FieldElement, odd_y: Choice) -> CtOption<Self> {
+    let y_square = ((x.square() + C::A) * x) + C::B;
+    y_square.sqrt().and_then(|mut y| {
+      y = <_>::conditional_select(&y, &-y, odd_y.ct_ne(&y.is_odd()));
+      CtOption::new(Self { x, y }, 1.into())
+    })
+  }
 
   /// The `x, y` coordinates of this point.
   pub fn coordinates(self) -> (C::FieldElement, C::FieldElement) {
     (self.x, self.y)
   }
 
-/// Sample a random on-curve point with an unknown discrete logarithm w.r.t. any other points.
-pub fn random(mut rng: impl RngCore) -> Self {
-  loop {
-    let x = C::FieldElement::random(&mut rng);
-    let y_square = ((x.square() + C::A) * x) + C::B;
-    let Some(mut y) = Option::<C::FieldElement>::from(y_square.sqrt()) else { continue };
-    if (rng.next_u64() % 2) == 1 {
-      y = -y;
+  /// Sample a random on-curve point with an unknown discrete logarithm w.r.t. any other points.
+  ///
+  /// This runs in time variable to the amount of samples required to find a point.
+  pub fn random(mut rng: impl RngCore) -> Self {
+    loop {
+      let x = C::FieldElement::random(&mut rng);
+      let y_is_odd = Choice::from((rng.next_u64() % 2) as u8);
+      let Some(res) = Option::<Self>::from(Self::decompress(x, y_is_odd)) else { continue };
+      return res;
     }
-    return Self { x, y };
   }
-    }
 }

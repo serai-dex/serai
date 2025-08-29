@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 use generic_array::{sequence::GenericSequence, ArrayLength, GenericArray};
 
 use generalized_bulletproofs_circuit_abstraction::Variable;
-use generalized_bulletproofs_ec_gadgets::{DiscreteLogParameters, Divisor, PointWithDlog};
+use generalized_bulletproofs_ec_gadgets::{DiscreteLogParameter, Divisor, PointWithDlog};
 
 use crate::Curves;
 
@@ -50,11 +50,11 @@ impl Tape {
       Note the `x` coefficients are only from the power of two, and `i >= 1`.
     */
     let dlog =
-      self.read_from_tape::<<C::EmbeddedCurveParameters as DiscreteLogParameters>::ScalarBits>();
+      self.read_from_tape::<<C::EmbeddedCurveParameters as DiscreteLogParameter>::ScalarBits>();
 
     struct PointIterator<'a, C: Curves>(
       &'a mut Tape,
-      GenericArray<Variable, <C::EmbeddedCurveParameters as DiscreteLogParameters>::ScalarBits>,
+      GenericArray<Variable, <C::EmbeddedCurveParameters as DiscreteLogParameter>::ScalarBits>,
       PhantomData<C>,
     );
     impl<'a, C: Curves> Iterator for PointIterator<'a, C> {

@@ -1,4 +1,5 @@
 use core::{
+  borrow::Borrow,
   ops::{DerefMut, Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign},
   iter::Sum,
 };
@@ -389,12 +390,12 @@ impl ec_divisors::DivisorCurve for Point {
   type FieldElement = FieldElement;
   type XyPoint = ec_divisors::Projective<Self>;
 
-  fn interpolator_for_scalar_mul() -> &'static ec_divisors::Interpolator<Self::FieldElement> {
+  fn interpolator_for_scalar_mul() -> impl Borrow<ec_divisors::Interpolator<Self::FieldElement>> {
     static PRECOMPUTE: std_shims::sync::LazyLock<ec_divisors::Interpolator<FieldElement>> =
       std_shims::sync::LazyLock::new(|| {
         ec_divisors::Interpolator::new(usize::try_from(130).unwrap())
       });
-    &PRECOMPUTE
+    &*PRECOMPUTE
   }
 
   fn a() -> Self::FieldElement {

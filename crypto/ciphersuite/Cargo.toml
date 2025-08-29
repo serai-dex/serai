@@ -40,6 +40,8 @@ ff-group-tests = { version = "0.13", path = "../ff-group-tests" }
 [features]
 alloc = ["std-shims"]
 std = [
+  "alloc",
+
   "std-shims/std",
 
   "rand_core/std",

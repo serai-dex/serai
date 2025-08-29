@@ -22,6 +22,7 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = fals
 [features]
 alloc = ["ciphersuite/alloc"]
 std = [
+  "alloc",
   "ciphersuite/std",
   "dalek-ff-group?/std",
 ]

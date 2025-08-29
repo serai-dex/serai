@@ -2875,7 +2875,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 [[package]]
 name = "ec-divisors"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=59e3ae73b51c214afbc304efca8d748b3da62977#59e3ae73b51c214afbc304efca8d748b3da62977"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a6f8797007e768488568b821435cf5006517a962#a6f8797007e768488568b821435cf5006517a962"
 dependencies = [
  "dalek-ff-group",
  "ff",
@@ -2990,7 +2990,6 @@ dependencies = [
  "ciphersuite 0.4.2",
  "curve25519-dalek",
  "dalek-ff-group",
- "ec-divisors",
  "ff-group-tests",
  "generalized-bulletproofs-ec-gadgets",
  "generic-array 1.2.0",
@@ -3728,7 +3727,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=59e3ae73b51c214afbc304efca8d748b3da62977#59e3ae73b51c214afbc304efca8d748b3da62977"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a6f8797007e768488568b821435cf5006517a962#a6f8797007e768488568b821435cf5006517a962"
 dependencies = [
  "blake2",
  "ciphersuite 0.4.99",
@@ -3743,7 +3742,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-circuit-abstraction"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=59e3ae73b51c214afbc304efca8d748b3da62977#59e3ae73b51c214afbc304efca8d748b3da62977"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a6f8797007e768488568b821435cf5006517a962#a6f8797007e768488568b821435cf5006517a962"
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs",
@@ -3754,7 +3753,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-ec-gadgets"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=59e3ae73b51c214afbc304efca8d748b3da62977#59e3ae73b51c214afbc304efca8d748b3da62977"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a6f8797007e768488568b821435cf5006517a962#a6f8797007e768488568b821435cf5006517a962"
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs-circuit-abstraction",
@@ -10927,7 +10926,9 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 name = "short-weierstrass"
 version = "0.1.0"
 dependencies = [
+ "ec-divisors",
  "ff",
+ "generic-array 1.2.0",
  "group",
  "rand_core 0.6.4",
  "subtle",

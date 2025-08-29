@@ -23,8 +23,8 @@ prime-field = { path = "../../prime-field", default-features = false }
 
 blake2 = { version = "0.10", default-features = false }
 ciphersuite = { path = "../../ciphersuite", version = "0.4", default-features = false }
-ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "59e3ae73b51c214afbc304efca8d748b3da62977", default-features = false }
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "59e3ae73b51c214afbc304efca8d748b3da62977", default-features = false }
+ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false }
 
 [dev-dependencies]
 hex = "0.4"

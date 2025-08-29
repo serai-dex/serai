@@ -9,7 +9,7 @@ use std_shims::io::{self, Read};
 
 use k256::elliptic_curve::{
   zeroize::Zeroize,
-  generic_array::typenum::{Sum, Diff, Quot, U, U1, U2},
+  generic_array::typenum::U,
   group::{
     ff::{PrimeField, FromUniformBytes},
     Group,
@@ -87,9 +87,6 @@ impl ciphersuite::Ciphersuite for Secq256k1 {
   }
 }
 
-impl generalized_bulletproofs_ec_gadgets::DiscreteLogParameters for Secq256k1 {
+impl generalized_bulletproofs_ec_gadgets::DiscreteLogParameter for Secq256k1 {
   type ScalarBits = U<{ Scalar::NUM_BITS as usize }>;
-  type XCoefficients = Quot<Sum<Self::ScalarBits, U1>, U2>;
-  type XCoefficientsMinusOne = Diff<Self::XCoefficients, U1>;
-  type YxCoefficients = Diff<Quot<Sum<Sum<Self::ScalarBits, U1>, U1>, U2>, U2>;
 }

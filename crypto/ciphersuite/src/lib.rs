@@ -3,10 +3,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::fmt::Debug;
-#[cfg(any(feature = "alloc", feature = "std"))]
+#[cfg(feature = "alloc")]
 #[allow(unused_imports)]
 use std_shims::prelude::*;
-#[cfg(any(feature = "alloc", feature = "std"))]
+#[cfg(feature = "alloc")]
 use std_shims::io::{self, Read};
 
 use rand_core::{RngCore, CryptoRng};
@@ -23,7 +23,7 @@ use group::{
   Group, GroupOps,
   prime::PrimeGroup,
 };
-#[cfg(any(feature = "alloc", feature = "std"))]
+#[cfg(feature = "alloc")]
 use group::GroupEncoding;
 
 /// Unified trait defining a ciphersuite around an elliptic curve.
@@ -69,7 +69,7 @@ pub trait Ciphersuite:
   }
 
   /// Read a canonical scalar from something implementing std::io::Read.
-  #[cfg(any(feature = "alloc", feature = "std"))]
+  #[cfg(feature = "alloc")]
   #[allow(non_snake_case)]
   fn read_F<R: Read>(reader: &mut R) -> io::Result<Self::F> {
     let mut encoding = <Self::F as PrimeField>::Repr::default();
@@ -86,7 +86,7 @@ pub trait Ciphersuite:
   ///
   /// The provided implementation is safe so long as `GroupEncoding::to_bytes` always returns a
   /// canonical serialization.
-  #[cfg(any(feature = "alloc", feature = "std"))]
+  #[cfg(feature = "alloc")]
   #[allow(non_snake_case)]
   fn read_G<R: Read>(reader: &mut R) -> io::Result<Self::G> {
     let mut encoding = <Self::G as GroupEncoding>::Repr::default();

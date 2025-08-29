@@ -1,13 +1,14 @@
 use core::{hint::black_box, borrow::Borrow, ops::*, iter::Sum};
 
-use subtle::{Choice, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable};
+use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable};
 use zeroize::{Zeroize, DefaultIsZeroes};
 
 use rand_core::RngCore;
 
 use group::{
-  ff::{Field, PrimeFieldBits},
-  Group,
+  ff::{Field, PrimeField, PrimeFieldBits},
+  Group, GroupEncoding,
+  prime::PrimeGroup,
 };
 
 use crate::{ShortWeierstrass, Affine};
@@ -280,19 +281,6 @@ impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>, S: Borrow<C::Scalar>> MulAssig
     *self = *self * scalar.borrow();
   }
 }
-/*
-impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> Mul<&C::Scalar> for Projective<C> {
-  type Output = Self;
-  fn mul(self, scalar: &C::Scalar) -> Self {
-    self * *scalar
-  }
-}
-impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> MulAssign<&C::Scalar> for Projective<C> {
-  fn mul_assign(&mut self, scalar: &C::Scalar) {
-    *self *= *scalar;
-  }
-}
-*/
 impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> Group for Projective<C> {
   type Scalar = C::Scalar;
   fn random(rng: impl RngCore) -> Self {
@@ -309,5 +297,75 @@ impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> Group for Projective<C> {
   }
   fn double(&self) -> Self {
     self.double_internal()
+  }
+}
+
+impl<C: ShortWeierstrass> GroupEncoding for Projective<C> {
+  type Repr = C::Repr;
+  fn from_bytes(bytes: &C::Repr) -> CtOption<Self> {
+    // If this point is the identity point
+    let identity = bytes.as_ref().ct_eq(C::IDENTITY.as_ref());
+
+    let (x, odd_y) = C::decode_compressed(bytes);
+
+    // Parse x, recover y, return the result
+    C::FieldElement::from_repr(x).and_then(|x| {
+      let non_identity_on_curve_point = Affine::decompress(x, odd_y).map(Projective::from);
+      let identity = CtOption::new(Projective::IDENTITY, identity);
+      non_identity_on_curve_point.or_else(|| identity)
+    })
+  }
+  fn from_bytes_unchecked(bytes: &C::Repr) -> CtOption<Self> {
+    Self::from_bytes(bytes)
+  }
+  fn to_bytes(&self) -> C::Repr {
+    let affine_on_curve = Affine::try_from(self);
+    let identity = affine_on_curve.is_none();
+
+    let compressed_if_not_identity = {
+      let affine_on_curve = affine_on_curve.unwrap_or(C::GENERATOR);
+      let (x, y) = affine_on_curve.coordinates();
+      C::compress(x, y.is_odd())
+    };
+
+    let mut res = C::Repr::default();
+    {
+      let res = res.as_mut();
+      for (dst, (if_not_identity, if_identity)) in
+        res.iter_mut().zip(compressed_if_not_identity.as_ref().iter().zip(C::IDENTITY.as_ref()))
+      {
+        *dst = <_>::conditional_select(if_not_identity, if_identity, identity);
+      }
+    }
+    res
+  }
+}
+
+impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> PrimeGroup for Projective<C> {}
+
+#[cfg(feature = "alloc")]
+mod alloc {
+  use core::borrow::Borrow;
+  use ff::{PrimeField, PrimeFieldBits};
+  use crate::{ShortWeierstrass, Affine, Projective};
+
+  impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> ec_divisors::DivisorCurve for Projective<C> {
+    type FieldElement = C::FieldElement;
+    type XyPoint = ec_divisors::Projective<Self>;
+
+    fn interpolator_for_scalar_mul() -> impl Borrow<ec_divisors::Interpolator<C::FieldElement>> {
+      ec_divisors::Interpolator::new((<C::Scalar as PrimeField>::NUM_BITS as usize).div_ceil(2) + 2)
+    }
+
+    fn a() -> C::FieldElement {
+      C::A
+    }
+    fn b() -> C::FieldElement {
+      C::B
+    }
+
+    fn to_xy(point: Self) -> Option<(C::FieldElement, C::FieldElement)> {
+      Option::<Affine<C>>::from(Affine::try_from(&point)).map(Affine::<_>::coordinates)
+    }
   }
 }
