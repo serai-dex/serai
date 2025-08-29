@@ -14,7 +14,8 @@ use rand_core::{RngCore, CryptoRng};
 use zeroize::Zeroize;
 use subtle::ConstantTimeEq;
 
-use digest::{core_api::BlockSizeUser, Digest, HashMarker};
+pub use digest;
+use digest::{array::ArraySize, block_api::BlockSizeUser, OutputSizeUser, Digest, HashMarker};
 use transcript::SecureDigest;
 
 pub use group;
@@ -26,13 +27,25 @@ use group::{
 #[cfg(feature = "alloc")]
 use group::GroupEncoding;
 
+pub trait FromUniformBytes<T> {
+  fn from_uniform_bytes(bytes: &T) -> Self;
+}
+impl<const N: usize, F: group::ff::FromUniformBytes<N>> FromUniformBytes<[u8; N]> for F {
+  fn from_uniform_bytes(bytes: &[u8; N]) -> Self {
+    F::from_uniform_bytes(bytes)
+  }
+}
+
 /// Unified trait defining a ciphersuite around an elliptic curve.
 pub trait Ciphersuite:
   'static + Send + Sync + Clone + Copy + PartialEq + Eq + Debug + Zeroize
 {
   /// Scalar field element type.
   // This is available via G::Scalar yet `C::G::Scalar` is ambiguous, forcing horrific accesses
-  type F: PrimeField + PrimeFieldBits + Zeroize;
+  type F: PrimeField
+    + PrimeFieldBits
+    + Zeroize
+    + FromUniformBytes<<<Self::H as OutputSizeUser>::OutputSize as ArraySize>::ArrayType<u8>>;
   /// Group element type.
   type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize + ConstantTimeEq;
   /// Hash algorithm used with this curve.
@@ -46,16 +59,10 @@ pub trait Ciphersuite:
   // While group does provide this in its API, privacy coins may want to use a custom basepoint
   fn generator() -> Self::G;
 
-  /// Hash the provided domain-separation tag and message to a scalar. Ciphersuites MAY naively
-  /// prefix the tag to the message, enabling transpotion between the two. Accordingly, this
-  /// function should NOT be used in any scheme where one tag is a valid substring of another
-  /// UNLESS the specific Ciphersuite is verified to handle the DST securely.
-  ///
-  /// Verifying specific ciphersuites have secure tag handling is not recommended, due to it
-  /// breaking the intended modularity of ciphersuites. Instead, component-specific tags with
-  /// further purpose tags are recommended ("Schnorr-nonce", "Schnorr-chal").
   #[allow(non_snake_case)]
-  fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F;
+  fn hash_to_F(data: &[u8]) -> Self::F {
+    Self::F::from_uniform_bytes(&Self::H::digest(data).into())
+  }
 
   /// Generate a random non-zero scalar.
   #[allow(non_snake_case)]

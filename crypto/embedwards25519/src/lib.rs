@@ -10,7 +10,7 @@ use std_shims::io::{self, Read};
 
 use prime_field::{subtle::Choice, zeroize::Zeroize};
 use ciphersuite::group::{
-  ff::{Field, PrimeField, FromUniformBytes},
+  ff::{Field, PrimeField},
   Group,
 };
 
@@ -53,7 +53,7 @@ impl ShortWeierstrass for Embedwards25519 {
   fn encode_compressed(x: Self::FieldElement, odd_y: Choice) -> Self::Repr {
     // The LE `x` coordinate, with if `y` is odd in the unused 256th bit
     let mut res = [0; 32];
-    res.as_mut().copy_from_slice(x.to_repr().as_ref());
+    res.copy_from_slice(x.to_repr().as_ref());
     res[31] |= odd_y.unwrap_u8() << 7;
     res
   }
@@ -65,7 +65,10 @@ impl ShortWeierstrass for Embedwards25519 {
 
     // Copy from the point's representation to the field's
     let mut repr = <Self::FieldElement as PrimeField>::Repr::default();
-    repr.as_mut().copy_from_slice(&bytes);
+    {
+      let repr: &mut [u8] = repr.as_mut();
+      repr.copy_from_slice(&bytes);
+    }
 
     (repr, odd_y)
   }
@@ -86,18 +89,6 @@ impl ciphersuite::Ciphersuite for Embedwards25519 {
 
   fn generator() -> Self::G {
     Point::generator()
-  }
-
-  /// `hash_to_F` is implemented with a naive concatenation of the `dst` and `data`, allowing
-  /// transposition between the two. This means `dst: b"abc", data: b"def"`, will produce the same
-  /// scalar as `dst: "abcdef", data: b""`. Please use carefully, not letting `dst` valuess be
-  /// substrings of each other.
-  fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
-    use blake2::Digest;
-    let mut digest = Self::H::new();
-    digest.update(dst);
-    digest.update(data);
-    <Scalar as FromUniformBytes<64>>::from_uniform_bytes(&digest.finalize().into())
   }
 
   // We override the provided impl, which compares against the reserialization, because

@@ -225,7 +225,11 @@ option-ext = { path = "patches/option-ext" }
 directories-next = { path = "patches/directories-next" }
 
 # Patch to include `FromUniformBytes<64>` over Scalar
-k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "fc92333e222b7f0cbe268d2ca92ed572f71f3e1d" }
+k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
+p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
+
+# https://github.com/RustCrypto/hybrid-array/issues/131
+hybrid-array = { git = "https://github.com/kayabaNerve/hybrid-array", rev = "8caa508976c93696a67f40734537c91be7cecd96" }
 
 [workspace.lints.clippy]
 unwrap_or_default = "allow"

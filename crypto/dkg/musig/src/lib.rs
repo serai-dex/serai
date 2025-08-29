@@ -11,7 +11,7 @@ use std_shims::{
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{digest::Digest, group::GroupEncoding, FromUniformBytes, Ciphersuite};
 
 pub use dkg::*;
 
@@ -80,7 +80,7 @@ fn binding_factor_transcript<C: Ciphersuite>(
 
 fn binding_factor<C: Ciphersuite>(mut transcript: Vec<u8>, i: u16) -> C::F {
   transcript.extend(i.to_le_bytes());
-  C::hash_to_F(b"dkg-musig", &transcript)
+  C::F::from_uniform_bytes(&C::H::digest(&transcript).into())
 }
 
 #[allow(clippy::type_complexity)]

@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dkg/musig"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["dkg", "multisig", "threshold", "ff", "group"]
 edition = "2021"
-rust-version = "1.79"
+rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true

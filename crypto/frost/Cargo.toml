@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/crypto/frost"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["frost", "multisig", "threshold"]
 edition = "2021"
-rust-version = "1.79"
+rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -27,13 +27,14 @@ subtle = { version = "^2.4", default-features = false, features = ["std"] }
 
 hex = { version = "0.4", default-features = false, features = ["std"], optional = true }
 
-digest = { version = "0.10", default-features = false, features = ["std"] }
 transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false, features = ["std", "recommended"] }
 
 dalek-ff-group = { path = "../dalek-ff-group", version = "0.4", default-features = false, features = ["std"], optional = true }
 minimal-ed448 = { path = "../ed448", version = "0.4", default-features = false, features = ["std"], optional = true }
 
 ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["std"] }
+sha2 = { version = "0.10.0", default-features = false, optional = true }
+elliptic-curve = { version = "0.13", default-features = false, features = ["hash2curve"], optional = true }
 ciphersuite-kp256 = { path = "../ciphersuite/kp256", version = "0.4", default-features = false, features = ["std"], optional = true }
 
 multiexp = { path = "../multiexp", version = "0.4", default-features = false, features = ["std", "batch"] }
@@ -56,8 +57,8 @@ dkg-dealer = { path = "../dkg/dealer", default-features = false, features = ["st
 ed25519 = ["dalek-ff-group"]
 ristretto = ["dalek-ff-group"]
 
-secp256k1 = ["ciphersuite-kp256"]
-p256 = ["ciphersuite-kp256"]
+secp256k1 = ["sha2", "elliptic-curve", "ciphersuite-kp256"]
+p256 = ["sha2", "elliptic-curve", "ciphersuite-kp256"]
 
 ed448 = ["minimal-ed448"]
 

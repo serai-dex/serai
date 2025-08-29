@@ -103,7 +103,7 @@ pub fn insecure_pair_from_name(name: &str) -> Pair {
 /// This key should never be considered a secure private key. It has effectively no entropy.
 #[cfg(feature = "std")]
 pub fn insecure_arbitrary_key_from_name<C: ciphersuite::Ciphersuite>(name: &str) -> C::F {
-  C::hash_to_F(b"insecure arbitrary key", name.as_bytes())
+  C::hash_to_F(name.as_bytes())
 }
 
 pub struct AccountLookup;

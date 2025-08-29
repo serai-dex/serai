@@ -13,10 +13,7 @@ use generic_array::{typenum::U33, GenericArray};
 use k256::elliptic_curve::{
   subtle::{Choice, ConstantTimeEq, ConditionallySelectable},
   zeroize::Zeroize,
-  group::{
-    ff::{PrimeField, FromUniformBytes},
-    Group,
-  },
+  group::{ff::PrimeField, Group},
   sec1::Tag,
 };
 
@@ -119,18 +116,6 @@ impl ciphersuite::Ciphersuite for Secq256k1 {
 
   fn generator() -> Self::G {
     Point::generator()
-  }
-
-  /// `hash_to_F` is implemented with a naive concatenation of the `dst` and `data`, allowing
-  /// transposition between the two. This means `dst: b"abc", data: b"def"`, will produce the same
-  /// scalar as `dst: "abcdef", data: b""`. Please use carefully, not letting `dst` valuess be
-  /// substrings of each other.
-  fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
-    use blake2::Digest;
-    let mut digest = Self::H::new();
-    digest.update(dst);
-    digest.update(data);
-    <Scalar as FromUniformBytes<64>>::from_uniform_bytes(&digest.finalize().into())
   }
 
   // We override the provided impl, which compares against the reserialization, because

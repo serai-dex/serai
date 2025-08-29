@@ -143,9 +143,9 @@ where
         // We don't know the eth address before the smart contract is deployed.
         ExternalNetworkId::Ethereum => Ok(String::new()),
         ExternalNetworkId::Monero => {
+          // TODO: Serai view-key crate
           let view_private = zeroize::Zeroizing::new(
             <Ed25519 as Ciphersuite>::hash_to_F(
-              b"Serai DEX Additional Key",
               &["Monero".as_bytes(), &0u64.to_le_bytes()].concat(),
             )
             .0,

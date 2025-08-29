@@ -8,7 +8,7 @@ use digest::{
   typenum::{
     consts::U32, marker_traits::NonZero, type_operators::IsGreaterOrEqual, operator_aliases::GrEq,
   },
-  core_api::BlockSizeUser,
+  block_api::BlockSizeUser,
   Digest, Output, HashMarker,
 };
 

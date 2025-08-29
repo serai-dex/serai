@@ -3,15 +3,12 @@ use zeroize::Zeroize;
 use sha3::{
   digest::{
     typenum::U114, core_api::BlockSizeUser, Update, Output, OutputSizeUser, FixedOutput,
-    ExtendableOutput, XofReader, HashMarker, Digest,
+    ExtendableOutput, XofReader, HashMarker,
   },
   Shake256,
 };
 
-use ciphersuite::{
-  group::{ff::FromUniformBytes, Group},
-  Ciphersuite,
-};
+use ciphersuite::{group::Group, Ciphersuite};
 
 use crate::{Scalar, Point};
 
@@ -52,11 +49,6 @@ impl FixedOutput for Shake256_114 {
 }
 impl HashMarker for Shake256_114 {}
 
-/// Ciphersuite for Ed448, inspired by RFC-8032. This is not recommended for usage.
-///
-/// hash_to_F is implemented with a naive concatenation of the dst and data, allowing transposition
-/// between the two. This means `dst: b"abc", data: b"def"`, will produce the same scalar as
-/// `dst: "abcdef", data: b""`. Please use carefully, not letting dsts be substrings of each other.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Ed448;
 impl Ciphersuite for Ed448 {
@@ -69,48 +61,9 @@ impl Ciphersuite for Ed448 {
   fn generator() -> Self::G {
     Point::generator()
   }
-
-  fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
-    let mut digest = Self::H::new();
-    Update::update(&mut digest, dst);
-    Update::update(&mut digest, data);
-    let digest = digest.finalize();
-
-    let mut wide_scalar = [0; 114];
-    wide_scalar.copy_from_slice(digest.as_ref());
-    Scalar::from_uniform_bytes(&wide_scalar)
-  }
 }
 
 #[test]
 fn test_ed448() {
-  use ciphersuite::group::ff::PrimeField;
-
   ff_group_tests::group::test_prime_group_bits::<_, Point>(&mut rand_core::OsRng);
-
-  // Ideally, a test vector from RFC-8032 (not FROST) would be here
-  // Unfortunately, the IETF draft doesn't provide any vectors for the derived challenges
-  assert_eq!(
-    Ed448::hash_to_F(
-      b"FROST-ED448-SHAKE256-v11nonce",
-      &hex::decode(
-        "\
-89bf16040081ff2990336b200613787937ebe1f024b8cdff90eb6f1c741d91c1\
-4a2b2f5858a932ad3d3b18bd16e76ced3070d72fd79ae4402df201f5\
-25e754716a1bc1b87a502297f2a99d89ea054e0018eb55d39562fd01\
-00"
-      )
-      .unwrap()
-    )
-    .to_repr()
-    .as_ref(),
-    hex::decode(
-      "\
-67a6f023e77361707c6e894c625e809e80f33fdb310810053ae29e28\
-e7011f3193b9020e73c183a98cc3a519160ed759376dd92c94831622\
-00"
-    )
-    .unwrap()
-    .as_slice()
-  );
 }

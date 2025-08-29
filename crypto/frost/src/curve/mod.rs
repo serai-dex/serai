@@ -1,4 +1,4 @@
-use core::ops::Deref;
+use core::{ops::Deref, convert::AsRef};
 use std::io::{self, Read};
 
 use rand_core::{RngCore, CryptoRng};
@@ -6,9 +6,8 @@ use rand_core::{RngCore, CryptoRng};
 use zeroize::{Zeroize, Zeroizing};
 use subtle::ConstantTimeEq;
 
-use digest::{Digest, Output};
-
 pub use ciphersuite::{
+  digest::Digest,
   group::{
     ff::{Field, PrimeField},
     Group,
@@ -46,24 +45,23 @@ pub trait Curve: Ciphersuite {
   const CONTEXT: &'static [u8];
 
   /// Hash the given dst and data to a byte vector. Used to instantiate H4 and H5.
-  fn hash(dst: &[u8], data: &[u8]) -> Output<Self::H> {
+  fn hash(dst: &[u8], data: &[u8]) -> impl AsRef<[u8]> {
     Self::H::digest([Self::CONTEXT, dst, data].concat())
   }
 
-  /// Field element from hash. Used during key gen and by other crates under Serai as a general
-  /// utility. Used to instantiate H1 and H3.
+  /// Field element from hash. Used to instantiate H1 and H3.
+  ///
+  /// The `dst` MUST be prefixed by `Self::CONTEXT` by the implementor.
   #[allow(non_snake_case)]
-  fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
-    <Self as Ciphersuite>::hash_to_F(&[Self::CONTEXT, dst].concat(), msg)
-  }
+  fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F;
 
   /// Hash the message for the binding factor. H4 from the IETF draft.
-  fn hash_msg(msg: &[u8]) -> Output<Self::H> {
+  fn hash_msg(msg: &[u8]) -> impl AsRef<[u8]> {
     Self::hash(b"msg", msg)
   }
 
   /// Hash the commitments for the binding factor. H5 from the IETF draft.
-  fn hash_commitments(commitments: &[u8]) -> Output<Self::H> {
+  fn hash_commitments(commitments: &[u8]) -> impl AsRef<[u8]> {
     Self::hash(b"com", commitments)
   }
 

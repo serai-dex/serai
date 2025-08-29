@@ -9,5 +9,5 @@ use ciphersuite::Ciphersuite;
 /// `k` is the index of the key to generate (enabling generating multiple view keys within a
 /// single context).
 pub fn view_key<C: Ciphersuite>(k: u64) -> C::F {
-  C::hash_to_F(b"Serai DEX View Key", &k.to_le_bytes())
+  C::hash_to_F(format!("Serai DEX View Key {k}").as_bytes())
 }

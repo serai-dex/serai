@@ -1,8 +1,5 @@
-use digest::Digest;
-
+use ciphersuite::{digest::Digest, FromUniformBytes, Ciphersuite};
 use dalek_ff_group::Scalar;
-
-use ciphersuite::Ciphersuite;
 
 use crate::{curve::Curve, algorithm::Hram};
 
@@ -20,6 +17,13 @@ macro_rules! dalek_curve {
 
     impl Curve for $Curve {
       const CONTEXT: &'static [u8] = $CONTEXT;
+      fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
+        let mut digest = <Self as Ciphersuite>::H::new();
+        digest.update(Self::CONTEXT);
+        digest.update(dst);
+        digest.update(msg);
+        Self::F::from_uniform_bytes(&digest.finalize().into())
+      }
     }
 
     /// The challenge function for this ciphersuite.
@@ -30,11 +34,13 @@ macro_rules! dalek_curve {
       fn hram(R: &<$Curve as Ciphersuite>::G, A: &<$Curve as Ciphersuite>::G, m: &[u8]) -> Scalar {
         let mut hash = <$Curve as Ciphersuite>::H::new();
         if $chal.len() != 0 {
-          hash.update(&[$CONTEXT.as_ref(), $chal].concat());
+          hash.update($CONTEXT);
+          hash.update($chal);
         }
-        Scalar::from_hash(
-          hash.chain_update(&[&R.compress().to_bytes(), &A.compress().to_bytes(), m].concat()),
-        )
+        hash.update(R.compress().to_bytes());
+        hash.update(A.compress().to_bytes());
+        hash.update(m);
+        Scalar::from_uniform_bytes(&hash.finalize().into())
       }
     }
   };

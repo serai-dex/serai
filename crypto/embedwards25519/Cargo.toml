@@ -27,7 +27,7 @@ short-weierstrass = { path = "../short-weierstrass", default-features = false }
 curve25519-dalek = { version = "4", default-features = false, features = ["legacy_compatibility"] }
 dalek-ff-group = { path = "../dalek-ff-group", version = "0.4", default-features = false }
 
-blake2 = { version = "0.10", default-features = false }
+blake2 = { version = "0.11.0-rc.0", default-features = false }
 ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false }
 
 generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false, optional = true }
@@ -41,5 +41,5 @@ ff-group-tests = { path = "../ff-group-tests" }
 
 [features]
 alloc = ["std-shims", "zeroize/alloc", "prime-field/alloc", "short-weierstrass/alloc", "curve25519-dalek/alloc", "ciphersuite/alloc", "generalized-bulletproofs-ec-gadgets"]
-std = ["alloc", "std-shims/std", "zeroize/std", "prime-field/std", "short-weierstrass/std", "blake2/std", "ciphersuite/std", "generalized-bulletproofs-ec-gadgets/std"]
+std = ["alloc", "std-shims/std", "zeroize/std", "prime-field/std", "short-weierstrass/std", "ciphersuite/std", "generalized-bulletproofs-ec-gadgets/std"]
 default = ["std"]

@@ -52,7 +52,7 @@ pub fn message_challenge(
   transcript.append_message(b"msg", msg);
   transcript.domain_separate(b"signature");
   transcript.append_message(b"nonce", nonce.to_bytes());
-  <Ristretto as Ciphersuite>::hash_to_F(b"message_challenge", &transcript.challenge(b"challenge"))
+  <Ristretto as Ciphersuite>::hash_to_F(&transcript.challenge(b"challenge"))
 }
 
 pub fn ack_challenge(
@@ -71,5 +71,5 @@ pub fn ack_challenge(
   transcript.append_message(b"id", id.to_le_bytes());
   transcript.domain_separate(b"signature");
   transcript.append_message(b"nonce", nonce.to_bytes());
-  <Ristretto as Ciphersuite>::hash_to_F(b"ack_challenge", &transcript.challenge(b"challenge"))
+  <Ristretto as Ciphersuite>::hash_to_F(&transcript.challenge(b"challenge"))
 }

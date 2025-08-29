@@ -19,7 +19,7 @@ workspace = true
 [dependencies]
 zeroize = { version = "1", default-features = false, features = ["zeroize_derive"] }
 
-sha3 = { version = "0.10", default-features = false }
+sha3 = { version = "0.11.0-rc.0", default-features = false }
 
 prime-field = { path = "../prime-field", default-features = false }
 ciphersuite = { path = "../ciphersuite", default-features = false }
@@ -33,5 +33,5 @@ ff-group-tests = { path = "../ff-group-tests" }
 
 [features]
 alloc = ["zeroize/alloc", "prime-field/alloc", "ciphersuite/alloc"]
-std = ["alloc", "zeroize/std", "sha3/std", "prime-field/std", "ciphersuite/std"]
+std = ["alloc", "zeroize/std", "prime-field/std", "ciphersuite/std"]
 default = ["std"]

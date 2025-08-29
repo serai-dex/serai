@@ -19,13 +19,13 @@ use primitives::OutputType;
 
 use crate::hash_bytes;
 
-const KEY_DST: &[u8] = b"Serai Bitcoin Processor Key Offset";
+// TODO: Bitcoin HD derivation, instead of these bespoke labels?
 static BRANCH_BASE_OFFSET: LazyLock<<Secp256k1 as Ciphersuite>::F> =
-  LazyLock::new(|| Secp256k1::hash_to_F(KEY_DST, b"branch"));
+  LazyLock::new(|| Secp256k1::hash_to_F(b"branch"));
 static CHANGE_BASE_OFFSET: LazyLock<<Secp256k1 as Ciphersuite>::F> =
-  LazyLock::new(|| Secp256k1::hash_to_F(KEY_DST, b"change"));
+  LazyLock::new(|| Secp256k1::hash_to_F(b"change"));
 static FORWARD_BASE_OFFSET: LazyLock<<Secp256k1 as Ciphersuite>::F> =
-  LazyLock::new(|| Secp256k1::hash_to_F(KEY_DST, b"forward"));
+  LazyLock::new(|| Secp256k1::hash_to_F(b"forward"));
 
 // Unfortunately, we have per-key offsets as it's the root key plus the base offset may not be
 // even. While we could tweak the key until all derivations are even, that'd require significantly

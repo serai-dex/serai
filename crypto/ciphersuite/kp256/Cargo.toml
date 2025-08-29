@@ -21,9 +21,8 @@ rand_core = { version = "0.6", default-features = false }
 
 zeroize = { version = "^1.5", default-features = false, features = ["derive"] }
 
-sha2 = { version = "0.10", default-features = false }
+sha2 = { version = "0.11.0-rc.0", default-features = false }
 
-elliptic-curve = { version = "0.13", default-features = false, features = ["hash2curve"] }
 p256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"] }
 k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"] }
 
@@ -43,9 +42,6 @@ std = [
 
   "zeroize/std",
 
-  "sha2/std",
-
-  "elliptic-curve/std",
   "p256/std",
   "k256/std",
 
