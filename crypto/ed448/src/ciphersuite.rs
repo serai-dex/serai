@@ -71,7 +71,11 @@ impl Ciphersuite for Ed448 {
   }
 
   fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
-    let digest = Self::H::digest([dst, data].concat());
+    let mut digest = Self::H::new();
+    Update::update(&mut digest, dst);
+    Update::update(&mut digest, data);
+    let digest = digest.finalize();
+
     let mut wide_scalar = [0; 114];
     wide_scalar.copy_from_slice(digest.as_ref());
     Scalar::from_uniform_bytes(&wide_scalar)

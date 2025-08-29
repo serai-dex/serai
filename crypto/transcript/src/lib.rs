@@ -2,9 +2,6 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
 
-#[allow(unused_imports)]
-use std_shims::prelude::*;
-
 use zeroize::Zeroize;
 
 use digest::{

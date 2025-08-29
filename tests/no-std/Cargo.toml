@@ -19,23 +19,45 @@ workspace = true
 [dependencies]
 flexible-transcript = { path = "../../crypto/transcript", default-features = false, features = ["recommended", "merlin"] }
 
+multiexp = { path = "../../crypto/multiexp", default-features = false, features = ["batch"], optional = true }
+
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false }
 minimal-ed448 = { path = "../../crypto/ed448", default-features = false }
 
-ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false }
 
-multiexp = { path = "../../crypto/multiexp", default-features = false, features = ["batch"] }
+schnorr-signatures = { path = "../../crypto/schnorr", default-features = false, optional = true }
 
-schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
-
-prime-field = { path = "../../crypto/prime-field", default-features = false, features = ["alloc"] }
-short-weierstrass = { path = "../../crypto/short-weierstrass", default-features = false, features = ["alloc"] }
+prime-field = { path = "../../crypto/prime-field", default-features = false }
+short-weierstrass = { path = "../../crypto/short-weierstrass", default-features = false }
 secq256k1 = { path = "../../crypto/secq256k1", default-features = false }
 embedwards25519 = { path = "../../crypto/embedwards25519", default-features = false }
 
-dkg = { path = "../../crypto/dkg", default-features = false }
-dkg-evrf = { path = "../../crypto/dkg/evrf", default-features = false }
+dkg = { path = "../../crypto/dkg", default-features = false, optional = true }
+dkg-evrf = { path = "../../crypto/dkg/evrf", default-features = false, features = ["secp256k1", "ed25519", "ristretto"], optional = true }
 # modular-frost = { path = "../../crypto/frost", default-features = false }
 # frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }
 
-bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["hazmat"] }
+bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["hazmat"], optional = true }
+
+[features]
+alloc = [
+  "multiexp",
+
+  "dalek-ff-group/alloc",
+  "minimal-ed448/alloc",
+
+  "ciphersuite/alloc",
+
+  "schnorr-signatures",
+
+  "prime-field/alloc",
+  "short-weierstrass/alloc",
+  "secq256k1/alloc",
+  "embedwards25519/alloc",
+
+  "dkg",
+  "dkg-evrf",
+
+  "bitcoin-serai",
+]

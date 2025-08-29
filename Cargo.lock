@@ -3280,7 +3280,6 @@ dependencies = [
  "digest 0.10.7",
  "merlin",
  "sha2 0.10.9",
- "std-shims",
  "zeroize",
 ]
 

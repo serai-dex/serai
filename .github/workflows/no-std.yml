@@ -32,4 +32,6 @@ jobs:
         run: sudo apt update && sudo apt install -y gcc-riscv64-unknown-elf gcc-multilib && rustup target add riscv32imac-unknown-none-elf
 
       - name: Verify no-std builds
-        run: CFLAGS=-I/usr/include cargo build --target riscv32imac-unknown-none-elf -p serai-no-std-tests
+        run: |
+          CFLAGS=-I/usr/include cargo +nightly build --target riscv32imac-unknown-none-elf -Z build-std=core -p serai-no-std-tests
+          CFLAGS=-I/usr/include cargo +nightly build --target riscv32imac-unknown-none-elf -Z build-std=core,alloc -p serai-no-std-tests --features "alloc"

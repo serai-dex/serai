@@ -29,7 +29,10 @@ macro_rules! dalek_curve {
       }
 
       fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
-        Scalar::from_hash(Sha512::new_with_prefix(&[dst, data].concat()))
+        let mut digest = Sha512::new();
+        digest.update(dst);
+        digest.update(data);
+        Scalar::from_hash(digest)
       }
     }
   };

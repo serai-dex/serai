@@ -94,9 +94,10 @@ impl ciphersuite::Ciphersuite for Embedwards25519 {
   /// substrings of each other.
   fn hash_to_F(dst: &[u8], data: &[u8]) -> Self::F {
     use blake2::Digest;
-    <Scalar as FromUniformBytes<64>>::from_uniform_bytes(
-      &Self::H::digest([dst, data].concat()).into(),
-    )
+    let mut digest = Self::H::new();
+    digest.update(dst);
+    digest.update(data);
+    <Scalar as FromUniformBytes<64>>::from_uniform_bytes(&digest.finalize().into())
   }
 
   // We override the provided impl, which compares against the reserialization, because

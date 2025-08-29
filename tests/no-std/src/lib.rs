@@ -7,20 +7,22 @@ pub use minimal_ed448;
 
 pub use ciphersuite;
 
-pub use multiexp;
-
-pub use schnorr_signatures;
-
 pub use prime_field;
 pub use short_weierstrass;
 pub use secq256k1;
 pub use embedwards25519;
-
-pub use dkg;
-pub use dkg_evrf;
 /*
 pub use modular_frost;
 pub use frost_schnorrkel;
 */
 
-pub use bitcoin_serai;
+#[cfg(feature = "alloc")]
+pub mod alloc {
+  pub use multiexp;
+  pub use schnorr_signatures;
+
+  pub use dkg;
+  pub use dkg_evrf;
+
+  pub use bitcoin_serai;
+}
