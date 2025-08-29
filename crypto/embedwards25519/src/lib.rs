@@ -2,9 +2,10 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "alloc")]
 #[allow(unused_imports)]
 use std_shims::prelude::*;
-#[cfg(any(feature = "alloc", feature = "std"))]
+#[cfg(feature = "alloc")]
 use std_shims::io::{self, Read};
 
 use prime_field::{subtle::Choice, zeroize::Zeroize};

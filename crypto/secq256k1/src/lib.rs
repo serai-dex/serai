@@ -2,16 +2,14 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "alloc")]
 #[allow(unused_imports)]
 use std_shims::prelude::*;
 #[cfg(feature = "alloc")]
 use std_shims::io::{self, Read};
 
 // Doesn't use the `generic-array 0.14` exported by `k256::elliptic_curve` as we need `1.0`
-use generic_array::{
-  typenum::{U, U33},
-  GenericArray,
-};
+use generic_array::{typenum::U33, GenericArray};
 use k256::elliptic_curve::{
   subtle::{Choice, ConstantTimeEq, ConditionallySelectable},
   zeroize::Zeroize,
@@ -152,7 +150,7 @@ impl ciphersuite::Ciphersuite for Secq256k1 {
 
 #[cfg(feature = "alloc")]
 impl generalized_bulletproofs_ec_gadgets::DiscreteLogParameter for Secq256k1 {
-  type ScalarBits = U<{ Scalar::NUM_BITS as usize }>;
+  type ScalarBits = generic_array::typenum::U<{ Scalar::NUM_BITS as usize }>;
 }
 
 #[test]

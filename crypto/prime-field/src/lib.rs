@@ -11,6 +11,7 @@ pub use ff;
 #[doc(hidden)]
 pub mod __prime_field_private {
   pub use paste;
+  #[cfg(feature = "std")]
   pub use ff_group_tests;
 
   use crypto_bigint::{Word, Uint, modular::ConstMontyParams};
@@ -38,15 +39,16 @@ pub mod __prime_field_private {
     let mut i = 0;
     while i < Uint::<LIMBS>::LIMBS {
       let word: Word = value.as_limbs()[i].0;
+      let word = word as u64;
       let bits = i * (Word::BITS as usize);
       let j = bits / (u64::BITS as usize);
-      res[j] |= word << (bits % (u64::BITS as usize));
+      res[j] |= (word << (bits % (u64::BITS as usize))) as u64;
       if (j + 1) < WORDS {
         if let Some(remaining_bits) =
           ((bits % (u64::BITS as usize)) + (Word::BITS as usize)).checked_sub(u64::BITS as usize)
         {
           if remaining_bits != 0 {
-            res[j + 1] |= word >> ((Word::BITS as usize) - remaining_bits);
+            res[j + 1] |= (word >> ((Word::BITS as usize) - remaining_bits)) as u64;
           }
         }
       }
@@ -126,7 +128,12 @@ macro_rules! odd_prime_field {
           hex_str_without_prefix($multiplicative_generator_as_be_hex);
 
         const MODULUS_BYTES: usize = MODULUS_WITHOUT_PREFIX.len() / 2;
-        type UnderlyingUint = Uint<{ MODULUS_BYTES.div_ceil(Limb::BYTES) }>;
+        /*
+          `crypto-bigint` only implements some methods for some limbs, due to the lack of const
+          generics. `next_power_of_two` pays a performance penalty yet effectively ensures this
+          `Uint` type is fully defined.
+        */
+        type UnderlyingUint = Uint<{ MODULUS_BYTES.div_ceil(Limb::BYTES).next_power_of_two() }>;
 
         const PADDED_MODULUS_WITHOUT_PREFIX_BYTES: [u8; 2 * UnderlyingUint::BYTES] = {
           let mut res = [b'0'; 2 * UnderlyingUint::BYTES];

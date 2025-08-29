@@ -1,9 +1,7 @@
+#[cfg(feature = "std")]
 use subtle::{Choice, ConstantTimeEq, ConditionallySelectable};
 
-use k256::{
-  elliptic_curve::sec1::{Tag, ToEncodedPoint},
-  ProjectivePoint,
-};
+use k256::{elliptic_curve::sec1::ToEncodedPoint, ProjectivePoint};
 
 use bitcoin::key::XOnlyPublicKey;
 
@@ -23,7 +21,9 @@ pub(crate) fn x_only(key: &ProjectivePoint) -> XOnlyPublicKey {
 }
 
 /// Return if a point must be negated to have an even Y coordinate and be eligible for use.
+#[cfg(feature = "std")]
 pub(crate) fn needs_negation(key: &ProjectivePoint) -> Choice {
+  use k256::elliptic_curve::sec1::Tag;
   u8::from(key.to_encoded_point(true).tag()).ct_eq(&u8::from(Tag::CompressedOddY))
 }
 

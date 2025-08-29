@@ -19,9 +19,9 @@ workspace = true
 [dependencies]
 thiserror = { version = "2", default-features = false }
 
-rand_core = { version = "0.6", default-features = false }
+rand_core = { version = "0.6", default-features = false, features = ["alloc"] }
 
-zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+zeroize = { version = "^1.5", default-features = false, features = ["alloc", "zeroize_derive"] }
 
 std-shims = { version = "0.1", path = "../../../common/std-shims", default-features = false }
 
@@ -39,11 +39,11 @@ ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f
 generalized-bulletproofs-circuit-abstraction = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false }
 generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false }
 
-dkg = { path = ".." }
+dkg = { path = "..", default-features = false }
 
-ciphersuite-kp256 = { path = "../../ciphersuite/kp256", default-features = false, optional = true }
-secq256k1 = { path = "../../secq256k1", optional = true }
-dalek-ff-group = { path = "../../dalek-ff-group", default-features = false, optional = true }
+ciphersuite-kp256 = { path = "../../ciphersuite/kp256", default-features = false, features = ["alloc"], optional = true }
+secq256k1 = { path = "../../secq256k1", default-features = false, features = ["alloc"], optional = true }
+dalek-ff-group = { path = "../../dalek-ff-group", default-features = false, features = ["alloc"], optional = true }
 embedwards25519 = { path = "../../embedwards25519", default-features = false, features = ["alloc"], optional = true }
 
 [dev-dependencies]
