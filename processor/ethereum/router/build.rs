@@ -19,8 +19,7 @@ fn sol(sol_files: &[&str], file: &str) {
 }
 
 fn main() {
-  let artifacts_path =
-    env::var("OUT_DIR").unwrap().to_string() + "/serai-processor-ethereum-router";
+  let artifacts_path = env::var("OUT_DIR").unwrap().clone() + "/serai-processor-ethereum-router";
 
   if !fs::exists(&artifacts_path).unwrap() {
     fs::create_dir(&artifacts_path).unwrap();
