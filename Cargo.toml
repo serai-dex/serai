@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
   # Version patches
-  "patches/parking_lot_core",
   "patches/parking_lot",
   "patches/zstd",
   "patches/rocksdb",
@@ -204,7 +203,6 @@ modular-frost = { path = "crypto/frost" }
 # https://github.com/rust-lang-nursery/lazy-static.rs/issues/201
 lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
 
-parking_lot_core = { path = "patches/parking_lot_core" }
 parking_lot = { path = "patches/parking_lot" }
 # wasmtime pulls in an old version for this
 zstd = { path = "patches/zstd" }
