@@ -3,12 +3,7 @@ resolver = "2"
 members = [
   # Version patches
   "patches/parking_lot",
-  "patches/zstd",
   "patches/rocksdb",
-
-  # std patches
-  "patches/matches",
-  "patches/is-terminal",
 
   # Rewrites/redirects
   "patches/option-ext",
@@ -190,15 +185,8 @@ modular-frost = { path = "crypto/frost" }
 lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
 
 parking_lot = { path = "patches/parking_lot" }
-# wasmtime pulls in an old version for this
-zstd = { path = "patches/zstd" }
 # Needed for WAL compression
 rocksdb = { path = "patches/rocksdb" }
-
-# is-terminal now has an std-based solution with an equivalent API
-is-terminal = { path = "patches/is-terminal" }
-# So does matches
-matches = { path = "patches/matches" }
 
 # directories-next was created because directories was unmaintained
 # directories-next is now unmaintained while directories is maintained

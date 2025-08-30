@@ -3,7 +3,8 @@ use alloc::vec::Vec;
 use zeroize::Zeroize;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite, Ristretto};
+use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use dalek_ff_group::Ristretto;
 
 use crate::{
   constants::MAX_KEY_SHARES_PER_SET,

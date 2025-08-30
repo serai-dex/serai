@@ -23,7 +23,8 @@ bitvec = { version = "1", default-features = false, features = ["alloc"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
 
-ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc", "ristretto"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false }
 dkg = { path = "../../crypto/dkg", default-features = false }
 
 bech32 = { version = "0.11", default-features = false }
