@@ -87,7 +87,7 @@ async fn main() {
     TransactionPublisher::new(db, provider, {
       let relayer_hostname = env::var("ETHEREUM_RELAYER_HOSTNAME")
         .expect("ethereum relayer hostname wasn't specified")
-        .to_string();
+        .clone();
       let relayer_port =
         env::var("ETHEREUM_RELAYER_PORT").expect("ethereum relayer port wasn't specified");
       relayer_hostname + ":" + &relayer_port
