@@ -21,8 +21,8 @@ pub fn processor(
       if coin == "ethereum" {
         r#"
 RUN cargo install svm-rs
-RUN svm install 0.8.25
-RUN svm use 0.8.25
+RUN svm install 0.8.26
+RUN svm use 0.8.26
 "#
       } else {
         ""

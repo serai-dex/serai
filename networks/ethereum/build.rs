@@ -10,7 +10,7 @@ fn main() {
   {
     if let Some(version) = line.strip_prefix("Version: ") {
       let version = version.split('+').next().unwrap();
-      assert_eq!(version, "0.8.25");
+      assert_eq!(version, "0.8.26");
     }
   }
 

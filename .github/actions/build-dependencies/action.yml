@@ -44,8 +44,8 @@ runs:
       shell: bash
       run: |
         cargo +1.89 install svm-rs --version =0.5.18
-        svm install 0.8.25
-        svm use 0.8.25
+        svm install 0.8.26
+        svm use 0.8.26
 
     - name: Remove preinstalled Docker
       shell: bash

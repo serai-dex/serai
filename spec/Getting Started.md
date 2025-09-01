@@ -32,15 +32,7 @@ rustup toolchain install nightly
 rustup target add wasm32v1-none --toolchain nightly
 ```
 
-### Install Solidity
-
-```
-cargo install svm-rs
-svm install 0.8.25
-svm use 0.8.25
-```
-
-### Install Solidity Compiler Version Manager
+### Install Solidity with `svm`
 
 ```
 cargo install svm-rs
