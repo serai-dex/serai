@@ -36,8 +36,8 @@ rustup target add wasm32v1-none --toolchain nightly
 
 ```
 cargo install svm-rs
-svm install 0.8.25
-svm use 0.8.25
+svm install 0.8.26
+svm use 0.8.26
 ```
 
 ### Install Solidity Compiler Version Manager
@@ -51,7 +51,8 @@ svm use 0.8.25
 ### Install foundry (for tests)
 
 ```
-cargo install --git https://github.com/foundry-rs/foundry --profile local --locked forge cast chisel anvil
+curl -L https://foundry.paradigm.xyz | bash
+foundryup
 ```
 
 ### Clone and Build Serai
