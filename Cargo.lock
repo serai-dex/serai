@@ -2229,7 +2229,7 @@ dependencies = [
  "borsh",
  "ciphersuite",
  "std-shims",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -2255,7 +2255,7 @@ dependencies = [
  "multiexp",
  "rand_core",
  "std-shims",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -2272,7 +2272,7 @@ dependencies = [
  "multiexp",
  "rand_core",
  "schnorr-signatures",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -2287,7 +2287,7 @@ dependencies = [
  "dleq",
  "flexible-transcript",
  "rand_core",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -2297,7 +2297,7 @@ version = "0.6.0"
 dependencies = [
  "ciphersuite",
  "dkg",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -2316,7 +2316,7 @@ dependencies = [
  "multiexp",
  "rand_core",
  "rustversion",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -3494,7 +3494,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.4.10",
+ "socket2 0.5.7",
  "tokio",
  "tower-service",
  "tracing",
@@ -4041,7 +4041,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4979f22fdb869068da03c9f7528f8297c6fd2606bc3a4affe42e6a823fdb8da4"
 dependencies = [
  "cfg-if",
- "windows-targets 0.48.5",
+ "windows-targets 0.52.6",
 ]
 
 [[package]]
@@ -4918,7 +4918,7 @@ dependencies = [
  "schnorr-signatures",
  "serde_json",
  "subtle",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -4930,7 +4930,7 @@ dependencies = [
  "curve25519-dalek",
  "monero-base58",
  "monero-io",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -4966,7 +4966,7 @@ dependencies = [
  "monero-primitives",
  "rand_core",
  "std-shims",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -4987,7 +4987,7 @@ dependencies = [
  "rand_core",
  "std-shims",
  "subtle",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -5025,7 +5025,7 @@ dependencies = [
  "monero-io",
  "monero-primitives",
  "std-shims",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -5072,7 +5072,7 @@ dependencies = [
  "serde",
  "serde_json",
  "std-shims",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -5108,7 +5108,7 @@ dependencies = [
  "rand_core",
  "rand_distr",
  "std-shims",
- "thiserror 2.0.14",
+ "thiserror 2.0.16",
  "zeroize",
 ]
 
@@ -9368,10 +9368,10 @@ dependencies = [
 [[package]]
 name = "sp-maybe-compressed-blob"
 version = "11.0.0"
-source = "git+https://github.com/serai-dex/polkadot-sdk?branch=serai-next#ebfc5f338a9752403fa07e88dd072b1d6de7acfc"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk?rev=19c487d6aa9893b6b09a21ce0ab8aefb1c299186#19c487d6aa9893b6b09a21ce0ab8aefb1c299186"
 dependencies = [
- "thiserror 2.0.14",
- "zstd 0.13.2",
+ "thiserror 2.0.16",
+ "zstd 0.13.3",
 ]
 
 [[package]]
@@ -9878,8 +9878,8 @@ dependencies = [
 
 [[package]]
 name = "substrate-wasm-builder"
-version = "25.0.0"
-source = "git+https://github.com/serai-dex/polkadot-sdk?branch=serai-next#ebfc5f338a9752403fa07e88dd072b1d6de7acfc"
+version = "26.0.1"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk?rev=19c487d6aa9893b6b09a21ce0ab8aefb1c299186#19c487d6aa9893b6b09a21ce0ab8aefb1c299186"
 dependencies = [
  "build-helper",
  "cargo_metadata",
@@ -10053,11 +10053,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "2.0.14"
+version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b0949c3a6c842cbde3f1686d6eea5a010516deb7085f79db747562d4102f41e"
+checksum = "3467d614147380f2e4e374161426ff399c91084acd2363eaf549172b3d5e60c0"
 dependencies = [
- "thiserror-impl 2.0.14",
+ "thiserror-impl 2.0.16",
 ]
 
 [[package]]
@@ -10073,9 +10073,9 @@ dependencies = [
 
 [[package]]
 name = "thiserror-impl"
-version = "2.0.14"
+version = "2.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc5b44b4ab9c2fdd0e0512e6bece8388e214c0749f5862b114cc5b7a25daf227"
+checksum = "6c5e1be1c48b9172ee610da68fd9cd2770e7a4056cb3fc98710ee6906f0c7960"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -11221,7 +11221,7 @@ version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf221c93e13a30d793f7645a0e7762c55d169dbb0a49671918a2319d289b10bb"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -11584,7 +11584,7 @@ dependencies = [
 name = "zstd"
 version = "0.11.2+zstd.1.5.2"
 dependencies = [
- "zstd 0.13.2",
+ "zstd 0.13.3",
 ]
 
 [[package]]
@@ -11598,9 +11598,9 @@ dependencies = [
 
 [[package]]
 name = "zstd"
-version = "0.13.2"
+version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fcf2b778a664581e31e389454a7072dab1647606d44f7feea22cd5abb9c9f3f9"
+checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
 dependencies = [
  "zstd-safe 7.2.1",
 ]
