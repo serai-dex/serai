@@ -4,7 +4,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::ExternalNetworkId;
+use serai_primitives::network_id::ExternalNetworkId;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Service {
