@@ -9,7 +9,7 @@ use serai_primitives::{
 
 use frame_support::storage::{StorageValue, StorageMap, StorageDoubleMap, StoragePrefixedMap};
 
-use crate::allocations::*;
+use crate::{embedded_elliptic_curve_keys::EmbeddedEllipticCurveKeys, allocations::Allocations};
 
 /// The list of genesis validators.
 pub(crate) type GenesisValidators = BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES_PER_SET_U32 }>>;
@@ -17,7 +17,7 @@ pub(crate) type GenesisValidators = BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES
 /// The key for the SelectedValidators map.
 pub(crate) type SelectedValidatorsKey = (ValidatorSet, [u8; 16], Public);
 
-pub(crate) trait SessionsStorage: AllocationsStorage {
+pub(crate) trait SessionsStorage: EmbeddedEllipticCurveKeys + Allocations {
   /// The genesis validators
   ///
   /// The usage of is shared with the rest of the pallet. `Sessions` only reads it.
@@ -92,20 +92,44 @@ fn clear_selected_validators<Storage: StoragePrefixedMap<u64>>(set: ValidatorSet
   ));
 }
 
-pub(crate) enum AllocationError {
+/// An error when allocating.
+#[derive(
+  scale::Encode,
+  scale::Decode,
+  scale::DecodeWithMemTracking,
+  scale_info::TypeInfo,
+  frame_support::PalletError,
+)]
+pub enum AllocationError {
+  /// The validator set didn't define an allocation requirement for a key share.
   NoAllocationPerKeyShareSet,
+  /// Validator is missing embedded elliptic curve keys.
+  MissingEmbeddedEllipticCurveKeys,
+  /// The allocation is less than the key share.
   AllocationLessThanKeyShare,
+  /// This allocation would introduce a single point of failure.
   IntroducesSinglePointOfFailure,
 }
 
-#[must_use]
 pub(crate) enum DeallocationTimeline {
   Immediate,
   Delayed { unlocks_at: Session },
 }
-pub(crate) enum DeallocationError {
+
+/// An error when deallocating.
+#[derive(
+  scale::Encode,
+  scale::Decode,
+  scale::DecodeWithMemTracking,
+  scale_info::TypeInfo,
+  frame_support::PalletError,
+)]
+pub enum DeallocationError {
+  /// The validator set didn't define an allocation requirement for a key share.
   NoAllocationPerKeyShareSet,
+  /// Not enough was allocated to enable this amount to be deallocated.
   NotEnoughAllocated,
+  /// The remaining allocation was non-zero and would be less than a key share.
   RemainingAllocationLessThanKeyShare,
 }
 
@@ -271,6 +295,10 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     let Some(allocation_per_key_share) = Storage::AllocationPerKeyShare::get(network) else {
       Err(AllocationError::NoAllocationPerKeyShareSet)?
     };
+
+    if Self::still_needs_to_set_embedded_elliptic_curve_keys(network, validator) {
+      Err(AllocationError::MissingEmbeddedEllipticCurveKeys)?;
+    }
 
     let old_allocation = Self::get_allocation(network, validator).unwrap_or(Amount(0));
     // Safe so long as the SRI supply fits within a u64, per assumptions on how this is called

@@ -1,4 +1,4 @@
-use sp_core::{Encode, sr25519::Public};
+use sp_core::sr25519::Public;
 
 use serai_primitives::{crypto::SignedEmbeddedEllipticCurveKeys, network_id::*};
 

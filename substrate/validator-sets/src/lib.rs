@@ -219,6 +219,11 @@ mod pallet {
     type DelayedDeallocations = DelayedDeallocations<T>;
   }
 
+  #[pallet::event]
+  #[pallet::generate_deposit(pub(super) fn deposit_event)]
+  pub enum Event<T: Config> {}
+
+  /*
   /// The generated key pair for a given validator set instance.
   #[pallet::storage]
   #[pallet::getter(fn keys)]
@@ -285,42 +290,16 @@ mod pallet {
       */
     }
   }
+  */
 
   #[pallet::error]
   pub enum Error<T> {
-    /// Validator Set doesn't exist.
-    NonExistentValidatorSet,
-    /// An invalid embedded elliptic curve key was specified.
-    ///
-    /// This error not being raised does not mean the key was valid. Solely that it wasn't detected
-    /// by this pallet as invalid.
-    InvalidEmbeddedEllipticCurveKey,
-    /// Trying to perform an operation requiring an embedded elliptic curve key, without an
-    /// embedded elliptic curve key.
-    MissingEmbeddedEllipticCurveKey,
-    /// Not enough allocation to obtain a key share in the set.
-    InsufficientAllocation,
-    /// Trying to deallocate more than allocated.
-    NotEnoughAllocated,
-    /// Allocation would cause the validator set to no longer achieve fault tolerance.
-    AllocationWouldRemoveFaultTolerance,
-    /// Allocation would cause the validator set to never be able to achieve fault tolerance.
-    AllocationWouldPreventFaultTolerance,
-    /// Deallocation would remove the participant from the set, despite the validator not
-    /// specifying so.
-    DeallocationWouldRemoveParticipant,
-    /// Deallocation would cause the validator set to no longer achieve fault tolerance.
-    DeallocationWouldRemoveFaultTolerance,
-    /// Deallocation to be claimed doesn't exist.
-    NonExistentDeallocation,
-    /// Validator Set already generated keys.
-    AlreadyGeneratedKeys,
-    /// An invalid MuSig signature was provided.
-    BadSignature,
-    /// Validator wasn't registered or active.
-    NonExistentValidator,
-    /// Deallocation would take the stake below what is required.
-    DeallocationWouldRemoveEconomicSecurity,
+    /// The provided embedded elliptic curve keys were invalid.
+    InvalidEmbeddedEllipticCurveKeys,
+    /// Allocation was erroneous.
+    AllocationError(AllocationError),
+    /// Deallocation was erroneous.
+    DeallocationError(DeallocationError),
   }
 
   /* TODO
@@ -816,7 +795,8 @@ mod pallet {
       let signer = ensure_signed(origin)?;
       <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::set_embedded_elliptic_curve_keys(
         signer, keys,
-      )?;
+      )
+      .map_err(|()| Error::<T>::InvalidEmbeddedEllipticCurveKeys)?;
       Ok(())
     }
 
@@ -824,21 +804,13 @@ mod pallet {
     #[pallet::weight(0)] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
-      // If this network utilizes embedded elliptic curve(s), require the validator to have set the
-      // appropriate key(s)
-      if <
-        Abstractions::<T>
-          as
-        crate::EmbeddedEllipticCurveKeys
-      >::still_needs_to_set_embedded_elliptic_curve_keys(network, validator) {
-        Err(Error::<T>::MissingEmbeddedEllipticCurveKey)?;
-      }
       Coins::<T>::transfer_internal(
         validator,
         Self::account(),
         Balance { coin: Coin::Serai, amount },
       )?;
-      Abstractions::<T>::increase_allocation(network, validator, amount, false)?;
+      Abstractions::<T>::increase_allocation(network, validator, amount, false)
+        .map_err(Error::<T>::AllocationError)?;
       Ok(())
     }
 
@@ -847,7 +819,8 @@ mod pallet {
     pub fn deallocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let account = ensure_signed(origin)?;
 
-      let deallocation_timeline = Abstractions::<T>::decrease_allocation(network, account, amount)?;
+      let deallocation_timeline = Abstractions::<T>::decrease_allocation(network, account, amount)
+        .map_err(Error::<T>::DeallocationError)?;
       if matches!(deallocation_timeline, DeallocationTimeline::Immediate) {
         Coins::<T>::transfer_internal(
           Self::account(),
