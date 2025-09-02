@@ -4,6 +4,9 @@
 
 extern crate alloc;
 
+mod embedded_elliptic_curve_keys;
+use embedded_elliptic_curve_keys::*;
+
 mod allocations;
 use allocations::*;
 
@@ -78,12 +81,7 @@ mod pallet {
   use frame_support::pallet_prelude::*;
 
   use serai_primitives::{
-    crypto::KeyPair,
-    network_id::*,
-    coin::*,
-    balance::*,
-    validator_sets::*,
-    address::SeraiAddress,
+    crypto::KeyPair, network_id::*, coin::*, balance::*, validator_sets::*, address::SeraiAddress,
   };
 
   use coins_pallet::Pallet as Coins;
@@ -91,8 +89,7 @@ mod pallet {
   use super::*;
 
   #[pallet::config]
-  #[pallet::disable_frame_system_supertrait_check]
-  pub trait Config: coins_pallet::Config {
+  pub trait Config: frame_system::Config + coins_pallet::Config {
     type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
 
     // type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
@@ -157,19 +154,24 @@ mod pallet {
   }
   */
 
-  /// A key on an embedded elliptic curve.
+  struct Abstractions<T: Config>(PhantomData<T>);
+
+  // Satisfy the `EmbeddedEllipticCurveKeys` abstraction
+
   #[pallet::storage]
-  pub type EmbeddedEllipticCurveKeys<T: Config> = StorageDoubleMap<
+  type EmbeddedEllipticCurveKeys<T: Config> = StorageDoubleMap<
     _,
-    Blake2_128Concat,
-    Public,
     Identity,
     ExternalNetworkId,
+    Blake2_128Concat,
+    Public,
     serai_primitives::crypto::EmbeddedEllipticCurveKeys,
     OptionQuery,
   >;
 
-  struct Abstractions<T: Config>(PhantomData<T>);
+  impl<T: Config> EmbeddedEllipticCurveKeysStorage for Abstractions<T> {
+    type EmbeddedEllipticCurveKeys = EmbeddedEllipticCurveKeys<T>;
+  }
 
   // Satisfy the `Allocations` abstraction
 
@@ -186,7 +188,7 @@ mod pallet {
     type SortedAllocations = SortedAllocations<T>;
   }
 
-  // Satisfy the `Sessions` API
+  // Satisfy the `Sessions` abstraction
 
   // We use `Identity` as the hasher for `NetworkId` due to how constrained it is
   #[pallet::storage]
@@ -809,12 +811,12 @@ mod pallet {
     #[pallet::weight(0)] // TODO
     pub fn set_embedded_elliptic_curve_keys(
       origin: OriginFor<T>,
-      network: ExternalNetworkId,
-      keys: serai_primitives::crypto::EmbeddedEllipticCurveKeys,
+      keys: serai_primitives::crypto::SignedEmbeddedEllipticCurveKeys,
     ) -> DispatchResult {
       let signer = ensure_signed(origin)?;
-      // TODO: Add PoKs and check validity
-      EmbeddedEllipticCurveKeys::<T>::set(signer, network, Some(keys));
+      <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::set_embedded_elliptic_curve_keys(
+        signer, keys,
+      )?;
       Ok(())
     }
 
@@ -824,10 +826,12 @@ mod pallet {
       let validator = ensure_signed(origin)?;
       // If this network utilizes embedded elliptic curve(s), require the validator to have set the
       // appropriate key(s)
-      if let Ok(network) = ExternalNetworkId::try_from(network) {
-        if !EmbeddedEllipticCurveKeys::<T>::contains_key(validator, network) {
-          Err(Error::<T>::MissingEmbeddedEllipticCurveKey)?;
-        }
+      if <
+        Abstractions::<T>
+          as
+        crate::EmbeddedEllipticCurveKeys
+      >::still_needs_to_set_embedded_elliptic_curve_keys(network, validator) {
+        Err(Error::<T>::MissingEmbeddedEllipticCurveKey)?;
       }
       Coins::<T>::transfer_internal(
         validator,

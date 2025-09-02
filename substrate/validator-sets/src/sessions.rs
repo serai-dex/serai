@@ -44,7 +44,8 @@ pub(crate) trait SessionsStorage: AllocationsStorage {
   ///
   /// This is opaque and to be exclusively read/write by `Sessions`.
   // The value is how many key shares the validator has.
-  type SelectedValidators: StorageMap<SelectedValidatorsKey, u64> + StoragePrefixedMap<u64>;
+  type SelectedValidators: StorageMap<SelectedValidatorsKey, u64, Query = Option<u64>>
+    + StoragePrefixedMap<u64>;
 
   /// The total allocated stake for a network.
   ///
