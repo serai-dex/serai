@@ -11490,7 +11490,7 @@ dependencies = [
 [[package]]
 name = "sp-maybe-compressed-blob"
 version = "11.0.0"
-source = "git+https://github.com/serai-dex/polkadot-sdk?branch=serai-next#ebfc5f338a9752403fa07e88dd072b1d6de7acfc"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk?rev=19c487d6aa9893b6b09a21ce0ab8aefb1c299186#19c487d6aa9893b6b09a21ce0ab8aefb1c299186"
 dependencies = [
  "thiserror 2.0.16",
  "zstd 0.13.3",
@@ -12015,8 +12015,8 @@ dependencies = [
 
 [[package]]
 name = "substrate-wasm-builder"
-version = "25.0.0"
-source = "git+https://github.com/serai-dex/polkadot-sdk?branch=serai-next#ebfc5f338a9752403fa07e88dd072b1d6de7acfc"
+version = "26.0.1"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk?rev=19c487d6aa9893b6b09a21ce0ab8aefb1c299186#19c487d6aa9893b6b09a21ce0ab8aefb1c299186"
 dependencies = [
  "build-helper",
  "cargo_metadata",
