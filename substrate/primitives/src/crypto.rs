@@ -3,6 +3,16 @@ use borsh::{BorshSerialize, BorshDeserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
 
+use ciphersuite::{
+  group::{ff::FromUniformBytes, GroupEncoding},
+  Ciphersuite,
+};
+use embedwards25519::Embedwards25519;
+use secq256k1::Secq256k1;
+use schnorr_signatures::SchnorrSignature;
+
+use crate::network_id::ExternalNetworkId;
+
 /// A Ristretto public key.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
@@ -89,7 +99,7 @@ impl Zeroize for ExternalKey {
 }
 
 impl ExternalKey {
-  /// The maximum length for am external key.
+  /// The maximum length for an external key.
   /*
     This support keys up to 96 bytes (such as BLS12-381 G2, which is the largest elliptic-curve
     group element we might reasonably use as a key). This can always be increased if we need to
@@ -100,12 +110,236 @@ impl ExternalKey {
 }
 
 /// Key(s) on embedded elliptic curve(s).
-///
-/// This may be a single key if the external network uses the same embedded elliptic curve as
-/// used for the key to oraclize onto Serai. Else, it'll be a key on the embedded elliptic curve
-/// used for the key to oraclize onto Serai concatenated with the key on the embedded elliptic
-/// curve used for the external network.
-pub type EmbeddedEllipticCurveKeys = BoundedVec<u8, ConstU32<{ 2 * ExternalKey::MAX_LEN }>>;
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+pub enum EmbeddedEllipticCurveKeys {
+  /// The embedded elliptic curve keys for a Bitcoin validator.
+  Bitcoin(
+    <<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr,
+    <<Secq256k1 as Ciphersuite>::G as GroupEncoding>::Repr,
+  ),
+  /// The embedded elliptic curve keys for an Ethereum validator.
+  Ethereum(
+    <<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr,
+    <<Secq256k1 as Ciphersuite>::G as GroupEncoding>::Repr,
+  ),
+  /// The embedded elliptic curve key for a Monero validator.
+  Monero(<<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr),
+}
+
+impl EmbeddedEllipticCurveKeys {
+  /// The network these keys are for.
+  pub fn network(&self) -> ExternalNetworkId {
+    match self {
+      Self::Bitcoin(_, _) => ExternalNetworkId::Bitcoin,
+      Self::Ethereum(_, _) => ExternalNetworkId::Ethereum,
+      Self::Monero(_) => ExternalNetworkId::Monero,
+    }
+  }
+}
+
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::Encode for EmbeddedEllipticCurveKeys {
+  fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
+    match self {
+      EmbeddedEllipticCurveKeys::Bitcoin(e, s) | EmbeddedEllipticCurveKeys::Ethereum(e, s) => {
+        let mut res = [0; 66];
+        res[0] = self.network() as u8;
+        res[1 .. 33].copy_from_slice(e);
+        res[33 ..].copy_from_slice(s);
+        f(&res)
+      }
+      EmbeddedEllipticCurveKeys::Monero(e) => {
+        let mut res = [0; 33];
+        res[0] = self.network() as u8;
+        res[1 ..].copy_from_slice(e);
+        f(&res)
+      }
+    }
+  }
+}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::MaxEncodedLen for EmbeddedEllipticCurveKeys {
+  fn max_encoded_len() -> usize {
+    66
+  }
+}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::EncodeLike<EmbeddedEllipticCurveKeys> for EmbeddedEllipticCurveKeys {}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::Decode for EmbeddedEllipticCurveKeys {
+  fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
+    let network_id = ExternalNetworkId::decode(&mut *input)?;
+    let embedwards25519 =
+      <<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr::decode(&mut *input)?;
+    Ok(match network_id {
+      ExternalNetworkId::Bitcoin => {
+        let secq256k1 = <[u8; 33]>::decode(&mut *input)?;
+        EmbeddedEllipticCurveKeys::Bitcoin(embedwards25519, secq256k1.into())
+      }
+      ExternalNetworkId::Ethereum => {
+        let secq256k1 = <[u8; 33]>::decode(&mut *input)?;
+        EmbeddedEllipticCurveKeys::Ethereum(embedwards25519, secq256k1.into())
+      }
+      ExternalNetworkId::Monero => EmbeddedEllipticCurveKeys::Monero(embedwards25519),
+    })
+  }
+}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::DecodeWithMemTracking for EmbeddedEllipticCurveKeys {}
+
+/// Key(s) on embedded elliptic curve(s) with the required proofs of knowledge.
+#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+pub enum SignedEmbeddedEllipticCurveKeys {
+  /// The signed embedded elliptic curve keys for a Bitcoin validator.
+  Bitcoin(
+    <<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr,
+    <<Secq256k1 as Ciphersuite>::G as GroupEncoding>::Repr,
+    [u8; 64],
+    [u8; 65],
+  ),
+  /// The signed embedded elliptic curve keys for an Ethereum validator.
+  Ethereum(
+    <<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr,
+    <<Secq256k1 as Ciphersuite>::G as GroupEncoding>::Repr,
+    [u8; 64],
+    [u8; 65],
+  ),
+  /// The signed embedded elliptic curve key for a Monero validator.
+  Monero(<<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr, [u8; 64]),
+}
+
+impl SignedEmbeddedEllipticCurveKeys {
+  /// The network these keys are for.
+  pub fn network(&self) -> ExternalNetworkId {
+    match self {
+      Self::Bitcoin(_, _, _, _) => ExternalNetworkId::Bitcoin,
+      Self::Ethereum(_, _, _, _) => ExternalNetworkId::Ethereum,
+      Self::Monero(_, _) => ExternalNetworkId::Monero,
+    }
+  }
+
+  /// Verify these key(s)' signature(s), returning the key(s) if valid.
+  pub fn verify(self, validator: Public) -> Option<EmbeddedEllipticCurveKeys> {
+    // Sample a unified challenge
+    let transcript = match &self {
+      Self::Bitcoin(e, s, e_sig, s_sig) => [
+        [ExternalNetworkId::Bitcoin as u8].as_slice(),
+        &validator.0,
+        e,
+        s,
+        &e_sig[.. 32],
+        &s_sig[.. 33],
+      ]
+      .concat(),
+      Self::Ethereum(e, s, e_sig, s_sig) => [
+        [ExternalNetworkId::Ethereum as u8].as_slice(),
+        &validator.0,
+        e,
+        s,
+        &e_sig[.. 32],
+        &s_sig[.. 33],
+      ]
+      .concat(),
+      Self::Monero(e, e_sig) => {
+        [[ExternalNetworkId::Monero as u8].as_slice(), &validator.0, e, &e_sig[.. 32]].concat()
+      }
+    };
+    let challenge = sp_core::hashing::blake2_512(&transcript);
+
+    // Verify the Schnorr signatures
+    match &self {
+      Self::Bitcoin(e, _, e_sig, _) | Self::Ethereum(e, _, e_sig, _) | Self::Monero(e, e_sig) => {
+        let sig = SchnorrSignature::<Embedwards25519>::read(&mut e_sig.as_slice()).ok()?;
+        if !sig.verify(
+          Embedwards25519::read_G(&mut e.as_slice()).ok()?,
+          <<Embedwards25519 as Ciphersuite>::F as FromUniformBytes<_>>::from_uniform_bytes(
+            &challenge,
+          ),
+        ) {
+          None?;
+        }
+      }
+    };
+    match &self {
+      Self::Bitcoin(_, s, _, s_sig) | Self::Ethereum(_, s, _, s_sig) => {
+        let sig = SchnorrSignature::<Secq256k1>::read(&mut s_sig.as_slice()).ok()?;
+        if !sig.verify(
+          Secq256k1::read_G(&mut s.as_slice()).ok()?,
+          <<Secq256k1 as Ciphersuite>::F as FromUniformBytes<_>>::from_uniform_bytes(&challenge),
+        ) {
+          None?;
+        }
+      }
+      Self::Monero(_, _) => {}
+    }
+
+    // Return the keys
+    Some(match self {
+      Self::Bitcoin(e, s, _, _) => EmbeddedEllipticCurveKeys::Bitcoin(e, s),
+      Self::Ethereum(e, s, _, _) => EmbeddedEllipticCurveKeys::Ethereum(e, s),
+      Self::Monero(e, _) => EmbeddedEllipticCurveKeys::Monero(e),
+    })
+  }
+}
+
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::Encode for SignedEmbeddedEllipticCurveKeys {
+  fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
+    match self {
+      SignedEmbeddedEllipticCurveKeys::Bitcoin(e, s, e_sig, s_sig) |
+      SignedEmbeddedEllipticCurveKeys::Ethereum(e, s, e_sig, s_sig) => {
+        let mut res = [0; 195];
+        res[0] = self.network() as u8;
+        res[1 .. 33].copy_from_slice(e);
+        res[33 .. 66].copy_from_slice(s);
+        res[66 .. 130].copy_from_slice(e_sig);
+        res[130 ..].copy_from_slice(s_sig);
+        f(&res)
+      }
+      SignedEmbeddedEllipticCurveKeys::Monero(e, e_sig) => {
+        let mut res = [0; 97];
+        res[0] = self.network() as u8;
+        res[1 .. 33].copy_from_slice(e);
+        res[33 ..].copy_from_slice(e_sig);
+        f(&res)
+      }
+    }
+  }
+}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::EncodeLike<SignedEmbeddedEllipticCurveKeys> for SignedEmbeddedEllipticCurveKeys {}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::Decode for SignedEmbeddedEllipticCurveKeys {
+  fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
+    let embedded_elliptic_curve_keys = EmbeddedEllipticCurveKeys::decode(input)?;
+    let embedwards25519_signature = <[u8; 64]>::decode(&mut *input)?;
+    Ok(match embedded_elliptic_curve_keys {
+      EmbeddedEllipticCurveKeys::Bitcoin(e, s) => {
+        let secq256k1_signature = <[u8; 65]>::decode(&mut *input)?;
+        SignedEmbeddedEllipticCurveKeys::Bitcoin(
+          e,
+          s,
+          embedwards25519_signature,
+          secq256k1_signature,
+        )
+      }
+      EmbeddedEllipticCurveKeys::Ethereum(e, s) => {
+        let secq256k1_signature = <[u8; 65]>::decode(&mut *input)?;
+        SignedEmbeddedEllipticCurveKeys::Ethereum(
+          e,
+          s,
+          embedwards25519_signature,
+          secq256k1_signature,
+        )
+      }
+      EmbeddedEllipticCurveKeys::Monero(e) => {
+        SignedEmbeddedEllipticCurveKeys::Monero(e, embedwards25519_signature)
+      }
+    })
+  }
+}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::DecodeWithMemTracking for SignedEmbeddedEllipticCurveKeys {}
 
 /// The key pair for a validator set.
 ///

@@ -25,7 +25,10 @@ scale-info = { version = "2", default-features = false, features = ["derive"], o
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "74839cba4a7f48023080215e5194fd6ab7e270e5", default-features = false }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
+schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["alloc"] }
+embedwards25519 = { path = "../../crypto/embedwards25519", default-features = false, features = ["alloc"] }
+secq256k1 = { path = "../../crypto/secq256k1", default-features = false, features = ["alloc"] }
 dkg = { package = "dkg-musig", path = "../../crypto/dkg/musig", default-features = false }
 
 schnorrkel = { version = "0.11", default-features = false }
@@ -36,7 +39,22 @@ bech32 = { version = "0.11", default-features = false }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
 [features]
-std = ["zeroize/std", "borsh/std", "bitvec/std", "scale?/std", "scale-info?/std", "sp-core/std", "ciphersuite/std", "dalek-ff-group/std", "dkg/std", "schnorrkel/std", "bech32/std"]
+std = [
+  "zeroize/std",
+  "borsh/std",
+  "bitvec/std",
+  "scale?/std",
+  "scale-info?/std",
+  "sp-core/std",
+  "ciphersuite/std",
+  "schnorr-signatures/std",
+  "dalek-ff-group/std",
+  "embedwards25519/std",
+  "secq256k1/std",
+  "dkg/std",
+  "schnorrkel/std",
+  "bech32/std"
+]
 serde = []
 non_canonical_scale_derivations = ["scale", "scale-info"]
 default = ["std"]

@@ -10259,10 +10259,13 @@ dependencies = [
  "ciphersuite 0.4.2",
  "dalek-ff-group",
  "dkg-musig",
+ "embedwards25519",
  "parity-scale-codec",
  "rand_core 0.6.4",
  "scale-info",
+ "schnorr-signatures",
  "schnorrkel",
+ "secq256k1",
  "sp-core",
  "zeroize",
 ]
