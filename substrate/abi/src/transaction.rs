@@ -166,17 +166,20 @@ impl BorshDeserialize for Transaction {
     if len == 0 {
       let call = Call::deserialize_reader(reader)?;
       if call.is_signed() {
+        #[allow(clippy::io_other_error)]
         Err(io::Error::new(io::ErrorKind::Other, "call was signed but marked unsigned"))?;
       }
       Ok(Transaction::Unsigned { call: UnsignedCall(call) })
     } else {
       if u32::from(len) > MAX_CALLS {
+        #[allow(clippy::io_other_error)]
         Err(io::Error::new(io::ErrorKind::Other, "too many calls"))?;
       }
       let mut calls = BoundedVec::with_bounded_capacity(len.into());
       for _ in 0 .. len {
         let call = Call::deserialize_reader(reader)?;
         if !call.is_signed() {
+          #[allow(clippy::io_other_error)]
           Err(io::Error::new(io::ErrorKind::Other, "call was unsigned but included as signed"))?;
         }
         calls.try_push(call).unwrap();
@@ -254,12 +257,14 @@ mod substrate {
         fn read(&mut self, buf: &mut [u8]) -> borsh::io::Result<usize> {
           let remaining_len = self.0.remaining_len().map_err(|err| {
             self.1 = Some(err);
+            #[allow(clippy::io_other_error)]
             borsh::io::Error::new(borsh::io::ErrorKind::Other, "")
           })?;
           // If we're still calling `read`, we try to read at least one more byte
           let to_read = buf.len().min(remaining_len.unwrap_or(1));
           self.0.read(&mut buf[.. to_read]).map_err(|err| {
             self.1 = Some(err);
+            #[allow(clippy::io_other_error)]
             borsh::io::Error::new(borsh::io::ErrorKind::Other, "")
           })?;
           Ok(to_read)

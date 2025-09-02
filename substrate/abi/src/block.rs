@@ -105,7 +105,7 @@ pub struct Block {
 mod substrate {
   use core::fmt::Debug;
 
-  use scale::{Encode, Decode};
+  use scale::{Encode, Decode, DecodeWithMemTracking, IoReader};
   use scale_info::TypeInfo;
 
   use sp_core::H256;
@@ -115,6 +115,31 @@ mod substrate {
   };
 
   use super::*;
+
+  // Add `serde` implementations which treat self as a `Vec<u8>`
+  impl sp_core::serde::Serialize for Transaction {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: sp_core::serde::Serializer,
+    {
+      <Vec<u8> as sp_core::serde::Serialize>::serialize(&self.encode(), serializer)
+    }
+  }
+  impl<'de> sp_core::serde::Deserialize<'de> for Transaction {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+      D: sp_core::serde::Deserializer<'de>,
+    {
+      use sp_core::serde::de::Error;
+      let bytes = <Vec<u8> as sp_core::serde::Deserialize>::deserialize(deserializer)?;
+      let mut reader = bytes.as_slice();
+      let block = Self::decode(&mut IoReader(&mut reader)).map_err(D::Error::custom)?;
+      if !reader.is_empty() {
+        Err(D::Error::custom("extraneous bytes at end"))?;
+      }
+      Ok(block)
+    }
+  }
 
   /// The digest for all of the Serai-specific header fields added before execution of the block.
   #[derive(Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
@@ -149,7 +174,18 @@ mod substrate {
   ///
   /// This is not considered part of the protocol proper and may be pruned in the future. It's
   /// solely considered used for consensus now.
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, sp_runtime::Serialize)]
+  #[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    Debug,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    TypeInfo,
+    sp_runtime::Serialize,
+    sp_runtime::Deserialize,
+  )]
   pub struct ConsensusV1 {
     /// The hash of the immediately preceding block.
     parent_hash: H256,
@@ -164,14 +200,37 @@ mod substrate {
   }
 
   /// A V1 header for a block, as needed by Substrate.
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, sp_runtime::Serialize)]
+  #[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    Debug,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    TypeInfo,
+    sp_runtime::Serialize,
+    sp_runtime::Deserialize,
+  )]
   pub struct SubstrateHeaderV1 {
     number: u64,
     consensus: ConsensusV1,
   }
 
   /// A header for a block, as needed by Substrate.
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, sp_runtime::Serialize)]
+  #[derive(
+    Clone,
+    PartialEq,
+    Eq,
+    Debug,
+    Encode,
+    Decode,
+    DecodeWithMemTracking,
+    TypeInfo,
+    sp_runtime::Serialize,
+    sp_runtime::Deserialize,
+  )]
+  #[allow(clippy::cast_possible_truncation)]
   pub enum SubstrateHeader {
     /// A version 1 header.
     V1(SubstrateHeaderV1),
@@ -226,11 +285,33 @@ mod substrate {
   }
 
   /// A block, as needed by Substrate.
-  #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, sp_runtime::Serialize)]
+  #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
   pub struct SubstrateBlock {
     header: SubstrateHeader,
-    #[serde(skip)] // This makes this unsafe to deserialize, but we don't impl `Deserialize`
     transactions: Vec<Transaction>,
+  }
+  impl sp_core::serde::Serialize for SubstrateBlock {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+      S: sp_core::serde::Serializer,
+    {
+      <Vec<u8> as sp_core::serde::Serialize>::serialize(&self.encode(), serializer)
+    }
+  }
+  impl<'de> sp_core::serde::Deserialize<'de> for SubstrateBlock {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+      D: sp_core::serde::Deserializer<'de>,
+    {
+      use sp_core::serde::de::Error;
+      let bytes = <Vec<u8> as sp_core::serde::Deserialize>::deserialize(deserializer)?;
+      let mut reader = bytes.as_slice();
+      let block = Self::decode(&mut IoReader(&mut reader)).map_err(D::Error::custom)?;
+      if !reader.is_empty() {
+        Err(D::Error::custom("extraneous bytes at end"))?;
+      }
+      Ok(block)
+    }
   }
 
   impl HeaderTrait for SubstrateHeader {

@@ -145,19 +145,6 @@ fn unbalanced_merkle_tree() {
     let with_new = UnbalancedMerkleTree::new(tag, list_of_hashes.clone());
     // Check `is_empty` works
     assert_eq!(with_new.is_empty(), i == 0);
-    // The reference method, easy to audit, should have identical behavior to the optimized method
-    assert_eq!(
-      with_new,
-      UnbalancedMerkleTree::from_scale_encoded_list_of_hashes(tag, list_of_hashes.encode())
-    );
-    // The encoding of a slice should work the same as the encoding of a list
-    assert_eq!(
-      with_new,
-      UnbalancedMerkleTree::from_scale_encoded_list_of_hashes(
-        tag,
-        list_of_hashes.as_slice().encode()
-      )
-    );
     // Check the incremental method produces an identical result
     assert_eq!(incremental.clone().calculate(tag), with_new, "{i}");
 

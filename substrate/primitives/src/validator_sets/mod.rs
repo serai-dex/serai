@@ -65,8 +65,24 @@ impl TryFrom<ValidatorSet> for ExternalValidatorSet {
 
 impl ExternalValidatorSet {
   /// The MuSig context for this validator set.
-  pub fn musig_context(&self) -> Vec<u8> {
-    borsh::to_vec(&(b"ValidatorSets-musig_key".as_ref(), self)).unwrap()
+  pub fn musig_context(&self) -> [u8; 32] {
+    let mut res = [0; 32];
+
+    const DST: &[u8] = b"ValidatorSets-musig_key";
+    res[0] = u8::try_from(DST.len()).unwrap();
+    #[allow(clippy::range_plus_one)]
+    res[1 .. (1 + DST.len())].copy_from_slice(DST);
+
+    // Check we have room to encode into `res`, using the approximate `size_of` for the max size of
+    // the serialization
+    const BYTES_FOR_SET: usize = 32 - (1 + DST.len());
+    const _ASSERT_MORE_BYTES_THAN_SIZE: [();
+      BYTES_FOR_SET - core::mem::size_of::<ExternalValidatorSet>()] = [(); _];
+
+    let encoded = borsh::to_vec(&self).unwrap();
+    res[(1 + DST.len()) .. (1 + DST.len() + encoded.len())].copy_from_slice(&encoded);
+
+    res
   }
 
   /// The MuSig public key for a validator set.
@@ -80,7 +96,7 @@ impl ExternalValidatorSet {
           .expect("invalid participant"),
       );
     }
-    Public(dkg::musig::musig_key::<Ristretto>(&self.musig_context(), &keys).unwrap().to_bytes())
+    Public(dkg::musig_key::<Ristretto>(self.musig_context(), &keys).unwrap().to_bytes())
   }
 
   /// The message for the `set_keys` signature.

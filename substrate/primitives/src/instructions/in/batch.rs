@@ -67,6 +67,7 @@ impl BorshDeserialize for Batch {
         let read = self.reader.read(buf)?;
         self.read = self.read.saturating_add(read);
         if self.read > Batch::MAX_SIZE {
+          #[allow(clippy::io_other_error)]
           Err(io::Error::new(io::ErrorKind::Other, "Batch size exceeded maximum"))?;
         }
         Ok(read)

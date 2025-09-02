@@ -69,6 +69,8 @@ impl From<u64> for BlockNumber {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[rustfmt::skip]
 #[derive(scale::Encode, scale::Decode)] // This is safe as scale and borsh share an encoding here
+#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
 pub struct BlockHash(pub [u8; 32]);
 impl From<[u8; 32]> for BlockHash {
   fn from(hash: [u8; 32]) -> BlockHash {

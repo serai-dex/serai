@@ -21,11 +21,11 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 
 bitvec = { version = "1", default-features = false, features = ["alloc"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-sp-core = { git = "https://github.com/serai-dex/polkadot-sdk", branch = "serai-next", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "799658329bf66a829e67b34a0e86376b63eb7d23", default-features = false }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false }
-dkg = { path = "../../crypto/dkg", default-features = false }
+dkg = { package = "dkg-musig", path = "../../crypto/dkg/musig", default-features = false }
 
 bech32 = { version = "0.11", default-features = false }
 

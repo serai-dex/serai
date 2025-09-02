@@ -71,6 +71,7 @@ impl ExternalNetworkId {
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
 )]
+#[cfg_attr(feature = "non_canonical_scale_derivations", allow(clippy::cast_possible_truncation))]
 pub enum NetworkId {
   /// The Serai network.
   Serai,

@@ -45,6 +45,7 @@ pub fn borsh_deserialize_bounded_vec<R: Read, T: BorshDeserialize, const B: u32>
   reader.read_exact(&mut length[.. bytes_for_length])?;
   let length = u32::from_le_bytes(length);
   if length > B {
+    #[allow(clippy::io_other_error)]
     Err(Error::new(ErrorKind::Other, "bound exceeded"))?;
   }
 
