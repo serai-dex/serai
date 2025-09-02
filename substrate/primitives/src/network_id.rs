@@ -62,11 +62,11 @@ impl ExternalNetworkId {
   }
 
   /// The coins native to this network.
-  pub fn coins(&self) -> &'static [ExternalCoin] {
+  pub fn coins(&self) -> impl Iterator<Item = ExternalCoin> {
     match self {
-      Self::Bitcoin => &[ExternalCoin::Bitcoin],
-      Self::Ethereum => &[ExternalCoin::Ether, ExternalCoin::Dai],
-      Self::Monero => &[ExternalCoin::Monero],
+      Self::Bitcoin => [ExternalCoin::Bitcoin].as_slice().iter().copied(),
+      Self::Ethereum => [ExternalCoin::Ether, ExternalCoin::Dai].as_slice().iter().copied(),
+      Self::Monero => [ExternalCoin::Monero].as_slice().iter().copied(),
     }
   }
 }
@@ -119,11 +119,11 @@ impl NetworkId {
 
   /// The coins native to this network.
   pub fn coins(self) -> impl Iterator<Item = Coin> {
-    let (coins, external_coins): (&[Coin], &[ExternalCoin]) = match self {
-      NetworkId::Serai => (&[Coin::Serai], &[]),
-      NetworkId::External(ext) => (&[], ext.coins()),
+    let (coins, external_coins): (&[Coin], _) = match self {
+      NetworkId::Serai => (&[Coin::Serai], None),
+      NetworkId::External(ext) => (&[], Some(ext.coins())),
     };
-    coins.iter().copied().chain(external_coins.iter().copied().map(Into::into))
+    coins.iter().copied().chain(external_coins.into_iter().flatten().map(Into::into))
   }
 }
 

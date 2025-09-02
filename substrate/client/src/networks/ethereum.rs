@@ -3,7 +3,7 @@ use std::io::Read;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use crate::primitives::{MAX_ADDRESS_LEN, ExternalAddress};
+use crate::primitives::address::ExternalAddress;
 
 /// THe maximum amount of gas an address is allowed to specify as its gas limit.
 ///
@@ -33,7 +33,8 @@ impl ContractDeployment {
     }
 
     // The max address length, minus the type byte, minus the size of the gas
-    const MAX_CODE_LEN: usize = (MAX_ADDRESS_LEN as usize) - (1 + core::mem::size_of::<u32>());
+    const MAX_CODE_LEN: usize =
+      (ExternalAddress::MAX_LEN as usize) - (1 + core::mem::size_of::<u32>());
     if code.len() > MAX_CODE_LEN {
       None?;
     }
@@ -111,7 +112,7 @@ impl From<Address> for ExternalAddress {
       }
     }
     // We only construct addresses whose code is small enough this can safely be constructed
-    ExternalAddress::new(res).unwrap()
+    ExternalAddress::try_from(res).unwrap()
   }
 }
 

@@ -8,7 +8,7 @@ use ciphersuite::{
 };
 use dkg::{Curves, Ristretto};
 
-use serai_client::validator_sets::primitives::Session;
+use serai_primitives::validator_sets::Session;
 
 use serai_env as env;
 use serai_db::{Get, DbTxn, Db as DbTrait, create_db, db_channel};

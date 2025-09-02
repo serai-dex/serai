@@ -93,6 +93,7 @@ impl BorshDeserialize for Batch {
 }
 
 /// An error incurred while pushing an instruction onto a `Batch`.
+#[derive(Debug)]
 pub enum PushInstructionError {
   /// The Batch's max size was exceeded.
   MaxSizeExceeded,

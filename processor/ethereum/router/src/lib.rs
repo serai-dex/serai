@@ -21,9 +21,8 @@ use alloy_rpc_types_eth::{BlockId, Log, Filter, TransactionInput, TransactionReq
 use alloy_transport::{TransportErrorKind, RpcError};
 use alloy_provider::{Provider, RootProvider};
 
-use scale::Encode;
 use serai_client::{
-  in_instructions::primitives::Shorthand, networks::ethereum::Address as SeraiAddress,
+  primitives::instructions::RefundableInInstruction, networks::ethereum::Address as SeraiAddress,
 };
 
 use ethereum_primitives::LogIndex;
@@ -351,20 +350,29 @@ impl Router {
     }
   }
 
-  /// Construct a transaction to send coins with an InInstruction to Serai.
+  /// Construct a transaction to send coins with an `InInstruction` to Serai.
   ///
   /// If coin is an ERC20, this will not create a transaction calling the Router but will create a
   /// top-level transfer of the ERC20 to the Router. This avoids needing to call `approve` before
   /// publishing the transaction calling the Router.
   ///
   /// The gas limit and gas price are not set and are left to the caller.
-  pub fn in_instruction(&self, coin: Coin, amount: U256, in_instruction: &Shorthand) -> TxLegacy {
+  pub fn in_instruction(
+    &self,
+    coin: Coin,
+    amount: U256,
+    in_instruction: &RefundableInInstruction,
+  ) -> TxLegacy {
     match coin {
       Coin::Ether => TxLegacy {
         to: self.address.into(),
-        input: abi::inInstructionCall::new((coin.into(), amount, in_instruction.encode().into()))
-          .abi_encode()
-          .into(),
+        input: abi::inInstructionCall::new((
+          coin.into(),
+          amount,
+          borsh::to_vec(&in_instruction).unwrap().into(),
+        ))
+        .abi_encode()
+        .into(),
         value: amount,
         ..Default::default()
       },
@@ -373,7 +381,7 @@ impl Router {
         input: erc20::transferWithInInstructionCall::new((
           self.address,
           amount,
-          in_instruction.encode().into(),
+          borsh::to_vec(&in_instruction).unwrap().into(),
         ))
         .abi_encode()
         .into(),

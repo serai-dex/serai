@@ -3,10 +3,10 @@ use std::sync::{LazyLock, Arc, Mutex};
 
 use tokio::sync::mpsc;
 
-use serai_client::{
-  primitives::Signature,
-  validator_sets::primitives::{Session, SlashReport},
-  in_instructions::primitives::SignedBatch,
+use serai_primitives::{
+  crypto::Signature,
+  validator_sets::{Session, SlashReport},
+  instructions::SignedBatch,
 };
 
 use serai_cosign::SignedCosign;

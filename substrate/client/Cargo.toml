@@ -23,7 +23,7 @@ thiserror = { version = "2", default-features = false, optional = true }
 bitvec = { version = "1", default-features = false, features = ["alloc", "serde"] }
 
 hex = "0.4"
-scale = { package = "parity-scale-codec", version = "3" }
+scale = { package = "parity-scale-codec", version = "3", optional = true }
 borsh = { version = "1", features = ["derive"] }
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
@@ -64,7 +64,7 @@ dockertest = "0.5"
 serai-docker-tests = { path = "../../tests/docker" }
 
 [features]
-serai = ["thiserror/std", "serde", "serde_json", "multiaddr", "sp-core", "sp-runtime", "frame-system", "simple-request"]
+serai = ["thiserror/std", "scale", "serde", "serde_json", "multiaddr", "sp-core", "sp-runtime", "frame-system", "simple-request"]
 
 networks = []
 bitcoin = ["networks", "dep:bitcoin"]
@@ -73,4 +73,4 @@ monero = ["networks", "dalek-ff-group", "ciphersuite", "monero-address"]
 
 # Assumes the default usage is to use Serai as a DEX, which doesn't actually
 # require connecting to a Serai node
-default = ["bitcoin", "monero"]
+default = ["bitcoin", "ethereum", "monero"]

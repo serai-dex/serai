@@ -2,7 +2,7 @@ use core::{marker::PhantomData, future::Future};
 
 use serai_db::{Get, DbTxn, Db};
 
-use serai_coins_primitives::{OutInstruction, OutInstructionWithBalance};
+use serai_primitives::instructions::{OutInstruction, OutInstructionWithBalance};
 
 use messages::substrate::ExecutedBatch;
 use primitives::task::{DoesNotError, ContinuallyRan};
@@ -150,7 +150,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SubstrateTask<D, S> {
 
                 if let Some(batch::ReturnInformation { address, balance }) = return_information {
                   burns.push(OutInstructionWithBalance {
-                    instruction: OutInstruction { address: address.into() },
+                    instruction: OutInstruction::Transfer(address.into()),
                     balance,
                   });
                 }

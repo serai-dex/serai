@@ -19,6 +19,8 @@ use serai_client::{
 use serai_db::*;
 use serai_task::*;
 
+use serai_cosign_types::*;
+
 /// The cosigns which are intended to be performed.
 mod intend;
 /// The evaluator of the cosigns.

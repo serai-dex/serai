@@ -1,15 +1,16 @@
 use core::fmt;
 use std::collections::HashMap;
 
-use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use dkg::Participant;
 
-use serai_primitives::BlockHash;
-use validator_sets_primitives::{Session, KeyPair, SlashReport};
-use coins_primitives::OutInstructionWithBalance;
-use in_instructions_primitives::SignedBatch;
+use serai_primitives::{
+  BlockHash,
+  crypto::KeyPair,
+  validator_sets::{Session, SlashReport},
+  instructions::{SignedBatch, OutInstructionWithBalance},
+};
 
 use serai_cosign::{Cosign, SignedCosign};
 
@@ -87,7 +88,7 @@ pub mod key_gen {
 pub mod sign {
   use super::*;
 
-  #[derive(Clone, Copy, PartialEq, Eq, Hash, Encode, Decode, BorshSerialize, BorshDeserialize)]
+  #[derive(Clone, Copy, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
   pub enum VariantSignId {
     Cosign(u64),
     Batch([u8; 32]),
@@ -111,9 +112,7 @@ pub mod sign {
     }
   }
 
-  #[derive(
-    Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize,
-  )]
+  #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
   pub struct SignId {
     pub session: Session,
     pub id: VariantSignId,
@@ -295,7 +294,7 @@ impl CoordinatorMessage {
         let (sub, id) = match msg {
           // Unique since we only have one attempt per session
           key_gen::CoordinatorMessage::GenerateKey { session, .. } => {
-            (0, borsh::to_vec(session).unwrap())
+            (0, borsh::to_vec(&session).unwrap())
           }
           // Unique since one participation per participant per session
           key_gen::CoordinatorMessage::Participation { session, participant, .. } => {
@@ -316,17 +315,19 @@ impl CoordinatorMessage {
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_SIGN_UID, sub];
-        res.extend(id.encode());
+        res.extend(borsh::to_vec(&id).unwrap());
         res
       }
       CoordinatorMessage::Coordinator(msg) => {
         let (sub, id) = match msg {
           // We only cosign a block once, and Reattempt is a separate message
           coordinator::CoordinatorMessage::CosignSubstrateBlock { cosign, .. } => {
-            (0, cosign.block_number.encode())
+            (0, borsh::to_vec(&cosign.block_number).unwrap())
           }
           // We only sign one slash report, and Reattempt is a separate message
-          coordinator::CoordinatorMessage::SignSlashReport { session, .. } => (1, session.encode()),
+          coordinator::CoordinatorMessage::SignSlashReport { session, .. } => {
+            (1, borsh::to_vec(&session).unwrap())
+          }
         };
 
         let mut res = vec![COORDINATOR_UID, TYPE_COORDINATOR_UID, sub];
@@ -335,10 +336,14 @@ impl CoordinatorMessage {
       }
       CoordinatorMessage::Substrate(msg) => {
         let (sub, id) = match msg {
-          substrate::CoordinatorMessage::SetKeys { session, .. } => (0, session.encode()),
-          substrate::CoordinatorMessage::SlashesReported { session } => (1, session.encode()),
+          substrate::CoordinatorMessage::SetKeys { session, .. } => {
+            (0, borsh::to_vec(&session).unwrap())
+          }
+          substrate::CoordinatorMessage::SlashesReported { session } => {
+            (1, borsh::to_vec(&session).unwrap())
+          }
           substrate::CoordinatorMessage::Block { serai_block_number, .. } => {
-            (2, serai_block_number.encode())
+            (2, borsh::to_vec(&serai_block_number).unwrap())
           }
         };
 
@@ -363,10 +368,10 @@ impl ProcessorMessage {
         let (sub, id) = match msg {
           // Unique since we only have one participation per session (due to no re-attempts)
           key_gen::ProcessorMessage::Participation { session, .. } => {
-            (0, borsh::to_vec(session).unwrap())
+            (0, borsh::to_vec(&session).unwrap())
           }
           key_gen::ProcessorMessage::GeneratedKeyPair { session, .. } => {
-            (1, borsh::to_vec(session).unwrap())
+            (1, borsh::to_vec(&session).unwrap())
           }
           // Unique since we only blame a participant once (as this is fatal)
           key_gen::ProcessorMessage::Blame { session, participant } => {
@@ -382,11 +387,11 @@ impl ProcessorMessage {
         let (sub, id) = match msg {
           // Unique since we'll only fatally slash a a participant once
           sign::ProcessorMessage::InvalidParticipant { session, participant } => {
-            (0, (session, u16::from(*participant)).encode())
+            (0, borsh::to_vec(&(session, u16::from(*participant))).unwrap())
           }
           // Unique since SignId
-          sign::ProcessorMessage::Preprocesses { id, .. } => (1, id.encode()),
-          sign::ProcessorMessage::Shares { id, .. } => (2, id.encode()),
+          sign::ProcessorMessage::Preprocesses { id, .. } => (1, borsh::to_vec(&id).unwrap()),
+          sign::ProcessorMessage::Shares { id, .. } => (2, borsh::to_vec(&id).unwrap()),
         };
 
         let mut res = vec![PROCESSOR_UID, TYPE_SIGN_UID, sub];
@@ -396,10 +401,14 @@ impl ProcessorMessage {
       ProcessorMessage::Coordinator(msg) => {
         let (sub, id) = match msg {
           coordinator::ProcessorMessage::CosignedBlock { cosign } => {
-            (0, cosign.cosign.block_hash.encode())
+            (0, borsh::to_vec(&cosign.cosign.block_hash).unwrap())
           }
-          coordinator::ProcessorMessage::SignedBatch { batch, .. } => (1, batch.batch.id.encode()),
-          coordinator::ProcessorMessage::SignedSlashReport { session, .. } => (2, session.encode()),
+          coordinator::ProcessorMessage::SignedBatch { batch, .. } => {
+            (1, borsh::to_vec(&batch.batch.id()).unwrap())
+          }
+          coordinator::ProcessorMessage::SignedSlashReport { session, .. } => {
+            (2, borsh::to_vec(&session).unwrap())
+          }
         };
 
         let mut res = vec![PROCESSOR_UID, TYPE_COORDINATOR_UID, sub];
@@ -408,7 +417,9 @@ impl ProcessorMessage {
       }
       ProcessorMessage::Substrate(msg) => {
         let (sub, id) = match msg {
-          substrate::ProcessorMessage::SubstrateBlockAck { block, .. } => (0, block.encode()),
+          substrate::ProcessorMessage::SubstrateBlockAck { block, .. } => {
+            (0, borsh::to_vec(&block).unwrap())
+          }
         };
 
         let mut res = vec![PROCESSOR_UID, TYPE_SUBSTRATE_UID, sub];

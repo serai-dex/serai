@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 
 use group::GroupEncoding;
 
-use serai_primitives::{ExternalCoin, Amount};
+use serai_primitives::{coin::ExternalCoin, balance::Amount};
 
 use serai_db::{Get, DbTxn, create_db};
 

@@ -5,11 +5,13 @@ use dalek_ff_group::Ed25519;
 
 use monero_wallet::WalletOutput;
 
-use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_client::{
-  primitives::{ExternalCoin, Amount, ExternalBalance},
+  primitives::{
+    coin::ExternalCoin,
+    balance::{Amount, ExternalBalance},
+  },
   networks::monero::Address,
 };
 
@@ -17,10 +19,7 @@ use primitives::{OutputType, ReceivedOutput};
 
 use crate::{EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS, FORWARDED_SUBADDRESS};
 
-#[rustfmt::skip]
-#[derive(
-  Clone, Copy, PartialEq, Eq, Default, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Default, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub(crate) struct OutputId(pub(crate) [u8; 32]);
 impl AsRef<[u8]> for OutputId {
   fn as_ref(&self) -> &[u8] {

@@ -4,7 +4,7 @@
 
 use core::{fmt::Debug, future::Future};
 
-use serai_primitives::Amount;
+use serai_primitives::balance::Amount;
 
 use primitives::{ReceivedOutput, Payment};
 use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor};

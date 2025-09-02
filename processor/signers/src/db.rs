@@ -1,4 +1,4 @@
-use serai_validator_sets_primitives::{Session, SlashReport as SlashReportStruct};
+use serai_primitives::validator_sets::{Session, SlashReport as SlashReportStruct};
 
 use serai_db::{Get, DbTxn, create_db, db_channel};
 

@@ -6,7 +6,7 @@ use std::{
 
 use dkg::*;
 
-use serai_validator_sets_primitives::MAX_KEY_SHARES_PER_SET;
+use serai_primitives::constants::MAX_KEY_SHARES_PER_SET;
 
 /// A cache of the generators used by the eVRF DKG.
 ///

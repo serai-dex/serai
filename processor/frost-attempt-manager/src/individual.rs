@@ -7,7 +7,7 @@ use frost::{
   sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
 };
 
-use serai_validator_sets_primitives::Session;
+use serai_primitives::validator_sets::Session;
 
 use serai_db::{Get, DbTxn, Db, create_db};
 use messages::sign::{VariantSignId, SignId, ProcessorMessage};

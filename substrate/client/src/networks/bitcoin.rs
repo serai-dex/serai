@@ -1,6 +1,5 @@
 use core::{str::FromStr, fmt};
 
-use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use bitcoin::{
@@ -11,10 +10,10 @@ use bitcoin::{
   address::{AddressType, NetworkChecked, Address as BAddress},
 };
 
-use crate::primitives::ExternalAddress;
+use crate::primitives::address::ExternalAddress;
 
 // SCALE-encodable representation of Bitcoin addresses, used internally.
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 enum EncodedAddress {
   P2PKH([u8; 20]),
   P2SH([u8; 20]),
@@ -124,7 +123,7 @@ impl TryFrom<ExternalAddress> for Address {
   fn try_from(data: ExternalAddress) -> Result<Address, ()> {
     // Decode as an EncodedAddress, then map to a ScriptBuf
     let mut data = data.as_ref();
-    let encoded = EncodedAddress::decode(&mut data).map_err(|_| ())?;
+    let encoded = EncodedAddress::deserialize_reader(&mut data).map_err(|_| ())?;
     if !data.is_empty() {
       Err(())?
     }
@@ -141,8 +140,8 @@ impl From<Address> for EncodedAddress {
 
 impl From<Address> for ExternalAddress {
   fn from(addr: Address) -> ExternalAddress {
-    // Safe since all variants are fixed-length and fit into MAX_ADDRESS_LEN
-    ExternalAddress::new(EncodedAddress::from(addr).encode()).unwrap()
+    // Safe since all variants are fixed-length and fit into `MAX_ADDRESS_LEN`
+    ExternalAddress::try_from(borsh::to_vec(&EncodedAddress::from(addr)).unwrap()).unwrap()
   }
 }
 

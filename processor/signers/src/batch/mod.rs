@@ -6,10 +6,7 @@ use ciphersuite::group::GroupEncoding;
 use dalek_ff_group::Ristretto;
 use frost::dkg::ThresholdKeys;
 
-use scale::Encode;
-
-use serai_validator_sets_primitives::Session;
-use serai_in_instructions_primitives::{SignedBatch, batch_message};
+use serai_primitives::{validator_sets::Session, instructions::SignedBatch};
 
 use serai_db::{Get, DbTxn, Db};
 
@@ -74,7 +71,7 @@ impl<D: Db, E: GroupEncoding> BatchSignerTask<D, E> {
         machines.push(WrappedSchnorrkelMachine::new(
           keys.clone(),
           b"substrate",
-          batch_message(&batch),
+          batch.publish_batch_message(),
         ));
       }
       attempt_manager.register(VariantSignId::Batch(id), machines);
@@ -100,14 +97,14 @@ impl<D: Db, E: Send + GroupEncoding> ContinuallyRan for BatchSignerTask<D, E> {
         iterated = true;
 
         // Save this to the database as a transaction to sign
-        let batch_hash = <[u8; 32]>::from(Blake2b::<U32>::digest(batch.encode()));
+        let batch_hash = <[u8; 32]>::from(Blake2b::<U32>::digest(borsh::to_vec(&batch).unwrap()));
         self.active_signing_protocols.insert(batch_hash);
         ActiveSigningProtocols::set(
           &mut txn,
           self.session,
           &self.active_signing_protocols.iter().copied().collect(),
         );
-        BatchHash::set(&mut txn, batch.id, &batch_hash);
+        BatchHash::set(&mut txn, batch.id(), &batch_hash);
         Batches::set(&mut txn, batch_hash, &batch);
 
         let mut machines = Vec::with_capacity(self.keys.len());
@@ -116,7 +113,7 @@ impl<D: Db, E: Send + GroupEncoding> ContinuallyRan for BatchSignerTask<D, E> {
           machines.push(WrappedSchnorrkelMachine::new(
             keys.clone(),
             b"substrate",
-            batch_message(&batch),
+            batch.publish_batch_message(),
           ));
         }
         for msg in self.attempt_manager.register(VariantSignId::Batch(batch_hash), machines) {
@@ -160,8 +157,8 @@ impl<D: Db, E: Send + GroupEncoding> ContinuallyRan for BatchSignerTask<D, E> {
         // Update the last acknowledged Batch
         {
           let last_acknowledged = LastAcknowledgedBatch::get(&txn);
-          if Some(batch.id) > last_acknowledged {
-            LastAcknowledgedBatch::set(&mut txn, &batch.id);
+          if Some(batch.id()) > last_acknowledged {
+            LastAcknowledgedBatch::set(&mut txn, &batch.id());
           }
         }
 
@@ -174,7 +171,7 @@ impl<D: Db, E: Send + GroupEncoding> ContinuallyRan for BatchSignerTask<D, E> {
         );
 
         // Clean up SignedBatches
-        SignedBatches::del(&mut txn, batch.id);
+        SignedBatches::del(&mut txn, batch.id());
 
         // We retire with a txn so we either successfully flag this Batch as acknowledged, and
         // won't re-register it (making this retire safe), or we don't flag it, meaning we will
@@ -203,7 +200,7 @@ impl<D: Db, E: Send + GroupEncoding> ContinuallyRan for BatchSignerTask<D, E> {
             let batch =
               Batches::get(&txn, id).expect("signed a Batch we didn't save to the database");
             let signed_batch = SignedBatch { batch, signature: signature.into() };
-            SignedBatches::set(&mut txn, signed_batch.batch.id, &signed_batch);
+            SignedBatches::set(&mut txn, signed_batch.batch.id(), &signed_batch);
           }
         }
 

@@ -5,12 +5,9 @@ use alloy_sol_types::SolCall;
 
 use alloy_consensus::{TxLegacy, Signed};
 
-use scale::Encode;
 use serai_client::{
   primitives::SeraiAddress,
-  in_instructions::primitives::{
-    InInstruction as SeraiInInstruction, RefundableInInstruction, Shorthand,
-  },
+  primitives::instructions::{InInstruction as SeraiInInstruction, RefundableInInstruction},
 };
 
 use ethereum_primitives::LogIndex;
@@ -18,14 +15,14 @@ use ethereum_primitives::LogIndex;
 use crate::{InInstruction, tests::*};
 
 impl Test {
-  pub(crate) fn in_instruction() -> Shorthand {
-    Shorthand::Raw(RefundableInInstruction {
+  pub(crate) fn in_instruction() -> RefundableInInstruction {
+    RefundableInInstruction {
       origin: None,
       instruction: SeraiInInstruction::Transfer(SeraiAddress([0xff; 32])),
-    })
+    }
   }
 
-  pub(crate) fn eth_in_instruction_tx(&self) -> (Coin, U256, Shorthand, TxLegacy) {
+  pub(crate) fn eth_in_instruction_tx(&self) -> (Coin, U256, RefundableInInstruction, TxLegacy) {
     let coin = Coin::Ether;
     let amount = U256::from(1);
     let shorthand = Self::in_instruction();
@@ -42,7 +39,7 @@ impl Test {
     tx: Signed<TxLegacy>,
     coin: Coin,
     amount: U256,
-    shorthand: &Shorthand,
+    shorthand: &RefundableInInstruction,
   ) {
     let receipt = ethereum_test_primitives::publish_tx(&self.provider, tx.clone()).await;
     assert!(receipt.status());
@@ -81,7 +78,7 @@ impl Test {
         from: tx.recover_signer().unwrap(),
         coin,
         amount,
-        data: shorthand.encode(),
+        data: borsh::to_vec(&shorthand).unwrap(),
       }
     );
   }
@@ -140,9 +137,13 @@ async fn test_erc20_router_in_instruction() {
     gas_limit: 1_000_000,
     to: test.router.address().into(),
     value: U256::ZERO,
-    input: crate::abi::inInstructionCall::new((coin.into(), amount, shorthand.encode().into()))
-      .abi_encode()
-      .into(),
+    input: crate::abi::inInstructionCall::new((
+      coin.into(),
+      amount,
+      borsh::to_vec(shorthand).unwrap().into(),
+    ))
+    .abi_encode()
+    .into(),
   };
 
   // If no `approve` was granted, this should fail

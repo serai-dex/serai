@@ -293,7 +293,7 @@ contract Router is IRouterWithoutCollisions {
   /// @param coin The coin to transfer in (address(0) if Ether)
   /// @param amount The amount to transfer in (msg.value if Ether)
   /**
-   * @param instruction The Shorthand-encoded InInstruction for Serai to associate with this
+   * @param instruction The encoded `RefundableInInstruction` for Serai to associate with this
    *  transfer in
    */
   // This function doesn't require nonReentrant as re-entrancy isn't an issue with this function

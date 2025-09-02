@@ -1,6 +1,7 @@
 use core::marker::PhantomData;
 
-use scale::Encode;
+use borsh::BorshSerialize;
+
 use serai_db::{Get, DbTxn, create_db};
 
 use primitives::{EncodableG, ReceivedOutput, Eventuality, EventualityTracker};
@@ -14,7 +15,7 @@ create_db!(
     // The latest block this task has handled which was notable
     LatestHandledNotableBlock: () -> u64,
 
-    SerializedEventualities: <K: Encode>(key: K) -> Vec<u8>,
+    SerializedEventualities: <K: BorshSerialize>(key: K) -> Vec<u8>,
 
     AccumulatedOutput: (id: &[u8]) -> (),
   }

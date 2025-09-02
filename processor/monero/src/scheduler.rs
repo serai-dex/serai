@@ -10,7 +10,7 @@ use dalek_ff_group::Ed25519;
 use monero_wallet::rpc::{FeeRate, RpcError};
 
 use serai_client::{
-  primitives::{ExternalCoin, Amount},
+  primitives::{coin::ExternalCoin, balance::Amount},
   networks::monero::Address,
 };
 

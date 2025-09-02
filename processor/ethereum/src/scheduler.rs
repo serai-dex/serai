@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use alloy_core::primitives::U256;
 
 use serai_client::{
-  primitives::{ExternalNetworkId, ExternalCoin, ExternalBalance},
+  primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::ExternalBalance},
   networks::ethereum::Address,
 };
 

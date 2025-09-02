@@ -9706,7 +9706,6 @@ dependencies = [
  "hex",
  "log",
  "modular-frost",
- "parity-scale-codec",
  "rand_core 0.6.4",
  "secp256k1 0.29.1",
  "serai-client",
@@ -9896,9 +9895,19 @@ dependencies = [
  "parity-scale-codec",
  "schnorrkel",
  "serai-client",
+ "serai-cosign-types",
  "serai-db",
  "serai-task",
  "tokio",
+]
+
+[[package]]
+name = "serai-cosign-types"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "schnorrkel",
+ "serai-primitives",
 ]
 
 [[package]]
@@ -9999,7 +10008,6 @@ dependencies = [
  "k256",
  "log",
  "modular-frost",
- "parity-scale-codec",
  "rand_core 0.6.4",
  "serai-client",
  "serai-db",
@@ -10136,7 +10144,6 @@ dependencies = [
  "modular-frost",
  "monero-simple-request-rpc",
  "monero-wallet",
- "parity-scale-codec",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "serai-client",
@@ -10258,6 +10265,7 @@ dependencies = [
  "parity-scale-codec",
  "rand_core 0.6.4",
  "scale-info",
+ "schnorrkel",
  "sp-core",
  "zeroize",
 ]
@@ -10272,8 +10280,7 @@ dependencies = [
  "env_logger",
  "hex",
  "log",
- "parity-scale-codec",
- "serai-cosign",
+ "serai-cosign-types",
  "serai-db",
  "serai-env",
  "serai-message-queue",
@@ -10355,7 +10362,6 @@ dependencies = [
  "futures-util",
  "group",
  "k256",
- "parity-scale-codec",
  "rand_core 0.6.4",
  "revm",
  "serai-client",
@@ -10375,7 +10381,6 @@ dependencies = [
  "borsh",
  "log",
  "modular-frost",
- "parity-scale-codec",
  "rand_core 0.6.4",
  "serai-db",
  "serai-primitives",
@@ -10392,7 +10397,6 @@ dependencies = [
  "dkg-evrf",
  "flexible-transcript",
  "log",
- "parity-scale-codec",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "serai-db",
@@ -10408,8 +10412,7 @@ dependencies = [
  "borsh",
  "dkg",
  "hex",
- "parity-scale-codec",
- "serai-cosign",
+ "serai-cosign-types",
  "serai-primitives",
 ]
 
@@ -10420,7 +10423,6 @@ dependencies = [
  "borsh",
  "group",
  "log",
- "parity-scale-codec",
  "serai-primitives",
  "serai-task",
  "tokio",
@@ -10435,7 +10437,6 @@ dependencies = [
  "group",
  "hex",
  "log",
- "parity-scale-codec",
  "serai-db",
  "serai-primitives",
  "serai-processor-messages",
@@ -10451,7 +10452,6 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "modular-frost",
- "parity-scale-codec",
  "serai-db",
 ]
 
@@ -10466,9 +10466,8 @@ dependencies = [
  "frost-schnorrkel",
  "log",
  "modular-frost",
- "parity-scale-codec",
  "rand_core 0.6.4",
- "serai-cosign",
+ "serai-cosign-types",
  "serai-db",
  "serai-primitives",
  "serai-processor-frost-attempt-manager",
@@ -10486,7 +10485,6 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "group",
- "parity-scale-codec",
  "serai-db",
  "serai-processor-primitives",
  "serai-processor-scanner",
@@ -10499,7 +10497,6 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "group",
- "parity-scale-codec",
  "serai-db",
  "serai-primitives",
  "serai-processor-primitives",
@@ -10514,7 +10511,6 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "group",
- "parity-scale-codec",
  "serai-db",
  "serai-primitives",
  "serai-processor-primitives",

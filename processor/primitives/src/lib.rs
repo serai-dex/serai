@@ -6,7 +6,6 @@ use core::{hash::Hash, fmt::Debug};
 
 use group::GroupEncoding;
 
-use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 /// A module for task-related structs and functionality.
@@ -40,8 +39,6 @@ pub trait Id:
   + AsRef<[u8]>
   + AsMut<[u8]>
   + Debug
-  + Encode
-  + Decode
   + BorshSerialize
   + BorshDeserialize
 {
@@ -57,22 +54,15 @@ impl<
       + AsRef<[u8]>
       + AsMut<[u8]>
       + Debug
-      + Encode
-      + Decode
       + BorshSerialize
       + BorshDeserialize,
   > Id for I
 {
 }
 
-/// A wrapper for a group element which implements the scale/borsh traits.
+/// A wrapper for a group element which implements the `borsh` traits.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct EncodableG<G: GroupEncoding>(pub G);
-impl<G: GroupEncoding> Encode for EncodableG<G> {
-  fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
-    f(self.0.to_bytes().as_ref())
-  }
-}
 impl<G: GroupEncoding> BorshSerialize for EncodableG<G> {
   fn serialize<W: borsh::io::Write>(&self, writer: &mut W) -> borsh::io::Result<()> {
     writer.write_all(self.0.to_bytes().as_ref())

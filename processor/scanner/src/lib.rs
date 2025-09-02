@@ -10,8 +10,10 @@ use group::GroupEncoding;
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, Db};
 
-use serai_primitives::{ExternalNetworkId, ExternalCoin, Amount};
-use serai_coins_primitives::OutInstructionWithBalance;
+use serai_primitives::{
+  network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount,
+  instructions::OutInstructionWithBalance,
+};
 
 use messages::substrate::ExecutedBatch;
 use primitives::{task::*, Address, ReceivedOutput, Block, Payment};

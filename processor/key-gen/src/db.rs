@@ -6,7 +6,7 @@ use zeroize::Zeroizing;
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use dkg::*;
 
-use serai_validator_sets_primitives::Session;
+use serai_primitives::validator_sets::Session;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn};
@@ -36,7 +36,7 @@ pub(crate) struct Participations {
 }
 
 mod _db {
-  use serai_validator_sets_primitives::Session;
+  use serai_primitives::validator_sets::Session;
 
   use serai_db::{Get, DbTxn, create_db};
 

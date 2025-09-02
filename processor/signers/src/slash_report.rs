@@ -3,8 +3,7 @@ use core::{marker::PhantomData, future::Future};
 use dalek_ff_group::Ristretto;
 use frost::dkg::ThresholdKeys;
 
-use serai_primitives::Signature;
-use serai_validator_sets_primitives::Session;
+use serai_primitives::{crypto::Signature, validator_sets::Session};
 
 use serai_db::{DbTxn, Db};
 

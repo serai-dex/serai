@@ -19,7 +19,7 @@ interface IRouterWithoutCollisions {
   /// @param from The address which called `inInstruction` and caused this event to be emitted
   /// @param coin The coin transferred in
   /// @param amount The amount of the coin transferred in
-  /// @param instruction The Shorthand-encoded InInstruction for Serai to decode and handle
+  /// @param instruction The encoded `RefundableInInstruction` for Serai to decode and handle
   event InInstruction(
     address indexed from, address indexed coin, uint256 amount, bytes instruction
   );
@@ -81,8 +81,8 @@ interface IRouterWithoutCollisions {
   /// @param coin The coin to transfer in (address(0) if Ether)
   /// @param amount The amount to transfer in (msg.value if Ether)
   /**
-   * @param instruction The Shorthand-encoded InInstruction for Serai to associate with this
-   *   transfer in
+   * @param instruction The encoded `RefundableInInstruction` for Serai to associate with this
+   *  transfer in
    */
   // Re-entrancy doesn't bork this function
   // slither-disable-next-line reentrancy-events

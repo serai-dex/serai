@@ -80,7 +80,7 @@ pub struct RefundableInInstruction {
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 pub struct InInstructionWithBalance {
   /// The instruction on how to handle coins in.
-  pub instruction: OutInstruction,
+  pub instruction: InInstruction,
   /// The coins in.
   pub balance: ExternalBalance,
 }

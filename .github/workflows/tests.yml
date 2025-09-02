@@ -61,6 +61,7 @@ jobs:
             -p serai-monero-processor \
             -p tendermint-machine \
             -p tributary-sdk \
+            -p serai-cosign-types \
             -p serai-cosign \
             -p serai-coordinator-substrate \
             -p serai-coordinator-tributary \

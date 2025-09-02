@@ -14,7 +14,7 @@ use alloy_simple_request_transport::SimpleRequest;
 use alloy_rpc_client::ClientBuilder;
 use alloy_provider::{Provider, RootProvider};
 
-use serai_client::validator_sets::primitives::Session;
+use serai_client::primitives::validator_sets::Session;
 
 use serai_env as env;
 use serai_db::{Get, DbTxn, create_db};

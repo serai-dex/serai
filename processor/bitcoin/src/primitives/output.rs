@@ -10,12 +10,15 @@ use bitcoin_serai::{
   wallet::ReceivedOutput as WalletOutput,
 };
 
-use scale::{Encode, Decode, IoReader};
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::Get;
 
 use serai_client::{
-  primitives::{ExternalCoin, Amount, ExternalBalance, ExternalAddress},
+  primitives::{
+    coin::ExternalCoin,
+    balance::{Amount, ExternalBalance},
+    address::ExternalAddress,
+  },
   networks::bitcoin::Address,
 };
 
@@ -26,7 +29,7 @@ use crate::{
   scan::{offsets_for_key, presumed_origin, extract_serai_data},
 };
 
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub(crate) struct OutputId([u8; 36]);
 impl Default for OutputId {
   fn default() -> Self {
@@ -139,7 +142,7 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     self.kind.write(writer)?;
     let presumed_origin: Option<ExternalAddress> = self.presumed_origin.clone().map(Into::into);
-    writer.write_all(&presumed_origin.encode())?;
+    presumed_origin.serialize(writer)?;
     self.output.write(writer)?;
     writer.write_all(&u16::try_from(self.data.len()).unwrap().to_le_bytes())?;
     writer.write_all(&self.data)
@@ -149,7 +152,7 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
     Ok(Output {
       kind: OutputType::read(reader)?,
       presumed_origin: {
-        Option::<ExternalAddress>::decode(&mut IoReader(&mut reader))
+        Option::<ExternalAddress>::deserialize_reader(&mut reader)
           .map_err(|e| io::Error::other(format!("couldn't decode ExternalAddress: {e:?}")))?
           .map(|address| {
             Address::try_from(address)

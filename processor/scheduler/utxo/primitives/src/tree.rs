@@ -1,6 +1,9 @@
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::{ExternalCoin, Amount, ExternalBalance};
+use serai_primitives::{
+  coin::ExternalCoin,
+  balance::{Amount, ExternalBalance},
+};
 
 use primitives::{Address, Payment};
 use scanner::ScannerFeed;

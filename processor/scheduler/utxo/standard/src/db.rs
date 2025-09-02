@@ -2,7 +2,10 @@ use core::marker::PhantomData;
 
 use group::GroupEncoding;
 
-use serai_primitives::{ExternalCoin, Amount, ExternalBalance};
+use serai_primitives::{
+  coin::ExternalCoin,
+  balance::{Amount, ExternalBalance},
+};
 
 use borsh::BorshDeserialize;
 use serai_db::{Get, DbTxn, create_db, db_channel};

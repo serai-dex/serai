@@ -1,3 +1,4 @@
+use core::convert::AsRef;
 use alloc::vec::Vec;
 
 use zeroize::Zeroize;
@@ -150,10 +151,15 @@ impl TryFrom<Vec<u8>> for ExternalAddress {
     vec.try_into().map(ExternalAddress).map_err(|_| FromVecError::TooLong)
   }
 }
-
 impl From<ExternalAddress> for Vec<u8> {
   fn from(ext: ExternalAddress) -> Vec<u8> {
     ext.0.into_inner()
+  }
+}
+
+impl AsRef<[u8]> for ExternalAddress {
+  fn as_ref(&self) -> &[u8] {
+    self.0.as_ref()
   }
 }
 

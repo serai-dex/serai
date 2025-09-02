@@ -6,7 +6,7 @@ use std::{
 
 use frost::dkg::ThresholdKeys;
 
-use serai_validator_sets_primitives::Session;
+use serai_primitives::validator_sets::Session;
 
 use serai_db::{DbTxn, Db};
 

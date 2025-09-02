@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use frost::{Participant, sign::PreprocessMachine};
 
-use serai_validator_sets_primitives::Session;
+use serai_primitives::validator_sets::Session;
 
 use serai_db::{DbTxn, Db};
 use messages::sign::{VariantSignId, ProcessorMessage, CoordinatorMessage};

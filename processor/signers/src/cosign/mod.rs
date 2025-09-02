@@ -3,9 +3,7 @@ use core::future::Future;
 use dalek_ff_group::Ristretto;
 use frost::dkg::ThresholdKeys;
 
-use scale::Encode;
-use serai_primitives::Signature;
-use serai_validator_sets_primitives::Session;
+use serai_primitives::{crypto::Signature, validator_sets::Session};
 
 use serai_db::{DbTxn, Db};
 
@@ -127,7 +125,7 @@ impl<D: Db> ContinuallyRan for CosignerTask<D> {
             LatestCosigned::set(&mut txn, self.session, &cosign.block_number);
             let cosign = SignedCosign {
               cosign,
-              signature: Signature::from(signature).encode().try_into().unwrap(),
+              signature: borsh::to_vec(&Signature::from(signature)).unwrap().try_into().unwrap(),
             };
             // Send the cosign
             Cosign::send(&mut txn, self.session, &cosign);

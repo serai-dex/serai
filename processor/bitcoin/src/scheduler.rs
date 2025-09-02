@@ -9,7 +9,7 @@ use bitcoin_serai::{
 };
 
 use serai_client::{
-  primitives::{ExternalCoin, Amount},
+  primitives::{coin::ExternalCoin, balance::Amount},
   networks::bitcoin::Address,
 };
 

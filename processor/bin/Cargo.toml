@@ -20,14 +20,13 @@ workspace = true
 zeroize = { version = "1", default-features = false, features = ["std"] }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
 dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std", "ristretto"] }
 
-serai-client = { path = "../../substrate/client", default-features = false }
-serai-cosign = { path = "../../coordinator/cosign" }
+serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
+serai-cosign = { package = "serai-cosign-types", path = "../../coordinator/cosign/types" }
 
 log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"] }

@@ -40,6 +40,11 @@ impl From<Public> for sp_core::sr25519::Public {
   )
 )]
 pub struct Signature(pub [u8; 64]);
+impl From<schnorrkel::Signature> for Signature {
+  fn from(signature: schnorrkel::Signature) -> Self {
+    Self(signature.to_bytes())
+  }
+}
 impl From<sp_core::sr25519::Signature> for Signature {
   fn from(signature: sp_core::sr25519::Signature) -> Self {
     Self(signature.0)
@@ -70,6 +75,12 @@ pub struct ExternalKey(
   )]
   pub BoundedVec<u8, ConstU32<{ ExternalKey::MAX_LEN }>>,
 );
+
+impl AsRef<[u8]> for ExternalKey {
+  fn as_ref(&self) -> &[u8] {
+    self.0.as_ref()
+  }
+}
 
 impl Zeroize for ExternalKey {
   fn zeroize(&mut self) {

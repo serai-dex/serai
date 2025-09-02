@@ -20,11 +20,10 @@ workspace = true
 [dependencies]
 hex = { version = "0.4", default-features = false, features = ["std"] }
 
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "borsh"] }
 
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 
-serai-cosign = { path = "../../coordinator/cosign", default-features = false }
+serai-cosign = { package = "serai-cosign-types", path = "../../coordinator/cosign/types" }

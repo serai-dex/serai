@@ -1,6 +1,6 @@
 use serai_db::{Get, DbTxn, create_db};
 
-use serai_validator_sets_primitives::Session;
+use serai_primitives::validator_sets::Session;
 
 create_db!(
   ScannerBatch {

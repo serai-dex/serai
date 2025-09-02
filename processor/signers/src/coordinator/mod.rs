@@ -1,6 +1,6 @@
 use core::future::Future;
 
-use serai_primitives::Signature;
+use serai_primitives::crypto::Signature;
 
 use serai_db::{DbTxn, Db};
 
@@ -140,7 +140,7 @@ impl<D: Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
         let mut next_batch = last_batch.map(|id| id + 1).unwrap_or(0);
         while let Some(batch) = crate::batch::signed_batch(&txn, next_batch) {
           iterated = true;
-          db::LastPublishedBatch::set(&mut txn, &batch.batch.id);
+          db::LastPublishedBatch::set(&mut txn, &batch.batch.id());
           self
             .coordinator
             .publish_signed_batch(batch)

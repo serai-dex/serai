@@ -82,6 +82,7 @@ members = [
 
   "coordinator/tributary-sdk/tendermint",
   "coordinator/tributary-sdk",
+  "coordinator/cosign/types",
   "coordinator/cosign",
   "coordinator/substrate",
   "coordinator/tributary",

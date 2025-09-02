@@ -5,7 +5,7 @@ use ciphersuite::Ciphersuite;
 
 use monero_address::{Network, AddressType as MoneroAddressType, MoneroAddress};
 
-use crate::primitives::ExternalAddress;
+use crate::primitives::address::ExternalAddress;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum AddressType {
@@ -123,7 +123,7 @@ impl TryFrom<ExternalAddress> for Address {
 impl From<Address> for ExternalAddress {
   fn from(address: Address) -> ExternalAddress {
     // This is 65 bytes which is less than MAX_ADDRESS_LEN
-    ExternalAddress::new(borsh::to_vec(&address).unwrap()).unwrap()
+    ExternalAddress::try_from(borsh::to_vec(&address).unwrap()).unwrap()
   }
 }
 

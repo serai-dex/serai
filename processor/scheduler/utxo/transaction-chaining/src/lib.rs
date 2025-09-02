@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use group::GroupEncoding;
 
-use serai_primitives::{ExternalCoin, Amount};
+use serai_primitives::{coin::ExternalCoin, balance::Amount};
 
 use serai_db::DbTxn;
 

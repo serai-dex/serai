@@ -17,7 +17,7 @@ use ciphersuite::{
 };
 use dkg::*;
 
-use serai_validator_sets_primitives::Session;
+use serai_primitives::validator_sets::Session;
 use messages::key_gen::*;
 
 use serai_db::{Get, DbTxn};

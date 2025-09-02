@@ -1,5 +1,7 @@
-use serai_validator_sets_primitives::Session;
-use serai_in_instructions_primitives::{Batch, SignedBatch};
+use serai_primitives::{
+  validator_sets::Session,
+  instructions::{Batch, SignedBatch},
+};
 
 use serai_db::{Get, DbTxn, create_db};
 

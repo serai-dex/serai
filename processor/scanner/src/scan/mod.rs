@@ -1,12 +1,12 @@
 use core::future::Future;
 use std::collections::HashMap;
 
-use scale::Decode;
+use borsh::BorshDeserialize;
+
 use serai_db::{Get, DbTxn, Db};
 
-use serai_in_instructions_primitives::{
-  Shorthand, RefundableInInstruction, InInstruction, InInstructionWithBalance,
-};
+#[rustfmt::skip]
+use serai_primitives::instructions::{RefundableInInstruction, InInstruction, InInstructionWithBalance};
 
 use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Block};
 
@@ -55,26 +55,22 @@ fn in_instruction_from_output<S: ScannerFeed>(
   let presumed_origin = output.presumed_origin();
 
   let mut data = output.data();
-  let shorthand = match Shorthand::decode(&mut data) {
-    Ok(shorthand) => shorthand,
-    Err(e) => {
-      log::info!("data in output {} wasn't valid shorthand: {e:?}", hex::encode(output.id()));
-      return (presumed_origin, None);
-    }
-  };
-  let instruction = match RefundableInInstruction::try_from(shorthand) {
+  let instruction = match RefundableInInstruction::deserialize_reader(&mut data) {
     Ok(instruction) => instruction,
     Err(e) => {
       log::info!(
-        "shorthand in output {} wasn't convertible to a RefundableInInstruction: {e:?}",
-        hex::encode(output.id())
+        "data in output {} wasn't a valid `RefundableInInstruction`: {e:?}",
+        hex::encode(output.id()),
       );
       return (presumed_origin, None);
     }
   };
 
   (
-    instruction.origin.and_then(|addr| AddressFor::<S>::try_from(addr).ok()).or(presumed_origin),
+    instruction
+      .return_address
+      .and_then(|addr| AddressFor::<S>::try_from(addr).ok())
+      .or(presumed_origin),
     Some(instruction.instruction),
   )
 }

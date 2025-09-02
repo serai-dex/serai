@@ -41,7 +41,6 @@ ethereum-primitives = { package = "serai-processor-ethereum-primitives", path = 
 ethereum-deployer = { package = "serai-processor-ethereum-deployer", path = "../deployer", default-features = false }
 erc20 = { package = "serai-processor-ethereum-erc20", path = "../erc20", default-features = false }
 
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 serai-client = { path = "../../../substrate/client", default-features = false, features = ["ethereum"] }
 
 futures-util = { version = "0.3", default-features = false, features = ["std"] }

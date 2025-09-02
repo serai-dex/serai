@@ -3,7 +3,7 @@ use core::future::Future;
 use monero_wallet::rpc::{RpcError, Rpc as RpcTrait};
 use monero_simple_request_rpc::SimpleRequestRpc;
 
-use serai_client::primitives::{ExternalNetworkId, ExternalCoin, Amount};
+use serai_client::primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount};
 
 use scanner::ScannerFeed;
 use signers::TransactionPublisher;

@@ -2,11 +2,9 @@ use core::{marker::PhantomData, future::Future};
 
 use blake2::{digest::typenum::U32, Digest, Blake2b};
 
-use scale::Encode;
 use serai_db::{DbTxn, Db};
 
-use serai_primitives::BlockHash;
-use serai_in_instructions_primitives::{MAX_BATCH_SIZE, Batch};
+use serai_primitives::{BlockHash, instructions::Batch};
 
 use primitives::{
   EncodableG,
@@ -111,12 +109,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for BatchTask<D, S> {
           let mut batch_id = BatchDb::<S>::acquire_batch_id(&mut txn);
 
           // start with empty batch
-          let mut batches = vec![Batch {
-            network,
-            id: batch_id,
-            external_network_block_hash,
-            instructions: vec![],
-          }];
+          let mut batches = vec![Batch::new(network, batch_id, external_network_block_hash)];
           // We also track the return information for the InInstructions within a Batch in case
           // they error
           let mut return_information = vec![vec![]];
@@ -125,23 +118,19 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for BatchTask<D, S> {
             let balance = in_instruction.balance;
 
             let batch = batches.last_mut().unwrap();
-            batch.instructions.push(in_instruction);
 
             // check if batch is over-size
-            if batch.encode().len() > MAX_BATCH_SIZE {
-              // pop the last instruction so it's back in size
-              let in_instruction = batch.instructions.pop().unwrap();
-
+            if batch.push_instruction(in_instruction.clone()).is_err() {
               // bump the id for the new batch
               batch_id = BatchDb::<S>::acquire_batch_id(&mut txn);
 
               // make a new batch with this instruction included
-              batches.push(Batch {
-                network,
-                id: batch_id,
-                external_network_block_hash,
-                instructions: vec![in_instruction],
-              });
+              let mut batch = Batch::new(network, batch_id, external_network_block_hash);
+              batch
+                .push_instruction(in_instruction)
+                .expect("single InInstruction exceeded Batch size limit");
+              batches.push(batch);
+
               // Since we're allocating a new batch, allocate a new set of return addresses for it
               return_information.push(vec![]);
             }
@@ -157,16 +146,16 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for BatchTask<D, S> {
           // Now that we've finalized the Batches, save the information for each to the database
           assert_eq!(batches.len(), return_information.len());
           for (batch, return_information) in batches.iter().zip(&return_information) {
-            assert_eq!(batch.instructions.len(), return_information.len());
+            assert_eq!(batch.instructions().len(), return_information.len());
             BatchDb::<S>::save_batch_info(
               &mut txn,
-              batch.id,
+              batch.id(),
               block_number,
               session_to_sign_batch,
               external_key_for_session_to_sign_batch,
-              Blake2b::<U32>::digest(batch.instructions.encode()).into(),
+              Blake2b::<U32>::digest(borsh::to_vec(&batch.instructions()).unwrap()).into(),
             );
-            BatchDb::<S>::save_return_information(&mut txn, batch.id, return_information);
+            BatchDb::<S>::save_return_information(&mut txn, batch.id(), return_information);
           }
 
           for batch in batches {

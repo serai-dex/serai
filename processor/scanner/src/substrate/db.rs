@@ -5,7 +5,7 @@ use group::GroupEncoding;
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db, db_channel};
 
-use serai_coins_primitives::OutInstructionWithBalance;
+use serai_primitives::instructions::OutInstructionWithBalance;
 
 use messages::substrate::ExecutedBatch;
 

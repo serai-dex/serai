@@ -5,11 +5,14 @@ use ciphersuite_kp256::Secp256k1;
 
 use alloy_core::primitives::U256;
 
-use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_client::{
-  primitives::{ExternalNetworkId, ExternalCoin, Amount, ExternalBalance},
+  primitives::{
+    network_id::ExternalNetworkId,
+    coin::ExternalCoin,
+    balance::{Amount, ExternalBalance},
+  },
   networks::ethereum::Address,
 };
 
@@ -39,9 +42,7 @@ fn amount_to_serai_amount(coin: ExternalCoin, amount: U256) -> Amount {
   Amount(u64::try_from(amount / divisor).unwrap())
 }
 
-#[derive(
-  Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub(crate) struct OutputId(pub(crate) [u8; 40]);
 impl Default for OutputId {
   fn default() -> Self {
