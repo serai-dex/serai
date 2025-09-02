@@ -11,7 +11,6 @@ use tokio::sync::mpsc;
 
 use serai_db::{Get, DbTxn, Db as DbTrait, create_db, db_channel};
 
-use scale::Encode;
 use serai_client::validator_sets::primitives::ExternalValidatorSet;
 
 use tributary_sdk::{TransactionKind, TransactionError, ProvidedError, TransactionTrait, Tributary};
@@ -479,7 +478,8 @@ pub(crate) async fn spawn_tributary<P: P2p>(
     return;
   }
 
-  let genesis = <[u8; 32]>::from(Blake2s::<U32>::digest((set.serai_block, set.set).encode()));
+  let genesis =
+    <[u8; 32]>::from(Blake2s::<U32>::digest(borsh::to_vec(&(set.serai_block, set.set)).unwrap()));
 
   // Since the Serai block will be finalized, then cosigned, before we handle this, this time will
   // be a couple of minutes stale. While the Tributary will still function with a start time in the

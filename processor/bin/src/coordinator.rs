@@ -34,7 +34,7 @@ static SEND_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 db_channel! {
   ProcessorBinCoordinator {
-    SentCoordinatorMessages: () -> Vec<u8>,
+    SentCoordinatorMessages: () -> messages::ProcessorMessage,
   }
 }
 
@@ -48,7 +48,7 @@ impl CoordinatorSend {
   fn send(&mut self, msg: &messages::ProcessorMessage) {
     let _lock = SEND_LOCK.lock().unwrap();
     let mut txn = self.db.txn();
-    SentCoordinatorMessages::send(&mut txn, &borsh::to_vec(msg).unwrap());
+    SentCoordinatorMessages::send(&mut txn, msg);
     txn.commit();
     self
       .sent_message
@@ -114,12 +114,9 @@ impl Coordinator {
           let mut txn = db.txn();
           match SentCoordinatorMessages::try_recv(&mut txn) {
             Some(msg) => {
-              let metadata = Metadata {
-                from: service,
-                to: Service::Coordinator,
-                intent: borsh::from_slice::<messages::ProcessorMessage>(&msg).unwrap().intent(),
-              };
-              message_queue.queue_with_retry(metadata, msg).await;
+              let metadata =
+                Metadata { from: service, to: Service::Coordinator, intent: msg.intent() };
+              message_queue.queue_with_retry(metadata, borsh::to_vec(&msg).unwrap()).await;
               txn.commit();
             }
             None => {

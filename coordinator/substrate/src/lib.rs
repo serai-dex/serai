@@ -4,7 +4,6 @@
 
 use std::collections::HashMap;
 
-use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use dkg::Participant;
@@ -178,14 +177,13 @@ impl Keys {
       signature_participants,
       signature,
     );
-    _public_db::Keys::set(txn, set.network, &(set.session, tx.encode()));
+    _public_db::Keys::set(txn, set.network, &(set.session, tx));
   }
   pub(crate) fn take(
     txn: &mut impl DbTxn,
     network: ExternalNetworkId,
   ) -> Option<(Session, Transaction)> {
-    let (session, tx) = _public_db::Keys::take(txn, network)?;
-    Some((session, <_>::decode(&mut tx.as_slice()).unwrap()))
+    _public_db::Keys::take(txn, network)
   }
 }
 
@@ -226,13 +224,12 @@ impl SlashReports {
       slash_report,
       signature,
     );
-    _public_db::SlashReports::set(txn, set.network, &(set.session, tx.encode()));
+    _public_db::SlashReports::set(txn, set.network, &(set.session, tx));
   }
   pub(crate) fn take(
     txn: &mut impl DbTxn,
     network: ExternalNetworkId,
   ) -> Option<(Session, Transaction)> {
-    let (session, tx) = _public_db::SlashReports::take(txn, network)?;
-    Some((session, <_>::decode(&mut tx.as_slice()).unwrap()))
+    _public_db::SlashReports::take(txn, network)
   }
 }

@@ -123,10 +123,7 @@ impl<D: Db> ContinuallyRan for CosignerTask<D> {
 
             let cosign = self.current_cosign.take().unwrap();
             LatestCosigned::set(&mut txn, self.session, &cosign.block_number);
-            let cosign = SignedCosign {
-              cosign,
-              signature: borsh::to_vec(&Signature::from(signature)).unwrap().try_into().unwrap(),
-            };
+            let cosign = SignedCosign { cosign, signature: Signature::from(signature).0 };
             // Send the cosign
             Cosign::send(&mut txn, self.session, &cosign);
           }

@@ -33,7 +33,6 @@ frost = { package = "modular-frost", path = "../crypto/frost" }
 frost-schnorrkel = { path = "../crypto/schnorrkel" }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive", "bit-vec"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 zalloc = { path = "../common/zalloc" }
