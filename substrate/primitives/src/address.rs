@@ -23,12 +23,16 @@ const HUMAN_READABLE_PART: bech32::Hrp = bech32::Hrp::parse_unchecked("sri");
 
 /// The address for an account on Serai.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[rustfmt::skip]
-#[derive(scale::Encode, scale::Decode)] // This is safe as scale and borsh share an encoding here
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale_info::TypeInfo)
+)]
 pub struct SeraiAddress(pub [u8; 32]);
 
 // These share encodings as 32-byte arrays
+#[cfg(feature = "non_canonical_scale_derivations")]
 impl scale::EncodeLike<Public> for SeraiAddress {}
+#[cfg(feature = "non_canonical_scale_derivations")]
 impl scale::EncodeLike<Public> for &SeraiAddress {}
 
 impl SeraiAddress {
@@ -112,14 +116,20 @@ impl core::str::FromStr for SeraiAddress {
 #[derive(Clone, PartialEq, Eq, Debug, borsh::BorshSerialize, borsh::BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
 )]
 pub struct ExternalAddress(
   #[borsh(
     serialize_with = "crate::borsh_serialize_bounded_vec",
     deserialize_with = "crate::borsh_deserialize_bounded_vec"
   )]
-  BoundedVec<u8, ConstU32<{ Self::MAX_LEN }>>,
+  BoundedVec<u8, ConstU32<{ ExternalAddress::MAX_LEN }>>,
 );
 
 impl ExternalAddress {

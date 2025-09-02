@@ -15,7 +15,7 @@ pub type AmountRepr = u64;
 #[derive(Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking, scale_info::TypeInfo)
 )]
 #[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
@@ -46,7 +46,13 @@ impl Mul for Amount {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
 )]
 #[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
@@ -82,7 +88,13 @@ impl Mul<Amount> for ExternalBalance {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
 )]
 #[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]

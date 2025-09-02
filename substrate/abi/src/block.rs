@@ -105,7 +105,7 @@ pub struct Block {
 mod substrate {
   use core::fmt::Debug;
 
-  use scale::{Encode, Decode, DecodeWithMemTracking, IoReader};
+  use scale::{Encode, Decode, DecodeWithMemTracking};
   use scale_info::TypeInfo;
 
   use sp_core::H256;
@@ -133,7 +133,7 @@ mod substrate {
       use sp_core::serde::de::Error;
       let bytes = <Vec<u8> as sp_core::serde::Deserialize>::deserialize(deserializer)?;
       let mut reader = bytes.as_slice();
-      let block = Self::decode(&mut IoReader(&mut reader)).map_err(D::Error::custom)?;
+      let block = Self::decode(&mut reader).map_err(D::Error::custom)?;
       if !reader.is_empty() {
         Err(D::Error::custom("extraneous bytes at end"))?;
       }
@@ -285,7 +285,7 @@ mod substrate {
   }
 
   /// A block, as needed by Substrate.
-  #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode)]
+  #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo)]
   pub struct SubstrateBlock {
     header: SubstrateHeader,
     transactions: Vec<Transaction>,
@@ -306,7 +306,7 @@ mod substrate {
       use sp_core::serde::de::Error;
       let bytes = <Vec<u8> as sp_core::serde::Deserialize>::deserialize(deserializer)?;
       let mut reader = bytes.as_slice();
-      let block = Self::decode(&mut IoReader(&mut reader)).map_err(D::Error::custom)?;
+      let block = Self::decode(&mut reader).map_err(D::Error::custom)?;
       if !reader.is_empty() {
         Err(D::Error::custom("extraneous bytes at end"))?;
       }

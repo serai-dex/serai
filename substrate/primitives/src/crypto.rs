@@ -7,7 +7,13 @@ use sp_core::{ConstU32, bounded::BoundedVec};
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
 )]
 pub struct Public(pub [u8; 32]);
 impl From<sp_core::sr25519::Public> for Public {
@@ -25,7 +31,13 @@ impl From<Public> for sp_core::sr25519::Public {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
 )]
 pub struct Signature(pub [u8; 64]);
 impl From<sp_core::sr25519::Signature> for Signature {
@@ -43,14 +55,20 @@ impl From<Signature> for sp_core::sr25519::Signature {
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
 )]
 pub struct ExternalKey(
   #[borsh(
     serialize_with = "crate::borsh_serialize_bounded_vec",
     deserialize_with = "crate::borsh_deserialize_bounded_vec"
   )]
-  pub BoundedVec<u8, ConstU32<{ Self::MAX_LEN }>>,
+  pub BoundedVec<u8, ConstU32<{ ExternalKey::MAX_LEN }>>,
 );
 
 impl Zeroize for ExternalKey {
@@ -85,6 +103,12 @@ pub type EmbeddedEllipticCurveKeys = BoundedVec<u8, ConstU32<{ 2 * ExternalKey::
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
 )]
 pub struct KeyPair(pub Public, pub ExternalKey);

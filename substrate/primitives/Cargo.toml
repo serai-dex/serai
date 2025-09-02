@@ -20,8 +20,9 @@ zeroize = { version = "^1.5", features = ["derive"] }
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
 
 bitvec = { version = "1", default-features = false, features = ["alloc"] }
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "799658329bf66a829e67b34a0e86376b63eb7d23", default-features = false }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
+scale-info = { version = "2", default-features = false, features = ["derive"], optional = true }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "2bfdaed4b3614de2fe7d10e4ece3e6a912833e90", default-features = false }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false }
@@ -33,7 +34,7 @@ bech32 = { version = "0.11", default-features = false }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
 [features]
-std = ["zeroize/std", "borsh/std", "ciphersuite/std", "dkg/std", "sp-core/std", "bech32/std"]
+std = ["zeroize/std", "borsh/std", "bitvec/std", "scale/std", "scale-info/std", "sp-core/std", "ciphersuite/std", "dalek-ff-group/std", "dkg/std", "bech32/std"]
 serde = []
-non_canonical_scale_derivations = []
+non_canonical_scale_derivations = ["scale", "scale-info"]
 default = ["std"]

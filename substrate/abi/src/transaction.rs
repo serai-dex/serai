@@ -262,6 +262,12 @@ mod substrate {
           })?;
           // If we're still calling `read`, we try to read at least one more byte
           let to_read = buf.len().min(remaining_len.unwrap_or(1));
+          // This may not be _allocated_ making this over-zealous, but it's the best we can do
+          self.0.on_before_alloc_mem(to_read).map_err(|err| {
+            self.1 = Some(err);
+            #[allow(clippy::io_other_error)]
+            borsh::io::Error::new(borsh::io::ErrorKind::Other, "")
+          })?;
           self.0.read(&mut buf[.. to_read]).map_err(|err| {
             self.1 = Some(err);
             #[allow(clippy::io_other_error)]
@@ -274,6 +280,23 @@ mod substrate {
       match Self::deserialize_reader(&mut input) {
         Ok(res) => Ok(res),
         Err(_) => Err(input.1.unwrap()),
+      }
+    }
+  }
+
+  // Clean `Transaction` tracks its memory during decoding, as we do call
+  // `Input::on_before_alloc_mem`
+  impl scale::DecodeWithMemTracking for Transaction {}
+
+  // Shim `TypeInfo` for `Transaction`
+  impl scale_info::TypeInfo for Transaction {
+    type Identity = Self;
+    fn type_info() -> scale_info::Type {
+      scale_info::Type {
+        path: scale_info::Path { segments: vec!["serai_abi", "transaction", "Transaction"] },
+        type_params: vec![],
+        type_def: (scale_info::TypeDefComposite { fields: vec![] }).into(),
+        docs: vec![],
       }
     }
   }

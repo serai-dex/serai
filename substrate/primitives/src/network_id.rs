@@ -20,7 +20,13 @@ pub enum EmbeddedEllipticCurve {
 #[borsh(use_discriminant = true)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
 )]
 #[non_exhaustive]
 pub enum ExternalNetworkId {
@@ -69,7 +75,13 @@ impl ExternalNetworkId {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
 )]
 #[cfg_attr(feature = "non_canonical_scale_derivations", allow(clippy::cast_possible_truncation))]
 pub enum NetworkId {

@@ -67,8 +67,10 @@ impl From<u64> for BlockNumber {
   hash it into a 32-byte hash or truncate it.
 */
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[rustfmt::skip]
-#[derive(scale::Encode, scale::Decode)] // This is safe as scale and borsh share an encoding here
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale_info::TypeInfo)
+)]
 #[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
 pub struct BlockHash(pub [u8; 32]);
@@ -84,7 +86,9 @@ impl From<sp_core::H256> for BlockHash {
 }
 
 // These share encodings as 32-byte arrays
+#[cfg(feature = "non_canonical_scale_derivations")]
 impl scale::EncodeLike<sp_core::H256> for BlockHash {}
+#[cfg(feature = "non_canonical_scale_derivations")]
 impl scale::EncodeLike<sp_core::H256> for &BlockHash {}
 
 #[doc(hidden)]

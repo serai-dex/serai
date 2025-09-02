@@ -68,7 +68,10 @@ impl UnbalancedMerkleTree {
 
 /// An unbalanced Merkle tree which is incrementally created.
 #[derive(Clone, PartialEq, Eq, Debug)]
-#[cfg_attr(feature = "non_canonical_scale_derivations", derive(scale::Encode, scale::Decode))]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::DecodeWithMemTracking, scale_info::TypeInfo)
+)]
 pub struct IncrementalUnbalancedMerkleTree {
   /// (number of children under branch, branch hash)
   branches: Vec<(u64, [u8; 32])>,

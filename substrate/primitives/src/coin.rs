@@ -11,7 +11,13 @@ use crate::network_id::{ExternalNetworkId, NetworkId};
 #[borsh(use_discriminant = true)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
 )]
 #[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
 #[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
@@ -39,7 +45,13 @@ impl ExternalCoin {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(
+    scale::Encode,
+    scale::Decode,
+    scale::MaxEncodedLen,
+    scale::DecodeWithMemTracking,
+    scale_info::TypeInfo
+  )
 )]
 #[cfg_attr(feature = "non_canonical_scale_derivations", allow(clippy::cast_possible_truncation))]
 #[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
