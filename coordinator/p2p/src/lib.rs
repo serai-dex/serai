@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{primitives::ExternalNetworkId, validator_sets::primitives::ExternalValidatorSet};
+use serai_primitives::{network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet};
 
 use serai_db::Db;
 use tributary_sdk::{ReadWrite, TransactionTrait, Tributary, TributaryReader};

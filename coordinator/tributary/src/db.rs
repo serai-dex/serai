@@ -1,9 +1,8 @@
 use std::collections::HashMap;
 
-use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{primitives::SeraiAddress, validator_sets::primitives::ExternalValidatorSet};
+use serai_primitives::{address::SeraiAddress, validator_sets::primitives::ExternalValidatorSet};
 
 use messages::sign::{VariantSignId, SignId};
 
@@ -14,7 +13,7 @@ use serai_cosign::CosignIntent;
 use crate::transaction::SigningProtocolRound;
 
 /// A topic within the database which the group participates in
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Topic {
   /// Vote to remove a participant
   RemoveParticipant {
@@ -123,7 +122,7 @@ impl Topic {
       Topic::DkgConfirmation { attempt, round: _ } => Some({
         let id = {
           let mut id = [0; 32];
-          let encoded_set = set.encode();
+          let encoded_set = borsh::to_vec(set).unwrap();
           id[.. encoded_set.len()].copy_from_slice(&encoded_set);
           VariantSignId::Batch(id)
         };

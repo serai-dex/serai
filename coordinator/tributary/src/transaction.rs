@@ -12,10 +12,9 @@ use ciphersuite::{
 use dalek_ff_group::Ristretto;
 use schnorr::SchnorrSignature;
 
-use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{primitives::SeraiAddress, validator_sets::primitives::MAX_KEY_SHARES_PER_SET};
+use serai_primitives::{addess::SeraiAddress, validator_sets::MAX_KEY_SHARES_PER_SET};
 
 use messages::sign::VariantSignId;
 
@@ -29,7 +28,7 @@ use tributary_sdk::{
 use crate::db::Topic;
 
 /// The round this data is for, within a signing protocol.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum SigningProtocolRound {
   /// A preprocess.
   Preprocess,
@@ -242,19 +241,20 @@ impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind {
     match self {
       Transaction::RemoveParticipant { participant, signed } => TransactionKind::Signed(
-        (b"RemoveParticipant", participant).encode(),
+        borsh::to_vec(&(b"RemoveParticipant".as_slice(), participant)).unwrap(),
         signed.to_tributary_signed(0),
       ),
 
-      Transaction::DkgParticipation { signed, .. } => {
-        TransactionKind::Signed(b"DkgParticipation".encode(), signed.to_tributary_signed(0))
-      }
+      Transaction::DkgParticipation { signed, .. } => TransactionKind::Signed(
+        borsh::to_vec(b"DkgParticipation".as_slice()).unwrap(),
+        signed.to_tributary_signed(0),
+      ),
       Transaction::DkgConfirmationPreprocess { attempt, signed, .. } => TransactionKind::Signed(
-        (b"DkgConfirmation", attempt).encode(),
+        borsh::to_vec(b"DkgConfirmation".as_slice(), attempt).unwrap(),
         signed.to_tributary_signed(0),
       ),
       Transaction::DkgConfirmationShare { attempt, signed, .. } => TransactionKind::Signed(
-        (b"DkgConfirmation", attempt).encode(),
+        borsh::to_vec(b"DkgConfirmation".as_slice(), attempt).unwrap(),
         signed.to_tributary_signed(1),
       ),
 
@@ -264,13 +264,14 @@ impl TransactionTrait for Transaction {
       Transaction::Batch { .. } => TransactionKind::Provided("Batch"),
 
       Transaction::Sign { id, attempt, round, signed, .. } => TransactionKind::Signed(
-        (b"Sign", id, attempt).encode(),
+        borsh::to_vec(b"Sign".as_slice(), id, attempt).unwrap(),
         signed.to_tributary_signed(round.nonce()),
       ),
 
-      Transaction::SlashReport { signed, .. } => {
-        TransactionKind::Signed(b"SlashReport".encode(), signed.to_tributary_signed(0))
-      }
+      Transaction::SlashReport { signed, .. } => TransactionKind::Signed(
+        borsh::to_vec(b"SlashReport".as_slice()).unwrap(),
+        signed.to_tributary_signed(0),
+      ),
     }
   }
 

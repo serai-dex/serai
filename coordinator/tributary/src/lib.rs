@@ -8,9 +8,9 @@ use std::collections::HashMap;
 use ciphersuite::group::GroupEncoding;
 use dkg::Participant;
 
-use serai_client::{
-  primitives::SeraiAddress,
-  validator_sets::primitives::{ExternalValidatorSet, Slash},
+use serai_primitives::{
+  address::SeraiAddress,
+  validator_sets::{ExternalValidatorSet, Slash},
 };
 
 use serai_db::*;

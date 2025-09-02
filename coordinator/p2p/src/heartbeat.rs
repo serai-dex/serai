@@ -1,7 +1,7 @@
 use core::future::Future;
 use std::time::{Duration, SystemTime};
 
-use serai_client::validator_sets::primitives::{MAX_KEY_SHARES_PER_SET, ExternalValidatorSet};
+use serai_primitives::{MAX_KEY_SHARES_PER_SET, ExternalValidatorSet};
 
 use futures_lite::FutureExt;
 
