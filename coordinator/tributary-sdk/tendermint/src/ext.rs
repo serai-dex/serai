@@ -3,33 +3,41 @@ use std::{sync::Arc, collections::HashSet};
 
 use thiserror::Error;
 
-use parity_scale_codec::{Encode, Decode};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use crate::{SignedMessageFor, SlashEvent, commit_msg};
 
 /// An alias for a series of traits required for a type to be usable as a validator ID,
 /// automatically implemented for all types satisfying those traits.
 pub trait ValidatorId:
-  Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + Encode + Decode
+  Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + BorshSerialize + BorshDeserialize
 {
 }
-impl<V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + Encode + Decode> ValidatorId
-  for V
+#[rustfmt::skip]
+impl<
+    V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + BorshSerialize + BorshDeserialize,
+  > ValidatorId for V
 {
 }
 
 /// An alias for a series of traits required for a type to be usable as a signature,
 /// automatically implemented for all types satisfying those traits.
-pub trait Signature: Send + Sync + Clone + PartialEq + Eq + Debug + Encode + Decode {}
-impl<S: Send + Sync + Clone + PartialEq + Eq + Debug + Encode + Decode> Signature for S {}
+pub trait Signature:
+  Send + Sync + Clone + PartialEq + Eq + Debug + BorshSerialize + BorshDeserialize
+{
+}
+impl<S: Send + Sync + Clone + PartialEq + Eq + Debug + BorshSerialize + BorshDeserialize> Signature
+  for S
+{
+}
 
 // Type aliases which are distinct according to the type system
 
 /// A struct containing a Block Number, wrapped to have a distinct type.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub struct BlockNumber(pub u64);
 /// A struct containing a round number, wrapped to have a distinct type.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub struct RoundNumber(pub u32);
 
 /// A signer for a validator.
@@ -127,7 +135,7 @@ impl<S: SignatureScheme> SignatureScheme for Arc<S> {
 /// A commit for a specific block.
 ///
 /// The list of validators have weight exceeding the threshold for a valid commit.
-#[derive(PartialEq, Debug, Encode, Decode)]
+#[derive(PartialEq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Commit<S: SignatureScheme> {
   /// End time of the round which created this commit, used as the start time of the next block.
   pub end_time: u64,
@@ -185,7 +193,7 @@ impl<W: Weights> Weights for Arc<W> {
 }
 
 /// Simplified error enum representing a block's validity.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Error, Encode, Decode)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Error, BorshSerialize, BorshDeserialize)]
 pub enum BlockError {
   /// Malformed block which is wholly invalid.
   #[error("invalid block")]
@@ -197,9 +205,20 @@ pub enum BlockError {
 }
 
 /// Trait representing a Block.
-pub trait Block: Send + Sync + Clone + PartialEq + Eq + Debug + Encode + Decode {
+pub trait Block:
+  Send + Sync + Clone + PartialEq + Eq + Debug + BorshSerialize + BorshDeserialize
+{
   // Type used to identify blocks. Presumably a cryptographic hash of the block.
-  type Id: Send + Sync + Copy + Clone + PartialEq + Eq + AsRef<[u8]> + Debug + Encode + Decode;
+  type Id: Send
+    + Sync
+    + Copy
+    + Clone
+    + PartialEq
+    + Eq
+    + AsRef<[u8]>
+    + Debug
+    + BorshSerialize
+    + BorshDeserialize;
 
   /// Return the deterministic, unique ID for this block.
   fn id(&self) -> Self::Id;

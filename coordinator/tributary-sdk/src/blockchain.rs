@@ -5,7 +5,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
 use serai_db::{Get, DbTxn, Db};
 
-use scale::Decode;
+use borsh::BorshDeserialize;
 
 use tendermint::ext::{Network, Commit};
 
@@ -62,7 +62,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     D::key(
       b"tributary_blockchain",
       b"next_nonce",
-      [genesis.as_ref(), signer.to_bytes().as_ref(), order].concat(),
+      [genesis.as_slice(), signer.to_bytes().as_slice(), order].concat(),
     )
   }
 
@@ -106,7 +106,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
   pub(crate) fn block_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Block<T>> {
     db.get(Self::block_key(&genesis, block))
-      .map(|bytes| Block::<T>::read::<&[u8]>(&mut bytes.as_ref()).unwrap())
+      .map(|bytes| Block::<T>::read::<&[u8]>(&mut bytes.as_slice()).unwrap())
   }
 
   pub(crate) fn commit_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Vec<u8>> {
@@ -166,7 +166,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       // we must have a commit per valid hash
       let commit = Self::commit_from_db(db, genesis, &hash).unwrap();
       // commit has to be valid if it is coming from our db
-      Some(Commit::<N::SignatureScheme>::decode(&mut commit.as_ref()).unwrap())
+      Some(Commit::<N::SignatureScheme>::deserialize_reader(&mut commit.as_slice()).unwrap())
     };
     let unsigned_in_chain =
       |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
@@ -241,7 +241,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     let commit = |block: u64| -> Option<Commit<N::SignatureScheme>> {
       let commit = self.commit_by_block_number(block)?;
       // commit has to be valid if it is coming from our db
-      Some(Commit::<N::SignatureScheme>::decode(&mut commit.as_ref()).unwrap())
+      Some(Commit::<N::SignatureScheme>::deserialize_reader(&mut commit.as_slice()).unwrap())
     };
 
     let mut txn_db = db.clone();

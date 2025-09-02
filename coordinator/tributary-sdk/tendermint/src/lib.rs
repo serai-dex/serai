@@ -6,7 +6,7 @@ use std::{
   collections::{VecDeque, HashMap},
 };
 
-use parity_scale_codec::{Encode, Decode, IoReader};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use futures_channel::mpsc;
 use futures_util::{
@@ -41,14 +41,14 @@ pub fn commit_msg(end_time: u64, id: &[u8]) -> Vec<u8> {
   [&end_time.to_le_bytes(), id].concat()
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Step {
   Propose,
   Prevote,
   Precommit,
 }
 
-#[derive(Clone, Eq, Debug, Encode, Decode)]
+#[derive(Clone, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Data<B: Block, S: Signature> {
   Proposal(Option<RoundNumber>, B),
   Prevote(Option<B::Id>),
@@ -90,7 +90,7 @@ impl<B: Block, S: Signature> Data<B, S> {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Message<V: ValidatorId, B: Block, S: Signature> {
   pub sender: V,
   pub block: BlockNumber,
@@ -100,7 +100,7 @@ pub struct Message<V: ValidatorId, B: Block, S: Signature> {
 }
 
 /// A signed Tendermint consensus message to be broadcast to the other validators.
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct SignedMessage<V: ValidatorId, B: Block, S: Signature> {
   pub msg: Message<V, B, S>,
   pub sig: S,
@@ -117,18 +117,18 @@ impl<V: ValidatorId, B: Block, S: Signature> SignedMessage<V, B, S> {
     &self,
     signer: &Scheme,
   ) -> bool {
-    signer.verify(self.msg.sender, &self.msg.encode(), &self.sig)
+    signer.verify(self.msg.sender, &borsh::to_vec(&self.msg).unwrap(), &self.sig)
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum SlashReason {
   FailToPropose,
   InvalidBlock,
   InvalidProposer,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Evidence {
   ConflictingMessages(Vec<u8>, Vec<u8>),
   InvalidPrecommit(Vec<u8>),
@@ -159,7 +159,7 @@ pub type SignedMessageFor<N> = SignedMessage<
 >;
 
 pub fn decode_signed_message<N: Network>(mut data: &[u8]) -> Option<SignedMessageFor<N>> {
-  SignedMessageFor::<N>::decode(&mut data).ok()
+  SignedMessageFor::<N>::deserialize_reader(&mut data).ok()
 }
 
 fn decode_and_verify_signed_message<N: Network>(
@@ -339,7 +339,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       target: "tendermint",
       "proposer for block {}, round {round:?} was {} (me: {res})",
       self.block.number.0,
-      hex::encode(proposer.encode()),
+      hex::encode(borsh::to_vec(&proposer).unwrap()),
     );
     res
   }
@@ -420,7 +420,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
     // TODO: If the new slash event has evidence, emit to prevent a low-importance slash from
     // cancelling emission of high-importance slashes
     if !self.block.slashes.contains(&validator) {
-      log::info!(target: "tendermint", "Slashing validator {}", hex::encode(validator.encode()));
+      log::info!(
+        target: "tendermint",
+        "Slashing validator {}",
+        hex::encode(borsh::to_vec(&validator).unwrap()),
+      );
       self.block.slashes.insert(validator);
       self.network.slash(validator, slash_event).await;
     }
@@ -670,7 +674,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           self
             .slash(
               msg.sender,
-              SlashEvent::WithEvidence(Evidence::InvalidPrecommit(signed.encode())),
+              SlashEvent::WithEvidence(Evidence::InvalidPrecommit(borsh::to_vec(&signed).unwrap())),
             )
             .await;
           Err(TendermintError::Malicious)?;
@@ -741,7 +745,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
           self.broadcast(Data::Prevote(None));
         }
         self
-          .slash(msg.sender, SlashEvent::WithEvidence(Evidence::InvalidValidRound(msg.encode())))
+          .slash(
+            msg.sender,
+            SlashEvent::WithEvidence(Evidence::InvalidValidRound(borsh::to_vec(&msg).unwrap())),
+          )
           .await;
         Err(TendermintError::Malicious)?;
       }
@@ -1032,7 +1039,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
           while !messages.is_empty() {
             self.network.broadcast(
-              SignedMessageFor::<N>::decode(&mut IoReader(&mut messages))
+              SignedMessageFor::<N>::deserialize_reader(&mut messages)
                 .expect("saved invalid message to DB")
             ).await;
           }
@@ -1057,7 +1064,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       } {
         if our_message {
           assert!(sig.is_none());
-          sig = Some(self.signer.sign(&msg.encode()).await);
+          sig = Some(self.signer.sign(&borsh::to_vec(&msg).unwrap()).await);
         }
         let sig = sig.unwrap();
 
@@ -1077,7 +1084,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           let message_tape_key = message_tape_key(self.genesis);
           let mut txn = self.db.txn();
           let mut message_tape = txn.get(&message_tape_key).unwrap_or(vec![]);
-          message_tape.extend(signed_msg.encode());
+          signed_msg.serialize(&mut message_tape).unwrap();
           txn.put(&message_tape_key, message_tape);
           txn.commit();
         }

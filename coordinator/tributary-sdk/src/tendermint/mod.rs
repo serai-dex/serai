@@ -24,7 +24,7 @@ use schnorr::{
 
 use serai_db::Db;
 
-use scale::{Encode, Decode};
+use borsh::{BorshSerialize, BorshDeserialize};
 use tendermint::{
   SignedMessageFor,
   ext::{
@@ -249,7 +249,7 @@ impl Weights for Validators {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TendermintBlock(pub Vec<u8>);
 impl BlockTrait for TendermintBlock {
   type Id = [u8; 32];
@@ -301,7 +301,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
   fn broadcast(&mut self, msg: SignedMessageFor<Self>) -> impl Send + Future<Output = ()> {
     async move {
       let mut to_broadcast = vec![TENDERMINT_MESSAGE];
-      to_broadcast.extend(msg.encode());
+      msg.serialize(&mut to_broadcast).unwrap();
       self.p2p.broadcast(self.genesis, to_broadcast).await
     }
   }
@@ -391,7 +391,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
         return invalid_block();
       };
 
-      let encoded_commit = commit.encode();
+      let encoded_commit = borsh::to_vec(&commit).unwrap();
       loop {
         let block_res = self.blockchain.write().await.add_block::<Self>(
           &block,

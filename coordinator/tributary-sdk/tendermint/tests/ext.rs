@@ -4,7 +4,7 @@ use std::{
   time::{UNIX_EPOCH, SystemTime, Duration},
 };
 
-use parity_scale_codec::{Encode, Decode};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use futures_util::sink::SinkExt;
 use tokio::{sync::RwLock, time::sleep};
@@ -89,7 +89,7 @@ impl Weights for TestWeights {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 struct TestBlock {
   id: TestBlockId,
   valid: Result<(), BlockError>,
