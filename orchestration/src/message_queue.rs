@@ -1,17 +1,17 @@
 use std::path::Path;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{group::GroupEncoding, WrappedGroup};
 
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
 pub fn message_queue(
   orchestration_path: &Path,
   network: Network,
-  coordinator_key: <Ristretto as Ciphersuite>::G,
-  bitcoin_key: <Ristretto as Ciphersuite>::G,
-  ethereum_key: <Ristretto as Ciphersuite>::G,
-  monero_key: <Ristretto as Ciphersuite>::G,
+  coordinator_key: <Ristretto as WrappedGroup>::G,
+  bitcoin_key: <Ristretto as WrappedGroup>::G,
+  ethereum_key: <Ristretto as WrappedGroup>::G,
+  monero_key: <Ristretto as WrappedGroup>::G,
 ) {
   let setup = mimalloc(Os::Debian).to_string() +
     &build_serai_service("", network.release(), network.db(), "serai-message-queue");

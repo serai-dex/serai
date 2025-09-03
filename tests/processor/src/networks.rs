@@ -1,6 +1,8 @@
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 
+use ciphersuite::{WrappedGroup, GroupIo};
+
 use scale::Encode;
 
 use serai_client::{
@@ -90,7 +92,7 @@ pub enum Wallet {
   },
   Ethereum {
     rpc_url: String,
-    key: <ciphersuite::Secp256k1 as Ciphersuite>::F,
+    key: <ciphersuite::Secp256k1 as WrappedGroup>::F,
     nonce: u64,
   },
   Monero {
@@ -158,9 +160,9 @@ impl Wallet {
           network::Ethereum,
         };
 
-        let key = <Secp256k1 as Ciphersuite>::F::random(&mut OsRng);
+        let key = <Secp256k1 as WrappedGroup>::F::random(&mut OsRng);
         let address =
-          ethereum_serai::crypto::address(&(<Secp256k1 as Ciphersuite>::generator() * key));
+          ethereum_serai::crypto::address(&(<Secp256k1 as WrappedGroup>::generator() * key));
 
         let provider = RootProvider::<_, Ethereum>::new(
           ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
@@ -321,7 +323,7 @@ impl Wallet {
         ));
 
         let to_as_key = PublicKey::new(
-          <ciphersuite::Secp256k1 as Ciphersuite>::read_G(&mut to.as_slice()).unwrap(),
+          <ciphersuite::Secp256k1 as GroupIo>::read_G(&mut to.as_slice()).unwrap(),
         )
         .unwrap();
         let router_addr = {

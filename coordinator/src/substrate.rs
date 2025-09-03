@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use zeroize::Zeroizing;
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use dalek_ff_group::Ristretto;
 
 use tokio::sync::mpsc;
@@ -23,7 +23,7 @@ use serai_coordinator_p2p::P2p;
 use crate::{Db, KeySet};
 
 pub(crate) struct SubstrateTask<P: P2p> {
-  pub(crate) serai_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  pub(crate) serai_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   pub(crate) db: Db,
   pub(crate) message_queue: Arc<MessageQueue>,
   pub(crate) p2p: P,

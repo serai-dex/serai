@@ -10,7 +10,7 @@ use blake2::{
   digest::{consts::U32, Digest},
   Blake2b,
 };
-use ciphersuite::{group::GroupEncoding, Ciphersuite}
+use ciphersuite::{group::GroupEncoding, WrappedGroup}
 use ciphersuite_kp256::Secp256k1;
 use dalek_ff_group::Ristretto;
 use dkg::Participant;
@@ -36,7 +36,7 @@ pub async fn batch(
   processors: &mut [Processor],
   processor_is: &[u8],
   session: Session,
-  substrate_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  substrate_key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   batch: Batch,
 ) -> u64 {
   let id = SubstrateSignId { session, id: SubstrateSignableId::Batch(batch.id), attempt: 0 };
@@ -164,7 +164,7 @@ pub async fn batch(
   schnorrkel_key_pair[.. 32].copy_from_slice(&substrate_key.to_repr());
   OsRng.fill_bytes(&mut schnorrkel_key_pair[32 .. 64]);
   schnorrkel_key_pair[64 ..]
-    .copy_from_slice(&(<Ristretto as Ciphersuite>::generator() * **substrate_key).to_bytes());
+    .copy_from_slice(&(<Ristretto as WrappedGroup>::generator() * **substrate_key).to_bytes());
   let signature = Signature(
     schnorrkel::keys::Keypair::from_bytes(&schnorrkel_key_pair)
       .unwrap()

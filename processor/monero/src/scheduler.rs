@@ -4,7 +4,7 @@ use zeroize::Zeroizing;
 use rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use dalek_ff_group::Ed25519;
 
 use monero_wallet::rpc::{FeeRate, RpcError};
@@ -33,7 +33,7 @@ use crate::{
   rpc::Rpc,
 };
 
-fn address_from_serai_key(key: <Ed25519 as Ciphersuite>::G, kind: OutputType) -> Address {
+fn address_from_serai_key(key: <Ed25519 as WrappedGroup>::G, kind: OutputType) -> Address {
   view_pair(key)
     .address(
       Network::Mainnet,
@@ -118,8 +118,8 @@ async fn signable_transaction(
       MoneroAddress::new(
         Network::Mainnet,
         AddressType::Legacy,
-        <Ed25519 as Ciphersuite>::generator().0,
-        <Ed25519 as Ciphersuite>::generator().0,
+        <Ed25519 as WrappedGroup>::generator().0,
+        <Ed25519 as WrappedGroup>::generator().0,
       ),
       0,
     ));

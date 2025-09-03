@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use dalek_ff_group::Ed25519;
 
 use monero_wallet::{
@@ -32,7 +32,7 @@ pub(crate) struct Block(pub(crate) MScannableBlock);
 impl primitives::Block for Block {
   type Header = BlockHeader;
 
-  type Key = <Ed25519 as Ciphersuite>::G;
+  type Key = <Ed25519 as WrappedGroup>::G;
   type Address = Address;
   type Output = Output;
   type Eventuality = Eventuality;

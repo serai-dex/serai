@@ -6,7 +6,7 @@ use rand_core::OsRng;
 use dalek_ff_group::Ed25519;
 use ciphersuite::{
   group::{ff::Field, Group},
-  Ciphersuite,
+  GroupIo, WithPreferredHash,
 };
 use multiexp::BatchVerifier;
 
@@ -16,10 +16,10 @@ use crate::aggregate::{SchnorrAggregator, SchnorrAggregate};
 
 mod rfc8032;
 
-pub(crate) fn sign<C: Ciphersuite>() {
-  let private_key = Zeroizing::new(C::random_nonzero_F(&mut OsRng));
-  let nonce = Zeroizing::new(C::random_nonzero_F(&mut OsRng));
-  let challenge = C::random_nonzero_F(&mut OsRng); // Doesn't bother to craft an HRAm
+pub(crate) fn sign<C: GroupIo>() {
+  let private_key = Zeroizing::new(C::F::random(&mut OsRng));
+  let nonce = Zeroizing::new(C::F::random(&mut OsRng));
+  let challenge = C::F::random(&mut OsRng); // Doesn't bother to craft an HRAm
   assert!(SchnorrSignature::<C>::sign(&private_key, nonce, challenge)
     .verify(C::generator() * private_key.deref(), challenge));
 }
@@ -27,22 +27,22 @@ pub(crate) fn sign<C: Ciphersuite>() {
 // The above sign function verifies signing works
 // This verifies invalid signatures don't pass, using zero signatures, which should effectively be
 // random
-pub(crate) fn verify<C: Ciphersuite>() {
+pub(crate) fn verify<C: GroupIo>() {
   assert!(!SchnorrSignature::<C> { R: C::G::identity(), s: C::F::ZERO }
-    .verify(C::generator() * C::random_nonzero_F(&mut OsRng), C::random_nonzero_F(&mut OsRng)));
+    .verify(C::generator() * C::F::random(&mut OsRng), C::F::random(&mut OsRng)));
 }
 
-pub(crate) fn batch_verify<C: Ciphersuite>() {
+pub(crate) fn batch_verify<C: GroupIo>() {
   // Create 5 signatures
   let mut keys = vec![];
   let mut challenges = vec![];
   let mut sigs = vec![];
   for i in 0 .. 5 {
-    keys.push(Zeroizing::new(C::random_nonzero_F(&mut OsRng)));
-    challenges.push(C::random_nonzero_F(&mut OsRng));
+    keys.push(Zeroizing::new(C::F::random(&mut OsRng)));
+    challenges.push(C::F::random(&mut OsRng));
     sigs.push(SchnorrSignature::<C>::sign(
       &keys[i],
-      Zeroizing::new(C::random_nonzero_F(&mut OsRng)),
+      Zeroizing::new(C::F::random(&mut OsRng)),
       challenges[i],
     ));
   }
@@ -78,7 +78,7 @@ pub(crate) fn batch_verify<C: Ciphersuite>() {
 }
 
 #[cfg(feature = "aggregate")]
-pub(crate) fn aggregate<C: Ciphersuite>() {
+pub(crate) fn aggregate<C: GroupIo + WithPreferredHash>() {
   const DST: &[u8] = b"Schnorr Aggregator Test";
 
   // Create 5 signatures
@@ -86,14 +86,14 @@ pub(crate) fn aggregate<C: Ciphersuite>() {
   let mut challenges = vec![];
   let mut aggregator = SchnorrAggregator::<C>::new(DST);
   for i in 0 .. 5 {
-    keys.push(Zeroizing::new(C::random_nonzero_F(&mut OsRng)));
+    keys.push(Zeroizing::new(C::F::random(&mut OsRng)));
     // In practice, this MUST be a secure challenge binding to the nonce, key, and any message
-    challenges.push(C::random_nonzero_F(&mut OsRng));
+    challenges.push(C::F::random(&mut OsRng));
     aggregator.aggregate(
       challenges[i],
       SchnorrSignature::<C>::sign(
         &keys[i],
-        Zeroizing::new(C::random_nonzero_F(&mut OsRng)),
+        Zeroizing::new(C::F::random(&mut OsRng)),
         challenges[i],
       ),
     );

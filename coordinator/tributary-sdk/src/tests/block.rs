@@ -3,10 +3,7 @@ use std::{sync::Arc, io, collections::HashMap, fmt::Debug};
 use blake2::{Digest, Blake2s256};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{
-  group::{ff::Field, Group},
-  Ciphersuite,
-};
+use ciphersuite::{group::Group, *};
 use schnorr::SchnorrSignature;
 
 use serai_db::MemDb;
@@ -32,11 +29,11 @@ impl NonceTransaction {
       nonce,
       distinguisher,
       Signed {
-        signer: <Ristretto as Ciphersuite>::G::identity(),
+        signer: <Ristretto as WrappedGroup>::G::identity(),
         nonce,
         signature: SchnorrSignature::<Ristretto> {
-          R: <Ristretto as Ciphersuite>::G::identity(),
-          s: <Ristretto as Ciphersuite>::F::ZERO,
+          R: <Ristretto as WrappedGroup>::G::identity(),
+          s: <Ristretto as WrappedGroup>::F::ZERO,
         },
       },
     )

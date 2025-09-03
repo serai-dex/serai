@@ -1,7 +1,7 @@
 use core::{str::FromStr, fmt};
 
-use dalek_ff_group::Ed25519;
-use ciphersuite::Ciphersuite;
+use dalek_ff_group::{EdwardsPoint, Ed25519};
+use ciphersuite::GroupIo;
 
 use monero_address::{Network, AddressType as MoneroAddressType, MoneroAddress};
 
@@ -18,8 +18,8 @@ enum AddressType {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Address {
   kind: AddressType,
-  spend: <Ed25519 as Ciphersuite>::G,
-  view: <Ed25519 as Ciphersuite>::G,
+  spend: EdwardsPoint,
+  view: EdwardsPoint,
 }
 
 fn byte_for_kind(kind: AddressType) -> u8 {

@@ -5,17 +5,14 @@
 #[cfg(feature = "alloc")]
 #[allow(unused_imports)]
 use std_shims::prelude::*;
-#[cfg(feature = "alloc")]
-use std_shims::io::{self, Read};
 
-use prime_field::{subtle::Choice, zeroize::Zeroize};
-use ciphersuite::group::{
-  ff::{Field, PrimeField},
-  Group,
+use prime_field::{
+  subtle::{Choice, CtOption},
+  zeroize::Zeroize,
 };
+use ciphersuite::group::{ff::PrimeField, Group, GroupEncoding};
 
-use curve25519_dalek::Scalar as DalekScalar;
-pub use dalek_ff_group::Scalar as FieldElement;
+pub use curve25519_dalek::Scalar as FieldElement;
 
 use short_weierstrass::{ShortWeierstrass, Affine, Projective};
 
@@ -32,18 +29,18 @@ pub struct Embedwards25519;
 #[allow(deprecated)] // No other way to construct arbitrary `FieldElement` at compile-time :/
 impl ShortWeierstrass for Embedwards25519 {
   type FieldElement = FieldElement;
-  const A: FieldElement = FieldElement(DalekScalar::from_bits(hex_literal::hex!(
+  const A: FieldElement = FieldElement::from_bits(hex_literal::hex!(
     "ead3f55c1a631258d69cf7a2def9de1400000000000000000000000000000010"
-  )));
-  const B: FieldElement = FieldElement(DalekScalar::from_bits(hex_literal::hex!(
+  ));
+  const B: FieldElement = FieldElement::from_bits(hex_literal::hex!(
     "5f07603a853f20370b682036210d463e64903a23ea669d07ca26cfc13f594209"
-  )));
+  ));
   const PRIME_ORDER: bool = true;
   const GENERATOR: Affine<Self> = Affine::from_xy_unchecked(
     FieldElement::ONE,
-    FieldElement(DalekScalar::from_bits(hex_literal::hex!(
+    FieldElement::from_bits(hex_literal::hex!(
       "2e4118080a484a3dfbafe2199a0e36b7193581d676c0dadfa376b0265616020c"
-    ))),
+    )),
   );
   type Scalar = Scalar;
 
@@ -80,30 +77,23 @@ impl ShortWeierstrass for Embedwards25519 {
 
 pub type Point = Projective<Embedwards25519>;
 
-impl ciphersuite::Ciphersuite for Embedwards25519 {
+impl ciphersuite::WrappedGroup for Embedwards25519 {
   type F = Scalar;
   type G = Point;
-  type H = blake2::Blake2b512;
-
-  const ID: &'static [u8] = b"embedwards25519";
 
   fn generator() -> Self::G {
-    Point::generator()
+    <Point as Group>::generator()
   }
-
-  // We override the provided impl, which compares against the reserialization, because
-  // we already require canonicity
-  #[cfg(feature = "alloc")]
-  #[allow(non_snake_case)]
-  fn read_G<R: Read>(reader: &mut R) -> io::Result<Self::G> {
-    use ciphersuite::group::GroupEncoding;
-
-    let mut encoding = <Self::G as GroupEncoding>::Repr::default();
-    reader.read_exact(encoding.as_mut())?;
-
-    let point = Option::<Self::G>::from(Self::G::from_bytes(&encoding))
-      .ok_or_else(|| io::Error::other("invalid point"))?;
-    Ok(point)
+}
+impl ciphersuite::Id for Embedwards25519 {
+  const ID: &[u8] = b"embedwards25519";
+}
+impl ciphersuite::WithPreferredHash for Embedwards25519 {
+  type H = blake2::Blake2b512;
+}
+impl ciphersuite::GroupCanonicalEncoding for Embedwards25519 {
+  fn from_canonical_bytes(bytes: &<Self::G as GroupEncoding>::Repr) -> CtOption<Self::G> {
+    Self::G::from_bytes(bytes)
   }
 }
 
@@ -119,9 +109,8 @@ fn test_curve() {
 
 #[test]
 fn generator() {
-  use ciphersuite::group::{Group, GroupEncoding};
   assert_eq!(
-    Point::generator(),
+    <Point as Group>::generator(),
     Point::from_bytes(&hex_literal::hex!(
       "0100000000000000000000000000000000000000000000000000000000000000"
     ))
@@ -139,6 +128,5 @@ fn zero_x_is_off_curve() {
 // Checks random won't infinitely loop
 #[test]
 fn random() {
-  use ciphersuite::group::Group;
   Point::random(&mut rand_core::OsRng);
 }

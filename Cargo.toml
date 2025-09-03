@@ -9,10 +9,12 @@ members = [
   "patches/option-ext",
   "patches/directories-next",
 
-  # monero-oxide expects ciphersuite, yet the ciphersuite in-tree here has breaking changes
-  # This re-exports the in-tree ciphersuite _without_ changes breaking to monero-oxide
+  # monero-oxide expects `ciphersuite`, yet the `ciphersuite` in-tree here has breaking changes
+  # This re-exports the in-tree `ciphersuite` _without_ changes breaking to monero-oxide
   # Not included in workspace to prevent having two crates with the same name (an error)
   # "patches/ciphersuite",
+  # Same for `dalek-ff-group`
+  # "patches/dalek-ff-group",
 
   "common/std-shims",
   "common/zalloc",
@@ -178,7 +180,7 @@ simple-request = { path = "common/request" }
 multiexp = { path = "crypto/multiexp" }
 flexible-transcript = { path = "crypto/transcript" }
 ciphersuite = { path = "patches/ciphersuite" }
-dalek-ff-group = { path = "crypto/dalek-ff-group" }
+dalek-ff-group = { path = "patches/dalek-ff-group" }
 minimal-ed448 = { path = "crypto/ed448" }
 modular-frost = { path = "crypto/frost" }
 
@@ -200,9 +202,6 @@ directories-next = { path = "patches/directories-next" }
 # Patch to include `FromUniformBytes<64>` over Scalar
 k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
 p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
-
-# https://github.com/RustCrypto/hybrid-array/issues/131
-hybrid-array = { git = "https://github.com/kayabaNerve/hybrid-array", rev = "8caa508976c93696a67f40734537c91be7cecd96" }
 
 [workspace.lints.clippy]
 incompatible_msrv = "allow" # Manually verified with a GitHub workflow

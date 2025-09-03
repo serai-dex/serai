@@ -4,7 +4,7 @@ pub(crate) use std::{
 };
 
 use dalek_ff_group::Ristretto;
-pub(crate) use ciphersuite::{group::GroupEncoding, Ciphersuite};
+pub(crate) use ciphersuite::{group::GroupEncoding, WrappedGroup, GroupCanonicalEncoding};
 pub(crate) use schnorr_signatures::SchnorrSignature;
 
 pub(crate) use serai_primitives::network_id::ExternalNetworkId;
@@ -29,7 +29,7 @@ pub(crate) type Db = serai_db::RocksDB;
 mod clippy {
   use super::*;
   use once_cell::sync::Lazy;
-  pub(crate) static KEYS: Lazy<Arc<RwLock<HashMap<Service, <Ristretto as Ciphersuite>::G>>>> =
+  pub(crate) static KEYS: Lazy<Arc<RwLock<HashMap<Service, <Ristretto as WrappedGroup>::G>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
   pub(crate) static QUEUES: Lazy<Arc<RwLock<HashMap<(Service, Service), RwLock<Queue<Db>>>>>> =
     Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
@@ -189,9 +189,9 @@ async fn main() {
   let read_key = |str| {
     let key = serai_env::var(str)?;
 
-    let mut repr = <<Ristretto as Ciphersuite>::G as GroupEncoding>::Repr::default();
+    let mut repr = <<Ristretto as WrappedGroup>::G as GroupEncoding>::Repr::default();
     repr.as_mut().copy_from_slice(&hex::decode(key).unwrap());
-    Some(<Ristretto as Ciphersuite>::G::from_bytes(&repr).unwrap())
+    Some(<Ristretto as GroupCanonicalEncoding>::from_canonical_bytes(&repr).unwrap())
   };
 
   let register_service = |service, key| {

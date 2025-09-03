@@ -150,7 +150,7 @@ pub fn musig<C: Ciphersuite>(
   }
   let group_key = multiexp::multiexp(&multiexp);
   debug_assert_eq!(our_pub_key, verification_shares[&params.i()]);
-  debug_assert_eq!(musig_key_vartime::<C>(context, keys).unwrap(), group_key);
+  debug_assert_eq!(musig_key_vartime::<C>(context, keys), Ok(group_key));
 
   ThresholdKeys::new(
     params,

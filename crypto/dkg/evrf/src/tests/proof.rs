@@ -6,13 +6,13 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{
   group::{ff::Field, Group},
-  Ciphersuite,
+  WrappedGroup,
 };
 
 use generalized_bulletproofs::{Generators, tests::insecure_test_generators};
 
 use crate::{
-  Curves, Ristretto,
+  Curves, Ed25519,
   proof::*,
   tests::{THRESHOLD, PARTICIPANTS},
 };
@@ -20,9 +20,9 @@ use crate::{
 fn proof<C: Curves>() {
   let generators = insecure_test_generators(&mut OsRng, 2048).unwrap();
   let embedded_private_key =
-    Zeroizing::new(<C::EmbeddedCurve as Ciphersuite>::F::random(&mut OsRng));
+    Zeroizing::new(<C::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng));
   let ecdh_public_keys: [_; PARTICIPANTS as usize] =
-    core::array::from_fn(|_| <C::EmbeddedCurve as Ciphersuite>::G::random(&mut OsRng));
+    core::array::from_fn(|_| <C::EmbeddedCurve as WrappedGroup>::G::random(&mut OsRng));
   let time = Instant::now();
   let res = Proof::<C>::prove(
     &mut OsRng,
@@ -54,5 +54,5 @@ fn proof<C: Curves>() {
 
 #[test]
 fn ristretto_proof() {
-  proof::<Ristretto>();
+  proof::<Ed25519>();
 }

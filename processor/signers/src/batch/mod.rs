@@ -3,8 +3,7 @@ use std::collections::HashSet;
 
 use blake2::{digest::typenum::U32, Digest, Blake2b};
 use ciphersuite::group::GroupEncoding;
-use dalek_ff_group::Ristretto;
-use frost::dkg::ThresholdKeys;
+use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
 use serai_primitives::{validator_sets::Session, instructions::SignedBatch};
 

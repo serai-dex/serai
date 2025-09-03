@@ -1,4 +1,4 @@
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use dkg::{ThresholdKeys, Curves, Secp256k1};
 
 use ethereum_schnorr::PublicKey;
@@ -13,19 +13,19 @@ impl key_gen::KeyGenParams for KeyGenParams {
     keys: &mut ThresholdKeys<<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve>,
   ) {
     while PublicKey::new(keys.group_key()).is_none() {
-      *keys = keys.clone().offset(<<Secp256k1 as Curves>::ToweringCurve as Ciphersuite>::F::ONE);
+      *keys = keys.clone().offset(<<Secp256k1 as Curves>::ToweringCurve as WrappedGroup>::F::ONE);
     }
   }
 
   fn encode_key(
-    key: <<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as Ciphersuite>::G,
+    key: <<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as WrappedGroup>::G,
   ) -> Vec<u8> {
     PublicKey::new(key).unwrap().eth_repr().to_vec()
   }
 
   fn decode_key(
     key: &[u8],
-  ) -> Option<<<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as Ciphersuite>::G> {
+  ) -> Option<<<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as WrappedGroup>::G> {
     PublicKey::from_eth_repr(key.try_into().ok()?).map(|key| key.point())
   }
 }

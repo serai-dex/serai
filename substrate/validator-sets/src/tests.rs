@@ -2,10 +2,9 @@ use crate::{mock::*, primitives::*};
 
 use std::collections::HashMap;
 
-use ciphersuite::Ciphersuite;
-use dalek_ff_group::Ristretto;
+use ciphersuite::{WrappedGroup, GroupIo};
 use dkg_musig::musig;
-use schnorrkel::Schnorrkel;
+use schnorrkel::{frost::curve::Ristretto, Schnorrkel};
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
@@ -75,13 +74,13 @@ fn set_keys_signature(set: &ExternalValidatorSet, key_pair: &KeyPair, pairs: &[P
   let mut pub_keys = vec![];
   for pair in pairs {
     let public_key =
-      <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut pair.public().0.as_ref()).unwrap();
+      <Ristretto as GroupIo>::read_G::<&[u8]>(&mut pair.public().0.as_ref()).unwrap();
     pub_keys.push(public_key);
   }
 
   let mut threshold_keys = vec![];
   for i in 0 .. pairs.len() {
-    let secret_key = <Ristretto as Ciphersuite>::read_F::<&[u8]>(
+    let secret_key = <Ristretto as GroupIo>::read_F::<&[u8]>(
       &mut pairs[i].as_ref().secret.to_bytes()[.. 32].as_ref(),
     )
     .unwrap();

@@ -1,4 +1,4 @@
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{group::GroupEncoding, *};
 use dkg::{ThresholdKeys, Curves, Secp256k1};
 
 use crate::{primitives::x_coord_to_even_point, scan::scanner};
@@ -18,7 +18,7 @@ impl key_gen::KeyGenParams for KeyGenParams {
   }
 
   fn encode_key(
-    key: <<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as Ciphersuite>::G,
+    key: <<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as WrappedGroup>::G,
   ) -> Vec<u8> {
     let key = key.to_bytes();
     let key: &[u8] = key.as_ref();
@@ -28,7 +28,7 @@ impl key_gen::KeyGenParams for KeyGenParams {
 
   fn decode_key(
     key: &[u8],
-  ) -> Option<<<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as Ciphersuite>::G> {
+  ) -> Option<<<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as WrappedGroup>::G> {
     x_coord_to_even_point(key)
   }
 }

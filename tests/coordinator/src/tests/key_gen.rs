@@ -5,7 +5,7 @@ use rand_core::OsRng;
 
 use ciphersuite::{
   group::{ff::Field, GroupEncoding},
-  Ciphersuite,
+  WrappedGroup,
 };
 use ciphersuite_kp256::Secq256k1;
 use dalek_ff_group::Ristretto;
@@ -19,10 +19,10 @@ use messages::CoordinatorMessage;
 
 use crate::tests::*;
 
-pub async fn key_gen<C: Ciphersuite>(
+pub async fn key_gen<C: WrappedGroup>(
   processors: &mut [Processor],
   session: Session,
-) -> (Vec<u8>, Zeroizing<<Ristretto as Ciphersuite>::F>, Zeroizing<C::F>) {
+) -> (Vec<u8>, Zeroizing<<Ristretto as WrappedGroup>::F>, Zeroizing<C::F>) {
   let coordinators = processors.len();
   let mut participant_is = vec![];
 
@@ -93,8 +93,8 @@ pub async fn key_gen<C: Ciphersuite>(
   }
 
   // Now that we've received all participations, publish the key pair
-  let substrate_priv_key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
-  let substrate_key = (<Ristretto as Ciphersuite>::generator() * *substrate_priv_key).to_bytes();
+  let substrate_priv_key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
+  let substrate_key = (<Ristretto as WrappedGroup>::generator() * *substrate_priv_key).to_bytes();
 
   let network_priv_key = Zeroizing::new(C::F::random(&mut OsRng));
   let network_key = (C::generator() * *network_priv_key).to_bytes().as_ref().to_vec();

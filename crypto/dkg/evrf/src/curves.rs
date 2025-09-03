@@ -17,7 +17,7 @@ type Blake2s256Keyed = Blake2sMac<U32>;
 
 use ciphersuite::{
   group::{ff::FromUniformBytes, GroupEncoding},
-  Ciphersuite,
+  WrappedGroup, Id, GroupIo,
 };
 
 use ec_divisors::DivisorCurve;
@@ -27,10 +27,10 @@ use generalized_bulletproofs_ec_gadgets::*;
 /// A pair of curves to perform the eVRF with.
 pub trait Curves {
   /// The towering curve, for which the resulting key is on.
-  type ToweringCurve: Ciphersuite<F: FromUniformBytes<64>>;
+  type ToweringCurve: Id + GroupIo<F: FromUniformBytes<64>>;
   /// The embedded curve which participants represent their public keys over.
-  type EmbeddedCurve: Ciphersuite<
-    G: DivisorCurve<FieldElement = <Self::ToweringCurve as Ciphersuite>::F>,
+  type EmbeddedCurve: GroupIo<
+    G: DivisorCurve<FieldElement = <Self::ToweringCurve as WrappedGroup>::F>,
   >;
   /// The parameters to use the embedded curve with the discrete-log gadget.
   type EmbeddedCurveParameters: DiscreteLogParameters;
@@ -49,14 +49,14 @@ impl<C: Curves> Generators<C> {
   pub fn new(max_threshold: u16, max_participants: u16) -> Generators<C> {
     let entropy = <Blake2s256Keyed as KeyInit>::new(&{
       let mut key = Array::<u8, <Blake2s256Keyed as KeySizeUser>::KeySize>::default();
-      let key_len = key.len().min(<C::ToweringCurve as Ciphersuite>::ID.len());
+      let key_len = key.len().min(<C::ToweringCurve as Id>::ID.len());
       {
         let key: &mut [u8] = key.as_mut();
-        key[.. key_len].copy_from_slice(&<C::ToweringCurve as Ciphersuite>::ID[.. key_len])
+        key[.. key_len].copy_from_slice(&<C::ToweringCurve as Id>::ID[.. key_len])
       }
       key
     })
-    .chain_update(<C::ToweringCurve as Ciphersuite>::generator().to_bytes())
+    .chain_update(<C::ToweringCurve as WrappedGroup>::generator().to_bytes())
     .finalize()
     .into_bytes();
     let mut rng = ChaCha20Rng::from_seed(entropy.into());
@@ -71,7 +71,8 @@ impl<C: Curves> Generators<C> {
       h_bold.push(crate::sample_point::<C::ToweringCurve>(&mut rng));
     }
     Self(
-      BpGenerators::new(<C::ToweringCurve as Ciphersuite>::generator(), h, g_bold, h_bold).unwrap(),
+      BpGenerators::new(<C::ToweringCurve as WrappedGroup>::generator(), h, g_bold, h_bold)
+        .unwrap(),
     )
   }
 }
@@ -92,16 +93,6 @@ pub struct Ed25519;
 #[cfg(feature = "ed25519")]
 impl Curves for Ed25519 {
   type ToweringCurve = dalek_ff_group::Ed25519;
-  type EmbeddedCurve = embedwards25519::Embedwards25519;
-  type EmbeddedCurveParameters = embedwards25519::Embedwards25519;
-}
-
-/// Ristretto, and an elliptic curve defined over its scalar field (embedwards25519).
-#[cfg(any(test, feature = "ristretto"))]
-pub struct Ristretto;
-#[cfg(any(test, feature = "ristretto"))]
-impl Curves for Ristretto {
-  type ToweringCurve = dalek_ff_group::Ristretto;
   type EmbeddedCurve = embedwards25519::Embedwards25519;
   type EmbeddedCurveParameters = embedwards25519::Embedwards25519;
 }

@@ -1,7 +1,7 @@
 use core::fmt;
 use std::collections::HashMap;
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use ciphersuite_kp256::Secp256k1;
 
 use bitcoin_serai::bitcoin::block::{Header, Block as BBlock};
@@ -35,7 +35,7 @@ impl<D: Db> fmt::Debug for Block<D> {
 impl<D: Db> primitives::Block for Block<D> {
   type Header = BlockHeader;
 
-  type Key = <Secp256k1 as Ciphersuite>::G;
+  type Key = <Secp256k1 as WrappedGroup>::G;
   type Address = Address;
   type Output = Output;
   type Eventuality = Eventuality;

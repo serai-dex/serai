@@ -29,7 +29,7 @@ zeroize = { version = "1", default-features = false, features = ["std"] }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
 # Cryptography
-transcript = { package = "flexible-transcript", path = "../crypto/transcript", default-features = false, features = ["std", "recommended"] }
+transcript = { package = "flexible-transcript", path = "../crypto/transcript", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std"] }
 schnorr-signatures = { path = "../crypto/schnorr", default-features = false, features = ["std"] }

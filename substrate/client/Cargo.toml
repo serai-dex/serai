@@ -41,9 +41,9 @@ simple-request = { path = "../../common/request", version = "0.1", optional = tr
 
 bitcoin = { version = "0.32", optional = true }
 
+ciphersuite = { path = "../../crypto/ciphersuite", optional = true }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
-ciphersuite = { path = "../../crypto/ciphersuite", version = "0.4", optional = true }
-monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "6966575e05fe09b77674c46984b21686ed9304ff", version = "0.1.0", default-features = false, features = ["std"], optional = true }
+monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7f37cc8f770858aa1739e0f56dbe447db86f4ba6", version = "0.1.0", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 rand_core = "0.6"
@@ -69,7 +69,7 @@ serai = ["thiserror/std", "scale", "serde", "serde_json", "multiaddr", "sp-core"
 networks = []
 bitcoin = ["networks", "dep:bitcoin"]
 ethereum = ["networks"]
-monero = ["networks", "dalek-ff-group", "ciphersuite", "monero-address"]
+monero = ["networks", "ciphersuite", "dalek-ff-group", "monero-address"]
 
 # Assumes the default usage is to use Serai as a DEX, which doesn't actually
 # require connecting to a Serai node

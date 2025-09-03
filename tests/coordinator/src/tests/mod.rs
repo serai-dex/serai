@@ -1,6 +1,8 @@
 use core::future::Future;
 use std::{sync::OnceLock, collections::HashMap};
 
+use ciphersuite::WrappedGroup;
+
 use tokio::sync::Mutex;
 
 use dockertest::{
@@ -125,7 +127,7 @@ pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
 
   struct Context {
     pending_coordinator_compositions: Mutex<Vec<TestBodySpecification>>,
-    handles_and_keys: Vec<(Handles, <Ristretto as Ciphersuite>::F)>,
+    handles_and_keys: Vec<(Handles, <Ristretto as WrappedGroup>::F)>,
     test_body: Box<dyn TestBody>,
   }
   static CONTEXT: OnceLock<Mutex<Option<Context>>> = OnceLock::new();

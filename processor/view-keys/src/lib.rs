@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 
 /// Generate a view key for usage within Serai.
 ///

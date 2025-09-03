@@ -6,21 +6,16 @@ use rand_core::{RngCore, CryptoRng};
 use zeroize::{Zeroize, Zeroizing};
 use subtle::ConstantTimeEq;
 
-pub use ciphersuite::{
-  digest::Digest,
-  group::{
-    ff::{Field, PrimeField},
-    Group,
-  },
-  Ciphersuite,
+use ciphersuite::group::{
+  ff::{Field, PrimeField},
+  Group,
 };
+pub use ciphersuite::{digest::Digest, WrappedGroup, GroupIo, Ciphersuite};
 
 #[cfg(any(feature = "ristretto", feature = "ed25519"))]
 mod dalek;
-#[cfg(feature = "ristretto")]
-pub use dalek::{Ristretto, IetfRistrettoHram};
-#[cfg(feature = "ed25519")]
-pub use dalek::{Ed25519, IetfEd25519Hram};
+#[cfg(any(feature = "ristretto", feature = "ed25519"))]
+pub use dalek::*;
 
 #[cfg(any(feature = "secp256k1", feature = "p256"))]
 mod kp256;
@@ -38,11 +33,11 @@ pub(crate) use ed448::Ietf8032Ed448Hram;
 
 /// FROST Ciphersuite.
 ///
-/// This exclude the signing algorithm specific H2, making this solely the curve, its associated
+/// This excludes the signing algorithm specific H2, making this solely the curve, its associated
 /// hash function, and the functions derived from it.
-pub trait Curve: Ciphersuite {
+pub trait Curve: GroupIo + Ciphersuite {
   /// Context string for this curve.
-  const CONTEXT: &'static [u8];
+  const CONTEXT: &[u8];
 
   /// Hash the given dst and data to a byte vector. Used to instantiate H4 and H5.
   fn hash(dst: &[u8], data: &[u8]) -> impl AsRef<[u8]> {
@@ -121,7 +116,7 @@ pub trait Curve: Ciphersuite {
   /// Read a point from a reader, rejecting identity.
   #[allow(non_snake_case)]
   fn read_G<R: Read>(reader: &mut R) -> io::Result<Self::G> {
-    let res = <Self as Ciphersuite>::read_G(reader)?;
+    let res = <Self as GroupIo>::read_G(reader)?;
     if res.is_identity().into() {
       Err(io::Error::other("identity point"))?;
     }

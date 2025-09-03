@@ -8,7 +8,7 @@ use blake2::{Digest, Blake2b512};
 
 use ciphersuite::{
   group::{Group, GroupEncoding},
-  Ciphersuite,
+  *,
 };
 use dalek_ff_group::Ristretto;
 use schnorr::SchnorrSignature;
@@ -43,7 +43,7 @@ pub enum TransactionError {
 /// Data for a signed transaction.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Signed {
-  pub signer: <Ristretto as Ciphersuite>::G,
+  pub signer: <Ristretto as WrappedGroup>::G,
   pub nonce: u32,
   pub signature: SchnorrSignature<Ristretto>,
 }
@@ -160,10 +160,10 @@ pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
   /// Do not override this unless you know what you're doing.
   ///
   /// Panics if called on non-signed transactions.
-  fn sig_hash(&self, genesis: [u8; 32]) -> <Ristretto as Ciphersuite>::F {
+  fn sig_hash(&self, genesis: [u8; 32]) -> <Ristretto as WrappedGroup>::F {
     match self.kind() {
       TransactionKind::Signed(order, Signed { signature, .. }) => {
-        <Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(
+        <Ristretto as WrappedGroup>::F::from_bytes_mod_order_wide(
           &Blake2b512::digest(
             [
               b"Tributary Signed Transaction",
@@ -182,8 +182,8 @@ pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
   }
 }
 
-pub trait GAIN: FnMut(&<Ristretto as Ciphersuite>::G, &[u8]) -> Option<u32> {}
-impl<F: FnMut(&<Ristretto as Ciphersuite>::G, &[u8]) -> Option<u32>> GAIN for F {}
+pub trait GAIN: FnMut(&<Ristretto as WrappedGroup>::G, &[u8]) -> Option<u32> {}
+impl<F: FnMut(&<Ristretto as WrappedGroup>::G, &[u8]) -> Option<u32>> GAIN for F {}
 
 pub(crate) fn verify_transaction<F: GAIN, T: Transaction>(
   tx: &T,

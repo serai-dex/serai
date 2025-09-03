@@ -1,7 +1,6 @@
 use core::{marker::PhantomData, future::Future};
 
-use dalek_ff_group::Ristretto;
-use frost::dkg::ThresholdKeys;
+use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
 use serai_primitives::{crypto::Signature, validator_sets::Session};
 

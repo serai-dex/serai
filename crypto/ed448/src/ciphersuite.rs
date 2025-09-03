@@ -1,4 +1,4 @@
-use zeroize::Zeroize;
+use prime_field::subtle::CtOption;
 
 use sha3::{
   digest::{
@@ -8,9 +8,9 @@ use sha3::{
   Shake256,
 };
 
-use ciphersuite::{group::Group, Ciphersuite};
+use ciphersuite::{group::GroupEncoding, Id, WithPreferredHash, GroupCanonicalEncoding};
 
-use crate::{Scalar, Point};
+use crate::Point;
 
 /// Shake256, fixed to a 114-byte output, as used by Ed448.
 #[derive(Clone, Default)]
@@ -49,21 +49,14 @@ impl FixedOutput for Shake256_114 {
 }
 impl HashMarker for Shake256_114 {}
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-pub struct Ed448;
-impl Ciphersuite for Ed448 {
-  type F = Scalar;
-  type G = Point;
-  type H = Shake256_114;
-
-  const ID: &'static [u8] = b"ed448";
-
-  fn generator() -> Self::G {
-    Point::generator()
-  }
+impl Id for Point {
+  const ID: &[u8] = b"ed448";
 }
-
-#[test]
-fn test_ed448() {
-  ff_group_tests::group::test_prime_group_bits::<_, Point>(&mut rand_core::OsRng);
+impl WithPreferredHash for Point {
+  type H = Shake256_114;
+}
+impl GroupCanonicalEncoding for Point {
+  fn from_canonical_bytes(bytes: &<Self::G as GroupEncoding>::Repr) -> CtOption<Self::G> {
+    Self::G::from_bytes(bytes)
+  }
 }

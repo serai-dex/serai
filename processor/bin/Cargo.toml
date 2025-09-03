@@ -23,7 +23,7 @@ hex = { version = "0.4", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
-dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std", "ristretto"] }
+dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std"] }
 
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 serai-cosign = { package = "serai-cosign-types", path = "../../coordinator/cosign/types" }

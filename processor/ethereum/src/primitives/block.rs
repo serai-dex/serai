@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use ciphersuite_kp256::Secp256k1;
 
 use serai_client::networks::ethereum::Address;
@@ -41,7 +41,7 @@ pub(crate) struct FullEpoch {
 impl primitives::Block for FullEpoch {
   type Header = Epoch;
 
-  type Key = <Secp256k1 as Ciphersuite>::G;
+  type Key = <Secp256k1 as WrappedGroup>::G;
   type Address = Address;
   type Output = Output;
   type Eventuality = Eventuality;

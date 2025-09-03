@@ -8,7 +8,7 @@ use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng, SeedableRng};
 use rand_chacha::ChaCha20Rng;
 
-use ciphersuite::{group::ff::Field, Ciphersuite};
+use ciphersuite::{group::ff::Field, WrappedGroup};
 
 use generalized_bulletproofs::{
   Generators, BatchVerifier, PedersenCommitment, PedersenVectorCommitment,
@@ -28,8 +28,8 @@ mod tape;
 use tape::*;
 
 type EmbeddedPoint<C> = (
-  <<<C as Curves>::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::FieldElement,
-  <<<C as Curves>::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::FieldElement,
+  <<<C as Curves>::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::FieldElement,
+  <<<C as Curves>::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::FieldElement,
 );
 
 #[allow(non_snake_case)]
@@ -37,14 +37,15 @@ struct Circuit<
   'a,
   C: Curves,
   CG: Iterator<
-    Item = ChallengedGenerator<<C::ToweringCurve as Ciphersuite>::F, C::EmbeddedCurveParameters>,
+    Item = ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
   >,
 > {
-  curve_spec: &'a CurveSpec<<<C::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::FieldElement>,
+  curve_spec: &'a CurveSpec<<<C::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::FieldElement>,
   circuit: &'a mut BpCircuit<C::ToweringCurve>,
-  challenge: DiscreteLogChallenge<<C::ToweringCurve as Ciphersuite>::F, C::EmbeddedCurveParameters>,
+  challenge:
+    DiscreteLogChallenge<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
   challenged_G:
-    ChallengedGenerator<<C::ToweringCurve as Ciphersuite>::F, C::EmbeddedCurveParameters>,
+    ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
   challenged_generators: &'a mut CG,
   tape: Tape,
   pedersen_commitment_tape: PedersenCommitmentTape,
@@ -54,7 +55,7 @@ impl<
     'a,
     C: Curves,
     CG: Iterator<
-      Item = ChallengedGenerator<<C::ToweringCurve as Ciphersuite>::F, C::EmbeddedCurveParameters>,
+      Item = ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
     >,
   > Circuit<'a, C, CG>
 {
@@ -92,7 +93,7 @@ impl<
           &self.challenge,
           &challenged_generator,
         );
-        lincomb = lincomb.term(<C::ToweringCurve as Ciphersuite>::F::ONE, point.x());
+        lincomb = lincomb.term(<C::ToweringCurve as WrappedGroup>::F::ONE, point.x());
       }
       /*
         Constrain the sum of the two `x` coordinates to be equal to the value committed to in a
@@ -137,7 +138,7 @@ impl<
         &self.challenge,
         &challenged_public_key,
       );
-      lincomb = lincomb.term(<C::ToweringCurve as Ciphersuite>::F::ONE, point.x());
+      lincomb = lincomb.term(<C::ToweringCurve as WrappedGroup>::F::ONE, point.x());
       debug_assert!(point_with_dlogs.next().is_none());
     }
 
@@ -152,20 +153,20 @@ impl<
 /// The result of proving.
 pub(super) struct ProveResult<C: Curves> {
   /// The coefficients for use in the DKG.
-  pub(super) coefficients: Vec<Zeroizing<<C::ToweringCurve as Ciphersuite>::F>>,
+  pub(super) coefficients: Vec<Zeroizing<<C::ToweringCurve as WrappedGroup>::F>>,
   /// The masks to encrypt secret shares with.
-  pub(super) encryption_keys: Vec<Zeroizing<<C::ToweringCurve as Ciphersuite>::F>>,
+  pub(super) encryption_keys: Vec<Zeroizing<<C::ToweringCurve as WrappedGroup>::F>>,
   /// The proof itself.
   pub(super) proof: Vec<u8>,
 }
 
 pub(super) struct Verified<C: Curves> {
   /// The commitments to the coefficients used within the DKG.
-  pub(super) coefficients: Vec<<C::ToweringCurve as Ciphersuite>::G>,
+  pub(super) coefficients: Vec<<C::ToweringCurve as WrappedGroup>::G>,
   /// The ephemeral public keys to perform ECDHs with
-  pub(super) ecdh_commitments: Vec<[<C::EmbeddedCurve as Ciphersuite>::G; 2]>,
+  pub(super) ecdh_commitments: Vec<[<C::EmbeddedCurve as WrappedGroup>::G; 2]>,
   /// The commitments to the masks used to encrypt secret shares with.
-  pub(super) encryption_key_commitments: Vec<<C::ToweringCurve as Ciphersuite>::G>,
+  pub(super) encryption_key_commitments: Vec<<C::ToweringCurve as WrappedGroup>::G>,
 }
 
 impl<C: Curves> fmt::Debug for Verified<C> {
@@ -175,7 +176,7 @@ impl<C: Curves> fmt::Debug for Verified<C> {
 }
 
 type GeneratorTable<C> = generalized_bulletproofs_ec_gadgets::GeneratorTable<
-  <<<C as Curves>::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::FieldElement,
+  <<<C as Curves>::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::FieldElement,
   <C as Curves>::EmbeddedCurveParameters,
 >;
 
@@ -219,7 +220,7 @@ impl<C: Curves> Proof<C> {
   }
 
   fn circuit(
-    curve_spec: &CurveSpec<<<C::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::FieldElement>,
+    curve_spec: &CurveSpec<<<C::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::FieldElement>,
     evrf_public_key: EmbeddedPoint<C>,
     coefficients: usize,
     ecdh_commitments: &[[EmbeddedPoint<C>; 2]],
@@ -281,7 +282,7 @@ impl<C: Curves> Proof<C> {
   fn sample_coefficients_evrf_points(
     seed: [u8; 32],
     coefficients: usize,
-  ) -> Vec<<C::EmbeddedCurve as Ciphersuite>::G> {
+  ) -> Vec<<C::EmbeddedCurve as WrappedGroup>::G> {
     let mut rng = ChaCha20Rng::from_seed(seed);
     let quantity = 2 * coefficients;
     let mut res = Vec::with_capacity(quantity);
@@ -293,28 +294,29 @@ impl<C: Curves> Proof<C> {
 
   /// Create the required tables for the generators.
   fn generator_tables(
-    coefficients_evrf_points: &[<C::EmbeddedCurve as Ciphersuite>::G],
-    participants: &[<<C as Curves>::EmbeddedCurve as Ciphersuite>::G],
+    coefficients_evrf_points: &[<C::EmbeddedCurve as WrappedGroup>::G],
+    participants: &[<<C as Curves>::EmbeddedCurve as WrappedGroup>::G],
   ) -> Vec<GeneratorTable<C>> {
     let curve_spec = CurveSpec {
-      a: <<C as Curves>::EmbeddedCurve as Ciphersuite>::G::a(),
-      b: <<C as Curves>::EmbeddedCurve as Ciphersuite>::G::b(),
+      a: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G::a(),
+      b: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G::b(),
     };
 
     let mut generator_tables =
       Vec::with_capacity(1 + coefficients_evrf_points.len() + participants.len());
     {
-      let (x, y) =
-        <C::EmbeddedCurve as Ciphersuite>::G::to_xy(<C::EmbeddedCurve as Ciphersuite>::generator())
-          .unwrap();
+      let (x, y) = <C::EmbeddedCurve as WrappedGroup>::G::to_xy(
+        <C::EmbeddedCurve as WrappedGroup>::generator(),
+      )
+      .unwrap();
       generator_tables.push(GeneratorTable::<C>::new(&curve_spec, x, y));
     }
     for generator in coefficients_evrf_points {
-      let (x, y) = <C::EmbeddedCurve as Ciphersuite>::G::to_xy(*generator).unwrap();
+      let (x, y) = <C::EmbeddedCurve as WrappedGroup>::G::to_xy(*generator).unwrap();
       generator_tables.push(GeneratorTable::<C>::new(&curve_spec, x, y));
     }
     for generator in participants {
-      let (x, y) = <C::EmbeddedCurve as Ciphersuite>::G::to_xy(*generator).unwrap();
+      let (x, y) = <C::EmbeddedCurve as WrappedGroup>::G::to_xy(*generator).unwrap();
       generator_tables.push(GeneratorTable::<C>::new(&curve_spec, x, y));
     }
     generator_tables
@@ -325,12 +327,12 @@ impl<C: Curves> Proof<C> {
     generators: &Generators<C::ToweringCurve>,
     transcript: [u8; 32],
     coefficients: usize,
-    participant_public_keys: &[<<C as Curves>::EmbeddedCurve as Ciphersuite>::G],
-    evrf_private_key: &Zeroizing<<<C as Curves>::EmbeddedCurve as Ciphersuite>::F>,
+    participant_public_keys: &[<<C as Curves>::EmbeddedCurve as WrappedGroup>::G],
+    evrf_private_key: &Zeroizing<<<C as Curves>::EmbeddedCurve as WrappedGroup>::F>,
   ) -> Result<ProveResult<C>, AcProveError> {
     let curve_spec = CurveSpec {
-      a: <<C as Curves>::EmbeddedCurve as Ciphersuite>::G::a(),
-      b: <<C as Curves>::EmbeddedCurve as Ciphersuite>::G::b(),
+      a: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G::a(),
+      b: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G::b(),
     };
 
     let coefficients_evrf_points = Self::sample_coefficients_evrf_points(transcript, coefficients);
@@ -340,7 +342,7 @@ impl<C: Curves> Proof<C> {
     // Push a discrete logarithm onto the tape
     let discrete_log =
       |vector_commitment_tape: &mut Vec<_>,
-       dlog: &ScalarDecomposition<<<C as Curves>::EmbeddedCurve as Ciphersuite>::F>| {
+       dlog: &ScalarDecomposition<<<C as Curves>::EmbeddedCurve as WrappedGroup>::F>| {
         for coefficient in dlog.decomposition() {
           vector_commitment_tape.push(<_>::from(*coefficient));
         }
@@ -351,8 +353,8 @@ impl<C: Curves> Proof<C> {
     // Returns the point for which the claim was made.
     let discrete_log_claim =
       |vector_commitment_tape: &mut Vec<_>,
-       dlog: &ScalarDecomposition<<<C as Curves>::EmbeddedCurve as Ciphersuite>::F>,
-       generator: <<C as Curves>::EmbeddedCurve as Ciphersuite>::G| {
+       dlog: &ScalarDecomposition<<<C as Curves>::EmbeddedCurve as WrappedGroup>::F>,
+       generator: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G| {
         {
           let divisor =
             Zeroizing::new(dlog.scalar_mul_divisor(generator).normalize_x_coefficient());
@@ -368,12 +370,12 @@ impl<C: Curves> Proof<C> {
               .y_coefficients
               .first()
               .copied()
-              .unwrap_or(<C::ToweringCurve as Ciphersuite>::F::ZERO),
+              .unwrap_or(<C::ToweringCurve as WrappedGroup>::F::ZERO),
           );
         }
 
         let dh = generator * dlog.scalar();
-        let (x, y) = <C::EmbeddedCurve as Ciphersuite>::G::to_xy(dh).unwrap();
+        let (x, y) = <C::EmbeddedCurve as WrappedGroup>::G::to_xy(dh).unwrap();
         vector_commitment_tape.push(x);
         vector_commitment_tape.push(y);
         (dh, (x, y))
@@ -387,7 +389,7 @@ impl<C: Curves> Proof<C> {
     let mut coefficients = Vec::with_capacity(coefficients);
     let evrf_public_key = {
       let evrf_private_key =
-        ScalarDecomposition::<<C::EmbeddedCurve as Ciphersuite>::F>::new(**evrf_private_key)
+        ScalarDecomposition::<<C::EmbeddedCurve as WrappedGroup>::F>::new(**evrf_private_key)
           .expect("eVRF private key was zero");
 
       discrete_log(&mut vector_commitment_tape, &evrf_private_key);
@@ -396,12 +398,12 @@ impl<C: Curves> Proof<C> {
       let (_, evrf_public_key) = discrete_log_claim(
         &mut vector_commitment_tape,
         &evrf_private_key,
-        <<C as Curves>::EmbeddedCurve as Ciphersuite>::generator(),
+        <<C as Curves>::EmbeddedCurve as WrappedGroup>::generator(),
       );
 
       // Push the divisor for each point we use in the eVRF
       for pair in coefficients_evrf_points.chunks(2) {
-        let mut coefficient = Zeroizing::new(<C::ToweringCurve as Ciphersuite>::F::ZERO);
+        let mut coefficient = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
         for point in pair {
           let (_, (dh_x, _)) =
             discrete_log_claim(&mut vector_commitment_tape, &evrf_private_key, *point);
@@ -418,15 +420,16 @@ impl<C: Curves> Proof<C> {
     let mut ecdh_commitments = Vec::with_capacity(2 * participant_public_keys.len());
     let mut ecdh_commitments_xy = Vec::with_capacity(participant_public_keys.len());
     for participant_public_key in participant_public_keys {
-      let mut ecdh_commitments_xy_i =
-        [(<C::ToweringCurve as Ciphersuite>::F::ZERO, <C::ToweringCurve as Ciphersuite>::F::ZERO);
-          2];
-      let mut encryption_key = Zeroizing::new(<C::ToweringCurve as Ciphersuite>::F::ZERO);
+      let mut ecdh_commitments_xy_i = [(
+        <C::ToweringCurve as WrappedGroup>::F::ZERO,
+        <C::ToweringCurve as WrappedGroup>::F::ZERO,
+      ); 2];
+      let mut encryption_key = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
       for ecdh_commitments_xy_i_j_dest in &mut ecdh_commitments_xy_i {
         let mut ecdh_ephemeral_secret;
         loop {
           ecdh_ephemeral_secret =
-            Zeroizing::new(<C::EmbeddedCurve as Ciphersuite>::F::random(&mut *rng));
+            Zeroizing::new(<C::EmbeddedCurve as WrappedGroup>::F::random(&mut *rng));
           // 0 would produce the identity, which isn't representable within the discrete-log proof.
           if bool::from(!ecdh_ephemeral_secret.is_zero()) {
             break;
@@ -434,7 +437,7 @@ impl<C: Curves> Proof<C> {
         }
 
         let ecdh_ephemeral_secret =
-          ScalarDecomposition::<<C::EmbeddedCurve as Ciphersuite>::F>::new(*ecdh_ephemeral_secret)
+          ScalarDecomposition::<<C::EmbeddedCurve as WrappedGroup>::F>::new(*ecdh_ephemeral_secret)
             .expect("ECDH ephemeral secret zero");
         discrete_log(&mut vector_commitment_tape, &ecdh_ephemeral_secret);
 
@@ -442,7 +445,7 @@ impl<C: Curves> Proof<C> {
         let (ecdh_commitment, ecdh_commitment_xy_i_j) = discrete_log_claim(
           &mut vector_commitment_tape,
           &ecdh_ephemeral_secret,
-          <<C as Curves>::EmbeddedCurve as Ciphersuite>::generator(),
+          <<C as Curves>::EmbeddedCurve as WrappedGroup>::generator(),
         );
         ecdh_commitments.push(ecdh_commitment);
         *ecdh_commitments_xy_i_j_dest = ecdh_commitment_xy_i_j;
@@ -470,7 +473,7 @@ impl<C: Curves> Proof<C> {
     for chunk in vector_commitment_tape.chunks(generators_to_use) {
       vector_commitments.push(PedersenVectorCommitment {
         g_values: chunk.into(),
-        mask: <C::ToweringCurve as Ciphersuite>::F::random(&mut *rng),
+        mask: <C::ToweringCurve as WrappedGroup>::F::random(&mut *rng),
       });
     }
 
@@ -479,13 +482,13 @@ impl<C: Curves> Proof<C> {
     for coefficient in &coefficients {
       commitments.push(PedersenCommitment {
         value: **coefficient,
-        mask: <C::ToweringCurve as Ciphersuite>::F::random(&mut *rng),
+        mask: <C::ToweringCurve as WrappedGroup>::F::random(&mut *rng),
       });
     }
     for enc_mask in &encryption_keys {
       commitments.push(PedersenCommitment {
         value: **enc_mask,
-        mask: <C::ToweringCurve as Ciphersuite>::F::random(&mut *rng),
+        mask: <C::ToweringCurve as WrappedGroup>::F::random(&mut *rng),
       });
     }
 
@@ -536,13 +539,13 @@ impl<C: Curves> Proof<C> {
     }
 
     // Prove the openings of the commitments were correct
-    let mut x = Zeroizing::new(<C::ToweringCurve as Ciphersuite>::F::ZERO);
+    let mut x = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
     for commitment in commitments {
       *x += commitment.mask * transcript.challenge::<C::ToweringCurve>();
     }
 
     // Produce a Schnorr PoK for the weighted-sum of the Pedersen commitments' blinding factors
-    let r = Zeroizing::new(<C::ToweringCurve as Ciphersuite>::F::random(&mut *rng));
+    let r = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::random(&mut *rng));
     transcript.push_point(&(generators.h() * r.deref()));
     let c = transcript.challenge::<C::ToweringCurve>();
     transcript.push_scalar((c * x.deref()) + r.deref());
@@ -557,14 +560,14 @@ impl<C: Curves> Proof<C> {
     verifier: &mut BatchVerifier<C::ToweringCurve>,
     transcript: [u8; 32],
     coefficients: usize,
-    participant_public_keys: &[<<C as Curves>::EmbeddedCurve as Ciphersuite>::G],
-    evrf_public_key: <<C as Curves>::EmbeddedCurve as Ciphersuite>::G,
+    participant_public_keys: &[<<C as Curves>::EmbeddedCurve as WrappedGroup>::G],
+    evrf_public_key: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G,
     proof: &[u8],
   ) -> Result<Verified<C>, ()> {
     let (mut transcript, ecdh_commitments, pedersen_commitments) = {
       let curve_spec = CurveSpec {
-        a: <<C as Curves>::EmbeddedCurve as Ciphersuite>::G::a(),
-        b: <<C as Curves>::EmbeddedCurve as Ciphersuite>::G::b(),
+        a: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G::a(),
+        b: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G::b(),
       };
 
       let coefficients_evrf_points =
@@ -600,9 +603,9 @@ impl<C: Curves> Proof<C> {
         ecdh_commitments.push(ecdh_commitments_i);
         // This inherently bans using the identity point, as it won't have an affine representation
         ecdh_commitments_xy.push([
-          <<C::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::to_xy(ecdh_commitments_i[0])
+          <<C::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::to_xy(ecdh_commitments_i[0])
             .ok_or(())?,
-          <<C::EmbeddedCurve as Ciphersuite>::G as DivisorCurve>::to_xy(ecdh_commitments_i[1])
+          <<C::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::to_xy(ecdh_commitments_i[1])
             .ok_or(())?,
         ]);
       }
@@ -610,7 +613,7 @@ impl<C: Curves> Proof<C> {
       let mut circuit = BpCircuit::verify();
       Self::circuit(
         &curve_spec,
-        <C::EmbeddedCurve as Ciphersuite>::G::to_xy(evrf_public_key).ok_or(())?,
+        <C::EmbeddedCurve as WrappedGroup>::G::to_xy(evrf_public_key).ok_or(())?,
         coefficients,
         &ecdh_commitments_xy,
         &generator_tables.iter().collect::<Vec<_>>(),

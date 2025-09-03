@@ -4,11 +4,11 @@ use zeroize::Zeroizing;
 use rand_core::OsRng;
 use rand::seq::SliceRandom;
 
-use ciphersuite::{group::ff::Field, Ciphersuite};
+use ciphersuite::{group::ff::Field, WrappedGroup};
 use embedwards25519::Embedwards25519;
 
 use dkg_recovery::recover_key;
-use crate::{Participant, Curves, Generators, VerifyResult, Dkg, Ristretto};
+use crate::{Participant, Curves, Generators, VerifyResult, Dkg, Ed25519};
 
 mod proof;
 
@@ -17,14 +17,14 @@ const PARTICIPANTS: u16 = 5;
 
 #[test]
 fn dkg() {
-  let generators = Generators::<Ristretto>::new(THRESHOLD, PARTICIPANTS);
+  let generators = Generators::<Ed25519>::new(THRESHOLD, PARTICIPANTS);
   let context = [0; 32];
 
   let mut priv_keys = vec![];
   let mut pub_keys = vec![];
   for i in 0 .. PARTICIPANTS {
-    let priv_key = <Embedwards25519 as Ciphersuite>::F::random(&mut OsRng);
-    pub_keys.push(<Embedwards25519 as Ciphersuite>::generator() * priv_key);
+    let priv_key = <Embedwards25519 as WrappedGroup>::F::random(&mut OsRng);
+    pub_keys.push(<Embedwards25519 as WrappedGroup>::generator() * priv_key);
     priv_keys.push((Participant::new(1 + i).unwrap(), Zeroizing::new(priv_key)));
   }
 
@@ -34,27 +34,15 @@ fn dkg() {
   for (i, priv_key) in priv_keys.iter().take(usize::from(THRESHOLD)) {
     participations.insert(
       *i,
-      Dkg::<Ristretto>::participate(
-        &mut OsRng,
-        &generators,
-        context,
-        THRESHOLD,
-        &pub_keys,
-        priv_key,
-      )
-      .unwrap(),
+      Dkg::<Ed25519>::participate(&mut OsRng, &generators, context, THRESHOLD, &pub_keys, priv_key)
+        .unwrap(),
     );
   }
 
-  let VerifyResult::Valid(dkg) = Dkg::<Ristretto>::verify(
-    &mut OsRng,
-    &generators,
-    context,
-    THRESHOLD,
-    &pub_keys,
-    &participations,
-  )
-  .unwrap() else {
+  let VerifyResult::Valid(dkg) =
+    Dkg::<Ed25519>::verify(&mut OsRng, &generators, context, THRESHOLD, &pub_keys, &participations)
+      .unwrap()
+  else {
     panic!("verify didn't return VerifyResult::Valid")
   };
 
@@ -80,7 +68,7 @@ fn dkg() {
 
   // TODO: Test for all possible combinations of keys
   assert_eq!(
-    <<Ristretto as Curves>::ToweringCurve as Ciphersuite>::generator() *
+    <<Ed25519 as Curves>::ToweringCurve as WrappedGroup>::generator() *
       *recover_key(&all_keys.values().cloned().collect::<Vec<_>>()).unwrap(),
     group_key.unwrap()
   );

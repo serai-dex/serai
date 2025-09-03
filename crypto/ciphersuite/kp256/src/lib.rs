@@ -5,7 +5,7 @@ use zeroize::Zeroize;
 
 use sha2::Sha512;
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::{WrappedGroup, Id, WithPreferredHash, GroupCanonicalEncoding};
 
 pub use k256;
 pub use p256;
@@ -18,17 +18,20 @@ macro_rules! kp_curve {
     $Ciphersuite: ident,
     $ID:          literal
   ) => {
-    impl Ciphersuite for $Ciphersuite {
+    impl WrappedGroup for $Ciphersuite {
       type F = $lib::Scalar;
       type G = $lib::ProjectivePoint;
-      type H = Sha512;
-
-      const ID: &'static [u8] = $ID;
-
       fn generator() -> Self::G {
         $lib::ProjectivePoint::GENERATOR
       }
     }
+    impl Id for $Ciphersuite {
+      const ID: &'static [u8] = $ID;
+    }
+    impl WithPreferredHash for $Ciphersuite {
+      type H = Sha512;
+    }
+    impl GroupCanonicalEncoding for $Ciphersuite {}
   };
 }
 

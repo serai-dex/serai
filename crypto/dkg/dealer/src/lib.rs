@@ -10,12 +10,12 @@ use rand_core::{RngCore, CryptoRng};
 
 use ciphersuite::{
   group::ff::{Field, PrimeField},
-  Ciphersuite,
+  GroupIo, Id,
 };
 pub use dkg::*;
 
 /// Create a key via a dealer key generation protocol.
-pub fn key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
+pub fn key_gen<R: RngCore + CryptoRng, C: GroupIo + Id>(
   rng: &mut R,
   threshold: u16,
   participants: u16,

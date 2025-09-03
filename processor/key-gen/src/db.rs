@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{group::GroupEncoding, *};
 use dkg::*;
 
 use serai_primitives::validator_sets::Session;
@@ -11,15 +11,15 @@ use serai_primitives::validator_sets::Session;
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn};
 
-use crate::KeyGenParams;
+use crate::{Ristretto, KeyGenParams};
 
 pub(crate) struct Params<P: KeyGenParams> {
   pub(crate) t: u16,
   pub(crate) n: u16,
   pub(crate) substrate_evrf_public_keys:
-    Vec<<<Ristretto as Curves>::EmbeddedCurve as Ciphersuite>::G>,
+    Vec<<<Ristretto as Curves>::EmbeddedCurve as WrappedGroup>::G>,
   pub(crate) network_evrf_public_keys:
-    Vec<<<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as Ciphersuite>::G>,
+    Vec<<<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as WrappedGroup>::G>,
 }
 
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -85,17 +85,16 @@ impl<P: KeyGenParams> KeyGenDb<P> {
         .substrate_evrf_public_keys
         .into_iter()
         .map(|key| {
-          <<Ristretto as Curves>::EmbeddedCurve as Ciphersuite>::read_G(&mut key.as_slice())
-            .unwrap()
+          <<Ristretto as Curves>::EmbeddedCurve as GroupIo>::read_G(&mut key.as_slice()).unwrap()
         })
         .collect(),
       network_evrf_public_keys: params
         .network_evrf_public_keys
         .into_iter()
         .map(|key| {
-          <<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as Ciphersuite>::read_G::<
-            &[u8],
-          >(&mut key.as_ref())
+          <<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as GroupIo>::read_G::<&[u8]>(
+            &mut key.as_ref(),
+          )
           .unwrap()
         })
         .collect(),

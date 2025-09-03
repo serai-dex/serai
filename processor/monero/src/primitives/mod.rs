@@ -1,6 +1,6 @@
 use zeroize::Zeroizing;
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use dalek_ff_group::Ed25519;
 
 use monero_wallet::{address::SubaddressIndex, ViewPairError, GuaranteedViewPair};
@@ -28,8 +28,8 @@ pub(crate) const FORWARDED_SUBADDRESS: SubaddressIndex = match SubaddressIndex::
   None => panic!("SubaddressIndex for FORWARDED_SUBADDRESS was None"),
 };
 
-pub(crate) fn view_pair(key: <Ed25519 as Ciphersuite>::G) -> GuaranteedViewPair {
-  match GuaranteedViewPair::new(key.0, Zeroizing::new(*view_key::<Ed25519>(0))) {
+pub(crate) fn view_pair(key: <Ed25519 as WrappedGroup>::G) -> GuaranteedViewPair {
+  match GuaranteedViewPair::new(key.0, Zeroizing::new(view_key::<Ed25519>(0))) {
     Ok(view_pair) => view_pair,
     Err(ViewPairError::TorsionedSpendKey) => {
       unreachable!("dalek_ff_group::EdwardsPoint had torsion")

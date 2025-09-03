@@ -4,7 +4,7 @@ use zeroize::Zeroizing;
 use rand::{RngCore, rngs::OsRng};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{Ciphersuite, group::ff::Field};
+use ciphersuite::*;
 
 use tendermint::{
   time::CanonicalInstant,
@@ -275,7 +275,7 @@ async fn conflicting_msgs_evidence_tx() {
     let signed_1 = signed_for_b_r(0, 0, Data::Proposal(None, TendermintBlock(vec![0x11]))).await;
 
     let signer_2 =
-      Signer::new(genesis, Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng)));
+      Signer::new(genesis, Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng)));
     let signed_id_2 = signer_2.validator_id().await.unwrap();
     let signed_2 = signed_from_data::<N>(
       signer_2.into(),
@@ -292,10 +292,9 @@ async fn conflicting_msgs_evidence_tx() {
     ));
 
     // update schema so that we don't fail due to invalid signature
-    let signer_pub =
-      <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut signer_id.as_slice()).unwrap();
+    let signer_pub = <Ristretto as GroupIo>::read_G::<&[u8]>(&mut signer_id.as_slice()).unwrap();
     let signer_pub_2 =
-      <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut signed_id_2.as_slice()).unwrap();
+      <Ristretto as GroupIo>::read_G::<&[u8]>(&mut signed_id_2.as_slice()).unwrap();
     let validators =
       Arc::new(Validators::new(genesis, vec![(signer_pub, 1), (signer_pub_2, 1)]).unwrap());
 
