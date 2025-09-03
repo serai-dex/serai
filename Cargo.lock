@@ -2458,6 +2458,7 @@ version = "0.4.6"
 dependencies = [
  "ciphersuite 0.4.2",
  "crypto-bigint 0.5.5",
+ "crypto-bigint 0.6.1",
  "curve25519-dalek",
  "digest 0.10.7",
  "ff-group-tests",
@@ -6005,6 +6006,7 @@ name = "minimal-ed448"
 version = "0.4.2"
 dependencies = [
  "ciphersuite 0.4.2",
+ "crypto-bigint 0.6.1",
  "ff-group-tests",
  "hex",
  "prime-field",

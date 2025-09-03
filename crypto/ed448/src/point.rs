@@ -7,8 +7,8 @@ use prime_field::{
   subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable},
   zeroize::Zeroize,
   rand_core::RngCore,
-  crypto_bigint::U512,
 };
+use crypto_bigint::U512;
 
 use ciphersuite::group::{
   ff::{Field, PrimeField, PrimeFieldBits},
@@ -18,17 +18,37 @@ use ciphersuite::group::{
 
 use crate::{u8_from_bool, Scalar, FieldElement};
 
-const G_Y: FieldElement = FieldElement::from(&U512::from_be_hex(concat!(
-  "0000000000000000",
-  "693f46716eb6bc248876203756c9c7624bea73736ca3984087789c1e",
-  "05a0c2d73ad3ff1ce67c39c4fdbd132c4ed7c8ad9808795bf230fa14",
-)));
+const G_Y: FieldElement = {
+  let bytes = U512::from_be_hex(concat!(
+    "0000000000000000",
+    "693f46716eb6bc248876203756c9c7624bea73736ca3984087789c1e",
+    "05a0c2d73ad3ff1ce67c39c4fdbd132c4ed7c8ad9808795bf230fa14",
+  ))
+  .to_le_bytes();
+  let mut dest = [0; 57];
+  let mut i = 0;
+  while i < dest.len() {
+    dest[i] = bytes[i];
+    i += 1;
+  }
+  FieldElement::from_bytes(&dest).unwrap()
+};
 
-const G_X: FieldElement = FieldElement::from(&U512::from_be_hex(concat!(
-  "0000000000000000",
-  "4f1970c66bed0ded221d15a622bf36da9e146570470f1767ea6de324",
-  "a3d3a46412ae1af72ab66511433b80e18b00938e2626a82bc70cc05e",
-)));
+const G_X: FieldElement = {
+  let bytes = U512::from_be_hex(concat!(
+    "0000000000000000",
+    "4f1970c66bed0ded221d15a622bf36da9e146570470f1767ea6de324",
+    "a3d3a46412ae1af72ab66511433b80e18b00938e2626a82bc70cc05e",
+  ))
+  .to_le_bytes();
+  let mut dest = [0; 57];
+  let mut i = 0;
+  while i < dest.len() {
+    dest[i] = bytes[i];
+    i += 1;
+  }
+  FieldElement::from_bytes(&dest).unwrap()
+};
 
 fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
   #[allow(non_snake_case)]

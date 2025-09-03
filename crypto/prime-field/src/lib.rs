@@ -5,11 +5,11 @@
 pub use subtle;
 pub use zeroize;
 pub use rand_core;
-pub use crypto_bigint;
 pub use ff;
 
 #[doc(hidden)]
 pub mod __prime_field_private {
+  pub use crypto_bigint;
   pub use paste;
   #[cfg(feature = "std")]
   pub use ff_group_tests;
@@ -94,6 +94,8 @@ pub mod __prime_field_private {
 /// less than `modulus_as_be_hex`.
 ///
 /// `big_endian` controls if the encoded representation will be big-endian or not.
+///
+/// `repr` must satisfy the requirements for `PrimeField::Repr`.
 #[doc(hidden)]
 #[macro_export]
 macro_rules! odd_prime_field_with_specific_repr {
@@ -116,13 +118,15 @@ macro_rules! odd_prime_field_with_specific_repr {
           },
           zeroize::Zeroize,
           rand_core::RngCore,
-          crypto_bigint::{
-            Limb, Encoding, Integer, Uint,
-            modular::{ConstMontyParams, ConstMontyForm},
-            impl_modulus,
-          },
           ff::*,
-          __prime_field_private::*,
+          __prime_field_private::{
+            crypto_bigint::{
+              Limb, Encoding, Integer, Uint,
+              modular::{ConstMontyParams, ConstMontyForm},
+              impl_modulus,
+            },
+            *,
+          },
         };
 
         const MODULUS_WITHOUT_PREFIX: &str = hex_str_without_prefix($modulus_as_be_hex);
@@ -180,7 +184,7 @@ macro_rules! odd_prime_field_with_specific_repr {
         const MODULUS_MINUS_TWO: UnderlyingUint = MODULUS.wrapping_sub(&UnderlyingUint::from_u8(2));
         const T: UnderlyingUint = MODULUS_MINUS_ONE.shr_vartime($name::S);
 
-        /// A field automatically generated with `short-weierstrass`.
+        /// A field automatically generated with `prime-field`.
         #[derive(Clone, Copy, Eq, Debug)]
         pub struct $name(Underlying);
 
@@ -192,8 +196,46 @@ macro_rules! odd_prime_field_with_specific_repr {
 
         impl $name {
           /// Create a `$name` from the `Uint` type underlying it.
-          pub const fn from(value: &UnderlyingUint) -> Self {
+          const fn from(value: &UnderlyingUint) -> Self {
             $name(Underlying::new(value))
+          }
+
+          /// Create a `$name` from bytes within a `const` context.
+          ///
+          /// This function executes in variable time. `<$name as PrimeField>::from_repr` SHOULD
+          /// be used instead.
+          pub const fn from_bytes(value: &[u8; MODULUS_BYTES]) -> Option<Self> {
+            let mut expanded_repr = [0; UnderlyingUint::BYTES];
+            let repr: &[u8] = value.as_slice();
+            let (uint, repr) = if $big_endian {
+              let start = UnderlyingUint::BYTES - MODULUS_BYTES;
+              let mut i = 0;
+              while i < repr.len() {
+                expanded_repr[start + i] = repr[i];
+                i += 1;
+              }
+              let uint = Underlying::new(&UnderlyingUint::from_be_slice(&expanded_repr));
+              (uint, uint.retrieve().to_be_bytes())
+            } else {
+              let mut i = 0;
+              while i < repr.len() {
+                expanded_repr[i] = repr[i];
+                i += 1;
+              }
+              let uint = Underlying::new(&UnderlyingUint::from_le_slice(&expanded_repr));
+              (uint, uint.retrieve().to_le_bytes())
+            };
+
+            // Ensure the representations match
+            let mut i = 0;
+            while i < expanded_repr.len() {
+              if repr[i] != expanded_repr[i] {
+                return None;
+              }
+              i += 1;
+            }
+
+            Some(Self(uint))
           }
         }
         impl From<u8> for $name {
@@ -416,6 +458,7 @@ macro_rules! odd_prime_field_with_specific_repr {
         }
 
         /// The encoded representation of a `$name`.
+        // This is required to be bespoke to satisfy `Default`.
         #[derive(Clone, Copy)]
         pub struct Repr([u8; MODULUS_BYTES]);
         impl Default for Repr {

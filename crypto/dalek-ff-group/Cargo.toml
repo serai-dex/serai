@@ -28,7 +28,8 @@ sha2 = { version = "0.11.0-rc.0", default-features = false }
 prime-field = { path = "../prime-field", default-features = false }
 ciphersuite = { version = "0.4.2", path = "../ciphersuite", default-features = false }
 
-crypto-bigint = { version = "0.5", default-features = false, features = ["zeroize"] }
+crypto-bigint-05 = { package = "crypto-bigint", version = "0.5", default-features = false, features = ["zeroize"] }
+crypto-bigint = { version = "0.6", default-features = false, features = ["zeroize"] }
 
 curve25519-dalek = { version = ">= 4.0, < 4.2", default-features = false, features = ["zeroize", "digest", "group", "precomputed-tables"] }
 
