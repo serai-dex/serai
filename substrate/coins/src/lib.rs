@@ -241,7 +241,7 @@ mod pallet {
     }
 
     /// Transfer `balance` from `from` to `to`.
-    fn transfer_internal(from: Public, to: Public, balance: Balance) -> Result<(), Error<T, I>> {
+    pub fn transfer_fn(from: Public, to: Public, balance: Balance) -> Result<(), Error<T, I>> {
       // update balances of accounts
       Self::decrease_balance_internal(from, balance)?;
       Self::increase_balance_internal(to, balance)?;
@@ -257,7 +257,7 @@ mod pallet {
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn transfer(origin: OriginFor<T>, to: Public, balance: Balance) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      Self::transfer_internal(from, to, balance)?;
+      Self::transfer_fn(from, to, balance)?;
       Ok(())
     }
 

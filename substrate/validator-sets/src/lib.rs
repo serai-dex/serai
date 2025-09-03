@@ -633,7 +633,7 @@ mod pallet {
     ) -> DispatchResult {
       // TODO: Should this call be part of the `increase_allocation` since we have to have it
       // before each call to it?
-      Coins::<T>::transfer_internal(
+      Coins::<T>::transfer_fn(
         account,
         Self::account(),
         Balance { coin: Coin::Serai, amount },
@@ -804,11 +804,7 @@ mod pallet {
     #[pallet::weight(0)] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
-      Coins::<T>::transfer_internal(
-        validator,
-        Self::account(),
-        Balance { coin: Coin::Serai, amount },
-      )?;
+      Coins::<T>::transfer_fn(validator, Self::account(), Balance { coin: Coin::Serai, amount })?;
       Abstractions::<T>::increase_allocation(network, validator, amount, false)
         .map_err(Error::<T>::AllocationError)?;
       Ok(())
@@ -822,11 +818,7 @@ mod pallet {
       let deallocation_timeline = Abstractions::<T>::decrease_allocation(network, account, amount)
         .map_err(Error::<T>::DeallocationError)?;
       if matches!(deallocation_timeline, DeallocationTimeline::Immediate) {
-        Coins::<T>::transfer_internal(
-          Self::account(),
-          account,
-          Balance { coin: Coin::Serai, amount },
-        )?;
+        Coins::<T>::transfer_fn(Self::account(), account, Balance { coin: Coin::Serai, amount })?;
       }
 
       Ok(())
@@ -844,7 +836,7 @@ mod pallet {
       let Some(amount) = Self::take_deallocatable_amount(network, session, account) else {
         Err(Error::<T>::NonExistentDeallocation)?
       };
-      Coins::<T>::transfer_internal(
+      Coins::<T>::transfer_fn(
         Self::account(),
         account,
         Balance { coin: Coin::Serai, amount },
