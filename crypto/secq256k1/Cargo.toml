@@ -14,7 +14,7 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-hex-literal = { version = "0.4", default-features = false }
+hex-literal = { version = "1", default-features = false }
 
 std-shims = { version = "0.1", path = "../../common/std-shims", default-features = false, optional = true }
 
