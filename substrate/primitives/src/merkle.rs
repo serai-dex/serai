@@ -16,6 +16,12 @@ pub struct UnbalancedMerkleTree {
   pub root: [u8; 32],
 }
 
+impl Default for UnbalancedMerkleTree {
+  fn default() -> Self {
+    Self::EMPTY
+  }
+}
+
 impl UnbalancedMerkleTree {
   /// An empty Merkle tree.
   pub const EMPTY: Self = Self { root: [0; 32] };
@@ -77,10 +83,17 @@ pub struct IncrementalUnbalancedMerkleTree {
   branches: Vec<(u64, [u8; 32])>,
 }
 
+#[allow(clippy::derivable_impls)]
+impl Default for IncrementalUnbalancedMerkleTree {
+  fn default() -> Self {
+    Self { branches: Vec::new() }
+  }
+}
+
 impl IncrementalUnbalancedMerkleTree {
   /// Create a new incrementally-created unbalanced merkle tree.
   pub fn new() -> Self {
-    Self { branches: Vec::new() }
+    Self::default()
   }
 
   /// Reduce the incremental tree.

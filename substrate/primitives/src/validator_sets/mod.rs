@@ -93,9 +93,8 @@ impl ExternalValidatorSet {
 
     // Check we have room to encode into `res`, using the approximate `size_of` for the max size of
     // the serialization
-    const BYTES_FOR_SET: usize = 32 - (1 + DST.len());
     const _ASSERT_MORE_BYTES_THAN_SIZE: [();
-      BYTES_FOR_SET - core::mem::size_of::<ExternalValidatorSet>()] = [(); _];
+      32 - (1 + DST.len()) - core::mem::size_of::<ExternalValidatorSet>()] = [(); _];
 
     let encoded = borsh::to_vec(&self).unwrap();
     res[(1 + DST.len()) .. (1 + DST.len() + encoded.len())].copy_from_slice(&encoded);

@@ -44,7 +44,7 @@ impl<S: EmbeddedEllipticCurveKeysStorage> EmbeddedEllipticCurveKeys for S {
   ) -> bool {
     match network {
       // Validators never need to set embedded elliptic curve keys for Serai
-      NetworkId::Serai => return false,
+      NetworkId::Serai => false,
       NetworkId::External(network) => {
         !S::EmbeddedEllipticCurveKeys::contains_key(network, validator)
       }

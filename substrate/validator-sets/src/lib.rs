@@ -73,6 +73,7 @@ impl<T: pallet::Config> GetValidatorCount for MembershipProof<T> {
 }
 */
 
+#[expect(clippy::ignored_unit_patterns, clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 mod pallet {
   use sp_core::sr25519::Public;
