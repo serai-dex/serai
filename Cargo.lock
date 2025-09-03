@@ -1939,7 +1939,7 @@ name = "ciphersuite"
 version = "0.4.99"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
 ]
 
 [[package]]
@@ -2457,7 +2457,6 @@ name = "dalek-ff-group"
 version = "0.4.6"
 dependencies = [
  "ciphersuite 0.4.2",
- "crypto-bigint 0.5.5",
  "crypto-bigint 0.6.1",
  "curve25519-dalek",
  "digest 0.10.7",
@@ -2468,6 +2467,16 @@ dependencies = [
  "sha2 0.11.0-rc.0",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "dalek-ff-group"
+version = "0.4.99"
+dependencies = [
+ "crypto-bigint 0.5.5",
+ "crypto-bigint 0.6.1",
+ "dalek-ff-group 0.4.6",
+ "prime-field",
 ]
 
 [[package]]
@@ -2795,7 +2804,7 @@ dependencies = [
  "blake2 0.11.0-rc.0",
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "dkg",
  "dkg-recovery",
  "ec-divisors",
@@ -2820,7 +2829,7 @@ name = "dkg-musig"
 version = "0.6.0"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "dkg",
  "dkg-recovery",
  "multiexp",
@@ -2913,7 +2922,7 @@ name = "ec-divisors"
 version = "0.1.0"
 source = "git+https://github.com/monero-oxide/monero-oxide?rev=a6f8797007e768488568b821435cf5006517a962#a6f8797007e768488568b821435cf5006517a962"
 dependencies = [
- "dalek-ff-group",
+ "dalek-ff-group 0.4.99",
  "ff",
  "group",
  "rand_core 0.6.4",
@@ -3025,7 +3034,7 @@ dependencies = [
  "blake2 0.11.0-rc.0",
  "ciphersuite 0.4.2",
  "curve25519-dalek",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "ff-group-tests",
  "generalized-bulletproofs-ec-gadgets",
  "hex",
@@ -3535,7 +3544,7 @@ name = "frost-schnorrkel"
 version = "0.2.0"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "flexible-transcript",
  "group",
  "modular-frost",
@@ -6074,7 +6083,7 @@ version = "0.10.1"
 dependencies = [
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "dkg",
  "dkg-dealer",
  "dkg-recovery",
@@ -6148,7 +6157,7 @@ version = "0.1.0"
 source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.99",
  "flexible-transcript",
  "group",
  "modular-frost",
@@ -6170,7 +6179,7 @@ source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77
 dependencies = [
  "crypto-bigint 0.5.5",
  "curve25519-dalek",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.99",
  "group",
  "monero-io",
  "sha3 0.10.8",
@@ -6267,7 +6276,7 @@ version = "0.1.0"
 source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
 dependencies = [
  "curve25519-dalek",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.99",
  "flexible-transcript",
  "hex",
  "modular-frost",
@@ -6318,7 +6327,7 @@ dependencies = [
 name = "multiexp"
 version = "0.4.2"
 dependencies = [
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "ff",
  "group",
  "k256",
@@ -9456,7 +9465,7 @@ name = "schnorr-signatures"
 version = "0.5.2"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "flexible-transcript",
  "hex",
  "multiexp",
@@ -9741,7 +9750,7 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "dkg-musig",
  "dockertest",
  "frame-system",
@@ -9802,7 +9811,7 @@ dependencies = [
  "blake2 0.11.0-rc.0",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "dkg-musig",
  "env_logger",
  "flexible-transcript",
@@ -9893,7 +9902,7 @@ dependencies = [
  "blake2 0.11.0-rc.0",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "dkg",
  "log",
  "parity-scale-codec",
@@ -10157,7 +10166,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "env_logger",
  "flexible-transcript",
  "hex",
@@ -10178,7 +10187,7 @@ name = "serai-message-queue-tests"
 version = "0.1.0"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "dockertest",
  "hex",
  "rand_core 0.6.4",
@@ -10195,7 +10204,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "dkg-evrf",
  "log",
  "modular-frost",
@@ -10225,7 +10234,7 @@ version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "dkg",
  "dkg-evrf",
  "embedwards25519",
@@ -10247,7 +10256,7 @@ dependencies = [
  "ciphersuite-kp256",
  "clap",
  "curve25519-dalek",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "embedwards25519",
  "frame-benchmarking",
  "futures-util",
@@ -10298,7 +10307,7 @@ name = "serai-orchestrator"
 version = "0.0.1"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "embedwards25519",
  "flexible-transcript",
  "hex",
@@ -10536,7 +10545,7 @@ dependencies = [
  "blake2 0.11.0-rc.0",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "frost-schnorrkel",
  "log",
  "modular-frost",
@@ -10714,7 +10723,7 @@ version = "0.1.0"
 dependencies = [
  "bitvec",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "dkg-musig",
  "frame-support",
  "frame-system",
@@ -10749,7 +10758,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "dkg-musig",
  "parity-scale-codec",
  "scale-info",
@@ -12602,7 +12611,7 @@ version = "0.1.0"
 dependencies = [
  "blake2 0.11.0-rc.0",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.4.6",
  "flexible-transcript",
  "futures-channel",
  "futures-util",
