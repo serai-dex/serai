@@ -24,7 +24,7 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
-dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std", "ristretto"] }
+dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std"] }
 
 serai-client = { path = "../../substrate/client", default-features = false }
 serai-cosign = { path = "../../coordinator/cosign" }

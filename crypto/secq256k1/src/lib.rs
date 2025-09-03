@@ -5,17 +5,12 @@
 #[cfg(feature = "alloc")]
 #[allow(unused_imports)]
 use std_shims::prelude::*;
-#[cfg(feature = "alloc")]
-use std_shims::io::{self, Read};
 
-use sha2::{
-  digest::array::{typenum::U33, Array},
-  Sha512,
-};
+use sha2::digest::array::{typenum::U33, Array};
 use k256::elliptic_curve::{
-  subtle::{Choice, ConstantTimeEq, ConditionallySelectable},
+  subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable},
   zeroize::Zeroize,
-  group::{ff::PrimeField, Group},
+  group::{ff::PrimeField, Group, GroupEncoding},
   sec1::Tag,
 };
 
@@ -109,31 +104,24 @@ impl ShortWeierstrass for Secq256k1 {
 
 pub type Point = Projective<Secq256k1>;
 
-impl ciphersuite::Ciphersuite for Secq256k1 {
+impl ciphersuite::WrappedGroup for Secq256k1 {
   type F = Scalar;
   type G = Point;
-  type H = Sha512;
-
-  const ID: &'static [u8] = b"secq256k1";
 
   fn generator() -> Self::G {
-    Point::generator()
+    <Point as Group>::generator()
   }
-
-  // We override the provided impl, which compares against the reserialization, because
-  // we already require canonicity
-  #[cfg(feature = "alloc")]
-  #[allow(non_snake_case)]
-  fn read_G<R: Read>(reader: &mut R) -> io::Result<Self::G> {
-    use ciphersuite::group::GroupEncoding;
-
-    let mut encoding = <Self::G as GroupEncoding>::Repr::default();
-    reader.read_exact(encoding.as_mut())?;
-
-    let point = Option::<Self::G>::from(Self::G::from_bytes(&encoding))
-      .ok_or_else(|| io::Error::other("invalid point"))?;
-    Ok(point)
+}
+impl ciphersuite::Id for Secq256k1 {
+  const ID: &[u8] = b"secq256k1";
+}
+impl ciphersuite::GroupCanonicalEncoding for Secq256k1 {
+  fn from_canonical_bytes(bytes: &<Self::G as GroupEncoding>::Repr) -> CtOption<Self::G> {
+    Self::G::from_bytes(bytes)
   }
+}
+impl ciphersuite::WithPreferredHash for Secq256k1 {
+  type H = sha2::Sha512;
 }
 
 #[cfg(feature = "alloc")]
@@ -150,7 +138,7 @@ fn test_curve() {
 fn generator() {
   use ciphersuite::group::GroupEncoding;
   assert_eq!(
-    Point::generator(),
+    <Point as Group>::generator(),
     Point::from_bytes(&Array(hex_literal::hex!(
       "020000000000000000000000000000000000000000000000000000000000000001"
     )))

@@ -1,7 +1,6 @@
 use core::future::Future;
 
-use dalek_ff_group::Ristretto;
-use frost::dkg::ThresholdKeys;
+use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
 use scale::Encode;
 use serai_primitives::Signature;

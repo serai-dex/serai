@@ -6,7 +6,7 @@ use core::time::Duration;
 use zeroize::Zeroize;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{group::GroupEncoding, GroupIo};
 
 use scale::{Encode, Decode, MaxEncodedLen};
 use scale_info::TypeInfo;
@@ -138,8 +138,7 @@ pub fn musig_key(set: ValidatorSet, set_keys: &[Public]) -> Public {
   let mut keys = Vec::new();
   for key in set_keys {
     keys.push(
-      <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut key.0.as_ref())
-        .expect("invalid participant"),
+      <Ristretto as GroupIo>::read_G::<&[u8]>(&mut key.0.as_ref()).expect("invalid participant"),
     );
   }
   Public(dkg_musig::musig_key_vartime::<Ristretto>(musig_context(set), &keys).unwrap().to_bytes())

@@ -5,7 +5,7 @@ use scale::{Encode, Decode, IoReader};
 use blake2::{Digest, Blake2s256};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 
 use crate::{
   transaction::{Transaction, TransactionKind, TransactionError},
@@ -50,7 +50,7 @@ impl Transaction for TendermintTx {
     Blake2s256::digest(self.serialize()).into()
   }
 
-  fn sig_hash(&self, _genesis: [u8; 32]) -> <Ristretto as Ciphersuite>::F {
+  fn sig_hash(&self, _genesis: [u8; 32]) -> <Ristretto as WrappedGroup>::F {
     match self {
       TendermintTx::SlashEvidence(_) => panic!("sig_hash called on slash evidence transaction"),
     }

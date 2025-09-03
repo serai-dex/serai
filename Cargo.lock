@@ -1526,11 +1526,11 @@ dependencies = [
 
 [[package]]
 name = "blake2"
-version = "0.11.0-rc.0"
+version = "0.11.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce3d950855224a23299348898f8a2127860e1afea78df3e51deebb89d1cb2f8f"
+checksum = "1edac47499deef695d9431bf241c75ea29f4cf3dcb78d39e19b31515e4ad3b08"
 dependencies = [
- "digest 0.11.0-rc.0",
+ "digest 0.11.0-rc.1",
 ]
 
 [[package]]
@@ -1588,11 +1588,12 @@ dependencies = [
 
 [[package]]
 name = "block-buffer"
-version = "0.11.0-rc.4"
+version = "0.11.0-rc.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a229bfd78e4827c91b9b95784f69492c1b77c1ab75a45a8a037b139215086f94"
+checksum = "e9ef36a6fcdb072aa548f3da057640ec10859eb4e91ddf526ee648d50c76a949"
 dependencies = [
  "hybrid-array",
+ "zeroize",
 ]
 
 [[package]]
@@ -1922,13 +1923,11 @@ dependencies = [
 name = "ciphersuite"
 version = "0.4.2"
 dependencies = [
- "digest 0.11.0-rc.0",
+ "digest 0.11.0-rc.1",
  "ff",
  "ff-group-tests",
- "flexible-transcript",
  "group",
  "hex",
- "rand_core 0.6.4",
  "std-shims",
  "subtle",
  "zeroize",
@@ -1939,7 +1938,9 @@ name = "ciphersuite"
 version = "0.4.99"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
+ "std-shims",
+ "zeroize",
 ]
 
 [[package]]
@@ -1952,7 +1953,7 @@ dependencies = [
  "k256",
  "p256",
  "rand_core 0.6.4",
- "sha2 0.11.0-rc.0",
+ "sha2 0.11.0-rc.2",
  "zeroize",
 ]
 
@@ -2345,9 +2346,9 @@ dependencies = [
 
 [[package]]
 name = "crypto-common"
-version = "0.2.0-rc.3"
+version = "0.2.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a23fa214dea9efd4dacee5a5614646b30216ae0f05d4bb51bafb50e9da1c5be"
+checksum = "6a8235645834fbc6832939736ce2f2d08192652269e11010a6240f61b908a1c6"
 dependencies = [
  "hybrid-array",
 ]
@@ -2371,6 +2372,7 @@ dependencies = [
  "cpufeatures",
  "curve25519-dalek-derive",
  "digest 0.10.7",
+ "ff",
  "fiat-crypto",
  "group",
  "rand_core 0.6.4",
@@ -2454,28 +2456,27 @@ dependencies = [
 
 [[package]]
 name = "dalek-ff-group"
-version = "0.4.6"
+version = "0.5.0"
 dependencies = [
+ "blake2 0.11.0-rc.2",
  "ciphersuite 0.4.2",
- "crypto-bigint 0.6.1",
  "curve25519-dalek",
- "digest 0.10.7",
  "ff-group-tests",
  "hex",
  "prime-field",
  "rand_core 0.6.4",
- "sha2 0.11.0-rc.0",
+ "sha2 0.11.0-rc.2",
  "subtle",
  "zeroize",
 ]
 
 [[package]]
 name = "dalek-ff-group"
-version = "0.4.99"
+version = "0.5.99"
 dependencies = [
  "crypto-bigint 0.5.5",
  "crypto-bigint 0.6.1",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "prime-field",
 ]
 
@@ -2551,7 +2552,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 2.0.106",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -2714,13 +2715,14 @@ dependencies = [
 
 [[package]]
 name = "digest"
-version = "0.11.0-rc.0"
+version = "0.11.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "460dd7f37e4950526b54a5a6b1f41b6c8e763c58eb9a8fc8fc05ba5c2f44ca7b"
+checksum = "3a4aae35a0fcbe22ff1be50fe96df72002d5a4a6fb4aae9193cf2da0daa36da2"
 dependencies = [
- "block-buffer 0.11.0-rc.4",
- "crypto-common 0.2.0-rc.3",
+ "block-buffer 0.11.0-rc.5",
+ "crypto-common 0.2.0-rc.4",
  "subtle",
+ "zeroize",
 ]
 
 [[package]]
@@ -2801,10 +2803,10 @@ dependencies = [
 name = "dkg-evrf"
 version = "0.1.0"
 dependencies = [
- "blake2 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "dkg",
  "dkg-recovery",
  "ec-divisors",
@@ -2829,7 +2831,7 @@ name = "dkg-musig"
 version = "0.6.0"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "dkg",
  "dkg-recovery",
  "multiexp",
@@ -2920,9 +2922,9 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 [[package]]
 name = "ec-divisors"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=a6f8797007e768488568b821435cf5006517a962#a6f8797007e768488568b821435cf5006517a962"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7216a2e84c7671c167c3d81eafe0d2b1f418f102#7216a2e84c7671c167c3d81eafe0d2b1f418f102"
 dependencies = [
- "dalek-ff-group 0.4.99",
+ "dalek-ff-group 0.5.99",
  "ff",
  "group",
  "rand_core 0.6.4",
@@ -3031,10 +3033,9 @@ dependencies = [
 name = "embedwards25519"
 version = "0.1.0"
 dependencies = [
- "blake2 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
  "ciphersuite 0.4.2",
  "curve25519-dalek",
- "dalek-ff-group 0.4.6",
  "ff-group-tests",
  "generalized-bulletproofs-ec-gadgets",
  "hex",
@@ -3321,10 +3322,10 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 name = "flexible-transcript"
 version = "0.3.4"
 dependencies = [
- "blake2 0.11.0-rc.0",
- "digest 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
+ "digest 0.11.0-rc.1",
  "merlin",
- "sha2 0.11.0-rc.0",
+ "sha2 0.11.0-rc.2",
  "zeroize",
 ]
 
@@ -3544,7 +3545,6 @@ name = "frost-schnorrkel"
 version = "0.2.0"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
  "flexible-transcript",
  "group",
  "modular-frost",
@@ -3771,7 +3771,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=a6f8797007e768488568b821435cf5006517a962#a6f8797007e768488568b821435cf5006517a962"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7216a2e84c7671c167c3d81eafe0d2b1f418f102#7216a2e84c7671c167c3d81eafe0d2b1f418f102"
 dependencies = [
  "blake2 0.10.6",
  "ciphersuite 0.4.99",
@@ -3786,7 +3786,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-circuit-abstraction"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=a6f8797007e768488568b821435cf5006517a962#a6f8797007e768488568b821435cf5006517a962"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7216a2e84c7671c167c3d81eafe0d2b1f418f102#7216a2e84c7671c167c3d81eafe0d2b1f418f102"
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs",
@@ -3797,7 +3797,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-ec-gadgets"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=a6f8797007e768488568b821435cf5006517a962#a6f8797007e768488568b821435cf5006517a962"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7216a2e84c7671c167c3d81eafe0d2b1f418f102#7216a2e84c7671c167c3d81eafe0d2b1f418f102"
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs-circuit-abstraction",
@@ -4221,8 +4221,9 @@ checksum = "9b112acc8b3adf4b107a8ec20977da0273a8c386765a3ec0229bd500a1443f9f"
 
 [[package]]
 name = "hybrid-array"
-version = "0.3.1"
-source = "git+https://github.com/kayabaNerve/hybrid-array?rev=8caa508976c93696a67f40734537c91be7cecd96#8caa508976c93696a67f40734537c91be7cecd96"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6fe39a812f039072707ce38020acbab2f769087952eddd9e2b890f37654b2349"
 dependencies = [
  "typenum",
 ]
@@ -6020,7 +6021,7 @@ dependencies = [
  "hex",
  "prime-field",
  "rand_core 0.6.4",
- "sha3 0.11.0-rc.0",
+ "sha3 0.11.0-rc.2",
  "zeroize",
 ]
 
@@ -6079,11 +6080,11 @@ dependencies = [
 
 [[package]]
 name = "modular-frost"
-version = "0.10.1"
+version = "0.11.0"
 dependencies = [
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "dkg",
  "dkg-dealer",
  "dkg-recovery",
@@ -6105,7 +6106,7 @@ dependencies = [
 [[package]]
 name = "monero-address"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "curve25519-dalek",
  "monero-base58",
@@ -6117,7 +6118,7 @@ dependencies = [
 [[package]]
 name = "monero-base58"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "monero-primitives",
  "std-shims",
@@ -6126,7 +6127,7 @@ dependencies = [
 [[package]]
 name = "monero-borromean"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6139,7 +6140,7 @@ dependencies = [
 [[package]]
 name = "monero-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6154,10 +6155,10 @@ dependencies = [
 [[package]]
 name = "monero-clsag"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "curve25519-dalek",
- "dalek-ff-group 0.4.99",
+ "dalek-ff-group 0.5.99",
  "flexible-transcript",
  "group",
  "modular-frost",
@@ -6175,11 +6176,11 @@ dependencies = [
 [[package]]
 name = "monero-generators"
 version = "0.4.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "crypto-bigint 0.5.5",
  "curve25519-dalek",
- "dalek-ff-group 0.4.99",
+ "dalek-ff-group 0.5.99",
  "group",
  "monero-io",
  "sha3 0.10.8",
@@ -6190,16 +6191,17 @@ dependencies = [
 [[package]]
 name = "monero-io"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "curve25519-dalek",
  "std-shims",
+ "zeroize",
 ]
 
 [[package]]
 name = "monero-mlsag"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6213,7 +6215,7 @@ dependencies = [
 [[package]]
 name = "monero-oxide"
 version = "0.1.4-alpha"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "curve25519-dalek",
  "hex-literal",
@@ -6231,7 +6233,7 @@ dependencies = [
 [[package]]
 name = "monero-primitives"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -6244,7 +6246,7 @@ dependencies = [
 [[package]]
 name = "monero-rpc"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "curve25519-dalek",
  "hex",
@@ -6260,7 +6262,7 @@ dependencies = [
 [[package]]
 name = "monero-simple-request-rpc"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "digest_auth",
  "hex",
@@ -6273,10 +6275,10 @@ dependencies = [
 [[package]]
 name = "monero-wallet"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=6966575e05fe09b77674c46984b21686ed9304ff#6966575e05fe09b77674c46984b21686ed9304ff"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
 dependencies = [
  "curve25519-dalek",
- "dalek-ff-group 0.4.99",
+ "dalek-ff-group 0.5.99",
  "flexible-transcript",
  "hex",
  "modular-frost",
@@ -6327,7 +6329,7 @@ dependencies = [
 name = "multiexp"
 version = "0.4.2"
 dependencies = [
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "ff",
  "group",
  "k256",
@@ -6688,7 +6690,7 @@ version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77e878c846a8abae00dd069496dbe8751b16ac1c3d6bd2a7283a938e8228f90d"
 dependencies = [
- "proc-macro-crate 3.2.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -9465,7 +9467,8 @@ name = "schnorr-signatures"
 version = "0.5.2"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
+ "digest 0.11.0-rc.1",
  "flexible-transcript",
  "hex",
  "multiexp",
@@ -9602,7 +9605,7 @@ dependencies = [
  "k256",
  "prime-field",
  "rand_core 0.6.4",
- "sha2 0.11.0-rc.0",
+ "sha2 0.11.0-rc.2",
  "short-weierstrass",
  "std-shims",
 ]
@@ -9746,11 +9749,11 @@ dependencies = [
  "async-lock",
  "bitcoin",
  "bitvec",
- "blake2 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
  "borsh",
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "dkg-musig",
  "dockertest",
  "frame-system",
@@ -9808,20 +9811,18 @@ name = "serai-coordinator"
 version = "0.1.0"
 dependencies = [
  "bitvec",
- "blake2 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "dkg-musig",
  "env_logger",
- "flexible-transcript",
  "frost-schnorrkel",
  "hex",
  "log",
  "modular-frost",
  "parity-scale-codec",
  "rand_core 0.6.4",
- "schnorr-signatures",
  "schnorrkel",
  "serai-client",
  "serai-coordinator-libp2p-p2p",
@@ -9845,7 +9846,7 @@ name = "serai-coordinator-libp2p-p2p"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "blake2 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
  "borsh",
  "futures-util",
  "hex",
@@ -9899,10 +9900,10 @@ dependencies = [
 name = "serai-coordinator-tributary"
 version = "0.1.0"
 dependencies = [
- "blake2 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "dkg",
  "log",
  "parity-scale-codec",
@@ -9922,7 +9923,7 @@ dependencies = [
 name = "serai-cosign"
 version = "0.1.0"
 dependencies = [
- "blake2 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
  "borsh",
  "log",
  "parity-scale-codec",
@@ -10166,7 +10167,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "env_logger",
  "flexible-transcript",
  "hex",
@@ -10187,7 +10188,7 @@ name = "serai-message-queue-tests"
 version = "0.1.0"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "dockertest",
  "hex",
  "rand_core 0.6.4",
@@ -10204,7 +10205,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "dkg-evrf",
  "log",
  "modular-frost",
@@ -10234,7 +10235,7 @@ version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "dkg",
  "dkg-evrf",
  "embedwards25519",
@@ -10256,7 +10257,7 @@ dependencies = [
  "ciphersuite-kp256",
  "clap",
  "curve25519-dalek",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "embedwards25519",
  "frame-benchmarking",
  "futures-util",
@@ -10307,7 +10308,7 @@ name = "serai-orchestrator"
 version = "0.0.1"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "embedwards25519",
  "flexible-transcript",
  "hex",
@@ -10462,12 +10463,14 @@ dependencies = [
 name = "serai-processor-key-gen"
 version = "0.1.0"
 dependencies = [
- "blake2 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
  "borsh",
  "ciphersuite 0.4.2",
  "dkg-evrf",
+ "embedwards25519",
  "flexible-transcript",
  "log",
+ "modular-frost",
  "parity-scale-codec",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
@@ -10510,7 +10513,7 @@ dependencies = [
 name = "serai-processor-scanner"
 version = "0.1.0"
 dependencies = [
- "blake2 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
  "borsh",
  "group",
  "hex",
@@ -10542,10 +10545,9 @@ dependencies = [
 name = "serai-processor-signers"
 version = "0.1.0"
 dependencies = [
- "blake2 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
  "frost-schnorrkel",
  "log",
  "modular-frost",
@@ -10723,7 +10725,7 @@ version = "0.1.0"
 dependencies = [
  "bitvec",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "dkg-musig",
  "frame-support",
  "frame-system",
@@ -10758,7 +10760,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "dkg-musig",
  "parity-scale-codec",
  "scale-info",
@@ -10943,13 +10945,13 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.11.0-rc.0"
+version = "0.11.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa1d2e6b3cc4e43a8258a9a3b17aa5dfd2cc5186c7024bba8a64aa65b2c71a59"
+checksum = "d1e3878ab0f98e35b2df35fe53201d088299b41a6bb63e3e34dada2ac4abd924"
 dependencies = [
  "cfg-if",
  "cpufeatures",
- "digest 0.11.0-rc.0",
+ "digest 0.11.0-rc.1",
 ]
 
 [[package]]
@@ -10964,11 +10966,11 @@ dependencies = [
 
 [[package]]
 name = "sha3"
-version = "0.11.0-rc.0"
+version = "0.11.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9e6a92fd180fd205defdc0b78288ce847c7309d329fd6647a814567e67db50e"
+checksum = "b3c185ed8cff82204014bfaa7649b4c945ca565e03c0534eb33a8d2a01572932"
 dependencies = [
- "digest 0.11.0-rc.0",
+ "digest 0.11.0-rc.1",
  "keccak 0.2.0-pre.0",
 ]
 
@@ -12609,9 +12611,9 @@ dependencies = [
 name = "tributary-sdk"
 version = "0.1.0"
 dependencies = [
- "blake2 0.11.0-rc.0",
+ "blake2 0.11.0-rc.2",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.4.6",
+ "dalek-ff-group 0.5.0",
  "flexible-transcript",
  "futures-channel",
  "futures-util",

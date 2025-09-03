@@ -1,6 +1,6 @@
 use std::io;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{group::GroupEncoding, *};
 use ciphersuite_kp256::Secp256k1;
 
 use alloy_core::primitives::U256;
@@ -61,10 +61,10 @@ impl AsMut<[u8]> for OutputId {
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum Output {
-  Output { key: <Secp256k1 as Ciphersuite>::G, instruction: EthereumInInstruction },
-  Eventuality { key: <Secp256k1 as Ciphersuite>::G, nonce: u64 },
+  Output { key: <Secp256k1 as WrappedGroup>::G, instruction: EthereumInInstruction },
+  Eventuality { key: <Secp256k1 as WrappedGroup>::G, nonce: u64 },
 }
-impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
+impl ReceivedOutput<<Secp256k1 as WrappedGroup>::G, Address> for Output {
   type Id = OutputId;
   type TransactionId = [u8; 32];
 
@@ -107,7 +107,7 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
     }
   }
 
-  fn key(&self) -> <Secp256k1 as Ciphersuite>::G {
+  fn key(&self) -> <Secp256k1 as WrappedGroup>::G {
     match self {
       Output::Output { key, .. } | Output::Eventuality { key, .. } => *key,
     }

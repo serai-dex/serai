@@ -18,13 +18,13 @@ hex-literal = { version = "0.4", default-features = false }
 
 std-shims = { version = "0.1", path = "../../common/std-shims", default-features = false, optional = true }
 
-k256 = { version = "0.13", default-features = false, features = ["arithmetic"] }
+sha2 = { version = "0.11.0-rc.0", default-features = false }
+k256 = { version = "0.13", default-features = false, features = ["arithmetic", "expose-field"] }
 prime-field = { path = "../prime-field", default-features = false }
 short-weierstrass = { path = "../short-weierstrass", default-features = false }
 
-sha2 = { version = "0.11.0-rc.0", default-features = false }
 ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false }
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false, optional = true }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", default-features = false, optional = true }
 
 [dev-dependencies]
 hex = "0.4"

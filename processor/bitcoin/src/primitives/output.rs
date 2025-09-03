@@ -1,6 +1,6 @@
 use std::io;
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use ciphersuite_kp256::Secp256k1;
 
 use bitcoin_serai::{
@@ -55,7 +55,7 @@ pub(crate) struct Output {
 impl Output {
   pub(crate) fn new(
     getter: &impl Get,
-    key: <Secp256k1 as Ciphersuite>::G,
+    key: <Secp256k1 as WrappedGroup>::G,
     tx: &Transaction,
     output: WalletOutput,
   ) -> Self {
@@ -71,7 +71,7 @@ impl Output {
   }
 
   pub(crate) fn new_with_presumed_origin(
-    key: <Secp256k1 as Ciphersuite>::G,
+    key: <Secp256k1 as WrappedGroup>::G,
     tx: &Transaction,
     presumed_origin: Option<Address>,
     output: WalletOutput,
@@ -88,7 +88,7 @@ impl Output {
   }
 }
 
-impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
+impl ReceivedOutput<<Secp256k1 as WrappedGroup>::G, Address> for Output {
   type Id = OutputId;
   type TransactionId = [u8; 32];
 
@@ -108,7 +108,7 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
     res
   }
 
-  fn key(&self) -> <Secp256k1 as Ciphersuite>::G {
+  fn key(&self) -> <Secp256k1 as WrappedGroup>::G {
     // We read the key from the script pubkey so we don't have to independently store it
     let script = &self.output.output().script_pubkey;
 
@@ -121,7 +121,7 @@ impl ReceivedOutput<<Secp256k1 as Ciphersuite>::G, Address> for Output {
       .expect("last item in scanned v1 Taproot script wasn't a valid x-only public key");
 
     // The output's key minus the output's offset is the root key
-    key - (<Secp256k1 as Ciphersuite>::G::GENERATOR * self.output.offset())
+    key - (<Secp256k1 as WrappedGroup>::G::GENERATOR * self.output.offset())
   }
 
   fn presumed_origin(&self) -> Option<Address> {

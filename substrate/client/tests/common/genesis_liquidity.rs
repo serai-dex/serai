@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use rand_core::{RngCore, OsRng};
 use zeroize::Zeroizing;
 
-use dalek_ff_group::Ristretto;
-use ciphersuite::Ciphersuite;
+use frost::curve::Ristretto;
+use ciphersuite::{WrappedGroup, GroupIo};
 use dkg_musig::musig;
 use schnorrkel::Schnorrkel;
 
@@ -96,11 +96,10 @@ async fn set_values(serai: &Serai, values: &Values) {
   // we publish the tx in set 1
   let set = ValidatorSet { session: Session(1), network: NetworkId::Serai };
 
-  let public_key = <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut public.0.as_ref()).unwrap();
-  let secret_key = <Ristretto as Ciphersuite>::read_F::<&[u8]>(
-    &mut pair.as_ref().secret.to_bytes()[.. 32].as_ref(),
-  )
-  .unwrap();
+  let public_key = <Ristretto as GroupIo>::read_G::<&[u8]>(&mut public.0.as_ref()).unwrap();
+  let secret_key =
+    <Ristretto as GroupIo>::read_F::<&[u8]>(&mut pair.as_ref().secret.to_bytes()[.. 32].as_ref())
+      .unwrap();
 
   assert_eq!(Ristretto::generator() * secret_key, public_key);
   let threshold_keys =

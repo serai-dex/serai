@@ -11,10 +11,9 @@ use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
-use ciphersuite::group::{
-  ff::{Field, PrimeField},
-  GroupEncoding,
-};
+use ciphersuite::group::{ff::PrimeField, GroupEncoding};
+#[cfg(any(test, feature = "tests"))]
+use ciphersuite::group::ff::Field;
 use multiexp::BatchVerifier;
 
 use crate::{

@@ -16,13 +16,19 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+std-shims = { path = "../../common/std-shims", version = "0.1.4", default-features = false, optional = true }
+
+zeroize = { version = "1", default-features = false }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false }
+
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, optional = true }
 
 [features]
-alloc = ["ciphersuite/alloc"]
+alloc = ["std-shims", "zeroize/alloc", "ciphersuite/alloc", "dalek-ff-group/alloc"]
 std = [
   "alloc",
+  "std-shims/std",
+  "zeroize/std",
   "ciphersuite/std",
   "dalek-ff-group?/std",
 ]

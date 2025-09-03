@@ -1,6 +1,6 @@
 use std::{sync::LazyLock, collections::HashMap};
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use ciphersuite_kp256::Secp256k1;
 
 use bitcoin_serai::{
@@ -20,20 +20,20 @@ use primitives::OutputType;
 use crate::hash_bytes;
 
 // TODO: Bitcoin HD derivation, instead of these bespoke labels?
-static BRANCH_BASE_OFFSET: LazyLock<<Secp256k1 as Ciphersuite>::F> =
+static BRANCH_BASE_OFFSET: LazyLock<<Secp256k1 as WrappedGroup>::F> =
   LazyLock::new(|| Secp256k1::hash_to_F(b"branch"));
-static CHANGE_BASE_OFFSET: LazyLock<<Secp256k1 as Ciphersuite>::F> =
+static CHANGE_BASE_OFFSET: LazyLock<<Secp256k1 as WrappedGroup>::F> =
   LazyLock::new(|| Secp256k1::hash_to_F(b"change"));
-static FORWARD_BASE_OFFSET: LazyLock<<Secp256k1 as Ciphersuite>::F> =
+static FORWARD_BASE_OFFSET: LazyLock<<Secp256k1 as WrappedGroup>::F> =
   LazyLock::new(|| Secp256k1::hash_to_F(b"forward"));
 
 // Unfortunately, we have per-key offsets as it's the root key plus the base offset may not be
 // even. While we could tweak the key until all derivations are even, that'd require significantly
 // more tweaking. This algorithmic complexity is preferred.
 pub(crate) fn offsets_for_key(
-  key: <Secp256k1 as Ciphersuite>::G,
-) -> HashMap<OutputType, <Secp256k1 as Ciphersuite>::F> {
-  let mut offsets = HashMap::from([(OutputType::External, <Secp256k1 as Ciphersuite>::F::ZERO)]);
+  key: <Secp256k1 as WrappedGroup>::G,
+) -> HashMap<OutputType, <Secp256k1 as WrappedGroup>::F> {
+  let mut offsets = HashMap::from([(OutputType::External, <Secp256k1 as WrappedGroup>::F::ZERO)]);
 
   // We create an actual Bitcoin scanner as upon adding an offset, it yields the tweaked offset
   // actually used
@@ -50,7 +50,7 @@ pub(crate) fn offsets_for_key(
   offsets
 }
 
-pub(crate) fn scanner(key: <Secp256k1 as Ciphersuite>::G) -> Scanner {
+pub(crate) fn scanner(key: <Secp256k1 as WrappedGroup>::G) -> Scanner {
   let mut scanner = Scanner::new(key).unwrap();
   for (_, offset) in offsets_for_key(key) {
     let tweaked_offset = scanner.register_offset(offset).unwrap();

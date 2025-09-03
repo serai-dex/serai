@@ -1,24 +1,24 @@
-use ciphersuite::{digest::Digest, FromUniformBytes, Ciphersuite};
+use subtle::CtOption;
+use zeroize::Zeroize;
+use ciphersuite::{
+  digest::Digest, group::GroupEncoding, FromUniformBytes, WrappedGroup, WithPreferredHash,
+};
 use dalek_ff_group::Scalar;
 
 use crate::{curve::Curve, algorithm::Hram};
 
 macro_rules! dalek_curve {
   (
-    $feature: literal,
-
     $Curve:      ident,
     $Hram:       ident,
 
     $CONTEXT: literal,
     $chal: literal
   ) => {
-    pub use dalek_ff_group::$Curve;
-
     impl Curve for $Curve {
       const CONTEXT: &'static [u8] = $CONTEXT;
       fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F {
-        let mut digest = <Self as Ciphersuite>::H::new();
+        let mut digest = <Self as WithPreferredHash>::H::new();
         digest.update(Self::CONTEXT);
         digest.update(dst);
         digest.update(msg);
@@ -31,8 +31,12 @@ macro_rules! dalek_curve {
     pub struct $Hram;
     impl Hram<$Curve> for $Hram {
       #[allow(non_snake_case)]
-      fn hram(R: &<$Curve as Ciphersuite>::G, A: &<$Curve as Ciphersuite>::G, m: &[u8]) -> Scalar {
-        let mut hash = <$Curve as Ciphersuite>::H::new();
+      fn hram(
+        R: &<$Curve as WrappedGroup>::G,
+        A: &<$Curve as WrappedGroup>::G,
+        m: &[u8],
+      ) -> Scalar {
+        let mut hash = <$Curve as WithPreferredHash>::H::new();
         if $chal.len() != 0 {
           hash.update($CONTEXT);
           hash.update($chal);
@@ -46,8 +50,31 @@ macro_rules! dalek_curve {
   };
 }
 
-#[cfg(feature = "ristretto")]
-dalek_curve!("ristretto", Ristretto, IetfRistrettoHram, b"FROST-RISTRETTO255-SHA512-v1", b"chal");
+/*
+  FROST defined Ristretto as using SHA2-512, while Blake2b512 is considered "preferred" by
+  `dalek-ff-group`. We define our own ciphersuite for it accordingly.
+*/
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+pub struct Ristretto;
+impl WrappedGroup for Ristretto {
+  type F = Scalar;
+  type G = dalek_ff_group::RistrettoPoint;
+  fn generator() -> Self::G {
+    dalek_ff_group::Ristretto::generator()
+  }
+}
+impl ciphersuite::Id for Ristretto {
+  const ID: &[u8] = b"FROST-RISTRETTO255";
+}
+impl WithPreferredHash for Ristretto {
+  type H = <Ed25519 as WithPreferredHash>::H;
+}
+impl ciphersuite::GroupCanonicalEncoding for Ristretto {
+  fn from_canonical_bytes(bytes: &<Self::G as GroupEncoding>::Repr) -> CtOption<Self::G> {
+    dalek_ff_group::Ristretto::from_canonical_bytes(bytes)
+  }
+}
+dalek_curve!(Ristretto, IetfRistrettoHram, b"FROST-RISTRETTO255-SHA512-v1", b"chal");
 
-#[cfg(feature = "ed25519")]
-dalek_curve!("ed25519", Ed25519, IetfEd25519Hram, b"FROST-ED25519-SHA512-v1", b"");
+pub use dalek_ff_group::Ed25519;
+dalek_curve!(Ed25519, IetfEd25519Hram, b"FROST-ED25519-SHA512-v1", b"");

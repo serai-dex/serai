@@ -6,8 +6,8 @@ use rand_core::{RngCore, CryptoRng};
 
 use blake2::{digest::typenum::U32, Digest, Blake2b};
 use ciphersuite::{
-  group::{ff::Field, Group, GroupEncoding},
-  Ciphersuite,
+  group::{Group, GroupEncoding},
+  *,
 };
 use dalek_ff_group::Ristretto;
 use schnorr::SchnorrSignature;
@@ -52,7 +52,7 @@ impl SigningProtocolRound {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Signed {
   /// The signer.
-  signer: <Ristretto as Ciphersuite>::G,
+  signer: <Ristretto as WrappedGroup>::G,
   /// The signature.
   signature: SchnorrSignature<Ristretto>,
 }
@@ -73,7 +73,7 @@ impl BorshDeserialize for Signed {
 
 impl Signed {
   /// Fetch the signer.
-  pub(crate) fn signer(&self) -> <Ristretto as Ciphersuite>::G {
+  pub(crate) fn signer(&self) -> <Ristretto as WrappedGroup>::G {
     self.signer
   }
 
@@ -86,10 +86,10 @@ impl Signed {
 impl Default for Signed {
   fn default() -> Self {
     Self {
-      signer: <Ristretto as Ciphersuite>::G::identity(),
+      signer: <Ristretto as WrappedGroup>::G::identity(),
       signature: SchnorrSignature {
-        R: <Ristretto as Ciphersuite>::G::identity(),
-        s: <Ristretto as Ciphersuite>::F::ZERO,
+        R: <Ristretto as WrappedGroup>::G::identity(),
+        s: <Ristretto as WrappedGroup>::F::ZERO,
       },
     }
   }
@@ -356,7 +356,7 @@ impl Transaction {
     &mut self,
     rng: &mut R,
     genesis: [u8; 32],
-    key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+    key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   ) {
     fn signed(tx: &mut Transaction) -> &mut Signed {
       #[allow(clippy::match_same_arms)] // This doesn't make semantic sense here
@@ -380,13 +380,13 @@ impl Transaction {
     }
 
     // Decide the nonce to sign with
-    let sig_nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng));
+    let sig_nonce = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(rng));
 
     {
       // Set the signer and the nonce
       let signed = signed(self);
       signed.signer = Ristretto::generator() * key.deref();
-      signed.signature.R = <Ristretto as Ciphersuite>::generator() * sig_nonce.deref();
+      signed.signature.R = <Ristretto as WrappedGroup>::generator() * sig_nonce.deref();
     }
 
     // Get the signature hash (which now includes `R || A` making it valid as the challenge)

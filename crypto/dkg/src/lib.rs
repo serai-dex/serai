@@ -17,7 +17,7 @@ use ciphersuite::{
     ff::{Field, PrimeField},
     GroupEncoding,
   },
-  Ciphersuite,
+  GroupIo, Id,
 };
 
 /// The ID of a participant, defined as a non-zero u16.
@@ -268,7 +268,7 @@ impl<F: Zeroize + PrimeField> Interpolation<F> {
 /// heap-allocated pointer to minimize copies on the stack (`ThresholdKeys`, the publicly exposed
 /// type).
 #[derive(Clone, PartialEq, Eq)]
-struct ThresholdCore<C: Ciphersuite> {
+struct ThresholdCore<C: GroupIo + Id> {
   params: ThresholdParams,
   group_key: C::G,
   verification_shares: HashMap<Participant, C::G>,
@@ -276,7 +276,7 @@ struct ThresholdCore<C: Ciphersuite> {
   secret_share: Zeroizing<C::F>,
 }
 
-impl<C: Ciphersuite> fmt::Debug for ThresholdCore<C> {
+impl<C: GroupIo + Id> fmt::Debug for ThresholdCore<C> {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt
       .debug_struct("ThresholdCore")
@@ -288,7 +288,7 @@ impl<C: Ciphersuite> fmt::Debug for ThresholdCore<C> {
   }
 }
 
-impl<C: Ciphersuite> Zeroize for ThresholdCore<C> {
+impl<C: GroupIo + Id> Zeroize for ThresholdCore<C> {
   fn zeroize(&mut self) {
     self.params.zeroize();
     self.group_key.zeroize();
@@ -302,7 +302,7 @@ impl<C: Ciphersuite> Zeroize for ThresholdCore<C> {
 
 /// Threshold keys usable for signing.
 #[derive(Clone, Debug, Zeroize)]
-pub struct ThresholdKeys<C: Ciphersuite> {
+pub struct ThresholdKeys<C: GroupIo + Id> {
   // Core keys.
   #[zeroize(skip)]
   core: Arc<Zeroizing<ThresholdCore<C>>>,
@@ -315,7 +315,7 @@ pub struct ThresholdKeys<C: Ciphersuite> {
 
 /// View of keys, interpolated and with the expected linear combination taken for usage.
 #[derive(Clone)]
-pub struct ThresholdView<C: Ciphersuite> {
+pub struct ThresholdView<C: GroupIo + Id> {
   interpolation: Interpolation<C::F>,
   scalar: C::F,
   offset: C::F,
@@ -326,7 +326,7 @@ pub struct ThresholdView<C: Ciphersuite> {
   verification_shares: HashMap<Participant, C::G>,
 }
 
-impl<C: Ciphersuite> fmt::Debug for ThresholdView<C> {
+impl<C: GroupIo + Id> fmt::Debug for ThresholdView<C> {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt
       .debug_struct("ThresholdView")
@@ -341,7 +341,7 @@ impl<C: Ciphersuite> fmt::Debug for ThresholdView<C> {
   }
 }
 
-impl<C: Ciphersuite> Zeroize for ThresholdView<C> {
+impl<C: GroupIo + Id> Zeroize for ThresholdView<C> {
   fn zeroize(&mut self) {
     self.scalar.zeroize();
     self.offset.zeroize();
@@ -357,7 +357,7 @@ impl<C: Ciphersuite> Zeroize for ThresholdView<C> {
   }
 }
 
-impl<C: Ciphersuite> ThresholdKeys<C> {
+impl<C: GroupIo + Id> ThresholdKeys<C> {
   /// Create a new set of ThresholdKeys.
   pub fn new(
     params: ThresholdParams,
@@ -632,7 +632,7 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
 
     let mut verification_shares = HashMap::new();
     for l in (1 ..= n).map(Participant) {
-      verification_shares.insert(l, <C as Ciphersuite>::read_G(reader)?);
+      verification_shares.insert(l, C::read_G(reader)?);
     }
 
     ThresholdKeys::new(
@@ -645,7 +645,7 @@ impl<C: Ciphersuite> ThresholdKeys<C> {
   }
 }
 
-impl<C: Ciphersuite> ThresholdView<C> {
+impl<C: GroupIo + Id> ThresholdView<C> {
   /// Return the scalar applied to this view.
   pub fn scalar(&self) -> C::F {
     self.scalar

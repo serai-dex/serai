@@ -24,7 +24,7 @@ use ciphersuite::{
     ff::{Field, PrimeField},
     GroupEncoding,
   },
-  Ciphersuite,
+  WrappedGroup,
 };
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
@@ -221,8 +221,10 @@ fn orchestration_path(network: Network) -> PathBuf {
   orchestration_path
 }
 
-type InfrastructureKeys =
-  HashMap<&'static str, (Zeroizing<<Ristretto as Ciphersuite>::F>, <Ristretto as Ciphersuite>::G)>;
+type InfrastructureKeys = HashMap<
+  &'static str,
+  (Zeroizing<<Ristretto as WrappedGroup>::F>, <Ristretto as WrappedGroup>::G),
+>;
 fn infrastructure_keys(network: Network) -> InfrastructureKeys {
   // Generate entropy for the infrastructure keys
 
@@ -257,7 +259,7 @@ fn infrastructure_keys(network: Network) -> InfrastructureKeys {
   let mut rng = ChaCha20Rng::from_seed(transcript.rng_seed(b"infrastructure_keys"));
 
   let mut key_pair = || {
-    let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut rng));
+    let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut rng));
     let public = Ristretto::generator() * key.deref();
     (key, public)
   };
@@ -307,12 +309,12 @@ fn embedded_curve_keys(network: Network) -> EmbeddedCurveKeys {
 
   EmbeddedCurveKeys {
     embedwards25519: {
-      let key = Zeroizing::new(<Embedwards25519 as Ciphersuite>::F::random(&mut rng));
+      let key = Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut rng));
       let pub_key = Embedwards25519::generator() * key.deref();
       (Zeroizing::new(key.to_repr().as_ref().to_vec()), pub_key.to_bytes().to_vec())
     },
     secq256k1: {
-      let key = Zeroizing::new(<Secq256k1 as Ciphersuite>::F::random(&mut rng));
+      let key = Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut rng));
       let pub_key = Secq256k1::generator() * key.deref();
       (Zeroizing::new(key.to_repr().as_ref().to_vec()), pub_key.to_bytes().to_vec())
     },
@@ -381,9 +383,9 @@ fn dockerfiles(network: Network) {
         .expect("couldn't read key for this network"),
     );
     let mut serai_key_repr =
-      Zeroizing::new(<<Ristretto as Ciphersuite>::F as PrimeField>::Repr::default());
+      Zeroizing::new(<<Ristretto as WrappedGroup>::F as PrimeField>::Repr::default());
     serai_key_repr.as_mut().copy_from_slice(serai_key.as_ref());
-    Zeroizing::new(<Ristretto as Ciphersuite>::F::from_repr(*serai_key_repr).unwrap())
+    Zeroizing::new(<Ristretto as WrappedGroup>::F::from_repr(*serai_key_repr).unwrap())
   };
 
   coordinator(&orchestration_path, network, coordinator_key.0, &serai_key);
@@ -399,7 +401,7 @@ fn key_gen(network: Network) {
     return;
   }
 
-  let key = <Ristretto as Ciphersuite>::F::random(&mut OsRng);
+  let key = <Ristretto as WrappedGroup>::F::random(&mut OsRng);
 
   let _ = fs::create_dir_all(&serai_dir);
   fs::write(key_file, key.to_repr()).expect("couldn't write key");
@@ -407,7 +409,7 @@ fn key_gen(network: Network) {
   // TODO: Move embedded curve key gen here, and print them
   println!(
     "Public Key: {}",
-    hex::encode((<Ristretto as Ciphersuite>::generator() * key).to_bytes())
+    hex::encode((<Ristretto as WrappedGroup>::generator() * key).to_bytes())
   );
 }
 

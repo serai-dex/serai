@@ -4,7 +4,7 @@ use zeroize::Zeroizing;
 use rand::{RngCore, rngs::OsRng};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::ff::Field, Ciphersuite};
+use ciphersuite::*;
 
 use tendermint::ext::Commit;
 
@@ -33,7 +33,7 @@ async fn mempool_addition() {
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
   let unsigned_in_chain = |_: [u8; 32]| false;
-  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+  let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
 
   let first_tx = signed_transaction(&mut OsRng, genesis, &key, 0);
   let signer = first_tx.1.signer;
@@ -125,7 +125,7 @@ async fn mempool_addition() {
 
   // If the mempool doesn't have a nonce for an account, it should successfully use the
   // blockchain's
-  let second_key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+  let second_key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
   let tx = signed_transaction(&mut OsRng, genesis, &second_key, 2);
   let second_signer = tx.1.signer;
   assert_eq!(mempool.next_nonce_in_mempool(&second_signer, vec![]), None);
@@ -165,7 +165,7 @@ fn too_many_mempool() {
     Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
   };
   let unsigned_in_chain = |_: [u8; 32]| false;
-  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+  let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
 
   // We should be able to add transactions up to the limit
   for i in 0 .. ACCOUNT_MEMPOOL_LIMIT {

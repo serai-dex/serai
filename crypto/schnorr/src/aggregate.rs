@@ -5,74 +5,34 @@ use std_shims::{
 
 use zeroize::Zeroize;
 
-use transcript::{Transcript, SecureDigest, DigestTranscript};
+use transcript::{Transcript, DigestTranscript};
 
 use ciphersuite::{
   group::{
     ff::{Field, PrimeField},
     Group, GroupEncoding,
   },
-  Ciphersuite,
+  FromUniformBytes, GroupIo, WithPreferredHash,
 };
 use multiexp::multiexp_vartime;
 
 use crate::SchnorrSignature;
 
 // Returns a unbiased scalar weight to use on a signature in order to prevent malleability
-fn weight<D: Send + Clone + SecureDigest, F: PrimeField>(digest: &mut DigestTranscript<D>) -> F {
-  let mut bytes = digest.challenge(b"aggregation_weight");
-  debug_assert_eq!(bytes.len() % 8, 0);
-  // This should be guaranteed thanks to SecureDigest
-  debug_assert!(bytes.len() >= 32);
-
-  let mut res = F::ZERO;
-  let mut i = 0;
-
-  // Derive a scalar from enough bits of entropy that bias is < 2^128
-  // This can't be const due to its usage of a generic
-  // Also due to the usize::try_from, yet that could be replaced with an `as`
-  #[allow(non_snake_case)]
-  let BYTES: usize = usize::try_from((F::NUM_BITS + 128).div_ceil(8)).unwrap();
-
-  let mut remaining = BYTES;
-
-  // We load bits in as u64s
-  const WORD_LEN_IN_BITS: usize = 64;
-  const WORD_LEN_IN_BYTES: usize = WORD_LEN_IN_BITS / 8;
-
-  let mut first = true;
-  while i < remaining {
-    // Shift over the already loaded bits
-    if !first {
-      for _ in 0 .. WORD_LEN_IN_BITS {
-        res += res;
-      }
-    }
-    first = false;
-
-    // Add the next 64 bits
-    res += F::from(u64::from_be_bytes(bytes[i .. (i + WORD_LEN_IN_BYTES)].try_into().unwrap()));
-    i += WORD_LEN_IN_BYTES;
-
-    // If we've exhausted this challenge, get another
-    if i == bytes.len() {
-      bytes = digest.challenge(b"aggregation_weight_continued");
-      remaining -= i;
-      i = 0;
-    }
-  }
-  res
+fn weight<C: WithPreferredHash>(digest: &mut DigestTranscript<C::H>) -> C::F {
+  let bytes = digest.challenge(b"aggregation_weight");
+  C::F::from_uniform_bytes(&bytes.into())
 }
 
 /// Aggregate Schnorr signature as defined in <https://eprint.iacr.org/2021/350>.
 #[allow(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
-pub struct SchnorrAggregate<C: Ciphersuite> {
+pub struct SchnorrAggregate<C: GroupIo + WithPreferredHash> {
   Rs: Vec<C::G>,
   s: C::F,
 }
 
-impl<C: Ciphersuite> SchnorrAggregate<C> {
+impl<C: GroupIo + WithPreferredHash> SchnorrAggregate<C> {
   /// Read a SchnorrAggregate from something implementing Read.
   pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
     let mut len = [0; 4];
@@ -137,7 +97,7 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
 
     let mut pairs = Vec::with_capacity((2 * keys_and_challenges.len()) + 1);
     for (i, (key, challenge)) in keys_and_challenges.iter().enumerate() {
-      let z = weight(&mut digest);
+      let z = weight::<C>(&mut digest);
       pairs.push((z, self.Rs[i]));
       pairs.push((z * challenge, *key));
     }
@@ -148,13 +108,22 @@ impl<C: Ciphersuite> SchnorrAggregate<C> {
 
 /// A signature aggregator capable of consuming signatures in order to produce an aggregate.
 #[allow(non_snake_case)]
-#[derive(Clone, Debug, Zeroize)]
-pub struct SchnorrAggregator<C: Ciphersuite> {
+#[derive(Clone, Debug)]
+pub struct SchnorrAggregator<C: GroupIo + WithPreferredHash> {
   digest: DigestTranscript<C::H>,
   sigs: Vec<SchnorrSignature<C>>,
 }
+impl<C: GroupIo + WithPreferredHash> Zeroize for SchnorrAggregator<C>
+where
+  C::H: digest::block_api::BlockSizeUser,
+{
+  fn zeroize(&mut self) {
+    self.digest.zeroize();
+    self.sigs.zeroize();
+  }
+}
 
-impl<C: Ciphersuite> SchnorrAggregator<C> {
+impl<C: GroupIo + WithPreferredHash> SchnorrAggregator<C> {
   /// Create a new aggregator.
   ///
   /// The DST used here must prevent a collision with whatever hash function produced the
@@ -180,7 +149,7 @@ impl<C: Ciphersuite> SchnorrAggregator<C> {
     let mut aggregate = SchnorrAggregate { Rs: Vec::with_capacity(self.sigs.len()), s: C::F::ZERO };
     for i in 0 .. self.sigs.len() {
       aggregate.Rs.push(self.sigs[i].R);
-      aggregate.s += self.sigs[i].s * weight::<_, C::F>(&mut self.digest);
+      aggregate.s += self.sigs[i].s * weight::<C>(&mut self.digest);
     }
     Some(aggregate)
   }

@@ -2,7 +2,7 @@ use std::{io, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use ciphersuite_kp256::Secp256k1;
 use frost::{
   dkg::{Participant, ThresholdKeys},
@@ -24,10 +24,10 @@ pub struct EthereumHram;
 impl Hram<Secp256k1> for EthereumHram {
   #[allow(non_snake_case)]
   fn hram(
-    R: &<Secp256k1 as Ciphersuite>::G,
-    A: &<Secp256k1 as Ciphersuite>::G,
+    R: &<Secp256k1 as WrappedGroup>::G,
+    A: &<Secp256k1 as WrappedGroup>::G,
     m: &[u8],
-  ) -> <Secp256k1 as Ciphersuite>::F {
+  ) -> <Secp256k1 as WrappedGroup>::F {
     Signature::challenge(*R, &PublicKey::new(*A).unwrap(), m)
   }
 }

@@ -1,7 +1,7 @@
 use std::collections::{VecDeque, HashSet};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{group::GroupEncoding, *};
 
 use serai_db::{Get, DbTxn, Db};
 
@@ -21,7 +21,7 @@ pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
 
   block_number: u64,
   tip: [u8; 32],
-  participants: HashSet<<Ristretto as Ciphersuite>::G>,
+  participants: HashSet<<Ristretto as WrappedGroup>::G>,
 
   provided: ProvidedTransactions<D, T>,
   mempool: Mempool<D, T>,
@@ -56,7 +56,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
   fn next_nonce_key(
     genesis: &[u8; 32],
-    signer: &<Ristretto as Ciphersuite>::G,
+    signer: &<Ristretto as WrappedGroup>::G,
     order: &[u8],
   ) -> Vec<u8> {
     D::key(
@@ -69,7 +69,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   pub(crate) fn new(
     db: D,
     genesis: [u8; 32],
-    participants: &[<Ristretto as Ciphersuite>::G],
+    participants: &[<Ristretto as WrappedGroup>::G],
   ) -> Self {
     let mut res = Self {
       db: Some(db.clone()),
@@ -196,7 +196,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
   pub(crate) fn next_nonce(
     &self,
-    signer: &<Ristretto as Ciphersuite>::G,
+    signer: &<Ristretto as WrappedGroup>::G,
     order: &[u8],
   ) -> Option<u32> {
     if let Some(next_nonce) = self.mempool.next_nonce_in_mempool(signer, order.to_vec()) {

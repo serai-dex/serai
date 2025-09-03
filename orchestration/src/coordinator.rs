@@ -3,7 +3,7 @@ use std::path::Path;
 use zeroize::Zeroizing;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::ff::PrimeField, Ciphersuite};
+use ciphersuite::{group::ff::PrimeField, WrappedGroup};
 
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
@@ -11,8 +11,8 @@ use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 pub fn coordinator(
   orchestration_path: &Path,
   network: Network,
-  coordinator_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  serai_key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  coordinator_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
+  serai_key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
 ) {
   let db = network.db();
   let longer_reattempts = if network == Network::Dev { "longer-reattempts" } else { "" };

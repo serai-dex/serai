@@ -40,7 +40,7 @@ mod frost_crypto {
   use k256::{elliptic_curve::ops::Reduce, U256, Scalar};
 
   use frost::{
-    curve::{Ciphersuite, Secp256k1},
+    curve::{WrappedGroup, Secp256k1},
     Participant, ThresholdKeys, ThresholdView, FrostError,
     algorithm::{Hram as HramTrait, Algorithm, IetfSchnorr as FrostSchnorr},
   };
@@ -128,10 +128,10 @@ mod frost_crypto {
     fn sign_share(
       &mut self,
       params: &ThresholdView<Secp256k1>,
-      nonce_sums: &[Vec<<Secp256k1 as Ciphersuite>::G>],
-      nonces: Vec<Zeroizing<<Secp256k1 as Ciphersuite>::F>>,
+      nonce_sums: &[Vec<<Secp256k1 as WrappedGroup>::G>],
+      nonces: Vec<Zeroizing<<Secp256k1 as WrappedGroup>::F>>,
       msg: &[u8],
-    ) -> <Secp256k1 as Ciphersuite>::F {
+    ) -> <Secp256k1 as WrappedGroup>::F {
       self.0.sign_share(params, nonce_sums, nonces, msg)
     }
 

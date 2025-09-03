@@ -413,7 +413,6 @@ impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> PrimeGroup for Projective<C> {
 
 #[cfg(feature = "alloc")]
 mod alloc {
-  use core::borrow::Borrow;
   use ff::{PrimeField, PrimeFieldBits};
   use crate::{ShortWeierstrass, Affine, Projective};
 
@@ -421,7 +420,8 @@ mod alloc {
     type FieldElement = C::FieldElement;
     type XyPoint = ec_divisors::Projective<Self>;
 
-    fn interpolator_for_scalar_mul() -> impl Borrow<ec_divisors::Interpolator<C::FieldElement>> {
+    type BorrowedInterpolator = ec_divisors::Interpolator<C::FieldElement>;
+    fn interpolator_for_scalar_mul() -> Self::BorrowedInterpolator {
       ec_divisors::Interpolator::new((<C::Scalar as PrimeField>::NUM_BITS as usize).div_ceil(2) + 2)
     }
 

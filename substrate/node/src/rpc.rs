@@ -50,7 +50,7 @@ where
 {
   use substrate_frame_rpc_system::{System, SystemApiServer};
   use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
-  use ciphersuite::Ciphersuite;
+  use ciphersuite::{GroupIo, WithPreferredHash};
   use ciphersuite_kp256::{k256::elliptic_curve::point::AffineCoordinates, Secp256k1};
   use dalek_ff_group::Ed25519;
   use bitcoin_serai::bitcoin;
@@ -126,7 +126,7 @@ where
 
       match network {
         ExternalNetworkId::Bitcoin => {
-          let key = <Secp256k1 as Ciphersuite>::read_G::<&[u8]>(&mut external_key.as_slice())
+          let key = <Secp256k1 as GroupIo>::read_G::<&[u8]>(&mut external_key.as_slice())
             .map_err(|_| Error::Custom("invalid key stored in db".to_string()))?;
 
           let addr = bitcoin::Address::p2tr_tweaked(
@@ -144,14 +144,11 @@ where
         ExternalNetworkId::Ethereum => Ok(String::new()),
         ExternalNetworkId::Monero => {
           // TODO: Serai view-key crate
-          let view_private = zeroize::Zeroizing::new(
-            <Ed25519 as Ciphersuite>::hash_to_F(
-              &["Monero".as_bytes(), &0u64.to_le_bytes()].concat(),
-            )
-            .0,
-          );
+          let view_private = zeroize::Zeroizing::new(<Ed25519 as WithPreferredHash>::hash_to_F(
+            &["Monero".as_bytes(), &0u64.to_le_bytes()].concat(),
+          ));
 
-          let spend = <Ed25519 as Ciphersuite>::read_G::<&[u8]>(&mut external_key.as_slice())
+          let spend = <Ed25519 as GroupIo>::read_G::<&[u8]>(&mut external_key.as_slice())
             .map_err(|_| Error::Custom("invalid key stored in db".to_string()))?;
 
           let addr = monero_address::MoneroAddress::new(

@@ -6,7 +6,7 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite,
+  WrappedGroup,
 };
 use ciphersuite_kp256::Secp256k1;
 use dalek_ff_group::{Ed25519, Ristretto};
@@ -40,7 +40,7 @@ pub fn processor_instance(
   name: &str,
   network: ExternalNetworkId,
   port: u32,
-  message_queue_key: <Ristretto as Ciphersuite>::F,
+  message_queue_key: <Ristretto as WrappedGroup>::F,
 ) -> (Vec<TestBodySpecification>, EvrfPublicKeys) {
   let substrate_evrf_key =
     insecure_arbitrary_key_from_name::<<Ristretto as EvrfCurve>::EmbeddedCurve>(name);
@@ -113,7 +113,7 @@ pub fn processor_instance(
 }
 
 pub struct ProcessorKeys {
-  coordinator: <Ristretto as Ciphersuite>::F,
+  coordinator: <Ristretto as WrappedGroup>::F,
   evrf: EvrfPublicKeys,
 }
 

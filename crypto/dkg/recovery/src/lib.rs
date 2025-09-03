@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 
 use zeroize::Zeroizing;
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::{GroupIo, Id};
 
 pub use dkg::*;
 
@@ -34,7 +34,7 @@ pub enum RecoveryError {
 }
 
 /// Recover a shared secret from a collection of `dkg::ThresholdKeys`.
-pub fn recover_key<C: Ciphersuite>(
+pub fn recover_key<C: GroupIo + Id>(
   keys: &[ThresholdKeys<C>],
 ) -> Result<Zeroizing<C::F>, RecoveryError> {
   let included = keys.iter().map(|keys| keys.params().i()).collect::<Vec<_>>();

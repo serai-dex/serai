@@ -25,12 +25,11 @@ typenum = { version = "1", default-features = false }
 prime-field = { path = "../prime-field", default-features = false }
 short-weierstrass = { path = "../short-weierstrass", default-features = false }
 curve25519-dalek = { version = "4", default-features = false, features = ["legacy_compatibility"] }
-dalek-ff-group = { path = "../dalek-ff-group", version = "0.4", default-features = false }
 
-blake2 = { version = "0.11.0-rc.0", default-features = false }
+blake2 = { version = "0.11.0-rc.2", default-features = false }
 ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false }
 
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false, optional = true }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", default-features = false, optional = true }
 
 [dev-dependencies]
 hex = "0.4"

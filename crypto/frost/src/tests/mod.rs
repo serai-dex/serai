@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng};
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::{GroupIo, Id};
 pub use dkg_recovery::recover_key;
 
 use crate::{
@@ -28,7 +28,7 @@ pub const PARTICIPANTS: u16 = 5;
 pub const THRESHOLD: u16 = ((PARTICIPANTS * 2) / 3) + 1;
 
 /// Create a key, for testing purposes.
-pub fn key_gen<R: RngCore + CryptoRng, C: Ciphersuite>(
+pub fn key_gen<R: RngCore + CryptoRng, C: GroupIo + Id>(
   rng: &mut R,
 ) -> HashMap<Participant, ThresholdKeys<C>> {
   let res = dkg_dealer::key_gen::<R, C>(rng, THRESHOLD, PARTICIPANTS).unwrap();

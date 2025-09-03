@@ -1,4 +1,4 @@
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use ciphersuite_kp256::Secp256k1;
 
 use bitcoin_serai::bitcoin::key::{Parity, XOnlyPublicKey};
@@ -7,7 +7,7 @@ pub(crate) mod output;
 pub(crate) mod transaction;
 pub(crate) mod block;
 
-pub(crate) fn x_coord_to_even_point(key: &[u8]) -> Option<<Secp256k1 as Ciphersuite>::G> {
+pub(crate) fn x_coord_to_even_point(key: &[u8]) -> Option<<Secp256k1 as WrappedGroup>::G> {
   if key.len() != 32 {
     None?
   };

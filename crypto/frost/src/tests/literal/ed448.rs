@@ -1,6 +1,6 @@
 use rand_core::OsRng;
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::GroupIo;
 
 use schnorr::SchnorrSignature;
 

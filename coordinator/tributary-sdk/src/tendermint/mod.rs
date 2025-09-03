@@ -10,11 +10,8 @@ use rand_chacha::ChaCha12Rng;
 use transcript::{Transcript, RecommendedTranscript};
 
 use ciphersuite::{
-  group::{
-    GroupEncoding,
-    ff::{Field, PrimeField},
-  },
-  Ciphersuite,
+  group::{ff::PrimeField, GroupEncoding},
+  *,
 };
 use dalek_ff_group::Ristretto;
 use schnorr::{
@@ -51,24 +48,26 @@ fn challenge(
   key: [u8; 32],
   nonce: &[u8],
   msg: &[u8],
-) -> <Ristretto as Ciphersuite>::F {
+) -> <Ristretto as WrappedGroup>::F {
   let mut transcript = RecommendedTranscript::new(b"Tributary Chain Tendermint Message");
   transcript.append_message(b"genesis", genesis);
   transcript.append_message(b"key", key);
   transcript.append_message(b"nonce", nonce);
   transcript.append_message(b"message", msg);
 
-  <Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(&transcript.challenge(b"schnorr").into())
+  <Ristretto as WrappedGroup>::F::from_bytes_mod_order_wide(
+    &transcript.challenge(b"schnorr").into(),
+  )
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Signer {
   genesis: [u8; 32],
-  key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 }
 
 impl Signer {
-  pub(crate) fn new(genesis: [u8; 32], key: Zeroizing<<Ristretto as Ciphersuite>::F>) -> Signer {
+  pub(crate) fn new(genesis: [u8; 32], key: Zeroizing<<Ristretto as WrappedGroup>::F>) -> Signer {
     Signer { genesis, key }
   }
 }
@@ -101,10 +100,10 @@ impl SignerTrait for Signer {
       assert_eq!(nonce_ref, [0; 64].as_ref());
 
       let nonce =
-        Zeroizing::new(<Ristretto as Ciphersuite>::F::from_bytes_mod_order_wide(&nonce_arr));
+        Zeroizing::new(<Ristretto as WrappedGroup>::F::from_bytes_mod_order_wide(&nonce_arr));
       nonce_arr.zeroize();
 
-      assert!(!bool::from(nonce.ct_eq(&<Ristretto as Ciphersuite>::F::ZERO)));
+      assert!(!bool::from(nonce.ct_eq(&<Ristretto as WrappedGroup>::F::ZERO)));
 
       let challenge = challenge(
         self.genesis,
@@ -133,7 +132,7 @@ pub struct Validators {
 impl Validators {
   pub(crate) fn new(
     genesis: [u8; 32],
-    validators: Vec<(<Ristretto as Ciphersuite>::G, u64)>,
+    validators: Vec<(<Ristretto as WrappedGroup>::G, u64)>,
   ) -> Option<Validators> {
     let mut total_weight = 0;
     let mut weights = HashMap::new();
@@ -220,7 +219,7 @@ impl SignatureScheme for Validators {
       signers
         .iter()
         .zip(challenges)
-        .map(|(s, c)| (<Ristretto as Ciphersuite>::read_G(&mut s.as_slice()).unwrap(), c))
+        .map(|(s, c)| (<Ristretto as GroupIo>::read_G(&mut s.as_slice()).unwrap(), c))
         .collect::<Vec<_>>()
         .as_slice(),
     )

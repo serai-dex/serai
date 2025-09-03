@@ -5,9 +5,9 @@ use std::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use dalek_ff_group::Ristretto;
 use frost::{
   dkg::{Participant, ThresholdKeys},
+  curve::Ristretto,
   FrostError,
   algorithm::Algorithm,
   sign::*,

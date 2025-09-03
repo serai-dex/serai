@@ -21,7 +21,7 @@ rand_core = { version = "0.6", default-features = false }
 
 zeroize = { version = "^1.5", default-features = false, features = ["derive"] }
 
-sha2 = { version = "0.11.0-rc.0", default-features = false }
+sha2 = { version = "0.11.0-rc.2", default-features = false }
 
 p256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"] }
 k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"] }

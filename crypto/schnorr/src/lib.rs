@@ -20,7 +20,7 @@ use ciphersuite::{
     ff::{Field, PrimeField},
     Group, GroupEncoding,
   },
-  Ciphersuite,
+  GroupIo,
 };
 use multiexp::{multiexp_vartime, BatchVerifier};
 
@@ -33,20 +33,20 @@ mod tests;
 
 /// A Schnorr signature of the form (R, s) where s = r + cx.
 ///
-/// These are intended to be strict. It is generic over Ciphersuite which is for PrimeGroups,
+/// These are intended to be strict. It is generic over `GroupIo` which is for `PrimeGroup`s,
 /// and mandates canonical encodings in its read function.
 ///
-/// RFC 8032 has an alternative verification formula, 8R = 8s - 8cX, which is intended to handle
-/// torsioned nonces/public keys. Due to this library's strict requirements, such signatures will
-/// not be verifiable with this library.
+/// RFC 8032 has an alternative verification formula for Ed25519, `8R = 8s - 8cX`, which is
+/// intended to handle torsioned nonces/public keys. Due to this library's strict requirements,
+/// such signatures will not be verifiable with this library.
 #[allow(non_snake_case)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-pub struct SchnorrSignature<C: Ciphersuite> {
+pub struct SchnorrSignature<C: GroupIo> {
   pub R: C::G,
   pub s: C::F,
 }
 
-impl<C: Ciphersuite> SchnorrSignature<C> {
+impl<C: GroupIo> SchnorrSignature<C> {
   /// Read a SchnorrSignature from something implementing Read.
   pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
     Ok(SchnorrSignature { R: C::read_G(reader)?, s: C::read_F(reader)? })

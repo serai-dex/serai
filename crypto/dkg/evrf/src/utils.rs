@@ -5,7 +5,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use ciphersuite::{
   group::{ff::PrimeField, Group, GroupEncoding},
-  Ciphersuite,
+  GroupIo,
 };
 
 use dkg::Participant;
@@ -13,7 +13,7 @@ use dkg::Participant;
 /// Sample a random, unbiased point on the elliptic curve with an unknown discrete logarithm.
 ///
 /// This keeps it simple by using rejection sampling.
-pub(crate) fn sample_point<C: Ciphersuite>(rng: &mut (impl RngCore + CryptoRng)) -> C::G {
+pub(crate) fn sample_point<C: GroupIo>(rng: &mut (impl RngCore + CryptoRng)) -> C::G {
   let mut repr = <C::G as GroupEncoding>::Repr::default();
   loop {
     rng.fill_bytes(repr.as_mut());

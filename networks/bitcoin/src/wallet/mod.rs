@@ -13,7 +13,7 @@ use k256::{
 
 #[cfg(feature = "std")]
 use frost::{
-  curve::{Ciphersuite, Secp256k1},
+  curve::{WrappedGroup, GroupIo, Secp256k1},
   ThresholdKeys,
 };
 
@@ -59,7 +59,7 @@ pub fn tweak_keys(keys: ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
       would be unusable due to a check the script path hash is less than the order. That doesn't
       impact us as we don't want the script path to be usable.
     */
-    keys.offset(<Secp256k1 as Ciphersuite>::F::reduce(U256::from_be_bytes(
+    keys.offset(<Secp256k1 as WrappedGroup>::F::reduce(U256::from_be_bytes(
       *tweak_hash.to_raw_hash().as_ref(),
     )))
   };

@@ -21,7 +21,7 @@ use ciphersuite::{
     ff::{Field, PrimeField},
     Group, GroupEncoding,
   },
-  Ciphersuite,
+  WrappedGroup, GroupIo,
 };
 use multiexp::multiexp_vartime;
 
@@ -49,7 +49,7 @@ mod tests;
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Participation<C: Curves> {
   proof: Vec<u8>,
-  encrypted_secret_shares: HashMap<Participant, <C::ToweringCurve as Ciphersuite>::F>,
+  encrypted_secret_shares: HashMap<Participant, <C::ToweringCurve as WrappedGroup>::F>,
 }
 
 impl<C: Curves> Participation<C> {
@@ -79,7 +79,7 @@ impl<C: Curves> Participation<C> {
 
     let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
     for i in Participant::iter().take(usize::from(n)) {
-      encrypted_secret_shares.insert(i, <C::ToweringCurve as Ciphersuite>::read_F(reader)?);
+      encrypted_secret_shares.insert(i, <C::ToweringCurve as GroupIo>::read_F(reader)?);
     }
 
     Ok(Self { proof, encrypted_secret_shares })
@@ -151,14 +151,14 @@ pub enum VerifyResult<C: Curves> {
 pub struct Dkg<C: Curves> {
   t: u16,
   n: u16,
-  evrf_public_keys: Vec<<C::EmbeddedCurve as Ciphersuite>::G>,
-  verification_shares: HashMap<Participant, <C::ToweringCurve as Ciphersuite>::G>,
+  evrf_public_keys: Vec<<C::EmbeddedCurve as WrappedGroup>::G>,
+  verification_shares: HashMap<Participant, <C::ToweringCurve as WrappedGroup>::G>,
   #[allow(clippy::type_complexity)]
   encrypted_secret_shares: HashMap<
     Participant,
     HashMap<
       Participant,
-      ([<C::EmbeddedCurve as Ciphersuite>::G; 2], <C::ToweringCurve as Ciphersuite>::F),
+      ([<C::EmbeddedCurve as WrappedGroup>::G; 2], <C::ToweringCurve as WrappedGroup>::F),
     >,
   >,
 }
@@ -167,7 +167,7 @@ impl<C: Curves> Dkg<C> {
   // Form the initial transcript for the proofs.
   fn initial_transcript(
     invocation: [u8; 32],
-    evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
+    evrf_public_keys: &[<C::EmbeddedCurve as WrappedGroup>::G],
     t: u16,
   ) -> [u8; 32] {
     let mut transcript = Blake2s256::new();
@@ -188,8 +188,8 @@ impl<C: Curves> Dkg<C> {
     generators: &Generators<C>,
     context: [u8; 32],
     t: u16,
-    evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
-    evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
+    evrf_public_keys: &[<C::EmbeddedCurve as WrappedGroup>::G],
+    evrf_private_key: &Zeroizing<<C::EmbeddedCurve as WrappedGroup>::F>,
   ) -> Result<Participation<C>, Error> {
     let Ok(n) = u16::try_from(evrf_public_keys.len()) else {
       Err(Error::TooManyParticipants { provided: evrf_public_keys.len() })?
@@ -202,7 +202,8 @@ impl<C: Curves> Dkg<C> {
     };
     // This also ensures the private key is not 0, due to the prior check the identity point wasn't
     // present
-    let evrf_public_key = <C::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key.deref();
+    let evrf_public_key =
+      <C::EmbeddedCurve as WrappedGroup>::generator() * evrf_private_key.deref();
     if !evrf_public_keys.contains(&evrf_public_key) {
       Err(Error::NotAParticipant)?;
     };
@@ -231,7 +232,7 @@ impl<C: Curves> Dkg<C> {
 
     let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
     for (l, encryption_key) in Participant::iter().take(usize::from(n)).zip(encryption_keys) {
-      let share = polynomial::<<C::ToweringCurve as Ciphersuite>::F>(&coefficients, l);
+      let share = polynomial::<<C::ToweringCurve as WrappedGroup>::F>(&coefficients, l);
       encrypted_secret_shares.insert(l, *share + *encryption_key);
     }
 
@@ -243,26 +244,26 @@ impl<C: Curves> Dkg<C> {
 #[allow(clippy::type_complexity)]
 fn verifiable_encryption_statements<C: Curves>(
   rng: &mut (impl RngCore + CryptoRng),
-  coefficients: &[<C::ToweringCurve as Ciphersuite>::G],
-  encryption_key_commitments: &[<C::ToweringCurve as Ciphersuite>::G],
-  encrypted_secret_shares: &HashMap<Participant, <C::ToweringCurve as Ciphersuite>::F>,
+  coefficients: &[<C::ToweringCurve as WrappedGroup>::G],
+  encryption_key_commitments: &[<C::ToweringCurve as WrappedGroup>::G],
+  encrypted_secret_shares: &HashMap<Participant, <C::ToweringCurve as WrappedGroup>::F>,
 ) -> (
-  <C::ToweringCurve as Ciphersuite>::F,
-  Vec<(<C::ToweringCurve as Ciphersuite>::F, <C::ToweringCurve as Ciphersuite>::G)>,
+  <C::ToweringCurve as WrappedGroup>::F,
+  Vec<(<C::ToweringCurve as WrappedGroup>::F, <C::ToweringCurve as WrappedGroup>::G)>,
 ) {
-  let mut g_scalar = <C::ToweringCurve as Ciphersuite>::F::ZERO;
+  let mut g_scalar = <C::ToweringCurve as WrappedGroup>::F::ZERO;
   let mut pairs = Vec::with_capacity(coefficients.len() + encryption_key_commitments.len());
 
   // Push on the commitments to the polynomial being secret-shared
   for coefficient in coefficients {
     // This uses `0` as we'll add to it later, given its fixed position
-    pairs.push((<C::ToweringCurve as Ciphersuite>::F::ZERO, *coefficient));
+    pairs.push((<C::ToweringCurve as WrappedGroup>::F::ZERO, *coefficient));
   }
 
   for (i, encrypted_secret_share) in encrypted_secret_shares {
     let encryption_key_commitment = encryption_key_commitments[usize::from(u16::from(*i)) - 1];
 
-    let weight = <C::ToweringCurve as Ciphersuite>::F::random(&mut *rng);
+    let weight = <C::ToweringCurve as WrappedGroup>::F::random(&mut *rng);
 
     /*
       The encrypted secret share scaling `G`, minus the encryption key commitment, minus the
@@ -274,7 +275,7 @@ fn verifiable_encryption_statements<C: Curves>(
     pairs.push((weight, encryption_key_commitment));
     // Calculate the commitment to the secret share via the commitments to the polynomial
     {
-      let i = <C::ToweringCurve as Ciphersuite>::F::from(u64::from(u16::from(*i)));
+      let i = <C::ToweringCurve as WrappedGroup>::F::from(u64::from(u16::from(*i)));
       (0 .. coefficients.len()).fold(weight, |exp, j| {
         pairs[j].0 += exp;
         exp * i
@@ -300,7 +301,7 @@ impl<C: Curves> Dkg<C> {
     generators: &Generators<C>,
     context: [u8; 32],
     t: u16,
-    evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
+    evrf_public_keys: &[<C::EmbeddedCurve as WrappedGroup>::G],
     participations: &HashMap<Participant, Participation<C>>,
   ) -> Result<VerifyResult<C>, Error> {
     let Ok(n) = u16::try_from(evrf_public_keys.len()) else {
@@ -386,7 +387,7 @@ impl<C: Curves> Dkg<C> {
     {
       let mut share_verification_statements_actual = HashMap::with_capacity(valid.len());
       if !{
-        let mut g_scalar = <C::ToweringCurve as Ciphersuite>::F::ZERO;
+        let mut g_scalar = <C::ToweringCurve as WrappedGroup>::F::ZERO;
         let mut pairs = Vec::with_capacity(valid.len() * (usize::from(t) + evrf_public_keys.len()));
         for (i, (encrypted_secret_shares, data)) in &valid {
           let (this_g_scalar, mut these_pairs) = verifiable_encryption_statements::<C>(
@@ -417,9 +418,11 @@ impl<C: Curves> Dkg<C> {
             let sum_encrypted_secret_share = sum_encrypted_secret_shares
               .get(j)
               .copied()
-              .unwrap_or(<C::ToweringCurve as Ciphersuite>::F::ZERO);
-            let sum_mask =
-              sum_masks.get(j).copied().unwrap_or(<C::ToweringCurve as Ciphersuite>::G::identity());
+              .unwrap_or(<C::ToweringCurve as WrappedGroup>::F::ZERO);
+            let sum_mask = sum_masks
+              .get(j)
+              .copied()
+              .unwrap_or(<C::ToweringCurve as WrappedGroup>::G::identity());
             sum_encrypted_secret_shares.insert(*j, sum_encrypted_secret_share + enc_share);
 
             let j_index = usize::from(u16::from(*j)) - 1;
@@ -487,7 +490,7 @@ impl<C: Curves> Dkg<C> {
     for i in Participant::iter().take(usize::from(n)) {
       verification_shares.insert(
         i,
-        (<C::ToweringCurve as Ciphersuite>::generator() * sum_encrypted_secret_shares[&i]) -
+        (<C::ToweringCurve as WrappedGroup>::generator() * sum_encrypted_secret_shares[&i]) -
           sum_masks[&i],
       );
     }
@@ -506,9 +509,10 @@ impl<C: Curves> Dkg<C> {
   /// This will return _all_ keys belong to the participant.
   pub fn keys(
     &self,
-    evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
+    evrf_private_key: &Zeroizing<<C::EmbeddedCurve as WrappedGroup>::F>,
   ) -> Vec<ThresholdKeys<C::ToweringCurve>> {
-    let evrf_public_key = <C::EmbeddedCurve as Ciphersuite>::generator() * evrf_private_key.deref();
+    let evrf_public_key =
+      <C::EmbeddedCurve as WrappedGroup>::generator() * evrf_private_key.deref();
     let mut is = Vec::with_capacity(1);
     for (i, evrf_key) in Participant::iter().zip(self.evrf_public_keys.iter()) {
       if *evrf_key == evrf_public_key {
@@ -518,14 +522,14 @@ impl<C: Curves> Dkg<C> {
 
     let mut res = Vec::with_capacity(is.len());
     for i in is {
-      let mut secret_share = Zeroizing::new(<C::ToweringCurve as Ciphersuite>::F::ZERO);
+      let mut secret_share = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
       for shares in self.encrypted_secret_shares.values() {
         let (ecdh_commitments, encrypted_secret_share) = shares[&i];
 
-        let mut ecdh = Zeroizing::new(<C::ToweringCurve as Ciphersuite>::F::ZERO);
+        let mut ecdh = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
         for point in ecdh_commitments {
           let (mut x, mut y) =
-            <C::EmbeddedCurve as Ciphersuite>::G::to_xy(point * evrf_private_key.deref()).unwrap();
+            <C::EmbeddedCurve as WrappedGroup>::G::to_xy(point * evrf_private_key.deref()).unwrap();
           *ecdh += x;
           x.zeroize();
           y.zeroize();
@@ -534,7 +538,7 @@ impl<C: Curves> Dkg<C> {
       }
       debug_assert_eq!(
         self.verification_shares[&i],
-        <C::ToweringCurve as Ciphersuite>::G::generator() * secret_share.deref()
+        <C::ToweringCurve as WrappedGroup>::generator() * secret_share.deref()
       );
 
       res.push(

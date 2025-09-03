@@ -3,11 +3,10 @@ use std::{boxed::Box, collections::HashMap};
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
-use dalek_ff_group::Ristretto;
+use ciphersuite::{group::GroupEncoding, *};
 use dkg::{Participant, musig};
 use frost_schnorrkel::{
-  frost::{FrostError, sign::*},
+  frost::{curve::Ristretto, FrostError, sign::*},
   Schnorrkel,
 };
 
@@ -31,7 +30,7 @@ fn schnorrkel() -> Schnorrkel {
 
 fn our_i(
   set: &NewSetInformation,
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   data: &HashMap<Participant, Vec<u8>>,
 ) -> Participant {
   let public = SeraiAddress((Ristretto::generator() * key.deref()).to_bytes());
@@ -125,7 +124,7 @@ pub(crate) struct ConfirmDkgTask<CD: DbTrait, TD: DbTrait> {
   set: NewSetInformation,
   tributary_db: TD,
 
-  key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   signer: Option<Signer>,
 }
 
@@ -134,7 +133,7 @@ impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
     db: CD,
     set: NewSetInformation,
     tributary_db: TD,
-    key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+    key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   ) -> Self {
     Self { db, set, tributary_db, key, signer: None }
   }
@@ -153,7 +152,7 @@ impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
     db: &mut CD,
     set: ExternalValidatorSet,
     attempt: u32,
-    key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+    key: Zeroizing<<Ristretto as WrappedGroup>::F>,
     signer: &mut Option<Signer>,
   ) {
     // Perform the preprocess

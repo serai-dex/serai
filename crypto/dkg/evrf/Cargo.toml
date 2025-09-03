@@ -31,13 +31,13 @@ ciphersuite = { path = "../../ciphersuite", version = "^0.4.1", default-features
 multiexp = { path = "../../multiexp", version = "0.4", default-features = false }
 
 generic-array = { version = "1", default-features = false, features = ["alloc"] }
-blake2 = { version = "0.11.0-rc.0", default-features = false }
+blake2 = { version = "0.11.0-rc.2", default-features = false }
 rand_chacha = { version = "0.3", default-features = false }
 
-generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false }
-ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false }
-generalized-bulletproofs-circuit-abstraction = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false }
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", default-features = false }
+generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", default-features = false }
+ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", default-features = false }
+generalized-bulletproofs-circuit-abstraction = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", default-features = false }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", default-features = false }
 
 dkg = { path = "..", default-features = false }
 
@@ -52,7 +52,7 @@ rand = { version = "0.8", default-features = false, features = ["std"] }
 ciphersuite = { path = "../../ciphersuite", default-features = false, features = ["std"]  }
 embedwards25519 = { path = "../../embedwards25519", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../../dalek-ff-group", default-features = false, features = ["std"] }
-generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a6f8797007e768488568b821435cf5006517a962", features = ["tests"] }
+generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", features = ["tests"] }
 dkg-recovery = { path = "../recovery" }
 
 [features]
@@ -86,6 +86,5 @@ std = [
 ]
 secp256k1 = ["ciphersuite-kp256", "secq256k1"]
 ed25519 = ["dalek-ff-group", "embedwards25519"]
-ristretto = ["dalek-ff-group", "embedwards25519"]
 tests = ["rand_core/getrandom"]
 default = ["std"]

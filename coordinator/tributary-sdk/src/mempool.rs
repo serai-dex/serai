@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 
 use serai_db::{DbTxn, Db};
 
@@ -21,9 +21,9 @@ pub(crate) struct Mempool<D: Db, T: TransactionTrait> {
   db: D,
   genesis: [u8; 32],
 
-  last_nonce_in_mempool: HashMap<(<Ristretto as Ciphersuite>::G, Vec<u8>), u32>,
+  last_nonce_in_mempool: HashMap<(<Ristretto as WrappedGroup>::G, Vec<u8>), u32>,
   txs: HashMap<[u8; 32], Transaction<T>>,
-  txs_per_signer: HashMap<<Ristretto as Ciphersuite>::G, u32>,
+  txs_per_signer: HashMap<<Ristretto as WrappedGroup>::G, u32>,
 }
 
 impl<D: Db, T: TransactionTrait> Mempool<D, T> {
@@ -107,7 +107,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   // Returns Ok(true) if new, Ok(false) if an already present unsigned, or the error.
   pub(crate) fn add<
     N: Network,
-    F: FnOnce(<Ristretto as Ciphersuite>::G, Vec<u8>) -> Option<u32>,
+    F: FnOnce(<Ristretto as WrappedGroup>::G, Vec<u8>) -> Option<u32>,
   >(
     &mut self,
     blockchain_next_nonce: F,
@@ -179,7 +179,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   // Returns None if the mempool doesn't have a nonce tracked.
   pub(crate) fn next_nonce_in_mempool(
     &self,
-    signer: &<Ristretto as Ciphersuite>::G,
+    signer: &<Ristretto as WrappedGroup>::G,
     order: Vec<u8>,
   ) -> Option<u32> {
     self.last_nonce_in_mempool.get(&(*signer, order)).copied().map(|nonce| nonce + 1)

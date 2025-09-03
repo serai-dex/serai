@@ -11,7 +11,7 @@ use rand::rngs::OsRng;
 use blake2::{Digest, Blake2s256};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::ff::Field, Ciphersuite};
+use ciphersuite::*;
 
 use serai_db::{DbTxn, Db, MemDb};
 
@@ -31,7 +31,7 @@ type N = TendermintNetwork<MemDb, SignedTransaction, DummyP2p>;
 
 fn new_blockchain<T: TransactionTrait>(
   genesis: [u8; 32],
-  participants: &[<Ristretto as Ciphersuite>::G],
+  participants: &[<Ristretto as WrappedGroup>::G],
 ) -> (MemDb, Blockchain<MemDb, T>) {
   let db = MemDb::new();
   let blockchain = Blockchain::new(db.clone(), genesis, participants);
@@ -82,7 +82,7 @@ fn invalid_block() {
     assert!(blockchain.verify_block::<N>(&block, &validators, false).is_err());
   }
 
-  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+  let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
   let tx = crate::tests::signed_transaction(&mut OsRng, genesis, &key, 0);
 
   // Not a participant
@@ -134,7 +134,7 @@ fn invalid_block() {
     blockchain.verify_block::<N>(&block, &validators, false).unwrap();
     match &mut block.transactions[0] {
       Transaction::Application(tx) => {
-        tx.1.signature.s += <Ristretto as Ciphersuite>::F::ONE;
+        tx.1.signature.s += <Ristretto as WrappedGroup>::F::ONE;
       }
       _ => panic!("non-signed tx found"),
     }
@@ -150,7 +150,7 @@ fn invalid_block() {
 fn signed_transaction() {
   let genesis = new_genesis();
   let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
-  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+  let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
   let tx = crate::tests::signed_transaction(&mut OsRng, genesis, &key, 0);
   let signer = tx.1.signer;
 
@@ -339,7 +339,7 @@ fn provided_transaction() {
 #[tokio::test]
 async fn tendermint_evidence_tx() {
   let genesis = new_genesis();
-  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+  let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
   let signer = Signer::new(genesis, key.clone());
   let signer_id = Ristretto::generator() * key.deref();
   let validators = Arc::new(Validators::new(genesis, vec![(signer_id, 1)]).unwrap());
@@ -379,7 +379,7 @@ async fn tendermint_evidence_tx() {
   let mut mempool: Vec<Transaction<SignedTransaction>> = vec![];
   let mut signers = vec![];
   for _ in 0 .. 5 {
-    let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+    let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
     let signer = Signer::new(genesis, key.clone());
     let signer_id = Ristretto::generator() * key.deref();
     signers.push((signer_id, 1));
@@ -446,7 +446,7 @@ async fn block_tx_ordering() {
   }
 
   let genesis = new_genesis();
-  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+  let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
 
   // signer
   let signer = crate::tests::signed_transaction(&mut OsRng, genesis, &key, 0).1.signer;

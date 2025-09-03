@@ -4,13 +4,7 @@
 
 use zeroize::Zeroize;
 
-use digest::{
-  typenum::{
-    consts::U32, marker_traits::NonZero, type_operators::IsGreaterOrEqual, operator_aliases::GrEq,
-  },
-  block_api::BlockSizeUser,
-  Digest, Output, HashMarker,
-};
+use digest::{block_api::BlockSizeUser, Digest, Output, HashMarker};
 
 #[cfg(feature = "merlin")]
 mod merlin;
@@ -75,24 +69,11 @@ impl DigestTranscriptMember {
   }
 }
 
-/// A trait defining cryptographic Digests with at least a 256-bit output size, assuming at least a
-/// 128-bit level of security accordingly.
-pub trait SecureDigest: Digest + HashMarker {}
-impl<D: Digest + HashMarker> SecureDigest for D
-where
-  // This just lets us perform the comparison
-  D::OutputSize: IsGreaterOrEqual<U32>,
-  // Perform the comparison and make sure it's true (not zero), meaning D::OutputSize is >= U32
-  // This should be U32 as it's length in bytes, not bits
-  GrEq<D::OutputSize, U32>: NonZero,
-{
-}
-
 /// A simple transcript format constructed around the specified hash algorithm.
 #[derive(Clone, Debug)]
-pub struct DigestTranscript<D: Send + Clone + SecureDigest>(D);
+pub struct DigestTranscript<D: Send + Clone + Digest + HashMarker>(D);
 
-impl<D: Send + Clone + SecureDigest> DigestTranscript<D> {
+impl<D: Send + Clone + Digest + HashMarker> DigestTranscript<D> {
   fn append(&mut self, kind: DigestTranscriptMember, value: &[u8]) {
     self.0.update([kind.as_u8()]);
     // Assumes messages don't exceed 16 exabytes
@@ -101,7 +82,7 @@ impl<D: Send + Clone + SecureDigest> DigestTranscript<D> {
   }
 }
 
-impl<D: Send + Clone + SecureDigest> Transcript for DigestTranscript<D> {
+impl<D: Send + Clone + Digest + HashMarker> Transcript for DigestTranscript<D> {
   type Challenge = Output<D>;
 
   fn new(name: &'static [u8]) -> Self {
@@ -140,7 +121,7 @@ impl<D: Send + Clone + SecureDigest> Transcript for DigestTranscript<D> {
 // Digest doesn't implement Zeroize
 // Implement Zeroize for DigestTranscript by writing twice the block size to the digest in an
 // attempt to overwrite the internal hash state/any leftover bytes
-impl<D: Send + Clone + SecureDigest> Zeroize for DigestTranscript<D>
+impl<D: Send + Clone + Digest + HashMarker> Zeroize for DigestTranscript<D>
 where
   D: BlockSizeUser,
 {
@@ -159,7 +140,7 @@ where
     // These writes may be optimized out if they're never read
     // Attempt to get them marked as read
 
-    fn mark_read<D: Send + Clone + SecureDigest>(transcript: &DigestTranscript<D>) {
+    fn mark_read<D: Send + Clone + Digest + HashMarker>(transcript: &DigestTranscript<D>) {
       // Just get a challenge from the state
       let mut challenge = core::hint::black_box(transcript.0.clone().finalize());
       challenge.as_mut().zeroize();

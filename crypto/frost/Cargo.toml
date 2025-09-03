@@ -1,6 +1,6 @@
 [package]
 name = "modular-frost"
-version = "0.10.1"
+version = "0.11.0"
 description = "Modular implementation of FROST over ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/frost"
@@ -29,7 +29,7 @@ hex = { version = "0.4", default-features = false, features = ["std"], optional 
 
 transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false, features = ["std", "recommended"] }
 
-dalek-ff-group = { path = "../dalek-ff-group", version = "0.4", default-features = false, features = ["std"], optional = true }
+dalek-ff-group = { path = "../dalek-ff-group", version = "0.5", default-features = false, features = ["std"], optional = true }
 minimal-ed448 = { path = "../ed448", version = "0.4", default-features = false, features = ["std"], optional = true }
 
 ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["std"] }

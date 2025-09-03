@@ -4,7 +4,7 @@ use zeroize::Zeroizing;
 use rand_core::OsRng;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::ff::Field, Ciphersuite};
+use ciphersuite::WrappedGroup;
 
 use dkg_recovery::recover_key;
 use crate::*;
@@ -17,21 +17,21 @@ pub fn test_musig() {
   let mut keys = vec![];
   let mut pub_keys = vec![];
   for _ in 0 .. PARTICIPANTS {
-    let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
-    pub_keys.push(<Ristretto as Ciphersuite>::generator() * *key);
+    let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
+    pub_keys.push(<Ristretto as WrappedGroup>::generator() * *key);
     keys.push(key);
   }
 
   const CONTEXT: [u8; 32] = *b"MuSig Test                      ";
 
   // Empty signing set
-  musig::<Ristretto>(CONTEXT, Zeroizing::new(<Ristretto as Ciphersuite>::F::ZERO), &[])
+  musig::<Ristretto>(CONTEXT, Zeroizing::new(<Ristretto as WrappedGroup>::F::ZERO), &[])
     .unwrap_err();
   // Signing set we're not part of
   musig::<Ristretto>(
     CONTEXT,
-    Zeroizing::new(<Ristretto as Ciphersuite>::F::ZERO),
-    &[<Ristretto as Ciphersuite>::generator()],
+    Zeroizing::new(<Ristretto as WrappedGroup>::F::ZERO),
+    &[<Ristretto as WrappedGroup>::generator()],
   )
   .unwrap_err();
 
@@ -48,7 +48,7 @@ pub fn test_musig() {
 
       verification_shares.insert(
         these_keys.params().i(),
-        <Ristretto as Ciphersuite>::generator() * **these_keys.original_secret_share(),
+        <Ristretto as WrappedGroup>::generator() * **these_keys.original_secret_share(),
       );
 
       assert_eq!(these_keys.group_key(), group_key);
@@ -63,7 +63,7 @@ pub fn test_musig() {
     }
 
     assert_eq!(
-      <Ristretto as Ciphersuite>::generator() *
+      <Ristretto as WrappedGroup>::generator() *
         *recover_key(&created_keys.values().cloned().collect::<Vec<_>>()).unwrap(),
       group_key
     );

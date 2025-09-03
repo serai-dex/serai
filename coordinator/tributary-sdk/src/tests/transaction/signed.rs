@@ -3,7 +3,7 @@ use rand::rngs::OsRng;
 use blake2::{Digest, Blake2s256};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::ff::Field, Ciphersuite};
+use ciphersuite::*;
 
 use crate::{
   ReadWrite,
@@ -69,7 +69,7 @@ fn signed_transaction() {
   }
   {
     let mut tx = tx.clone();
-    tx.1.signature.s += <Ristretto as Ciphersuite>::F::ONE;
+    tx.1.signature.s += <Ristretto as WrappedGroup>::F::ONE;
     assert!(verify_transaction(&tx, genesis, &mut |_, _| Some(tx.1.nonce)).is_err());
   }
 

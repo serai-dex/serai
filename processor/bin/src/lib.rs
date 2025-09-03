@@ -4,9 +4,9 @@ use zeroize::{Zeroize, Zeroizing};
 
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite,
+  *,
 };
-use dkg::{Curves, Ristretto};
+use dkg::Curves;
 
 use serai_client::validator_sets::primitives::Session;
 
@@ -14,7 +14,7 @@ use serai_env as env;
 use serai_db::{Get, DbTxn, Db as DbTrait, create_db, db_channel};
 
 use primitives::EncodableG;
-use ::key_gen::{KeyGenParams, KeyGen};
+use ::key_gen::{Ristretto, KeyGenParams, KeyGen};
 use scheduler::{SignableTransaction, TransactionFor};
 use scanner::{ScannerFeed, Scanner, KeyFor, Scheduler};
 use signers::{TransactionPublisher, Signers};
@@ -80,7 +80,7 @@ pub fn url() -> String {
 }
 
 fn key_gen<K: KeyGenParams>() -> KeyGen<K> {
-  fn read_key_from_env<C: Ciphersuite>(label: &'static str) -> Zeroizing<C::F> {
+  fn read_key_from_env<C: WrappedGroup>(label: &'static str) -> Zeroizing<C::F> {
     let key_hex =
       Zeroizing::new(env::var(label).unwrap_or_else(|| panic!("{label} wasn't provided")));
     let bytes = Zeroizing::new(

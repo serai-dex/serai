@@ -3,7 +3,7 @@ use std::path::Path;
 use zeroize::Zeroizing;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::ff::PrimeField, Ciphersuite};
+use ciphersuite::{group::ff::PrimeField, WrappedGroup};
 
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
@@ -12,8 +12,8 @@ pub fn processor(
   orchestration_path: &Path,
   network: Network,
   coin: &'static str,
-  _coordinator_key: <Ristretto as Ciphersuite>::G,
-  processor_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  _coordinator_key: <Ristretto as WrappedGroup>::G,
+  processor_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   substrate_evrf_key: Zeroizing<Vec<u8>>,
   network_evrf_key: Zeroizing<Vec<u8>>,
 ) {

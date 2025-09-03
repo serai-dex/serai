@@ -4,7 +4,7 @@ use std::sync::Arc;
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 use blake2::{digest::typenum::U32, Digest, Blake2s};
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use dalek_ff_group::Ristretto;
 
 use tokio::sync::mpsc;
@@ -160,7 +160,7 @@ impl<CD: DbTrait, TD: DbTrait, P: P2p> ContinuallyRan
 #[must_use]
 async fn add_signed_unsigned_transaction<TD: DbTrait, P: P2p>(
   tributary: &Tributary<TD, Transaction, P>,
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   mut tx: Transaction,
 ) -> bool {
   // If this is a signed transaction, sign it
@@ -213,7 +213,7 @@ async fn add_with_recognition_check<TD: DbTrait, P: P2p>(
   set: ExternalValidatorSet,
   tributary_db: &mut TD,
   tributary: &Tributary<TD, Transaction, P>,
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   tx: Transaction,
 ) -> bool {
   let kind = tx.kind();
@@ -252,7 +252,7 @@ pub(crate) struct AddTributaryTransactionsTask<CD: DbTrait, TD: DbTrait, P: P2p>
   tributary_db: TD,
   tributary: Tributary<TD, Transaction, P>,
   set: NewSetInformation,
-  key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 }
 impl<CD: DbTrait, TD: DbTrait, P: P2p> ContinuallyRan for AddTributaryTransactionsTask<CD, TD, P> {
   type Error = DoesNotError;
@@ -382,7 +382,7 @@ pub(crate) struct SignSlashReportTask<CD: DbTrait, TD: DbTrait, P: P2p> {
   tributary_db: TD,
   tributary: Tributary<TD, Transaction, P>,
   set: NewSetInformation,
-  key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 }
 impl<CD: DbTrait, TD: DbTrait, P: P2p> ContinuallyRan for SignSlashReportTask<CD, TD, P> {
   type Error = DoesNotError;
@@ -470,7 +470,7 @@ pub(crate) async fn spawn_tributary<P: P2p>(
   p2p: P,
   p2p_add_tributary: &mpsc::UnboundedSender<(ExternalValidatorSet, Tributary<Db, Transaction, P>)>,
   set: NewSetInformation,
-  serai_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+  serai_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 ) {
   // Don't spawn retired Tributaries
   if crate::db::RetiredTributary::get(&db, set.set.network).map(|session| session.0) >=
@@ -490,7 +490,7 @@ pub(crate) async fn spawn_tributary<P: P2p>(
 
   let mut tributary_validators = Vec::with_capacity(set.validators.len());
   for (validator, weight) in set.validators.iter().copied() {
-    let validator_key = <Ristretto as Ciphersuite>::read_G(&mut validator.0.as_slice())
+    let validator_key = <Ristretto as GroupIo>::read_G(&mut validator.0.as_slice())
       .expect("Serai validator had an invalid public key");
     let weight = u64::from(weight);
     tributary_validators.push((validator_key, weight));

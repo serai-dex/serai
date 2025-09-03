@@ -7,7 +7,7 @@ use ciphersuite::{
     ff::{Field, PrimeField},
     GroupEncoding,
   },
-  Ciphersuite,
+  WrappedGroup,
 };
 
 use elliptic_curve::{
@@ -20,7 +20,7 @@ use elliptic_curve::{
 use crate::{curve::Curve, algorithm::Hram};
 
 #[allow(non_snake_case)]
-fn hash_to_F<C: Ciphersuite<F: PrimeField<Repr = GenericArray<u8, U32>>>>(
+fn hash_to_F<C: WrappedGroup<F: PrimeField<Repr = GenericArray<u8, U32>>>>(
   dst: &[u8],
   msg: &[u8],
 ) -> C::F {
@@ -112,10 +112,10 @@ macro_rules! kp_curve {
     impl Hram<$Curve> for $Hram {
       #[allow(non_snake_case)]
       fn hram(
-        R: &<$Curve as Ciphersuite>::G,
-        A: &<$Curve as Ciphersuite>::G,
+        R: &<$Curve as WrappedGroup>::G,
+        A: &<$Curve as WrappedGroup>::G,
         m: &[u8],
-      ) -> <$Curve as Ciphersuite>::F {
+      ) -> <$Curve as WrappedGroup>::F {
         <$Curve as Curve>::hash_to_F(
           b"chal",
           &[R.to_bytes().as_ref(), A.to_bytes().as_ref(), m].concat(),
@@ -132,7 +132,7 @@ kp_curve!("p256", P256, IetfP256Hram, b"FROST-P256-SHA256-v1");
 kp_curve!("secp256k1", Secp256k1, IetfSecp256k1Hram, b"FROST-secp256k1-SHA256-v1");
 
 #[cfg(test)]
-fn test_oversize_dst<C: Ciphersuite<F: PrimeField<Repr = GenericArray<u8, U32>>>>() {
+fn test_oversize_dst<C: WrappedGroup<F: PrimeField<Repr = GenericArray<u8, U32>>>>() {
   use sha2::Digest;
 
   // The draft specifies DSTs >255 bytes should be hashed into a 32-byte DST

@@ -4,10 +4,7 @@ use zeroize::{Zeroize, Zeroizing};
 use rand_core::OsRng;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{
-  group::ff::{Field, PrimeField},
-  Ciphersuite,
-};
+use ciphersuite::{group::ff::PrimeField, WrappedGroup};
 use schnorr_signatures::SchnorrSignature;
 
 use tokio::{
@@ -22,8 +19,8 @@ use crate::{Service, Metadata, QueuedMessage, MessageQueueRequest, message_chall
 
 pub struct MessageQueue {
   pub service: Service,
-  priv_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-  pub_key: <Ristretto as Ciphersuite>::G,
+  priv_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
+  pub_key: <Ristretto as WrappedGroup>::G,
   url: String,
 }
 
@@ -31,7 +28,7 @@ impl MessageQueue {
   pub fn new(
     service: Service,
     mut url: String,
-    priv_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+    priv_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   ) -> MessageQueue {
     // Allow MESSAGE_QUEUE_RPC to either be a full URL or just a hostname
     // While we could stitch together multiple variables, our control over this service makes this
@@ -46,16 +43,16 @@ impl MessageQueue {
   pub fn from_env(service: Service) -> MessageQueue {
     let url = env::var("MESSAGE_QUEUE_RPC").expect("message-queue RPC wasn't specified");
 
-    let priv_key: Zeroizing<<Ristretto as Ciphersuite>::F> = {
+    let priv_key: Zeroizing<<Ristretto as WrappedGroup>::F> = {
       let key_str =
         Zeroizing::new(env::var("MESSAGE_QUEUE_KEY").expect("message-queue key wasn't specified"));
       let key_bytes = Zeroizing::new(
         hex::decode(&key_str).expect("invalid message-queue key specified (wasn't hex)"),
       );
-      let mut bytes = <<Ristretto as Ciphersuite>::F as PrimeField>::Repr::default();
+      let mut bytes = <<Ristretto as WrappedGroup>::F as PrimeField>::Repr::default();
       bytes.copy_from_slice(&key_bytes);
       let key = Zeroizing::new(
-        Option::from(<<Ristretto as Ciphersuite>::F as PrimeField>::from_repr(bytes))
+        Option::from(<<Ristretto as WrappedGroup>::F as PrimeField>::from_repr(bytes))
           .expect("invalid message-queue key specified"),
       );
       bytes.zeroize();
@@ -79,7 +76,7 @@ impl MessageQueue {
   }
 
   pub async fn queue(&self, metadata: Metadata, msg: Vec<u8>) -> Result<(), String> {
-    let nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+    let nonce = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
     let nonce_pub = Ristretto::generator() * nonce.deref();
     let sig = SchnorrSignature::<Ristretto>::sign(
       &self.priv_key,
@@ -215,7 +212,7 @@ impl MessageQueue {
 
   pub async fn ack(&self, from: Service, id: u64) {
     // TODO: Should this use OsRng? Deterministic or deterministic + random may be better.
-    let nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng));
+    let nonce = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
     let nonce_pub = Ristretto::generator() * nonce.deref();
     let sig = SchnorrSignature::<Ristretto>::sign(
       &self.priv_key,

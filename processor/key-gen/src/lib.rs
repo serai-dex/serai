@@ -13,7 +13,7 @@ use blake2::{Digest, Blake2s256};
 use transcript::{Transcript, RecommendedTranscript};
 use ciphersuite::{
   group::{Group, GroupEncoding},
-  Ciphersuite,
+  *,
 };
 use dkg::*;
 
@@ -27,6 +27,14 @@ use generators::generators;
 
 mod db;
 use db::{Params, Participations, KeyGenDb};
+
+/// Ristretto, and an elliptic curve defined over its scalar field (embedwards25519).
+pub struct Ristretto;
+impl Curves for Ristretto {
+  type ToweringCurve = frost::curve::Ristretto;
+  type EmbeddedCurve = embedwards25519::Embedwards25519;
+  type EmbeddedCurveParameters = embedwards25519::Embedwards25519;
+}
 
 /// Parameters for a key generation.
 pub trait KeyGenParams {
@@ -49,7 +57,7 @@ pub trait KeyGenParams {
   ///
   /// A default implementation is provided which calls the traditional `to_bytes`.
   fn encode_key(
-    key: <<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as Ciphersuite>::G,
+    key: <<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as WrappedGroup>::G,
   ) -> Vec<u8> {
     key.to_bytes().as_ref().to_vec()
   }
@@ -59,11 +67,10 @@ pub trait KeyGenParams {
   /// A default implementation is provided which calls the traditional `from_bytes`.
   fn decode_key(
     mut key: &[u8],
-  ) -> Option<<<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as Ciphersuite>::G> {
-    let res = <<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as Ciphersuite>::read_G(
-      &mut key,
-    )
-    .ok()?;
+  ) -> Option<<<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as WrappedGroup>::G> {
+    let res =
+      <<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve as GroupIo>::read_G(&mut key)
+        .ok()?;
     if !key.is_empty() {
       None?;
     }
@@ -101,14 +108,14 @@ pub trait KeyGenParams {
 */
 fn coerce_keys<C: 'static + Curves>(
   key_bytes: &[impl AsRef<[u8]>],
-) -> (Vec<<C::EmbeddedCurve as Ciphersuite>::G>, Vec<Participant>) {
-  fn evrf_key<C: 'static + Curves>(key: &[u8]) -> Option<<C::EmbeddedCurve as Ciphersuite>::G> {
-    let mut repr = <<C::EmbeddedCurve as Ciphersuite>::G as GroupEncoding>::Repr::default();
+) -> (Vec<<C::EmbeddedCurve as WrappedGroup>::G>, Vec<Participant>) {
+  fn evrf_key<C: 'static + Curves>(key: &[u8]) -> Option<<C::EmbeddedCurve as WrappedGroup>::G> {
+    let mut repr = <<C::EmbeddedCurve as WrappedGroup>::G as GroupEncoding>::Repr::default();
     if repr.as_ref().len() != key.len() {
       None?;
     }
     repr.as_mut().copy_from_slice(key);
-    let point = Option::<<C::EmbeddedCurve as Ciphersuite>::G>::from(<_>::from_bytes(&repr))?;
+    let point = Option::<<C::EmbeddedCurve as WrappedGroup>::G>::from(<_>::from_bytes(&repr))?;
     if bool::from(point.is_identity()) {
       None?;
     }
@@ -131,10 +138,10 @@ fn coerce_keys<C: 'static + Curves>(
         // Generate a random key
         let mut rng = ChaCha20Rng::from_seed(Blake2s256::digest(key).into());
         loop {
-          let mut repr = <<C::EmbeddedCurve as Ciphersuite>::G as GroupEncoding>::Repr::default();
+          let mut repr = <<C::EmbeddedCurve as WrappedGroup>::G as GroupEncoding>::Repr::default();
           rng.fill_bytes(repr.as_mut());
           if let Some(key) =
-            Option::<<C::EmbeddedCurve as Ciphersuite>::G>::from(<_>::from_bytes(&repr))
+            Option::<<C::EmbeddedCurve as WrappedGroup>::G>::from(<_>::from_bytes(&repr))
           {
             break key;
           }
@@ -149,18 +156,20 @@ fn coerce_keys<C: 'static + Curves>(
 /// An instance of the Serai key generation protocol.
 #[derive(Debug)]
 pub struct KeyGen<P: KeyGenParams> {
-  substrate_evrf_private_key: Zeroizing<<<Ristretto as Curves>::EmbeddedCurve as Ciphersuite>::F>,
+  substrate_evrf_private_key: Zeroizing<<<Ristretto as Curves>::EmbeddedCurve as WrappedGroup>::F>,
   network_evrf_private_key:
-    Zeroizing<<<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as Ciphersuite>::F>,
+    Zeroizing<<<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as WrappedGroup>::F>,
 }
 
 impl<P: KeyGenParams> KeyGen<P> {
   /// Create a new key generation instance.
   #[allow(clippy::new_ret_no_self)]
   pub fn new(
-    substrate_evrf_private_key: Zeroizing<<<Ristretto as Curves>::EmbeddedCurve as Ciphersuite>::F>,
+    substrate_evrf_private_key: Zeroizing<
+      <<Ristretto as Curves>::EmbeddedCurve as WrappedGroup>::F,
+    >,
     network_evrf_private_key: Zeroizing<
-      <<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as Ciphersuite>::F,
+      <<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as WrappedGroup>::F,
     >,
   ) -> KeyGen<P> {
     KeyGen { substrate_evrf_private_key, network_evrf_private_key }
@@ -214,8 +223,8 @@ impl<P: KeyGenParams> KeyGen<P> {
         fn participate<C: 'static + Curves>(
           context: [u8; 32],
           threshold: u16,
-          evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
-          evrf_private_key: &Zeroizing<<C::EmbeddedCurve as Ciphersuite>::F>,
+          evrf_public_keys: &[<C::EmbeddedCurve as WrappedGroup>::G],
+          evrf_private_key: &Zeroizing<<C::EmbeddedCurve as WrappedGroup>::F>,
           output: &mut impl io::Write,
         ) {
           let participation = Dkg::<C>::participate(
@@ -411,7 +420,7 @@ impl<P: KeyGenParams> KeyGen<P> {
           session: Session,
           true_if_substrate_false_if_network: bool,
           threshold: u16,
-          evrf_public_keys: &[<C::EmbeddedCurve as Ciphersuite>::G],
+          evrf_public_keys: &[<C::EmbeddedCurve as WrappedGroup>::G],
           substrate_participations: &mut HashMap<Participant, Vec<u8>>,
           network_participations: &mut HashMap<Participant, Vec<u8>>,
         ) -> Result<Dkg<C>, Vec<ProcessorMessage>> {

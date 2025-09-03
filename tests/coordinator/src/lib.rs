@@ -16,7 +16,7 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite,
+  WrappedGroup,
 };
 use dalek_ff_group::Ristretto;
 use embedwards25519::Embedwards25519;
@@ -39,7 +39,7 @@ mod tests;
 
 pub fn coordinator_instance(
   name: &str,
-  message_queue_key: <Ristretto as Ciphersuite>::F,
+  message_queue_key: <Ristretto as WrappedGroup>::F,
 ) -> TestBodySpecification {
   serai_docker_tests::build("coordinator".to_string());
 
@@ -123,7 +123,7 @@ pub struct Processor {
 
   evrf_public_keys: ([u8; 32], Vec<u8>),
 
-  substrate_key: Arc<AsyncMutex<Option<Zeroizing<<Ristretto as Ciphersuite>::F>>>>,
+  substrate_key: Arc<AsyncMutex<Option<Zeroizing<<Ristretto as WrappedGroup>::F>>>>,
 }
 
 impl Drop for Processor {
@@ -140,7 +140,7 @@ impl Processor {
     network: ExternalNetworkId,
     ops: &DockerOperations,
     handles: Handles,
-    processor_key: <Ristretto as Ciphersuite>::F,
+    processor_key: <Ristretto as WrappedGroup>::F,
   ) -> Processor {
     let message_queue_rpc = ops.handle(&handles.message_queue).host_port(2287).unwrap();
     let message_queue_rpc = format!("{}:{}", message_queue_rpc.0, message_queue_rpc.1);
@@ -321,7 +321,7 @@ impl Processor {
               schnorrkel_key_pair[.. 32].copy_from_slice(&substrate_key.to_repr());
               OsRng.fill_bytes(&mut schnorrkel_key_pair[32 .. 64]);
               schnorrkel_key_pair[64 ..].copy_from_slice(
-                &(<Ristretto as Ciphersuite>::generator() * *substrate_key).to_bytes(),
+                &(<Ristretto as WrappedGroup>::generator() * *substrate_key).to_bytes(),
               );
               let signature = Signature(
                 schnorrkel::keys::Keypair::from_bytes(&schnorrkel_key_pair)
@@ -390,7 +390,7 @@ impl Processor {
 
   pub async fn set_substrate_key(
     &mut self,
-    substrate_key: Zeroizing<<Ristretto as Ciphersuite>::F>,
+    substrate_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   ) {
     *self.substrate_key.lock().await = Some(substrate_key);
   }

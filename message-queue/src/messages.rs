@@ -1,6 +1,6 @@
-use transcript::{Transcript, RecommendedTranscript};
+use transcript::{Transcript, DigestTranscript};
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{group::GroupEncoding, FromUniformBytes, WrappedGroup, WithPreferredHash};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
@@ -36,13 +36,15 @@ pub enum MessageQueueRequest {
 
 pub fn message_challenge(
   from: Service,
-  from_key: <Ristretto as Ciphersuite>::G,
+  from_key: <Ristretto as WrappedGroup>::G,
   to: Service,
   intent: &[u8],
   msg: &[u8],
-  nonce: <Ristretto as Ciphersuite>::G,
-) -> <Ristretto as Ciphersuite>::F {
-  let mut transcript = RecommendedTranscript::new(b"Serai Message Queue v0.1 Message");
+  nonce: <Ristretto as WrappedGroup>::G,
+) -> <Ristretto as WrappedGroup>::F {
+  let mut transcript = DigestTranscript::<<Ristretto as WithPreferredHash>::H>::new(
+    b"Serai Message Queue v0.1 Message",
+  );
   transcript.domain_separate(b"metadata");
   transcript.append_message(b"from", borsh::to_vec(&from).unwrap());
   transcript.append_message(b"from_key", from_key.to_bytes());
@@ -52,17 +54,19 @@ pub fn message_challenge(
   transcript.append_message(b"msg", msg);
   transcript.domain_separate(b"signature");
   transcript.append_message(b"nonce", nonce.to_bytes());
-  <Ristretto as Ciphersuite>::hash_to_F(&transcript.challenge(b"challenge"))
+  <Ristretto as WrappedGroup>::F::from_uniform_bytes(&transcript.challenge(b"challenge").into())
 }
 
 pub fn ack_challenge(
   to: Service,
-  to_key: <Ristretto as Ciphersuite>::G,
+  to_key: <Ristretto as WrappedGroup>::G,
   from: Service,
   id: u64,
-  nonce: <Ristretto as Ciphersuite>::G,
-) -> <Ristretto as Ciphersuite>::F {
-  let mut transcript = RecommendedTranscript::new(b"Serai Message Queue v0.1 Acknowledgement");
+  nonce: <Ristretto as WrappedGroup>::G,
+) -> <Ristretto as WrappedGroup>::F {
+  let mut transcript = DigestTranscript::<<Ristretto as WithPreferredHash>::H>::new(
+    b"Serai Message Queue v0.1 Acknowledgement",
+  );
   transcript.domain_separate(b"metadata");
   transcript.append_message(b"to", borsh::to_vec(&to).unwrap());
   transcript.append_message(b"to_key", to_key.to_bytes());
@@ -71,5 +75,5 @@ pub fn ack_challenge(
   transcript.append_message(b"id", id.to_le_bytes());
   transcript.domain_separate(b"signature");
   transcript.append_message(b"nonce", nonce.to_bytes());
-  <Ristretto as Ciphersuite>::hash_to_F(&transcript.challenge(b"challenge"))
+  <Ristretto as WrappedGroup>::F::from_uniform_bytes(&transcript.challenge(b"challenge").into())
 }

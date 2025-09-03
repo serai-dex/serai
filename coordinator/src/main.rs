@@ -7,7 +7,7 @@ use rand_core::{RngCore, OsRng};
 use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite,
+  *,
 };
 
 use borsh::BorshDeserialize;
@@ -352,7 +352,7 @@ async fn main() {
     let mut key_bytes = [0; 32];
     key_bytes.copy_from_slice(&key_vec);
     key_vec.zeroize();
-    let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::from_repr(key_bytes).unwrap());
+    let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::from_repr(key_bytes).unwrap());
     key_bytes.zeroize();
     key
   };
@@ -439,7 +439,7 @@ async fn main() {
     EphemeralEventStream::new(
       db.clone(),
       serai.clone(),
-      SeraiAddress((<Ristretto as Ciphersuite>::generator() * serai_key.deref()).to_bytes()),
+      SeraiAddress((<Ristretto as WrappedGroup>::generator() * serai_key.deref()).to_bytes()),
     )
     .continually_run(substrate_ephemeral_task_def, vec![substrate_task]),
   );

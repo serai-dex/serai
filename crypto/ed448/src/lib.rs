@@ -29,7 +29,6 @@ mod point;
 pub use point::Point;
 
 mod ciphersuite;
-pub use crate::ciphersuite::Ed448;
 
 pub(crate) fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   use core::hint::black_box;

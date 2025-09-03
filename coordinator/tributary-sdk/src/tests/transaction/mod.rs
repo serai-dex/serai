@@ -7,10 +7,7 @@ use rand::{RngCore, CryptoRng, rngs::OsRng};
 use blake2::{Digest, Blake2s256};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{
-  group::{ff::Field, Group},
-  Ciphersuite,
-};
+use ciphersuite::{group::Group, *};
 use schnorr::SchnorrSignature;
 
 use scale::Encode;
@@ -34,11 +31,11 @@ mod tendermint;
 
 pub fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
   Signed {
-    signer: <Ristretto as Ciphersuite>::G::random(&mut *rng),
+    signer: <Ristretto as WrappedGroup>::G::random(&mut *rng),
     nonce: u32::try_from(rng.next_u64() >> 32 >> 1).unwrap(),
     signature: SchnorrSignature::<Ristretto> {
-      R: <Ristretto as Ciphersuite>::G::random(&mut *rng),
-      s: <Ristretto as Ciphersuite>::F::random(rng),
+      R: <Ristretto as WrappedGroup>::G::random(&mut *rng),
+      s: <Ristretto as WrappedGroup>::F::random(rng),
     },
   }
 }
@@ -137,18 +134,18 @@ impl Transaction for SignedTransaction {
 pub fn signed_transaction<R: RngCore + CryptoRng>(
   rng: &mut R,
   genesis: [u8; 32],
-  key: &Zeroizing<<Ristretto as Ciphersuite>::F>,
+  key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   nonce: u32,
 ) -> SignedTransaction {
   let mut data = vec![0; 512];
   rng.fill_bytes(&mut data);
 
-  let signer = <Ristretto as Ciphersuite>::generator() * **key;
+  let signer = <Ristretto as WrappedGroup>::generator() * **key;
 
   let mut tx =
     SignedTransaction(data, Signed { signer, nonce, signature: random_signed(rng).signature });
 
-  let sig_nonce = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(rng));
+  let sig_nonce = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(rng));
   tx.1.signature.R = Ristretto::generator() * sig_nonce.deref();
   tx.1.signature = SchnorrSignature::sign(key, sig_nonce, tx.sig_hash(genesis));
 
@@ -163,7 +160,7 @@ pub fn random_signed_transaction<R: RngCore + CryptoRng>(
   let mut genesis = [0; 32];
   rng.fill_bytes(&mut genesis);
 
-  let key = Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut *rng));
+  let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut *rng));
   // Shift over an additional bit to ensure it won't overflow when incremented
   let nonce = u32::try_from(rng.next_u64() >> 32 >> 1).unwrap();
 
@@ -180,12 +177,11 @@ pub async fn tendermint_meta() -> ([u8; 32], Signer, [u8; 32], Arc<Validators>) 
   // signer
   let genesis = new_genesis();
   let signer =
-    Signer::new(genesis, Zeroizing::new(<Ristretto as Ciphersuite>::F::random(&mut OsRng)));
+    Signer::new(genesis, Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng)));
   let validator_id = signer.validator_id().await.unwrap();
 
   // schema
-  let signer_pub =
-    <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut validator_id.as_slice()).unwrap();
+  let signer_pub = <Ristretto as GroupIo>::read_G::<&[u8]>(&mut validator_id.as_slice()).unwrap();
   let validators = Arc::new(Validators::new(genesis, vec![(signer_pub, 1)]).unwrap());
 
   (genesis, signer, validator_id, validators)

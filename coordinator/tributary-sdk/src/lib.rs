@@ -3,7 +3,7 @@ use std::{sync::Arc, io};
 
 use zeroize::Zeroizing;
 
-use ciphersuite::Ciphersuite;
+use ciphersuite::*;
 use dalek_ff_group::Ristretto;
 
 use scale::Decode;
@@ -162,8 +162,8 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     db: D,
     genesis: [u8; 32],
     start_time: u64,
-    key: Zeroizing<<Ristretto as Ciphersuite>::F>,
-    validators: Vec<(<Ristretto as Ciphersuite>::G, u64)>,
+    key: Zeroizing<<Ristretto as WrappedGroup>::F>,
+    validators: Vec<(<Ristretto as WrappedGroup>::G, u64)>,
     p2p: P,
   ) -> Option<Self> {
     log::info!("new Tributary with genesis {}", hex::encode(genesis));
@@ -235,7 +235,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
 
   pub async fn next_nonce(
     &self,
-    signer: &<Ristretto as Ciphersuite>::G,
+    signer: &<Ristretto as WrappedGroup>::G,
     order: &[u8],
   ) -> Option<u32> {
     self.network.blockchain.read().await.next_nonce(signer, order)

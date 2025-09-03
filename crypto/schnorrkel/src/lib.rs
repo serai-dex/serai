@@ -9,16 +9,16 @@ use zeroize::Zeroizing;
 
 use transcript::{Transcript, MerlinTranscript};
 
-use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
-  Ciphersuite,
+  WrappedGroup,
 };
 use schnorr::SchnorrSignature;
 
 use ::frost::{
   Participant, ThresholdKeys, ThresholdView, FrostError,
   algorithm::{Hram, Algorithm, Schnorr},
+  curve::Ristretto,
 };
 
 /// The [modular-frost](https://docs.rs/modular-frost) library.
@@ -28,8 +28,8 @@ pub mod frost {
 
 use schnorrkel::{PublicKey, Signature, context::SigningTranscript, signing_context};
 
-type RistrettoPoint = <Ristretto as Ciphersuite>::G;
-type Scalar = <Ristretto as Ciphersuite>::F;
+type RistrettoPoint = <Ristretto as WrappedGroup>::G;
+type Scalar = <Ristretto as WrappedGroup>::F;
 
 #[cfg(test)]
 mod tests;
@@ -83,7 +83,7 @@ impl Algorithm<Ristretto> for Schnorrkel {
     self.schnorr.transcript()
   }
 
-  fn nonces(&self) -> Vec<Vec<<Ristretto as Ciphersuite>::G>> {
+  fn nonces(&self) -> Vec<Vec<<Ristretto as WrappedGroup>::G>> {
     self.schnorr.nonces()
   }
 
