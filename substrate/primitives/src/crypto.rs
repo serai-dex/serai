@@ -5,7 +5,7 @@ use sp_core::{ConstU32, bounded::BoundedVec};
 
 use ciphersuite::{
   group::{ff::FromUniformBytes, GroupEncoding},
-  Ciphersuite,
+  WrappedGroup, GroupCanonicalEncoding,
 };
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
@@ -114,16 +114,16 @@ impl ExternalKey {
 pub enum EmbeddedEllipticCurveKeys {
   /// The embedded elliptic curve keys for a Bitcoin validator.
   Bitcoin(
-    <<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr,
-    <<Secq256k1 as Ciphersuite>::G as GroupEncoding>::Repr,
+    <<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr,
+    <<Secq256k1 as WrappedGroup>::G as GroupEncoding>::Repr,
   ),
   /// The embedded elliptic curve keys for an Ethereum validator.
   Ethereum(
-    <<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr,
-    <<Secq256k1 as Ciphersuite>::G as GroupEncoding>::Repr,
+    <<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr,
+    <<Secq256k1 as WrappedGroup>::G as GroupEncoding>::Repr,
   ),
   /// The embedded elliptic curve key for a Monero validator.
-  Monero(<<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr),
+  Monero(<<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr),
 }
 
 impl EmbeddedEllipticCurveKeys {
@@ -170,7 +170,7 @@ impl scale::Decode for EmbeddedEllipticCurveKeys {
   fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
     let network_id = ExternalNetworkId::decode(&mut *input)?;
     let embedwards25519 =
-      <<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr::decode(&mut *input)?;
+      <<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr::decode(&mut *input)?;
     Ok(match network_id {
       ExternalNetworkId::Bitcoin => {
         let secq256k1 = <[u8; 33]>::decode(&mut *input)?;
@@ -192,20 +192,20 @@ impl scale::DecodeWithMemTracking for EmbeddedEllipticCurveKeys {}
 pub enum SignedEmbeddedEllipticCurveKeys {
   /// The signed embedded elliptic curve keys for a Bitcoin validator.
   Bitcoin(
-    <<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr,
-    <<Secq256k1 as Ciphersuite>::G as GroupEncoding>::Repr,
+    <<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr,
+    <<Secq256k1 as WrappedGroup>::G as GroupEncoding>::Repr,
     [u8; 64],
     [u8; 65],
   ),
   /// The signed embedded elliptic curve keys for an Ethereum validator.
   Ethereum(
-    <<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr,
-    <<Secq256k1 as Ciphersuite>::G as GroupEncoding>::Repr,
+    <<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr,
+    <<Secq256k1 as WrappedGroup>::G as GroupEncoding>::Repr,
     [u8; 64],
     [u8; 65],
   ),
   /// The signed embedded elliptic curve key for a Monero validator.
-  Monero(<<Embedwards25519 as Ciphersuite>::G as GroupEncoding>::Repr, [u8; 64]),
+  Monero(<<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr, [u8; 64]),
 }
 
 impl SignedEmbeddedEllipticCurveKeys {
@@ -251,8 +251,10 @@ impl SignedEmbeddedEllipticCurveKeys {
       Self::Bitcoin(e, _, e_sig, _) | Self::Ethereum(e, _, e_sig, _) | Self::Monero(e, e_sig) => {
         let sig = SchnorrSignature::<Embedwards25519>::read(&mut e_sig.as_slice()).ok()?;
         if !sig.verify(
-          Embedwards25519::read_G(&mut e.as_slice()).ok()?,
-          <<Embedwards25519 as Ciphersuite>::F as FromUniformBytes<_>>::from_uniform_bytes(
+          Option::<<Embedwards25519 as WrappedGroup>::G>::from(
+            Embedwards25519::from_canonical_bytes(e),
+          )?,
+          <<Embedwards25519 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(
             &challenge,
           ),
         ) {
@@ -264,8 +266,8 @@ impl SignedEmbeddedEllipticCurveKeys {
       Self::Bitcoin(_, s, _, s_sig) | Self::Ethereum(_, s, _, s_sig) => {
         let sig = SchnorrSignature::<Secq256k1>::read(&mut s_sig.as_slice()).ok()?;
         if !sig.verify(
-          Secq256k1::read_G(&mut s.as_slice()).ok()?,
-          <<Secq256k1 as Ciphersuite>::F as FromUniformBytes<_>>::from_uniform_bytes(&challenge),
+          Option::<<Secq256k1 as WrappedGroup>::G>::from(Secq256k1::from_canonical_bytes(s))?,
+          <<Secq256k1 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(&challenge),
         ) {
           None?;
         }

@@ -4,7 +4,7 @@ use sp_core::Pair as PairTrait;
 
 use sc_service::ChainType;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{group::GroupEncoding, WithPreferredHash};
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 
@@ -20,7 +20,7 @@ fn account_from_name(name: &'static str) -> PublicKey {
   insecure_pair_from_name(name).public()
 }
 
-fn insecure_arbitrary_public_key_from_name<C: Ciphersuite>(name: &'static str) -> Vec<u8> {
+fn insecure_arbitrary_public_key_from_name<C: WithPreferredHash>(name: &'static str) -> Vec<u8> {
   let key = insecure_arbitrary_key_from_name::<C>(name);
   (C::generator() * key).to_bytes().as_ref().to_vec()
 }

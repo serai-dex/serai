@@ -34,16 +34,16 @@ secq256k1 = { path = "../../crypto/secq256k1" }
 
 libp2p = "0.54"
 
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sp-keystore = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sp-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sp-blockchain = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sp-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sp-block-builder = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sp-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sp-keystore = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sp-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sp-blockchain = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sp-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sp-block-builder = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sp-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
 
-frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
+frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
 
 serai-runtime = { path = "../runtime", features = ["std"] }
 
@@ -55,37 +55,31 @@ jsonrpsee = { version = "0.24", features = ["server"] }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
-sc-offchain = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-transaction-pool = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-transaction-pool-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-basic-authorship = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-executor = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-service = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-client-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-network-common = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-network = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba", default-features = false, features = [] }
+sc-offchain = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-transaction-pool = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-transaction-pool-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-basic-authorship = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-executor = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-service = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-client-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-network-common = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-network = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0", default-features = false, features = [] }
 
-sc-consensus = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-consensus-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-authority-discovery = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
+sc-consensus = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-consensus-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-authority-discovery = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
 
-sc-telemetry = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-sc-cli = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba", default-features = false, features = ["rocksdb"] }
+sc-telemetry = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
+sc-cli = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0", default-features = false, features = ["rocksdb"] }
 
-sc-rpc-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-
-substrate-frame-rpc-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
-pallet-transaction-payment-rpc = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
+sc-rpc-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0" }
 
 serai-env = { path = "../../common/env" }
 
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["std", "hazmat"] }
 monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7f37cc8f770858aa1739e0f56dbe447db86f4ba6", default-features = false, features = ["std"] }
-
-[build-dependencies]
-substrate-build-script-utils = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ece373ca1e8aaee67844eebcca28b5e016136dba" }
 
 [features]
 default = []

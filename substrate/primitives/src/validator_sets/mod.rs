@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use zeroize::Zeroize;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use ciphersuite::{group::GroupEncoding, GroupIo};
 use dalek_ff_group::Ristretto;
 
 use crate::{
@@ -109,8 +109,7 @@ impl ExternalValidatorSet {
     let mut keys = Vec::new();
     for key in set_keys {
       keys.push(
-        <Ristretto as Ciphersuite>::read_G::<&[u8]>(&mut key.0.as_ref())
-          .expect("invalid participant"),
+        <Ristretto as GroupIo>::read_G::<&[u8]>(&mut key.0.as_ref()).expect("invalid participant"),
       );
     }
     Public(dkg::musig_key::<Ristretto>(self.musig_context(), &keys).unwrap().to_bytes())

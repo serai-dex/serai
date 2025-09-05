@@ -1,6 +1,6 @@
 [package]
 name = "directories-next"
-version = "2.0.0"
+version = "2.0.99"
 description = "Patch from directories-next back to directories"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/patches/directories-next"
@@ -13,4 +13,4 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [dependencies]
-directories = "5"
+directories = "6"

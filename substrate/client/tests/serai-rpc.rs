@@ -5,7 +5,7 @@ use zeroize::Zeroizing;
 
 use ciphersuite::{
   group::{ff::Field, GroupEncoding},
-  Ciphersuite,
+  WrappedGroup,
 };
 use dalek_ff_group::Ed25519;
 use ciphersuite_kp256::Secp256k1;
@@ -44,7 +44,7 @@ serai_test!(
   })
 );
 
-async fn set_network_keys<C: Ciphersuite>(
+async fn set_network_keys<C: WrappedGroup>(
   serai: &Serai,
   set: ExternalValidatorSet,
   pairs: &[Pair],
