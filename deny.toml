@@ -71,6 +71,7 @@ exceptions = [
   { allow = ["AGPL-3.0"], name = "serai-monero-processor" },
 
   { allow = ["AGPL-3.0"], name = "tributary-sdk" },
+  { allow = ["AGPL-3.0"], name = "serai-cosign-types" },
   { allow = ["AGPL-3.0"], name = "serai-cosign" },
   { allow = ["AGPL-3.0"], name = "serai-coordinator-substrate" },
   { allow = ["AGPL-3.0"], name = "serai-coordinator-tributary" },
@@ -130,7 +131,6 @@ unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
   "https://github.com/rust-lang-nursery/lazy-static.rs",
-  "https://github.com/kayabaNerve/hybrid-array",
   "https://github.com/kayabaNerve/elliptic-curves",
   "https://github.com/monero-oxide/monero-oxide",
   "https://github.com/serai-dex/patch-polkadot-sdk",
