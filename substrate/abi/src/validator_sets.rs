@@ -1,9 +1,7 @@
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use sp_core::{ConstU32, bounded::BoundedVec};
-
 use serai_primitives::{
-  crypto::{ExternalKey, EmbeddedEllipticCurveKeys, KeyPair, Signature},
+  crypto::{SignedEmbeddedEllipticCurveKeys, KeyPair, Signature},
   address::SeraiAddress,
   balance::Amount,
   network_id::*,
@@ -40,14 +38,8 @@ pub enum Call {
   },
   /// Set a validator's keys on embedded elliptic curves for a specific network.
   set_embedded_elliptic_curve_keys {
-    /// The network the origin is setting their embedded elliptic curve keys for.
-    network: ExternalNetworkId,
     /// The keys on the embedded elliptic curves.
-    #[borsh(
-      serialize_with = "serai_primitives::sp_borsh::borsh_serialize_bounded_vec",
-      deserialize_with = "serai_primitives::sp_borsh::borsh_deserialize_bounded_vec"
-    )]
-    keys: EmbeddedEllipticCurveKeys,
+    keys: SignedEmbeddedEllipticCurveKeys,
   },
   /// Allocate stake to a network.
   allocate {

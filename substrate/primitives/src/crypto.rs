@@ -1,5 +1,5 @@
 use zeroize::Zeroize;
-use borsh::{BorshSerialize, BorshDeserialize};
+use borsh::{io, BorshSerialize, BorshDeserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
 
@@ -137,30 +137,54 @@ impl EmbeddedEllipticCurveKeys {
   }
 }
 
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::Encode for EmbeddedEllipticCurveKeys {
-  fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
+impl BorshSerialize for EmbeddedEllipticCurveKeys {
+  fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     match self {
       EmbeddedEllipticCurveKeys::Bitcoin(e, s) | EmbeddedEllipticCurveKeys::Ethereum(e, s) => {
-        let mut res = [0; 66];
+        let mut res = [0; 1 + 32 + 33];
         res[0] = self.network() as u8;
         res[1 .. 33].copy_from_slice(e);
         res[33 ..].copy_from_slice(s);
-        f(&res)
+        writer.write_all(&res)
       }
       EmbeddedEllipticCurveKeys::Monero(e) => {
-        let mut res = [0; 33];
+        let mut res = [0; 1 + 32];
         res[0] = self.network() as u8;
         res[1 ..].copy_from_slice(e);
-        f(&res)
+        writer.write_all(&res)
       }
     }
+  }
+}
+
+impl BorshDeserialize for EmbeddedEllipticCurveKeys {
+  fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let network_id = ExternalNetworkId::deserialize_reader(&mut *reader)?;
+    let embedwards25519 = <[u8; 32]>::deserialize_reader(&mut *reader)?;
+    Ok(match network_id {
+      ExternalNetworkId::Bitcoin => {
+        let secq256k1 = <[u8; 33]>::deserialize_reader(&mut *reader)?;
+        EmbeddedEllipticCurveKeys::Bitcoin(embedwards25519, secq256k1.into())
+      }
+      ExternalNetworkId::Ethereum => {
+        let secq256k1 = <[u8; 33]>::deserialize_reader(&mut *reader)?;
+        EmbeddedEllipticCurveKeys::Ethereum(embedwards25519, secq256k1.into())
+      }
+      ExternalNetworkId::Monero => EmbeddedEllipticCurveKeys::Monero(embedwards25519),
+    })
+  }
+}
+
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::Encode for EmbeddedEllipticCurveKeys {
+  fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
+    f(&borsh::to_vec(self).unwrap())
   }
 }
 #[cfg(feature = "non_canonical_scale_derivations")]
 impl scale::MaxEncodedLen for EmbeddedEllipticCurveKeys {
   fn max_encoded_len() -> usize {
-    66
+    1 + 32 + 33
   }
 }
 #[cfg(feature = "non_canonical_scale_derivations")]
@@ -168,20 +192,7 @@ impl scale::EncodeLike<EmbeddedEllipticCurveKeys> for EmbeddedEllipticCurveKeys 
 #[cfg(feature = "non_canonical_scale_derivations")]
 impl scale::Decode for EmbeddedEllipticCurveKeys {
   fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
-    let network_id = ExternalNetworkId::decode(&mut *input)?;
-    let embedwards25519 =
-      <<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr::decode(&mut *input)?;
-    Ok(match network_id {
-      ExternalNetworkId::Bitcoin => {
-        let secq256k1 = <[u8; 33]>::decode(&mut *input)?;
-        EmbeddedEllipticCurveKeys::Bitcoin(embedwards25519, secq256k1.into())
-      }
-      ExternalNetworkId::Ethereum => {
-        let secq256k1 = <[u8; 33]>::decode(&mut *input)?;
-        EmbeddedEllipticCurveKeys::Ethereum(embedwards25519, secq256k1.into())
-      }
-      ExternalNetworkId::Monero => EmbeddedEllipticCurveKeys::Monero(embedwards25519),
-    })
+    crate::read_scale_as_borsh(input)
   }
 }
 #[cfg(feature = "non_canonical_scale_derivations")]
@@ -284,40 +295,37 @@ impl SignedEmbeddedEllipticCurveKeys {
   }
 }
 
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::Encode for SignedEmbeddedEllipticCurveKeys {
-  fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
+impl BorshSerialize for SignedEmbeddedEllipticCurveKeys {
+  fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     match self {
       SignedEmbeddedEllipticCurveKeys::Bitcoin(e, s, e_sig, s_sig) |
       SignedEmbeddedEllipticCurveKeys::Ethereum(e, s, e_sig, s_sig) => {
-        let mut res = [0; 195];
+        let mut res = [0; 1 + 32 + 33 + 32 + 32 + 33 + 32];
         res[0] = self.network() as u8;
         res[1 .. 33].copy_from_slice(e);
         res[33 .. 66].copy_from_slice(s);
         res[66 .. 130].copy_from_slice(e_sig);
         res[130 ..].copy_from_slice(s_sig);
-        f(&res)
+        writer.write_all(&res)
       }
       SignedEmbeddedEllipticCurveKeys::Monero(e, e_sig) => {
-        let mut res = [0; 97];
+        let mut res = [0; 1 + 32 + 32 + 32];
         res[0] = self.network() as u8;
         res[1 .. 33].copy_from_slice(e);
         res[33 ..].copy_from_slice(e_sig);
-        f(&res)
+        writer.write_all(&res)
       }
     }
   }
 }
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::EncodeLike<SignedEmbeddedEllipticCurveKeys> for SignedEmbeddedEllipticCurveKeys {}
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::Decode for SignedEmbeddedEllipticCurveKeys {
-  fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
-    let embedded_elliptic_curve_keys = EmbeddedEllipticCurveKeys::decode(input)?;
-    let embedwards25519_signature = <[u8; 64]>::decode(&mut *input)?;
+
+impl BorshDeserialize for SignedEmbeddedEllipticCurveKeys {
+  fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let embedded_elliptic_curve_keys = EmbeddedEllipticCurveKeys::deserialize_reader(&mut *reader)?;
+    let embedwards25519_signature = <[u8; 64]>::deserialize_reader(&mut *reader)?;
     Ok(match embedded_elliptic_curve_keys {
       EmbeddedEllipticCurveKeys::Bitcoin(e, s) => {
-        let secq256k1_signature = <[u8; 65]>::decode(&mut *input)?;
+        let secq256k1_signature = <[u8; 65]>::deserialize_reader(&mut *reader)?;
         SignedEmbeddedEllipticCurveKeys::Bitcoin(
           e,
           s,
@@ -326,7 +334,7 @@ impl scale::Decode for SignedEmbeddedEllipticCurveKeys {
         )
       }
       EmbeddedEllipticCurveKeys::Ethereum(e, s) => {
-        let secq256k1_signature = <[u8; 65]>::decode(&mut *input)?;
+        let secq256k1_signature = <[u8; 65]>::deserialize_reader(&mut *reader)?;
         SignedEmbeddedEllipticCurveKeys::Ethereum(
           e,
           s,
@@ -338,6 +346,21 @@ impl scale::Decode for SignedEmbeddedEllipticCurveKeys {
         SignedEmbeddedEllipticCurveKeys::Monero(e, embedwards25519_signature)
       }
     })
+  }
+}
+
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::Encode for SignedEmbeddedEllipticCurveKeys {
+  fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
+    f(&borsh::to_vec(self).unwrap())
+  }
+}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::EncodeLike<SignedEmbeddedEllipticCurveKeys> for SignedEmbeddedEllipticCurveKeys {}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::Decode for SignedEmbeddedEllipticCurveKeys {
+  fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
+    crate::read_scale_as_borsh(input)
   }
 }
 #[cfg(feature = "non_canonical_scale_derivations")]

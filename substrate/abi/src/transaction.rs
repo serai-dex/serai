@@ -252,35 +252,7 @@ mod substrate {
   }
   impl Decode for Transaction {
     fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
-      struct ScaleRead<'a, I: scale::Input>(&'a mut I, Option<scale::Error>);
-      impl<I: scale::Input> borsh::io::Read for ScaleRead<'_, I> {
-        fn read(&mut self, buf: &mut [u8]) -> borsh::io::Result<usize> {
-          let remaining_len = self.0.remaining_len().map_err(|err| {
-            self.1 = Some(err);
-            #[allow(clippy::io_other_error)]
-            borsh::io::Error::new(borsh::io::ErrorKind::Other, "")
-          })?;
-          // If we're still calling `read`, we try to read at least one more byte
-          let to_read = buf.len().min(remaining_len.unwrap_or(1));
-          // This may not be _allocated_ making this over-zealous, but it's the best we can do
-          self.0.on_before_alloc_mem(to_read).map_err(|err| {
-            self.1 = Some(err);
-            #[allow(clippy::io_other_error)]
-            borsh::io::Error::new(borsh::io::ErrorKind::Other, "")
-          })?;
-          self.0.read(&mut buf[.. to_read]).map_err(|err| {
-            self.1 = Some(err);
-            #[allow(clippy::io_other_error)]
-            borsh::io::Error::new(borsh::io::ErrorKind::Other, "")
-          })?;
-          Ok(to_read)
-        }
-      }
-      let mut input = ScaleRead(input, None);
-      match Self::deserialize_reader(&mut input) {
-        Ok(res) => Ok(res),
-        Err(_) => Err(input.1.unwrap()),
-      }
+      serai_primitives::read_scale_as_borsh(input)
     }
   }
 
