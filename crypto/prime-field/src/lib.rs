@@ -419,7 +419,7 @@ macro_rules! odd_prime_field_with_specific_repr {
             const ONE_MOD_EIGHT: bool = (MODULUS.as_words()[0] % 8) == 1;
             const FIVE_MOD_EIGHT: bool = (MODULUS.as_words()[0] % 8) == 5;
 
-            let sqrt = if THREE_MOD_FOUR {
+            let mut sqrt = if THREE_MOD_FOUR {
               const SQRT_EXP: UnderlyingUint =
                 MODULUS.shr_vartime(2).wrapping_add(&UnderlyingUint::ONE);
               Self(self.0.pow(&SQRT_EXP))
@@ -449,7 +449,10 @@ macro_rules! odd_prime_field_with_specific_repr {
               Self(upsilon * self.0 * (i - Self::ONE.0))
             };
 
-            let sqrt = <_>::conditional_select(&sqrt, &-sqrt, sqrt.0.retrieve().is_odd());
+            // Normalize to the even choice of square root
+            // `let ()` is used to assert how `conditional_negate` operates in-place
+            let () = sqrt.conditional_negate(sqrt.is_odd());
+
             CtOption::new(sqrt, sqrt.square().ct_eq(self))
           }
           fn sqrt_ratio(num: &Self, div: &Self) -> (Choice, Self) {
