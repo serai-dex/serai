@@ -21,7 +21,7 @@ pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
 
   block_number: u64,
   tip: [u8; 32],
-  participants: HashSet<<Ristretto as WrappedGroup>::G>,
+  participants: HashSet<[u8; 32]>,
 
   provided: ProvidedTransactions<D, T>,
   mempool: Mempool<D, T>,
@@ -74,7 +74,10 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     let mut res = Self {
       db: Some(db.clone()),
       genesis,
-      participants: participants.iter().copied().collect(),
+      participants: participants
+        .iter()
+        .map(<<Ristretto as WrappedGroup>::G as GroupEncoding>::to_bytes)
+        .collect(),
 
       block_number: 0,
       tip: genesis,
@@ -173,7 +176,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
     self.mempool.add::<N, _>(
       |signer, order| {
-        if self.participants.contains(&signer) {
+        if self.participants.contains(&signer.to_bytes()) {
           Some(
             db.get(Self::next_nonce_key(&self.genesis, &signer, &order))
               .map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap())),
@@ -202,7 +205,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     if let Some(next_nonce) = self.mempool.next_nonce_in_mempool(signer, order.to_vec()) {
       return Some(next_nonce);
     }
-    if self.participants.contains(signer) {
+    if self.participants.contains(&signer.to_bytes()) {
       Some(
         self
           .db
@@ -251,7 +254,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       self.tip,
       self.provided.transactions.clone(),
       &mut |signer, order| {
-        if self.participants.contains(signer) {
+        if self.participants.contains(&signer.to_bytes()) {
           let key = Self::next_nonce_key(&self.genesis, signer, order);
           let next = txn
             .get(&key)

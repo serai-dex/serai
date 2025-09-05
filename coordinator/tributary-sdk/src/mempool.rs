@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::*;
+use ciphersuite::{group::GroupEncoding, *};
 
 use serai_db::{DbTxn, Db};
 
@@ -21,9 +21,9 @@ pub(crate) struct Mempool<D: Db, T: TransactionTrait> {
   db: D,
   genesis: [u8; 32],
 
-  last_nonce_in_mempool: HashMap<(<Ristretto as WrappedGroup>::G, Vec<u8>), u32>,
+  last_nonce_in_mempool: HashMap<([u8; 32], Vec<u8>), u32>,
   txs: HashMap<[u8; 32], Transaction<T>>,
-  txs_per_signer: HashMap<<Ristretto as WrappedGroup>::G, u32>,
+  txs_per_signer: HashMap<[u8; 32], u32>,
 }
 
 impl<D: Db, T: TransactionTrait> Mempool<D, T> {
@@ -82,6 +82,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
         }
         Transaction::Application(tx) => match tx.kind() {
           TransactionKind::Signed(order, Signed { signer, nonce, .. }) => {
+            let signer = signer.to_bytes();
             let amount = *res.txs_per_signer.get(&signer).unwrap_or(&0) + 1;
             res.txs_per_signer.insert(signer, amount);
 
@@ -140,6 +141,8 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
             };
             let mut next_nonce = blockchain_next_nonce;
 
+            let signer = signer.to_bytes();
+
             if let Some(mempool_last_nonce) =
               self.last_nonce_in_mempool.get(&(signer, order.clone()))
             {
@@ -182,7 +185,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     signer: &<Ristretto as WrappedGroup>::G,
     order: Vec<u8>,
   ) -> Option<u32> {
-    self.last_nonce_in_mempool.get(&(*signer, order)).copied().map(|nonce| nonce + 1)
+    self.last_nonce_in_mempool.get(&(signer.to_bytes(), order)).copied().map(|nonce| nonce + 1)
   }
 
   /// Get transactions to include in a block.
@@ -243,6 +246,8 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
 
     if let Some(tx) = self.txs.remove(tx) {
       if let TransactionKind::Signed(order, Signed { signer, nonce, .. }) = tx.kind() {
+        let signer = signer.to_bytes();
+
         let amount = *self.txs_per_signer.get(&signer).unwrap() - 1;
         self.txs_per_signer.insert(signer, amount);
 
