@@ -22,13 +22,7 @@ fn downtime_per_slash_point(validators: NonZero<u16>) -> Duration {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 #[cfg_attr(feature = "non_canonical_scale_derivations", allow(clippy::cast_possible_truncation))]
 pub enum Slash {
@@ -211,13 +205,7 @@ impl Slash {
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub struct SlashReport(
   #[borsh(

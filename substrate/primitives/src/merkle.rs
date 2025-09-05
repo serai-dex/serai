@@ -76,7 +76,7 @@ impl UnbalancedMerkleTree {
 #[derive(Clone, PartialEq, Eq, Debug)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::DecodeWithMemTracking, scale_info::TypeInfo)
+  derive(scale::Encode, scale::Decode, scale::DecodeWithMemTracking)
 )]
 pub struct IncrementalUnbalancedMerkleTree {
   /// (number of children under branch, branch hash)

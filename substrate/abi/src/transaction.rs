@@ -256,22 +256,9 @@ mod substrate {
     }
   }
 
-  // Clean `Transaction` tracks its memory during decoding, as we do call
+  // Clean `Transaction` tracks its memory during decoding, as `read_scale_as_borsh` does call
   // `Input::on_before_alloc_mem`
   impl scale::DecodeWithMemTracking for Transaction {}
-
-  // Shim `TypeInfo` for `Transaction`
-  impl scale_info::TypeInfo for Transaction {
-    type Identity = Self;
-    fn type_info() -> scale_info::Type {
-      scale_info::Type {
-        path: scale_info::Path { segments: vec!["serai_abi", "transaction", "Transaction"] },
-        type_params: vec![],
-        type_def: (scale_info::TypeDefComposite { fields: vec![] }).into(),
-        docs: vec![],
-      }
-    }
-  }
 
   /// The context which transactions are executed in.
   pub trait TransactionContext: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {

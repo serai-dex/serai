@@ -8,13 +8,7 @@ use crate::coin::{ExternalCoin, Coin};
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub enum EmbeddedEllipticCurve {
   /// The Embedwards25519 curve, defined over (embedded into) Ed25519's/Ristretto's scalar field.
@@ -30,13 +24,7 @@ pub enum EmbeddedEllipticCurve {
 #[borsh(use_discriminant = true)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 #[non_exhaustive]
 pub enum ExternalNetworkId {
@@ -88,13 +76,7 @@ impl ExternalNetworkId {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 #[cfg_attr(feature = "non_canonical_scale_derivations", allow(clippy::cast_possible_truncation))]
 pub enum NetworkId {

@@ -21,8 +21,7 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 
 bitvec = { version = "1", default-features = false, features = ["alloc"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
-scale-info = { version = "2", default-features = false, features = ["derive"], optional = true }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "749e7a1a664813ea3ae15e646f352a410e39653c", default-features = false }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
 schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
@@ -44,7 +43,6 @@ std = [
   "borsh/std",
   "bitvec/std",
   "scale?/std",
-  "scale-info?/std",
   "sp-core/std",
   "ciphersuite/std",
   "schnorr-signatures/std",
@@ -56,5 +54,5 @@ std = [
   "bech32/std"
 ]
 serde = []
-non_canonical_scale_derivations = ["scale", "scale-info"]
+non_canonical_scale_derivations = ["scale"]
 default = ["std"]

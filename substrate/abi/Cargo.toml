@@ -22,13 +22,12 @@ workspace = true
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
 
 bitvec = { version = "1", default-features = false, features = ["alloc"] }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "749e7a1a664813ea3ae15e646f352a410e39653c", default-features = false }
 
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
-scale-info = { version = "2", default-features = false, features = ["derive"], optional = true }
-sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0", default-features = false, features = ["serde"], optional = true }
-frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "9451a7e8d8ff28571bd9bc8cdea91dacd80e1ab0", default-features = false, optional = true }
+sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "749e7a1a664813ea3ae15e646f352a410e39653c", default-features = false, features = ["serde"], optional = true }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "749e7a1a664813ea3ae15e646f352a410e39653c", default-features = false, optional = true }
 
 serai-primitives = { path = "../primitives", version = "0.1", default-features = false }
 
@@ -41,12 +40,11 @@ std = [
 
   "serde?/std",
   "scale?/std",
-  "scale-info?/std",
   "sp-runtime?/std",
   "frame-support?/std",
 
   "serai-primitives/std",
 ]
-substrate = ["serde", "scale", "scale-info", "sp-runtime", "frame-support", "serai-primitives/serde", "serai-primitives/non_canonical_scale_derivations"]
+substrate = ["serde", "scale", "sp-runtime", "frame-support", "serai-primitives/serde", "serai-primitives/non_canonical_scale_derivations"]
 try-runtime = ["sp-runtime/try-runtime"]
 default = ["std"]

@@ -17,13 +17,7 @@ use crate::network_id::ExternalNetworkId;
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub struct Public(pub [u8; 32]);
 impl From<sp_core::sr25519::Public> for Public {
@@ -41,13 +35,7 @@ impl From<Public> for sp_core::sr25519::Public {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub struct Signature(pub [u8; 64]);
 impl From<schnorrkel::Signature> for Signature {
@@ -70,13 +58,7 @@ impl From<Signature> for sp_core::sr25519::Signature {
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub struct ExternalKey(
   #[borsh(
@@ -373,12 +355,6 @@ impl scale::DecodeWithMemTracking for SignedEmbeddedEllipticCurveKeys {}
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub struct KeyPair(pub Public, pub ExternalKey);

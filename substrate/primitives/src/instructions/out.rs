@@ -8,13 +8,7 @@ use crate::{address::ExternalAddress, balance::ExternalBalance};
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 #[cfg_attr(feature = "non_canonical_scale_derivations", allow(clippy::cast_possible_truncation))]
 pub enum OutInstruction {
@@ -26,13 +20,7 @@ pub enum OutInstruction {
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub struct OutInstructionWithBalance {
   /// The instruction on how to transfer coins out.

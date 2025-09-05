@@ -19,13 +19,7 @@ pub use slashes::*;
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub struct Session(pub u32);
 
@@ -33,13 +27,7 @@ pub struct Session(pub u32);
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub struct ExternalValidatorSet {
   /// The network this set of validators are for.
@@ -52,13 +40,7 @@ pub struct ExternalValidatorSet {
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(
-    scale::Encode,
-    scale::Decode,
-    scale::MaxEncodedLen,
-    scale::DecodeWithMemTracking,
-    scale_info::TypeInfo
-  )
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub struct ValidatorSet {
   /// The network this set of validators are for.

@@ -17,7 +17,6 @@ use sessions::{*, GenesisValidators as GenesisValidatorsContainer};
 use core::marker::PhantomData;
 
 use scale::{Encode, Decode};
-use scale_info::TypeInfo;
 
 use sp_std::{vec, vec::Vec};
 use sp_core::sr25519::{Public, Signature};
@@ -49,7 +48,7 @@ use pallet_grandpa::{
   EquivocationOffence as GrandpaEquivocationOffence,
 };
 
-#[derive(Debug, Encode, Decode, TypeInfo, PartialEq, Eq, Clone)]
+#[derive(Debug, Encode, Decode, PartialEq, Eq, Clone)]
 pub struct MembershipProof<T: pallet::Config>(pub Public, pub PhantomData<T>);
 impl<T: pallet::Config> GetSessionNumber for MembershipProof<T> {
   fn session(&self) -> u32 {

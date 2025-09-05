@@ -106,7 +106,6 @@ mod substrate {
   use core::fmt::Debug;
 
   use scale::{Encode, Decode, DecodeWithMemTracking};
-  use scale_info::TypeInfo;
 
   use sp_core::H256;
   use sp_runtime::{
@@ -182,7 +181,6 @@ mod substrate {
     Encode,
     Decode,
     DecodeWithMemTracking,
-    TypeInfo,
     sp_runtime::Serialize,
     sp_runtime::Deserialize,
   )]
@@ -208,7 +206,6 @@ mod substrate {
     Encode,
     Decode,
     DecodeWithMemTracking,
-    TypeInfo,
     sp_runtime::Serialize,
     sp_runtime::Deserialize,
   )]
@@ -226,7 +223,6 @@ mod substrate {
     Encode,
     Decode,
     DecodeWithMemTracking,
-    TypeInfo,
     sp_runtime::Serialize,
     sp_runtime::Deserialize,
   )]
@@ -285,7 +281,7 @@ mod substrate {
   }
 
   /// A block, as needed by Substrate.
-  #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking, TypeInfo)]
+  #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking)]
   pub struct SubstrateBlock {
     header: SubstrateHeader,
     transactions: Vec<Transaction>,

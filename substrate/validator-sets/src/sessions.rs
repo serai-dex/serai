@@ -94,11 +94,7 @@ fn clear_selected_validators<Storage: StoragePrefixedMap<u64>>(set: ValidatorSet
 
 /// An error when allocating.
 #[derive(
-  scale::Encode,
-  scale::Decode,
-  scale::DecodeWithMemTracking,
-  scale_info::TypeInfo,
-  frame_support::PalletError,
+  scale::Encode, scale::Decode, scale::DecodeWithMemTracking, frame_support::PalletError,
 )]
 pub enum AllocationError {
   /// The validator set didn't define an allocation requirement for a key share.
@@ -118,11 +114,7 @@ pub(crate) enum DeallocationTimeline {
 
 /// An error when deallocating.
 #[derive(
-  scale::Encode,
-  scale::Decode,
-  scale::DecodeWithMemTracking,
-  scale_info::TypeInfo,
-  frame_support::PalletError,
+  scale::Encode, scale::Decode, scale::DecodeWithMemTracking, frame_support::PalletError,
 )]
 pub enum DeallocationError {
   /// The validator set didn't define an allocation requirement for a key share.
