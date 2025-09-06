@@ -21,7 +21,7 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 
 bitvec = { version = "1", default-features = false, features = ["alloc"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "311aa66887309af7bf455b4fdfd1ab59e24deea7", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "a9236a3b83d2379f1ba50d6048da0e41ec78e36e", default-features = false }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
 schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
