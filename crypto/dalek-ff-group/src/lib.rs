@@ -8,7 +8,6 @@ use core::{
   borrow::Borrow,
   ops::{Deref, Add, AddAssign, Sub, SubAssign, Neg, Mul, MulAssign},
   iter::{Iterator, Sum},
-  hash::{Hash, Hasher},
 };
 
 use zeroize::Zeroize;
@@ -20,9 +19,8 @@ use subtle::{Choice, CtOption};
 
 use curve25519_dalek::{
   edwards::{EdwardsPoint as DEdwardsPoint, CompressedEdwardsY},
-  ristretto::{RistrettoPoint as DRistrettoPoint, CompressedRistretto},
 };
-pub use curve25519_dalek::Scalar;
+pub use curve25519_dalek::{Scalar, ristretto::RistrettoPoint};
 
 use ::ciphersuite::group::{Group, GroupEncoding, prime::PrimeGroup};
 
@@ -259,17 +257,6 @@ macro_rules! dalek_group {
     }
 
     impl PrimeGroup for $Point {}
-
-    // Support being used as a key in a table
-    // While it is expensive as a key, due to the field operations required, there's frequently
-    // use cases for public key -> value lookups
-    #[allow(unknown_lints, renamed_and_removed_lints)]
-    #[allow(clippy::derived_hash_with_manual_eq, clippy::derive_hash_xor_eq)]
-    impl Hash for $Point {
-      fn hash<H: Hasher>(&self, state: &mut H) {
-        self.to_bytes().hash(state);
-      }
-    }
   };
 }
 
@@ -279,14 +266,6 @@ dalek_group!(
   |point: DEdwardsPoint| point.is_torsion_free(),
   EdwardsBasepointTable,
   CompressedEdwardsY,
-);
-
-dalek_group!(
-  RistrettoPoint,
-  DRistrettoPoint,
-  |_| true,
-  RistrettoBasepointTable,
-  CompressedRistretto,
 );
 
 #[test]
