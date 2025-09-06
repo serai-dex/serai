@@ -123,6 +123,8 @@ highlight = "all"
 deny = [
   { name = "serde_derive", version = ">=1.0.172, <1.0.185" },
   { name = "hashbrown", version = "=0.15.0" },
+  # Legacy which _no one_ should use anymore
+  { name = "is-terminal", version = "*" },
 ]
 
 [sources]

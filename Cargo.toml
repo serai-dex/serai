@@ -195,6 +195,9 @@ directories-next = { path = "patches/directories-next" }
 k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
 p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
 
+# Patch due to `std` now including the required functionality
+is_terminal_polyfill = { path = "./patches/is_terminal_polyfill" }
+
 [workspace.lints.clippy]
 incompatible_msrv = "allow" # Manually verified with a GitHub workflow
 manual_is_multiple_of = "allow"
