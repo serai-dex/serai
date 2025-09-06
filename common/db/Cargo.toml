@@ -17,7 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-parity-db = { version = "0.4", default-features = false, optional = true }
+parity-db = { version = "0.5", default-features = false, features = ["arc"], optional = true }
 rocksdb = { version = "0.24", default-features = false, features = ["zstd"], optional = true }
 
 [features]
