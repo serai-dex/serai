@@ -26,7 +26,7 @@ impl<C: ciphersuite::GroupIo> Ciphersuite for C {
   #[cfg(feature = "alloc")]
   fn read_G<R: io::Read>(reader: &mut R) -> io::Result<Self::G> {
     <C as ciphersuite::GroupIo>::read_G(reader)
-}
+  }
 }
 
 #[cfg(feature = "ed25519")]
