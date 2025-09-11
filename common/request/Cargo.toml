@@ -1,6 +1,6 @@
 [package]
 name = "simple-request"
-version = "0.1.0"
+version = "0.1.1"
 description = "A simple HTTP(S) request library"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/common/simple-request"
@@ -21,6 +21,7 @@ tower-service = { version = "0.3", default-features = false }
 hyper = { version = "1", default-features = false, features = ["http1", "client"] }
 hyper-util = { version = "0.1", default-features = false, features = ["http1", "client-legacy", "tokio"] }
 http-body-util = { version = "0.1", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false }
 
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "ring", "rustls-native-certs", "native-tokio"], optional = true }

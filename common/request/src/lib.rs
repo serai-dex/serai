@@ -97,7 +97,7 @@ impl Client {
 
   pub async fn request<R: Into<Request>>(&self, request: R) -> Result<Response<'_>, Error> {
     let request: Request = request.into();
-    let mut request = request.0;
+    let Request { mut request, response_size_limit } = request;
     if let Some(header_host) = request.headers().get(hyper::header::HOST) {
       match &self.connection {
         Connection::ConnectionPool(_) => {}
@@ -153,11 +153,11 @@ impl Client {
         let mut err = connection.ready().await.err();
         if err.is_none() {
           // Send the request
-          let res = connection.send_request(request).await;
-          if let Ok(res) = res {
-            return Ok(Response(res, self));
+          let response = connection.send_request(request).await;
+          if let Ok(response) = response {
+            return Ok(Response { response, size_limit: response_size_limit, client: self });
           }
-          err = res.err();
+          err = response.err();
         }
         // Since this connection has been put into an error state, drop it
         *connection_lock = None;
@@ -165,6 +165,6 @@ impl Client {
       }
     };
 
-    Ok(Response(response, self))
+    Ok(Response { response, size_limit: response_size_limit, client: self })
   }
 }
