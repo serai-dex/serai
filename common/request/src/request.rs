@@ -7,11 +7,15 @@ pub use http_body_util::Full;
 use crate::Error;
 
 #[derive(Debug)]
-pub struct Request(pub(crate) hyper::Request<Full<Bytes>>);
+pub struct Request {
+  pub(crate) request: hyper::Request<Full<Bytes>>,
+  pub(crate) response_size_limit: Option<usize>,
+}
+
 impl Request {
   #[cfg(feature = "basic-auth")]
   fn username_password_from_uri(&self) -> Result<(String, String), Error> {
-    if let Some(authority) = self.0.uri().authority() {
+    if let Some(authority) = self.request.uri().authority() {
       let authority = authority.as_str();
       if authority.contains('@') {
         // Decode the username and password from the URI
@@ -36,7 +40,7 @@ impl Request {
     let mut formatted = format!("{username}:{password}");
     let mut encoded = Base64::encode_string(formatted.as_bytes());
     formatted.zeroize();
-    self.0.headers_mut().insert(
+    self.request.headers_mut().insert(
       hyper::header::AUTHORIZATION,
       HeaderValue::from_str(&format!("Basic {encoded}")).unwrap(),
     );
@@ -59,9 +63,17 @@ impl Request {
   pub fn with_basic_auth(&mut self) {
     let _ = self.basic_auth_from_uri();
   }
+
+  /// Set a size limit for the response.
+  ///
+  /// This may be exceeded by a single HTTP frame and accordingly isn't perfect.
+  pub fn set_response_size_limit(&mut self, response_size_limit: Option<usize>) {
+    self.response_size_limit = response_size_limit;
+  }
 }
+
 impl From<hyper::Request<Full<Bytes>>> for Request {
   fn from(request: hyper::Request<Full<Bytes>>) -> Request {
-    Request(request)
+    Request { request, response_size_limit: None }
   }
 }
