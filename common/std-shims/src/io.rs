@@ -64,6 +64,12 @@ mod shims {
     }
   }
 
+  impl<R: Read> Read for &mut R {
+    fn read(&mut self, buf: &mut [u8]) -> Result<usize> {
+      R::read(*self, buf)
+    }
+  }
+
   pub trait BufRead: Read {
     fn fill_buf(&mut self) -> Result<&[u8]>;
     fn consume(&mut self, amt: usize);
