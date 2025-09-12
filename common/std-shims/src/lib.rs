@@ -13,6 +13,14 @@ pub use alloc::str;
 pub use alloc::string;
 
 pub mod prelude {
+  pub use alloc::{
+    format, vec,
+    boxed::Box,
+    borrow::ToOwned,
+    vec::Vec,
+    string::{String, ToString},
+  };
+
   #[rustversion::before(1.73)]
   #[doc(hidden)]
   pub trait StdShimsDivCeil {
