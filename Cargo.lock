@@ -5714,8 +5714,6 @@ dependencies = [
  "group",
  "k256",
  "rand_core 0.6.4",
- "rustversion",
- "std-shims",
  "zeroize",
 ]
 

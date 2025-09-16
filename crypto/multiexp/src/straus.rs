@@ -1,4 +1,4 @@
-use std_shims::vec::Vec;
+use alloc::{vec, vec::Vec};
 
 use zeroize::Zeroize;
 

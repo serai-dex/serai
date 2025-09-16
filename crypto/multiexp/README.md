@@ -12,5 +12,6 @@ culminating in commit
 [669d2dbffc1dafb82a09d9419ea182667115df06](https://github.com/serai-dex/serai/tree/669d2dbffc1dafb82a09d9419ea182667115df06).
 Any subsequent changes have not undergone auditing.
 
-This library is usable under no_std, via alloc, when the default features are
-disabled.
+This library is usable under no-`std` and no-`alloc`. With the `alloc` feature,
+the library is fully functional. Without the `alloc` feature, the `multiexp`
+function is shimmed with a serial implementation.

@@ -1,4 +1,4 @@
-use std_shims::vec::Vec;
+use alloc::vec::Vec;
 
 use rand_core::{RngCore, CryptoRng};
 
