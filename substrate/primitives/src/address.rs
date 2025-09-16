@@ -26,7 +26,7 @@ const HUMAN_READABLE_PART: bech32::Hrp = bech32::Hrp::parse_unchecked("sri");
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub struct SeraiAddress(pub [u8; 32]);
 

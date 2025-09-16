@@ -96,7 +96,7 @@ pub mod prelude {
   pub use crate::coin::*;
   pub use crate::balance::*;
   pub use crate::network_id::*;
-  pub use crate::validator_sets::{Session, ValidatorSet, ExternalValidatorSet, Slash, SlashReport};
+  pub use crate::validator_sets::*;
   pub use crate::instructions::*;
 }
 

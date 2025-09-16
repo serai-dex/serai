@@ -112,6 +112,8 @@ impl ExternalValidatorSet {
 pub struct KeyShares(pub u16);
 
 impl KeyShares {
+  /// Zero key shares.
+  pub const ZERO: KeyShares = KeyShares(0);
   /// One key share.
   pub const ONE: KeyShares = KeyShares(1);
   /// The maximum amount of key shares per set.

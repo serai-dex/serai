@@ -5,19 +5,21 @@ use crate::{network_id::ExternalNetworkId, address::SeraiAddress};
 
 /// The ID of an protocol.
 pub type ProtocolId = [u8; 32];
+/// The ID of a signal.
+pub type SignalId = [u8; 32];
 
 /// A signal.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
   allow(clippy::cast_possible_truncation),
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub enum Signal {
   /// A signal to retire the current protocol.
   Retire {
-    /// The protocol to retire in favor of.
-    in_favor_of: ProtocolId,
+    /// The ID of the retirement signal being favored.
+    signal_id: SignalId,
   },
   /// A signal to halt an external network.
   Halt(ExternalNetworkId),
@@ -27,7 +29,7 @@ pub enum Signal {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub struct RegisteredRetirementSignal {
   /// The protocol to retire in favor of.
@@ -40,7 +42,7 @@ pub struct RegisteredRetirementSignal {
 
 impl RegisteredRetirementSignal {
   /// The ID of this signal.
-  pub fn id(&self) -> ProtocolId {
+  pub fn id(&self) -> SignalId {
     sp_core::blake2_256(&borsh::to_vec(self).unwrap())
   }
 }

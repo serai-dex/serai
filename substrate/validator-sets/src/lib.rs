@@ -3,6 +3,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
+use alloc::vec::Vec;
 
 mod embedded_elliptic_curve_keys;
 use embedded_elliptic_curve_keys::*;
@@ -72,7 +73,7 @@ impl<T: pallet::Config> GetValidatorCount for MembershipProof<T> {
 }
 */
 
-#[expect(clippy::ignored_unit_patterns, clippy::cast_possible_truncation)]
+#[expect(clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 mod pallet {
   use sp_core::sr25519::Public;
@@ -94,7 +95,7 @@ mod pallet {
   use super::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config + coins_pallet::Config {
+  pub trait Config: frame_system::Config + coins_pallet::Config<coins_pallet::CoinsInstance> {
     // type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
   }
 
@@ -381,6 +382,11 @@ mod pallet {
       validator: Public,
     ) -> Option<KeySharesStruct> {
       Abstractions::<T>::key_shares_possessed_by_validator(set, validator)
+    }
+
+    /// The stake for the current validator set.
+    pub fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount> {
+      Abstractions::<T>::stake_for_current_validator_set(network)
     }
 
     /*
@@ -840,7 +846,7 @@ mod pallet {
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
-      Coins::<T>::transfer_fn(validator, Self::account(), Balance { coin: Coin::Serai, amount })?;
+      Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(validator, Self::account(), Balance { coin: Coin::Serai, amount })?;
       Abstractions::<T>::increase_allocation(network, validator, amount, false)
         .map_err(Error::<T>::AllocationError)?;
       Ok(())
@@ -854,7 +860,7 @@ mod pallet {
       let deallocation_timeline = Abstractions::<T>::decrease_allocation(network, account, amount)
         .map_err(Error::<T>::DeallocationError)?;
       if matches!(deallocation_timeline, DeallocationTimeline::Immediate) {
-        Coins::<T>::transfer_fn(Self::account(), account, Balance { coin: Coin::Serai, amount })?;
+        Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(Self::account(), account, Balance { coin: Coin::Serai, amount })?;
       }
 
       Ok(())
@@ -870,7 +876,7 @@ mod pallet {
       let account = ensure_signed(origin)?;
       let amount = Abstractions::<T>::claim_delayed_deallocation(account, network, session)
         .map_err(Error::<T>::DeallocationError)?;
-      Coins::<T>::transfer_fn(Self::account(), account, Balance { coin: Coin::Serai, amount })?;
+      Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(Self::account(), account, Balance { coin: Coin::Serai, amount })?;
       Ok(())
     }
   }

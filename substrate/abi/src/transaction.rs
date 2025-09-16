@@ -237,7 +237,7 @@ mod substrate {
   use scale::{Encode, Decode};
   use sp_runtime::{
     transaction_validity::*,
-    traits::{Verify, ExtrinsicLike, Dispatchable, ValidateUnsigned, Checkable, Applyable},
+    traits::{Verify, ExtrinsicLike, ExtrinsicCall, Dispatchable, ValidateUnsigned, Checkable, Applyable},
     Weight,
   };
   #[rustfmt::skip]
@@ -315,6 +315,13 @@ mod substrate {
     }
     fn is_bare(&self) -> bool {
       matches!(self, Transaction::Unsigned { .. })
+    }
+  }
+
+  impl ExtrinsicCall for Transaction {
+    type Call = Self;
+    fn call(&self) -> &Self {
+      self
     }
   }
 

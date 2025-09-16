@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use sp_core::{Encode, Decode, ConstU32, sr25519::Public, bounded::BoundedVec};
 
 use serai_primitives::{
@@ -211,6 +212,9 @@ pub(crate) trait Sessions {
     set: ValidatorSet,
     validator: Public,
   ) -> Option<KeySharesStruct>;
+
+  /// The stake for the current validator set.
+  fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount>;
 }
 
 impl<Storage: SessionsStorage> Sessions for Storage {
@@ -515,5 +519,9 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     validator: Public,
   ) -> Option<KeySharesStruct> {
     Storage::SelectedValidators::get(selected_validators_key(set, validator))
+  }
+
+  fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount> {
+    Storage::TotalAllocatedStake::get(network)
   }
 }

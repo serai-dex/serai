@@ -82,6 +82,12 @@ mod runtime {
 
   #[runtime::pallet_index(3)]
   pub type LiquidityTokens = serai_coins_pallet::Pallet<Runtime, LiquidityTokensInstance>;
+
+  #[runtime::pallet_index(4)]
+  pub type ValidatorSets = serai_validator_sets_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(5)]
+  pub type Signals = serai_signals_pallet::Pallet<Runtime>;
 }
 
 impl frame_system::Config for Runtime {
@@ -127,12 +133,15 @@ impl frame_system::Config for Runtime {
 impl core_pallet::Config for Runtime {}
 
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
-  type RuntimeEvent = RuntimeEvent;
   type AllowMint = serai_coins_pallet::AlwaysAllowMint; // TODO
 }
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
-  type RuntimeEvent = RuntimeEvent;
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+}
+impl serai_validator_sets_pallet::Config for Runtime {}
+impl serai_signals_pallet::Config for Runtime {
+  type RetirementValidityDuration = sp_core::ConstU64<0>; // TODO
+  type RetirementLockInDuration = sp_core::ConstU64<0>; // TODO
 }
 
 impl From<Option<SeraiAddress>> for RuntimeOrigin {
