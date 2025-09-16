@@ -1,6 +1,6 @@
 use rand_core::OsRng;
 
-use group::GroupEncoding;
+use ciphersuite::group::GroupEncoding;
 use frost::{
   Participant,
   tests::{key_gen, algorithm_machines, sign},

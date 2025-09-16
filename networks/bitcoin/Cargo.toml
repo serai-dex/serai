@@ -27,7 +27,7 @@ rand_core = { version = "0.6", default-features = false }
 bitcoin = { version = "0.32", default-features = false }
 
 k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits"] }
-frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.11", default-features = false, features = ["secp256k1"], optional = true }
+frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.11", default-features = false, features = ["secp256k1"] }
 
 hex = { version = "0.4", default-features = false, optional = true }
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
@@ -55,7 +55,7 @@ std = [
   "bitcoin/serde",
 
   "k256/std",
-  "frost",
+  "frost/std",
 
   "hex/std",
   "serde/std",

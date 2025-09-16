@@ -1,5 +1,7 @@
 use core::{ops::Deref, fmt::Debug};
-use std::{
+#[allow(unused_imports)]
+use std_shims::prelude::*;
+use std_shims::{
   io::{self, Read, Write},
   collections::HashMap,
 };

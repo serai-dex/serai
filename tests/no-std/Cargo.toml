@@ -36,9 +36,13 @@ secq256k1 = { path = "../../crypto/secq256k1", default-features = false }
 embedwards25519 = { path = "../../crypto/embedwards25519", default-features = false }
 
 dkg = { path = "../../crypto/dkg", default-features = false, optional = true }
+dkg-dealer = { path = "../../crypto/dkg/dealer", default-features = false, optional = true }
+dkg-recovery = { path = "../../crypto/dkg/recovery", default-features = false, optional = true }
+dkg-musig = { path = "../../crypto/dkg/musig", default-features = false, optional = true }
 dkg-evrf = { path = "../../crypto/dkg/evrf", default-features = false, features = ["secp256k1", "ed25519"], optional = true }
-# modular-frost = { path = "../../crypto/frost", default-features = false }
-# frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }
+
+modular-frost = { path = "../../crypto/frost", default-features = false, optional = true }
+frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false, optional = true }
 
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["hazmat"], optional = true }
 
@@ -62,7 +66,13 @@ alloc = [
   "embedwards25519/alloc",
 
   "dkg",
+  "dkg-dealer",
+  "dkg-recovery",
+  "dkg-musig",
   "dkg-evrf",
+
+  "modular-frost",
+  "frost-schnorrkel",
 
   "bitcoin-serai",
 ]

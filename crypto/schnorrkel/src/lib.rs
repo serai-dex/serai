@@ -1,7 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![doc = include_str!("../README.md")]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-use std::io::{self, Read};
+#[allow(unused_imports)]
+use std_shims::prelude::*;
+use std_shims::io::{self, Read};
 
 use rand_core::{RngCore, CryptoRng};
 
