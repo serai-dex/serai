@@ -3,10 +3,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::fmt::Debug;
-#[cfg(feature = "alloc")]
 #[allow(unused_imports)]
 use std_shims::prelude::*;
-#[cfg(feature = "alloc")]
 use std_shims::io::{self, Read};
 
 use subtle::{CtOption, ConstantTimeEq, ConditionallySelectable};
@@ -112,7 +110,6 @@ pub trait GroupCanonicalEncoding: WrappedGroup {
 }
 
 /// `std::io` extensions for `GroupCanonicalEncoding.`
-#[cfg(feature = "alloc")]
 #[allow(non_snake_case)]
 pub trait GroupIo: GroupCanonicalEncoding {
   /// Read a canonical field element from something implementing `std::io::Read`.
@@ -129,8 +126,6 @@ pub trait GroupIo: GroupCanonicalEncoding {
   }
 
   /// Read a canonical point from something implementing `std::io::Read`.
-  #[cfg(feature = "alloc")]
-  #[allow(non_snake_case)]
   fn read_G<R: Read>(reader: &mut R) -> io::Result<Self::G> {
     let mut bytes = <Self::G as GroupEncoding>::Repr::default();
     reader.read_exact(bytes.as_mut())?;

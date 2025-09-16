@@ -2,25 +2,44 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-pub extern crate alloc;
+#[cfg(not(feature = "alloc"))]
+pub use core::*;
+#[cfg(not(feature = "alloc"))]
+pub use core::{alloc, borrow, ffi, fmt, slice, str, task};
 
-pub mod sync;
+#[cfg(not(feature = "std"))]
+#[rustversion::before(1.81)]
+pub mod error {
+  use core::fmt::Debug::Display;
+  pub trait Error: Debug + Display {}
+}
+#[cfg(not(feature = "std"))]
+#[rustversion::since(1.81)]
+pub use core::error;
+
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+pub extern crate alloc as extern_alloc;
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+pub use extern_alloc::{alloc, borrow, boxed, ffi, fmt, rc, slice, str, string, task, vec, format};
+#[cfg(feature = "std")]
+pub use std::{alloc, borrow, boxed, error, ffi, fmt, rc, slice, str, string, task, vec, format};
+
 pub mod collections;
 pub mod io;
-
-pub use alloc::vec;
-pub use alloc::str;
-pub use alloc::string;
+pub mod sync;
 
 pub mod prelude {
-  pub use alloc::{
+  // Shim the `std` prelude
+  #[cfg(all(feature = "alloc", not(feature = "std")))]
+  pub use extern_alloc::{
     format, vec,
-    boxed::Box,
     borrow::ToOwned,
+    boxed::Box,
     vec::Vec,
     string::{String, ToString},
   };
 
+  // Shim `div_ceil`
   #[rustversion::before(1.73)]
   #[doc(hidden)]
   pub trait StdShimsDivCeil {
@@ -61,6 +80,7 @@ pub mod prelude {
     }
   }
 
+  // Shim `io::Error::other`
   #[cfg(feature = "std")]
   #[rustversion::before(1.74)]
   #[doc(hidden)]

@@ -3,14 +3,15 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::ops::Deref;
-#[cfg(not(feature = "std"))]
-#[macro_use]
+#[cfg(all(feature = "alloc", not(feature = "std")))]
 extern crate alloc;
-use std_shims::{
-  vec::Vec,
-  io::{self, Read, Write},
-};
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+use alloc::vec::Vec;
+#[allow(unused_imports)]
+use std_shims::prelude::*;
+use std_shims::io::{self, Read, Write};
 
+#[cfg(feature = "alloc")]
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, Zeroizing};
@@ -22,6 +23,7 @@ use ciphersuite::{
   },
   GroupIo,
 };
+#[cfg(feature = "alloc")]
 use multiexp::{multiexp_vartime, BatchVerifier};
 
 /// Half-aggregation from <https://eprint.iacr.org/2021/350>.
@@ -59,6 +61,7 @@ impl<C: GroupIo> SchnorrSignature<C> {
   }
 
   /// Serialize a SchnorrSignature, returning a `Vec<u8>`.
+  #[cfg(feature = "alloc")]
   pub fn serialize(&self) -> Vec<u8> {
     let mut buf = vec![];
     self.write(&mut buf).unwrap();
@@ -106,7 +109,12 @@ impl<C: GroupIo> SchnorrSignature<C> {
   /// different keys/messages.
   #[must_use]
   pub fn verify(&self, public_key: C::G, challenge: C::F) -> bool {
-    multiexp_vartime(&self.batch_statements(public_key, challenge)).is_identity().into()
+    let statements = self.batch_statements(public_key, challenge);
+    #[cfg(feature = "alloc")]
+    let res = multiexp_vartime(&statements);
+    #[cfg(not(feature = "alloc"))]
+    let res = statements.into_iter().map(|(scalar, point)| point * scalar).sum::<C::G>();
+    res.is_identity().into()
   }
 
   /// Queue a signature for batch verification.
@@ -114,6 +122,7 @@ impl<C: GroupIo> SchnorrSignature<C> {
   /// This challenge must be properly crafted, which means being binding to the public key, nonce,
   /// and any message. Failure to do so will let a malicious adversary to forge signatures for
   /// different keys/messages.
+  #[cfg(feature = "alloc")]
   pub fn batch_verify<R: RngCore + CryptoRng, I: Copy + Zeroize>(
     &self,
     rng: &mut R,

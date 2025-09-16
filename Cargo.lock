@@ -10246,6 +10246,7 @@ dependencies = [
  "schnorr-signatures",
  "secq256k1",
  "short-weierstrass",
+ "std-shims",
 ]
 
 [[package]]
