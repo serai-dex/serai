@@ -27,7 +27,7 @@ digest = { version = "0.11.0-rc.1", default-features = false, features = ["block
 transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false, optional = true }
 
 ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false }
-multiexp = { path = "../multiexp", version = "0.4", default-features = false, features = ["batch"], optional = true }
+multiexp = { path = "../multiexp", version = "0.4", default-features = false }
 
 [dev-dependencies]
 hex = "0.4"
@@ -40,7 +40,7 @@ dalek-ff-group = { path =  "../dalek-ff-group" }
 ciphersuite = { path = "../ciphersuite" }
 
 [features]
-alloc = ["zeroize/alloc", "digest/alloc", "ciphersuite/alloc", "multiexp"]
+alloc = ["zeroize/alloc", "digest/alloc", "ciphersuite/alloc", "multiexp/alloc", "multiexp/batch"]
 aggregate = ["alloc", "transcript"]
 std = ["alloc", "std-shims/std", "rand_core/std", "zeroize/std", "transcript?/std", "ciphersuite/std", "multiexp/std"]
 default = ["std"]

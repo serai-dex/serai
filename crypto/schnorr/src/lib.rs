@@ -23,8 +23,9 @@ use ciphersuite::{
   },
   GroupIo,
 };
+use multiexp::multiexp_vartime;
 #[cfg(feature = "alloc")]
-use multiexp::{multiexp_vartime, BatchVerifier};
+use multiexp::BatchVerifier;
 
 /// Half-aggregation from <https://eprint.iacr.org/2021/350>.
 #[cfg(feature = "aggregate")]
@@ -109,12 +110,7 @@ impl<C: GroupIo> SchnorrSignature<C> {
   /// different keys/messages.
   #[must_use]
   pub fn verify(&self, public_key: C::G, challenge: C::F) -> bool {
-    let statements = self.batch_statements(public_key, challenge);
-    #[cfg(feature = "alloc")]
-    let res = multiexp_vartime(&statements);
-    #[cfg(not(feature = "alloc"))]
-    let res = statements.into_iter().map(|(scalar, point)| point * scalar).sum::<C::G>();
-    res.is_identity().into()
+    multiexp_vartime(&self.batch_statements(public_key, challenge)).is_identity().into()
   }
 
   /// Queue a signature for batch verification.

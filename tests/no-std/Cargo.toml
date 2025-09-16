@@ -21,7 +21,7 @@ std-shims = { path = "../../common/std-shims", default-features = false }
 
 flexible-transcript = { path = "../../crypto/transcript", default-features = false, features = ["recommended", "merlin"] }
 
-multiexp = { path = "../../crypto/multiexp", default-features = false, features = ["batch"], optional = true }
+multiexp = { path = "../../crypto/multiexp", default-features = false }
 
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false }
 minimal-ed448 = { path = "../../crypto/ed448", default-features = false }
@@ -46,7 +46,8 @@ bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, fea
 alloc = [
   "std-shims/alloc",
 
-  "multiexp",
+  "multiexp/alloc",
+  "multiexp/batch",
 
   "dalek-ff-group/alloc",
   "minimal-ed448/alloc",

@@ -17,11 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-rustversion = "1"
-
-std-shims = { path = "../../common/std-shims", version = "0.1.1", default-features = false, features = ["alloc"] }
-
-zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive", "alloc"] }
+zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
 
 ff = { version = "0.13", default-features = false, features = ["bits"] }
 group = { version = "0.13", default-features = false }
@@ -35,8 +31,9 @@ k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic"
 dalek-ff-group = { path = "../dalek-ff-group" }
 
 [features]
-std = ["std-shims/std", "zeroize/std", "ff/std", "rand_core?/std"]
+alloc = ["zeroize/alloc"]
+std = ["alloc", "zeroize/std", "ff/std", "rand_core?/std"]
 
-batch = ["rand_core"]
+batch = ["alloc", "rand_core"]
 
 default = ["std"]

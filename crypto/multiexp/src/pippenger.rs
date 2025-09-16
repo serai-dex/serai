@@ -1,3 +1,5 @@
+use alloc::vec;
+
 use zeroize::Zeroize;
 
 use ff::PrimeFieldBits;
