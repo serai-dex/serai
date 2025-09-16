@@ -17,6 +17,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+std-shims = { path = "../../common/std-shims", default-features = false }
+
 flexible-transcript = { path = "../../crypto/transcript", default-features = false, features = ["recommended", "merlin"] }
 
 multiexp = { path = "../../crypto/multiexp", default-features = false, features = ["batch"], optional = true }
@@ -26,7 +28,7 @@ minimal-ed448 = { path = "../../crypto/ed448", default-features = false }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false }
 
-schnorr-signatures = { path = "../../crypto/schnorr", default-features = false, optional = true }
+schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
 
 prime-field = { path = "../../crypto/prime-field", default-features = false }
 short-weierstrass = { path = "../../crypto/short-weierstrass", default-features = false }
@@ -42,6 +44,8 @@ bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, fea
 
 [features]
 alloc = [
+  "std-shims/alloc",
+
   "multiexp",
 
   "dalek-ff-group/alloc",
@@ -49,7 +53,7 @@ alloc = [
 
   "ciphersuite/alloc",
 
-  "schnorr-signatures",
+  "schnorr-signatures/alloc",
 
   "prime-field/alloc",
   "short-weierstrass/alloc",

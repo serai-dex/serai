@@ -2,7 +2,6 @@
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(feature = "alloc")]
 #[allow(unused_imports)]
 use std_shims::prelude::*;
 
