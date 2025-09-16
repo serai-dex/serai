@@ -125,6 +125,8 @@ deny = [
   { name = "hashbrown", version = "=0.15.0" },
   # Legacy which _no one_ should use anymore
   { name = "is-terminal", version = "*" },
+  # Stop introduction into the tree without realizing it
+  { name = "once_cell_polyfill", version = "*" },
 ]
 
 [sources]
