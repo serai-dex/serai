@@ -725,7 +725,7 @@ mod pallet {
   impl<T: Config> Pallet<T> {
     /*
     #[pallet::call_index(0)]
-    #[pallet::weight(0)] // TODO
+    #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn set_keys(
       origin: OriginFor<T>,
       network: ExternalNetworkId,
@@ -758,7 +758,7 @@ mod pallet {
     }
 
     #[pallet::call_index(1)]
-    #[pallet::weight(0)] // TODO
+    #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn report_slashes(
       origin: OriginFor<T>,
       network: ExternalNetworkId,
@@ -787,7 +787,7 @@ mod pallet {
     */
 
     #[pallet::call_index(2)]
-    #[pallet::weight(0)] // TODO
+    #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn set_embedded_elliptic_curve_keys(
       origin: OriginFor<T>,
       keys: serai_primitives::crypto::SignedEmbeddedEllipticCurveKeys,
@@ -801,7 +801,7 @@ mod pallet {
     }
 
     #[pallet::call_index(3)]
-    #[pallet::weight(0)] // TODO
+    #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
       Coins::<T>::transfer_fn(validator, Self::account(), Balance { coin: Coin::Serai, amount })?;
@@ -811,7 +811,7 @@ mod pallet {
     }
 
     #[pallet::call_index(4)]
-    #[pallet::weight(0)] // TODO
+    #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn deallocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let account = ensure_signed(origin)?;
 
@@ -824,27 +824,19 @@ mod pallet {
       Ok(())
     }
 
-    /*
     #[pallet::call_index(5)]
-    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn claim_deallocation(
       origin: OriginFor<T>,
       network: NetworkId,
       session: Session,
     ) -> DispatchResult {
       let account = ensure_signed(origin)?;
-      let Some(amount) = Self::take_deallocatable_amount(network, session, account) else {
-        Err(Error::<T>::NonExistentDeallocation)?
-      };
-      Coins::<T>::transfer_fn(
-        Self::account(),
-        account,
-        Balance { coin: Coin::Serai, amount },
-      )?;
-      Self::deposit_event(Event::DeallocationClaimed { validator: account, network, session });
+      let amount = Abstractions::<T>::claim_delayed_deallocation(account, network, session)
+        .map_err(Error::<T>::DeallocationError)?;
+      Coins::<T>::transfer_fn(Self::account(), account, Balance { coin: Coin::Serai, amount })?;
       Ok(())
     }
-    */
   }
 
   /*

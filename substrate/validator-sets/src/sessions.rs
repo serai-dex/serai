@@ -123,6 +123,10 @@ pub enum DeallocationError {
   NotEnoughAllocated,
   /// The remaining allocation was non-zero and would be less than a key share.
   RemainingAllocationLessThanKeyShare,
+  /// The delay has yet to be satisfied.
+  DelayNotSatisfied,
+  /// No delayed deallocation was present.
+  NoDelayedDeallocation,
 }
 
 pub(crate) trait Sessions {
@@ -164,6 +168,16 @@ pub(crate) trait Sessions {
     validator: Public,
     amount: Amount,
   ) -> Result<DeallocationTimeline, DeallocationError>;
+
+  /// Claim a delayed allocation.
+  ///
+  /// This does not perform any transfers of any coins/tokens. It solely performs the book-keeping
+  /// of it.
+  fn claim_delayed_deallocation(
+    validator: Public,
+    network: NetworkId,
+    session: Session,
+  ) -> Result<Amount, DeallocationError>;
 }
 
 impl<Storage: SessionsStorage> Sessions for Storage {
@@ -431,5 +445,19 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     // Because the network either doesn't have a current session, or this validator wasn't present,
     // immediately handle the deallocation
     Ok(DeallocationTimeline::Immediate)
+  }
+
+  fn claim_delayed_deallocation(
+    validator: Public,
+    network: NetworkId,
+    session: Session,
+  ) -> Result<Amount, DeallocationError> {
+    if Storage::CurrentSession::get(network).map(|session| session.0) <
+      Some(session).map(|session| session.0)
+    {
+      Err(DeallocationError::DelayNotSatisfied)?;
+    }
+    Storage::DelayedDeallocations::take(validator, session)
+      .ok_or(DeallocationError::NoDelayedDeallocation)
   }
 }
