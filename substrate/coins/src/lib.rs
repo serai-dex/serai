@@ -54,8 +54,6 @@ mod pallet {
   /// The configuration of this pallet.
   #[pallet::config]
   pub trait Config<I: 'static = ()>: frame_system::Config<AccountId = Public> {
-    /// The event type.
-    type RuntimeEvent: From<Event<Self, I>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
     /// What decides if mints are allowed.
     type AllowMint: AllowMint;
   }

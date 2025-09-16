@@ -90,8 +90,6 @@ mod pallet {
 
   #[pallet::config]
   pub trait Config: frame_system::Config + coins_pallet::Config {
-    type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
-
     // type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
   }
 
@@ -218,10 +216,6 @@ mod pallet {
     type TotalAllocatedStake = TotalAllocatedStake<T>;
     type DelayedDeallocations = DelayedDeallocations<T>;
   }
-
-  #[pallet::event]
-  #[pallet::generate_deposit(pub(super) fn deposit_event)]
-  pub enum Event<T: Config> {}
 
   /*
   /// The generated key pair for a given validator set instance.
