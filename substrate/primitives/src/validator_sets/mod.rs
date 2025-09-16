@@ -7,9 +7,9 @@ use ciphersuite::{group::GroupEncoding, GroupIo};
 use dalek_ff_group::Ristretto;
 
 use crate::{
-  constants::MAX_KEY_SHARES_PER_SET,
   crypto::{Public, KeyPair},
   network_id::{ExternalNetworkId, NetworkId},
+  balance::Amount,
 };
 
 mod slashes;
@@ -103,19 +103,84 @@ impl ExternalValidatorSet {
   }
 }
 
-/// For a set of validators whose key shares may exceed the maximum, reduce until they are less
-/// than or equal to the maximum.
-///
-/// This runs in time linear to the exceed key shares and assumes the excess fits within a usize,
-/// panicking otherwise.
-///
-/// Reduction occurs by reducing each validator in a reverse round-robin. This means the worst
-/// validators lose their key shares first.
-pub fn amortize_excess_key_shares(validators: &mut [(sp_core::sr25519::Public, u64)]) {
-  let total_key_shares = validators.iter().map(|(_key, shares)| shares).sum::<u64>();
-  for i in 0 .. usize::try_from(total_key_shares.saturating_sub(u64::from(MAX_KEY_SHARES_PER_SET)))
-    .unwrap()
-  {
-    validators[validators.len() - ((i % validators.len()) + 1)].1 -= 1;
+/// The representation for an amount of key shares.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
+pub struct KeyShares(pub u16);
+
+impl KeyShares {
+  /// One key share.
+  pub const ONE: KeyShares = KeyShares(1);
+  /// The maximum amount of key shares per set.
+  pub const MAX_PER_SET: u16 = 150;
+  /// The maximum amount of key shares per set, represented as a `u32`.
+  pub const MAX_PER_SET_U32: u32 = 150;
+
+  /// Create key shares from a `u16`.
+  ///
+  /// This will saturate the value if the `u16` exceeds the maximum amount of key shares.
+  pub fn saturating_from(key_shares: u16) -> KeyShares {
+    KeyShares(key_shares.min(Self::MAX_PER_SET))
+  }
+
+  /// Create key shares from an allocation.
+  ///
+  /// Presumably panics if `allocation_per_key_share` is zero.
+  pub fn from_allocation(allocation: Amount, allocation_per_key_share: Amount) -> Self {
+    Self::saturating_from(
+      u16::try_from(allocation.0 / allocation_per_key_share.0).unwrap_or(u16::MAX),
+    )
+  }
+
+  /// For a set of validators whose key shares may exceed the maximum, reduce until they are less
+  /// than or equal to the maximum.
+  ///
+  /// Returns the new amount of validators with a non-zero amount of key shares.
+  ///
+  /// This runs in time linear to the exceeded key shares and may panic if:
+  ///   - The total amount of key shares exceeds `u16::MAX`.
+  ///   - The list of validators is absurdly long
+  ///   - The list of validators includes validators without key shares
+  ///
+  /// Reduction occurs by reducing each validator in a reverse round-robin. This means the
+  /// validators with the least key shares are evicted first.
+  #[must_use]
+  pub fn amortize_excess(validators: &mut [(sp_core::sr25519::Public, KeyShares)]) -> usize {
+    let total_key_shares = validators.iter().map(|(_key, shares)| shares.0).sum::<u16>();
+    let mut actual_len = validators.len();
+    let mut offset = 1;
+    for _ in 0 .. usize::from(total_key_shares.saturating_sub(Self::MAX_PER_SET)) {
+      // If the offset exceeds the new length, reset it
+      if offset > actual_len {
+        offset = 1;
+      }
+
+      // Take one key share from this validator
+      let index = actual_len - offset;
+      validators[index].1 .0 -= 1;
+      // If they now have zero key shares, shrink the length and continue
+      if validators[index].1 .0 == 0 {
+        actual_len -= 1;
+        continue;
+      }
+
+      // Increment the offset to take from the next validator on the next iteration
+      offset += 1;
+    }
+    actual_len
+  }
+}
+
+impl TryFrom<u16> for KeyShares {
+  type Error = ();
+  fn try_from(value: u16) -> Result<Self, ()> {
+    if value > Self::MAX_PER_SET {
+      Err(())
+    } else {
+      Ok(Self(value))
+    }
   }
 }

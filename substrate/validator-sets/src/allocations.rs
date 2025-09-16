@@ -1,6 +1,6 @@
 use sp_core::{Encode, sr25519::Public};
 
-use serai_primitives::{constants::MAX_KEY_SHARES_PER_SET, network_id::NetworkId, balance::Amount};
+use serai_primitives::{network_id::NetworkId, balance::Amount, validator_sets::KeyShares};
 
 use frame_support::storage::{StorageMap, StoragePrefixedMap};
 
@@ -63,7 +63,7 @@ pub(crate) trait Allocations {
   ) -> impl Iterator<Item = (Public, Amount)>;
 
   /// Calculate the expected key shares for a network, per the current allocations.
-  fn expected_key_shares(network: NetworkId, allocation_per_key_share: Amount) -> u64;
+  fn expected_key_shares(network: NetworkId, allocation_per_key_share: Amount) -> KeyShares;
 }
 
 /// Reverses the lexicographic order of a given byte array.
@@ -149,17 +149,16 @@ impl<Storage: AllocationsStorage> Allocations for Storage {
     .filter(move |(_key, allocation)| *allocation >= minimum_allocation)
   }
 
-  fn expected_key_shares(network: NetworkId, allocation_per_key_share: Amount) -> u64 {
+  fn expected_key_shares(network: NetworkId, allocation_per_key_share: Amount) -> KeyShares {
     let mut total_key_shares = 0;
     for (_, amount) in Self::iter_allocations(network, allocation_per_key_share) {
-      let key_shares = amount.0 / allocation_per_key_share.0;
-      total_key_shares += key_shares;
+      total_key_shares += KeyShares::from_allocation(amount, allocation_per_key_share).0;
 
-      if total_key_shares >= u64::from(MAX_KEY_SHARES_PER_SET) {
+      if total_key_shares >= KeyShares::MAX_PER_SET {
         break;
       }
     }
-    total_key_shares
+    KeyShares::saturating_from(total_key_shares)
   }
 }
 

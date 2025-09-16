@@ -24,7 +24,10 @@ const HUMAN_READABLE_PART: bech32::Hrp = bech32::Hrp::parse_unchecked("sri");
 
 /// The address for an account on Serai.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(feature = "non_canonical_scale_derivations", derive(scale::Encode, scale::Decode))]
+#[cfg_attr(
+  feature = "non_canonical_scale_derivations",
+  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
+)]
 pub struct SeraiAddress(pub [u8; 32]);
 
 // These share encodings as 32-byte arrays

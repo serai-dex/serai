@@ -1,10 +1,9 @@
 use sp_core::{Encode, Decode, ConstU32, sr25519::Public, bounded::BoundedVec};
 
 use serai_primitives::{
-  constants::{MAX_KEY_SHARES_PER_SET, MAX_KEY_SHARES_PER_SET_U32},
   network_id::NetworkId,
   balance::Amount,
-  validator_sets::{Session, ValidatorSet, amortize_excess_key_shares},
+  validator_sets::{KeyShares as KeySharesStruct, Session, ValidatorSet},
 };
 
 use frame_support::storage::{StorageValue, StorageMap, StorageDoubleMap, StoragePrefixedMap};
@@ -12,7 +11,8 @@ use frame_support::storage::{StorageValue, StorageMap, StorageDoubleMap, Storage
 use crate::{embedded_elliptic_curve_keys::EmbeddedEllipticCurveKeys, allocations::Allocations};
 
 /// The list of genesis validators.
-pub(crate) type GenesisValidators = BoundedVec<Public, ConstU32<{ MAX_KEY_SHARES_PER_SET_U32 }>>;
+pub(crate) type GenesisValidators =
+  BoundedVec<Public, ConstU32<{ KeySharesStruct::MAX_PER_SET_U32 }>>;
 
 /// The key for the SelectedValidators map.
 pub(crate) type SelectedValidatorsKey = (ValidatorSet, [u8; 16], Public);
@@ -38,14 +38,23 @@ pub(crate) trait SessionsStorage: EmbeddedEllipticCurveKeys + Allocations {
   /// This is opaque and to be exclusively read/write by `Sessions`.
   type LatestDecidedSession: StorageMap<NetworkId, Session, Query = Option<Session>>;
 
+  /// The amount of key shares a validator set has.
+  ///
+  /// This is opaque and to be exclusively read/write by `Sessions`.
+  type KeyShares: StorageMap<ValidatorSet, KeySharesStruct, Query = Option<KeySharesStruct>>;
+
   /// The selected validators for a set.
   ///
   /// This MUST be instantiated with a map using `Identity` for its hasher.
   ///
   /// This is opaque and to be exclusively read/write by `Sessions`.
   // The value is how many key shares the validator has.
-  type SelectedValidators: StorageMap<SelectedValidatorsKey, u64, Query = Option<u64>>
-    + StoragePrefixedMap<u64>;
+  #[rustfmt::skip]
+  type SelectedValidators: StorageMap<
+    SelectedValidatorsKey,
+    KeySharesStruct,
+    Query = Option<KeySharesStruct>
+  > + StoragePrefixedMap<KeySharesStruct>;
 
   /// The total allocated stake for a network.
   ///
@@ -64,9 +73,9 @@ fn selected_validators_key(set: ValidatorSet, key: Public) -> SelectedValidators
   (set, hash, key)
 }
 
-fn selected_validators<Storage: StoragePrefixedMap<u64>>(
+fn selected_validators<Storage: StoragePrefixedMap<KeySharesStruct>>(
   set: ValidatorSet,
-) -> impl Iterator<Item = (Public, u64)> {
+) -> impl Iterator<Item = (Public, KeySharesStruct)> {
   let mut prefix = Storage::final_prefix().to_vec();
   prefix.extend(&set.encode());
   frame_support::storage::PrefixIterator::<_, ()>::new(
@@ -77,13 +86,13 @@ fn selected_validators<Storage: StoragePrefixedMap<u64>>(
         // Recover the validator's key from the storage key
         <[u8; 32]>::try_from(&key[(key.len() - 32) ..]).unwrap().into(),
         // Decode the key shares from the value
-        u64::decode(&mut key_shares).unwrap(),
+        KeySharesStruct::decode(&mut key_shares).unwrap(),
       ))
     },
   )
 }
 
-fn clear_selected_validators<Storage: StoragePrefixedMap<u64>>(set: ValidatorSet) {
+fn clear_selected_validators<Storage: StoragePrefixedMap<KeySharesStruct>>(set: ValidatorSet) {
   let mut prefix = Storage::final_prefix().to_vec();
   prefix.extend(&set.encode());
   assert!(matches!(
@@ -178,6 +187,30 @@ pub(crate) trait Sessions {
     network: NetworkId,
     session: Session,
   ) -> Result<Amount, DeallocationError>;
+
+  /// The currently active session for a network.
+  fn current_session(network: NetworkId) -> Option<Session>;
+
+  /// The latest decided session for a network.
+  fn latest_decided_session(network: NetworkId) -> Option<Session>;
+
+  /// The amount of key shares a validator has.
+  ///
+  /// Returns `None` for historic sessions which we no longer have the data for.
+  fn key_shares(set: ValidatorSet) -> Option<KeySharesStruct>;
+
+  /// If a validator is present within the specified validator set.
+  ///
+  /// This MAY return `false` for _any_ historic session, even if the validator _was_ present,
+  fn in_validator_set(set: ValidatorSet, validator: Public) -> bool;
+
+  /// The key shares possessed by a validator, within a validator set.
+  ///
+  /// This MAY return `None` for _any_ historic session, even if the validator _was_ present,
+  fn key_shares_possessed_by_validator(
+    set: ValidatorSet,
+    validator: Public,
+  ) -> Option<KeySharesStruct>;
 }
 
 impl<Storage: SessionsStorage> Sessions for Storage {
@@ -202,44 +235,39 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       }
     }
 
-    let mut selected_validators = Vec::with_capacity(usize::from(MAX_KEY_SHARES_PER_SET / 2));
+    let mut selected_validators = Vec::with_capacity(usize::from(KeySharesStruct::MAX_PER_SET / 2));
     let mut total_key_shares = 0;
     if let Some(allocation_per_key_share) = Storage::AllocationPerKeyShare::get(network) {
       for (validator, amount) in Self::iter_allocations(network, allocation_per_key_share) {
-        // If this allocation is absurd, causing this to not fit within a u16, bound to the max
-        let key_shares = amount.0 / allocation_per_key_share.0;
+        let key_shares = KeySharesStruct::from_allocation(amount, allocation_per_key_share);
         selected_validators.push((validator, key_shares));
-        // We're tracking key shares as a u64 yet the max allowed is a u16, so this won't overflow
-        total_key_shares += key_shares;
-        if total_key_shares >= u64::from(MAX_KEY_SHARES_PER_SET) {
+        total_key_shares += key_shares.0;
+        if total_key_shares >= KeySharesStruct::MAX_PER_SET {
           break;
         }
       }
     }
 
     // Perform amortization if we've exceeded the maximum amount of key shares
-    // This is guaranteed not to cause any validators have zero key shares as we'd only be over if
-    // the last-added (worst) validator had multiple key shares, meaning everyone has more shares
-    // than we'll amortize here
-    amortize_excess_key_shares(selected_validators.as_mut_slice());
+    {
+      let new_len = KeySharesStruct::amortize_excess(selected_validators.as_mut_slice());
+      selected_validators.truncate(new_len);
+    }
 
     if include_genesis_validators {
       let mut genesis_validators = Storage::GenesisValidators::get()
         .expect("genesis validators wasn't set")
         .into_iter()
-        .map(|validator| (validator, 1))
+        .map(|validator| (validator, KeySharesStruct::ONE))
         .collect::<Vec<_>>();
-      let genesis_validator_key_shares = u64::try_from(genesis_validators.len()).unwrap();
-      while (total_key_shares + genesis_validator_key_shares) > u64::from(MAX_KEY_SHARES_PER_SET) {
+      let genesis_validator_key_shares = u16::try_from(genesis_validators.len()).unwrap();
+      total_key_shares += genesis_validator_key_shares;
+      while total_key_shares > KeySharesStruct::MAX_PER_SET {
         let (_key, key_shares) = selected_validators.pop().unwrap();
-        total_key_shares -= key_shares;
+        total_key_shares -= key_shares.0;
       }
       selected_validators.append(&mut genesis_validators);
-      total_key_shares += genesis_validator_key_shares;
     }
-
-    // We kept this accurate but don't actually further read from it
-    let _ = total_key_shares;
 
     let latest_decided_session = Storage::LatestDecidedSession::mutate(network, |session| {
       let next_session = session.map(|session| Session(session.0 + 1)).unwrap_or(Session(0));
@@ -248,6 +276,10 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     });
 
     let latest_decided_set = ValidatorSet { network, session: latest_decided_session };
+    Storage::KeyShares::insert(
+      latest_decided_set,
+      KeySharesStruct::try_from(total_key_shares).expect("amortization failure"),
+    );
     for (key, key_shares) in selected_validators {
       Storage::SelectedValidators::insert(
         selected_validators_key(latest_decided_set, key),
@@ -285,10 +317,9 @@ impl<Storage: SessionsStorage> Sessions for Storage {
 
     // Clean-up the historic set's storage, if one exists
     if let Some(historic_session) = current.0.checked_sub(2).map(Session) {
-      clear_selected_validators::<Storage::SelectedValidators>(ValidatorSet {
-        network,
-        session: historic_session,
-      });
+      let historic_set = ValidatorSet { network, session: historic_session };
+      Storage::KeyShares::remove(historic_set);
+      clear_selected_validators::<Storage::SelectedValidators>(historic_set);
     }
   }
 
@@ -322,26 +353,28 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     {
       // Check the validator set's current expected key shares
       let expected_key_shares = Self::expected_key_shares(network, allocation_per_key_share);
-      // Check if the top validator in this set may be faulty under this f
-      let top_validator_may_be_faulty = if let Some(top_validator) =
+      // Check if the top validator in this set may be faulty without causing a halt under this f
+      let currently_tolerates_single_point_of_failure = if let Some(top_validator) =
         Self::iter_allocations(network, allocation_per_key_share).next()
       {
         let (_key, amount) = top_validator;
-        let key_shares = amount.0 / allocation_per_key_share.0;
-        key_shares <= (expected_key_shares / 3)
+        let key_shares = KeySharesStruct::from_allocation(amount, allocation_per_key_share);
+        key_shares.0 <= (expected_key_shares.0 / 3)
       } else {
-        // If there are no validators, we claim the top validator may not be faulty so the
-        // following check doesn't run
         false
       };
-      if top_validator_may_be_faulty {
-        let old_key_shares = old_allocation.0 / allocation_per_key_share.0;
-        let new_key_shares = new_allocation.0 / allocation_per_key_share.0;
+      // If the set currently tolerates the fault of the top validator, don't let that change
+      if currently_tolerates_single_point_of_failure {
+        let old_key_shares =
+          KeySharesStruct::from_allocation(old_allocation, allocation_per_key_share);
+        let new_key_shares =
+          KeySharesStruct::from_allocation(new_allocation, allocation_per_key_share);
         // Update the amount of expected key shares per the key shares added
-        let expected_key_shares = (expected_key_shares + (new_key_shares - old_key_shares))
-          .min(u64::from(MAX_KEY_SHARES_PER_SET));
+        let expected_key_shares = KeySharesStruct::saturating_from(
+          expected_key_shares.0 + (new_key_shares.0 - old_key_shares.0),
+        );
         // If the new key shares exceeds the fault tolerance, don't allow the allocation
-        if new_key_shares > (expected_key_shares / 3) {
+        if new_key_shares.0 > (expected_key_shares.0 / 3) {
           Err(AllocationError::IntroducesSinglePointOfFailure)?
         }
       }
@@ -459,5 +492,28 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     }
     Storage::DelayedDeallocations::take(validator, session)
       .ok_or(DeallocationError::NoDelayedDeallocation)
+  }
+
+  fn current_session(network: NetworkId) -> Option<Session> {
+    Storage::CurrentSession::get(network)
+  }
+
+  fn latest_decided_session(network: NetworkId) -> Option<Session> {
+    Storage::LatestDecidedSession::get(network)
+  }
+
+  fn key_shares(set: ValidatorSet) -> Option<KeySharesStruct> {
+    Storage::KeyShares::get(set)
+  }
+
+  fn in_validator_set(set: ValidatorSet, validator: Public) -> bool {
+    Storage::SelectedValidators::contains_key(selected_validators_key(set, validator))
+  }
+
+  fn key_shares_possessed_by_validator(
+    set: ValidatorSet,
+    validator: Public,
+  ) -> Option<KeySharesStruct> {
+    Storage::SelectedValidators::get(selected_validators_key(set, validator))
   }
 }

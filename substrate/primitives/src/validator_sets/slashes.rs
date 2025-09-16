@@ -8,8 +8,9 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use sp_core::{ConstU32, bounded::BoundedVec};
 
 use crate::{
-  constants::{TARGET_BLOCK_TIME, SESSION_LENGTH, MAX_KEY_SHARES_PER_SET_U32},
+  constants::{TARGET_BLOCK_TIME, SESSION_LENGTH},
   balance::Amount,
+  validator_sets::KeyShares,
 };
 
 /// Each slash point is equivalent to the downtime implied by missing a block proposal.
@@ -212,7 +213,7 @@ pub struct SlashReport(
     serialize_with = "crate::borsh_serialize_bounded_vec",
     deserialize_with = "crate::borsh_deserialize_bounded_vec"
   )]
-  pub BoundedVec<Slash, ConstU32<{ MAX_KEY_SHARES_PER_SET_U32 }>>,
+  pub BoundedVec<Slash, ConstU32<{ KeyShares::MAX_PER_SET_U32 }>>,
 );
 
 /// An error when converting from a `Vec`.
@@ -251,7 +252,7 @@ impl SlashReport {
 
 #[test]
 fn test_penalty() {
-  for validators in [1, 50, 100, crate::constants::MAX_KEY_SHARES_PER_SET] {
+  for validators in [1, 50, 100, KeyShares::MAX_PER_SET_U32] {
     let validators = NonZero::new(validators).unwrap();
     // 12 hours of slash points should only decrease the rewards proportionately
     let twelve_hours_of_slash_points =

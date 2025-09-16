@@ -81,7 +81,12 @@ mod pallet {
   use frame_support::pallet_prelude::*;
 
   use serai_primitives::{
-    crypto::KeyPair, network_id::*, coin::*, balance::*, validator_sets::*, address::SeraiAddress,
+    crypto::KeyPair,
+    network_id::*,
+    coin::*,
+    balance::*,
+    validator_sets::{Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct},
+    address::SeraiAddress,
   };
 
   use coins_pallet::Pallet as Coins;
@@ -197,10 +202,12 @@ mod pallet {
   type CurrentSession<T: Config> = StorageMap<_, Identity, NetworkId, Session, OptionQuery>;
   #[pallet::storage]
   type LatestDecidedSession<T: Config> = StorageMap<_, Identity, NetworkId, Session, OptionQuery>;
+  #[pallet::storage]
+  type KeyShares<T: Config> = StorageMap<_, Identity, ValidatorSet, KeySharesStruct, OptionQuery>;
   // This has to use `Identity` per the documentation of `SessionsStorage`
   #[pallet::storage]
   type SelectedValidators<T: Config> =
-    StorageMap<_, Identity, SelectedValidatorsKey, u64, OptionQuery>;
+    StorageMap<_, Identity, SelectedValidatorsKey, KeySharesStruct, OptionQuery>;
   #[pallet::storage]
   type TotalAllocatedStake<T: Config> = StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
   #[pallet::storage]
@@ -212,6 +219,7 @@ mod pallet {
     type AllocationPerKeyShare = AllocationPerKeyShare<T>;
     type CurrentSession = CurrentSession<T>;
     type LatestDecidedSession = LatestDecidedSession<T>;
+    type KeyShares = KeyShares<T>;
     type SelectedValidators = SelectedValidators<T>;
     type TotalAllocatedStake = TotalAllocatedStake<T>;
     type DelayedDeallocations = DelayedDeallocations<T>;
@@ -339,6 +347,40 @@ mod pallet {
   impl<T: Config> Pallet<T> {
     fn account() -> T::AccountId {
       SeraiAddress::system(b"ValidatorSets").into()
+    }
+
+    /// The current session for a network.
+    pub fn current_session(network: NetworkId) -> Option<Session> {
+      Abstractions::<T>::current_session(network)
+    }
+
+    /// The latest decided session for a network.
+    pub fn latest_decided_session(network: NetworkId) -> Option<Session> {
+      Abstractions::<T>::latest_decided_session(network)
+    }
+
+    /// The amount of key shares a validator has.
+    ///
+    /// Returns `None` for historic sessions which we no longer have the data for.
+    pub fn key_shares(set: ValidatorSet) -> Option<KeySharesStruct> {
+      Abstractions::<T>::key_shares(set)
+    }
+
+    /// If a validator is present within the specified validator set.
+    ///
+    /// This MAY return `false` for _any_ historic session, even if the validator _was_ present,
+    pub fn in_validator_set(set: ValidatorSet, validator: Public) -> bool {
+      Abstractions::<T>::in_validator_set(set, validator)
+    }
+
+    /// The key shares possessed by a validator, within a validator set.
+    ///
+    /// This MAY return `None` for _any_ historic session, even if the validator _was_ present,
+    pub fn key_shares_possessed_by_validator(
+      set: ValidatorSet,
+      validator: Public,
+    ) -> Option<KeySharesStruct> {
+      Abstractions::<T>::key_shares_possessed_by_validator(set, validator)
     }
 
     /*
