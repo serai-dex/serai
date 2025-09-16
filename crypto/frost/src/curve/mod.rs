@@ -1,5 +1,7 @@
 use core::{ops::Deref, convert::AsRef};
-use std::io::{self, Read};
+#[allow(unused_imports)]
+use std_shims::prelude::*;
+use std_shims::io::{self, Read};
 
 use rand_core::{RngCore, CryptoRng};
 

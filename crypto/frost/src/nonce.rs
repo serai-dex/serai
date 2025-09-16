@@ -6,7 +6,9 @@
 // Each nonce remains of the form (d, e) and made into a proper nonce with d + (e * b)
 
 use core::ops::Deref;
-use std::{
+#[allow(unused_imports)]
+use std_shims::prelude::*;
+use std_shims::{
   io::{self, Read, Write},
   collections::HashMap,
 };

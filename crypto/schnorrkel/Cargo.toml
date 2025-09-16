@@ -17,18 +17,35 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-rand_core = "0.6"
-zeroize = "^1.5"
+std-shims = { version = "0.1", default-features = false, features = ["alloc"] }
 
-transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", features = ["merlin"] }
+rand_core = { version = "0.6", default-features = false }
+zeroize = { version = "1.5", default-features = false, features = ["zeroize_derive", "alloc"] }
 
-group = "0.13"
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3.2", default-features = false, features = ["merlin"] }
 
-ciphersuite = { path = "../ciphersuite", version = "^0.4.1", features = ["std"] }
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1" }
-frost = { path = "../frost", package = "modular-frost", version = "0.11.0", features = ["ristretto"] }
+ciphersuite = { path = "../ciphersuite", version = "0.4.1", default-features = false, features = ["alloc"] }
+schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.5.1", default-features = false, features = ["alloc"] }
+frost = { path = "../frost", package = "modular-frost", version = "0.11.0", default-features = false, features = ["ristretto"] }
 
-schnorrkel = { version = "0.11" }
+schnorrkel = { version = "0.11", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 frost = { path = "../frost", package = "modular-frost", features = ["tests"] }
+
+[features]
+std = [
+  "std-shims/std",
+
+  "rand_core/std",
+  "zeroize/std",
+
+  "transcript/std",
+
+  "ciphersuite/std",
+  "schnorr/std",
+  "frost/std",
+
+  "schnorrkel/std",
+]
+default = ["std"]

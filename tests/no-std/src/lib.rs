@@ -21,12 +21,13 @@ pub mod alloc {
   pub use multiexp;
 
   pub use dkg;
+  pub use dkg_dealer;
+  pub use dkg_recovery;
+  pub use dkg_musig;
   pub use dkg_evrf;
 
-  pub use bitcoin_serai;
-
-  /*
   pub use modular_frost;
   pub use frost_schnorrkel;
-  */
+
+  pub use bitcoin_serai;
 }

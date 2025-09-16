@@ -1,5 +1,7 @@
 use core::{marker::PhantomData, fmt::Debug};
-use std::io::{self, Read, Write};
+#[allow(unused_imports)]
+use std_shims::prelude::*;
+use std_shims::io::{self, Read, Write};
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};

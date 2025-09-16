@@ -1,8 +1,8 @@
 use core::ops::Deref;
 
-use std::collections::HashMap;
+use std_shims::collections::HashMap;
 #[cfg(test)]
-use std::str::FromStr;
+use core::str::FromStr;
 
 use zeroize::Zeroizing;
 

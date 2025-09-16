@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std_shims::collections::HashMap;
 
 use rand_core::{RngCore, CryptoRng};
 

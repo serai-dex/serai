@@ -17,33 +17,35 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-thiserror = { version = "2", default-features = false, features = ["std"] }
+std-shims = { version = "0.1", path = "../../common/std-shims", default-features = false, features = ["alloc"] }
 
-rand_core = { version = "0.6", default-features = false, features = ["std"] }
-rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
+thiserror = { version = "2", default-features = false }
 
-zeroize = { version = "^1.5", default-features = false, features = ["std", "zeroize_derive"] }
-subtle = { version = "^2.4", default-features = false, features = ["std"] }
+rand_core = { version = "0.6", default-features = false, features = ["alloc"] }
+rand_chacha = { version = "0.3", default-features = false }
 
-hex = { version = "0.4", default-features = false, features = ["std"], optional = true }
+zeroize = { version = "^1.5", default-features = false, features = ["alloc", "zeroize_derive"] }
+subtle = { version = "^2.4", default-features = false }
 
-transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false, features = ["std", "recommended"] }
+hex = { version = "0.4", default-features = false, features = ["alloc"], optional = true }
 
-dalek-ff-group = { path = "../dalek-ff-group", version = "0.5", default-features = false, features = ["std"], optional = true }
-minimal-ed448 = { path = "../ed448", version = "0.4", default-features = false, features = ["std"], optional = true }
+transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false, features = ["recommended"] }
 
-ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../dalek-ff-group", version = "0.5", default-features = false, features = ["alloc"], optional = true }
+minimal-ed448 = { path = "../ed448", version = "0.4", default-features = false, features = ["alloc"], optional = true }
+
+ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["alloc"] }
 sha2 = { version = "0.10.0", default-features = false, optional = true }
 elliptic-curve = { version = "0.13", default-features = false, features = ["hash2curve"], optional = true }
-ciphersuite-kp256 = { path = "../ciphersuite/kp256", version = "0.4", default-features = false, features = ["std"], optional = true }
+ciphersuite-kp256 = { path = "../ciphersuite/kp256", version = "0.4", default-features = false, features = ["alloc"], optional = true }
 
-multiexp = { path = "../multiexp", version = "0.4", default-features = false, features = ["std", "batch"] }
+multiexp = { path = "../multiexp", version = "0.4", default-features = false, features = ["alloc", "batch"] }
 
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false, features = ["std"] }
+schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false, features = ["alloc"] }
 
-dkg = { path = "../dkg", version = "0.6.1", default-features = false, features = ["std"] }
-dkg-recovery = { path = "../dkg/recovery", version = "0.6", default-features = false, features = ["std"], optional = true }
-dkg-dealer = { path = "../dkg/dealer", version = "0.6", default-features = false, features = ["std"], optional = true }
+dkg = { path = "../dkg", version = "0.6.1", default-features = false }
+dkg-recovery = { path = "../dkg/recovery", version = "0.6", default-features = false, optional = true }
+dkg-dealer = { path = "../dkg/dealer", version = "0.6", default-features = false, optional = true }
 
 [dev-dependencies]
 hex = "0.4"
@@ -54,6 +56,38 @@ dkg-recovery = { path = "../dkg/recovery", default-features = false, features = 
 dkg-dealer = { path = "../dkg/dealer", default-features = false, features = ["std"] }
 
 [features]
+std = [
+  "std-shims/std",
+
+  "thiserror/std",
+
+  "rand_core/std",
+  "rand_chacha/std",
+
+  "zeroize/std",
+  "subtle/std",
+
+  "hex?/std",
+
+  "transcript/std",
+
+  "dalek-ff-group?/std",
+  "minimal-ed448?/std",
+
+  "ciphersuite/std",
+  "sha2?/std",
+  "elliptic-curve?/std",
+  "ciphersuite-kp256?/std",
+
+  "multiexp/std",
+
+  "schnorr/std",
+
+  "dkg/std",
+  "dkg-recovery?/std",
+  "dkg-dealer?/std",
+]
+
 ed25519 = ["dalek-ff-group"]
 ristretto = ["dalek-ff-group"]
 
@@ -63,3 +97,5 @@ p256 = ["sha2", "elliptic-curve", "ciphersuite-kp256"]
 ed448 = ["minimal-ed448"]
 
 tests = ["hex", "rand_core/getrandom", "dkg-dealer", "dkg-recovery"]
+
+default = ["std"]

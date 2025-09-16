@@ -1,36 +1,31 @@
+#[allow(unused_imports)]
+use std_shims::prelude::*;
 use std_shims::{
-  vec::Vec,
   collections::HashMap,
-  io::{self, Write},
+  io::{self, Read, Write},
 };
-#[cfg(feature = "std")]
-use std::io::{Read, BufReader};
 
 use k256::{
   elliptic_curve::sec1::{Tag, ToEncodedPoint},
   Scalar, ProjectivePoint,
 };
 
-#[cfg(feature = "std")]
 use frost::{
   curve::{WrappedGroup, GroupIo, Secp256k1},
   ThresholdKeys,
 };
 
 use bitcoin::{
-  consensus::encode::serialize, key::TweakedPublicKey, OutPoint, ScriptBuf, TxOut, Transaction,
-  Block,
+  hashes::Hash,
+  key::TweakedPublicKey,
+  TapTweakHash,
+  consensus::encode::{Decodable, serialize},
+  OutPoint, ScriptBuf, TxOut, Transaction, Block,
 };
-#[cfg(feature = "std")]
-use bitcoin::{hashes::Hash, consensus::encode::Decodable, TapTweakHash};
 
-use crate::crypto::x_only;
-#[cfg(feature = "std")]
-use crate::crypto::needs_negation;
+use crate::crypto::{x_only, needs_negation};
 
-#[cfg(feature = "std")]
 mod send;
-#[cfg(feature = "std")]
 pub use send::*;
 
 /// Tweak keys to ensure they're usable with Bitcoin's Taproot upgrade.
@@ -42,7 +37,6 @@ pub use send::*;
 /// After adding an unspendable script path, the key is negated if odd.
 ///
 /// This has a neligible probability of returning keys whose group key is the point at infinity.
-#[cfg(feature = "std")]
 pub fn tweak_keys(keys: ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
   // Adds the unspendable script path per
   // https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki#cite_note-23
@@ -118,18 +112,23 @@ impl ReceivedOutput {
   }
 
   /// Read a ReceivedOutput from a generic satisfying Read.
-  #[cfg(feature = "std")]
   pub fn read<R: Read>(r: &mut R) -> io::Result<ReceivedOutput> {
     let offset = Secp256k1::read_F(r)?;
-    let output;
-    let outpoint;
-    {
-      let mut buf_r = BufReader::with_capacity(0, r);
-      output =
-        TxOut::consensus_decode(&mut buf_r).map_err(|_| io::Error::other("invalid TxOut"))?;
-      outpoint =
-        OutPoint::consensus_decode(&mut buf_r).map_err(|_| io::Error::other("invalid OutPoint"))?;
+
+    struct BitcoinRead<R: Read>(R);
+    impl<R: Read> bitcoin::io::Read for BitcoinRead<R> {
+      fn read(&mut self, buf: &mut [u8]) -> bitcoin::io::Result<usize> {
+        self
+          .0
+          .read(buf)
+          .map_err(|e| bitcoin::io::Error::new(bitcoin::io::ErrorKind::Other, e.to_string()))
+      }
     }
+    let mut r = BitcoinRead(r);
+
+    let output = TxOut::consensus_decode(&mut r).map_err(|_| io::Error::other("invalid TxOut"))?;
+    let outpoint =
+      OutPoint::consensus_decode(&mut r).map_err(|_| io::Error::other("invalid OutPoint"))?;
     Ok(ReceivedOutput { offset, output, outpoint })
   }
 
