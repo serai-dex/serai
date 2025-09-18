@@ -129,7 +129,7 @@ impl Test {
       .spawn();
 
     let provider = Arc::new(RootProvider::new(
-      ClientBuilder::default().transport(SimpleRequest::new(anvil.endpoint()), true),
+      ClientBuilder::default().transport(SimpleRequest::new(anvil.endpoint()).unwrap(), true),
     ));
     let chain_id = U256::from(provider.get_chain_id().await.unwrap());
 

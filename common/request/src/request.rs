@@ -42,7 +42,8 @@ impl Request {
     formatted.zeroize();
     self.request.headers_mut().insert(
       hyper::header::AUTHORIZATION,
-      HeaderValue::from_str(&format!("Basic {encoded}")).unwrap(),
+      HeaderValue::from_str(&format!("Basic {encoded}"))
+        .expect("couldn't form header from base64-encoded string"),
     );
     encoded.zeroize();
   }

@@ -36,7 +36,7 @@ async fn setup_test() -> (AnvilInstance, Arc<RootProvider>, Address) {
   let anvil = Anvil::new().spawn();
 
   let provider = Arc::new(RootProvider::new(
-    ClientBuilder::default().transport(SimpleRequest::new(anvil.endpoint()), true),
+    ClientBuilder::default().transport(SimpleRequest::new(anvil.endpoint()).unwrap(), true),
   ));
 
   let mut address = [0; 20];

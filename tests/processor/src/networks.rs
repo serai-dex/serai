@@ -165,7 +165,7 @@ impl Wallet {
           ethereum_serai::crypto::address(&(<Secp256k1 as WrappedGroup>::generator() * key));
 
         let provider = RootProvider::<_, Ethereum>::new(
-          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()).unwrap(), true),
         );
 
         provider
@@ -319,7 +319,7 @@ impl Wallet {
         let one_eth = eighteen_decimals;
 
         let provider = Arc::new(RootProvider::<_, Ethereum>::new(
-          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()).unwrap(), true),
         ));
 
         let to_as_key = PublicKey::new(

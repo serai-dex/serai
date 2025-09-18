@@ -21,7 +21,7 @@ async fn test_deployer() {
     let anvil = Anvil::new().arg("--hardfork").arg(network).spawn();
 
     let provider = Arc::new(RootProvider::new(
-      ClientBuilder::default().transport(SimpleRequest::new(anvil.endpoint()), true),
+      ClientBuilder::default().transport(SimpleRequest::new(anvil.endpoint()).unwrap(), true),
     ));
 
     // Deploy the Deployer
