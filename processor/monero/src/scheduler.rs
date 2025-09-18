@@ -7,7 +7,7 @@ use rand_chacha::ChaCha20Rng;
 use ciphersuite::*;
 use dalek_ff_group::Ed25519;
 
-use monero_wallet::rpc::{FeeRate, RpcError};
+use monero_wallet::interface::prelude::*;
 
 use serai_client::{
   primitives::{coin::ExternalCoin, balance::Amount},
@@ -55,7 +55,7 @@ async fn signable_transaction(
   inputs: Vec<OutputFor<Rpc>>,
   payments: Vec<Payment<AddressFor<Rpc>>>,
   change: Option<KeyFor<Rpc>>,
-) -> Result<Result<(SignableTransaction, MSignableTransaction), SendError>, RpcError> {
+) -> Result<Result<(SignableTransaction, MSignableTransaction), SendError>, TransactionsError> {
   assert!(inputs.len() < <Planner as TransactionPlanner<Rpc, ()>>::MAX_INPUTS);
   assert!(
     (payments.len() + usize::from(u8::from(change.is_some()))) <
@@ -148,7 +148,7 @@ async fn signable_transaction(
 #[derive(Clone)]
 pub(crate) struct Planner(pub(crate) Rpc);
 impl TransactionPlanner<Rpc, ()> for Planner {
-  type EphemeralError = RpcError;
+  type EphemeralError = TransactionsError;
 
   type SignableTransaction = SignableTransaction;
 
@@ -221,8 +221,9 @@ impl TransactionPlanner<Rpc, ()> for Planner {
     payments: Vec<Payment<AddressFor<Rpc>>>,
     change: Option<KeyFor<Rpc>>,
   ) -> impl Send
-       + Future<Output = Result<PlannedTransaction<Rpc, Self::SignableTransaction, ()>, RpcError>>
-  {
+       + Future<
+    Output = Result<PlannedTransaction<Rpc, Self::SignableTransaction, ()>, TransactionsError>,
+  > {
     let singular_spent_output = (inputs.len() == 1).then(|| inputs[0].id());
 
     async move {

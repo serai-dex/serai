@@ -165,7 +165,7 @@ overflow-checks = true
 [patch.crates-io]
 # Dependencies from monero-oxide which originate from within our own tree
 std-shims = { path = "patches/std-shims" }
-simple-request = { path = "patches/simple-request" }
+simple-request = { path = "common/request" }
 multiexp = { path = "crypto/multiexp" }
 flexible-transcript = { path = "crypto/transcript" }
 ciphersuite = { path = "patches/ciphersuite" }

@@ -1379,7 +1379,7 @@ dependencies = [
  "serde",
  "serde_json",
  "simple-request",
- "std-shims",
+ "std-shims 0.1.5",
  "subtle",
  "thiserror 2.0.16",
  "tokio",
@@ -1795,7 +1795,7 @@ dependencies = [
  "ff-group-tests",
  "group",
  "hex",
- "std-shims",
+ "std-shims 0.1.5",
  "subtle",
  "zeroize",
 ]
@@ -1806,7 +1806,7 @@ version = "0.4.99"
 dependencies = [
  "ciphersuite 0.4.2",
  "dalek-ff-group",
- "std-shims",
+ "std-shims 0.1.5",
  "zeroize",
 ]
 
@@ -2676,7 +2676,7 @@ version = "0.6.1"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "std-shims",
+ "std-shims 0.1.5",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -2688,7 +2688,7 @@ dependencies = [
  "ciphersuite 0.4.2",
  "dkg",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.5",
  "zeroize",
 ]
 
@@ -2714,7 +2714,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "secq256k1",
- "std-shims",
+ "std-shims 0.1.5",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -2729,7 +2729,7 @@ dependencies = [
  "dkg-recovery",
  "multiexp",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.5",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -2800,7 +2800,7 @@ dependencies = [
  "ff",
  "group",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.99",
  "subtle",
  "zeroize",
 ]
@@ -2913,7 +2913,7 @@ dependencies = [
  "prime-field",
  "rand_core 0.6.4",
  "short-weierstrass",
- "std-shims",
+ "std-shims 0.1.5",
  "typenum",
  "zeroize",
 ]
@@ -3371,7 +3371,7 @@ dependencies = [
  "rand_core 0.6.4",
  "schnorr-signatures",
  "schnorrkel",
- "std-shims",
+ "std-shims 0.1.5",
  "zeroize",
 ]
 
@@ -3547,7 +3547,7 @@ dependencies = [
  "flexible-transcript",
  "multiexp",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
@@ -3558,7 +3558,7 @@ source = "git+https://github.com/monero-oxide/monero-oxide?rev=dc1b3dbe436aae61e
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs",
- "std-shims",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
@@ -3570,7 +3570,7 @@ dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs-circuit-abstraction",
  "generic-array 1.2.0",
- "std-shims",
+ "std-shims 0.1.99",
 ]
 
 [[package]]
@@ -4051,6 +4051,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
+ "webpki-roots 1.0.2",
 ]
 
 [[package]]
@@ -4271,7 +4272,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4b0f83760fb341a774ed326568e19f5a863af4a952def8c39f9ab92fd95b88e5"
 dependencies = [
  "equivalent",
- "hashbrown 0.15.5",
+ "hashbrown 0.16.0",
  "serde",
  "serde_core",
 ]
@@ -5431,7 +5432,7 @@ dependencies = [
  "schnorr-signatures",
  "serde_json",
  "sha2 0.10.9",
- "std-shims",
+ "std-shims 0.1.5",
  "subtle",
  "thiserror 2.0.16",
  "zeroize",
@@ -5459,7 +5460,7 @@ dependencies = [
 [[package]]
 name = "monero-address"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "curve25519-dalek",
  "monero-base58",
@@ -5471,36 +5472,36 @@ dependencies = [
 [[package]]
 name = "monero-base58"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "monero-primitives",
- "std-shims",
+ "std-shims 0.1.99",
 ]
 
 [[package]]
 name = "monero-borromean"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
  "monero-io",
  "monero-primitives",
- "std-shims",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
 [[package]]
 name = "monero-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
  "monero-io",
  "monero-primitives",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.99",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -5508,7 +5509,7 @@ dependencies = [
 [[package]]
 name = "monero-clsag"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "curve25519-dalek",
  "dalek-ff-group",
@@ -5520,16 +5521,31 @@ dependencies = [
  "monero-primitives",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.99",
  "subtle",
  "thiserror 2.0.16",
  "zeroize",
 ]
 
 [[package]]
+name = "monero-daemon-rpc"
+version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
+dependencies = [
+ "curve25519-dalek",
+ "hex",
+ "monero-address",
+ "monero-interface",
+ "monero-oxide",
+ "serde",
+ "serde_json",
+ "std-shims 0.1.99",
+]
+
+[[package]]
 name = "monero-generators"
 version = "0.4.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "crypto-bigint 0.5.5",
  "curve25519-dalek",
@@ -5537,30 +5553,43 @@ dependencies = [
  "group",
  "monero-io",
  "sha3 0.10.8",
- "std-shims",
+ "std-shims 0.1.99",
  "subtle",
+]
+
+[[package]]
+name = "monero-interface"
+version = "0.1.0"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
+dependencies = [
+ "curve25519-dalek",
+ "hex",
+ "monero-oxide",
+ "std-shims 0.1.99",
+ "thiserror 2.0.16",
+ "zeroize",
 ]
 
 [[package]]
 name = "monero-io"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "curve25519-dalek",
- "std-shims",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
 [[package]]
 name = "monero-mlsag"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
  "monero-io",
  "monero-primitives",
- "std-shims",
+ "std-shims 0.1.99",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -5568,7 +5597,7 @@ dependencies = [
 [[package]]
 name = "monero-oxide"
 version = "0.1.4-alpha"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "curve25519-dalek",
  "hex-literal",
@@ -5579,47 +5608,31 @@ dependencies = [
  "monero-io",
  "monero-mlsag",
  "monero-primitives",
- "std-shims",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
 [[package]]
 name = "monero-primitives"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
  "monero-io",
  "sha3 0.10.8",
- "std-shims",
- "zeroize",
-]
-
-[[package]]
-name = "monero-rpc"
-version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
-dependencies = [
- "curve25519-dalek",
- "hex",
- "monero-address",
- "monero-oxide",
- "serde",
- "serde_json",
- "std-shims",
- "thiserror 2.0.16",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
 [[package]]
 name = "monero-simple-request-rpc"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "digest_auth",
  "hex",
- "monero-rpc",
+ "monero-daemon-rpc",
  "simple-request",
  "tokio",
  "zeroize",
@@ -5628,7 +5641,7 @@ dependencies = [
 [[package]]
 name = "monero-wallet"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c#f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c"
 dependencies = [
  "curve25519-dalek",
  "flexible-transcript",
@@ -5636,13 +5649,13 @@ dependencies = [
  "modular-frost",
  "monero-address",
  "monero-clsag",
+ "monero-interface",
  "monero-oxide",
- "monero-rpc",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "rand_distr",
- "std-shims",
+ "std-shims 0.1.99",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -8620,7 +8633,7 @@ dependencies = [
  "multiexp",
  "rand_core 0.6.4",
  "sha2 0.10.9",
- "std-shims",
+ "std-shims 0.1.5",
  "zeroize",
 ]
 
@@ -8743,7 +8756,7 @@ dependencies = [
  "rand_core 0.6.4",
  "sha2 0.11.0-rc.2",
  "short-weierstrass",
- "std-shims",
+ "std-shims 0.1.5",
 ]
 
 [[package]]
@@ -9297,7 +9310,7 @@ dependencies = [
  "schnorr-signatures",
  "secq256k1",
  "short-weierstrass",
- "std-shims",
+ "std-shims 0.1.5",
 ]
 
 [[package]]
@@ -10000,7 +10013,7 @@ dependencies = [
 
 [[package]]
 name = "simple-request"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "base64ct",
  "futures-util",
@@ -10717,6 +10730,13 @@ dependencies = [
  "hashbrown 0.16.0",
  "rustversion",
  "spin",
+]
+
+[[package]]
+name = "std-shims"
+version = "0.1.99"
+dependencies = [
+ "std-shims 0.1.5",
 ]
 
 [[package]]

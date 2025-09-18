@@ -4,7 +4,8 @@ use ciphersuite::*;
 use dalek_ff_group::Ed25519;
 
 use monero_wallet::{
-  block::Block as MBlock, rpc::ScannableBlock as MScannableBlock, ScanError, GuaranteedScanner,
+  block::Block as MBlock, interface::ScannableBlock as MScannableBlock, ScanError,
+  GuaranteedScanner,
 };
 
 use serai_client::networks::monero::Address;
