@@ -1,7 +1,6 @@
 use core::future::Future;
 
-use monero_wallet::rpc::{RpcError, Rpc as RpcTrait};
-use monero_simple_request_rpc::SimpleRequestRpc;
+use monero_simple_request_rpc::{prelude::*, SimpleRequestTransport};
 
 use serai_client::primitives::{ExternalNetworkId, ExternalCoin, Amount};
 
@@ -15,7 +14,7 @@ use crate::{
 
 #[derive(Clone)]
 pub(crate) struct Rpc {
-  pub(crate) rpc: SimpleRequestRpc,
+  pub(crate) rpc: MoneroDaemon<SimpleRequestTransport>,
 }
 
 impl ScannerFeed for Rpc {
@@ -31,21 +30,16 @@ impl ScannerFeed for Rpc {
 
   type Block = Block;
 
-  type EphemeralError = RpcError;
+  type EphemeralError = InterfaceError;
 
   fn latest_finalized_block_number(
     &self,
   ) -> impl Send + Future<Output = Result<u64, Self::EphemeralError>> {
     async move {
       Ok(
-        self
-          .rpc
-          .get_height()
-          .await?
-          .checked_sub(1)
-          .expect("connected to an invalid Monero RPC")
-          .try_into()
-          .unwrap(),
+        u64::try_from(self.rpc.latest_block_number().await?)
+          .unwrap()
+          .saturating_sub(Self::CONFIRMATIONS - 1),
       )
     }
   }
@@ -64,11 +58,11 @@ impl ScannerFeed for Rpc {
       }
 
       // Fetch all the timestamps within the window
-      let block_for_time_of = self.rpc.get_block_by_number(number.try_into().unwrap()).await?;
+      let block_for_time_of = self.rpc.block_by_number(number.try_into().unwrap()).await?;
       let mut timestamps = vec![block_for_time_of.header.timestamp];
       let mut parent = block_for_time_of.header.previous;
       for _ in 1 .. BLOCKCHAIN_TIMESTAMP_CHECK_WINDOW {
-        let parent_block = self.rpc.get_block(parent).await?;
+        let parent_block = self.rpc.block(parent).await?;
         timestamps.push(parent_block.header.timestamp);
         parent = parent_block.header.previous;
       }
@@ -94,7 +88,7 @@ impl ScannerFeed for Rpc {
   ) -> impl Send
        + Future<Output = Result<<Self::Block as primitives::Block>::Header, Self::EphemeralError>>
   {
-    async move { Ok(BlockHeader(self.rpc.get_block_by_number(number.try_into().unwrap()).await?)) }
+    async move { Ok(BlockHeader(self.rpc.block_by_number(number.try_into().unwrap()).await?)) }
   }
 
   #[rustfmt::skip] // It wants to improperly format the `async move` to a single line
@@ -103,7 +97,7 @@ impl ScannerFeed for Rpc {
     number: u64,
   ) -> impl Send + Future<Output = Result<Self::Block, Self::EphemeralError>> {
     async move {
-      Ok(Block(self.rpc.get_scannable_block_by_number(number.try_into().unwrap()).await?))
+      Ok(Block(self.rpc.scannable_block_by_number(number.try_into().unwrap()).await?))
     }
   }
 
@@ -128,7 +122,7 @@ impl ScannerFeed for Rpc {
 }
 
 impl TransactionPublisher<Transaction> for Rpc {
-  type EphemeralError = RpcError;
+  type EphemeralError = PublishTransactionError;
 
   fn publish(
     &self,

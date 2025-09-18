@@ -43,7 +43,7 @@ bitcoin = { version = "0.32", optional = true }
 
 ciphersuite = { path = "../../crypto/ciphersuite", optional = true }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
-monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "2c847f71079a105456376f9957cee86c4b6a9eb8", version = "0.1.0", default-features = false, features = ["std"], optional = true }
+monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c", version = "0.1.0", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 rand_core = "0.6"

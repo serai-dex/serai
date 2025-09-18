@@ -6,7 +6,7 @@
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
   zalloc::ZeroizingAlloc(std::alloc::System);
 
-use monero_simple_request_rpc::SimpleRequestRpc;
+use monero_simple_request_rpc::SimpleRequestTransport;
 
 mod primitives;
 pub(crate) use crate::primitives::*;
@@ -23,7 +23,7 @@ async fn main() {
   let db = bin::init();
   let feed = Rpc {
     rpc: loop {
-      match SimpleRequestRpc::new(bin::url()).await {
+      match SimpleRequestTransport::new(bin::url()).await {
         Ok(rpc) => break rpc,
         Err(e) => {
           log::error!("couldn't connect to the Monero node: {e:?}");
