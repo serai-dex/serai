@@ -52,7 +52,7 @@ jobs:
           key: rust-advisory-db
 
       - name: Install cargo deny
-        run: cargo +1.89 install cargo-deny --version =0.18.3
+        run: cargo +1.90 install cargo-deny --version =0.18.4
 
       - name: Run cargo deny
         run: cargo deny -L error --all-features check --hide-inclusion-graph
@@ -88,8 +88,8 @@ jobs:
       - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
       - name: Verify all dependencies are in use
         run: |
-          cargo +1.89 install cargo-machete --version =0.8.0
-          cargo +1.89 machete
+          cargo +1.90 install cargo-machete --version =0.9.1
+          cargo +1.90 machete
 
   msrv:
     runs-on: ubuntu-latest
@@ -98,7 +98,7 @@ jobs:
       - name: Verify claimed `rust-version`
         shell: bash
         run: |
-          cargo +1.89 install cargo-msrv --version =0.18.4
+          cargo +1.90 install cargo-msrv --version =0.18.4
 
           function check_msrv {
             # We `cd` into the directory passed as the first argument, but will return to the
@@ -146,12 +146,12 @@ jobs:
             cargo_toml_lines=$(cat ./Cargo.toml | wc -l)
             # Keep all lines after the start of the array, then keep all lines before the next "]"
             members=$(cat Cargo.toml | grep "members\ \=\ \[" -m1 -A$cargo_toml_lines | grep "]" -m1 -B$cargo_toml_lines)
-            # Prune `members = [` to `[` by replacing the first line with just `[`
-            members=$(echo "$members" | sed "1s/.*/\[/")
 
             # Parse out any comments, whitespace, including comments post-fixed on the same line as an entry
             # We accomplish the latter by pruning all characters after the entry's ","
             members=$(echo "$members" | grep -Ev "^[[:space:]]*(#|$)" | awk -F',' '{print $1","}')
+            # Replace the first line, which was "members = [" and is now "members = [,", with "["
+            members=$(echo "$members" | sed "1s/.*/\[/")
             # Correct the last line, which was malleated to "],"
             members=$(echo "$members" | sed "$(echo "$members" | wc -l)s/\]\,/\]/")
 

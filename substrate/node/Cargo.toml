@@ -78,7 +78,7 @@ serai-env = { path = "../../common/env" }
 
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["std", "hazmat"] }
-monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7f37cc8f770858aa1739e0f56dbe447db86f4ba6", default-features = false, features = ["std"] }
+monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "2c847f71079a105456376f9957cee86c4b6a9eb8", default-features = false, features = ["std"] }
 
 [features]
 default = []

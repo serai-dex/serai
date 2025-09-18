@@ -34,10 +34,10 @@ generic-array = { version = "1", default-features = false, features = ["alloc"] 
 blake2 = { version = "0.11.0-rc.2", default-features = false }
 rand_chacha = { version = "0.3", default-features = false }
 
-generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", default-features = false }
-ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", default-features = false }
-generalized-bulletproofs-circuit-abstraction = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", default-features = false }
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", default-features = false }
+generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "dc1b3dbe436aae61ec363505052d4715d38ce1df", default-features = false }
+ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "dc1b3dbe436aae61ec363505052d4715d38ce1df", default-features = false }
+generalized-bulletproofs-circuit-abstraction = { git = "https://github.com/monero-oxide/monero-oxide", rev = "dc1b3dbe436aae61ec363505052d4715d38ce1df", default-features = false }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "dc1b3dbe436aae61ec363505052d4715d38ce1df", default-features = false }
 
 dkg = { path = "..", default-features = false }
 
@@ -52,7 +52,7 @@ rand = { version = "0.8", default-features = false, features = ["std"] }
 ciphersuite = { path = "../../ciphersuite", default-features = false, features = ["std"]  }
 embedwards25519 = { path = "../../embedwards25519", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../../dalek-ff-group", default-features = false, features = ["std"] }
-generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "7216a2e84c7671c167c3d81eafe0d2b1f418f102", features = ["tests"] }
+generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "dc1b3dbe436aae61ec363505052d4715d38ce1df", features = ["tests"] }
 dkg-recovery = { path = "../recovery" }
 
 [features]

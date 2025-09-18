@@ -9,8 +9,6 @@ members = [
   # This re-exports the in-tree `ciphersuite` _without_ changes breaking to monero-oxide
   # Not included in workspace to prevent having two crates with the same name (an error)
   # "patches/ciphersuite",
-  # Same for `dalek-ff-group`
-  # "patches/dalek-ff-group",
 
   "common/std-shims",
   "common/zalloc",
@@ -176,7 +174,7 @@ simple-request = { path = "common/request" }
 multiexp = { path = "crypto/multiexp" }
 flexible-transcript = { path = "crypto/transcript" }
 ciphersuite = { path = "patches/ciphersuite" }
-dalek-ff-group = { path = "patches/dalek-ff-group" }
+dalek-ff-group = { path = "crypto/dalek-ff-group" }
 minimal-ed448 = { path = "crypto/ed448" }
 modular-frost = { path = "crypto/frost" }
 

@@ -29,9 +29,6 @@ mod delay;
 pub use delay::BROADCAST_FREQUENCY;
 use delay::LatestCosignedBlockNumber;
 
-/// The schnorrkel context to used when signing a cosign.
-pub const COSIGN_CONTEXT: &[u8] = b"/serai/coordinator/cosign";
-
 /// A 'global session', defined as all validator sets used for cosigning at a given moment.
 ///
 /// We evaluate cosign faults within a global session. This ensures even if cosigners cosign

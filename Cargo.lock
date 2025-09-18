@@ -343,7 +343,7 @@ dependencies = [
  "derive_more 2.0.1",
  "foldhash 0.1.5",
  "hashbrown 0.15.5",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "itoa",
  "k256",
  "keccak-asm",
@@ -571,7 +571,7 @@ dependencies = [
  "alloy-sol-macro-input",
  "const-hex",
  "heck 0.5.0",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "proc-macro-error2",
  "proc-macro2",
  "quote",
@@ -1457,7 +1457,7 @@ version = "0.11.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1edac47499deef695d9431bf241c75ea29f4cf3dcb78d39e19b31515e4ad3b08"
 dependencies = [
- "digest 0.11.0-rc.1",
+ "digest 0.11.0-rc.2",
 ]
 
 [[package]]
@@ -1718,9 +1718,9 @@ dependencies = [
 
 [[package]]
 name = "cfg-expr"
-version = "0.20.2"
+version = "0.20.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8d458d63f0f0f482c8da9b7c8b76c21bd885a02056cc94c6404d861ca2b8206"
+checksum = "1a2c5f3bf25ec225351aa1c8e230d04d880d3bd89dea133537dafad4ae291e5c"
 dependencies = [
  "smallvec",
 ]
@@ -1790,7 +1790,7 @@ dependencies = [
 name = "ciphersuite"
 version = "0.4.2"
 dependencies = [
- "digest 0.11.0-rc.1",
+ "digest 0.11.0-rc.2",
  "ff",
  "ff-group-tests",
  "group",
@@ -1805,7 +1805,7 @@ name = "ciphersuite"
 version = "0.4.99"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "std-shims",
  "zeroize",
 ]
@@ -2325,9 +2325,9 @@ dependencies = [
 
 [[package]]
 name = "cxx"
-version = "1.0.184"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be4a0beb369d20d0de6aa7084ee523e4c9a31d7d8c61ba357b119bb574d7f368"
+checksum = "2f81de88da10862f22b5b3a60f18f6f42bbe7cb8faa24845dd7b1e4e22190e77"
 dependencies = [
  "cc",
  "cxx-build",
@@ -2340,13 +2340,13 @@ dependencies = [
 
 [[package]]
 name = "cxx-build"
-version = "1.0.184"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27d955b93e56a8e45cbc34df0ae920d8b5ad01541a4571222c78527c00e1a40a"
+checksum = "5edd58bf75c3fdfc80d79806403af626570662f7b6cc782a7fabe156166bd6d6"
 dependencies = [
  "cc",
  "codespan-reporting",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "proc-macro2",
  "quote",
  "scratch",
@@ -2355,13 +2355,13 @@ dependencies = [
 
 [[package]]
 name = "cxxbridge-cmd"
-version = "1.0.184"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "052f6c468d9dabdc2b8b228bcb2d7843b2bea0f3fb9c4e2c6ba5852574ec0150"
+checksum = "fd46bf2b541a4e0c2d5abba76607379ee05d68e714868e3cb406dc8d591ce2d2"
 dependencies = [
  "clap",
  "codespan-reporting",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -2369,17 +2369,17 @@ dependencies = [
 
 [[package]]
 name = "cxxbridge-flags"
-version = "1.0.184"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fd145fa180986cb8002c63217d03b2c782fdcd5fa323adcd1f62d2d6ece6144"
+checksum = "2c79b68f6a3a8f809d39b38ae8af61305a6113819b19b262643b9c21353b92d9"
 
 [[package]]
 name = "cxxbridge-macro"
-version = "1.0.184"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02ac4a3bc4484a2daa0a8421c9588bd26522be9682a2fe02c7087bc4e8bc3c60"
+checksum = "862b7fdb048ff9ef0779a0d0a03affd09746c4c875543746b640756be9cff2af"
 dependencies = [
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "proc-macro2",
  "quote",
  "rustversion",
@@ -2400,16 +2400,6 @@ dependencies = [
  "sha2 0.11.0-rc.2",
  "subtle",
  "zeroize",
-]
-
-[[package]]
-name = "dalek-ff-group"
-version = "0.5.99"
-dependencies = [
- "crypto-bigint 0.5.5",
- "crypto-bigint 0.6.1",
- "dalek-ff-group 0.5.0",
- "prime-field",
 ]
 
 [[package]]
@@ -2484,7 +2474,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.106",
 ]
 
 [[package]]
@@ -2618,9 +2608,9 @@ dependencies = [
 
 [[package]]
 name = "digest"
-version = "0.11.0-rc.1"
+version = "0.11.0-rc.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a4aae35a0fcbe22ff1be50fe96df72002d5a4a6fb4aae9193cf2da0daa36da2"
+checksum = "6749b668519cd7149ee3d11286a442a8a8bdc3a9d529605f579777bfccc5a4bc"
 dependencies = [
  "block-buffer 0.11.0-rc.5",
  "crypto-common 0.2.0-rc.4",
@@ -2709,7 +2699,7 @@ dependencies = [
  "blake2 0.11.0-rc.2",
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "dkg",
  "dkg-recovery",
  "ec-divisors",
@@ -2734,7 +2724,7 @@ name = "dkg-musig"
 version = "0.6.0"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "dkg",
  "dkg-recovery",
  "multiexp",
@@ -2804,9 +2794,9 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 [[package]]
 name = "ec-divisors"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7216a2e84c7671c167c3d81eafe0d2b1f418f102#7216a2e84c7671c167c3d81eafe0d2b1f418f102"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=dc1b3dbe436aae61ec363505052d4715d38ce1df#dc1b3dbe436aae61ec363505052d4715d38ce1df"
 dependencies = [
- "dalek-ff-group 0.5.99",
+ "dalek-ff-group",
  "ff",
  "group",
  "rand_core 0.6.4",
@@ -2995,7 +2985,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
@@ -3173,7 +3163,7 @@ name = "flexible-transcript"
 version = "0.3.4"
 dependencies = [
  "blake2 0.11.0-rc.2",
- "digest 0.11.0-rc.1",
+ "digest 0.11.0-rc.2",
  "merlin",
  "sha2 0.11.0-rc.2",
  "zeroize",
@@ -3549,7 +3539,7 @@ checksum = "42012b0f064e01aa58b545fe3727f90f7dd4020f4a3ea735b50344965f5a57e9"
 [[package]]
 name = "generalized-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7216a2e84c7671c167c3d81eafe0d2b1f418f102#7216a2e84c7671c167c3d81eafe0d2b1f418f102"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=dc1b3dbe436aae61ec363505052d4715d38ce1df#dc1b3dbe436aae61ec363505052d4715d38ce1df"
 dependencies = [
  "blake2 0.10.6",
  "ciphersuite 0.4.99",
@@ -3564,7 +3554,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-circuit-abstraction"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7216a2e84c7671c167c3d81eafe0d2b1f418f102#7216a2e84c7671c167c3d81eafe0d2b1f418f102"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=dc1b3dbe436aae61ec363505052d4715d38ce1df#dc1b3dbe436aae61ec363505052d4715d38ce1df"
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs",
@@ -3575,7 +3565,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-ec-gadgets"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7216a2e84c7671c167c3d81eafe0d2b1f418f102#7216a2e84c7671c167c3d81eafe0d2b1f418f102"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=dc1b3dbe436aae61ec363505052d4715d38ce1df#dc1b3dbe436aae61ec363505052d4715d38ce1df"
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs-circuit-abstraction",
@@ -3677,7 +3667,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e629b9b98ef3dd8afe6ca2bd0f89306cec16d43d907889945bc5d6687f2f13c7"
 dependencies = [
  "fallible-iterator",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "stable_deref_trait",
 ]
 
@@ -3743,7 +3733,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "slab",
  "tokio",
  "tokio-util",
@@ -4078,7 +4068,7 @@ dependencies = [
  "hyper",
  "libc",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.0",
  "tokio",
  "tower-service",
  "tracing",
@@ -4276,9 +4266,9 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "2.11.3"
+version = "2.11.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92119844f513ffa41556430369ab02c295a3578af21cf945caa3e9e0c2481ac3"
+checksum = "4b0f83760fb341a774ed326568e19f5a863af4a952def8c39f9ab92fd95b88e5"
 dependencies = [
  "equivalent",
  "hashbrown 0.15.5",
@@ -4388,9 +4378,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.77"
+version = "0.3.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1cfaf33c695fc6e08064efbc1f72ec937429614f25eef83af942d0e227c3a28f"
+checksum = "852f13bec5eba4ba9afbeb93fd7c13fe56147f055939ae21c43a29a0ecb2702e"
 dependencies = [
  "once_cell",
  "wasm-bindgen",
@@ -5427,7 +5417,7 @@ version = "0.11.0"
 dependencies = [
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "dkg",
  "dkg-dealer",
  "dkg-recovery",
@@ -5469,7 +5459,7 @@ dependencies = [
 [[package]]
 name = "monero-address"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
  "monero-base58",
@@ -5481,7 +5471,7 @@ dependencies = [
 [[package]]
 name = "monero-base58"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "monero-primitives",
  "std-shims",
@@ -5490,7 +5480,7 @@ dependencies = [
 [[package]]
 name = "monero-borromean"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -5503,7 +5493,7 @@ dependencies = [
 [[package]]
 name = "monero-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -5518,10 +5508,10 @@ dependencies = [
 [[package]]
 name = "monero-clsag"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
- "dalek-ff-group 0.5.99",
+ "dalek-ff-group",
  "flexible-transcript",
  "group",
  "modular-frost",
@@ -5539,11 +5529,11 @@ dependencies = [
 [[package]]
 name = "monero-generators"
 version = "0.4.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "crypto-bigint 0.5.5",
  "curve25519-dalek",
- "dalek-ff-group 0.5.99",
+ "dalek-ff-group",
  "group",
  "monero-io",
  "sha3 0.10.8",
@@ -5554,7 +5544,7 @@ dependencies = [
 [[package]]
 name = "monero-io"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
  "std-shims",
@@ -5564,7 +5554,7 @@ dependencies = [
 [[package]]
 name = "monero-mlsag"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -5578,7 +5568,7 @@ dependencies = [
 [[package]]
 name = "monero-oxide"
 version = "0.1.4-alpha"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
  "hex-literal",
@@ -5596,7 +5586,7 @@ dependencies = [
 [[package]]
 name = "monero-primitives"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
  "monero-generators",
@@ -5609,7 +5599,7 @@ dependencies = [
 [[package]]
 name = "monero-rpc"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
  "hex",
@@ -5625,7 +5615,7 @@ dependencies = [
 [[package]]
 name = "monero-simple-request-rpc"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "digest_auth",
  "hex",
@@ -5638,10 +5628,9 @@ dependencies = [
 [[package]]
 name = "monero-wallet"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=7f37cc8f770858aa1739e0f56dbe447db86f4ba6#7f37cc8f770858aa1739e0f56dbe447db86f4ba6"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
- "dalek-ff-group 0.5.99",
  "flexible-transcript",
  "hex",
  "modular-frost",
@@ -5710,7 +5699,7 @@ dependencies = [
 name = "multiexp"
 version = "0.4.2"
 dependencies = [
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "ff",
  "group",
  "k256",
@@ -6035,9 +6024,9 @@ dependencies = [
 
 [[package]]
 name = "nybbles"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0418987d1aaed324d95b4beffc93635e19be965ed5d63ec07a35980fe3b71a4"
+checksum = "bfa11e84403164a9f12982ab728f3c67c6fd4ab5b5f0254ffc217bdbd3b28ab0"
 dependencies = [
  "alloy-rlp",
  "cfg-if",
@@ -6064,7 +6053,7 @@ checksum = "ff76201f031d8863c38aa7f905eca4f53abbfa15f609db4277d44cd8938f33fe"
 dependencies = [
  "crc32fast",
  "hashbrown 0.15.5",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "memchr",
 ]
 
@@ -6353,7 +6342,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3672b37090dbd86368a4145bc067582552b29c27377cad4e0a306c97f9bd7772"
 dependencies = [
  "fixedbitset",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
 ]
 
 [[package]]
@@ -6756,8 +6745,8 @@ version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac6c3320f9abac597dcbc668774ef006702672474aad53c6d596b62e487b40b1"
 dependencies = [
- "heck 0.4.1",
- "itertools 0.13.0",
+ "heck 0.5.0",
+ "itertools 0.14.0",
  "log",
  "multimap",
  "once_cell",
@@ -6777,7 +6766,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9120690fafc389a67ba3803df527d0ec9cbbc9cc45e4cc20b332996dfb672425"
 dependencies = [
  "anyhow",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.106",
@@ -6872,7 +6861,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.0",
  "thiserror 2.0.16",
  "tokio",
  "tracing",
@@ -6909,9 +6898,9 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.0",
  "tracing",
- "windows-sys 0.59.0",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7549,7 +7538,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
@@ -8521,7 +8510,7 @@ dependencies = [
  "async-trait",
  "futures",
  "futures-timer",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "itertools 0.14.0",
  "linked-hash-map",
  "parity-scale-codec",
@@ -8550,7 +8539,7 @@ source = "git+https://github.com/serai-dex/patch-polkadot-sdk?rev=d4624c561765c1
 dependencies = [
  "async-trait",
  "futures",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "log",
  "parity-scale-codec",
  "serde",
@@ -8624,8 +8613,8 @@ name = "schnorr-signatures"
 version = "0.5.2"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
- "digest 0.11.0-rc.1",
+ "dalek-ff-group",
+ "digest 0.11.0-rc.2",
  "flexible-transcript",
  "hex",
  "multiexp",
@@ -8870,7 +8859,7 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "dkg-musig",
  "dockertest",
  "frame-system",
@@ -8915,7 +8904,7 @@ dependencies = [
  "blake2 0.11.0-rc.2",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "dkg-musig",
  "env_logger",
  "frost-schnorrkel",
@@ -9002,7 +8991,7 @@ dependencies = [
  "blake2 0.11.0-rc.2",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "dkg",
  "log",
  "rand_core 0.6.4",
@@ -9024,7 +9013,6 @@ dependencies = [
  "blake2 0.11.0-rc.2",
  "borsh",
  "log",
- "schnorrkel",
  "serai-client",
  "serai-cosign-types",
  "serai-db",
@@ -9226,7 +9214,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "env_logger",
  "flexible-transcript",
  "hex",
@@ -9247,7 +9235,7 @@ name = "serai-message-queue-tests"
 version = "0.1.0"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "dockertest",
  "hex",
  "rand_core 0.6.4",
@@ -9264,7 +9252,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "dkg-evrf",
  "log",
  "modular-frost",
@@ -9293,7 +9281,7 @@ version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "dkg",
  "dkg-dealer",
  "dkg-evrf",
@@ -9321,7 +9309,7 @@ dependencies = [
  "ciphersuite-kp256",
  "clap",
  "curve25519-dalek",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "embedwards25519",
  "frame-benchmarking",
  "futures-util",
@@ -9368,7 +9356,7 @@ name = "serai-orchestrator"
 version = "0.0.1"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "embedwards25519",
  "flexible-transcript",
  "hex",
@@ -9388,7 +9376,7 @@ dependencies = [
  "bitvec",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "dkg-musig",
  "embedwards25519",
  "parity-scale-codec",
@@ -9785,7 +9773,7 @@ version = "1.0.145"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "402a6f66d8c709116cf22f558eab210f5a50187f702eb4d7e5ef38d9a7f1c79c"
 dependencies = [
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "itoa",
  "memchr",
  "ryu",
@@ -9835,7 +9823,7 @@ dependencies = [
  "chrono",
  "hex",
  "indexmap 1.9.3",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "serde",
  "serde_derive",
  "serde_json",
@@ -9918,7 +9906,7 @@ checksum = "d1e3878ab0f98e35b2df35fe53201d088299b41a6bb63e3e34dada2ac4abd924"
 dependencies = [
  "cfg-if",
  "cpufeatures",
- "digest 0.11.0-rc.1",
+ "digest 0.11.0-rc.2",
 ]
 
 [[package]]
@@ -9937,7 +9925,7 @@ version = "0.11.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2103ca0e6f4e9505eae906de5e5883e06fc3b2232fb5d6914890c7bbcb62f478"
 dependencies = [
- "digest 0.11.0-rc.1",
+ "digest 0.11.0-rc.2",
  "keccak 0.2.0-rc.0",
 ]
 
@@ -10949,7 +10937,7 @@ dependencies = [
  "getrandom 0.3.3",
  "once_cell",
  "rustix",
- "windows-sys 0.59.0",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]
@@ -11147,9 +11135,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-rustls"
-version = "0.26.2"
+version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e727b36a1a0e8b74c376ac2211e40c2c8af09fb4013c60d910495810f008e9b"
+checksum = "05f63835928ca123f1bef57abbcd23bb2ba0ac9ae1235f1e65bda0d06e7786bd"
 dependencies = [
  "rustls",
  "tokio",
@@ -11217,7 +11205,7 @@ version = "0.22.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a"
 dependencies = [
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "serde",
  "serde_spanned",
  "toml_datetime",
@@ -11378,7 +11366,7 @@ dependencies = [
  "blake2 0.11.0-rc.2",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group 0.5.0",
+ "dalek-ff-group",
  "flexible-transcript",
  "futures-channel",
  "futures-util",
@@ -11662,21 +11650,22 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.100"
+version = "0.2.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1edc8929d7499fc4e8f0be2262a241556cfc54a0bea223790e71446f2aab1ef5"
+checksum = "ab10a69fbd0a177f5f649ad4d8d3305499c42bab9aef2f7ff592d0ec8f833819"
 dependencies = [
  "cfg-if",
  "once_cell",
  "rustversion",
  "wasm-bindgen-macro",
+ "wasm-bindgen-shared",
 ]
 
 [[package]]
 name = "wasm-bindgen-backend"
-version = "0.2.100"
+version = "0.2.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f0a0651a5c2bc21487bde11ee802ccaf4c51935d0d3d42a6101f98161700bc6"
+checksum = "0bb702423545a6007bbc368fde243ba47ca275e549c8a28617f56f6ba53b1d1c"
 dependencies = [
  "bumpalo",
  "log",
@@ -11688,9 +11677,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.100"
+version = "0.2.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fe63fc6d09ed3792bd0897b314f53de8e16568c2b3f7982f468c0bf9bd0b407"
+checksum = "fc65f4f411d91494355917b605e1480033152658d71f722a90647f56a70c88a0"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -11698,9 +11687,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.100"
+version = "0.2.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ae87ea40c9f689fc23f209965b6fb8a99ad69aeeb0231408be24920604395de"
+checksum = "ffc003a991398a8ee604a401e194b6b3a39677b3173d6e74495eb51b82e99a32"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -11711,9 +11700,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.100"
+version = "0.2.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1a05d73b933a847d6cccdda8f838a22ff101ad9bf93e33684f39c1f5f0eece3d"
+checksum = "293c37f4efa430ca14db3721dfbe48d8c33308096bd44d80ebaa775ab71ba1cf"
 dependencies = [
  "unicode-ident",
 ]
@@ -11785,7 +11774,7 @@ checksum = "a9b1e81f3eb254cf7404a82cee6926a4a3ccc5aad80cc3d43608a070c67aa1d7"
 dependencies = [
  "bitflags 2.9.4",
  "hashbrown 0.15.5",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "semver 1.0.27",
  "serde",
 ]
@@ -11814,7 +11803,7 @@ dependencies = [
  "cc",
  "cfg-if",
  "hashbrown 0.15.5",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "libc",
  "log",
  "mach2",
@@ -11854,7 +11843,7 @@ dependencies = [
  "cranelift-bitset",
  "cranelift-entity",
  "gimli 0.32.3",
- "indexmap 2.11.3",
+ "indexmap 2.11.4",
  "log",
  "object 0.37.3",
  "postcard",
@@ -12016,9 +12005,9 @@ dependencies = [
 
 [[package]]
 name = "web-sys"
-version = "0.3.77"
+version = "0.3.80"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "33b6dd2ef9186f1f2072e409e99cd22a975331a6b3591b12c764e0e55c60d5d2"
+checksum = "fbe734895e869dc429d78c4b433f8d17d95f8d05317440b4fad5ab2d33e596dc"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -12090,7 +12079,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.0",
 ]
 
 [[package]]

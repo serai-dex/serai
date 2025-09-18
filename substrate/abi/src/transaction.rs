@@ -237,7 +237,9 @@ mod substrate {
   use scale::{Encode, Decode};
   use sp_runtime::{
     transaction_validity::*,
-    traits::{Verify, ExtrinsicLike, ExtrinsicCall, Dispatchable, ValidateUnsigned, Checkable, Applyable},
+    traits::{
+      Verify, ExtrinsicLike, ExtrinsicCall, Dispatchable, ValidateUnsigned, Checkable, Applyable,
+    },
     Weight,
   };
   #[rustfmt::skip]

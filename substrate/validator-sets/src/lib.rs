@@ -95,7 +95,9 @@ mod pallet {
   use super::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config + coins_pallet::Config<coins_pallet::CoinsInstance> {
+  pub trait Config:
+    frame_system::Config + coins_pallet::Config<coins_pallet::CoinsInstance>
+  {
     // type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
   }
 
@@ -846,7 +848,11 @@ mod pallet {
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
-      Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(validator, Self::account(), Balance { coin: Coin::Serai, amount })?;
+      Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(
+        validator,
+        Self::account(),
+        Balance { coin: Coin::Serai, amount },
+      )?;
       Abstractions::<T>::increase_allocation(network, validator, amount, false)
         .map_err(Error::<T>::AllocationError)?;
       Ok(())
@@ -860,7 +866,11 @@ mod pallet {
       let deallocation_timeline = Abstractions::<T>::decrease_allocation(network, account, amount)
         .map_err(Error::<T>::DeallocationError)?;
       if matches!(deallocation_timeline, DeallocationTimeline::Immediate) {
-        Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(Self::account(), account, Balance { coin: Coin::Serai, amount })?;
+        Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(
+          Self::account(),
+          account,
+          Balance { coin: Coin::Serai, amount },
+        )?;
       }
 
       Ok(())
@@ -876,7 +886,11 @@ mod pallet {
       let account = ensure_signed(origin)?;
       let amount = Abstractions::<T>::claim_delayed_deallocation(account, network, session)
         .map_err(Error::<T>::DeallocationError)?;
-      Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(Self::account(), account, Balance { coin: Coin::Serai, amount })?;
+      Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(
+        Self::account(),
+        account,
+        Balance { coin: Coin::Serai, amount },
+      )?;
       Ok(())
     }
   }

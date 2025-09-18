@@ -10,7 +10,10 @@ extern crate alloc;
 pub mod pallet {
   use sp_core::sr25519::Public;
 
-  use serai_abi::{primitives::{prelude::*, signals::*}, SubstrateBlock};
+  use serai_abi::{
+    primitives::{prelude::*, signals::*},
+    SubstrateBlock,
+  };
 
   use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
@@ -18,7 +21,9 @@ pub mod pallet {
   use validator_sets_pallet::{Config as VsConfig, Pallet as VsPallet};
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<AccountId = Public, Block = SubstrateBlock> + VsConfig {
+  pub trait Config:
+    frame_system::Config<AccountId = Public, Block = SubstrateBlock> + VsConfig
+  {
     /// How long a candidate retirement signal is valid for.
     ///
     /// This MUST be equal to the rate at which new sets are attempted.
@@ -297,8 +302,7 @@ pub mod pallet {
       retirement_signal: [u8; 32],
     ) -> DispatchResult {
       let validator = ensure_signed(origin)?;
-      let Some(registered_signal) = RegisteredRetirementSignals::<T>::get(retirement_signal)
-      else {
+      let Some(registered_signal) = RegisteredRetirementSignals::<T>::get(retirement_signal) else {
         return Err::<(), _>(Error::<T>::NonExistentRetirementSignal.into());
       };
       if SeraiAddress::from(validator) != registered_signal.registrant {
@@ -325,11 +329,7 @@ pub mod pallet {
     /// Favor a signal.
     #[pallet::call_index(2)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
-    pub fn favor(
-      origin: OriginFor<T>,
-      signal: Signal,
-      for_network: NetworkId,
-    ) -> DispatchResult {
+    pub fn favor(origin: OriginFor<T>, signal: Signal, for_network: NetworkId) -> DispatchResult {
       let validator = ensure_signed(origin)?;
 
       // Perform the relevant checks for this class of signal
@@ -347,7 +347,7 @@ pub mod pallet {
             process.
           */
           let Some(registered_signal) = RegisteredRetirementSignals::<T>::get(signal_id) else {
-            return Err::<(), _>(Error::<T>::NonExistentRetirementSignal.into())
+            return Err::<(), _>(Error::<T>::NonExistentRetirementSignal.into());
           };
 
           // Check the signal isn't out of date, and its tallies with it.
@@ -356,7 +356,7 @@ pub mod pallet {
           {
             Err::<(), _>(Error::<T>::ExpiredRetirementSignal)?;
           }
-        },
+        }
         Signal::Halt { .. } => {}
       }
 
@@ -378,7 +378,7 @@ pub mod pallet {
           Signal::Retire { signal_id } => {
             LockedInRetirement::<T>::set(Some((
               signal_id,
-              frame_system::Pallet::<T>::block_number() + T::RetirementLockInDuration::get()
+              frame_system::Pallet::<T>::block_number() + T::RetirementLockInDuration::get(),
             )));
             // TODO: Event
           }
