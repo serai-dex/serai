@@ -7,7 +7,7 @@ use rand::{RngCore, CryptoRng, rngs::OsRng};
 use blake2::{Digest, Blake2s256};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::Group, *};
+use ciphersuite::*;
 use schnorr::SchnorrSignature;
 
 use scale::Encode;
