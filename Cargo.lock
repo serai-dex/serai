@@ -544,7 +544,7 @@ dependencies = [
  "alloy-json-rpc",
  "alloy-transport",
  "serde_json",
- "simple-request",
+ "simple-request 0.2.0",
  "tower 0.5.2",
 ]
 
@@ -1461,8 +1461,8 @@ dependencies = [
  "secp256k1 0.29.1",
  "serde",
  "serde_json",
- "simple-request",
- "std-shims",
+ "simple-request 0.2.0",
+ "std-shims 0.1.5",
  "subtle",
  "thiserror 2.0.16",
  "tokio",
@@ -1928,7 +1928,7 @@ dependencies = [
  "ff-group-tests",
  "group",
  "hex",
- "std-shims",
+ "std-shims 0.1.5",
  "subtle",
  "zeroize",
 ]
@@ -1938,8 +1938,8 @@ name = "ciphersuite"
 version = "0.4.99"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group",
- "std-shims",
+ "dalek-ff-group 0.5.0",
+ "std-shims 0.1.5",
  "zeroize",
 ]
 
@@ -2471,6 +2471,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "dalek-ff-group"
+version = "0.5.99"
+dependencies = [
+ "crypto-bigint 0.5.5",
+ "crypto-bigint 0.6.1",
+ "dalek-ff-group 0.5.0",
+ "prime-field",
+]
+
+[[package]]
 name = "darling"
 version = "0.20.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2542,7 +2552,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 2.0.106",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -2773,7 +2783,7 @@ version = "0.6.1"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "std-shims",
+ "std-shims 0.1.5",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -2785,7 +2795,7 @@ dependencies = [
  "ciphersuite 0.4.2",
  "dkg",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.5",
  "zeroize",
 ]
 
@@ -2796,7 +2806,7 @@ dependencies = [
  "blake2 0.11.0-rc.2",
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "dkg",
  "dkg-recovery",
  "ec-divisors",
@@ -2811,7 +2821,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "secq256k1",
- "std-shims",
+ "std-shims 0.1.5",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -2821,12 +2831,12 @@ name = "dkg-musig"
 version = "0.6.0"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "dkg",
  "dkg-recovery",
  "multiexp",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.5",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -2914,11 +2924,11 @@ name = "ec-divisors"
 version = "0.1.0"
 source = "git+https://github.com/monero-oxide/monero-oxide?rev=dc1b3dbe436aae61ec363505052d4715d38ce1df#dc1b3dbe436aae61ec363505052d4715d38ce1df"
 dependencies = [
- "dalek-ff-group",
+ "dalek-ff-group 0.5.99",
  "ff",
  "group",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.99",
  "subtle",
  "zeroize",
 ]
@@ -3033,7 +3043,7 @@ dependencies = [
  "prime-field",
  "rand_core 0.6.4",
  "short-weierstrass",
- "std-shims",
+ "std-shims 0.1.5",
  "typenum",
  "zeroize",
 ]
@@ -3546,7 +3556,7 @@ dependencies = [
  "rand_core 0.6.4",
  "schnorr-signatures",
  "schnorrkel",
- "std-shims",
+ "std-shims 0.1.5",
  "zeroize",
 ]
 
@@ -3775,7 +3785,7 @@ dependencies = [
  "flexible-transcript",
  "multiexp",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
@@ -3786,7 +3796,7 @@ source = "git+https://github.com/monero-oxide/monero-oxide?rev=dc1b3dbe436aae61e
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs",
- "std-shims",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
@@ -3798,7 +3808,7 @@ dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs-circuit-abstraction",
  "generic-array 1.2.0",
- "std-shims",
+ "std-shims 0.1.99",
 ]
 
 [[package]]
@@ -4250,7 +4260,7 @@ dependencies = [
  "httpdate",
  "itoa",
  "pin-project-lite",
- "socket2 0.5.8",
+ "socket2 0.4.10",
  "tokio",
  "tower-service",
  "tracing",
@@ -6089,7 +6099,7 @@ version = "0.11.0"
 dependencies = [
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "dkg",
  "dkg-dealer",
  "dkg-recovery",
@@ -6103,7 +6113,7 @@ dependencies = [
  "schnorr-signatures",
  "serde_json",
  "sha2 0.10.9",
- "std-shims",
+ "std-shims 0.1.5",
  "subtle",
  "thiserror 2.0.16",
  "zeroize",
@@ -6127,7 +6137,7 @@ version = "0.1.0"
 source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "monero-primitives",
- "std-shims",
+ "std-shims 0.1.99",
 ]
 
 [[package]]
@@ -6139,7 +6149,7 @@ dependencies = [
  "monero-generators",
  "monero-io",
  "monero-primitives",
- "std-shims",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
@@ -6153,7 +6163,7 @@ dependencies = [
  "monero-io",
  "monero-primitives",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.99",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -6164,7 +6174,7 @@ version = "0.1.0"
 source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.99",
  "flexible-transcript",
  "group",
  "modular-frost",
@@ -6173,7 +6183,7 @@ dependencies = [
  "monero-primitives",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
- "std-shims",
+ "std-shims 0.1.99",
  "subtle",
  "thiserror 2.0.16",
  "zeroize",
@@ -6186,11 +6196,11 @@ source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a10545
 dependencies = [
  "crypto-bigint 0.5.5",
  "curve25519-dalek",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.99",
  "group",
  "monero-io",
  "sha3 0.10.8",
- "std-shims",
+ "std-shims 0.1.99",
  "subtle",
 ]
 
@@ -6200,7 +6210,7 @@ version = "0.1.0"
 source = "git+https://github.com/monero-oxide/monero-oxide?rev=2c847f71079a105456376f9957cee86c4b6a9eb8#2c847f71079a105456376f9957cee86c4b6a9eb8"
 dependencies = [
  "curve25519-dalek",
- "std-shims",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
@@ -6213,7 +6223,7 @@ dependencies = [
  "monero-generators",
  "monero-io",
  "monero-primitives",
- "std-shims",
+ "std-shims 0.1.99",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -6232,7 +6242,7 @@ dependencies = [
  "monero-io",
  "monero-mlsag",
  "monero-primitives",
- "std-shims",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
@@ -6245,7 +6255,7 @@ dependencies = [
  "monero-generators",
  "monero-io",
  "sha3 0.10.8",
- "std-shims",
+ "std-shims 0.1.99",
  "zeroize",
 ]
 
@@ -6260,7 +6270,7 @@ dependencies = [
  "monero-oxide",
  "serde",
  "serde_json",
- "std-shims",
+ "std-shims 0.1.99",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -6273,7 +6283,7 @@ dependencies = [
  "digest_auth",
  "hex",
  "monero-rpc",
- "simple-request",
+ "simple-request 0.1.99",
  "tokio",
  "zeroize",
 ]
@@ -6295,7 +6305,7 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "rand_distr",
- "std-shims",
+ "std-shims 0.1.99",
  "thiserror 2.0.16",
  "zeroize",
 ]
@@ -6334,7 +6344,7 @@ dependencies = [
 name = "multiexp"
 version = "0.4.2"
 dependencies = [
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "ff",
  "group",
  "k256",
@@ -9470,14 +9480,14 @@ name = "schnorr-signatures"
 version = "0.5.2"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "digest 0.11.0-rc.1",
  "flexible-transcript",
  "hex",
  "multiexp",
  "rand_core 0.6.4",
  "sha2 0.10.9",
- "std-shims",
+ "std-shims 0.1.5",
  "zeroize",
 ]
 
@@ -9610,7 +9620,7 @@ dependencies = [
  "rand_core 0.6.4",
  "sha2 0.11.0-rc.2",
  "short-weierstrass",
- "std-shims",
+ "std-shims 0.1.5",
 ]
 
 [[package]]
@@ -9756,7 +9766,7 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "ciphersuite-kp256",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "dkg-musig",
  "dockertest",
  "frame-system",
@@ -9771,7 +9781,7 @@ dependencies = [
  "serai-docker-tests",
  "serde",
  "serde_json",
- "simple-request",
+ "simple-request 0.2.0",
  "sp-core",
  "sp-runtime",
  "thiserror 2.0.16",
@@ -9817,7 +9827,7 @@ dependencies = [
  "blake2 0.11.0-rc.2",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "dkg-musig",
  "env_logger",
  "frost-schnorrkel",
@@ -9906,7 +9916,7 @@ dependencies = [
  "blake2 0.11.0-rc.2",
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "dkg",
  "log",
  "parity-scale-codec",
@@ -10170,7 +10180,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "env_logger",
  "flexible-transcript",
  "hex",
@@ -10191,7 +10201,7 @@ name = "serai-message-queue-tests"
 version = "0.1.0"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "dockertest",
  "hex",
  "rand_core 0.6.4",
@@ -10208,7 +10218,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "dkg-evrf",
  "log",
  "modular-frost",
@@ -10238,7 +10248,7 @@ version = "0.1.0"
 dependencies = [
  "bitcoin-serai",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "dkg",
  "dkg-dealer",
  "dkg-evrf",
@@ -10254,7 +10264,7 @@ dependencies = [
  "schnorr-signatures",
  "secq256k1",
  "short-weierstrass",
- "std-shims",
+ "std-shims 0.1.5",
 ]
 
 [[package]]
@@ -10266,7 +10276,7 @@ dependencies = [
  "ciphersuite-kp256",
  "clap",
  "curve25519-dalek",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "embedwards25519",
  "frame-benchmarking",
  "futures-util",
@@ -10317,7 +10327,7 @@ name = "serai-orchestrator"
 version = "0.0.1"
 dependencies = [
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "embedwards25519",
  "flexible-transcript",
  "hex",
@@ -10734,7 +10744,7 @@ version = "0.1.0"
 dependencies = [
  "bitvec",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "dkg-musig",
  "frame-support",
  "frame-system",
@@ -10769,7 +10779,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "dkg-musig",
  "parity-scale-codec",
  "scale-info",
@@ -11054,7 +11064,14 @@ dependencies = [
 
 [[package]]
 name = "simple-request"
-version = "0.1.1"
+version = "0.1.99"
+dependencies = [
+ "simple-request 0.2.0",
+]
+
+[[package]]
+name = "simple-request"
+version = "0.2.0"
 dependencies = [
  "base64ct",
  "futures-util",
@@ -11879,6 +11896,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "std-shims"
+version = "0.1.99"
+dependencies = [
+ "std-shims 0.1.5",
+]
+
+[[package]]
 name = "strobe-rs"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12623,7 +12647,7 @@ version = "0.1.0"
 dependencies = [
  "blake2 0.11.0-rc.2",
  "ciphersuite 0.4.2",
- "dalek-ff-group",
+ "dalek-ff-group 0.5.0",
  "flexible-transcript",
  "futures-channel",
  "futures-util",

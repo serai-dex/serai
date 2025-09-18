@@ -37,7 +37,7 @@ frame-system = { git = "https://github.com/serai-dex/substrate", optional = true
 
 async-lock = "3"
 
-simple-request = { path = "../../common/request", version = "0.1", optional = true }
+simple-request = { path = "../../common/request", version = "0.2", optional = true }
 
 bitcoin = { version = "0.32", optional = true }
 

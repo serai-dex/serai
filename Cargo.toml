@@ -14,11 +14,6 @@ members = [
   "patches/option-ext",
   "patches/directories-next",
 
-  # monero-oxide expects `ciphersuite`, yet the `ciphersuite` in-tree here has breaking changes
-  # This re-exports the in-tree `ciphersuite` _without_ changes breaking to monero-oxide
-  # Not included in workspace to prevent having two crates with the same name (an error)
-  # "patches/ciphersuite",
-
   "common/std-shims",
   "common/zalloc",
   "common/patchable-async-sleep",
@@ -191,12 +186,12 @@ overflow-checks = true
 
 [patch.crates-io]
 # Dependencies from monero-oxide which originate from within our own tree
-std-shims = { path = "common/std-shims" }
-simple-request = { path = "common/request" }
+std-shims = { path = "patches/std-shims" }
+simple-request = { path = "patches/simple-request" }
 multiexp = { path = "crypto/multiexp" }
 flexible-transcript = { path = "crypto/transcript" }
 ciphersuite = { path = "patches/ciphersuite" }
-dalek-ff-group = { path = "crypto/dalek-ff-group" }
+dalek-ff-group = { path = "patches/dalek-ff-group" }
 minimal-ed448 = { path = "crypto/ed448" }
 modular-frost = { path = "crypto/frost" }
 
