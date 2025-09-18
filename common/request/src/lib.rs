@@ -52,7 +52,7 @@ pub struct Client {
 }
 
 impl Client {
-  fn connector() -> Connector {
+  fn connector() -> Result<Connector, Error> {
     let mut res = HttpConnector::new();
     res.set_keepalive(Some(core::time::Duration::from_secs(60)));
     res.set_nodelay(true);
@@ -62,27 +62,31 @@ impl Client {
     #[cfg(feature = "tls")]
     let res = HttpsConnectorBuilder::new()
       .with_native_roots()
-      .expect("couldn't fetch system's SSL roots")
+      .map_err(|e| {
+        Error::ConnectionError(
+          format!("couldn't load system's SSL root certificates: {e:?}").into(),
+        )
+      })?
       .https_or_http()
       .enable_http1()
       .wrap_connector(res);
-    res
+    Ok(res)
   }
 
-  pub fn with_connection_pool() -> Client {
-    Client {
+  pub fn with_connection_pool() -> Result<Client, Error> {
+    Ok(Client {
       connection: Connection::ConnectionPool(
         HyperClient::builder(TokioExecutor::new())
           .pool_idle_timeout(core::time::Duration::from_secs(60))
-          .build(Self::connector()),
+          .build(Self::connector()?),
       ),
-    }
+    })
   }
 
   pub fn without_connection_pool(host: &str) -> Result<Client, Error> {
     Ok(Client {
       connection: Connection::Connection {
-        connector: Self::connector(),
+        connector: Self::connector()?,
         host: {
           let uri: Uri = host.parse().map_err(|_| Error::InvalidUri)?;
           if uri.host().is_none() {
@@ -149,7 +153,7 @@ impl Client {
           *connection_lock = Some(requester);
         }
 
-        let connection = connection_lock.as_mut().unwrap();
+        let connection = connection_lock.as_mut().expect("lock over the connection was poisoned");
         let mut err = connection.ready().await.err();
         if err.is_none() {
           // Send the request
@@ -161,7 +165,7 @@ impl Client {
         }
         // Since this connection has been put into an error state, drop it
         *connection_lock = None;
-        Err(Error::Hyper(err.unwrap()))?
+        Err(Error::Hyper(err.expect("only here if `err` is some yet no error")))?
       }
     };
 

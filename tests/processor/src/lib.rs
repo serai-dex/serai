@@ -277,7 +277,7 @@ impl Coordinator {
               };
 
               let provider = Arc::new(RootProvider::<_, Ethereum>::new(
-                ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+                ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()).unwrap(), true),
               ));
 
               if handle
@@ -417,7 +417,7 @@ impl Coordinator {
         };
 
         let provider = RootProvider::<_, Ethereum>::new(
-          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()).unwrap(), true),
         );
         let start = provider
           .get_block(BlockNumberOrTag::Latest.into(), BlockTransactionsKind::Hashes)
@@ -509,7 +509,7 @@ impl Coordinator {
 
         let (expected_number, state) = {
           let provider = RootProvider::<_, Ethereum>::new(
-            ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+            ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()).unwrap(), true),
           );
 
           let expected_number = provider
@@ -528,7 +528,7 @@ impl Coordinator {
         for coordinator in others {
           let rpc_url = network_rpc(coordinator.network, ops, &coordinator.network_handle);
           let provider = RootProvider::<_, Ethereum>::new(
-            ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+            ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()).unwrap(), true),
           );
           assert!(provider
             .raw_request::<_, bool>("anvil_loadState".into(), &[&state])
@@ -605,7 +605,7 @@ impl Coordinator {
         };
 
         let provider = RootProvider::<_, Ethereum>::new(
-          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()).unwrap(), true),
         );
         let _ = provider.send_raw_transaction(tx).await.unwrap();
       }
@@ -662,7 +662,7 @@ impl Coordinator {
       ExternalNetworkId::Ethereum => {
         /*
         let provider = RootProvider::<_, Ethereum>::new(
-          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()), true),
+          ClientBuilder::default().transport(SimpleRequest::new(rpc_url.clone()).unwrap(), true),
         );
         let mut hash = [0; 32];
         hash.copy_from_slice(tx);

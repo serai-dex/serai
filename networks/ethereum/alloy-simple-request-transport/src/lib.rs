@@ -7,7 +7,7 @@ use std::io;
 use alloy_json_rpc::{RequestPacket, ResponsePacket};
 use alloy_transport::{TransportError, TransportErrorKind, TransportFut};
 
-use simple_request::{hyper, Request, Client};
+use simple_request::{hyper, Error, Request, Client};
 
 use tower::Service;
 
@@ -18,8 +18,8 @@ pub struct SimpleRequest {
 }
 
 impl SimpleRequest {
-  pub fn new(url: String) -> Self {
-    Self { client: Client::with_connection_pool(), url }
+  pub fn new(url: String) -> Result<Self, Error> {
+    Ok(Self { client: Client::with_connection_pool()?, url })
   }
 }
 

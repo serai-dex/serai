@@ -61,7 +61,7 @@ async fn main() {
   let db = bin::init();
 
   let provider = Arc::new(RootProvider::new(
-    ClientBuilder::default().transport(SimpleRequest::new(bin::url()), true),
+    ClientBuilder::default().transport(SimpleRequest::new(bin::url()).unwrap(), true),
   ));
 
   let chain_id = {

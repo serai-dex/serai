@@ -62,7 +62,8 @@ impl Rpc {
   /// provided to this library, if the RPC has an incompatible argument layout. That is not checked
   /// at time of RPC creation.
   pub async fn new(url: String) -> Result<Rpc, RpcError> {
-    let rpc = Rpc { client: Client::with_connection_pool(), url };
+    let rpc =
+      Rpc { client: Client::with_connection_pool().map_err(|_| RpcError::ConnectionError)?, url };
 
     // Make an RPC request to verify the node is reachable and sane
     let res: String = rpc.rpc_call("help", json!([])).await?;
