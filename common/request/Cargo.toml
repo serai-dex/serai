@@ -31,5 +31,6 @@ base64ct = { version = "1", features = ["alloc"], optional = true }
 
 [features]
 tls = ["hyper-rustls"]
+webpki-roots = ["tls", "hyper-rustls/webpki-roots"]
 basic-auth = ["zeroize", "base64ct"]
 default = ["tls"]

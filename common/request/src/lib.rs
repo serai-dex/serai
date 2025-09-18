@@ -52,24 +52,30 @@ pub struct Client {
 }
 
 impl Client {
+  #[allow(clippy::unnecessary_wraps)]
   fn connector() -> Result<Connector, Error> {
     let mut res = HttpConnector::new();
     res.set_keepalive(Some(core::time::Duration::from_secs(60)));
     res.set_nodelay(true);
     res.set_reuse_address(true);
+
     #[cfg(feature = "tls")]
     res.enforce_http(false);
     #[cfg(feature = "tls")]
-    let res = HttpsConnectorBuilder::new()
-      .with_native_roots()
-      .map_err(|e| {
-        Error::ConnectionError(
-          format!("couldn't load system's SSL root certificates: {e:?}").into(),
-        )
-      })?
-      .https_or_http()
-      .enable_http1()
-      .wrap_connector(res);
+    let https = HttpsConnectorBuilder::new().with_native_roots();
+    #[cfg(all(feature = "tls", not(feature = "webpki-roots")))]
+    let https = https.map_err(|e| {
+      Error::ConnectionError(
+        format!("couldn't load system's SSL root certificates and webpki-roots unavilable: {e:?}")
+          .into(),
+      )
+    })?;
+    // Fallback to `webpki-roots` if present
+    #[cfg(all(feature = "tls", feature = "webpki-roots"))]
+    let https = https.unwrap_or(HttpsConnectorBuilder::new().with_webpki_roots());
+    #[cfg(feature = "tls")]
+    let res = https.https_or_http().enable_http1().wrap_connector(res);
+
     Ok(res)
   }
 
