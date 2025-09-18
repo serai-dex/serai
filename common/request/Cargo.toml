@@ -1,9 +1,9 @@
 [package]
 name = "simple-request"
-version = "0.1.1"
+version = "0.2.0"
 description = "A simple HTTP(S) request library"
 license = "MIT"
-repository = "https://github.com/serai-dex/serai/tree/develop/common/simple-request"
+repository = "https://github.com/serai-dex/serai/tree/develop/common/request"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["http", "https", "async", "request", "ssl"]
 edition = "2021"
