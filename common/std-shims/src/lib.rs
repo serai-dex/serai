@@ -17,8 +17,8 @@ pub mod error {
 #[rustversion::since(1.81)]
 pub use core::error;
 
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-pub extern crate alloc as extern_alloc;
+#[cfg(feature = "alloc")]
+extern crate alloc as extern_alloc;
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 pub use extern_alloc::{alloc, borrow, boxed, ffi, fmt, rc, slice, str, string, task, vec, format};
 #[cfg(feature = "std")]
@@ -30,7 +30,7 @@ pub mod sync;
 
 pub mod prelude {
   // Shim the `std` prelude
-  #[cfg(all(feature = "alloc", not(feature = "std")))]
+  #[cfg(feature = "alloc")]
   pub use extern_alloc::{
     format, vec,
     borrow::ToOwned,
