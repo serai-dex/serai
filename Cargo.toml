@@ -84,6 +84,7 @@ members = [
   "substrate/primitives",
   "substrate/abi",
 
+  "substrate/core",
   "substrate/coins",
   "substrate/validator-sets",
   "substrate/signals",

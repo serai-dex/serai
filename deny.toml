@@ -79,6 +79,7 @@ exceptions = [
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-libp2p-p2p" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator" },
 
+  { allow = ["AGPL-3.0-only"], name = "serai-core-pallet" },
   { allow = ["AGPL-3.0-only"], name = "serai-coins-pallet" },
   { allow = ["AGPL-3.0-only"], name = "serai-dex-pallet" },
 

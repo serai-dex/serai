@@ -1,0 +1,56 @@
+[package]
+name = "serai-core-pallet"
+version = "0.1.0"
+description = "Core pallet"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/core"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+rust-version = "1.85"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+ignored = ["scale"]
+
+[lints]
+workspace = true
+
+[dependencies]
+borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
+
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "d4624c561765c13b38eb566e435131a8c329a543", default-features = false }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "d4624c561765c13b38eb566e435131a8c329a543", default-features = false }
+
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "d4624c561765c13b38eb566e435131a8c329a543", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "d4624c561765c13b38eb566e435131a8c329a543", default-features = false }
+
+serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
+
+[features]
+std = [
+  "borsh/std",
+  "scale/std",
+
+  "sp-core/std",
+  "sp-io/std",
+
+  "frame-system/std",
+  "frame-support/std",
+
+  "serai-abi/std",
+]
+
+runtime-benchmarks = [
+  "frame-system/runtime-benchmarks",
+  "frame-support/runtime-benchmarks",
+]
+
+# TODO
+try-runtime = []
+
+default = ["std"]

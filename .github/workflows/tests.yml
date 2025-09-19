@@ -83,21 +83,16 @@ jobs:
         run: |
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
             -p serai-primitives \
-            -p serai-coins-primitives \
-            -p serai-coins-pallet \
-            -p serai-dex-pallet \
-            -p serai-validator-sets-primitives \
-            -p serai-validator-sets-pallet \
-            -p serai-genesis-liquidity-primitives \
-            -p serai-genesis-liquidity-pallet \
-            -p serai-emissions-primitives \
-            -p serai-emissions-pallet \
-            -p serai-economic-security-pallet \
-            -p serai-in-instructions-primitives \
-            -p serai-in-instructions-pallet \
-            -p serai-signals-primitives \
-            -p serai-signals-pallet \
             -p serai-abi \
+            -p serai-core-pallet \
+            -p serai-coins-pallet \
+            -p serai-validator-sets-pallet \
+            -p serai-signals-pallet \
+            -p serai-dex-pallet \
+            -p serai-genesis-liquidity-pallet \
+            -p serai-economic-security-pallet \
+            -p serai-emissions-pallet \
+            -p serai-in-instructions-pallet \
             -p serai-runtime \
             -p serai-node
 

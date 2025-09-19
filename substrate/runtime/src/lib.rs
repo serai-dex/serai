@@ -9,7 +9,7 @@ extern crate alloc;
 use alloc::borrow::Cow;
 
 use sp_core::sr25519::Public;
-use sp_runtime::{Perbill, Weight, traits::Header as _};
+use sp_runtime::{Perbill, Weight};
 use sp_version::RuntimeVersion;
 
 #[rustfmt::skip]
@@ -18,8 +18,6 @@ use serai_abi::{
 };
 
 use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance};
-
-mod core_pallet;
 
 type Block = SubstrateBlock;
 
@@ -75,7 +73,7 @@ mod runtime {
   pub type System = frame_system::Pallet<Runtime>;
 
   #[runtime::pallet_index(1)]
-  pub type Core = core_pallet::Pallet<Runtime>;
+  pub type Core = serai_core_pallet::Pallet<Runtime>;
 
   #[runtime::pallet_index(2)]
   pub type Coins = serai_coins_pallet::Pallet<Runtime, CoinsInstance>;
@@ -125,12 +123,12 @@ impl frame_system::Config for Runtime {
   type SingleBlockMigrations = ();
   type MultiBlockMigrator = ();
 
-  type PreInherents = core_pallet::StartOfBlock<Runtime>;
+  type PreInherents = serai_core_pallet::StartOfBlock<Runtime>;
   type PostInherents = ();
-  type PostTransactions = core_pallet::EndOfBlock<Runtime>;
+  type PostTransactions = serai_core_pallet::EndOfBlock<Runtime>;
 }
 
-impl core_pallet::Config for Runtime {}
+impl serai_core_pallet::Config for Runtime {}
 
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint; // TODO
@@ -230,7 +228,6 @@ sp_api::impl_runtime_apis! {
       VERSION
     }
     fn initialize_block(header: &Header) -> sp_runtime::ExtrinsicInclusionMode {
-      core_pallet::Blocks::<Runtime>::set(header.parent_hash(), Some(()));
       Executive::initialize_block(header)
     }
     fn execute_block(block: Block) {
@@ -257,7 +254,7 @@ impl serai_abi::TransactionContext for Context {
 
   /// If a block is present in the blockchain.
   fn block_is_present_in_blockchain(&self, hash: &serai_abi::primitives::BlockHash) -> bool {
-    core_pallet::Blocks::<Runtime>::get(hash).is_some()
+    serai_core_pallet::Pallet::<Runtime>::block_exists(hash)
   }
   /// The time embedded into the current block.
   fn current_time(&self) -> Option<u64> {
@@ -265,7 +262,7 @@ impl serai_abi::TransactionContext for Context {
   }
   /// Get the next nonce for an account.
   fn next_nonce(&self, signer: &SeraiAddress) -> u32 {
-    core_pallet::NextNonce::<Runtime>::get(signer)
+    serai_core_pallet::Pallet::<Runtime>::next_nonce(signer)
   }
   /// If the signer can pay the SRI fee.
   fn can_pay_fee(
@@ -284,11 +281,10 @@ impl serai_abi::TransactionContext for Context {
   }
 
   fn start_transaction(&self) {
-    Core::start_transaction();
+    Core::start_transaction()
   }
-  /// Consume the next nonce for an account.
   fn consume_next_nonce(&self, signer: &SeraiAddress) {
-    core_pallet::NextNonce::<Runtime>::mutate(signer, |value| *value += 1);
+    serai_core_pallet::Pallet::<Runtime>::consume_next_nonce(signer)
   }
   /// Have the transaction pay its SRI fee.
   fn pay_fee(

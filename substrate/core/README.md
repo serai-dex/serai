@@ -1,0 +1,1 @@
+# Serai Core Pallet

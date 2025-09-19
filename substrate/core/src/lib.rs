@@ -1,59 +1,19 @@
-use core::marker::PhantomData;
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
-use borsh::BorshSerialize;
+use core::marker::PhantomData;
 
 use frame_support::pallet_prelude::*;
 
 use serai_abi::{
-  primitives::merkle::{UnbalancedMerkleTree, IncrementalUnbalancedMerkleTree as Iumt},
+  primitives::{prelude::*, merkle::IncrementalUnbalancedMerkleTree as Iumt},
   *,
 };
 
-/// A wrapper around a `StorageValue` which offers a high-level API as an IUMT.
-struct IncrementalUnbalancedMerkleTree<
-  T: frame_support::StorageValue<Iumt, Query = Option<Iumt>>,
-  const BRANCH_TAG: u8 = 1,
-  const LEAF_TAG: u8 = 0,
->(PhantomData<T>);
-impl<
-    T: frame_support::StorageValue<Iumt, Query = Option<Iumt>>,
-    const BRANCH_TAG: u8,
-    const LEAF_TAG: u8,
-  > IncrementalUnbalancedMerkleTree<T, BRANCH_TAG, LEAF_TAG>
-{
-  /// Create a new Merkle tree, expecting there to be none already present.
-  ///
-  /// Panics if a Merkle tree was already present.
-  fn new_expecting_none() {
-    T::mutate(|value| {
-      assert!(value.is_none());
-      *value = Some(Iumt::new());
-    });
-  }
-  /// Append a leaf to the Merkle tree.
-  ///
-  /// Panics if no Merkle tree was present.
-  fn append<L: BorshSerialize>(leaf: &L) {
-    let leaf = sp_core::blake2_256(&borsh::to_vec(&(LEAF_TAG, leaf)).unwrap());
-
-    T::mutate(|value| {
-      let tree = value.as_mut().unwrap();
-      tree.append(BRANCH_TAG, leaf);
-    })
-  }
-  /// Get the unbalanced merkle tree.
-  ///
-  /// Panics if no Merkle tree was present.
-  fn get() -> UnbalancedMerkleTree {
-    T::get().unwrap().calculate(BRANCH_TAG)
-  }
-  /// Take the Merkle tree.
-  ///
-  /// Panics if no Merkle tree was present.
-  fn take() -> UnbalancedMerkleTree {
-    T::mutate(|value| value.take().unwrap().calculate(BRANCH_TAG))
-  }
-}
+mod iumt;
+pub use iumt::*;
 
 #[frame_support::pallet]
 mod pallet {
@@ -61,7 +21,7 @@ mod pallet {
 
   /// The set of all blocks prior added to the blockchain.
   #[pallet::storage]
-  pub type Blocks<T: Config> = StorageMap<_, Identity, T::Hash, (), OptionQuery>;
+  pub(super) type Blocks<T: Config> = StorageMap<_, Identity, T::Hash, (), OptionQuery>;
   /// The Merkle tree of all blocks added to the blockchain.
   #[pallet::storage]
   #[pallet::unbounded]
@@ -96,8 +56,7 @@ mod pallet {
 
   /// A mapping from an account to its next nonce.
   #[pallet::storage]
-  pub type NextNonce<T: Config> =
-    StorageMap<_, Blake2_128Concat, T::AccountId, T::Nonce, ValueQuery>;
+  type NextNonce<T: Config> = StorageMap<_, Blake2_128Concat, SeraiAddress, T::Nonce, ValueQuery>;
 
   #[pallet::config]
   pub trait Config: frame_system::Config<Hash: Into<[u8; 32]>> {}
@@ -106,15 +65,43 @@ mod pallet {
   pub struct Pallet<T>(_);
 
   impl<T: Config> Pallet<T> {
+    /// If a block exists on the current blockchain.
+    #[must_use]
+    pub fn block_exists(hash: impl scale::EncodeLike<T::Hash>) -> bool {
+      Blocks::<T>::contains_key(hash)
+    }
+
+    /// The next nonce for an account.
+    #[must_use]
+    pub fn next_nonce(account: &SeraiAddress) -> T::Nonce {
+      NextNonce::<T>::get(account)
+    }
+
+    /// Consume the next nonce for an account.
+    ///
+    /// Panics if the current nonce is `<_>::MAX`.
+    pub fn consume_next_nonce(signer: &SeraiAddress) {
+      NextNonce::<T>::mutate(signer, |value| {
+        *value = value
+          .checked_add(&T::Nonce::one())
+          .expect("`consume_next_nonce` called when current nonce is <_>::MAX")
+      });
+    }
+
+    /// The code to run when beginning execution of a transaction.
+    ///
+    /// The caller MUST ensure two transactions aren't simultaneously started.
     pub fn start_transaction() {
       TransactionEventsMerkle::<T>::new_expecting_none();
     }
+    /// Emit an event.
     // TODO: Have this called
-    pub fn on_event(event: impl TryInto<serai_abi::Event>) {
+    pub fn emit_event(event: impl TryInto<serai_abi::Event>) {
       if let Ok(event) = event.try_into() {
         TransactionEventsMerkle::<T>::append(&event);
       }
     }
+    /// End execution of a transaction.
     pub fn end_transaction(transaction_hash: [u8; 32]) {
       BlockTransactionsCommitmentMerkle::<T>::append(&transaction_hash);
 
@@ -126,8 +113,9 @@ mod pallet {
     }
   }
 }
-pub(super) use pallet::*;
+pub use pallet::*;
 
+/// The code to run at the start of a block for this pallet.
 pub struct StartOfBlock<T: Config>(PhantomData<T>);
 impl<T: Config> frame_support::traits::PreInherents for StartOfBlock<T> {
   fn pre_inherents() {
@@ -145,17 +133,20 @@ impl<T: Config> frame_support::traits::PreInherents for StartOfBlock<T> {
   }
 }
 
+/// The code to run at the end of a block for this pallet.
 pub struct EndOfBlock<T: Config>(PhantomData<T>);
 impl<T: Config> frame_support::traits::PostTransactions for EndOfBlock<T> {
   fn post_transactions() {
-    frame_system::Pallet::<T>::deposit_log(sp_runtime::generic::DigestItem::Consensus(
-      SeraiExecutionDigest::CONSENSUS_ID,
-      borsh::to_vec(&SeraiExecutionDigest {
-        builds_upon: BlocksCommitmentMerkle::<T>::get(),
-        transactions_commitment: BlockTransactionsCommitmentMerkle::<T>::take(),
-        events_commitment: BlockEventsCommitmentMerkle::<T>::take(),
-      })
-      .unwrap(),
-    ));
+    frame_system::Pallet::<T>::deposit_log(
+      frame_support::sp_runtime::generic::DigestItem::Consensus(
+        SeraiExecutionDigest::CONSENSUS_ID,
+        borsh::to_vec(&SeraiExecutionDigest {
+          builds_upon: BlocksCommitmentMerkle::<T>::get(),
+          transactions_commitment: BlockTransactionsCommitmentMerkle::<T>::take(),
+          events_commitment: BlockEventsCommitmentMerkle::<T>::take(),
+        })
+        .unwrap(),
+      ),
+    );
   }
 }

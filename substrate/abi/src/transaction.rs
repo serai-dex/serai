@@ -297,6 +297,8 @@ mod substrate {
     /// Begin execution of a transaction.
     fn start_transaction(&self);
     /// Consume the next nonce for an account.
+    ///
+    /// This MUST NOT be called if the next nonce is `u32::MAX`. The caller MAY panic in that case.
     fn consume_next_nonce(&self, signer: &SeraiAddress);
     /// Have the transaction pay its SRI fee.
     fn pay_fee(&self, signer: &SeraiAddress, fee: Amount) -> Result<(), TransactionValidityError>;
@@ -425,13 +427,20 @@ mod substrate {
               Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
             }
           }
-          match self.1.next_nonce(signer).cmp(nonce) {
-            core::cmp::Ordering::Less => {
-              Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?
+
+          {
+            let next_nonce = self.1.next_nonce(signer);
+            if next_nonce == u32::MAX {
+              Err(TransactionValidityError::Invalid(InvalidTransaction::BadSigner))?;
             }
-            core::cmp::Ordering::Equal => {}
-            core::cmp::Ordering::Greater => {
-              Err(TransactionValidityError::Invalid(InvalidTransaction::Future))?
+            match next_nonce.cmp(nonce) {
+              core::cmp::Ordering::Less => {
+                Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?
+              }
+              core::cmp::Ordering::Equal => {}
+              core::cmp::Ordering::Greater => {
+                Err(TransactionValidityError::Invalid(InvalidTransaction::Future))?
+              }
             }
           }
 
