@@ -28,7 +28,8 @@ frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev =
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
 
-validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../validator-sets", default-features = false }
+serai-core-pallet = { path = "../core", default-features = false }
+serai-validator-sets-pallet = { path = "../validator-sets", default-features = false }
 
 [features]
 std = [
@@ -41,15 +42,26 @@ std = [
 
   "serai-abi/std",
 
-  "validator-sets-pallet/std",
+  "serai-core-pallet/std",
+  "serai-validator-sets-pallet/std",
 ]
 
 runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
+
+  "serai-core-pallet/runtime-benchmarks",
+  "serai-validator-sets-pallet/runtime-benchmarks",
 ]
 
-# TODO
-try-runtime = []
+try-runtime = [
+  "frame-system/try-runtime",
+  "frame-support/try-runtime",
+
+  "serai-abi/try-runtime",
+
+  "serai-core-pallet/try-runtime",
+  "serai-validator-sets-pallet/try-runtime",
+]
 
 default = ["std"]

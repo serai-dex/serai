@@ -1,7 +1,9 @@
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{
-  address::SeraiAddress, network_id::NetworkId, validator_sets::ValidatorSet, signals::Signal,
+  address::SeraiAddress,
+  network_id::{ExternalNetworkId, NetworkId},
+  signals::Signal,
 };
 
 /// A call to signals.
@@ -95,38 +97,40 @@ pub enum Event {
     /// The network with which favor for the signal was revoked.
     with_network: NetworkId,
   },
-  /// A supermajority of a validator set now favor a signal.
-  SetInFavor {
-    /// The signal which now has a supermajority of a validator set favoring it.
+  /// A supermajority of a network's validator set now favor a signal.
+  NetworkInFavor {
+    /// The signal which now has a supermajority of a network's validator set favoring it.
     signal: Signal,
-    /// The validator set which is now considered to favor the signal.
-    set: ValidatorSet,
+    /// The network which is now considered to favor the signal.
+    network: NetworkId,
   },
-  /// A validator set is no longer considered to favor a signal.
-  SetNoLongerInFavor {
-    /// The signal which no longer has the validator set considered in favor of it.
+  /// A network's validator set is no longer considered to favor a signal.
+  NetworkNoLongerInFavor {
+    /// The signal which no longer has the network considered in favor of it.
     signal: Signal,
-    /// The validator set which is no longer considered to be in favor of the signal.
-    set: ValidatorSet,
+    /// The network which is no longer considered to be in favor of the signal.
+    network: NetworkId,
   },
   /// A retirement signal has been locked in.
   RetirementSignalLockedIn {
     /// The signal which has been locked in.
     signal: [u8; 32],
   },
-  /// A validator set's ability to publish batches was halted.
+  /// A network's ability to publish batches was halted.
   ///
   /// This also halts set rotation in effect, as handovers are via new sets starting to publish
   /// batches.
-  SetHalted {
-    /// The signal which has been locked in.
-    signal: [u8; 32],
+  NetworkHalted {
+    /// The network which has been halted.
+    network: ExternalNetworkId,
   },
   /// An account has stood against a signal.
   AgainstSignal {
     /// The signal stood against.
     signal: Signal,
     /// The account which stood against the signal.
-    who: SeraiAddress,
+    account: SeraiAddress,
+    /// The network with which this was expressed.
+    with_network: NetworkId,
   },
 }

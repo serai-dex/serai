@@ -12,17 +12,19 @@ pub mod pallet {
 
   use serai_abi::{
     primitives::{prelude::*, signals::*},
+    signals::Event,
     SubstrateBlock,
   };
 
   use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
-  use validator_sets_pallet::{Config as VsConfig, Pallet as VsPallet};
+  use serai_validator_sets_pallet::{Config as VsConfig, Pallet as VsPallet};
+  use serai_core_pallet::{Config as CoreConfig, Pallet as Core};
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config<AccountId = Public, Block = SubstrateBlock> + VsConfig
+    frame_system::Config<AccountId = Public, Block = SubstrateBlock> + VsConfig + CoreConfig
   {
     /// How long a candidate retirement signal is valid for.
     ///
@@ -172,12 +174,12 @@ pub mod pallet {
         let prior_in_favor = NetworksInFavor::<T>::contains_key((signal, network));
         NetworksInFavor::<T>::set((signal, network), Some(()));
         if !prior_in_favor {
-          todo!("Event");
+          Core::<T>::emit_event(Event::NetworkInFavor { signal, network });
         }
       } else {
         #[allow(clippy::collapsible_else_if)]
         if NetworksInFavor::<T>::take((signal, network)).is_some() {
-          todo!("Event");
+          Core::<T>::emit_event(Event::NetworkNoLongerInFavor { signal, network });
         }
       }
 
@@ -225,7 +227,11 @@ pub mod pallet {
         Err::<(), _>(Error::<T>::RevokingNonExistentFavor)?;
       }
       Favors::<T>::remove((signal, for_network), validator);
-      // TODO: Event
+      Core::<T>::emit_event(Event::FavorRevoked {
+        signal,
+        by: validator.into(),
+        with_network: for_network,
+      });
 
       // Update the tally for this network
       Self::tally_for_network(signal, for_network);
@@ -278,9 +284,10 @@ pub mod pallet {
         This prevents a malicious actor from frontrunning a proposal, causing them to be the
         registrant, just to cancel it later.
       */
+      let registrant = SeraiAddress::from(validator);
       let signal = RegisteredRetirementSignal {
         in_favor_of,
-        registrant: validator.into(),
+        registrant,
         registered_at: frame_system::Pallet::<T>::block_number(),
       };
       let signal_id = signal.id();
@@ -290,7 +297,12 @@ pub mod pallet {
       }
       RegisteredRetirementSignals::<T>::set(signal_id, Some(signal));
 
-      // TODO: Event
+      Core::<T>::emit_event(Event::RetirementSignalRegistered {
+        signal: signal_id,
+        in_favor_of,
+        registrant,
+      });
+
       Ok(())
     }
 
@@ -322,7 +334,8 @@ pub mod pallet {
         LockedInRetirement::<T>::kill();
       }
 
-      // TODO: Event
+      Core::<T>::emit_event(Event::RetirementSignalRevoked { signal: retirement_signal });
+
       Ok(())
     }
 
@@ -366,7 +379,12 @@ pub mod pallet {
 
       // Set the validator as in favor
       Favors::<T>::set((signal, for_network), validator, Some(()));
-      // TODO: Event
+
+      Core::<T>::emit_event(Event::SignalFavored {
+        signal,
+        by: validator.into(),
+        with_network: for_network,
+      });
 
       // Check if the network is in favor
       let network_in_favor = Self::tally_for_network(signal, for_network);
@@ -380,11 +398,11 @@ pub mod pallet {
               signal_id,
               frame_system::Pallet::<T>::block_number() + T::RetirementLockInDuration::get(),
             )));
-            // TODO: Event
+            Core::<T>::emit_event(Event::RetirementSignalLockedIn { signal: signal_id });
           }
           Signal::Halt(network) => {
             Halted::<T>::set(network, Some(()));
-            // TODO: Event
+            Core::<T>::emit_event(Event::NetworkHalted { network });
           }
         }
       }
@@ -451,53 +469,15 @@ pub mod pallet {
         }
       }
 
-      // Emit the event
-      // TODO: Event
+      Core::<T>::emit_event(Event::AgainstSignal {
+        signal,
+        account: validator.into(),
+        with_network: for_network,
+      });
 
       Ok(())
     }
   }
-
-  /* TODO
-  #[pallet::event]
-  #[pallet::generate_deposit(pub(super) fn deposit_event)]
-  pub enum Event<T: Config> {
-    RetirementSignalRegistered {
-      signal: [u8; 32],
-      in_favor_of: [u8; 32],
-      registrant: T::AccountId,
-    },
-    RetirementSignalRevoked {
-      signal_id: [u8; 32],
-    },
-    SignalFavored {
-      signal_id: Signal,
-      by: T::AccountId,
-      for_network: NetworkId,
-    },
-    SetInFavor {
-      signal_id: Signal,
-      set: ValidatorSet,
-    },
-    RetirementSignalLockedIn {
-      signal_id: [u8; 32],
-    },
-    SetNoLongerInFavor {
-      signal_id: Signal,
-      set: ValidatorSet,
-    },
-    FavorRevoked {
-      signal_id: Signal,
-      by: T::AccountId,
-      for_network: NetworkId,
-    },
-    AgainstSignal {
-      signal_id: Signal,
-      who: T::AccountId,
-      for_network: NetworkId,
-    },
-  }
-  */
 }
 
 pub use pallet::*;

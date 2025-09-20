@@ -9720,6 +9720,7 @@ dependencies = [
  "frame-system",
  "parity-scale-codec",
  "serai-abi",
+ "serai-core-pallet",
  "serai-validator-sets-pallet",
  "sp-core",
 ]
