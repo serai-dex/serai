@@ -136,7 +136,9 @@ impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
 }
-impl serai_validator_sets_pallet::Config for Runtime {}
+impl serai_validator_sets_pallet::Config for Runtime {
+  type ShouldEndSession = Babe;
+}
 impl serai_signals_pallet::Config for Runtime {
   type RetirementValidityDuration = sp_core::ConstU64<0>; // TODO
   type RetirementLockInDuration = sp_core::ConstU64<0>; // TODO
@@ -424,28 +426,11 @@ impl timestamp::Config for Runtime {
   type WeightInfo = ();
 }
 
-impl transaction_payment::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-  type OnChargeTransaction = Coins;
-  type OperationalFeeMultiplier = ConstU8<5>;
-  type WeightToFee = IdentityFee<SubstrateAmount>;
-  type LengthToFee = IdentityFee<SubstrateAmount>;
-  type FeeMultiplierUpdate = ();
-}
-
 impl coins::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
   type AllowMint = ValidatorSets;
 }
 
-impl coins::Config<coins::Instance1> for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-  type AllowMint = ();
-}
-
 impl dex::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-
   type LPFee = ConstU32<3>; // 0.3%
   type MintMinLiquidity = ConstU64<10000>;
 
@@ -454,12 +439,6 @@ impl dex::Config for Runtime {
   type MedianPriceWindowLength = ConstU16<{ MEDIAN_PRICE_WINDOW_LENGTH }>;
 
   type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
-}
-
-impl validator_sets::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-
-  type ShouldEndSession = Babe;
 }
 
 pub struct IdentityValidatorIdOf;

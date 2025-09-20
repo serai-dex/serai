@@ -29,6 +29,7 @@ frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev =
 
 pallet-session = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", default-features = false }
 pallet-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", default-features = false }
+pallet-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", default-features = false }
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
 
@@ -55,6 +56,7 @@ std = [
 
   "pallet-session/std",
   "pallet-babe/std",
+  "pallet-grandpa/std",
 
   "serai-abi/std",
 
@@ -69,6 +71,7 @@ try-runtime = [
 
   "pallet-session/try-runtime",
   "pallet-babe/try-runtime",
+  "pallet-grandpa/try-runtime",
 ]
 
 runtime-benchmarks = [
@@ -76,6 +79,7 @@ runtime-benchmarks = [
   "frame-support/runtime-benchmarks",
 
   "pallet-babe/runtime-benchmarks",
+  "pallet-grandpa/runtime-benchmarks",
 ]
 
 default = ["std"]

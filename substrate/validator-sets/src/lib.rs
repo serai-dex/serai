@@ -49,6 +49,7 @@ mod pallet {
 
   use pallet_session::ShouldEndSession;
   use pallet_babe::Pallet as Babe;
+  use pallet_grandpa::Pallet as Grandpa;
 
   use serai_abi::primitives::{
     crypto::SignedEmbeddedEllipticCurveKeys,
@@ -68,6 +69,7 @@ mod pallet {
     frame_system::Config
     + pallet_session::Config
     + pallet_babe::Config
+    + pallet_grandpa::Config
     + serai_coins_pallet::Config<serai_coins_pallet::CoinsInstance>
   {
     type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
@@ -245,11 +247,17 @@ mod pallet {
         "failed to attempt the next session for the Serai network on genesis"
       );
 
-      // Spawn BABE's genesis session
+      // Spawn BABE's, GRANDPA's genesis session
+      let genesis_serai_validators = Abstractions::<T>::serai_validators(Session(0));
       Babe::<T>::on_genesis_session(
-        Abstractions::<T>::serai_validators(Session(0))
+        genesis_serai_validators
           .iter()
-          .map(|(validator, key)| (validator, pallet_babe::AuthorityId::from(*key))),
+          .map(|(validator, key)| (validator, (*key).into())),
+      );
+      Grandpa::<T>::on_genesis_session(
+        genesis_serai_validators
+          .iter()
+          .map(|(validator, key)| (validator, (*key).into())),
       );
     }
   }
@@ -304,10 +312,7 @@ mod pallet {
         Abstractions::<T>::attempt_new_session(network.into(), include_genesis_validators);
       }
 
-      /* TODO
-      Dex::<T>::on_new_session(network);
-      Grandpa::new_session
-      */
+      // TODO Dex::<T>::on_new_session(network);
     }
 
     /*
@@ -420,15 +425,6 @@ mod pallet {
 
     pub(crate) fn rotate_session() {
       Self::retire_set(ValidatorSet { network: NetworkId::Serai, session: prior_serai_session });
-
-      // make a new session and get the next validator set.
-      Self::new_session();
-
-      Grandpa::<T>::new_session(
-        true,
-        session,
-        now_validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
-      );
 
       // Clear SeraiDisabledIndices, only preserving keys still present in the new session
       // First drain so we don't mutate as we iterate
@@ -566,6 +562,7 @@ mod pallet {
     fn on_initialize(n: BlockNumberFor<T>) -> Weight {
       if <T as Config>::ShouldEndSession::should_end_session(n) {
         Babe::<T>::on_before_session_ending();
+        Grandpa::<T>::on_before_session_ending();
 
         {
           // Accept the hand-over to the next session for the Serai network
@@ -598,17 +595,32 @@ mod pallet {
             !prior_serai_validators.is_empty(),
             "prior Serai validators weren't able to be fetched from storage",
           );
+
           let serai_validators = Abstractions::<T>::serai_validators(current_serai_session);
+
+          let validators_changed = prior_serai_validators != serai_validators;
+
           let queued_serai_validators =
             Abstractions::<T>::serai_validators(latest_decided_serai_session);
 
-          fn map((validator, key): &(Public, Public)) -> (&Public, pallet_babe::AuthorityId) {
+          fn map_babe((validator, key): &(Public, Public)) -> (&Public, pallet_babe::AuthorityId) {
             (validator, (*key).into())
           }
           Babe::<T>::on_new_session(
-            prior_serai_validators != serai_validators,
-            serai_validators.iter().map(map),
-            queued_serai_validators.iter().map(map),
+            validators_changed,
+            serai_validators.iter().map(map_babe),
+            queued_serai_validators.iter().map(map_babe),
+          );
+
+          fn map_grandpa(
+            (validator, key): &(Public, Public),
+          ) -> (&Public, pallet_grandpa::AuthorityId) {
+            (validator, (*key).into())
+          }
+          Grandpa::<T>::on_new_session(
+            validators_changed,
+            serai_validators.iter().map(map_grandpa),
+            queued_serai_validators.iter().map(map_grandpa),
           );
         }
 
