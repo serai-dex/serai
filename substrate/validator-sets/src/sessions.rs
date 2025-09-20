@@ -366,37 +366,45 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       Err(AllocationError::AllocationLessThanKeyShare)?
     }
 
-    /*
-      If the validator set has a single point of failure, the following does nothing. If the
-      validator set has decentralized and doesn't have a single point of failure, the following
-      will ensure this allocation doesn't create a single point of failure.
-    */
     {
-      // Check the validator set's current expected key shares
-      let expected_key_shares = Self::expected_key_shares(network, allocation_per_key_share);
-      // Check if the top validator in this set may be faulty without causing a halt under this f
-      let currently_tolerates_single_point_of_failure = if let Some(top_validator) =
-        Self::iter_allocations(network, allocation_per_key_share).next()
+      let new_key_shares =
+        KeySharesStruct::from_allocation(new_allocation, allocation_per_key_share);
+
+      // If this would guarantee this validator will be a single point of failure, error
+      if ((3 * new_key_shares.0) + 1) > KeySharesStruct::MAX_PER_SET {
+        Err(AllocationError::IntroducesSinglePointOfFailure)?;
+      }
+
+      /*
+        If the validator set has a single point of failure, the following does nothing. If the
+        validator set has decentralized and doesn't have a single point of failure, the following
+        will ensure this allocation doesn't create a single point of failure.
+      */
       {
-        let (_key, amount) = top_validator;
-        let key_shares = KeySharesStruct::from_allocation(amount, allocation_per_key_share);
-        key_shares.0 <= (expected_key_shares.0 / 3)
-      } else {
-        false
-      };
-      // If the set currently tolerates the fault of the top validator, don't let that change
-      if currently_tolerates_single_point_of_failure {
-        let old_key_shares =
-          KeySharesStruct::from_allocation(old_allocation, allocation_per_key_share);
-        let new_key_shares =
-          KeySharesStruct::from_allocation(new_allocation, allocation_per_key_share);
-        // Update the amount of expected key shares per the key shares added
-        let expected_key_shares = KeySharesStruct::saturating_from(
-          expected_key_shares.0 + (new_key_shares.0 - old_key_shares.0),
-        );
-        // If the new key shares exceeds the fault tolerance, don't allow the allocation
-        if new_key_shares.0 > (expected_key_shares.0 / 3) {
-          Err(AllocationError::IntroducesSinglePointOfFailure)?
+        // Check the validator set's current expected key shares
+        let expected_key_shares = Self::expected_key_shares(network, allocation_per_key_share);
+        // Check if the top validator in this set may be faulty without causing a halt under this f
+        let currently_tolerates_single_point_of_failure = if let Some(top_validator) =
+          Self::iter_allocations(network, allocation_per_key_share).next()
+        {
+          let (_key, amount) = top_validator;
+          let key_shares = KeySharesStruct::from_allocation(amount, allocation_per_key_share);
+          key_shares.0 <= (expected_key_shares.0 / 3)
+        } else {
+          false
+        };
+        // If the set currently tolerates the fault of the top validator, don't let that change
+        if currently_tolerates_single_point_of_failure {
+          let old_key_shares =
+            KeySharesStruct::from_allocation(old_allocation, allocation_per_key_share);
+          // Update the amount of expected key shares per the key shares added
+          let expected_key_shares = KeySharesStruct::saturating_from(
+            expected_key_shares.0 + (new_key_shares.0 - old_key_shares.0),
+          );
+          // If the new key shares exceeds the fault tolerance, don't allow the allocation
+          if new_key_shares.0 > (expected_key_shares.0 / 3) {
+            Err(AllocationError::IntroducesSinglePointOfFailure)?;
+          }
         }
       }
     }

@@ -319,21 +319,6 @@ mod pallet {
     }
 
     /*
-    fn increase_allocation(
-      network: NetworkId,
-      account: T::AccountId,
-      amount: Amount,
-      block_reward: bool,
-    ) -> DispatchResult {
-      /* TODO
-      // The above is_bft calls are only used to check a BFT net doesn't become non-BFT
-      // Check here if this call would prevent a non-BFT net from *ever* becoming BFT
-      if (new_allocation / allocation_per_key_share) >= (MAX_KEY_SHARES_PER_SET_U32 / 3).into() {
-        Err(Error::<T>::AllocationWouldPreventFaultTolerance)?;
-      }
-      */
-    }
-
     fn session_to_unlock_on_for_current_set(network: NetworkId) -> Option<Session> {
       let mut to_unlock_on = Self::session(network)?;
       // Move to the next session, as deallocating currently in-use stake is obviously invalid
