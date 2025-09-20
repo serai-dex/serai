@@ -109,6 +109,14 @@ pub enum Event {
     /// The set which accepted responsibility from the prior set.
     set: ValidatorSet,
   },
+  /// A slash report has been entered for this validator set.
+  ///
+  /// This may be due to a slash report being published or a default being used due to one not
+  /// being received within time.
+  SlashReport {
+    /// The set whose slash report has been entered.
+    set: ExternalValidatorSet,
+  },
   /// A validator set their keys on an embedded elliptic curve for a network.
   SetEmbeddedEllipticCurveKeys {
     /// The validator which set their keys.

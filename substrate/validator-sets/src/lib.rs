@@ -21,6 +21,7 @@ use keys::{KeysStorage, Keys as _};
 #[frame_support::pallet]
 mod pallet {
   use sp_core::sr25519::Public;
+  use sp_application_crypto::RuntimePublic;
 
   use frame_system::pallet_prelude::*;
   use frame_support::{pallet_prelude::*, traits::OneSessionHandler};
@@ -35,7 +36,9 @@ mod pallet {
       network_id::*,
       coin::*,
       balance::*,
-      validator_sets::{Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct},
+      validator_sets::{
+        Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct, SlashReport,
+      },
       address::SeraiAddress,
     },
     economic_security::EconomicSecurity,
@@ -126,6 +129,8 @@ mod pallet {
   #[pallet::storage]
   type DelayedDeallocations<T: Config> =
     StorageDoubleMap<_, Blake2_128Concat, Public, Identity, Session, Amount, OptionQuery>;
+  #[pallet::storage]
+  type PendingSlashReport<T: Config> = StorageMap<_, Identity, ExternalNetworkId, (), OptionQuery>;
 
   impl<T: Config> SessionsStorage for Abstractions<T> {
     type Config = T;
@@ -138,6 +143,7 @@ mod pallet {
     type SelectedValidators = SelectedValidators<T>;
     type TotalAllocatedStake = TotalAllocatedStake<T>;
     type DelayedDeallocations = DelayedDeallocations<T>;
+    type PendingSlashReport = PendingSlashReport<T>;
   }
 
   // Satisfy the `Keys` abstractions
@@ -152,13 +158,6 @@ mod pallet {
     type OraclizationKeys = OraclizationKeys<T>;
     type ExternalKeys = ExternalKeys<T>;
   }
-
-  /* TODO
-  /// The key for validator sets which can (and still need to) publish their slash reports.
-  #[pallet::storage]
-  pub type PendingSlashReport<T: Config> =
-    StorageMap<_, Identity, ExternalNetworkId, Public, OptionQuery>;
-  */
 
   #[pallet::error]
   pub enum Error<T> {
@@ -322,34 +321,6 @@ mod pallet {
       }
 
       Sessions::<T>::decrease_allocation(network, account, amount)
-    }
-
-    // TODO: This is called retire_set, yet just starts retiring the set
-    // Update the nomenclature within this function
-    pub fn retire_set(set: ValidatorSet) {
-      // Serai doesn't set keys and network slashes are handled by BABE/GRANDPA
-      if let NetworkId::External(n) = set.network {
-        // If the prior prior set didn't report, emit they're retired now
-        if PendingSlashReport::<T>::get(n).is_some() {
-          Self::deposit_event(Event::SetRetired {
-            set: ValidatorSet { network: set.network, session: Session(set.session.0 - 1) },
-          });
-        }
-
-        // This overwrites the prior value as the prior to-report set's stake presumably just
-        // unlocked, making their report unenforceable
-        let keys =
-          Keys::<T>::take(ExternalValidatorSet { network: n, session: set.session }).unwrap();
-        PendingSlashReport::<T>::set(n, Some(keys.0));
-      } else {
-        // emit the event for serai network
-        Self::deposit_event(Event::SetRetired { set });
-      }
-
-      // We're retiring this set because the set after it accepted the handover
-      Self::deposit_event(Event::AcceptedHandover {
-        set: ValidatorSet { network: set.network, session: Session(set.session.0 + 1) },
-      });
     }
 
     /// Returns the required stake in terms SRI for a given `Balance`.
@@ -520,7 +491,6 @@ mod pallet {
       Ok(())
     }
 
-    /* TODO
     #[pallet::call_index(1)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn report_slashes(
@@ -531,24 +501,13 @@ mod pallet {
     ) -> DispatchResult {
       ensure_none(origin)?;
 
-      // signature isn't checked as this is an unsigned transaction, and validate_unsigned
-      // (called by pre_dispatch) checks it
+      // `signature` is checked within `ValidateUnsigned`
       let _ = signature;
 
-      // TODO: Handle slashes
-      let _ = slashes;
-
-      // Emit set retireed
-      Pallet::<T>::deposit_event(Event::SetRetired {
-        set: ValidatorSet {
-          network: network.into(),
-          session: Session(Self::session(NetworkId::from(network)).unwrap().0 - 1),
-        },
-      });
+      Abstractions::<T>::handle_slash_report(network, slashes);
 
       Ok(())
     }
-    */
 
     #[pallet::call_index(2)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
@@ -693,7 +652,6 @@ mod pallet {
           }
 
           // Verify the signature with the MuSig key of the signers
-          use sp_application_crypto::RuntimePublic;
           if !set.musig_key(&signers).verify(&set.set_keys_message(key_pair), &signature.0.into()) {
             Err(InvalidTransaction::BadProof)?;
           }
@@ -704,30 +662,23 @@ mod pallet {
             .propagate(true)
             .build()
         }
-        /* TODO
         Call::report_slashes { network, ref slashes, ref signature } => {
           let network = *network;
-          let Some(key) = PendingSlashReport::<T>::take(network) else {
-            // Assumed already published
+
+          let Some(key) = Abstractions::<T>::waiting_for_slash_report(network) else {
             Err(InvalidTransaction::Stale)?
           };
 
-          // There must have been a previous session is PendingSlashReport is populated
-          let set = ExternalValidatorSet {
-            network,
-            session: Session(Self::session(NetworkId::from(network)).unwrap().0 - 1),
-          };
-          if !key.verify(&slashes.report_slashes_message(), signature) {
+          if !key.verify(&slashes.report_slashes_message(), &signature.0.into()) {
             Err(InvalidTransaction::BadProof)?;
           }
 
           ValidTransaction::with_tag_prefix("ValidatorSets")
-            .and_provides((1, set))
-            .longevity(MAX_KEY_SHARES_PER_SET_U32.into())
+            .and_provides((1, key))
+            .longevity(KeySharesStruct::MAX_PER_SET_U32.into())
             .propagate(true)
             .build()
         }
-        */
         Call::set_embedded_elliptic_curve_keys { .. } |
         Call::allocate { .. } |
         Call::deallocate { .. } |

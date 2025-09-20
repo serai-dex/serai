@@ -30,6 +30,9 @@ pub(crate) trait Keys {
 
   /// Clear a historic set of keys.
   fn clear_keys(set: ExternalValidatorSet);
+
+  /// The oraclization key for a validator set.
+  fn oraclization_key(set: ExternalValidatorSet) -> Option<Public>;
 }
 
 impl<S: KeysStorage> Keys for S {
@@ -45,5 +48,9 @@ impl<S: KeysStorage> Keys for S {
   fn clear_keys(set: ExternalValidatorSet) {
     S::OraclizationKeys::remove(set);
     S::ExternalKeys::remove(set);
+  }
+
+  fn oraclization_key(set: ExternalValidatorSet) -> Option<Public> {
+    S::OraclizationKeys::get(set)
   }
 }

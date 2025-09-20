@@ -3,9 +3,11 @@ use sp_core::{Encode, Decode, ConstU32, sr25519::Public, bounded::BoundedVec};
 
 use serai_abi::{
   primitives::{
-    network_id::NetworkId,
+    network_id::{ExternalNetworkId, NetworkId},
     balance::Amount,
-    validator_sets::{KeyShares as KeySharesStruct, Session, ExternalValidatorSet, ValidatorSet},
+    validator_sets::{
+      KeyShares as KeySharesStruct, Session, ExternalValidatorSet, ValidatorSet, SlashReport,
+    },
   },
   validator_sets::{DeallocationTimeline, Event},
 };
@@ -76,6 +78,11 @@ pub(crate) trait SessionsStorage: EmbeddedEllipticCurveKeys + Allocations + Keys
   ///
   /// This is opaque and to be exclusively read/write by `Sessions`.
   type DelayedDeallocations: StorageDoubleMap<Public, Session, Amount, Query = Option<Amount>>;
+
+  /// Networks for which we're awaiting slash reports.
+  ///
+  /// This is opaque and to be exclusively read/write by `Sessions`.
+  type PendingSlashReport: StorageMap<ExternalNetworkId, (), Query = Option<()>>;
 }
 
 /// The storage key for the SelectedValidators map.
@@ -196,6 +203,11 @@ pub(crate) trait Sessions {
     session: Session,
   ) -> Result<Amount, DeallocationError>;
 
+  /// Handle a slash report.
+  ///
+  /// This will panic if this slash report isn't pending.
+  fn handle_slash_report(network: ExternalNetworkId, slashes: SlashReport);
+
   /// The currently active session for a network.
   fn current_session(network: NetworkId) -> Option<Session>;
 
@@ -235,6 +247,11 @@ pub(crate) trait Sessions {
       .map(|(validator, _key_shares)| (validator, validator))
       .collect()
   }
+
+  /// If this network is awaiting a slash report.
+  ///
+  /// If so, this returns the key which should publish the slash report.
+  fn waiting_for_slash_report(network: ExternalNetworkId) -> Option<Public>;
 }
 
 impl<Storage: SessionsStorage> Sessions for Storage {
@@ -322,7 +339,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
   }
 
   fn accept_handover(network: NetworkId) {
-    let current = {
+    let (prior, current) = {
       let current = Storage::CurrentSession::get(network);
       let latest_decided = Storage::LatestDecidedSession::get(network)
         .expect("accepting handover but never decided a session");
@@ -333,8 +350,8 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       );
       // Set the CurrentSession variable
       Storage::CurrentSession::set(network, Some(latest_decided));
-      // Return `latest_decided` as `current` as it is now current
-      latest_decided
+      // Return `latest_decided` as `current` as it is now current, and `current` as `prior`
+      (current, latest_decided)
     };
 
     let mut total_allocated_stake = Amount(0);
@@ -347,6 +364,23 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     }
     // Update the total allocated stake variable to the current session
     Storage::TotalAllocatedStake::set(network, Some(total_allocated_stake));
+
+    match network {
+      NetworkId::Serai => {}
+      NetworkId::External(network) => {
+        // If this network never submitted its slash report, treat it as submitting `vec![]`
+        if Storage::PendingSlashReport::take(network).is_some() {
+          Core::<Storage::Config>::emit_event(Event::SlashReport {
+            set: ExternalValidatorSet {
+              network,
+              session: prior.expect("pending slash report yet no prior session"),
+            },
+          });
+        }
+        // Mark this network as pending a slash report
+        Storage::PendingSlashReport::insert(network, ());
+      }
+    }
 
     // Clean-up the historic set's storage, if one exists
     if let Some(historic_session) = current.0.checked_sub(2).map(Session) {
@@ -537,6 +571,22 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     Ok(DeallocationTimeline::Immediate)
   }
 
+  fn handle_slash_report(network: ExternalNetworkId, _slashes: SlashReport) {
+    Storage::PendingSlashReport::take(network)
+      .expect("handling a slash report which wasn't pending");
+
+    let current_session =
+      Self::current_session(network.into()).expect("handling slash report yet no current session");
+    let prior_session = Session(
+      current_session.0.checked_sub(1).expect("handling slash report yet no prior session"),
+    );
+    Core::<Storage::Config>::emit_event(Event::SlashReport {
+      set: ExternalValidatorSet { network, session: prior_session },
+    });
+
+    // TODO: Actually handle `_slashes`
+  }
+
   fn claim_delayed_deallocation(
     validator: Public,
     network: NetworkId,
@@ -580,5 +630,20 @@ impl<Storage: SessionsStorage> Sessions for Storage {
 
   fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (Public, KeySharesStruct)> {
     selected_validators::<Storage::SelectedValidators>(set)
+  }
+
+  fn waiting_for_slash_report(network: ExternalNetworkId) -> Option<Public> {
+    if !Storage::PendingSlashReport::contains_key(network) {
+      None?;
+    }
+    let current_session = Self::current_session(network.into())
+      .expect("network awaiting slash report yet no current session");
+    let prior_session = Session(
+      current_session.0.checked_sub(1).expect("network awaiting slash report yet no prior session"),
+    );
+    Some(
+      Storage::oraclization_key(ExternalValidatorSet { network, session: prior_session })
+        .expect("no oraclization key for set waiting for a slash report"),
+    )
   }
 }
