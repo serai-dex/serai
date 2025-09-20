@@ -46,7 +46,8 @@ mod pallet {
   };
 
   use serai_core_pallet::Pallet as Core;
-  use serai_coins_pallet::Pallet as Coins;
+  use serai_coins_pallet::AllowMint;
+  type Coins<T> = serai_coins_pallet::Pallet<T, serai_coins_pallet::CoinsInstance>;
 
   use super::*;
 
@@ -274,88 +275,28 @@ mod pallet {
       }
     }
 
-    /* TODO
-    /// Decreases a validator's allocation to a set.
-    ///
-    /// Errors if the capacity provided by this allocation is in use.
-    ///
-    /// Errors if a partial decrease of allocation which puts the remaining allocation below the
-    /// minimum requirement.
-    ///
-    /// The capacity prior provided by the allocation is immediately removed, in order to ensure it
-    /// doesn't become used (preventing deallocation).
-    ///
-    /// Returns if the amount is immediately eligible for deallocation.
-    fn decrease_allocation(
-      network: NetworkId,
-      account: T::AccountId,
-      amount: Amount,
-    ) -> Result<bool, DispatchError> {
-      // Check it's safe to decrease this set's stake by this amount
-      if let NetworkId::External(n) = network {
-        let new_total_staked = Self::total_allocated_stake(NetworkId::from(n))
-          .unwrap()
-          .0
-          .checked_sub(amount.0)
-          .ok_or(Error::<T>::NotEnoughAllocated)?;
-        let required_stake = Self::required_stake_for_network(n);
-        if new_total_staked < required_stake {
-          Err(Error::<T>::DeallocationWouldRemoveEconomicSecurity)?;
-        }
-      }
-
-      let decreased_key_shares =
-        (old_allocation / allocation_per_key_share) > (new_allocation / allocation_per_key_share);
-
-      // If this decreases the validator's key shares, error if the new set is unable to handle
-      // byzantine faults
-      let mut was_bft = None;
-      if decreased_key_shares {
-        was_bft = Some(Self::is_bft(network));
-      }
-
-      if let Some(was_bft) = was_bft {
-        if was_bft && (!Self::is_bft(network)) {
-          Err(Error::<T>::DeallocationWouldRemoveFaultTolerance)?;
-        }
-      }
-
-      Sessions::<T>::decrease_allocation(network, account, amount)
+    /// The required amount of stake for a balance.
+    fn stake_requirement(balance: ExternalBalance) -> AmountRepr {
+      let value = T::EconomicSecurity::sri_value(balance).0;
+      // As 67% can misbehave, 67% of stake must be sufficient to secure this
+      let requirement = value.saturating_mul(3) / 2;
+      // We add an additional margin of 20%
+      let margin = requirement / 5;
+      requirement.saturating_add(margin)
     }
 
-    /// Returns the required stake in terms SRI for a given `Balance`.
-    pub fn required_stake(balance: &ExternalBalance) -> SubstrateAmount {
-      use dex_pallet::HigherPrecisionBalance;
-
-      // This is inclusive to an increase in accuracy
-      let sri_per_coin = Dex::<T>::security_oracle_value(balance.coin).unwrap_or(Amount(0));
-
-      // See dex-pallet for the reasoning on these
-      let coin_decimals = balance.coin.decimals().max(5);
-      let accuracy_increase = HigherPrecisionBalance::from(SubstrateAmount::pow(10, coin_decimals));
-
-      let total_coin_value = u64::try_from(
-        HigherPrecisionBalance::from(balance.amount.0) *
-          HigherPrecisionBalance::from(sri_per_coin.0) /
-          accuracy_increase,
-      )
-      .unwrap_or(u64::MAX);
-
-      // required stake formula (COIN_VALUE * 1.5) + margin(20%)
-      let required_stake = total_coin_value.saturating_mul(3).saturating_div(2);
-      required_stake.saturating_add(total_coin_value.saturating_div(5))
-    }
-
-    /// Returns the current total required stake for a given `network`.
-    pub fn required_stake_for_network(network: ExternalNetworkId) -> SubstrateAmount {
-      let mut total_required = 0;
+    /// The required amount of stake for a network.
+    fn network_stake_requirement(network: ExternalNetworkId) -> AmountRepr {
+      let mut requirement = AmountRepr::zero();
       for coin in network.coins() {
         let supply = Coins::<T>::supply(Coin::from(coin));
-        total_required += Self::required_stake(&ExternalBalance { coin, amount: Amount(supply) });
+        requirement = requirement
+          .saturating_add(Self::stake_requirement(ExternalBalance { coin, amount: supply }));
       }
-      total_required
+      requirement
     }
 
+    /* TODO
     pub fn distribute_block_rewards(
       network: NetworkId,
       account: T::AccountId,
@@ -532,11 +473,7 @@ mod pallet {
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
-      Coins::<T, serai_coins_pallet::CoinsInstance>::transfer_fn(
-        validator,
-        Self::account(),
-        Balance { coin: Coin::Serai, amount },
-      )?;
+      Coins::<T>::transfer_fn(validator, Self::account(), Balance { coin: Coin::Serai, amount })?;
       Abstractions::<T>::increase_allocation(network, validator, amount, false)
         .map_err(Error::<T>::AllocationError)?;
       Ok(())
@@ -558,11 +495,7 @@ mod pallet {
       });
 
       if matches!(timeline, DeallocationTimeline::Immediate) {
-        Coins::<T, serai_coins_pallet::CoinsInstance>::transfer_fn(
-          Self::account(),
-          validator,
-          Balance { coin: Coin::Serai, amount },
-        )?;
+        Coins::<T>::transfer_fn(Self::account(), validator, Balance { coin: Coin::Serai, amount })?;
       }
 
       Ok(())
@@ -584,11 +517,7 @@ mod pallet {
         deallocation: ValidatorSet { network, session },
       });
 
-      Coins::<T, serai_coins_pallet::CoinsInstance>::transfer_fn(
-        Self::account(),
-        validator,
-        Balance { coin: Coin::Serai, amount },
-      )?;
+      Coins::<T>::transfer_fn(Self::account(), validator, Balance { coin: Coin::Serai, amount })?;
       Ok(())
     }
   }
@@ -693,20 +622,20 @@ mod pallet {
     }
   }
 
-  /* TODO
+  /*
+    TODO: Add an intent. While we shouldn't allow `Transfer`, `AddLiquidity` when we're within a
+    certain range of the limit, we should still allow swaps.
+  */
   impl<T: Config> AllowMint for Pallet<T> {
     fn is_allowed(balance: &ExternalBalance) -> bool {
-      // get the required stake
-      let current_required = Self::required_stake_for_network(balance.coin.network());
-      let new_required = current_required + Self::required_stake(balance);
-
-      // get the total stake for the network & compare.
+      let current_requirement = Self::network_stake_requirement(balance.coin.network());
+      let new_requirement = current_requirement.saturating_add(Self::stake_requirement(*balance));
       let staked =
-        Self::total_allocated_stake(NetworkId::from(balance.coin.network())).unwrap_or(Amount(0));
-      staked.0 >= new_required
+        Abstractions::<T>::stake_for_current_validator_set(balance.coin.network().into())
+          .unwrap_or(Amount(0));
+      staked.0 >= new_requirement
     }
   }
-  */
 }
 pub use pallet::*;
 

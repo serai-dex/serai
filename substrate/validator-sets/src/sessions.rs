@@ -494,6 +494,9 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     validator: Public,
     amount: Amount,
   ) -> Result<DeallocationTimeline, DeallocationError> {
+    // TODO: Check if this would introduce a single point of failure
+    // TODO: Check if this would violate economic security
+
     /*
       Decrease the allocation.
 
