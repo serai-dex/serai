@@ -51,13 +51,16 @@ mod pallet {
   use pallet_babe::Pallet as Babe;
   use pallet_grandpa::Pallet as Grandpa;
 
-  use serai_abi::primitives::{
-    crypto::SignedEmbeddedEllipticCurveKeys,
-    network_id::*,
-    coin::*,
-    balance::*,
-    validator_sets::{Session, ValidatorSet, KeyShares as KeySharesStruct},
-    address::SeraiAddress,
+  use serai_abi::{
+    primitives::{
+      crypto::SignedEmbeddedEllipticCurveKeys,
+      network_id::*,
+      coin::*,
+      balance::*,
+      validator_sets::{Session, ValidatorSet, KeyShares as KeySharesStruct},
+      address::SeraiAddress,
+    },
+    economic_security::EconomicSecurity,
   };
 
   use serai_coins_pallet::Pallet as Coins;
@@ -73,6 +76,7 @@ mod pallet {
     + serai_coins_pallet::Config<serai_coins_pallet::CoinsInstance>
   {
     type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
+    type EconomicSecurity: EconomicSecurity;
   }
 
   #[pallet::genesis_config]
@@ -250,14 +254,10 @@ mod pallet {
       // Spawn BABE's, GRANDPA's genesis session
       let genesis_serai_validators = Abstractions::<T>::serai_validators(Session(0));
       Babe::<T>::on_genesis_session(
-        genesis_serai_validators
-          .iter()
-          .map(|(validator, key)| (validator, (*key).into())),
+        genesis_serai_validators.iter().map(|(validator, key)| (validator, (*key).into())),
       );
       Grandpa::<T>::on_genesis_session(
-        genesis_serai_validators
-          .iter()
-          .map(|(validator, key)| (validator, (*key).into())),
+        genesis_serai_validators.iter().map(|(validator, key)| (validator, (*key).into())),
       );
     }
   }
@@ -306,13 +306,16 @@ mod pallet {
       Abstractions::<T>::stake_for_current_validator_set(network)
     }
 
-    fn attempt_external_network_session_rotation() {
-      for network in ExternalNetworkId::all() {
-        let include_genesis_validators = true; // TODO
-        Abstractions::<T>::attempt_new_session(network.into(), include_genesis_validators);
+    fn include_genesis_validators(network: NetworkId) -> bool {
+      match network {
+        // For Serai, we include the genesis validators as long as any other set does
+        NetworkId::Serai => {
+          ExternalNetworkId::all().all(T::EconomicSecurity::achieved_economic_security)
+        }
+        // For the other networks, we include the genesis validators if they have yet to achieve
+        // economic security
+        NetworkId::External(network) => T::EconomicSecurity::achieved_economic_security(network),
       }
-
-      // TODO Dex::<T>::on_new_session(network);
     }
 
     /*
@@ -568,14 +571,16 @@ mod pallet {
           // Accept the hand-over to the next session for the Serai network
           Abstractions::<T>::accept_handover(NetworkId::Serai);
           // Decide the next session for the Serai network
-          let include_genesis_validators = true; // TODO
           assert!(
-            Abstractions::<T>::attempt_new_session(NetworkId::Serai, include_genesis_validators),
+            Abstractions::<T>::attempt_new_session(
+              NetworkId::Serai,
+              Self::include_genesis_validators(NetworkId::Serai)
+            ),
             "failed to attempt the next session for the Serai network"
           );
         }
 
-        // Update BABE
+        // Update BABE, GRANDPA
         {
           let current_serai_session = Abstractions::<T>::current_session(NetworkId::Serai)
             .expect("never selected a session for Serai");
@@ -624,7 +629,15 @@ mod pallet {
           );
         }
 
-        Self::attempt_external_network_session_rotation();
+        // Attempt new sessions for all external networks
+        for network in ExternalNetworkId::all() {
+          Abstractions::<T>::attempt_new_session(
+            network.into(),
+            Self::include_genesis_validators(network.into()),
+          );
+        }
+
+        // TODO Dex::<T>::on_new_session(network);
 
         Weight::zero() // TODO
       } else {

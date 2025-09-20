@@ -11,3 +11,10 @@ pub enum Event {
     network: ExternalNetworkId,
   },
 }
+
+/// A trait representing access to the information on economic security.
+pub trait EconomicSecurity {
+  /// If am external network has _ever_ achieved economic security.
+  #[must_use]
+  fn achieved_economic_security(network: ExternalNetworkId) -> bool;
+}
