@@ -15,40 +15,6 @@ mod sessions;
 use sessions::{*, GenesisValidators as GenesisValidatorsContainer};
 
 /*
-use core::marker::PhantomData;
-
-use scale::{Encode, Decode};
-
-use sp_std::{vec, vec::Vec};
-use sp_core::sr25519::{Public, Signature};
-use sp_application_crypto::RuntimePublic;
-use sp_session::{ShouldEndSession, GetSessionNumber, GetValidatorCount};
-use sp_runtime::{KeyTypeId, ConsensusEngineId, traits::IsMember};
-use sp_staking::offence::{ReportOffence, Offence, OffenceError};
-
-use frame_system::{pallet_prelude::*, RawOrigin};
-use frame_support::{
-  pallet_prelude::*,
-  sp_runtime::SaturatedConversion,
-  traits::{DisabledValidators, KeyOwnerProofSystem, FindAuthor},
-  BoundedVec, WeakBoundedVec, StoragePrefixedMap,
-};
-
-use serai_abi::primitives::*;
-pub use validator_sets_primitives as primitives;
-use primitives::*;
-
-use serai_coins_pallet::{Pallet as Coins, AllowMint};
-use dex_pallet::Pallet as Dex;
-
-use pallet_babe::{
-  Pallet as Babe, AuthorityId as BabeAuthorityId, EquivocationOffence as BabeEquivocationOffence,
-};
-use pallet_grandpa::{
-  Pallet as Grandpa, AuthorityId as GrandpaAuthorityId,
-  EquivocationOffence as GrandpaEquivocationOffence,
-};
-
 #[derive(Debug, Encode, Decode, PartialEq, Eq, Clone)]
 pub struct MembershipProof<T: pallet::Config>(pub Public, pub PhantomData<T>);
 impl<T: pallet::Config> GetSessionNumber for MembershipProof<T> {
@@ -79,7 +45,10 @@ mod pallet {
   use sp_core::sr25519::Public;
 
   use frame_system::pallet_prelude::*;
-  use frame_support::pallet_prelude::*;
+  use frame_support::{pallet_prelude::*, traits::OneSessionHandler};
+
+  use pallet_session::ShouldEndSession;
+  use pallet_babe::Pallet as Babe;
 
   use serai_abi::primitives::{
     crypto::SignedEmbeddedEllipticCurveKeys,
@@ -96,9 +65,12 @@ mod pallet {
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config + serai_coins_pallet::Config<serai_coins_pallet::CoinsInstance>
+    frame_system::Config
+    + pallet_session::Config
+    + pallet_babe::Config
+    + serai_coins_pallet::Config<serai_coins_pallet::CoinsInstance>
   {
-    // type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
+    type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
   }
 
   #[pallet::genesis_config]
@@ -108,57 +80,8 @@ mod pallet {
     pub participants: Vec<(T::AccountId, Vec<SignedEmbeddedEllipticCurveKeys>)>,
   }
 
-  #[pallet::genesis_build]
-  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-    fn build(&self) {
-      for (participant, keys) in &self.participants {
-        for (network, keys) in ExternalNetworkId::all().zip(keys.iter().cloned()) {
-          assert_eq!(network, keys.network());
-          <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::set_embedded_elliptic_curve_keys(
-            *participant,
-            keys,
-          )
-          .expect("genesis embedded elliptic curve keys weren't valid");
-        }
-      }
-      for network in NetworkId::all() {
-        Abstractions::<T>::attempt_new_session(network, true);
-      }
-    }
-  }
-
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
-
-  /*
-  /// The allocation required per key share.
-  // Uses Identity for the lookup to avoid a hash of a severely limited fixed key-space.
-  #[pallet::storage]
-  #[pallet::getter(fn allocation_per_key_share)]
-  pub type AllocationPerKeyShare<T: Config> =
-    StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
-  /// The validators selected to be in-set (and their key shares), regardless of if removed.
-  ///
-  /// This method allows iterating over all validators and their stake.
-  #[pallet::storage]
-  #[pallet::getter(fn participants_for_latest_decided_set)]
-  pub(crate) type Participants<T: Config> = StorageMap<
-    _,
-    Identity,
-    NetworkId,
-    BoundedVec<(Public, u64), ConstU32<{ MAX_KEY_SHARES_PER_SET_U32 }>>,
-    OptionQuery,
-  >;
-  /// The validators selected to be in-set, regardless of if removed.
-  ///
-  /// This method allows quickly checking for presence in-set and looking up a validator's key
-  /// shares.
-  // Uses Identity for NetworkId to avoid a hash of a severely limited fixed key-space.
-  #[pallet::storage]
-  pub(crate) type InSet<T: Config> =
-    StorageDoubleMap<_, Identity, NetworkId, Blake2_128Concat, Public, u64, OptionQuery>;
-  }
-  */
 
   struct Abstractions<T: Config>(PhantomData<T>);
 
@@ -281,20 +204,6 @@ mod pallet {
       session: Session,
     },
   }
-
-  impl<T: Config> Pallet<T> {
-    fn new_set(network: NetworkId) {
-      // TODO
-      let include_genesis_validators = true;
-      // TODO: prevent new set if it doesn't have enough stake for economic security.
-      Abstractions::<T>::attempt_new_session(network, include_genesis_validators)
-
-      /* TODO
-      let set = ValidatorSet { network, session };
-      Pallet::<T>::deposit_event(Event::NewSet { set });
-      */
-    }
-  }
   */
 
   #[pallet::error]
@@ -307,20 +216,43 @@ mod pallet {
     DeallocationError(DeallocationError),
   }
 
-  /* TODO
-  #[pallet::hooks]
-  impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-    fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-      if T::ShouldEndSession::should_end_session(n) {
-        Self::rotate_session();
-        // TODO: set the proper weights
-        T::BlockWeights::get().max_block
-      } else {
-        Weight::zero()
+  #[pallet::genesis_build]
+  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+    fn build(&self) {
+      for (participant, keys) in &self.participants {
+        for (network, keys) in ExternalNetworkId::all().zip(keys.iter().cloned()) {
+          assert_eq!(network, keys.network());
+          <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::set_embedded_elliptic_curve_keys(
+            *participant,
+            keys,
+          )
+          .expect("genesis embedded elliptic curve keys weren't valid");
+        }
       }
+      for network in NetworkId::all() {
+        assert!(
+          Abstractions::<T>::attempt_new_session(network, true),
+          "failed to attempt a new session on genesis"
+        );
+      }
+
+      // Immediately accept the handover for the genesis validators, for the Serai network
+      Abstractions::<T>::accept_handover(NetworkId::Serai);
+      // And decide the next session for the Serai network, as BABE requires selecting the next one
+      // already
+      assert!(
+        Abstractions::<T>::attempt_new_session(NetworkId::Serai, true),
+        "failed to attempt the next session for the Serai network on genesis"
+      );
+
+      // Spawn BABE's genesis session
+      Babe::<T>::on_genesis_session(
+        Abstractions::<T>::serai_validators(Session(0))
+          .iter()
+          .map(|(validator, key)| (validator, pallet_babe::AuthorityId::from(*key))),
+      );
     }
   }
-  */
 
   impl<T: Config> Pallet<T> {
     fn account() -> T::AccountId {
@@ -366,37 +298,19 @@ mod pallet {
       Abstractions::<T>::stake_for_current_validator_set(network)
     }
 
-    /*
-    // is_bft returns if the network is able to survive any single node becoming byzantine.
-    fn is_bft(network: NetworkId) -> bool {
-      let allocation_per_key_share = AllocationPerKeyShare::<T>::get(network).unwrap().0;
-
-      let mut validators_len = 0;
-      let mut top = None;
-      let mut key_shares = 0;
-      for (_, amount) in Abstractions::<T>::iter_allocations(network, allocation_per_key_share) {
-        validators_len += 1;
-
-        key_shares += amount.0 / allocation_per_key_share;
-        if top.is_none() {
-          top = Some(key_shares);
-        }
-
-        if key_shares > u64::from(MAX_KEY_SHARES_PER_SET_U32) {
-          break;
-        }
+    fn attempt_external_network_session_rotation() {
+      for network in ExternalNetworkId::all() {
+        let include_genesis_validators = true; // TODO
+        Abstractions::<T>::attempt_new_session(network.into(), include_genesis_validators);
       }
 
-      let Some(top) = top else { return false };
-
-      // key_shares may be over MAX_KEY_SHARES_PER_SET, which will cause a round robin reduction of
-      // each validator's key shares until their sum is MAX_KEY_SHARES_PER_SET
-      // post_amortization_key_shares_for_top_validator yields what the top validator's key shares
-      // would be after such a reduction, letting us evaluate this correctly
-      let top = post_amortization_key_shares_for_top_validator(validators_len, top, key_shares);
-      (top * 3) < key_shares.min(MAX_KEY_SHARES_PER_SET_U32.into())
+      /* TODO
+      Dex::<T>::on_new_session(network);
+      Grandpa::new_session
+      */
     }
 
+    /*
     fn increase_allocation(
       network: NetworkId,
       account: T::AccountId,
@@ -410,7 +324,6 @@ mod pallet {
         Err(Error::<T>::AllocationWouldPreventFaultTolerance)?;
       }
       */
-      Abstractions::<T>::increase_allocation(network, account, amount, block_reward)
     }
 
     fn session_to_unlock_on_for_current_set(network: NetworkId) -> Option<Session> {
@@ -477,54 +390,6 @@ mod pallet {
       Sessions::<T>::decrease_allocation(network, account, amount)
     }
 
-    // Checks if this session has completed the handover from the prior session.
-    fn handover_completed(network: NetworkId, session: Session) -> bool {
-      let Some(current_session) = Self::session(network) else { return false };
-
-      // If the session we've been queried about is old, it must have completed its handover
-      if current_session.0 > session.0 {
-        return true;
-      }
-      // If the session we've been queried about has yet to start, it can't have completed its
-      // handover
-      if current_session.0 < session.0 {
-        return false;
-      }
-
-      let NetworkId::External(n) = network else {
-        // Handover is automatically complete for Serai as it doesn't have a handover protocol
-        return true;
-      };
-
-      // The current session must have set keys for its handover to be completed
-      if !Keys::<T>::contains_key(ExternalValidatorSet { network: n, session }) {
-        return false;
-      }
-
-      // This must be the first session (which has set keys) OR the prior session must have been
-      // retired (signified by its keys no longer being present)
-      (session.0 == 0) ||
-        (!Keys::<T>::contains_key(ExternalValidatorSet {
-          network: n,
-          session: Session(session.0 - 1),
-        }))
-    }
-
-    fn new_session() {
-      for network in serai_abi::primitives::NETWORKS {
-        // If this network hasn't started sessions yet, don't start one now
-        let Some(current_session) = Self::session(network) else { continue };
-        // Only spawn a new set if:
-        // - This is Serai, as we need to rotate Serai upon a new session (per Babe)
-        // - The current set was actually established with a completed handover protocol
-        if (network == NetworkId::Serai) || Self::handover_completed(network, current_session) {
-          Pallet::<T>::new_set(network);
-          // let the Dex know session is rotated.
-          Dex::<T>::on_new_session(network);
-        }
-      }
-    }
-
     // TODO: This is called retire_set, yet just starts retiring the set
     // Update the nomenclature within this function
     pub fn retire_set(set: ValidatorSet) {
@@ -553,48 +418,12 @@ mod pallet {
       });
     }
 
-    /// Take the amount deallocatable.
-    ///
-    /// `session` refers to the Session the stake becomes deallocatable on.
-    fn take_deallocatable_amount(
-      network: NetworkId,
-      session: Session,
-      key: Public,
-    ) -> Option<Amount> {
-      // Check this Session has properly started, completing the handover from the prior session.
-      if !Self::handover_completed(network, session) {
-        return None;
-      }
-      PendingDeallocations::<T>::take((network, key), session)
-    }
-
     pub(crate) fn rotate_session() {
-      // next serai validators that is in the queue.
-      let now_validators = Participants::<T>::get(NetworkId::Serai)
-        .expect("no Serai participants upon rotate_session");
-      let prior_serai_session = Self::session(NetworkId::Serai).unwrap();
-
-      // TODO: T::SessionHandler::on_before_session_ending() was here.
-      // end the current serai session.
       Self::retire_set(ValidatorSet { network: NetworkId::Serai, session: prior_serai_session });
 
       // make a new session and get the next validator set.
       Self::new_session();
 
-      // Update Babe and Grandpa
-      let session = prior_serai_session.0 + 1;
-      let next_validators = Participants::<T>::get(NetworkId::Serai).unwrap();
-      Babe::<T>::enact_epoch_change(
-        WeakBoundedVec::force_from(
-          now_validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
-          None,
-        ),
-        WeakBoundedVec::force_from(
-          next_validators.iter().copied().map(|(id, w)| (BabeAuthorityId::from(id), w)).collect(),
-          None,
-        ),
-        Some(session),
-      );
       Grandpa::<T>::new_session(
         true,
         session,
@@ -729,15 +558,67 @@ mod pallet {
         false
       }
     }
-
-    /// Returns the external network key for a given external network
-    pub fn external_network_key(network: ExternalNetworkId) -> Option<Vec<u8>> {
-      let current_session = Self::session(NetworkId::from(network))?;
-      let keys = Keys::<T>::get(ExternalValidatorSet { network, session: current_session })?;
-
-      Some(keys.1.into_inner())
-    }
     */
+  }
+
+  #[pallet::hooks]
+  impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+    fn on_initialize(n: BlockNumberFor<T>) -> Weight {
+      if <T as Config>::ShouldEndSession::should_end_session(n) {
+        Babe::<T>::on_before_session_ending();
+
+        {
+          // Accept the hand-over to the next session for the Serai network
+          Abstractions::<T>::accept_handover(NetworkId::Serai);
+          // Decide the next session for the Serai network
+          let include_genesis_validators = true; // TODO
+          assert!(
+            Abstractions::<T>::attempt_new_session(NetworkId::Serai, include_genesis_validators),
+            "failed to attempt the next session for the Serai network"
+          );
+        }
+
+        // Update BABE
+        {
+          let current_serai_session = Abstractions::<T>::current_session(NetworkId::Serai)
+            .expect("never selected a session for Serai");
+          let latest_decided_serai_session =
+            Abstractions::<T>::latest_decided_session(NetworkId::Serai)
+              .expect("current session yet no latest decided session for Serai");
+          assert_eq!(
+            Session(current_serai_session.0 + 1),
+            latest_decided_serai_session,
+            "latest decided Serai session wasn't the session after the current session"
+          );
+
+          let prior_serai_validators = Abstractions::<T>::serai_validators(Session(
+            current_serai_session.0.checked_sub(1).expect("ShouldEndSession triggered on genesis"),
+          ));
+          assert!(
+            !prior_serai_validators.is_empty(),
+            "prior Serai validators weren't able to be fetched from storage",
+          );
+          let serai_validators = Abstractions::<T>::serai_validators(current_serai_session);
+          let queued_serai_validators =
+            Abstractions::<T>::serai_validators(latest_decided_serai_session);
+
+          fn map((validator, key): &(Public, Public)) -> (&Public, pallet_babe::AuthorityId) {
+            (validator, (*key).into())
+          }
+          Babe::<T>::on_new_session(
+            prior_serai_validators != serai_validators,
+            serai_validators.iter().map(map),
+            queued_serai_validators.iter().map(map),
+          );
+        }
+
+        Self::attempt_external_network_session_rotation();
+
+        Weight::zero() // TODO
+      } else {
+        Weight::zero()
+      }
+    }
   }
 
   #[pallet::call]

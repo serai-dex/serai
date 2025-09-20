@@ -148,7 +148,9 @@ pub(crate) trait Sessions {
   ///
   /// Doesn't spawn the next session if the latest decided session has yet to start. This bounds
   /// the current session to be the latest decided session or the one prior.
-  fn attempt_new_session(network: NetworkId, include_genesis_validators: bool);
+  ///
+  /// Returns `true` if the next session was decided. Returns `false` otherwise.
+  fn attempt_new_session(network: NetworkId, include_genesis_validators: bool) -> bool;
 
   /// Have the latest-decided session accept the handover from the current set, if one exists.
   ///
@@ -215,10 +217,23 @@ pub(crate) trait Sessions {
 
   /// The stake for the current validator set.
   fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount>;
+
+  /// The selected validators for a set.
+  ///
+  /// This will return an empty iterator if the validators have yet to be decided, or if the
+  /// selected validators were cleared due to being historic.
+  fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (Public, KeySharesStruct)>;
+
+  /// The validators for the Serai network, in the form expected by BABE, GRANDPA.
+  fn serai_validators(session: Session) -> Vec<(Public, Public)> {
+    Self::selected_validators(ValidatorSet { network: NetworkId::Serai, session })
+      .map(|(validator, _key_shares)| (validator, validator))
+      .collect()
+  }
 }
 
 impl<Storage: SessionsStorage> Sessions for Storage {
-  fn attempt_new_session(network: NetworkId, include_genesis_validators: bool) {
+  fn attempt_new_session(network: NetworkId, include_genesis_validators: bool) -> bool {
     // If we haven't rotated to the latest decided session, return
     // This prevents us from deciding session #n+2 when we haven't even started #n+1
     let current_session = Storage::CurrentSession::get(network);
@@ -228,12 +243,12 @@ impl<Storage: SessionsStorage> Sessions for Storage {
           // If the latest decided session is current, we can decide the next session
         } else {
           // If we already have a pending session, don't spawn a new one
-          return;
+          return false;
         }
       }
       (Some(_current), None) => unreachable!("current session but never decided a session"),
       // If we decided our first session, but didn't start it, don't decide another session
-      (None, Some(_latest)) => return,
+      (None, Some(_latest)) => return false,
       (None, None) => {
         // If we've never started a session, we can decide the first session
       }
@@ -290,6 +305,8 @@ impl<Storage: SessionsStorage> Sessions for Storage {
         key_shares,
       );
     }
+
+    true
   }
 
   fn accept_handover(network: NetworkId) {
@@ -523,5 +540,9 @@ impl<Storage: SessionsStorage> Sessions for Storage {
 
   fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount> {
     Storage::TotalAllocatedStake::get(network)
+  }
+
+  fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (Public, KeySharesStruct)> {
+    selected_validators::<Storage::SelectedValidators>(set)
   }
 }
