@@ -21,6 +21,7 @@ bitvec = { version = "1", default-features = false, features = ["alloc", "serde"
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "bit-vec"] }
 
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", default-features = false }
+sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", default-features = false }
 sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", default-features = false }
 sp-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", default-features = false }
 
@@ -39,6 +40,7 @@ serai-coins-pallet = { path = "../coins", default-features = false }
 zeroize = "^1.5"
 
 rand_core = "0.6"
+
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
 
 [features]
@@ -48,6 +50,7 @@ std = [
   "scale/std",
 
   "sp-core/std",
+  "sp-application-crypto/std",
   "sp-io/std",
   "sp-api/std",
 

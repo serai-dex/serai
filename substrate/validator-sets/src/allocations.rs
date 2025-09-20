@@ -14,11 +14,16 @@ pub(crate) type SortedAllocationsKey = (NetworkId, [u8; 8], [u8; 16], Public);
 /// This storage is expected to be owned by the `Allocations` interface and not directly read/write
 /// to.
 pub(crate) trait AllocationsStorage {
-  /// An opaque map storing allocations.
+  /// An map storing allocations.
+  ///
+  /// This is opaque and to be exclusively read/write by `Allocations`.
   type Allocations: StorageMap<AllocationsKey, Amount, Query = Option<Amount>>;
-  /// An opaque map storing allocations in a sorted manner.
+
+  /// An map storing allocations in a sorted manner.
   ///
   /// This MUST be instantiated with a map using `Identity` for its hasher.
+  ///
+  /// This is opaque and to be exclusively read/write by `Allocations`.
   /*
     This is premised on the underlying trie iterating from keys with low-bytes to keys with
     high-bytes.

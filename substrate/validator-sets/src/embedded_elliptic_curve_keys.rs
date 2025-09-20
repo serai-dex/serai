@@ -5,7 +5,9 @@ use serai_abi::primitives::{crypto::SignedEmbeddedEllipticCurveKeys, network_id:
 use frame_support::storage::StorageDoubleMap;
 
 pub(crate) trait EmbeddedEllipticCurveKeysStorage {
-  /// An opaque map storing keys on an embedded elliptic curve.
+  /// An map storing keys on an embedded elliptic curve.
+  ///
+  /// This is opaque and to be exclusively read/write by `EmbeddedEllipticCurveKeys`.
   type EmbeddedEllipticCurveKeys: StorageDoubleMap<
     ExternalNetworkId,
     Public,

@@ -9748,6 +9748,7 @@ dependencies = [
  "serai-abi",
  "serai-coins-pallet",
  "sp-api",
+ "sp-application-crypto",
  "sp-core",
  "sp-io",
  "zeroize",

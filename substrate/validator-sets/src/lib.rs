@@ -14,6 +14,9 @@ use allocations::*;
 mod sessions;
 use sessions::{*, GenesisValidators as GenesisValidatorsContainer};
 
+mod keys;
+use keys::{KeysStorage, Keys as _};
+
 #[expect(clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 mod pallet {
@@ -28,11 +31,11 @@ mod pallet {
 
   use serai_abi::{
     primitives::{
-      crypto::SignedEmbeddedEllipticCurveKeys,
+      crypto::{SignedEmbeddedEllipticCurveKeys, ExternalKey, KeyPair, Signature},
       network_id::*,
       coin::*,
       balance::*,
-      validator_sets::{Session, ValidatorSet, KeyShares as KeySharesStruct},
+      validator_sets::{Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct},
       address::SeraiAddress,
     },
     economic_security::EconomicSecurity,
@@ -132,13 +135,20 @@ mod pallet {
     type DelayedDeallocations = DelayedDeallocations<T>;
   }
 
-  /* TODO
-  /// The generated key pair for a given validator set instance.
+  // Satisfy the `Keys` abstractions
   #[pallet::storage]
-  #[pallet::getter(fn keys)]
-  pub type Keys<T: Config> =
-    StorageMap<_, Twox64Concat, ExternalValidatorSet, KeyPair, OptionQuery>;
+  type OraclizationKeys<T: Config> =
+    StorageMap<_, Identity, ExternalValidatorSet, Public, OptionQuery>;
+  #[pallet::storage]
+  type ExternalKeys<T: Config> =
+    StorageMap<_, Identity, ExternalValidatorSet, ExternalKey, OptionQuery>;
 
+  impl<T: Config> KeysStorage for Abstractions<T> {
+    type OraclizationKeys = OraclizationKeys<T>;
+    type ExternalKeys = ExternalKeys<T>;
+  }
+
+  /* TODO
   /// The key for validator sets which can (and still need to) publish their slash reports.
   #[pallet::storage]
   pub type PendingSlashReport<T: Config> =
@@ -196,6 +206,15 @@ mod pallet {
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
+      GenesisValidators::<T>::set(Some(
+        self
+          .participants
+          .iter()
+          .map(|(participant, _keys)| *participant)
+          .collect::<Vec<_>>()
+          .try_into()
+          .expect("amount of genesis validators exceeded the maximum allowed per set"),
+      ));
       for (participant, keys) in &self.participants {
         for (network, keys) in ExternalNetworkId::all().zip(keys.iter().cloned()) {
           assert_eq!(network, keys.network());
@@ -504,7 +523,6 @@ mod pallet {
 
   #[pallet::call]
   impl<T: Config> Pallet<T> {
-    /* TODO
     #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn set_keys(
@@ -516,28 +534,24 @@ mod pallet {
     ) -> DispatchResult {
       ensure_none(origin)?;
 
-      // signature isn't checked as this is an unsigned transaction, and validate_unsigned
-      // (called by pre_dispatch) checks it
+      // `signature_participants`, `signature` are checked within `ValidateUnsigned`
       let _ = signature_participants;
       let _ = signature;
 
-      let session = Self::session(NetworkId::from(network)).unwrap();
+      let session = Self::current_session(NetworkId::from(network))
+        .expect("validated `set_keys` for a non-existent session");
       let set = ExternalValidatorSet { network, session };
+      Abstractions::<T>::set_keys(set, key_pair);
 
-      Keys::<T>::set(set, Some(key_pair.clone()));
-
-      // If this is the first ever set for this network, set TotalAllocatedStake now
-      // We generally set TotalAllocatedStake when the prior set retires, and the new set is fully
-      // active and liable. Since this is the first set, there is no prior set to wait to retire
+      // If this is the first session of an external network, mark them current, not solely decided
       if session == Session(0) {
-        Self::set_total_allocated_stake(NetworkId::from(network));
+        Abstractions::<T>::accept_handover(network.into());
       }
-
-      Self::deposit_event(Event::KeyGen { set, key_pair });
 
       Ok(())
     }
 
+    /* TODO
     #[pallet::call_index(1)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn report_slashes(
@@ -632,7 +646,6 @@ mod pallet {
     }
   }
 
-  /* TODO
   #[pallet::validate_unsigned]
   impl<T: Config> ValidateUnsigned for Pallet<T> {
     type Call = Call<T>;
@@ -643,58 +656,57 @@ mod pallet {
         Call::set_keys { network, ref key_pair, ref signature_participants, ref signature } => {
           let network = *network;
 
-          // Confirm this set has a session
-          let Some(current_session) = Self::session(NetworkId::from(network)) else {
-            Err(InvalidTransaction::Custom(1))?
+          // Confirm this network has a session decided
+          let Some(latest_decided_session) = Self::latest_decided_session(network.into()) else {
+            Err(InvalidTransaction::BadSigner)?
           };
 
-          let set = ExternalValidatorSet { network, session: current_session };
+          let set = ExternalValidatorSet { network, session: latest_decided_session };
 
-          // Confirm it has yet to set keys
-          if Keys::<T>::get(set).is_some() {
+          // Confirm this set has yet to set keys
+          if Abstractions::<T>::needs_to_set_keys(set) {
             Err(InvalidTransaction::Stale)?;
           }
 
-          // This is a needed precondition as this uses storage variables for the latest decided
-          // session on this assumption
-          assert_eq!(Pallet::<T>::latest_decided_session(network.into()), Some(current_session));
-
-          let participants = Participants::<T>::get(NetworkId::from(network))
-            .expect("session existed without participants");
+          let participants = Abstractions::<T>::selected_validators(set.into()).collect::<Vec<_>>();
+          assert!(
+            !participants.is_empty(),
+            "set which was decided had no selected participants stored"
+          );
 
           // Check the bitvec is of the proper length
           if participants.len() != signature_participants.len() {
-            Err(InvalidTransaction::Custom(2))?;
+            Err(InvalidTransaction::BadProof)?;
           }
 
+          // Find the participating, total key shares
           let mut all_key_shares = 0;
           let mut signers = vec![];
           let mut signing_key_shares = 0;
-          for (participant, in_use) in participants.into_iter().zip(signature_participants) {
-            let participant = participant.0;
-            let shares = InSet::<T>::get(NetworkId::from(network), participant)
-              .expect("participant from Participants wasn't InSet");
-            all_key_shares += shares;
+          for ((participant, shares), in_use) in
+            participants.into_iter().zip(signature_participants)
+          {
+            all_key_shares += shares.0;
 
             if !in_use {
               continue;
             }
 
             signers.push(participant);
-            signing_key_shares += shares;
+            signing_key_shares += shares.0;
           }
 
+          // Check enough validators participated
           {
             let f = all_key_shares - signing_key_shares;
             if signing_key_shares < ((2 * f) + 1) {
-              Err(InvalidTransaction::Custom(3))?;
+              Err(InvalidTransaction::BadSigner)?;
             }
           }
 
           // Verify the signature with the MuSig key of the signers
-          // We theoretically don't need set_keys_message to bind to removed_participants, as the
-          // key we're signing with effectively already does so, yet there's no reason not to
-          if !musig_key(set.into(), &signers).verify(&set_keys_message(&set, key_pair), signature) {
+          use sp_application_crypto::RuntimePublic;
+          if !set.musig_key(&signers).verify(&set.set_keys_message(key_pair), &signature.0.into()) {
             Err(InvalidTransaction::BadProof)?;
           }
 
@@ -704,6 +716,7 @@ mod pallet {
             .propagate(true)
             .build()
         }
+        /* TODO
         Call::report_slashes { network, ref slashes, ref signature } => {
           let network = *network;
           let Some(key) = PendingSlashReport::<T>::take(network) else {
@@ -726,7 +739,8 @@ mod pallet {
             .propagate(true)
             .build()
         }
-        Call::set_embedded_elliptic_curve_key { .. } |
+        */
+        Call::set_embedded_elliptic_curve_keys { .. } |
         Call::allocate { .. } |
         Call::deallocate { .. } |
         Call::claim_deallocation { .. } => Err(InvalidTransaction::Call)?,
@@ -734,12 +748,13 @@ mod pallet {
       }
     }
 
-    // Explicitly provide a pre-dispatch which calls validate_unsigned
+    // Explicitly provide a pre-dispatch which calls `validate_unsigned`
     fn pre_dispatch(call: &Self::Call) -> Result<(), TransactionValidityError> {
       Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ())
     }
   }
 
+  /* TODO
   impl<T: Config> AllowMint for Pallet<T> {
     fn is_allowed(balance: &ExternalBalance) -> bool {
       // get the required stake

@@ -4,12 +4,14 @@ use sp_core::{Encode, Decode, ConstU32, sr25519::Public, bounded::BoundedVec};
 use serai_abi::primitives::{
   network_id::NetworkId,
   balance::Amount,
-  validator_sets::{KeyShares as KeySharesStruct, Session, ValidatorSet},
+  validator_sets::{KeyShares as KeySharesStruct, Session, ExternalValidatorSet, ValidatorSet},
 };
 
 use frame_support::storage::{StorageValue, StorageMap, StorageDoubleMap, StoragePrefixedMap};
 
-use crate::{embedded_elliptic_curve_keys::EmbeddedEllipticCurveKeys, allocations::Allocations};
+use crate::{
+  embedded_elliptic_curve_keys::EmbeddedEllipticCurveKeys, allocations::Allocations, keys::Keys,
+};
 
 /// The list of genesis validators.
 pub(crate) type GenesisValidators =
@@ -18,7 +20,7 @@ pub(crate) type GenesisValidators =
 /// The key for the SelectedValidators map.
 pub(crate) type SelectedValidatorsKey = (ValidatorSet, [u8; 16], Public);
 
-pub(crate) trait SessionsStorage: EmbeddedEllipticCurveKeys + Allocations {
+pub(crate) trait SessionsStorage: EmbeddedEllipticCurveKeys + Allocations + Keys {
   /// The genesis validators
   ///
   /// The usage of is shared with the rest of the pallet. `Sessions` only reads it.
@@ -288,6 +290,11 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       selected_validators.append(&mut genesis_validators);
     }
 
+    // If we failed to select any validators, return `false` now
+    if total_key_shares == 0 {
+      return false;
+    }
+
     let latest_decided_session = Storage::LatestDecidedSession::mutate(network, |session| {
       let next_session = session.map(|session| Session(session.0 + 1)).unwrap_or(Session(0));
       *session = Some(next_session);
@@ -341,6 +348,12 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       let historic_set = ValidatorSet { network, session: historic_session };
       Storage::KeyShares::remove(historic_set);
       clear_selected_validators::<Storage::SelectedValidators>(historic_set);
+      match historic_set.network {
+        NetworkId::Serai => {}
+        NetworkId::External(network) => {
+          Storage::clear_keys(ExternalValidatorSet { network, session: historic_session })
+        }
+      }
     }
   }
 

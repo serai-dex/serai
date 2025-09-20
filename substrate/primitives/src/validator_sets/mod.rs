@@ -1,4 +1,4 @@
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 
 use zeroize::Zeroize;
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -6,8 +6,10 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use ciphersuite::{group::GroupEncoding, GroupIo};
 use dalek_ff_group::Ristretto;
 
+use sp_core::sr25519::Public;
+
 use crate::{
-  crypto::{Public, KeyPair},
+  crypto::KeyPair,
   network_id::{ExternalNetworkId, NetworkId},
   balance::Amount,
 };
@@ -86,15 +88,17 @@ impl ExternalValidatorSet {
 
   /// The MuSig public key for a validator set.
   ///
-  /// This function panics on invalid input, per the definition of `dkg::musig::musig_key`.
-  pub fn musig_key(&self, set_keys: &[Public]) -> Public {
-    let mut keys = Vec::new();
-    for key in set_keys {
-      keys.push(
-        <Ristretto as GroupIo>::read_G::<&[u8]>(&mut key.0.as_ref()).expect("invalid participant"),
+  /// This function panics on invalid points as keys and on invalid input, per the definition of
+  /// `dkg::musig::musig_key`.
+  pub fn musig_key(&self, keys: &[Public]) -> Public {
+    let mut decompressed_keys = vec![];
+    for key in keys {
+      decompressed_keys.push(
+        <Ristretto as GroupIo>::read_G::<&[u8]>(&mut key.0.as_slice())
+          .expect("invalid participant"),
       );
     }
-    Public(dkg::musig_key::<Ristretto>(self.musig_context(), &keys).unwrap().to_bytes())
+    dkg::musig_key::<Ristretto>(self.musig_context(), &decompressed_keys).unwrap().to_bytes().into()
   }
 
   /// The message for the `set_keys` signature.
@@ -150,7 +154,7 @@ impl KeyShares {
   /// Reduction occurs by reducing each validator in a reverse round-robin. This means the
   /// validators with the least key shares are evicted first.
   #[must_use]
-  pub fn amortize_excess(validators: &mut [(sp_core::sr25519::Public, KeyShares)]) -> usize {
+  pub fn amortize_excess(validators: &mut [(Public, KeyShares)]) -> usize {
     let total_key_shares = validators.iter().map(|(_key, shares)| shares.0).sum::<u16>();
     let mut actual_len = validators.len();
     let mut offset = 1;
