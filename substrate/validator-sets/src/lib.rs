@@ -39,8 +39,10 @@ mod pallet {
       address::SeraiAddress,
     },
     economic_security::EconomicSecurity,
+    validator_sets::{DeallocationTimeline, Event},
   };
 
+  use serai_core_pallet::Pallet as Core;
   use serai_coins_pallet::Pallet as Coins;
 
   use super::*;
@@ -51,6 +53,7 @@ mod pallet {
     + pallet_session::Config
     + pallet_babe::Config
     + pallet_grandpa::Config
+    + serai_core_pallet::Config
     + serai_coins_pallet::Config<serai_coins_pallet::CoinsInstance>
   {
     type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
@@ -125,6 +128,8 @@ mod pallet {
     StorageDoubleMap<_, Blake2_128Concat, Public, Identity, Session, Amount, OptionQuery>;
 
   impl<T: Config> SessionsStorage for Abstractions<T> {
+    type Config = T;
+
     type GenesisValidators = GenesisValidators<T>;
     type AllocationPerKeyShare = AllocationPerKeyShare<T>;
     type CurrentSession = CurrentSession<T>;
@@ -153,44 +158,6 @@ mod pallet {
   #[pallet::storage]
   pub type PendingSlashReport<T: Config> =
     StorageMap<_, Identity, ExternalNetworkId, Public, OptionQuery>;
-
-  #[pallet::event]
-  #[pallet::generate_deposit(pub(super) fn deposit_event)]
-  pub enum Event<T: Config> {
-    NewSet {
-      set: ValidatorSet,
-    },
-    ParticipantRemoved {
-      set: ValidatorSet,
-      removed: T::AccountId,
-    },
-    KeyGen {
-      set: ExternalValidatorSet,
-      key_pair: KeyPair,
-    },
-    AcceptedHandover {
-      set: ValidatorSet,
-    },
-    SetRetired {
-      set: ValidatorSet,
-    },
-    AllocationIncreased {
-      validator: T::AccountId,
-      network: NetworkId,
-      amount: Amount,
-    },
-    AllocationDecreased {
-      validator: T::AccountId,
-      network: NetworkId,
-      amount: Amount,
-      delayed_until: Option<Session>,
-    },
-    DeallocationClaimed {
-      validator: T::AccountId,
-      network: NetworkId,
-      session: Session,
-    },
-  }
   */
 
   #[pallet::error]
@@ -541,7 +508,9 @@ mod pallet {
       let session = Self::current_session(NetworkId::from(network))
         .expect("validated `set_keys` for a non-existent session");
       let set = ExternalValidatorSet { network, session };
-      Abstractions::<T>::set_keys(set, key_pair);
+      Abstractions::<T>::set_keys(set, key_pair.clone());
+
+      Core::<T>::emit_event(Event::SetKeys { set, key_pair });
 
       // If this is the first session of an external network, mark them current, not solely decided
       if session == Session(0) {
@@ -587,11 +556,16 @@ mod pallet {
       origin: OriginFor<T>,
       keys: SignedEmbeddedEllipticCurveKeys,
     ) -> DispatchResult {
-      let signer = ensure_signed(origin)?;
+      let validator = ensure_signed(origin)?;
+      let network = keys.network();
       <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::set_embedded_elliptic_curve_keys(
-        signer, keys,
+        validator, keys,
       )
       .map_err(|()| Error::<T>::InvalidEmbeddedEllipticCurveKeys)?;
+      Core::<T>::emit_event(Event::SetEmbeddedEllipticCurveKeys {
+        validator: validator.into(),
+        network,
+      });
       Ok(())
     }
 
@@ -612,14 +586,22 @@ mod pallet {
     #[pallet::call_index(4)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn deallocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
-      let account = ensure_signed(origin)?;
+      let validator = ensure_signed(origin)?;
 
-      let deallocation_timeline = Abstractions::<T>::decrease_allocation(network, account, amount)
+      let timeline = Abstractions::<T>::decrease_allocation(network, validator, amount)
         .map_err(Error::<T>::DeallocationError)?;
-      if matches!(deallocation_timeline, DeallocationTimeline::Immediate) {
+
+      Core::<T>::emit_event(Event::Deallocation {
+        validator: validator.into(),
+        network,
+        amount,
+        timeline,
+      });
+
+      if matches!(timeline, DeallocationTimeline::Immediate) {
         Coins::<T, serai_coins_pallet::CoinsInstance>::transfer_fn(
           Self::account(),
-          account,
+          validator,
           Balance { coin: Coin::Serai, amount },
         )?;
       }
@@ -634,12 +616,18 @@ mod pallet {
       network: NetworkId,
       session: Session,
     ) -> DispatchResult {
-      let account = ensure_signed(origin)?;
-      let amount = Abstractions::<T>::claim_delayed_deallocation(account, network, session)
+      let validator = ensure_signed(origin)?;
+      let amount = Abstractions::<T>::claim_delayed_deallocation(validator, network, session)
         .map_err(Error::<T>::DeallocationError)?;
+
+      Core::<T>::emit_event(Event::DelayedDeallocationClaimed {
+        validator: validator.into(),
+        deallocation: ValidatorSet { network, session },
+      });
+
       Coins::<T, serai_coins_pallet::CoinsInstance>::transfer_fn(
         Self::account(),
-        account,
+        validator,
         Balance { coin: Coin::Serai, amount },
       )?;
       Ok(())

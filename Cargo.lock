@@ -9747,6 +9747,7 @@ dependencies = [
  "rand_core 0.6.4",
  "serai-abi",
  "serai-coins-pallet",
+ "serai-core-pallet",
  "sp-api",
  "sp-application-crypto",
  "sp-core",

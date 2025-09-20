@@ -34,6 +34,7 @@ pallet-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev 
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
 
+serai-core-pallet = { path = "../core", default-features = false }
 serai-coins-pallet = { path = "../coins", default-features = false }
 
 [dev-dependencies]
@@ -63,6 +64,7 @@ std = [
 
   "serai-abi/std",
 
+  "serai-core-pallet/std",
   "serai-coins-pallet/std",
 ]
 
@@ -75,6 +77,9 @@ try-runtime = [
   "pallet-session/try-runtime",
   "pallet-babe/try-runtime",
   "pallet-grandpa/try-runtime",
+
+  "serai-core-pallet/try-runtime",
+  "serai-coins-pallet/try-runtime",
 ]
 
 runtime-benchmarks = [
@@ -83,6 +88,9 @@ runtime-benchmarks = [
 
   "pallet-babe/runtime-benchmarks",
   "pallet-grandpa/runtime-benchmarks",
+
+  "serai-core-pallet/runtime-benchmarks",
+  "serai-coins-pallet/runtime-benchmarks",
 ]
 
 default = ["std"]

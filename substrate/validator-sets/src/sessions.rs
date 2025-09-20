@@ -1,13 +1,18 @@
 use alloc::vec::Vec;
 use sp_core::{Encode, Decode, ConstU32, sr25519::Public, bounded::BoundedVec};
 
-use serai_abi::primitives::{
-  network_id::NetworkId,
-  balance::Amount,
-  validator_sets::{KeyShares as KeySharesStruct, Session, ExternalValidatorSet, ValidatorSet},
+use serai_abi::{
+  primitives::{
+    network_id::NetworkId,
+    balance::Amount,
+    validator_sets::{KeyShares as KeySharesStruct, Session, ExternalValidatorSet, ValidatorSet},
+  },
+  validator_sets::{DeallocationTimeline, Event},
 };
 
 use frame_support::storage::{StorageValue, StorageMap, StorageDoubleMap, StoragePrefixedMap};
+
+use serai_core_pallet::Pallet as Core;
 
 use crate::{
   embedded_elliptic_curve_keys::EmbeddedEllipticCurveKeys, allocations::Allocations, keys::Keys,
@@ -21,6 +26,9 @@ pub(crate) type GenesisValidators =
 pub(crate) type SelectedValidatorsKey = (ValidatorSet, [u8; 16], Public);
 
 pub(crate) trait SessionsStorage: EmbeddedEllipticCurveKeys + Allocations + Keys {
+  /// The configuration for the core pallet.
+  type Config: serai_core_pallet::Config;
+
   /// The genesis validators
   ///
   /// The usage of is shared with the rest of the pallet. `Sessions` only reads it.
@@ -117,11 +125,6 @@ pub enum AllocationError {
   AllocationLessThanKeyShare,
   /// This allocation would introduce a single point of failure.
   IntroducesSinglePointOfFailure,
-}
-
-pub(crate) enum DeallocationTimeline {
-  Immediate,
-  Delayed { unlocks_at: Session },
 }
 
 /// An error when deallocating.
@@ -313,6 +316,8 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       );
     }
 
+    Core::<Storage::Config>::emit_event(Event::SetDecided { set: latest_decided_set });
+
     true
   }
 
@@ -355,6 +360,10 @@ impl<Storage: SessionsStorage> Sessions for Storage {
         }
       }
     }
+
+    Core::<Storage::Config>::emit_event(Event::AcceptedHandover {
+      set: ValidatorSet { network, session: current },
+    });
   }
 
   fn increase_allocation(
@@ -436,6 +445,12 @@ impl<Storage: SessionsStorage> Sessions for Storage {
         });
       }
     }
+
+    Core::<Storage::Config>::emit_event(Event::Allocation {
+      validator: validator.into(),
+      network,
+      amount,
+    });
 
     Ok(())
   }

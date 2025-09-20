@@ -77,12 +77,24 @@ impl Call {
   }
 }
 
+/// The timeline for a deallocation.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+pub enum DeallocationTimeline {
+  /// The deallocation is available immediately.
+  Immediate,
+  /// The dealocation was delayed.
+  Delayed {
+    /// The session the deallocation unlocks at and can be claimed.
+    unlocks_at: Session,
+  },
+}
+
 /// An event from the validator sets.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
-  /// A new validator set was declared.
-  NewSet {
-    /// The set declared.
+  /// A new validator set was decided.
+  SetDecided {
+    /// The set decided.
     set: ValidatorSet,
   },
   /// A validator set has set their keys.
@@ -97,10 +109,12 @@ pub enum Event {
     /// The set which accepted responsibility from the prior set.
     set: ValidatorSet,
   },
-  /// A validator set has retired.
-  SetRetired {
-    /// The set retired.
-    set: ValidatorSet,
+  /// A validator set their keys on an embedded elliptic curve for a network.
+  SetEmbeddedEllipticCurveKeys {
+    /// The validator which set their keys.
+    validator: SeraiAddress,
+    /// The network which they set embedded elliptic curve keys for.
+    network: ExternalNetworkId,
   },
   /// A validator's allocation to a network has increased.
   Allocation {
@@ -119,13 +133,11 @@ pub enum Event {
     network: NetworkId,
     /// The amount of stake deallocated.
     amount: Amount,
-    /// The session which claiming the deallocation was delayed until.
-    delayed_until: Option<Session>,
+    /// The timeline for this deallocation.
+    timeline: DeallocationTimeline,
   },
-  /// A validator's deallocation from a network has been claimed.
-  ///
-  /// This is only emited for deallocations which were delayed and has to be explicitly claimed.
-  DeallocationClaimed {
+  /// A validator's delayed deallocation from a network has been claimed.
+  DelayedDeallocationClaimed {
     /// The validator who claimed their deallocation.
     validator: SeraiAddress,
     /// The validator set the deallocation was delayed until.
