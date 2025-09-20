@@ -34,11 +34,11 @@ use frame_support::{
   BoundedVec, WeakBoundedVec, StoragePrefixedMap,
 };
 
-use serai_primitives::*;
+use serai_abi::primitives::*;
 pub use validator_sets_primitives as primitives;
 use primitives::*;
 
-use coins_pallet::{Pallet as Coins, AllowMint};
+use serai_coins_pallet::{Pallet as Coins, AllowMint};
 use dex_pallet::Pallet as Dex;
 
 use pallet_babe::{
@@ -81,51 +81,51 @@ mod pallet {
   use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
-  use serai_primitives::{
-    crypto::KeyPair,
+  use serai_abi::primitives::{
+    crypto::SignedEmbeddedEllipticCurveKeys,
     network_id::*,
     coin::*,
     balance::*,
-    validator_sets::{Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct},
+    validator_sets::{Session, ValidatorSet, KeyShares as KeySharesStruct},
     address::SeraiAddress,
   };
 
-  use coins_pallet::Pallet as Coins;
+  use serai_coins_pallet::Pallet as Coins;
 
   use super::*;
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config + coins_pallet::Config<coins_pallet::CoinsInstance>
+    frame_system::Config + serai_coins_pallet::Config<serai_coins_pallet::CoinsInstance>
   {
     // type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
   }
 
-  /* TODO
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, serde::Serialize, serde::Deserialize)]
-  pub struct AllEmbeddedEllipticCurveKeysAtGenesis {
-    pub embedwards25519: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
-    pub secq256k1: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
-  }
-
   #[pallet::genesis_config]
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+  #[derive(Clone, PartialEq, Eq, Debug)]
   pub struct GenesisConfig<T: Config> {
-    /// Networks to spawn Serai with, and the stake requirement per key share.
-    ///
-    /// Every participant at genesis will automatically be assumed to have this much stake.
-    /// This stake cannot be withdrawn however as there's no actual stake behind it.
-    pub networks: Vec<(NetworkId, Amount)>,
     /// List of participants to place in the initial validator sets.
-    pub participants: Vec<(T::AccountId, AllEmbeddedEllipticCurveKeysAtGenesis)>,
+    pub participants: Vec<(T::AccountId, Vec<SignedEmbeddedEllipticCurveKeys>)>,
   }
 
-  impl<T: Config> Default for GenesisConfig<T> {
-    fn default() -> Self {
-      GenesisConfig { networks: Default::default(), participants: Default::default() }
+  #[pallet::genesis_build]
+  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+    fn build(&self) {
+      for (participant, keys) in &self.participants {
+        for (network, keys) in ExternalNetworkId::all().zip(keys.iter().cloned()) {
+          assert_eq!(network, keys.network());
+          <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::set_embedded_elliptic_curve_keys(
+            *participant,
+            keys,
+          )
+          .expect("genesis embedded elliptic curve keys weren't valid");
+        }
+      }
+      for network in NetworkId::all() {
+        Abstractions::<T>::attempt_new_session(network, true);
+      }
     }
   }
-  */
 
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
@@ -171,7 +171,7 @@ mod pallet {
     ExternalNetworkId,
     Blake2_128Concat,
     Public,
-    serai_primitives::crypto::EmbeddedEllipticCurveKeys,
+    serai_abi::primitives::crypto::EmbeddedEllipticCurveKeys,
     OptionQuery,
   >;
 
@@ -317,31 +317,6 @@ mod pallet {
         T::BlockWeights::get().max_block
       } else {
         Weight::zero()
-      }
-    }
-  }
-
-  #[pallet::genesis_build]
-  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-    fn build(&self) {
-      for (id, stake) in self.networks.clone() {
-        AllocationPerKeyShare::<T>::set(id, Some(stake));
-        for participant in &self.participants {
-          if Abstractions::<T>::set_allocation(id, participant.0, stake) {
-            panic!("participants contained duplicates");
-          }
-          EmbeddedEllipticCurveKeys::<T>::set(
-            participant.0,
-            EmbeddedEllipticCurve::Embedwards25519,
-            Some(participant.1.embedwards25519.clone()),
-          );
-          EmbeddedEllipticCurveKeys::<T>::set(
-            participant.0,
-            EmbeddedEllipticCurve::Secq256k1,
-            Some(participant.1.secq256k1.clone()),
-          );
-        }
-        Pallet::<T>::new_set(id);
       }
     }
   }
@@ -536,7 +511,7 @@ mod pallet {
     }
 
     fn new_session() {
-      for network in serai_primitives::NETWORKS {
+      for network in serai_abi::primitives::NETWORKS {
         // If this network hasn't started sessions yet, don't start one now
         let Some(current_session) = Self::session(network) else { continue };
         // Only spawn a new set if:
@@ -834,7 +809,7 @@ mod pallet {
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn set_embedded_elliptic_curve_keys(
       origin: OriginFor<T>,
-      keys: serai_primitives::crypto::SignedEmbeddedEllipticCurveKeys,
+      keys: SignedEmbeddedEllipticCurveKeys,
     ) -> DispatchResult {
       let signer = ensure_signed(origin)?;
       <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::set_embedded_elliptic_curve_keys(
@@ -848,7 +823,7 @@ mod pallet {
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
-      Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(
+      Coins::<T, serai_coins_pallet::CoinsInstance>::transfer_fn(
         validator,
         Self::account(),
         Balance { coin: Coin::Serai, amount },
@@ -866,7 +841,7 @@ mod pallet {
       let deallocation_timeline = Abstractions::<T>::decrease_allocation(network, account, amount)
         .map_err(Error::<T>::DeallocationError)?;
       if matches!(deallocation_timeline, DeallocationTimeline::Immediate) {
-        Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(
+        Coins::<T, serai_coins_pallet::CoinsInstance>::transfer_fn(
           Self::account(),
           account,
           Balance { coin: Coin::Serai, amount },
@@ -886,7 +861,7 @@ mod pallet {
       let account = ensure_signed(origin)?;
       let amount = Abstractions::<T>::claim_delayed_deallocation(account, network, session)
         .map_err(Error::<T>::DeallocationError)?;
-      Coins::<T, coins_pallet::CoinsInstance>::transfer_fn(
+      Coins::<T, serai_coins_pallet::CoinsInstance>::transfer_fn(
         Self::account(),
         account,
         Balance { coin: Coin::Serai, amount },
@@ -1118,20 +1093,19 @@ mod pallet {
   }
   */
 }
+pub use pallet::*;
 
 sp_api::decl_runtime_apis! {
   #[api_version(1)]
   pub trait ValidatorSetsApi {
     /// Returns the validator set for a given network.
     fn validators(
-      network_id: serai_primitives::network_id::NetworkId,
-    ) -> Vec<serai_primitives::crypto::Public>;
+      network_id: serai_abi::primitives::network_id::NetworkId,
+    ) -> Vec<serai_abi::primitives::crypto::Public>;
 
     /// Returns the external network key for a given external network.
     fn external_network_key(
-      network: serai_primitives::network_id::ExternalNetworkId,
-    ) -> Option<serai_primitives::crypto::ExternalKey>;
+      network: serai_abi::primitives::network_id::ExternalNetworkId,
+    ) -> Option<serai_abi::primitives::crypto::ExternalKey>;
   }
 }
-
-pub use pallet::*;

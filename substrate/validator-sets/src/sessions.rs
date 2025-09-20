@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use sp_core::{Encode, Decode, ConstU32, sr25519::Public, bounded::BoundedVec};
 
-use serai_primitives::{
+use serai_abi::primitives::{
   network_id::NetworkId,
   balance::Amount,
   validator_sets::{KeyShares as KeySharesStruct, Session, ValidatorSet},
@@ -231,9 +231,9 @@ impl<Storage: SessionsStorage> Sessions for Storage {
           return;
         }
       }
-      (Some(current), None) => unreachable!("current session but never decided a session"),
+      (Some(_current), None) => unreachable!("current session but never decided a session"),
       // If we decided our first session, but didn't start it, don't decide another session
-      (None, Some(latest)) => return,
+      (None, Some(_latest)) => return,
       (None, None) => {
         // If we've never started a session, we can decide the first session
       }

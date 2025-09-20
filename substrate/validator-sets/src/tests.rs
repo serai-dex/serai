@@ -22,7 +22,7 @@ use sp_core::{
 };
 use sp_runtime::traits::ValidateUnsigned;
 
-use serai_primitives::*;
+use serai_abi::primitives::*;
 
 fn active_network_validators(network: NetworkId) -> Vec<(Public, u64)> {
   if network == NetworkId::Serai {

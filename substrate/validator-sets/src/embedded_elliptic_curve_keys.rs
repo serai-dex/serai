@@ -1,6 +1,6 @@
 use sp_core::sr25519::Public;
 
-use serai_primitives::{crypto::SignedEmbeddedEllipticCurveKeys, network_id::*};
+use serai_abi::primitives::{crypto::SignedEmbeddedEllipticCurveKeys, network_id::*};
 
 use frame_support::storage::StorageDoubleMap;
 
@@ -9,8 +9,8 @@ pub(crate) trait EmbeddedEllipticCurveKeysStorage {
   type EmbeddedEllipticCurveKeys: StorageDoubleMap<
     ExternalNetworkId,
     Public,
-    serai_primitives::crypto::EmbeddedEllipticCurveKeys,
-    Query = Option<serai_primitives::crypto::EmbeddedEllipticCurveKeys>,
+    serai_abi::primitives::crypto::EmbeddedEllipticCurveKeys,
+    Query = Option<serai_abi::primitives::crypto::EmbeddedEllipticCurveKeys>,
   >;
 }
 

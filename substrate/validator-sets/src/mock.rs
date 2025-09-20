@@ -18,11 +18,11 @@ use sp_runtime::{
   BuildStorage,
 };
 
-use serai_primitives::*;
+use serai_abi::primitives::*;
 use validator_sets::{primitives::MAX_KEY_SHARES_PER_SET_U32, MembershipProof};
 
 pub use crate as validator_sets;
-pub use coins_pallet as coins;
+pub use serai_coins_pallet as coins;
 pub use dex_pallet as dex;
 pub use pallet_babe as babe;
 pub use pallet_grandpa as grandpa;

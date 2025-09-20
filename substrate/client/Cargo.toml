@@ -31,9 +31,9 @@ serde_json = { version = "1", optional = true }
 serai-abi = { path = "../abi", version = "0.1" }
 
 multiaddr = { version = "0.18", optional = true }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "d4624c561765c13b38eb566e435131a8c329a543", optional = true }
-sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "d4624c561765c13b38eb566e435131a8c329a543", optional = true }
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "d4624c561765c13b38eb566e435131a8c329a543", optional = true }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", optional = true }
+sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", optional = true }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", optional = true }
 
 async-lock = "3"
 

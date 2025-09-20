@@ -1,6 +1,6 @@
 use sp_core::{Encode, sr25519::Public};
 
-use serai_primitives::{network_id::NetworkId, balance::Amount, validator_sets::KeyShares};
+use serai_abi::primitives::{network_id::NetworkId, balance::Amount, validator_sets::KeyShares};
 
 use frame_support::storage::{StorageMap, StoragePrefixedMap};
 
