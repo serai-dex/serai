@@ -14,31 +14,6 @@ use allocations::*;
 mod sessions;
 use sessions::{*, GenesisValidators as GenesisValidatorsContainer};
 
-/*
-#[derive(Debug, Encode, Decode, PartialEq, Eq, Clone)]
-pub struct MembershipProof<T: pallet::Config>(pub Public, pub PhantomData<T>);
-impl<T: pallet::Config> GetSessionNumber for MembershipProof<T> {
-  fn session(&self) -> u32 {
-    let current = Pallet::<T>::session(NetworkId::Serai).unwrap().0;
-    if Babe::<T>::is_member(&BabeAuthorityId::from(self.0)) {
-      current
-    } else {
-      // if it isn't in the current session, it should have been in the previous one.
-      current - 1
-    }
-  }
-}
-impl<T: pallet::Config> GetValidatorCount for MembershipProof<T> {
-  // We only implement and this interface to satisfy trait requirements
-  // Although this might return the wrong count if the offender was in the previous set, we don't
-  // rely on it and Substrate only relies on it to offer economic calculations we also don't rely
-  // on
-  fn validator_count(&self) -> u32 {
-    u32::try_from(Babe::<T>::authorities().len()).unwrap()
-  }
-}
-*/
-
 #[expect(clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 mod pallet {
@@ -157,7 +132,7 @@ mod pallet {
     type DelayedDeallocations = DelayedDeallocations<T>;
   }
 
-  /*
+  /* TODO
   /// The generated key pair for a given validator set instance.
   #[pallet::storage]
   #[pallet::getter(fn keys)]
@@ -168,10 +143,6 @@ mod pallet {
   #[pallet::storage]
   pub type PendingSlashReport<T: Config> =
     StorageMap<_, Identity, ExternalNetworkId, Public, OptionQuery>;
-
-  /// Disabled validators.
-  #[pallet::storage]
-  pub type SeraiDisabledIndices<T: Config> = StorageMap<_, Identity, u32, Public, OptionQuery>;
 
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -318,21 +289,7 @@ mod pallet {
       }
     }
 
-    /*
-    fn session_to_unlock_on_for_current_set(network: NetworkId) -> Option<Session> {
-      let mut to_unlock_on = Self::session(network)?;
-      // Move to the next session, as deallocating currently in-use stake is obviously invalid
-      to_unlock_on.0 += 1;
-      if network == NetworkId::Serai {
-        // Since the next Serai set will already have been decided, we can only deallocate one
-        // session later
-        to_unlock_on.0 += 1;
-      }
-      // Increase the session by one, creating a cooldown period
-      to_unlock_on.0 += 1;
-      Some(to_unlock_on)
-    }
-
+    /* TODO
     /// Decreases a validator's allocation to a set.
     ///
     /// Errors if the capacity provided by this allocation is in use.
@@ -349,7 +306,6 @@ mod pallet {
       account: T::AccountId,
       amount: Amount,
     ) -> Result<bool, DispatchError> {
-      /* TODO
       // Check it's safe to decrease this set's stake by this amount
       if let NetworkId::External(n) = network {
         let new_total_staked = Self::total_allocated_stake(NetworkId::from(n))
@@ -378,7 +334,6 @@ mod pallet {
           Err(Error::<T>::DeallocationWouldRemoveFaultTolerance)?;
         }
       }
-      */
 
       Sessions::<T>::decrease_allocation(network, account, amount)
     }
@@ -409,20 +364,6 @@ mod pallet {
       Self::deposit_event(Event::AcceptedHandover {
         set: ValidatorSet { network: set.network, session: Session(set.session.0 + 1) },
       });
-    }
-
-    pub(crate) fn rotate_session() {
-      Self::retire_set(ValidatorSet { network: NetworkId::Serai, session: prior_serai_session });
-
-      // Clear SeraiDisabledIndices, only preserving keys still present in the new session
-      // First drain so we don't mutate as we iterate
-      let mut disabled = vec![];
-      for (_, validator) in SeraiDisabledIndices::<T>::drain() {
-        disabled.push(validator);
-      }
-      for disabled in disabled {
-        Self::disable_serai_validator(disabled);
-      }
     }
 
     /// Returns the required stake in terms SRI for a given `Balance`.
@@ -471,76 +412,6 @@ mod pallet {
         Balance { coin: Coin::Serai, amount },
       )?;
       Self::increase_allocation(network, account, amount, true)
-    }
-
-    fn can_slash_serai_validator(validator: Public) -> bool {
-      // Checks if they're active or actively deallocating (letting us still slash them)
-      // We could check if they're upcoming/still allocating, yet that'd mean the equivocation is
-      // invalid (as they aren't actively signing anything) or severely dated
-      // It's not an edge case worth being comprehensive to due to the complexity of being so
-      Babe::<T>::is_member(&BabeAuthorityId::from(validator)) ||
-        PendingDeallocations::<T>::iter_prefix((NetworkId::Serai, validator)).next().is_some()
-    }
-
-    fn slash_serai_validator(validator: Public) {
-      let network = NetworkId::Serai;
-
-      let mut allocation = Abstractions::<T>::get_allocation((network, validator))
-      .unwrap_or(Amount(0));
-      // reduce the current allocation to 0.
-      Abstractions::<T>::set_allocation(network, validator, Amount(0));
-
-      // Take the pending deallocation from the current session
-      allocation.0 += PendingDeallocations::<T>::take(
-        (network, validator),
-        Self::session_to_unlock_on_for_current_set(network).unwrap(),
-      )
-      .unwrap_or(Amount(0))
-      .0;
-
-      // Reduce the TotalAllocatedStake for the network, if in set
-      // TotalAllocatedStake is the sum of allocations and pending deallocations from the current
-      // session, since pending deallocations can still be slashed and therefore still contribute
-      // to economic security, hence the allocation calculations above being above and the ones
-      // below being below
-      if InSet::<T>::contains_key(NetworkId::Serai, validator) {
-        let current_staked = Self::total_allocated_stake(network).unwrap();
-        TotalAllocatedStake::<T>::set(network, Some(current_staked - allocation));
-      }
-
-      // Clear any other pending deallocations.
-      for (_, pending) in PendingDeallocations::<T>::drain_prefix((network, validator)) {
-        allocation.0 += pending.0;
-      }
-
-      // burn the allocation from the stake account
-      Coins::<T>::burn(
-        RawOrigin::Signed(Self::account()).into(),
-        Balance { coin: Coin::Serai, amount: allocation },
-      )
-      .unwrap();
-    }
-
-    /// Disable a Serai validator, preventing them from further authoring blocks.
-    ///
-    /// Returns true if the validator-to-disable was actually a validator.
-    /// Returns false if they weren't.
-    fn disable_serai_validator(validator: Public) -> bool {
-      if let Some(index) =
-        Babe::<T>::authorities().into_iter().position(|(id, _)| id.into_inner() == validator)
-      {
-        SeraiDisabledIndices::<T>::set(u32::try_from(index).unwrap(), Some(validator));
-
-        let session = Self::session(NetworkId::Serai).unwrap();
-        Self::deposit_event(Event::ParticipantRemoved {
-          set: ValidatorSet { network: NetworkId::Serai, session },
-          removed: validator,
-        });
-
-        true
-      } else {
-        false
-      }
     }
     */
   }
@@ -633,7 +504,7 @@ mod pallet {
 
   #[pallet::call]
   impl<T: Config> Pallet<T> {
-    /*
+    /* TODO
     #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Operational))] // TODO
     pub fn set_keys(
@@ -761,7 +632,7 @@ mod pallet {
     }
   }
 
-  /*
+  /* TODO
   #[pallet::validate_unsigned]
   impl<T: Config> ValidateUnsigned for Pallet<T> {
     type Call = Call<T>;
@@ -879,107 +750,6 @@ mod pallet {
       let staked =
         Self::total_allocated_stake(NetworkId::from(balance.coin.network())).unwrap_or(Amount(0));
       staked.0 >= new_required
-    }
-  }
-
-  impl<T: Config, V: Into<Public> + From<Public>> KeyOwnerProofSystem<(KeyTypeId, V)> for
-  Pallet<T> {
-    type Proof = MembershipProof<T>;
-    type IdentificationTuple = Public;
-
-    fn prove(key: (KeyTypeId, V)) -> Option<Self::Proof> {
-      Some(MembershipProof(key.1.into(), PhantomData))
-    }
-
-    fn check_proof(key: (KeyTypeId, V), proof: Self::Proof) -> Option<Self::IdentificationTuple> {
-      let validator = key.1.into();
-
-      // check the offender and the proof offender are the same.
-      if validator != proof.0 {
-        return None;
-      }
-
-      // check validator is valid
-      if !Self::can_slash_serai_validator(validator) {
-        return None;
-      }
-
-      Some(validator)
-    }
-  }
-
-  impl<T: Config> ReportOffence<Public, Public, BabeEquivocationOffence<Public>> for Pallet<T> {
-    /// Report an `offence` and reward given `reporters`.
-    fn report_offence(
-      _: Vec<Public>,
-      offence: BabeEquivocationOffence<Public>,
-    ) -> Result<(), OffenceError> {
-      // slash the offender
-      let offender = offence.offender;
-      Self::slash_serai_validator(offender);
-
-      // disable it
-      Self::disable_serai_validator(offender);
-
-      Ok(())
-    }
-
-    fn is_known_offence(
-      offenders: &[Public],
-      _: &<BabeEquivocationOffence<Public> as Offence<Public>>::TimeSlot,
-    ) -> bool {
-      for offender in offenders {
-        // It's not a known offence if we can still slash them
-        if Self::can_slash_serai_validator(*offender) {
-          return false;
-        }
-      }
-      true
-    }
-  }
-
-  impl<T: Config> ReportOffence<Public, Public, GrandpaEquivocationOffence<Public>> for Pallet<T> {
-    /// Report an `offence` and reward given `reporters`.
-    fn report_offence(
-      _: Vec<Public>,
-      offence: GrandpaEquivocationOffence<Public>,
-    ) -> Result<(), OffenceError> {
-      // slash the offender
-      let offender = offence.offender;
-      Self::slash_serai_validator(offender);
-
-      // disable it
-      Self::disable_serai_validator(offender);
-
-      Ok(())
-    }
-
-    fn is_known_offence(
-      offenders: &[Public],
-      _slot: &<GrandpaEquivocationOffence<Public> as Offence<Public>>::TimeSlot,
-    ) -> bool {
-      for offender in offenders {
-        if Self::can_slash_serai_validator(*offender) {
-          return false;
-        }
-      }
-      true
-    }
-  }
-
-  impl<T: Config> FindAuthor<Public> for Pallet<T> {
-    fn find_author<'a, I>(digests: I) -> Option<Public>
-    where
-      I: 'a + IntoIterator<Item = (ConsensusEngineId, &'a [u8])>,
-    {
-      let i = Babe::<T>::find_author(digests)?;
-      Some(Babe::<T>::authorities()[i as usize].0.clone().into())
-    }
-  }
-
-  impl<T: Config> DisabledValidators for Pallet<T> {
-    fn is_disabled(index: u32) -> bool {
-      SeraiDisabledIndices::<T>::get(index).is_some()
     }
   }
   */
