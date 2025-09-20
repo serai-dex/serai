@@ -44,6 +44,15 @@ pub enum Event {
     /// The coins minted.
     coins: Balance,
   },
+  /// The specified coins were transferred.
+  Transfer {
+    /// The address transferred from.
+    from: SeraiAddress,
+    /// The address transferred to.
+    to: SeraiAddress,
+    /// The coins transferred.
+    coins: Balance,
+  },
   /// The specified coins were burnt.
   Burn {
     /// The address burnt from.
@@ -57,14 +66,5 @@ pub enum Event {
     from: SeraiAddress,
     /// The `OutInstruction` specified, and the coins burnt.
     instruction: OutInstructionWithBalance,
-  },
-  /// The specified coins were transferred.
-  Transfer {
-    /// The address transferred from.
-    from: SeraiAddress,
-    /// The address transferred to.
-    to: SeraiAddress,
-    /// The coins transferred.
-    coins: Balance,
   },
 }

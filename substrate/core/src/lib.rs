@@ -5,18 +5,20 @@
 
 use core::marker::PhantomData;
 
-use frame_support::pallet_prelude::*;
-
-use serai_abi::{
-  primitives::{prelude::*, merkle::IncrementalUnbalancedMerkleTree as Iumt},
-  *,
-};
+extern crate alloc;
 
 mod iumt;
 pub use iumt::*;
 
+#[expect(clippy::cast_possible_truncation)]
 #[frame_support::pallet]
-mod pallet {
+pub mod pallet {
+  use alloc::vec::Vec;
+
+  use frame_support::pallet_prelude::*;
+
+  use serai_abi::primitives::{prelude::*, merkle::IncrementalUnbalancedMerkleTree as Iumt};
+
   use super::*;
 
   /// The set of all blocks prior added to the blockchain.
@@ -41,8 +43,8 @@ mod pallet {
   pub(super) type TransactionEvents<T: Config> = StorageValue<_, Iumt, OptionQuery>;
   pub(super) type TransactionEventsMerkle<T> = IncrementalUnbalancedMerkleTree<
     TransactionEvents<T>,
-    TRANSACTION_EVENTS_COMMITMENT_BRANCH_TAG,
-    TRANSACTION_EVENTS_COMMITMENT_LEAF_TAG,
+    { serai_abi::TRANSACTION_EVENTS_COMMITMENT_BRANCH_TAG },
+    { serai_abi::TRANSACTION_EVENTS_COMMITMENT_LEAF_TAG },
   >;
   /// The roots of the Merkle trees of each transaction's events.
   #[pallet::storage]
@@ -50,13 +52,21 @@ mod pallet {
   pub(super) type BlockEventsCommitment<T: Config> = StorageValue<_, Iumt, OptionQuery>;
   pub(super) type BlockEventsCommitmentMerkle<T> = IncrementalUnbalancedMerkleTree<
     BlockEventsCommitment<T>,
-    EVENTS_COMMITMENT_BRANCH_TAG,
-    EVENTS_COMMITMENT_LEAF_TAG,
+    { serai_abi::EVENTS_COMMITMENT_BRANCH_TAG },
+    { serai_abi::EVENTS_COMMITMENT_LEAF_TAG },
   >;
 
   /// A mapping from an account to its next nonce.
   #[pallet::storage]
   type NextNonce<T: Config> = StorageMap<_, Blake2_128Concat, SeraiAddress, T::Nonce, ValueQuery>;
+
+  /// Mapping from Serai's events to Substrate's.
+  #[pallet::event]
+  #[pallet::generate_deposit(pub(super) fn deposit_event)]
+  pub enum Event<T: Config> {
+    /// An event from Serai.
+    Event(Vec<u8>),
+  }
 
   #[pallet::config]
   pub trait Config: frame_system::Config<Hash: Into<[u8; 32]>> {}
@@ -94,13 +104,14 @@ mod pallet {
     pub fn start_transaction() {
       TransactionEventsMerkle::<T>::new_expecting_none();
     }
+
     /// Emit an event.
-    // TODO: Have this called
-    pub fn emit_event(event: impl TryInto<serai_abi::Event>) {
-      if let Ok(event) = event.try_into() {
-        TransactionEventsMerkle::<T>::append(&event);
-      }
+    pub fn emit_event(event: impl Into<serai_abi::Event>) {
+      let event = event.into();
+      TransactionEventsMerkle::<T>::append(&event);
+      Self::deposit_event(Event::Event(borsh::to_vec(&event).unwrap()));
     }
+
     /// End execution of a transaction.
     pub fn end_transaction(transaction_hash: [u8; 32]) {
       BlockTransactionsCommitmentMerkle::<T>::append(&transaction_hash);
@@ -111,6 +122,19 @@ mod pallet {
       // commitment
       BlockEventsCommitmentMerkle::<T>::append(&(&transaction_hash, &transaction_events_root));
     }
+
+    /// Fetch all of Serai's events.
+    ///
+    /// This MUST only be used for testing purposes.
+    pub fn events() -> Vec<serai_abi::Event>
+    where
+      serai_abi::Event: TryFrom<T::RuntimeEvent>,
+    {
+      frame_system::Pallet::<T>::events()
+        .into_iter()
+        .filter_map(|e| serai_abi::Event::try_from(e.event).ok())
+        .collect()
+    }
   }
 }
 pub use pallet::*;
@@ -119,6 +143,8 @@ pub use pallet::*;
 pub struct StartOfBlock<T: Config>(PhantomData<T>);
 impl<T: Config> frame_support::traits::PreInherents for StartOfBlock<T> {
   fn pre_inherents() {
+    use frame_support::pallet_prelude::Zero;
+
     if frame_system::Pallet::<T>::block_number().is_zero() {
       BlocksCommitmentMerkle::<T>::new_expecting_none();
     } else {
@@ -137,6 +163,7 @@ impl<T: Config> frame_support::traits::PreInherents for StartOfBlock<T> {
 pub struct EndOfBlock<T: Config>(PhantomData<T>);
 impl<T: Config> frame_support::traits::PostTransactions for EndOfBlock<T> {
   fn post_transactions() {
+    use serai_abi::SeraiExecutionDigest;
     frame_system::Pallet::<T>::deposit_log(
       frame_support::sp_runtime::generic::DigestItem::Consensus(
         SeraiExecutionDigest::CONSENSUS_ID,

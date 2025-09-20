@@ -158,11 +158,9 @@ impl From<serai_abi::Call> for RuntimeCall {
         use serai_abi::coins::Call;
         match call {
           Call::transfer { to, coins } => {
-            RuntimeCall::Coins(serai_coins_pallet::Call::transfer { to: to.into(), balance: coins })
+            RuntimeCall::Coins(serai_coins_pallet::Call::transfer { to: to.into(), coins })
           }
-          Call::burn { coins } => {
-            RuntimeCall::Coins(serai_coins_pallet::Call::burn { balance: coins })
-          }
+          Call::burn { coins } => RuntimeCall::Coins(serai_coins_pallet::Call::burn { coins }),
           Call::burn_with_instruction { instruction } => {
             RuntimeCall::Coins(serai_coins_pallet::Call::burn_with_instruction { instruction })
           }
@@ -195,7 +193,7 @@ impl From<serai_abi::Call> for RuntimeCall {
           Call::transfer_liquidity { to, liquidity_tokens } => {
             RuntimeCall::LiquidityTokens(serai_coins_pallet::Call::transfer {
               to: to.into(),
-              balance: liquidity_tokens.into(),
+              coins: liquidity_tokens.into(),
             })
           }
           Call::add_liquidity { .. } |

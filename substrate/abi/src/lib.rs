@@ -96,3 +96,44 @@ pub enum Event {
   /// The event for `InInstruction`s.
   InInstructions(in_instructions::Event) = 7,
 }
+
+impl From<system::Event> for Event {
+  fn from(event: system::Event) -> Self {
+    Self::System(event)
+  }
+}
+impl From<coins::Event> for Event {
+  fn from(event: coins::Event) -> Self {
+    Self::Coins(event)
+  }
+}
+impl From<validator_sets::Event> for Event {
+  fn from(event: validator_sets::Event) -> Self {
+    Self::ValidatorSets(event)
+  }
+}
+impl From<signals::Event> for Event {
+  fn from(event: signals::Event) -> Self {
+    Self::Signals(event)
+  }
+}
+impl From<dex::Event> for Event {
+  fn from(event: dex::Event) -> Self {
+    Self::Dex(event)
+  }
+}
+impl From<genesis_liquidity::Event> for Event {
+  fn from(event: genesis_liquidity::Event) -> Self {
+    Self::GenesisLiquidity(event)
+  }
+}
+impl From<economic_security::Event> for Event {
+  fn from(event: economic_security::Event) -> Self {
+    Self::EconomicSecurity(event)
+  }
+}
+impl From<in_instructions::Event> for Event {
+  fn from(event: in_instructions::Event) -> Self {
+    Self::InInstructions(event)
+  }
+}

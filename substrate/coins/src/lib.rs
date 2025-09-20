@@ -11,7 +11,8 @@ mod mock;
 #[cfg(test)]
 mod tests;
 
-use serai_primitives::balance::ExternalBalance;
+use serai_abi::primitives::balance::ExternalBalance;
+use serai_core_pallet::Pallet as Core;
 
 /// The decider for if a mint is allowed or not.
 pub trait AllowMint {
@@ -27,7 +28,7 @@ impl AllowMint for AlwaysAllowMint {
   }
 }
 
-#[allow(clippy::cast_possible_truncation)]
+#[expect(clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 mod pallet {
   use core::any::TypeId;
@@ -38,7 +39,10 @@ mod pallet {
   use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
-  use serai_primitives::{coin::*, balance::*, instructions::OutInstructionWithBalance};
+  use serai_abi::{
+    primitives::{coin::*, balance::*, instructions::OutInstructionWithBalance},
+    coins::Event,
+  };
 
   use super::*;
 
@@ -53,7 +57,9 @@ mod pallet {
 
   /// The configuration of this pallet.
   #[pallet::config]
-  pub trait Config<I: 'static = ()>: frame_system::Config<AccountId = Public> {
+  pub trait Config<I: 'static = ()>:
+    frame_system::Config<AccountId = Public> + serai_core_pallet::Config
+  {
     /// What decides if mints are allowed.
     type AllowMint: AllowMint;
   }
@@ -90,42 +96,6 @@ mod pallet {
     BurnWithInstructionNotAllowed,
   }
 
-  /// An event emitted.
-  #[pallet::event]
-  #[pallet::generate_deposit(fn deposit_event)]
-  pub enum Event<T: Config<I>, I: 'static = ()> {
-    /// Coins were minted.
-    Mint {
-      /// The account minted to.
-      to: Public,
-      /// The balance minted.
-      balance: Balance,
-    },
-    /// Coins were transferred.
-    Transfer {
-      /// The account transferred from.
-      from: Public,
-      /// The account transferred to.
-      to: Public,
-      /// The balance transferred.
-      balance: Balance,
-    },
-    /// Coins were burnt.
-    Burn {
-      /// The account burnt from.
-      from: Public,
-      /// The balance burnt.
-      balance: Balance,
-    },
-    /// Coins were burnt with an instruction.
-    BurnWithInstruction {
-      /// The account burnt from.
-      from: Public,
-      /// The instruction, and associated balance.
-      instruction: OutInstructionWithBalance,
-    },
-  }
-
   /// The Pallet struct.
   #[pallet::pallet]
   pub struct Pallet<T, I = ()>(_);
@@ -151,6 +121,16 @@ mod pallet {
   }
 
   impl<T: Config<I>, I: 'static> Pallet<T, I> {
+    fn emit_event(event: Event) {
+      if TypeId::of::<I>() == TypeId::of::<CoinsInstance>() {
+        Core::<T>::emit_event(event)
+      } else if TypeId::of::<I>() == TypeId::of::<LiquidityTokensInstance>() {
+        // The DEX pallet is expected to emit this event
+      } else {
+        panic!("unrecognized instance type for `coins::Pallet` made it into an execution context")
+      }
+    }
+
     /// Returns the balance of `coin` for the specified account.
     pub fn balance(
       of: impl scale::EncodeLike<Public>,
@@ -195,10 +175,10 @@ mod pallet {
     /// Mint `balance` to the given account.
     ///
     /// Errors if any amount overflows.
-    pub fn mint(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
+    pub fn mint(to: Public, coins: Balance) -> Result<(), Error<T, I>> {
       {
         // If this is an external coin, check if we can mint it
-        let external_balance = ExternalBalance::try_from(balance);
+        let external_balance = ExternalBalance::try_from(coins);
         let can_mint_external = external_balance.as_ref().map(T::AllowMint::is_allowed);
         // If it was native to the Serai network, we can always mint it
         let can_mint = can_mint_external.unwrap_or(true);
@@ -208,14 +188,14 @@ mod pallet {
       }
 
       // update the balance
-      Self::increase_balance_internal(to, balance)?;
+      Self::increase_balance_internal(to, coins)?;
 
       // update the supply
-      let new_supply = (Supply::<T, I>::get(balance.coin) + balance.amount)
-        .ok_or(Error::<T, I>::AmountOverflowed)?;
-      Supply::<T, I>::set(balance.coin, new_supply);
+      let new_supply =
+        (Supply::<T, I>::get(coins.coin) + coins.amount).ok_or(Error::<T, I>::AmountOverflowed)?;
+      Supply::<T, I>::set(coins.coin, new_supply);
 
-      Self::deposit_event(Event::Mint { to, balance });
+      Self::emit_event(Event::Mint { to: to.into(), coins });
       Ok(())
     }
 
@@ -238,12 +218,12 @@ mod pallet {
       Ok(())
     }
 
-    /// Transfer `balance` from `from` to `to`.
-    pub fn transfer_fn(from: Public, to: Public, balance: Balance) -> Result<(), Error<T, I>> {
+    /// Transfer `coins` from `from` to `to`.
+    pub fn transfer_fn(from: Public, to: Public, coins: Balance) -> Result<(), Error<T, I>> {
       // update balances of accounts
-      Self::decrease_balance_internal(from, balance)?;
-      Self::increase_balance_internal(to, balance)?;
-      Self::deposit_event(Event::Transfer { from, to, balance });
+      Self::decrease_balance_internal(from, coins)?;
+      Self::increase_balance_internal(to, coins)?;
+      Self::emit_event(Event::Transfer { from: from.into(), to: to.into(), coins });
       Ok(())
     }
   }
@@ -253,19 +233,19 @@ mod pallet {
     /// Transfer `balance` from the signer to `to`.
     #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
-    pub fn transfer(origin: OriginFor<T>, to: Public, balance: Balance) -> DispatchResult {
+    pub fn transfer(origin: OriginFor<T>, to: Public, coins: Balance) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      Self::transfer_fn(from, to, balance)?;
+      Self::transfer_fn(from, to, coins)?;
       Ok(())
     }
 
-    /// Burn `balance` from the signer.
+    /// Burn `coins` from the signer.
     #[pallet::call_index(1)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
-    pub fn burn(origin: OriginFor<T>, balance: Balance) -> DispatchResult {
+    pub fn burn(origin: OriginFor<T>, coins: Balance) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      Self::burn_internal(from, balance)?;
-      Self::deposit_event(Event::Burn { from, balance });
+      Self::burn_internal(from, coins)?;
+      Self::emit_event(Event::Burn { from: from.into(), coins });
       Ok(())
     }
 
@@ -283,7 +263,7 @@ mod pallet {
 
       let from = ensure_signed(origin)?;
       Self::burn_internal(from, instruction.balance.into())?;
-      Self::deposit_event(Event::BurnWithInstruction { from, instruction });
+      Self::emit_event(Event::BurnWithInstruction { from: from.into(), instruction });
       Ok(())
     }
   }

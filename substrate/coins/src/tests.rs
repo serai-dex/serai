@@ -1,15 +1,17 @@
 use sp_core::{Pair as _, sr25519::Pair};
 use frame_system::RawOrigin;
 
-use serai_primitives::{coin::*, balance::*, address::*, instructions::*};
+use serai_abi::primitives::{coin::*, balance::*, address::*, instructions::*};
 
 use crate::mock::*;
 
-pub type CoinsEvent = crate::Event<Test, crate::CoinsInstance>;
+pub type CoinsEvent = serai_abi::coins::Event;
 
 #[test]
 fn mint() {
   new_test_ext().execute_with(|| {
+    Core::start_transaction();
+
     // minting u64::MAX should work
     let coin = Coin::Serai;
     let to = Pair::generate().0.public();
@@ -25,10 +27,10 @@ fn mint() {
     assert_eq!(Coins::supply(coin), balance.amount);
 
     // test events
-    let mint_events = System::events()
+    let mint_events = Core::events()
       .iter()
       .filter_map(|event| {
-        if let RuntimeEvent::Coins(e) = &event.event {
+        if let serai_abi::Event::Coins(e) = &event {
           if matches!(e, CoinsEvent::Mint { .. }) {
             Some(e.clone())
           } else {
@@ -40,13 +42,15 @@ fn mint() {
       })
       .collect::<Vec<_>>();
 
-    assert_eq!(mint_events, vec![CoinsEvent::Mint { to, balance }]);
+    assert_eq!(mint_events, vec![CoinsEvent::Mint { to: to.into(), coins: balance }]);
   })
 }
 
 #[test]
 fn burn_with_instruction() {
   new_test_ext().execute_with(|| {
+    Core::start_transaction();
+
     // mint some coin
     let coin = Coin::External(ExternalCoin::Bitcoin);
     let to = Pair::generate().0.public();
@@ -76,10 +80,10 @@ fn burn_with_instruction() {
     assert_eq!(Coins::balance(to, coin), Amount(0));
     assert_eq!(Coins::supply(coin), Amount(0));
 
-    let burn_events = System::events()
+    let burn_events = Core::events()
       .iter()
       .filter_map(|event| {
-        if let RuntimeEvent::Coins(e) = &event.event {
+        if let serai_abi::Event::Coins(e) = &event {
           if matches!(e, CoinsEvent::BurnWithInstruction { .. }) {
             Some(e.clone())
           } else {
@@ -91,13 +95,15 @@ fn burn_with_instruction() {
       })
       .collect::<Vec<_>>();
 
-    assert_eq!(burn_events, vec![CoinsEvent::BurnWithInstruction { from: to, instruction }]);
+    assert_eq!(burn_events, vec![CoinsEvent::BurnWithInstruction { from: to.into(), instruction }]);
   })
 }
 
 #[test]
 fn transfer() {
   new_test_ext().execute_with(|| {
+    Core::start_transaction();
+
     // mint some coin
     let coin = Coin::External(ExternalCoin::Bitcoin);
     let from = Pair::generate().0.public();
