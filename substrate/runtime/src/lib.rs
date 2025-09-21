@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
@@ -36,13 +37,9 @@ pub use emissions_pallet as emissions;
 
 pub use economic_security_pallet as economic_security;
 
-// Actually used by the runtime
-use sp_core::OpaqueMetadata;
 use sp_std::prelude::*;
 
 use sp_version::RuntimeVersion;
-#[cfg(feature = "std")]
-use sp_version::NativeVersion;
 
 use sp_runtime::{
   create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
@@ -113,15 +110,11 @@ pub const VERSION: RuntimeVersion = RuntimeVersion {
   impl_name: create_runtime_str!("core"),
   spec_version: 1,
   impl_version: 1,
+  authoring_version: 1,
   apis: RUNTIME_API_VERSIONS,
   transaction_version: 1,
-  state_version: 1,
+  system_version: 1,
 };
-
-#[cfg(feature = "std")]
-pub fn native_version() -> NativeVersion {
-  NativeVersion { runtime_version: VERSION, can_author_with: Default::default() }
-}
 
 pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
 pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
@@ -135,8 +128,6 @@ const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 parameter_types! {
   pub const BlockHashCount: BlockNumber = 2400;
   pub const Version: RuntimeVersion = VERSION;
-
-  pub const SS58Prefix: u8 = 42; // TODO: Remove for Bech32m
 
   // 1 MB block size limit
   pub BlockLength: system::limits::BlockLength =
@@ -181,9 +172,16 @@ impl system::Config for Runtime {
 
   type AccountData = ();
   type SystemWeightInfo = ();
-  type SS58Prefix = SS58Prefix; // TODO: Remove for Bech32m
 
   type MaxConsumers = support::traits::ConstU32<16>;
+
+  type RuntimeTask = ();
+  type ExtensionsWeightInfo = (); // TODO
+  type SingleBlockMigrations = ();
+  type MultiBlockMigrator = ();
+  type PreInherents = ();
+  type PostInherents = ();
+  type PostTransactions = ();
 }
 
 impl timestamp::Config for Runtime {
@@ -200,21 +198,18 @@ impl transaction_payment::Config for Runtime {
   type WeightToFee = IdentityFee<SubstrateAmount>;
   type LengthToFee = IdentityFee<SubstrateAmount>;
   type FeeMultiplierUpdate = ();
+  type WeightInfo = ();
 }
 
 impl coins::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
   type AllowMint = ValidatorSets;
 }
 
 impl coins::Config<coins::Instance1> for Runtime {
-  type RuntimeEvent = RuntimeEvent;
   type AllowMint = ();
 }
 
 impl dex::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-
   type LPFee = ConstU32<3>; // 0.3%
   type MintMinLiquidity = ConstU64<10000>;
 
@@ -226,8 +221,6 @@ impl dex::Config for Runtime {
 }
 
 impl validator_sets::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-
   type ShouldEndSession = Babe;
 }
 
@@ -239,7 +232,6 @@ impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
 }
 
 impl signals::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
   // 1 week
   #[allow(clippy::cast_possible_truncation)]
   type RetirementValidityDuration = ConstU32<{ (7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
@@ -248,30 +240,13 @@ impl signals::Config for Runtime {
   type RetirementLockInDuration = ConstU32<{ (2 * 7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
 }
 
-impl in_instructions::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
+impl in_instructions::Config for Runtime {}
 
-impl genesis_liquidity::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
+impl genesis_liquidity::Config for Runtime {}
 
-impl emissions::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
+impl emissions::Config for Runtime {}
 
-impl economic_security::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
-
-// for publishing equivocation evidences.
-impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
-where
-  RuntimeCall: From<C>,
-{
-  type Extrinsic = Transaction;
-  type OverarchingCall = RuntimeCall;
-}
+impl economic_security::Config for Runtime {}
 
 // for validating equivocation evidences.
 // The following runtime construction doesn't actually implement the pallet as doing so is
@@ -301,6 +276,7 @@ impl babe::Config for Runtime {
 
   type WeightInfo = ();
   type MaxAuthorities = MaxAuthorities;
+  type MaxNominators = ConstU32<1>;
 
   type KeyOwnerProof = MembershipProof<Self>;
   type EquivocationReportSystem =
@@ -312,11 +288,23 @@ impl grandpa::Config for Runtime {
 
   type WeightInfo = ();
   type MaxAuthorities = MaxAuthorities;
+  type MaxNominators = ConstU32<1>;
 
   type MaxSetIdSessionEntries = ConstU64<0>;
   type KeyOwnerProof = MembershipProof<Self>;
   type EquivocationReportSystem =
     grandpa::EquivocationReportSystem<Self, ValidatorSets, ValidatorSets, ReportLongevity>;
+}
+
+#[doc(hidden)]
+pub struct GetCurrentSessionForSubstrate;
+impl pallet_session::GetCurrentSessionForSubstrate for GetCurrentSessionForSubstrate {
+  fn get() -> u32 {
+    validator_sets::Pallet::<Runtime>::latest_decided_session(NetworkId::Serai).unwrap().0 - 1
+  }
+}
+impl pallet_session::Config for Runtime {
+  type Session = GetCurrentSessionForSubstrate;
 }
 
 pub type Executive = frame_executive::Executive<
@@ -329,7 +317,7 @@ pub type Executive = frame_executive::Executive<
 
 construct_runtime!(
   pub enum Runtime {
-    System: system exclude_parts { Call },
+    System: system,
 
     Timestamp: timestamp,
 
@@ -379,6 +367,11 @@ sp_api::decl_runtime_apis! {
   pub trait SeraiRuntimeApi {
     fn validators(network_id: NetworkId) -> Vec<PublicKey>;
   }
+
+  #[api_version(1)]
+  pub trait GenesisApi {
+    fn build(genesis: RuntimeGenesisConfig);
+  }
 }
 
 sp_api::impl_runtime_apis! {
@@ -391,22 +384,9 @@ sp_api::impl_runtime_apis! {
       Executive::execute_block(block);
     }
 
-    fn initialize_block(header: &Header) {
-      Executive::initialize_block(header)
-    }
-  }
-
-  impl sp_api::Metadata<Block> for Runtime {
-    fn metadata() -> OpaqueMetadata {
-      OpaqueMetadata::new(Runtime::metadata().into())
-    }
-
-    fn metadata_at_version(version: u32) -> Option<OpaqueMetadata> {
-      Runtime::metadata_at_version(version)
-    }
-
-    fn metadata_versions() -> sp_std::vec::Vec<u32> {
-      Runtime::metadata_versions()
+    fn initialize_block(header: &Header) -> sp_runtime::ExtrinsicInclusionMode {
+      Executive::initialize_block(header);
+      sp_runtime::ExtrinsicInclusionMode::AllExtrinsics
     }
   }
 
@@ -606,6 +586,12 @@ sp_api::impl_runtime_apis! {
     }
   }
 
+  impl crate::GenesisApi<Block> for Runtime {
+    fn build(genesis: RuntimeGenesisConfig) {
+      <RuntimeGenesisConfig as frame_support::traits::BuildGenesisConfig>::build(&genesis)
+    }
+  }
+
   impl dex::DexApi<Block> for Runtime {
     fn quote_price_exact_tokens_for_tokens(
       coin1: Coin,
@@ -628,5 +614,22 @@ sp_api::impl_runtime_apis! {
     fn get_reserves(coin1: Coin, coin2: Coin) -> Option<(SubstrateAmount, SubstrateAmount)> {
       Dex::get_reserves(&coin1, &coin2).ok()
     }
+  }
+}
+
+impl<LocalCall> frame_system::offchain::CreateTransactionBase<LocalCall> for Runtime
+where
+  RuntimeCall: From<LocalCall>,
+{
+  type Extrinsic = <Block as BlockT>::Extrinsic;
+  type RuntimeCall = RuntimeCall;
+}
+
+impl<LocalCall> frame_system::offchain::CreateBare<LocalCall> for Runtime
+where
+  RuntimeCall: From<LocalCall>,
+{
+  fn create_bare(call: RuntimeCall) -> <Block as BlockT>::Extrinsic {
+    <<Block as BlockT>::Extrinsic as frame_support::traits::InherentBuilder>::new_inherent(call)
   }
 }

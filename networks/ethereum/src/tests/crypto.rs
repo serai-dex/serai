@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use rand_core::OsRng;
 
 use group::ff::{Field, PrimeField};

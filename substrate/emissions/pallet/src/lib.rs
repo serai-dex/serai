@@ -36,11 +36,10 @@ pub mod pallet {
     + GenesisLiquidityConfig
     + EconomicSecurityConfig
   {
-    type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
   #[pallet::genesis_config]
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+  #[derive(Clone, Debug)]
   pub struct GenesisConfig<T: Config> {
     /// Networks to spawn Serai with.
     pub networks: Vec<(NetworkId, Amount)>,

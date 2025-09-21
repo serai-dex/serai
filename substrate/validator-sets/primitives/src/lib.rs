@@ -6,8 +6,7 @@ use zeroize::Zeroize;
 use dalek_ff_group::Ristretto;
 use ciphersuite::{group::GroupEncoding, Ciphersuite};
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale::{Encode, Decode, DecodeWithMemTracking, MaxEncodedLen};
 
 #[cfg(feature = "borsh")]
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -27,7 +26,17 @@ pub const MAX_KEY_LEN: u32 = 96;
 
 /// The type used to identify a specific session of validators.
 #[derive(
-  Clone, Copy, PartialEq, Eq, Hash, Default, Debug, Encode, Decode, TypeInfo, MaxEncodedLen,
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  Hash,
+  Default,
+  Debug,
+  Encode,
+  Decode,
+  DecodeWithMemTracking,
+  MaxEncodedLen,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
@@ -35,7 +44,9 @@ pub const MAX_KEY_LEN: u32 = 96;
 pub struct Session(pub u32);
 
 /// The type used to identify a specific validator set during a specific session.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[derive(
+  Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen,
+)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -45,7 +56,9 @@ pub struct ValidatorSet {
 }
 
 /// The type used to identify a specific validator set during a specific session.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[derive(
+  Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen,
+)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -78,7 +91,7 @@ pub type ExternalKey = BoundedVec<u8, MaxKeyLen>;
 /// The key pair for a validator set.
 ///
 /// This is their Ristretto key, used for signing Batches, and their key on the external network.
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct KeyPair(
@@ -128,7 +141,7 @@ pub fn musig_key(set: ValidatorSet, set_keys: &[Public]) -> Public {
         .expect("invalid participant"),
     );
   }
-  Public(dkg_musig::musig_key_vartime::<Ristretto>(musig_context(set), &keys).unwrap().to_bytes())
+  dkg_musig::musig_key_vartime::<Ristretto>(musig_context(set), &keys).unwrap().to_bytes().into()
 }
 
 /// The message for the set_keys signature.

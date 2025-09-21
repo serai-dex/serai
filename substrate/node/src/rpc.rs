@@ -15,14 +15,12 @@ use tokio::sync::RwLock;
 
 use jsonrpsee::RpcModule;
 
-pub use sc_rpc_api::DenyUnsafe;
 use sc_transaction_pool_api::TransactionPool;
 
 pub struct FullDeps<C, P> {
   pub id: String,
   pub client: Arc<C>,
   pub pool: Arc<P>,
-  pub deny_unsafe: DenyUnsafe,
   pub authority_discovery: Option<sc_authority_discovery::Service>,
 }
 
@@ -38,7 +36,7 @@ pub fn create_full<
   deps: FullDeps<C, P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
-  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, PublicKey, Nonce>
+  C::Api: frame_system_rpc_runtime_api::AccountNonceApi<Block, PublicKey, Nonce>
     + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, SubstrateAmount>
     + SeraiRuntimeApi<Block>
     + BlockBuilder<Block>,
@@ -47,9 +45,9 @@ where
   use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
 
   let mut module = RpcModule::new(());
-  let FullDeps { id, client, pool, deny_unsafe, authority_discovery } = deps;
+  let FullDeps { id, client, pool, authority_discovery } = deps;
 
-  module.merge(System::new(client.clone(), pool, deny_unsafe).into_rpc())?;
+  module.merge(System::new(client.clone(), pool).into_rpc())?;
   module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
   if let Some(authority_discovery) = authority_discovery {
@@ -57,17 +55,25 @@ where
       RpcModule::new((id, client, RwLock::new(authority_discovery)));
     authority_discovery_module.register_async_method(
       "p2p_validators",
-      |params, context| async move {
+      |params, context, _ext| async move {
         let network: NetworkId = params.parse()?;
         let (id, client, authority_discovery) = &*context;
         let latest_block = client.info().best_hash;
 
         let validators = client.runtime_api().validators(latest_block, network).map_err(|_| {
-          jsonrpsee::core::Error::to_call_error(std::io::Error::other(format!(
-            "couldn't get validators from the latest block, which is likely a fatal bug. {}",
-            "please report this at https://github.com/serai-dex/serai",
-          )))
-        })?;
+          jsonrpsee::types::error::ErrorObjectOwned::owned(
+            -1,
+            format!(
+              "couldn't get validators from the latest block, which is likely a fatal bug. {}",
+              "please report this at https://github.com/serai-dex/serai",
+            ),
+            Option::<()>::None,
+          )
+        });
+        let validators = match validators {
+          Ok(validators) => validators,
+          Err(e) => return Err(e),
+        };
         // Always return the protocol's bootnodes
         let mut all_p2p_addresses = crate::chain_spec::bootnode_multiaddrs(id);
         // Additionally returns validators found over the DHT
@@ -87,9 +93,9 @@ where
           // It isn't beneficial to use multiple addresses for a single peer here
           if !returned_addresses.is_empty() {
             all_p2p_addresses.push(
-              returned_addresses.remove(
-                usize::try_from(OsRng.next_u64() >> 32).unwrap() % returned_addresses.len(),
-              ),
+              returned_addresses
+                .remove(usize::try_from(OsRng.next_u64() >> 32).unwrap() % returned_addresses.len())
+                .into(),
             );
           }
         }

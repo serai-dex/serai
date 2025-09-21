@@ -6,8 +6,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale::{Encode, Decode, DecodeWithMemTracking, MaxEncodedLen};
 
 use serai_primitives::{Amount, ExternalAddress, ExternalCoin, SeraiAddress};
 
@@ -17,7 +16,7 @@ use crate::RefundableInInstruction;
 #[cfg(feature = "std")]
 use crate::InInstruction;
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

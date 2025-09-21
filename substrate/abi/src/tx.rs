@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use scale::Encode;
 
 use sp_core::sr25519::{Public, Signature};
@@ -8,18 +10,11 @@ use serai_primitives::SeraiAddress;
 use frame_support::dispatch::GetDispatchInfo;
 
 pub trait TransactionMember:
-  Clone + PartialEq + Eq + core::fmt::Debug + scale::Encode + scale::Decode + scale_info::TypeInfo
+  Clone + PartialEq + Eq + core::fmt::Debug + scale::Encode + scale::Decode
 {
 }
-impl<
-    T: Clone
-      + PartialEq
-      + Eq
-      + core::fmt::Debug
-      + scale::Encode
-      + scale::Decode
-      + scale_info::TypeInfo,
-  > TransactionMember for T
+impl<T: Clone + PartialEq + Eq + core::fmt::Debug + scale::Encode + scale::Decode> TransactionMember
+  for T
 {
 }
 
@@ -29,8 +24,8 @@ type TransactionDecodeAs<Extra> = (crate::Call, Option<(SeraiAddress, Signature,
 
 // We use our own Transaction struct, over UncheckedExtrinsic, for more control, a bit more
 // simplicity, and in order to be immune to https://github.com/paritytech/polkadot-sdk/issues/2947
-#[allow(private_bounds)]
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[allow(clippy::multiple_bound_locations)]
+#[derive(Clone, PartialEq, Eq, Debug, scale::DecodeWithMemTracking)]
 pub struct Transaction<
   Call: 'static + TransactionMember + From<crate::Call>,
   Extra: 'static + TransactionMember,
@@ -67,16 +62,6 @@ impl<Call: 'static + TransactionMember + From<crate::Call>, Extra: 'static + Tra
     let (call, signature) = TransactionDecodeAs::decode(input)?;
     let mapped_call = Call::from(call.clone());
     Ok(Self { call, mapped_call, signature })
-  }
-}
-impl<Call: 'static + TransactionMember + From<crate::Call>, Extra: 'static + TransactionMember>
-  scale_info::TypeInfo for Transaction<Call, Extra>
-{
-  type Identity = TransactionDecodeAs<Extra>;
-
-  // Define the type info as the info of the type equivalent to what we encode as
-  fn type_info() -> scale_info::Type {
-    TransactionDecodeAs::<Extra>::type_info()
   }
 }
 
@@ -129,21 +114,12 @@ impl<
 impl<
     Call: 'static + TransactionMember + From<crate::Call> + TryInto<crate::Call>,
     Extra: 'static + TransactionMember,
-  > frame_support::traits::ExtrinsicCall for Transaction<Call, Extra>
+  > frame_support::sp_runtime::traits::ExtrinsicCall for Transaction<Call, Extra>
 {
+  type Call = Call;
   fn call(&self) -> &Call {
     &self.mapped_call
   }
-}
-
-impl<
-    Call: 'static + TransactionMember + From<crate::Call>,
-    Extra: 'static + TransactionMember + sp_runtime::traits::SignedExtension,
-  > sp_runtime::traits::ExtrinsicMetadata for Transaction<Call, Extra>
-{
-  type SignedExtensions = Extra;
-
-  const VERSION: u8 = 0;
 }
 
 impl<
@@ -156,9 +132,10 @@ impl<
   }
 }
 
+use sp_runtime::generic::ExtrinsicFormat;
 impl<
-    Call: 'static + TransactionMember + From<crate::Call>,
-    Extra: 'static + TransactionMember + sp_runtime::traits::SignedExtension,
+    Call: 'static + TransactionMember + From<crate::Call> + sp_runtime::traits::Dispatchable,
+    Extra: 'static + TransactionMember + sp_runtime::traits::TransactionExtension<Call>,
   > sp_runtime::traits::BlindCheckable for Transaction<Call, Extra>
 {
   type Checked = sp_runtime::generic::CheckedExtrinsic<Public, Call, Extra>;
@@ -168,19 +145,33 @@ impl<
   ) -> Result<Self::Checked, sp_runtime::transaction_validity::TransactionValidityError> {
     Ok(match self.signature {
       Some((signer, signature, extra)) => {
-        if !signature.verify(
-          (&self.call, &extra, extra.additional_signed()?).encode().as_slice(),
-          &signer.into(),
-        ) {
+        if !signature
+          .verify((&self.call, &extra, extra.implicit()?).encode().as_slice(), &signer.into())
+        {
           Err(sp_runtime::transaction_validity::InvalidTransaction::BadProof)?
         }
 
         sp_runtime::generic::CheckedExtrinsic {
-          signed: Some((signer.into(), extra)),
+          format: ExtrinsicFormat::Signed(signer.into(), extra),
           function: self.mapped_call,
         }
       }
-      None => sp_runtime::generic::CheckedExtrinsic { signed: None, function: self.mapped_call },
+      None => sp_runtime::generic::CheckedExtrinsic {
+        format: ExtrinsicFormat::Bare,
+        function: self.mapped_call,
+      },
     })
+  }
+}
+
+impl<
+    Call: 'static + TransactionMember + From<crate::Call> + TryInto<crate::Call>,
+    Extra: 'static + TransactionMember,
+  > frame_support::traits::InherentBuilder for Transaction<Call, Extra>
+{
+  /// Panics if the inherent isn't supported.
+  // TODO: Don't panic here
+  fn new_inherent(call: Self::Call) -> Self {
+    sp_runtime::traits::Extrinsic::new(call, None).expect("trying to build an unsupported inherent")
   }
 }

@@ -8,13 +8,14 @@ use borsh::{BorshSerialize, BorshDeserialize};
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale::{Encode, Decode, DecodeWithMemTracking, MaxEncodedLen};
 
 use crate::{Amount, Coin, ExternalCoin};
 
 /// The type used for balances (a Coin and Balance).
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(
+  Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen,
+)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -24,7 +25,9 @@ pub struct Balance {
 }
 
 /// The type used for balances (a Coin and Balance).
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(
+  Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen,
+)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

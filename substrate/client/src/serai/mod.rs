@@ -290,7 +290,7 @@ impl Serai {
     self
       .0
       .rpc()
-      .system_account_next_index(&sp_core::sr25519::Public(address.0).to_string())
+      .system_account_next_index(&sp_core::sr25519::Public::from(address.0).to_string())
       .await
       .map_err(|_| SeraiError::ConnectionError)
   }

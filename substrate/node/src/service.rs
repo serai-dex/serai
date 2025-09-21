@@ -8,12 +8,11 @@ use sp_consensus_babe::{SlotDuration, inherents::InherentDataProvider as BabeInh
 use sp_io::SubstrateHostFunctions;
 use sc_executor::{sp_wasm_interface::ExtendedHostFunctions, WasmExecutor};
 
-use sc_network_common::sync::warp::WarpSyncParams;
-use sc_network::{Event, NetworkEventStream};
+use sc_network::{Event, NetworkEventStream, NetworkBackend};
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
 
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
-use sc_client_api::{BlockBackend, Backend};
+use sc_client_api::BlockBackend;
 
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
@@ -40,8 +39,8 @@ type PartialComponents = sc_service::PartialComponents<
   FullClient,
   FullBackend,
   SelectChain,
-  sc_consensus::DefaultImportQueue<Block, FullClient>,
-  sc_transaction_pool::FullPool<Block, FullClient>,
+  sc_consensus::DefaultImportQueue<Block>,
+  sc_transaction_pool::TransactionPoolWrapper<Block, FullClient>,
   (
     BabeBlockImport,
     sc_consensus_babe::BabeLink<Block>,
@@ -74,11 +73,11 @@ pub fn new_partial(
 
   #[allow(deprecated)]
   let executor = Executor::new(
-    config.wasm_method,
-    config.default_heap_pages,
-    config.max_runtime_instances,
+    config.executor.wasm_method,
+    config.executor.default_heap_pages,
+    config.executor.max_runtime_instances,
     None,
-    config.runtime_cache_size,
+    config.executor.runtime_cache_size,
   );
 
   let (client, backend, keystore_container, task_manager) =
@@ -103,16 +102,19 @@ pub fn new_partial(
 
   let select_chain = sc_consensus::LongestChain::new(backend.clone());
 
-  let transaction_pool = sc_transaction_pool::BasicPool::new_full(
-    config.transaction_pool.clone(),
-    config.role.is_authority().into(),
-    config.prometheus_registry(),
+  let transaction_pool = sc_transaction_pool::Builder::new(
     task_manager.spawn_essential_handle(),
     client.clone(),
-  );
+    config.role.is_authority().into(),
+  )
+  .with_options(config.transaction_pool.clone())
+  .with_prometheus(config.prometheus_registry())
+  .build();
+  let transaction_pool = Arc::new(transaction_pool);
 
   let (grandpa_block_import, grandpa_link) = grandpa::block_import(
     client.clone(),
+    u32::MAX,
     &client,
     select_chain.clone(),
     telemetry.as_ref().map(Telemetry::handle),
@@ -181,22 +183,26 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
   config.network.listen_addresses =
     vec!["/ip4/0.0.0.0/tcp/30333".parse().unwrap(), "/ip6/::/tcp/30333".parse().unwrap()];
 
-  let mut net_config = sc_network::config::FullNetworkConfiguration::new(&config.network);
+  type N = sc_network::service::NetworkWorker<Block, <Block as sp_runtime::traits::Block>::Hash>;
+  let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, N>::new(
+    &config.network,
+    config.prometheus_registry().cloned(),
+  );
+  let metrics = N::register_notification_metrics(config.prometheus_registry());
+
   let grandpa_protocol_name =
     grandpa::protocol_standard_name(&client.block_hash(0).unwrap().unwrap(), &config.chain_spec);
-  net_config.add_notification_protocol(sc_consensus_grandpa::grandpa_peers_set_config(
-    grandpa_protocol_name.clone(),
-  ));
+  let (grandpa_protocol_config, grandpa_notification_service) =
+    sc_consensus_grandpa::grandpa_peers_set_config::<Block, N>(
+      grandpa_protocol_name.clone(),
+      metrics.clone(),
+      net_config.peer_store_handle(),
+    );
+  net_config.add_notification_protocol(grandpa_protocol_config);
 
   let publish_non_global_ips = config.network.allow_non_globals_in_dht;
 
-  let warp_sync = Arc::new(grandpa::warp_proof::NetworkProvider::new(
-    backend.clone(),
-    grandpa_link.shared_authority_set().clone(),
-    vec![],
-  ));
-
-  let (network, system_rpc_tx, tx_handler_controller, network_starter, sync_service) =
+  let (network, system_rpc_tx, tx_handler_controller, sync_service) =
     sc_service::build_network(sc_service::BuildNetworkParams {
       config: &config,
       net_config,
@@ -205,7 +211,9 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       spawn_handle: task_manager.spawn_handle(),
       import_queue,
       block_announce_validator_builder: None,
-      warp_sync_params: Some(WarpSyncParams::WithProvider(warp_sync)),
+      metrics,
+      block_relay: None,
+      warp_sync_config: None,
     })?;
 
   task_manager.spawn_handle().spawn("bootnodes", "bootnodes", {
@@ -233,7 +241,10 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
                 .multiplex(libp2p::yamux::Config::default());
               let Ok(transport) = transport.dial(multiaddr.clone()) else { None? };
               let Ok((peer_id, _)) = transport.await else { None? };
-              Some(sc_network::config::MultiaddrWithPeerId { multiaddr, peer_id })
+              Some(sc_network::config::MultiaddrWithPeerId {
+                multiaddr: multiaddr.into(),
+                peer_id: peer_id.into(),
+              })
             }),
           ));
         }
@@ -261,25 +272,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
     }
   });
 
-  if config.offchain_worker.enabled {
-    task_manager.spawn_handle().spawn(
-      "offchain-workers-runner",
-      "offchain-worker",
-      sc_offchain::OffchainWorkers::new(sc_offchain::OffchainWorkerOptions {
-        runtime_api_provider: client.clone(),
-        is_validator: config.role.is_authority(),
-        keystore: Some(keystore_container.clone()),
-        offchain_db: backend.offchain_storage(),
-        transaction_pool: Some(OffchainTransactionPoolFactory::new(transaction_pool.clone())),
-        network_provider: network.clone(),
-        enable_http_requests: true,
-        custom_extensions: |_| vec![],
-      })
-      .run(client.clone(), task_manager.spawn_handle()),
-    );
-  }
-
-  let role = config.role.clone();
+  let role = config.role;
   let keystore = keystore_container;
   let prometheus_registry = config.prometheus_registry().cloned();
 
@@ -294,7 +287,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
         worker
       },
       client.clone(),
-      network.clone(),
+      Arc::new(network.clone()),
       Box::pin(network.event_stream("authority-discovery").filter_map(|e| async move {
         match e {
           Event::Dht(e) => Some(e),
@@ -303,6 +296,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       })),
       sc_authority_discovery::Role::PublishAndDiscover(keystore.clone()),
       prometheus_registry.clone(),
+      task_manager.spawn_handle(),
     );
     task_manager.spawn_handle().spawn(
       "authority-discovery-worker",
@@ -320,12 +314,11 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
     let client = client.clone();
     let pool = transaction_pool.clone();
 
-    Box::new(move |deny_unsafe, _| {
+    Box::new(move |_| {
       crate::rpc::create_full(crate::rpc::FullDeps {
         id: id.clone(),
         client: client.clone(),
         pool: pool.clone(),
-        deny_unsafe,
         authority_discovery: authority_discovery.clone(),
       })
       .map_err(Into::into)
@@ -392,7 +385,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       grandpa::run_grandpa_voter(grandpa::GrandpaParams {
         config: grandpa::Config {
           gossip_duration: std::time::Duration::from_millis(333),
-          justification_period: 512,
+          justification_generation_period: 512,
           name: Some(name),
           observer_enabled: false,
           keystore: if role.is_authority() { Some(keystore) } else { None },
@@ -408,10 +401,10 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
         prometheus_registry,
         shared_voter_state,
         offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool),
+        notification_service: grandpa_notification_service,
       })?,
     );
   }
 
-  network_starter.start_network();
   Ok(task_manager)
 }

@@ -4,10 +4,7 @@ use serai_abi::primitives::NetworkId;
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 
-use sp_core::{
-  sr25519::{Pair, Signature},
-  Pair as PairTrait,
-};
+use sp_core::{sr25519::Pair, Pair as PairTrait};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::Ciphersuite;
@@ -69,7 +66,7 @@ pub async fn set_keys(
       set.network,
       vec![].try_into().unwrap(),
       key_pair.clone(),
-      Signature(sig.to_bytes()),
+      sig.to_bytes().into(),
     ),
   )
   .await;

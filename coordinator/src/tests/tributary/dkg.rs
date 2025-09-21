@@ -316,7 +316,8 @@ async fn dkg_test() {
   OsRng.fill_bytes(&mut substrate_key);
   let mut network_key = vec![0; usize::try_from((OsRng.next_u64() % 32) + 32).unwrap()];
   OsRng.fill_bytes(&mut network_key);
-  let key_pair = KeyPair(serai_client::Public(substrate_key), network_key.try_into().unwrap());
+  let key_pair =
+    KeyPair(serai_client::Public::from(substrate_key), network_key.try_into().unwrap());
 
   let mut txs = vec![];
   for (i, key) in keys.iter().enumerate() {
@@ -361,7 +362,7 @@ async fn dkg_test() {
       assert_eq!(self.key_pair, key_pair);
       assert!(signature.verify(
         &*serai_client::validator_sets::primitives::set_keys_message(&set, &[], &key_pair),
-        &serai_client::Public(
+        &serai_client::Public::from(
           dkg_musig::musig_key_vartime::<Ristretto>(
             serai_client::validator_sets::primitives::musig_context(set.into()),
             &self.spec.validators().into_iter().map(|(validator, _)| validator).collect::<Vec<_>>()

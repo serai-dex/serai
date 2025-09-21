@@ -295,7 +295,7 @@ impl<T: DbTxn> DkgConfirmer<'_, T> {
       threshold_i_map_to_keys_and_musig_i_map(self.spec, &self.removed, self.key, preprocesses).1;
     let msg = set_keys_message(
       &self.spec.set(),
-      &self.removed.iter().map(|key| Public(key.to_bytes())).collect::<Vec<_>>(),
+      &self.removed.iter().map(|key| Public::from(key.to_bytes())).collect::<Vec<_>>(),
       key_pair,
     );
     self.signing_protocol().share_internal(&participants, preprocesses, &msg)

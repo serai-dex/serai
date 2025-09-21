@@ -6,14 +6,23 @@ use borsh::{BorshSerialize, BorshDeserialize};
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale::{Encode, Decode, DecodeWithMemTracking, MaxEncodedLen};
 
 use sp_core::H256;
 
 /// The type used to identify block numbers.
 #[derive(
-  Clone, Copy, Default, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
+  Clone,
+  Copy,
+  Default,
+  PartialEq,
+  Eq,
+  Hash,
+  Debug,
+  Encode,
+  Decode,
+  DecodeWithMemTracking,
+  MaxEncodedLen,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
@@ -30,7 +39,9 @@ impl From<u64> for BlockNumber {
 // If a block exists with a hash which isn't 32-bytes, it can be hashed into a value with 32-bytes
 // This would require the processor to maintain a mapping of 32-byte IDs to actual hashes, which
 // would be fine
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(
+  Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen,
+)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

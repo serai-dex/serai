@@ -62,8 +62,10 @@
 //! http://localhost:9933/
 //! ```
 //! (This can be run against the kitchen sync node in the `node` folder of this repo.)
+
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
+
 use frame_support::traits::DefensiveOption;
 
 #[cfg(feature = "runtime-benchmarks")]
@@ -132,9 +134,6 @@ pub mod pallet {
     + CoinsConfig
     + coins_pallet::Config<coins_pallet::Instance1>
   {
-    /// Overarching event type.
-    type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-
     /// A % the liquidity providers will take of every swap. Represents 10ths of a percent.
     #[pallet::constant]
     type LPFee: Get<u32>;

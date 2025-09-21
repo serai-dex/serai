@@ -52,7 +52,6 @@ pub mod pallet {
     + GenesisLiqConfig
     + EmissionsConfig
   {
-    type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
   #[pallet::event]

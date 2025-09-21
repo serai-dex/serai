@@ -1,8 +1,7 @@
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-use scale::{Decode, Encode, EncodeLike, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale::{Encode, EncodeLike, Decode, DecodeWithMemTracking, MaxEncodedLen};
 
 #[cfg(feature = "borsh")]
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -16,7 +15,7 @@ use sp_std::{vec, vec::Vec};
 use crate::{borsh_serialize_bounded_vec, borsh_deserialize_bounded_vec};
 
 /// The type used to identify external networks.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, TypeInfo)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ExternalNetworkId {
@@ -47,6 +46,8 @@ impl Decode for ExternalNetworkId {
   }
 }
 
+impl DecodeWithMemTracking for ExternalNetworkId {}
+
 impl MaxEncodedLen for ExternalNetworkId {
   fn max_encoded_len() -> usize {
     1
@@ -73,7 +74,7 @@ impl BorshDeserialize for ExternalNetworkId {
 }
 
 /// The type used to identify networks.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord, TypeInfo)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum NetworkId {
@@ -99,6 +100,8 @@ impl Decode for NetworkId {
     }
   }
 }
+
+impl DecodeWithMemTracking for NetworkId {}
 
 impl MaxEncodedLen for NetworkId {
   fn max_encoded_len() -> usize {
@@ -184,7 +187,7 @@ pub const COINS: [Coin; 5] = [
 ];
 
 /// The type used to identify external coins.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, TypeInfo)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ExternalCoin {
@@ -217,6 +220,9 @@ impl Decode for ExternalCoin {
     }
   }
 }
+
+impl DecodeWithMemTracking for ExternalCoin {}
+
 impl MaxEncodedLen for ExternalCoin {
   fn max_encoded_len() -> usize {
     1
@@ -242,7 +248,7 @@ impl BorshDeserialize for ExternalCoin {
 }
 
 /// The type used to identify coins.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, TypeInfo)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Coin {
@@ -268,6 +274,8 @@ impl Decode for Coin {
     }
   }
 }
+
+impl DecodeWithMemTracking for Coin {}
 
 impl MaxEncodedLen for Coin {
   fn max_encoded_len() -> usize {

@@ -12,7 +12,7 @@ use tokio::{
 use borsh::BorshSerialize;
 use sp_application_crypto::RuntimePublic;
 use serai_client::{
-  primitives::{ExternalNetworkId, Signature, EXTERNAL_NETWORKS},
+  primitives::{ExternalNetworkId, EXTERNAL_NETWORKS},
   validator_sets::primitives::{ExternalValidatorSet, Session},
   Serai, SeraiError, TemporalSerai,
 };
@@ -164,7 +164,7 @@ impl<D: Db> CosignEvaluator<D> {
 
     if !keys
       .0
-      .verify(&cosign_block_msg(cosign.block_number, cosign.block), &Signature(cosign.signature))
+      .verify(&cosign_block_msg(cosign.block_number, cosign.block), &cosign.signature.into())
     {
       log::warn!("received cosigned block with an invalid signature");
       return Ok(());

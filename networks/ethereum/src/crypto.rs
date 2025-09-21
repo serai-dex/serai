@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use group::ff::PrimeField;
 use k256::{
   elliptic_curve::{ops::Reduce, point::AffineCoordinates, sec1::ToEncodedPoint},
