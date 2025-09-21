@@ -47,6 +47,8 @@ pub enum Call {
   stand_against {
     /// The signal to stand against.
     signal: Signal,
+    /// The network this validator is standing against the signal on behalf of.
+    with_network: NetworkId,
   },
 }
 

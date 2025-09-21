@@ -20,10 +20,10 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ef18bfc7029d4a3d7c27e1d0b84da5091628a7d9", default-features = false }
 
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "16336c737dbe833e9d138a256af99698aba637c7", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ef18bfc7029d4a3d7c27e1d0b84da5091628a7d9", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "ef18bfc7029d4a3d7c27e1d0b84da5091628a7d9", default-features = false }
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
 

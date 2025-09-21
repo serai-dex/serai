@@ -8,13 +8,17 @@ extern crate alloc;
 
 use alloc::borrow::Cow;
 
-use sp_core::sr25519::Public;
+use sp_core::{ConstU32, ConstU64, sr25519::Public};
 use sp_runtime::{Perbill, Weight};
 use sp_version::RuntimeVersion;
 
-#[rustfmt::skip]
 use serai_abi::{
-  primitives::address::SeraiAddress, SubstrateHeader as Header, SubstrateBlock,
+  primitives::{
+    network_id::{ExternalNetworkId, NetworkId},
+    balance::{Amount, ExternalBalance},
+    address::SeraiAddress,
+  },
+  SubstrateHeader as Header, SubstrateBlock,
 };
 
 use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance};
@@ -79,13 +83,22 @@ mod runtime {
   pub type Coins = serai_coins_pallet::Pallet<Runtime, CoinsInstance>;
 
   #[runtime::pallet_index(3)]
-  pub type LiquidityTokens = serai_coins_pallet::Pallet<Runtime, LiquidityTokensInstance>;
-
-  #[runtime::pallet_index(4)]
   pub type ValidatorSets = serai_validator_sets_pallet::Pallet<Runtime>;
 
-  #[runtime::pallet_index(5)]
+  #[runtime::pallet_index(4)]
   pub type Signals = serai_signals_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(5)]
+  pub type LiquidityTokens = serai_coins_pallet::Pallet<Runtime, LiquidityTokensInstance>;
+
+  #[runtime::pallet_index(0xfd)]
+  pub type Session = pallet_session::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0xfe)]
+  pub type Babe = pallet_babe::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0xff)]
+  pub type Grandpa = pallet_grandpa::Pallet<Runtime>;
 }
 
 impl frame_system::Config for Runtime {
@@ -104,7 +117,7 @@ impl frame_system::Config for Runtime {
   type Block = Block;
   // Don't track old block hashes within the System pallet
   // We use not a number -> hash index, but a hash -> () index, in our own pallet
-  type BlockHashCount = sp_core::ConstU64<1>;
+  type BlockHashCount = ConstU64<1>;
   type DbWeight = frame_support::weights::constants::RocksDbWeight;
   type Version = Version;
   type PalletInfo = PalletInfo;
@@ -118,7 +131,7 @@ impl frame_system::Config for Runtime {
   // We don't invoke any hooks on-set-code as we don't perform upgrades via the blockchain yet via
   // nodes, ensuring everyone who upgrades consents to the rules they upgrade to
   type OnSetCode = ();
-  type MaxConsumers = sp_core::ConstU32<{ u32::MAX }>;
+  type MaxConsumers = ConstU32<{ u32::MAX }>;
   // No migrations set
   type SingleBlockMigrations = ();
   type MultiBlockMigrator = ();
@@ -133,15 +146,84 @@ impl serai_core_pallet::Config for Runtime {}
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint; // TODO
 }
-impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
-  type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+
+#[doc(hidden)]
+pub struct EconomicSecurity; // TODO
+impl serai_abi::economic_security::EconomicSecurity for EconomicSecurity {
+  fn achieved_economic_security(_network: ExternalNetworkId) -> bool {
+    false
+  }
+  fn sri_value(_balance: ExternalBalance) -> Amount {
+    Amount(0)
+  }
 }
 impl serai_validator_sets_pallet::Config for Runtime {
   type ShouldEndSession = Babe;
+  type EconomicSecurity = EconomicSecurity;
 }
 impl serai_signals_pallet::Config for Runtime {
-  type RetirementValidityDuration = sp_core::ConstU64<0>; // TODO
-  type RetirementLockInDuration = sp_core::ConstU64<0>; // TODO
+  type RetirementValidityDuration = ConstU64<0>; // TODO
+  type RetirementLockInDuration = ConstU64<0>; // TODO
+}
+impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
+  type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+}
+
+/*
+  `pallet-babe` requires we implement `pallet-timestamp` for the associated constants. It does not
+  actually require we offer the timestamp pallet however, and we don't as we follow our methodology
+  (using the block header for timestamps, not an inherent transaction).
+
+  TODO: Set timestamp when executing a block.
+*/
+impl pallet_timestamp::Config for Runtime {
+  type Moment = u64;
+  type OnTimestampSet = Babe;
+  type MinimumPeriod = ConstU64<0>; // TODO
+  type WeightInfo = ();
+}
+
+#[doc(hidden)]
+pub struct GetCurrentSessionForSubstrate;
+impl pallet_session::GetCurrentSessionForSubstrate for GetCurrentSessionForSubstrate {
+  fn get() -> u32 {
+    serai_validator_sets_pallet::Pallet::<Runtime>::current_session(NetworkId::Serai)
+      .map(|session| session.0)
+      .unwrap_or(0)
+  }
+}
+impl pallet_session::Config for Runtime {
+  type Session = GetCurrentSessionForSubstrate;
+}
+
+type MaxAuthorities =
+  ConstU32<{ serai_abi::primitives::validator_sets::KeyShares::MAX_PER_SET_U32 }>;
+impl pallet_babe::Config for Runtime {
+  type EpochDuration = ConstU64<0>; // TODO
+
+  type ExpectedBlockTime = ConstU64<0>; // TODO
+  type EpochChangeTrigger = pallet_babe::ExternalTrigger;
+
+  type WeightInfo = ();
+  type MaxAuthorities = MaxAuthorities;
+  type MaxNominators = ConstU32<1>;
+
+  // TODO: https://github.com/serai-dex/serai/issues/657
+  type DisabledValidators = ();
+  type KeyOwnerProof = sp_session::MembershipProof;
+  type EquivocationReportSystem = ();
+}
+impl pallet_grandpa::Config for Runtime {
+  type RuntimeEvent = RuntimeEvent;
+
+  type WeightInfo = ();
+  type MaxAuthorities = MaxAuthorities;
+  type MaxNominators = ConstU32<1>;
+
+  // TODO: https://github.com/serai-dex/serai/issues/657
+  type MaxSetIdSessionEntries = ConstU64<0>;
+  type KeyOwnerProof = sp_session::MembershipProof;
+  type EquivocationReportSystem = ();
 }
 
 impl From<Option<SeraiAddress>> for RuntimeOrigin {
@@ -158,36 +240,54 @@ impl From<serai_abi::Call> for RuntimeCall {
     match call {
       serai_abi::Call::Coins(call) => {
         use serai_abi::coins::Call;
-        match call {
-          Call::transfer { to, coins } => {
-            RuntimeCall::Coins(serai_coins_pallet::Call::transfer { to: to.into(), coins })
-          }
-          Call::burn { coins } => RuntimeCall::Coins(serai_coins_pallet::Call::burn { coins }),
+        use serai_coins_pallet::Call as Scall;
+        RuntimeCall::Coins(match call {
+          Call::transfer { to, coins } => Scall::transfer { to: to.into(), coins },
+          Call::burn { coins } => Scall::burn { coins },
           Call::burn_with_instruction { instruction } => {
-            RuntimeCall::Coins(serai_coins_pallet::Call::burn_with_instruction { instruction })
+            Scall::burn_with_instruction { instruction }
           }
-        }
+        })
       }
       serai_abi::Call::ValidatorSets(call) => {
         use serai_abi::validator_sets::Call;
-        match call {
-          Call::set_keys { .. } |
-          Call::report_slashes { .. } |
-          Call::set_embedded_elliptic_curve_keys { .. } |
-          Call::allocate { .. } |
-          Call::deallocate { .. } |
-          Call::claim_deallocation { .. } => todo!("TODO"),
-        }
+        use serai_validator_sets_pallet::Call as Scall;
+        RuntimeCall::ValidatorSets(match call {
+          Call::set_keys { network, key_pair, signature_participants, signature } => {
+            Scall::set_keys { network, key_pair, signature_participants, signature }
+          }
+          Call::report_slashes { network, slashes, signature } => {
+            Scall::report_slashes { network, slashes, signature }
+          }
+          Call::set_embedded_elliptic_curve_keys { keys } => {
+            Scall::set_embedded_elliptic_curve_keys { keys }
+          }
+          Call::allocate { network, amount } => Scall::allocate { network, amount },
+          Call::deallocate { network, amount } => Scall::deallocate { network, amount },
+          Call::claim_deallocation { deallocation } => Scall::claim_deallocation {
+            network: deallocation.network,
+            session: deallocation.session,
+          },
+        })
       }
       serai_abi::Call::Signals(call) => {
         use serai_abi::signals::Call;
-        match call {
-          Call::register_retirement_signal { .. } |
-          Call::revoke_retirement_signal { .. } |
-          Call::favor { .. } |
-          Call::revoke_favor { .. } |
-          Call::stand_against { .. } => todo!("TODO"),
-        }
+        use serai_signals_pallet::Call as Scall;
+        RuntimeCall::Signals(match call {
+          Call::register_retirement_signal { in_favor_of } => {
+            Scall::register_retirement_signal { in_favor_of }
+          }
+          Call::revoke_retirement_signal { was_in_favor_of } => {
+            Scall::revoke_retirement_signal { retirement_signal: was_in_favor_of }
+          }
+          Call::favor { signal, with_network } => Scall::favor { signal, with_network },
+          Call::revoke_favor { signal, with_network } => {
+            Scall::revoke_favor { signal, with_network }
+          }
+          Call::stand_against { signal, with_network } => {
+            Scall::stand_against { signal, with_network }
+          }
+        })
       }
       serai_abi::Call::Dex(call) => {
         use serai_abi::dex::Call;
@@ -330,9 +430,6 @@ pub use validator_sets_pallet as validator_sets;
 pub use in_instructions_pallet as in_instructions;
 
 pub use signals_pallet as signals;
-
-pub use pallet_babe as babe;
-pub use pallet_grandpa as grandpa;
 
 pub use genesis_liquidity_pallet as genesis_liquidity;
 pub use emissions_pallet as emissions;
@@ -492,42 +589,8 @@ impl pallet_authorship::Config for Runtime {
   type EventHandler = ();
 }
 
-// Maximum number of authorities per session.
-pub type MaxAuthorities = ConstU32<{ validator_sets::primitives::MAX_KEY_SHARES_PER_SET_U32 }>;
-
 /// Longevity of an offence report.
 pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
-
-impl babe::Config for Runtime {
-  #[cfg(feature = "fast-epoch")]
-  type EpochDuration = ConstU64<{ FAST_EPOCH_DURATION }>;
-
-  #[cfg(not(feature = "fast-epoch"))]
-  type EpochDuration = ConstU64<{ 4 * 7 * DAYS }>;
-
-  type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME * 1000 }>;
-  type EpochChangeTrigger = babe::ExternalTrigger;
-  type DisabledValidators = ValidatorSets;
-
-  type WeightInfo = ();
-  type MaxAuthorities = MaxAuthorities;
-
-  type KeyOwnerProof = MembershipProof<Self>;
-  type EquivocationReportSystem =
-    babe::EquivocationReportSystem<Self, ValidatorSets, ValidatorSets, ReportLongevity>;
-}
-
-impl grandpa::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-
-  type WeightInfo = ();
-  type MaxAuthorities = MaxAuthorities;
-
-  type MaxSetIdSessionEntries = ConstU64<0>;
-  type KeyOwnerProof = MembershipProof<Self>;
-  type EquivocationReportSystem =
-    grandpa::EquivocationReportSystem<Self, ValidatorSets, ValidatorSets, ReportLongevity>;
-}
 
 construct_runtime!(
   pub enum Runtime {

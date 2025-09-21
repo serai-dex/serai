@@ -36,13 +36,13 @@ pub mod pallet {
   }
 
   #[pallet::genesis_config]
-  #[derive(Debug, Encode, Decode)]
+  #[derive(Clone, Debug)]
   pub struct GenesisConfig<T: Config> {
     _config: PhantomData<T>,
   }
   impl<T: Config> Default for GenesisConfig<T> {
     fn default() -> Self {
-      GenesisConfig { _config: PhantomData }
+      Self { _config: PhantomData }
     }
   }
   #[pallet::genesis_build]
@@ -221,20 +221,16 @@ pub mod pallet {
     fn revoke_favor_internal(
       validator: T::AccountId,
       signal: Signal,
-      for_network: NetworkId,
+      with_network: NetworkId,
     ) -> DispatchResult {
-      if !Favors::<T>::contains_key((signal, for_network), validator) {
+      if !Favors::<T>::contains_key((signal, with_network), validator) {
         Err::<(), _>(Error::<T>::RevokingNonExistentFavor)?;
       }
-      Favors::<T>::remove((signal, for_network), validator);
-      Core::<T>::emit_event(Event::FavorRevoked {
-        signal,
-        by: validator.into(),
-        with_network: for_network,
-      });
+      Favors::<T>::remove((signal, with_network), validator);
+      Core::<T>::emit_event(Event::FavorRevoked { signal, by: validator.into(), with_network });
 
       // Update the tally for this network
-      Self::tally_for_network(signal, for_network);
+      Self::tally_for_network(signal, with_network);
 
       Ok(())
     }
@@ -342,7 +338,7 @@ pub mod pallet {
     /// Favor a signal.
     #[pallet::call_index(2)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
-    pub fn favor(origin: OriginFor<T>, signal: Signal, for_network: NetworkId) -> DispatchResult {
+    pub fn favor(origin: OriginFor<T>, signal: Signal, with_network: NetworkId) -> DispatchResult {
       let validator = ensure_signed(origin)?;
 
       // Perform the relevant checks for this class of signal
@@ -373,21 +369,17 @@ pub mod pallet {
         Signal::Halt { .. } => {}
       }
 
-      if Favors::<T>::contains_key((signal, for_network), validator) {
+      if Favors::<T>::contains_key((signal, with_network), validator) {
         Err::<(), _>(Error::<T>::AlreadyInFavor)?;
       }
 
       // Set the validator as in favor
-      Favors::<T>::set((signal, for_network), validator, Some(()));
+      Favors::<T>::set((signal, with_network), validator, Some(()));
 
-      Core::<T>::emit_event(Event::SignalFavored {
-        signal,
-        by: validator.into(),
-        with_network: for_network,
-      });
+      Core::<T>::emit_event(Event::SignalFavored { signal, by: validator.into(), with_network });
 
       // Check if the network is in favor
-      let network_in_favor = Self::tally_for_network(signal, for_network);
+      let network_in_favor = Self::tally_for_network(signal, with_network);
 
       // If this network is in favor, check if enough networks are
       if network_in_favor && Self::tally_for_all_networks(signal) {
@@ -416,7 +408,7 @@ pub mod pallet {
     pub fn revoke_favor(
       origin: OriginFor<T>,
       signal: Signal,
-      for_network: NetworkId,
+      with_network: NetworkId,
     ) -> DispatchResult {
       match signal {
         Signal::Retire { .. } => {
@@ -428,7 +420,7 @@ pub mod pallet {
       }
 
       let validator = ensure_signed(origin)?;
-      Self::revoke_favor_internal(validator, signal, for_network)
+      Self::revoke_favor_internal(validator, signal, with_network)
     }
 
     /// Emit an event standing against the signal.
@@ -442,7 +434,7 @@ pub mod pallet {
     pub fn stand_against(
       origin: OriginFor<T>,
       signal: Signal,
-      for_network: NetworkId,
+      with_network: NetworkId,
     ) -> DispatchResult {
       match signal {
         Signal::Retire { .. } => {
@@ -455,8 +447,8 @@ pub mod pallet {
 
       let validator = ensure_signed(origin)?;
       // If currently in favor, revoke the favor
-      if Favors::<T>::contains_key((signal, for_network), validator) {
-        Self::revoke_favor_internal(validator, signal, for_network)?;
+      if Favors::<T>::contains_key((signal, with_network), validator) {
+        Self::revoke_favor_internal(validator, signal, with_network)?;
       } else {
         // Check this Signal exists (which would've been implied by `Favors` for it existing)
         match signal {
@@ -472,7 +464,7 @@ pub mod pallet {
       Core::<T>::emit_event(Event::AgainstSignal {
         signal,
         account: validator.into(),
-        with_network: for_network,
+        with_network,
       });
 
       Ok(())

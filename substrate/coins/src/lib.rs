@@ -49,10 +49,12 @@ mod pallet {
   /// The instance used to represent coins on the Serai network.
   ///
   /// This would either be SRI itself or the sriXYZ coins swappable via pools.
+  #[derive(Default)]
   pub struct CoinsInstance;
   /// The instance used to represent liquidity tokens on the Serai network.
   ///
   /// Coin::XYZ would be considered as the liquidity token for the Coin::SRI - Coin::XYZ pool.
+  #[derive(Default)]
   pub struct LiquidityTokensInstance;
 
   /// The configuration of this pallet.
@@ -66,7 +68,7 @@ mod pallet {
 
   /// The genesis state to use for this pallet.
   #[pallet::genesis_config]
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+  #[derive(Clone, Debug)]
   pub struct GenesisConfig<T: Config<I>, I: 'static = ()> {
     /// The balances to initiate the state with.
     ///
@@ -76,10 +78,9 @@ mod pallet {
     /// PhantomData to bind `I`.
     pub _instance: PhantomData<I>,
   }
-
   impl<T: Config<I>, I: 'static> Default for GenesisConfig<T, I> {
     fn default() -> Self {
-      GenesisConfig { accounts: Default::default(), _instance: Default::default() }
+      Self { accounts: Default::default(), _instance: PhantomData }
     }
   }
 

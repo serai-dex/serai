@@ -3,7 +3,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 extern crate alloc;
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 
 mod embedded_elliptic_curve_keys;
 use embedded_elliptic_curve_keys::*;
@@ -65,10 +65,15 @@ mod pallet {
   }
 
   #[pallet::genesis_config]
-  #[derive(Clone, PartialEq, Eq, Debug)]
+  #[derive(Clone, Debug)]
   pub struct GenesisConfig<T: Config> {
     /// List of participants to place in the initial validator sets.
     pub participants: Vec<(T::AccountId, Vec<SignedEmbeddedEllipticCurveKeys>)>,
+  }
+  impl<T: Config> Default for GenesisConfig<T> {
+    fn default() -> Self {
+      Self { participants: Default::default() }
+    }
   }
 
   #[pallet::pallet]

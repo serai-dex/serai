@@ -13,8 +13,8 @@ use serai_primitives::{
 pub enum Call {
   /// Set the keys for a validator set.
   set_keys {
-    /// The validator set which is setting their keys.
-    validator_set: ExternalValidatorSet,
+    /// The network whose latest decided validator set is setting their keys..
+    network: ExternalNetworkId,
     /// The keys being set.
     key_pair: KeyPair,
     /// The participants in the validator set who signed off on these keys.
@@ -29,8 +29,8 @@ pub enum Call {
   },
   /// Report a validator set's slashes onto Serai.
   report_slashes {
-    /// The validator set which is setting their keys.
-    validator_set: ExternalValidatorSet,
+    /// The network whose latest retired validator set is reporting their slashes.
+    network: ExternalNetworkId,
     /// The slashes they're reporting.
     slashes: SlashReport,
     /// The signature confirming the validity of this slash report.
