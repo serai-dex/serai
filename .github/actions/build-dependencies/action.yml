@@ -44,7 +44,7 @@ runs:
         elif [ "$RUNNER_OS" == "macOS" ]; then
           brew install protobuf llvm
           HOMEBREW_ROOT_PATH=/opt/homebrew
-          if [ $(uname -r | awk -F "." '{ print $1 }') -eq "13" ]; then HOMEBREW_ROOT_PATH=/usr/local; fi
+          if [ $(sw_vers -productVersion | awk -F "." '{ print $1 }') = "13" ]; then HOMEBREW_ROOT_PATH=/usr/local; fi
           ls $HOMEBREW_ROOT_PATH/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
           echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
         fi
