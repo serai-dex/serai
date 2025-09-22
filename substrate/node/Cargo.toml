@@ -27,7 +27,7 @@ log = "0.4"
 
 schnorrkel = "0.11"
 
-libp2p = "0.52"
+libp2p = "0.56"
 
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev =  "7f2a8865cd0ded35e1d62fc330915d44dfa3beab" }
 sp-keystore = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev =  "7f2a8865cd0ded35e1d62fc330915d44dfa3beab" }

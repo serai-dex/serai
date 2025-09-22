@@ -9184,7 +9184,7 @@ dependencies = [
  "futures-util",
  "hex",
  "jsonrpsee",
- "libp2p 0.52.4",
+ "libp2p 0.56.0",
  "log",
  "pallet-transaction-payment-rpc",
  "rand_core 0.6.4",

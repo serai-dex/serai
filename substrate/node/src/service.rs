@@ -225,7 +225,15 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       // While the PeerIds *should* be known in advance and hardcoded, that data wasn't collected in
       // time and this fine for a testnet
       let bootnodes = || async {
-        use libp2p::{Transport as TransportTrait, tcp::tokio::Transport, noise::Config};
+        use libp2p::{
+          core::{
+            Endpoint,
+            transport::{PortUse, DialOpts},
+          },
+          Transport as TransportTrait,
+          tcp::tokio::Transport,
+          noise::Config,
+        };
 
         let bootnode_multiaddrs = crate::chain_spec::bootnode_multiaddrs(&id);
 
@@ -239,7 +247,12 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
                 .upgrade(libp2p::core::upgrade::Version::V1)
                 .authenticate(noise)
                 .multiplex(libp2p::yamux::Config::default());
-              let Ok(transport) = transport.dial(multiaddr.clone()) else { None? };
+              let Ok(transport) = transport.dial(
+                multiaddr.clone(),
+                DialOpts { role: Endpoint::Dialer, port_use: PortUse::Reuse },
+              ) else {
+                None?
+              };
               let Ok((peer_id, _)) = transport.await else { None? };
               Some(sc_network::config::MultiaddrWithPeerId {
                 multiaddr: multiaddr.into(),
