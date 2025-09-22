@@ -76,7 +76,7 @@ message-queue = { package = "serai-message-queue", path = "../message-queue", op
 [dev-dependencies]
 frost = { package = "modular-frost", path = "../crypto/frost", features = ["tests"] }
 
-sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "7f2a8865cd0ded35e1d62fc330915d44dfa3beab", default-features = false, features = ["std"] }
+sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b225e429397af981afda8a3d48be027926c466ba", default-features = false, features = ["std"] }
 
 ethereum-serai = { path = "../networks/ethereum", default-features = false, features = ["tests"] }
 

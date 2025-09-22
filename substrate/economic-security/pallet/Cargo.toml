@@ -21,8 +21,8 @@ workspace = true
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "7f2a8865cd0ded35e1d62fc330915d44dfa3beab", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "7f2a8865cd0ded35e1d62fc330915d44dfa3beab", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b225e429397af981afda8a3d48be027926c466ba", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b225e429397af981afda8a3d48be027926c466ba", default-features = false }
 
 dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
