@@ -118,7 +118,7 @@ WORKDIR /home/{user}
 
     Os::Debian => format!(
       r#"
-FROM debian:bookworm-slim AS image
+FROM debian:trixie-slim AS image
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
