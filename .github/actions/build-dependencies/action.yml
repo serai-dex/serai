@@ -43,8 +43,8 @@ runs:
           choco install protoc
         elif [ "$RUNNER_OS" == "macOS" ]; then
           brew install protobuf llvm
-          ls /usr/local/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
-          echo "DYLD_LIBRARY_PATH=/usr/local/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          ls /opt/homebrew/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
+          echo "DYLD_LIBRARY_PATH=/opt/homebrew/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
         fi
 
     - name: Install solc
