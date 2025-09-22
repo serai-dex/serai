@@ -2,6 +2,7 @@ use std::{sync::Arc, collections::HashSet};
 
 use rand_core::{RngCore, OsRng};
 
+use sp_core::Encode;
 use sp_blockchain::{Error as BlockchainError, HeaderBackend, HeaderMetadata};
 use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
@@ -15,6 +16,7 @@ use tokio::sync::RwLock;
 
 use jsonrpsee::RpcModule;
 
+use sc_client_api::BlockBackend;
 use sc_transaction_pool_api::TransactionPool;
 
 pub struct FullDeps<C, P> {
@@ -28,6 +30,7 @@ pub fn create_full<
   C: ProvideRuntimeApi<Block>
     + HeaderBackend<Block>
     + HeaderMetadata<Block, Error = BlockchainError>
+    + BlockBackend<Block>
     + Send
     + Sync
     + 'static,
@@ -52,7 +55,7 @@ where
 
   if let Some(authority_discovery) = authority_discovery {
     let mut authority_discovery_module =
-      RpcModule::new((id, client, RwLock::new(authority_discovery)));
+      RpcModule::new((id, client.clone(), RwLock::new(authority_discovery)));
     authority_discovery_module.register_async_method(
       "p2p_validators",
       |params, context, _ext| async move {
@@ -104,6 +107,34 @@ where
     )?;
     module.merge(authority_discovery_module)?;
   }
+
+  let mut block_bin_module = RpcModule::new(client);
+  block_bin_module.register_async_method(
+    "chain_getBlockBin",
+    |params, client, _ext| async move {
+      let [block_hash]: [String; 1] = params.parse()?;
+      let Some(block_hash) = hex::decode(&block_hash).ok().and_then(|bytes| {
+        <[u8; 32]>::try_from(bytes.as_slice())
+          .map(<Block as sp_runtime::traits::Block>::Hash::from)
+          .ok()
+      }) else {
+        return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+          -1,
+          "requested block hash wasn't a valid hash",
+          Option::<()>::None,
+        ));
+      };
+      let Some(block) = client.block(block_hash).ok().flatten() else {
+        return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+          -1,
+          "couldn't find requested block",
+          Option::<()>::None,
+        ));
+      };
+      Ok(hex::encode(block.block.encode()))
+    },
+  )?;
+  module.merge(block_bin_module)?;
 
   Ok(module)
 }
