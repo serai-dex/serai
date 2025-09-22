@@ -52,7 +52,7 @@ jobs:
           key: rust-advisory-db
 
       - name: Install cargo deny
-        run: cargo +1.89 install cargo-deny --version =0.18.3
+        run: cargo +1.89 install cargo-deny --version =0.18.4
 
       - name: Run cargo deny
         run: cargo deny -L error --all-features check --hide-inclusion-graph

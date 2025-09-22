@@ -9113,7 +9113,6 @@ dependencies = [
  "serai-primitives",
  "serde",
  "sp-application-crypto",
- "sp-runtime",
  "sp-std",
  "zeroize",
 ]
@@ -9199,9 +9198,6 @@ dependencies = [
  "sc-consensus-grandpa",
  "sc-executor",
  "sc-network",
- "sc-network-common",
- "sc-rpc",
- "sc-rpc-api",
  "sc-service",
  "sc-telemetry",
  "sc-transaction-pool",

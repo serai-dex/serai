@@ -38,11 +38,11 @@ runs:
       shell: bash
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
-          sudo apt install -y ca-certificates protobuf-compiler
+          sudo apt install -y ca-certificates protobuf-compiler libclang-dev
         elif [ "$RUNNER_OS" == "Windows" ]; then
-          choco install protoc
+          choco install protoc llvm
         elif [ "$RUNNER_OS" == "macOS" ]; then
-          brew install protobuf
+          brew install protobuf llvm
         fi
 
     - name: Install solc
