@@ -144,12 +144,12 @@ fn genesis(
     Encode,
     traits::{RuntimeCode, WrappedRuntimeCode, CodeExecutor},
   };
-  use sp_runtime::BuildStorage;
+  use sc_service::ChainSpec as _;
 
   let bin = wasm_binary();
   let hash = sp_core::blake2_256(&bin).to_vec();
 
-  let chain_spec = sc_chain_spec::ChainSpecBuilder::new(&bin, None)
+  let mut chain_spec = sc_chain_spec::ChainSpecBuilder::new(&bin, None)
     .with_name(name)
     .with_id(id)
     .with_chain_type(chain_type)
@@ -157,7 +157,7 @@ fn genesis(
     .build();
 
   let mut ext = sp_state_machine::BasicExternalities::new_empty();
-  let code_fetcher = WrappedRuntimeCode(bin.into());
+  let code_fetcher = WrappedRuntimeCode(bin.clone().into());
   sc_executor::WasmExecutor::<sp_io::SubstrateHostFunctions>::builder()
     .with_allow_missing_host_functions(true)
     .build()
@@ -170,7 +170,9 @@ fn genesis(
     )
     .0
     .unwrap();
-  chain_spec.assimilate_storage(&mut ext.into_storages()).unwrap();
+  let mut storage = ext.into_storages();
+  storage.top.insert(sp_core::storage::well_known_keys::CODE.to_vec(), bin);
+  chain_spec.set_storage(storage);
 
   chain_spec
 }
