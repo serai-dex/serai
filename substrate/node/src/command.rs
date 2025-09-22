@@ -48,7 +48,7 @@ impl SubstrateCli for Cli {
 }
 
 pub fn run() -> sc_cli::Result<()> {
-  let cli = Cli::from_args();
+  let mut cli = Cli::from_args();
 
   match &cli.subcommand {
     Some(Subcommand::Key(cmd)) => cmd.run(&cli),
@@ -98,11 +98,20 @@ pub fn run() -> sc_cli::Result<()> {
       cli.create_runner(cmd)?.sync_run(|config| cmd.run::<Block>(&config))
     }
 
-    None => cli.create_runner(&cli.run)?.run_node_until_exit(|mut config| async {
-      if config.role.is_authority() {
-        config.state_pruning = Some(PruningMode::ArchiveAll);
-      }
-      service::new_full(config).map_err(sc_cli::Error::Service)
-    }),
+    None => {
+      cli.run.network_params.node_key_params = sc_cli::NodeKeyParams {
+        node_key: None,
+        node_key_file: None,
+        node_key_type: sc_cli::arg_enums::NodeKeyType::Ed25519,
+        unsafe_force_node_key_generation: true,
+      };
+
+      cli.create_runner(&cli.run)?.run_node_until_exit(|mut config| async {
+        if config.role.is_authority() {
+          config.state_pruning = Some(PruningMode::ArchiveAll);
+        }
+        service::new_full(config).map_err(sc_cli::Error::Service)
+      })
+    }
   }
 }
