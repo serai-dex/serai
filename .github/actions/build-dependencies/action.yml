@@ -40,11 +40,11 @@ runs:
         if [ "$RUNNER_OS" == "Linux" ]; then
           sudo apt install -y ca-certificates protobuf-compiler libclang-dev
         elif [ "$RUNNER_OS" == "Windows" ]; then
-          choco install protoc llvm
-          ls /usr/local/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
-          echo "LD_LIBRARY_PATH=/usr/local/opt/llvm/lib:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          choco install protoc
         elif [ "$RUNNER_OS" == "macOS" ]; then
           brew install protobuf llvm
+          ls /usr/local/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
+          echo "DYLD_LIBRARY_PATH=/usr/local/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
         fi
 
     - name: Install solc
