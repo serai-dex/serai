@@ -41,6 +41,8 @@ runs:
           sudo apt install -y ca-certificates protobuf-compiler libclang-dev
         elif [ "$RUNNER_OS" == "Windows" ]; then
           choco install protoc llvm
+          echo "LIBCLANG_PATH=/usr/local/opt/llvm/lib" >> $GITHUB_ENV
+          echo "DYLD_LIBRARY_PATH=/usr/local/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> $GITHUB_ENV
         elif [ "$RUNNER_OS" == "macOS" ]; then
           brew install protobuf llvm
         fi
