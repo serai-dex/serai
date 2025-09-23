@@ -381,6 +381,14 @@ sp_api::impl_runtime_apis! {
     }
 
     fn execute_block(block: Block) {
+      for tx in &block.extrinsics {
+        if let Some(signer) = tx.signer() {
+          let signer = signer.0.into();
+          if System::providers(&signer) == 0 {
+            System::inc_providers(&signer);
+          }
+        }
+      }
       Executive::execute_block(block);
     }
 
@@ -392,6 +400,12 @@ sp_api::impl_runtime_apis! {
 
   impl sp_block_builder::BlockBuilder<Block> for Runtime {
     fn apply_extrinsic(extrinsic: <Block as BlockT>::Extrinsic) -> ApplyExtrinsicResult {
+      if let Some(signer) = extrinsic.signer() {
+        let signer = signer.0.into();
+        if System::providers(&signer) == 0 {
+          System::inc_providers(&signer);
+        }
+      }
       Executive::apply_extrinsic(extrinsic)
     }
 
@@ -417,6 +431,12 @@ sp_api::impl_runtime_apis! {
       tx: <Block as BlockT>::Extrinsic,
       block_hash: <Block as BlockT>::Hash,
     ) -> TransactionValidity {
+      if let Some(signer) = tx.signer() {
+        let signer = signer.0.into();
+        if System::providers(&signer) == 0 {
+          System::inc_providers(&signer);
+        }
+      }
       Executive::validate_transaction(source, tx, block_hash)
     }
   }

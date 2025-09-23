@@ -45,6 +45,10 @@ impl<Call: 'static + TransactionMember + From<crate::Call>, Extra: 'static + Tra
   pub fn call(&self) -> &crate::Call {
     &self.call
   }
+
+  pub fn signer(&self) -> Option<SeraiAddress> {
+    self.signature.as_ref().map(|(address, _sig, _extra)| *address)
+  }
 }
 
 impl<Call: 'static + TransactionMember + From<crate::Call>, Extra: 'static + TransactionMember>

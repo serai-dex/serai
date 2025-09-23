@@ -36,15 +36,25 @@ pub mod tx;
   Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
 )]
 pub enum Call {
+  #[codec(index = 1)]
   Timestamp(timestamp::Call),
+  #[codec(index = 3)]
   Coins(coins::Call),
+  #[codec(index = 4)]
   LiquidityTokens(liquidity_tokens::Call),
+  #[codec(index = 5)]
   Dex(dex::Call),
+  #[codec(index = 6)]
   ValidatorSets(validator_sets::Call),
+  #[codec(index = 7)]
   GenesisLiquidity(genesis_liquidity::Call),
+  #[codec(index = 10)]
   InInstructions(in_instructions::Call),
+  #[codec(index = 11)]
   Signals(signals::Call),
+  #[codec(index = 12)]
   Babe(babe::Call),
+  #[codec(index = 13)]
   Grandpa(grandpa::Call),
 }
 
@@ -60,19 +70,27 @@ pub enum TransactionPaymentEvent {
   Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
 )]
 pub enum Event {
+  #[codec(index = 0)]
   System(system::Event),
-  Timestamp,
+  #[codec(index = 2)]
   TransactionPayment(TransactionPaymentEvent),
+  #[codec(index = 3)]
   Coins(coins::Event),
+  #[codec(index = 4)]
   LiquidityTokens(liquidity_tokens::Event),
+  #[codec(index = 5)]
   Dex(dex::Event),
+  #[codec(index = 6)]
   ValidatorSets(validator_sets::Event),
+  #[codec(index = 7)]
   GenesisLiquidity(genesis_liquidity::Event),
-  Emissions,
+  #[codec(index = 9)]
   EconomicSecurity(economic_security::Event),
+  #[codec(index = 10)]
   InInstructions(in_instructions::Event),
+  #[codec(index = 11)]
   Signals(signals::Event),
-  Babe,
+  #[codec(index = 13)]
   Grandpa(grandpa::Event),
 }
 
