@@ -26,21 +26,9 @@ presented in section 4.2 is extended, with the following changes:
   just one round.
 
 For a gist of the verifiable encryption scheme, please see
-https://gist.github.com/kayabaNerve/cfbde74b0660dfdf8dd55326d6ec33d7. Security
-proofs are currently being worked on.
-
----
-
-This library relies on an implementation of Bulletproofs and various
-zero-knowledge gadgets. This library uses
-[`generalized-bulletproofs`](https://docs.rs/generalized-bulletproofs),
-[`generalized-bulletproofs-circuit-abstraction`](https://docs.rs/generalized-bulletproofs-circuit-abstraction),
-and
-[`generalized-bulletproofs-ec-gadgets`](https://docs.rs/generalized-bulletproofs-ec-gadgets)
-from the Monero project's FCMP++ codebase. These libraries have received the
-following audits in the past:
-- https://github.com/kayabaNerve/monero-oxide/tree/fcmp++/audits/generalized-bulletproofs
-- https://github.com/kayabaNerve/monero-oxide/tree/fcmp++/audits/fcmps
+https://gist.github.com/kayabaNerve/cfbde74b0660dfdf8dd55326d6ec33d7. For
+security proofs and audit information, please see
+[here](../../../audits/crypto/dkg/evrf).
 
 ---
 
