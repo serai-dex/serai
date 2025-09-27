@@ -1,10 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-  # Rewrites/redirects
-  "patches/option-ext",
-  "patches/directories-next",
-
   "common/std-shims",
   "common/zalloc",
   "common/patchable-async-sleep",
@@ -164,6 +160,19 @@ panic = "unwind"
 overflow-checks = true
 
 [patch.crates-io]
+# Point to empty crates for unused crates in our tree
+ark-ff-3 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.3" }
+ark-ff-4 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.4" }
+c-kzg = { path = "patches/ethereum/c-kzg" }
+libsecp256k1 = { path = "patches/ethereum/libsecp256k1" }
+rug = { path = "patches/ethereum/rug" }
+secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-30" }
+secp256k1-31 = { package = "secp256k1", path = "patches/ethereum/secp256k1-31" }
+
+# Updates to the latest version
+darling = { path = "patches/darling" }
+thiserror = { path = "patches/thiserror" }
+
 # Dependencies from monero-oxide which originate from within our own tree
 std-shims = { path = "patches/std-shims" }
 simple-request = { path = "common/request" }

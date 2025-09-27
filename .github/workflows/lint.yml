@@ -155,8 +155,6 @@ jobs:
             # Correct the last line, which was malleated to "],"
             members=$(echo "$members" | sed "$(echo "$members" | wc -l)s/\]\,/\]/")
 
-            # Don't check the patches
-            members=$(echo "$members" | grep -v "patches")
             # Don't check the following
             # Most of these are binaries, with the exception of the Substrate runtime which has a
             # bespoke build pipeline

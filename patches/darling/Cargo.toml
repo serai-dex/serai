@@ -1,0 +1,16 @@
+[package]
+name = "darling"
+version = "0.20.99"
+description = "Patch to the latest version"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/darling"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[dependencies]
+darling = { version = "0.21" }
