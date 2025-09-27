@@ -22,7 +22,6 @@ use ciphersuite::{
 
 /// The ID of a participant, defined as a non-zero u16.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize))]
 pub struct Participant(u16);
 impl Participant {
   /// Create a new Participant identifier from a u16.
@@ -129,18 +128,8 @@ pub enum DkgError {
   NotParticipating,
 }
 
-// Manually implements BorshDeserialize so we can enforce it's a valid index
-#[cfg(feature = "borsh")]
-impl borsh::BorshDeserialize for Participant {
-  fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    Participant::new(u16::deserialize_reader(reader)?)
-      .ok_or_else(|| io::Error::other("invalid participant"))
-  }
-}
-
 /// Parameters for a multisig.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize))]
 pub struct ThresholdParams {
   /// Participants needed to sign on behalf of the group.
   t: u16,
@@ -207,16 +196,6 @@ impl ThresholdParams {
   /// An iterator over all participant indexes.
   pub fn all_participant_indexes(&self) -> impl Iterator<Item = Participant> {
     AllParticipantIndexes { i: 1, n: self.n }
-  }
-}
-
-#[cfg(feature = "borsh")]
-impl borsh::BorshDeserialize for ThresholdParams {
-  fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let t = u16::deserialize_reader(reader)?;
-    let n = u16::deserialize_reader(reader)?;
-    let i = Participant::deserialize_reader(reader)?;
-    ThresholdParams::new(t, n, i).map_err(|e| io::Error::other(format!("{e:?}")))
   }
 }
 

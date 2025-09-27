@@ -20,6 +20,44 @@ pub struct SubstrateContext {
   pub network_latest_finalized_block: BlockHash,
 }
 
+pub fn borsh_serialize_participant<W: borsh::io::Write>(
+  value: &Participant,
+  writer: &mut W,
+) -> borsh::io::Result<()> {
+  u16::from(*value).serialize(writer)
+}
+pub fn borsh_deserialize_participant<R: borsh::io::Read>(
+  reader: &mut R,
+) -> borsh::io::Result<Participant> {
+  u16::deserialize_reader(reader).and_then(|p| {
+    Participant::new(p)
+      .ok_or_else(|| borsh::io::Error::other("invalid `Participant` despite valid `u16`"))
+  })
+}
+
+pub fn borsh_serialize_participant_map<W: borsh::io::Write>(
+  value: &HashMap<Participant, Vec<u8>>,
+  writer: &mut W,
+) -> borsh::io::Result<()> {
+  value
+    .iter()
+    .map(|(key, value)| (u16::from(*key), value))
+    .collect::<HashMap<u16, &Vec<u8>>>()
+    .serialize(writer)
+}
+pub fn borsh_deserialize_participant_map<R: borsh::io::Read>(
+  reader: &mut R,
+) -> borsh::io::Result<HashMap<Participant, Vec<u8>>> {
+  HashMap::<u16, Vec<u8>>::deserialize_reader(reader)?
+    .into_iter()
+    .map(|(key, value)| {
+      Participant::new(key)
+        .ok_or_else(|| borsh::io::Error::other("invalid `Participant` despite valid `u16` in map"))
+        .map(|key| (key, value))
+    })
+    .collect()
+}
+
 pub mod key_gen {
   use super::*;
 
@@ -32,7 +70,15 @@ pub mod key_gen {
     /// Received participations for the specified key generation protocol.
     ///
     /// This is sent by the Coordinator's Tributary scanner.
-    Participation { session: Session, participant: Participant, participation: Vec<u8> },
+    Participation {
+      session: Session,
+      #[borsh(
+        serialize_with = "borsh_serialize_participant",
+        deserialize_with = "borsh_deserialize_participant"
+      )]
+      participant: Participant,
+      participation: Vec<u8>,
+    },
   }
 
   impl core::fmt::Debug for CoordinatorMessage {
@@ -57,11 +103,25 @@ pub mod key_gen {
   #[derive(Clone, BorshSerialize, BorshDeserialize)]
   pub enum ProcessorMessage {
     // Participated in the specified key generation protocol.
-    Participation { session: Session, participation: Vec<u8> },
+    Participation {
+      session: Session,
+      participation: Vec<u8>,
+    },
     // Resulting keys from the specified key generation protocol.
-    GeneratedKeyPair { session: Session, substrate_key: [u8; 32], network_key: Vec<u8> },
+    GeneratedKeyPair {
+      session: Session,
+      substrate_key: [u8; 32],
+      network_key: Vec<u8>,
+    },
     // Blame this participant.
-    Blame { session: Session, participant: Participant },
+    Blame {
+      session: Session,
+      #[borsh(
+        serialize_with = "borsh_serialize_participant",
+        deserialize_with = "borsh_deserialize_participant"
+      )]
+      participant: Participant,
+    },
   }
 
   impl core::fmt::Debug for ProcessorMessage {
@@ -124,11 +184,25 @@ pub mod sign {
     /// Received preprocesses for the specified signing protocol.
     ///
     /// This is sent by the Coordinator's Tributary scanner.
-    Preprocesses { id: SignId, preprocesses: HashMap<Participant, Vec<u8>> },
+    Preprocesses {
+      id: SignId,
+      #[borsh(
+        serialize_with = "borsh_serialize_participant_map",
+        deserialize_with = "borsh_deserialize_participant_map"
+      )]
+      preprocesses: HashMap<Participant, Vec<u8>>,
+    },
     // Received shares for the specified signing protocol.
     ///
     /// This is sent by the Coordinator's Tributary scanner.
-    Shares { id: SignId, shares: HashMap<Participant, Vec<u8>> },
+    Shares {
+      id: SignId,
+      #[borsh(
+        serialize_with = "borsh_serialize_participant_map",
+        deserialize_with = "borsh_deserialize_participant_map"
+      )]
+      shares: HashMap<Participant, Vec<u8>>,
+    },
     // Re-attempt a signing protocol.
     ///
     /// This is sent by the Coordinator's Tributary re-attempt scheduling logic.
@@ -149,11 +223,24 @@ pub mod sign {
   #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
   pub enum ProcessorMessage {
     // Participant sent an invalid message during the sign protocol.
-    InvalidParticipant { session: Session, participant: Participant },
+    InvalidParticipant {
+      session: Session,
+      #[borsh(
+        serialize_with = "borsh_serialize_participant",
+        deserialize_with = "borsh_deserialize_participant"
+      )]
+      participant: Participant,
+    },
     // Created preprocesses for the specified signing protocol.
-    Preprocesses { id: SignId, preprocesses: Vec<Vec<u8>> },
+    Preprocesses {
+      id: SignId,
+      preprocesses: Vec<Vec<u8>>,
+    },
     // Signed shares for the specified signing protocol.
-    Shares { id: SignId, shares: Vec<Vec<u8>> },
+    Shares {
+      id: SignId,
+      shares: Vec<Vec<u8>>,
+    },
   }
 }
 
@@ -298,7 +385,7 @@ impl CoordinatorMessage {
           }
           // Unique since one participation per participant per session
           key_gen::CoordinatorMessage::Participation { session, participant, .. } => {
-            (1, borsh::to_vec(&(session, participant)).unwrap())
+            (1, borsh::to_vec(&(session, u16::from(*participant))).unwrap())
           }
         };
 
@@ -375,7 +462,7 @@ impl ProcessorMessage {
           }
           // Unique since we only blame a participant once (as this is fatal)
           key_gen::ProcessorMessage::Blame { session, participant } => {
-            (2, borsh::to_vec(&(session, participant)).unwrap())
+            (2, borsh::to_vec(&(session, u16::from(*participant))).unwrap())
           }
         };
 

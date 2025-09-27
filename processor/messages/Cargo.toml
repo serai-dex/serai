@@ -19,11 +19,9 @@ workspace = true
 
 [dependencies]
 hex = { version = "0.4", default-features = false, features = ["std"] }
-
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-dkg = { path = "../../crypto/dkg", default-features = false, features = ["std", "borsh"] }
+dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
 
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
-
 serai-cosign = { package = "serai-cosign-types", path = "../../coordinator/cosign/types" }

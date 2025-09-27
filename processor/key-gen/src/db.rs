@@ -31,7 +31,15 @@ struct RawParams {
 
 #[derive(BorshSerialize, BorshDeserialize)]
 pub(crate) struct Participations {
+  #[borsh(
+    serialize_with = "messages::borsh_serialize_participant_map",
+    deserialize_with = "messages::borsh_deserialize_participant_map"
+  )]
   pub(crate) substrate_participations: HashMap<Participant, Vec<u8>>,
+  #[borsh(
+    serialize_with = "messages::borsh_serialize_participant_map",
+    deserialize_with = "messages::borsh_deserialize_participant_map"
+  )]
   pub(crate) network_participations: HashMap<Participant, Vec<u8>>,
 }
 
