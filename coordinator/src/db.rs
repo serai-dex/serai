@@ -103,7 +103,7 @@ mod _internal_db {
       // Tributary transactions to publish from the DKG confirmation task
       TributaryTransactionsFromDkgConfirmation: (set: ExternalValidatorSet) -> Transaction,
       // Participants to remove
-      RemoveParticipant: (set: ExternalValidatorSet) -> Participant,
+      RemoveParticipant: (set: ExternalValidatorSet) -> u16,
     }
   }
 }
@@ -139,10 +139,11 @@ impl RemoveParticipant {
   pub(crate) fn send(txn: &mut impl DbTxn, set: ExternalValidatorSet, participant: Participant) {
     // If this set has yet to be retired, send this transaction
     if RetiredTributary::get(txn, set.network).map(|session| session.0) < Some(set.session.0) {
-      _internal_db::RemoveParticipant::send(txn, set, &participant);
+      _internal_db::RemoveParticipant::send(txn, set, &u16::from(participant));
     }
   }
   pub(crate) fn try_recv(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Option<Participant> {
     _internal_db::RemoveParticipant::try_recv(txn, set)
+      .map(|i| Participant::new(i).expect("sent invalid participant index for removal"))
   }
 }

@@ -23,19 +23,12 @@ thiserror = { version = "2", default-features = false }
 
 std-shims = { version = "0.1", path = "../../common/std-shims", default-features = false, features = ["alloc"] }
 
-borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
-
 ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["alloc"] }
 
 [features]
 std = [
   "thiserror/std",
-
   "std-shims/std",
-
-  "borsh?/std",
-
   "ciphersuite/std",
 ]
-borsh = ["dep:borsh"]
 default = ["std"]

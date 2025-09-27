@@ -2444,7 +2444,6 @@ dependencies = [
 name = "dkg"
 version = "0.6.1"
 dependencies = [
- "borsh",
  "ciphersuite 0.4.2",
  "std-shims 0.1.5",
  "thiserror 2.0.17",
