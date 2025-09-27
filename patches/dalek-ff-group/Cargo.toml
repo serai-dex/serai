@@ -24,6 +24,6 @@ crypto-bigint = { version = "0.6", default-features = false, features = ["zeroiz
 prime-field = { path = "../../crypto/prime-field", default-features = false }
 
 [features]
-alloc = ["dalek-ff-group/alloc", "crypto-bigint-05/alloc", "crypto-bigint/alloc", "prime-field/alloc"]
+alloc = ["dalek-ff-group/alloc", "prime-field/alloc"]
 std = ["alloc", "dalek-ff-group/std", "prime-field/std"]
 default = ["std"]
