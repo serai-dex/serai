@@ -91,9 +91,6 @@ mod runtime {
   #[runtime::pallet_index(5)]
   pub type LiquidityTokens = serai_coins_pallet::Pallet<Runtime, LiquidityTokensInstance>;
 
-  #[runtime::pallet_index(0xfd)]
-  pub type Session = pallet_session::Pallet<Runtime>;
-
   #[runtime::pallet_index(0xfe)]
   pub type Babe = pallet_babe::Pallet<Runtime>;
 

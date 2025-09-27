@@ -10,6 +10,7 @@ ignore = [
   "RUSTSEC-2022-0061", # https://github.com/serai-dex/serai/227
   "RUSTSEC-2024-0370", # proc-macro-error is unmaintained
   "RUSTSEC-2024-0436", # paste is unmaintained
+  "RUSTSEC-2025-0057", # https://github.com/bytecodealliance/wasmtime/pull/11634
 ]
 
 [licenses]
@@ -78,6 +79,8 @@ exceptions = [
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-p2p" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-libp2p-p2p" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator" },
+
+  { allow = ["AGPL-3.0-only"], name = "pallet-session" },
 
   { allow = ["AGPL-3.0-only"], name = "serai-core-pallet" },
   { allow = ["AGPL-3.0-only"], name = "serai-coins-pallet" },
