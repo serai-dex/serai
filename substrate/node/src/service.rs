@@ -287,6 +287,9 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 
   let role = config.role;
   let keystore = keystore_container;
+  if let Some(seed) = config.dev_key_seed.as_ref() {
+    let _ = keystore.sr25519_generate_new(sp_core::crypto::key_types::AUTHORITY_DISCOVERY, Some(seed));
+  }
   let prometheus_registry = config.prometheus_registry().cloned();
 
   // TODO: Ensure we're considered as an authority is a validator of an external network

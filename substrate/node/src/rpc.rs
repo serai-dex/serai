@@ -59,7 +59,7 @@ where
     authority_discovery_module.register_async_method(
       "p2p_validators",
       |params, context, _ext| async move {
-        let network: NetworkId = params.parse()?;
+        let [network]: [NetworkId; 1] = params.parse()?;
         let (id, client, authority_discovery) = &*context;
         let latest_block = client.info().best_hash;
 
