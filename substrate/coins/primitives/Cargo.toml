@@ -25,7 +25,7 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 serai-primitives = { path = "../../primitives", default-features = false }
 
 [dev-dependencies]
-sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b225e429397af981afda8a3d48be027926c466ba", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "1f99b62c1163e7c5373e5b8560c88365e8a765b2", default-features = false }
 
 [features]
 std = ["zeroize", "borsh?/std", "serde?/std", "scale/std", "sp-runtime/std", "serai-primitives/std"]
