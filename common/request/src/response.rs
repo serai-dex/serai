@@ -1,9 +1,11 @@
+use core::{pin::Pin, future::Future};
 use std::io;
 
 use hyper::{
   StatusCode,
   header::{HeaderValue, HeaderMap},
   body::Incoming,
+  rt::Executor,
 };
 use http_body_util::BodyExt;
 
@@ -14,13 +16,18 @@ use crate::{Client, Error};
 // Borrows the client so its async task lives as long as this response exists.
 #[allow(dead_code)]
 #[derive(Debug)]
-pub struct Response<'a> {
+pub struct Response<
+  'a,
+  E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>,
+> {
   pub(crate) response: hyper::Response<Incoming>,
   pub(crate) size_limit: Option<usize>,
-  pub(crate) client: &'a Client,
+  pub(crate) client: &'a Client<E>,
 }
 
-impl Response<'_> {
+impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>>
+  Response<'_, E>
+{
   pub fn status(&self) -> StatusCode {
     self.response.status()
   }

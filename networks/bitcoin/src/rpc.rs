@@ -6,7 +6,7 @@ use thiserror::Error;
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::json;
 
-use simple_request::{hyper, Request, Client};
+use simple_request::{hyper, Request, TokioClient as Client};
 
 use bitcoin::{
   hashes::{Hash, hex::FromHex},

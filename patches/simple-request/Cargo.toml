@@ -1,23 +1,22 @@
 [package]
 name = "simple-request"
-version = "0.1.99"
+version = "0.2.99"
 description = "simple-request which patches to the latest update"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/patches/simple-request"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["nostd", "no_std", "alloc", "io"]
 edition = "2021"
-rust-version = "1.65"
+rust-version = "1.71"
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[lints]
-workspace = true
-
 [dependencies]
-simple-request = { path = "../../common/request" }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+simple-request = { path = "../../common/request", default-features = false, features = ["tokio"] }
 
 [features]
 tls = ["simple-request/tls"]
+basic-auth = ["simple-request/basic-auth"]

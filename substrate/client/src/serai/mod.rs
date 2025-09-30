@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use async_lock::RwLock;
-use simple_request::{hyper, Request, Client};
+use simple_request::{hyper, Request, TokioClient as Client};
 
 use scale::{Decode, Encode};
 use serde::{Serialize, Deserialize, de::DeserializeOwned};

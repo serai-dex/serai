@@ -7,7 +7,7 @@ use std::io;
 use alloy_json_rpc::{RequestPacket, ResponsePacket};
 use alloy_transport::{TransportError, TransportErrorKind, TransportFut};
 
-use simple_request::{hyper, Error, Request, Client};
+use simple_request::{hyper, Error, Request, TokioClient as Client};
 
 use tower::Service;
 

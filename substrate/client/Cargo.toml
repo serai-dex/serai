@@ -37,13 +37,13 @@ frame-system = { git = "https://github.com/serai-dex/substrate", optional = true
 
 async-lock = "3"
 
-simple-request = { path = "../../common/request", version = "0.2", optional = true }
+simple-request = { path = "../../common/request", version = "0.3", features = ["tokio"], optional = true }
 
 bitcoin = { version = "0.32", optional = true }
 
 ciphersuite = { path = "../../crypto/ciphersuite", optional = true }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
-monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c", version = "0.1.0", default-features = false, features = ["std"], optional = true }
+monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "4b7191e3da20e42f839bfd6d706f75364004a4b8", version = "0.1.0", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 rand_core = "0.6"

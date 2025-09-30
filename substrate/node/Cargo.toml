@@ -82,7 +82,7 @@ serai-env = { path = "../../common/env" }
 
 curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["std", "hazmat"] }
-monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c", default-features = false, features = ["std"] }
+monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "4b7191e3da20e42f839bfd6d706f75364004a4b8", default-features = false, features = ["std"] }
 
 [build-dependencies]
 substrate-build-script-utils = { git = "https://github.com/serai-dex/substrate" }
