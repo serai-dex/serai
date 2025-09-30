@@ -119,6 +119,7 @@ impl Rpc {
         .unwrap(),
     );
     request.with_basic_auth();
+    request.set_response_size_limit(Some(100 * 1024 * 1024));
     let mut res = self
       .client
       .request(request)
