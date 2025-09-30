@@ -102,6 +102,7 @@ pub trait PreprocessMachine: Send {
   type SignMachine: SignMachine<Self::Signature, Preprocess = Self::Preprocess>;
 
   /// Perform the preprocessing round required in order to sign.
+  ///
   /// Returns a preprocess message to be broadcast to all participants, over an authenticated
   /// channel.
   fn preprocess<R: RngCore + CryptoRng>(self, rng: &mut R)
@@ -235,6 +236,8 @@ pub trait SignMachine<S>: Send + Sync + Sized {
   /// Takes in the participants' preprocess messages. Returns the signature share to be broadcast
   /// to all participants, over an authenticated channel. The parties who participate here will
   /// become the signing set for this session.
+  ///
+  /// The caller MUST only use preprocesses obtained via this machine's `read_preprocess` function.
   fn sign(
     self,
     commitments: HashMap<Participant, Self::Preprocess>,
@@ -421,7 +424,10 @@ pub trait SignatureMachine<S>: Send + Sync {
   fn read_share<R: Read>(&self, reader: &mut R) -> io::Result<Self::SignatureShare>;
 
   /// Complete signing.
+  ///
   /// Takes in everyone elses' shares. Returns the signature.
+  ///
+  /// The caller MUST only use shares obtained via this machine's `read_shares` function.
   fn complete(self, shares: HashMap<Participant, Self::SignatureShare>) -> Result<S, FrostError>;
 }
 
