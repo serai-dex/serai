@@ -384,10 +384,10 @@ sp_api::impl_runtime_apis! {
       for tx in &block.extrinsics {
         if let Some(signer) = tx.signer() {
           let signer = PublicKey::from(signer.0);
-          let mut info = frame_system::Account::<Runtime>::get(&signer);
+          let mut info = frame_system::Account::<Runtime>::get(signer);
           if info.providers == 0 {
             info.providers = 1;
-            frame_system::Account::<Runtime>::set(&signer, info);
+            frame_system::Account::<Runtime>::set(signer, info);
           }
         }
       }
@@ -404,10 +404,10 @@ sp_api::impl_runtime_apis! {
     fn apply_extrinsic(extrinsic: <Block as BlockT>::Extrinsic) -> ApplyExtrinsicResult {
       if let Some(signer) = extrinsic.signer() {
         let signer = PublicKey::from(signer.0);
-        let mut info = frame_system::Account::<Runtime>::get(&signer);
+        let mut info = frame_system::Account::<Runtime>::get(signer);
         if info.providers == 0 {
           info.providers = 1;
-          frame_system::Account::<Runtime>::set(&signer, info);
+          frame_system::Account::<Runtime>::set(signer, info);
         }
       }
       Executive::apply_extrinsic(extrinsic)
@@ -436,9 +436,11 @@ sp_api::impl_runtime_apis! {
       block_hash: <Block as BlockT>::Hash,
     ) -> TransactionValidity {
       if let Some(signer) = tx.signer() {
-        let signer = signer.0.into();
-        if System::providers(&signer) == 0 {
-          System::inc_providers(&signer);
+        let signer = PublicKey::from(signer.0);
+        let mut info = frame_system::Account::<Runtime>::get(signer);
+        if info.providers == 0 {
+          info.providers = 1;
+          frame_system::Account::<Runtime>::set(signer, info);
         }
       }
       Executive::validate_transaction(source, tx, block_hash)
