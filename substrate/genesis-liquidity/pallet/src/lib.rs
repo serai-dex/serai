@@ -8,7 +8,6 @@
 )]
 #[frame_support::pallet]
 pub mod pallet {
-  use super::*;
   use frame_system::{pallet_prelude::*, RawOrigin};
   use frame_support::{pallet_prelude::*, sp_runtime::SaturatedConversion};
 
@@ -40,7 +39,6 @@ pub mod pallet {
     + CoinsConfig
     + coins_pallet::Config<coins_pallet::Instance1>
   {
-    type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
   #[pallet::error]

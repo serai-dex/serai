@@ -8,8 +8,7 @@ use zeroize::Zeroize;
 use dalek_ff_group::Ristretto;
 use ciphersuite::{group::GroupEncoding, GroupIo};
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale::{Encode, Decode, DecodeWithMemTracking, MaxEncodedLen};
 
 #[cfg(feature = "borsh")]
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -39,7 +38,17 @@ pub const MAX_KEY_SHARES_PER_SET_U32: u32 = MAX_KEY_SHARES_PER_SET as u32;
 
 /// The type used to identify a specific session of validators.
 #[derive(
-  Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Encode, Decode, TypeInfo, MaxEncodedLen,
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  Hash,
+  Default,
+  Debug,
+  Encode,
+  Decode,
+  DecodeWithMemTracking,
+  MaxEncodedLen,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
@@ -48,7 +57,7 @@ pub struct Session(pub u32);
 
 /// The type used to identify a specific validator set during a specific session.
 #[derive(
-  Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Encode, Decode, TypeInfo, MaxEncodedLen,
+  Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
@@ -59,7 +68,9 @@ pub struct ValidatorSet {
 }
 
 /// The type used to identify a specific validator set during a specific session.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[derive(
+  Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen,
+)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -90,9 +101,8 @@ pub type ExternalKey = BoundedVec<u8, ConstU32<MAX_KEY_LEN>>;
 
 /// The key pair for a validator set.
 ///
-/// This is their Ristretto key, used for publishing data onto Serai, and their key on the external
-/// network.
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+/// This is their Ristretto key, used for signing Batches, and their key on the external network.
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct KeyPair(
@@ -141,7 +151,7 @@ pub fn musig_key(set: ValidatorSet, set_keys: &[Public]) -> Public {
       <Ristretto as GroupIo>::read_G::<&[u8]>(&mut key.0.as_ref()).expect("invalid participant"),
     );
   }
-  Public(dkg_musig::musig_key_vartime::<Ristretto>(musig_context(set), &keys).unwrap().to_bytes())
+  dkg_musig::musig_key_vartime::<Ristretto>(musig_context(set), &keys).unwrap().to_bytes().into()
 }
 
 /// The message for the `set_keys` signature.

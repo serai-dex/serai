@@ -9,8 +9,6 @@
 )] // TODO
 #[frame_support::pallet]
 pub mod pallet {
-  use scale_info::TypeInfo;
-
   use sp_core::sr25519::Public;
   use sp_io::hashing::blake2_256;
 
@@ -25,17 +23,13 @@ pub mod pallet {
   use in_instructions_pallet::{Config as IiConfig, Pallet as InInstructions};
 
   #[pallet::config]
-  pub trait Config:
-    frame_system::Config<AccountId = Public> + VsConfig + IiConfig + TypeInfo
-  {
-    type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
-
+  pub trait Config: frame_system::Config<AccountId = Public> + VsConfig + IiConfig {
     type RetirementValidityDuration: Get<u32>;
     type RetirementLockInDuration: Get<u32>;
   }
 
   #[pallet::genesis_config]
-  #[derive(Debug, Encode, Decode)]
+  #[derive(Debug)]
   pub struct GenesisConfig<T: Config> {
     _config: PhantomData<T>,
   }
@@ -56,7 +50,7 @@ pub mod pallet {
   #[pallet::pallet]
   pub struct Pallet<T>(PhantomData<T>);
 
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen)]
   pub struct RegisteredRetirementSignal<T: Config> {
     in_favor_of: [u8; 32],
     registrant: T::AccountId,

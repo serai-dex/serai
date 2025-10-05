@@ -57,7 +57,7 @@ async fn set_network_keys<C: Ciphersuite>(
   let network_priv_key = Zeroizing::new(C::F::random(&mut OsRng));
   let network_key = (C::generator() * *network_priv_key).to_bytes().as_ref().to_vec();
 
-  let key_pair = KeyPair(Public(ristretto_key), network_key.try_into().unwrap());
+  let key_pair = KeyPair(Public::from(ristretto_key), network_key.try_into().unwrap());
   let _ = set_keys(serai, set, key_pair, pairs).await;
 }
 

@@ -19,18 +19,18 @@ workspace = true
 bitvec = { version = "1", default-features = false, features = ["alloc", "serde"] }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "bit-vec"] }
-scale-info = { version = "2", default-features = false, features = ["derive", "bit-vec"] }
 
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
 serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
 
-sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
 
-sp-consensus-babe = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-consensus-grandpa = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+sp-consensus-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
 
-frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
 
 serai-primitives = { path = "../primitives", version = "0.1", default-features = false }
 serai-coins-primitives = { path = "../coins/primitives", version = "0.1", default-features = false }
@@ -45,7 +45,6 @@ std = [
   "bitvec/std",
 
   "scale/std",
-  "scale-info/std",
 
   "borsh?/std",
   "serde?/std",
@@ -56,6 +55,7 @@ std = [
   "sp-consensus-babe/std",
   "sp-consensus-grandpa/std",
 
+  "frame-system/std",
   "frame-support/std",
 
   "serai-primitives/std",

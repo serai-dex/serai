@@ -2,19 +2,25 @@ use sp_consensus_grandpa::EquivocationProof;
 
 use serai_primitives::{BlockNumber, SeraiAddress};
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
+#[derive(
+  Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
+)]
 pub struct ReportEquivocation {
   pub equivocation_proof: alloc::boxed::Box<EquivocationProof<[u8; 32], BlockNumber>>,
   pub key_owner_proof: SeraiAddress,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
+#[derive(
+  Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
+)]
 pub enum Call {
   report_equivocation(ReportEquivocation),
   report_equivocation_unsigned(ReportEquivocation),
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
+#[derive(
+  Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Event {

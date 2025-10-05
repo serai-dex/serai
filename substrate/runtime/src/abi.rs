@@ -201,6 +201,7 @@ impl TryInto<Call> for RuntimeCall {
 
   fn try_into(self) -> Result<Call, ()> {
     Ok(match self {
+      RuntimeCall::System(_) => Err(())?,
       RuntimeCall::Timestamp(timestamp::Call::set { now }) => {
         Call::Timestamp(serai_abi::timestamp::Call::set { now })
       }

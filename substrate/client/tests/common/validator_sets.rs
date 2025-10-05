@@ -8,12 +8,7 @@ use ciphersuite::{WrappedGroup, GroupIo};
 use dkg_musig::musig;
 use schnorrkel::Schnorrkel;
 
-use sp_core::{
-  ConstU32,
-  bounded_vec::BoundedVec,
-  sr25519::{Pair, Signature},
-  Pair as PairTrait,
-};
+use sp_core::{ConstU32, bounded_vec::BoundedVec, sr25519::Pair, Pair as PairTrait};
 
 use serai_abi::primitives::NetworkId;
 
@@ -73,7 +68,7 @@ pub async fn set_keys(
       set.network,
       key_pair.clone(),
       bitvec::bitvec!(u8, bitvec::prelude::Lsb0; 1; musig_keys.len()),
-      Signature(sig.to_bytes()),
+      sig.to_bytes().into(),
     ),
   )
   .await;

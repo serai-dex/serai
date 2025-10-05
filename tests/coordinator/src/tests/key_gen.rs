@@ -180,7 +180,7 @@ pub async fn key_gen<C: WrappedGroup>(
       .await
       .unwrap()
       .unwrap(),
-    KeyPair(Public(substrate_key), network_key.try_into().unwrap())
+    KeyPair(substrate_key.into(), network_key.try_into().unwrap())
   );
 
   for processor in &mut *processors {

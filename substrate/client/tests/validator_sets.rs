@@ -32,7 +32,7 @@ fn get_random_key_pair() -> KeyPair {
   OsRng.fill_bytes(&mut ristretto_key);
   let mut external_key = vec![0; 33];
   OsRng.fill_bytes(&mut external_key);
-  KeyPair(Public(ristretto_key), external_key.try_into().unwrap())
+  KeyPair(Public::from(ristretto_key), external_key.try_into().unwrap())
 }
 
 async fn get_ordered_keys(serai: &Serai, network: NetworkId, accounts: &[Pair]) -> Vec<Pair> {

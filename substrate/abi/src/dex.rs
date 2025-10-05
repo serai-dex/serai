@@ -5,7 +5,9 @@ use serai_primitives::*;
 type PoolId = ExternalCoin;
 type MaxSwapPathLength = sp_core::ConstU32<3>;
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
+#[derive(
+  Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Call {
@@ -38,7 +40,9 @@ pub enum Call {
   },
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
+#[derive(
+  Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
+)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
 pub enum Event {

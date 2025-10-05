@@ -21,11 +21,9 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-scale-info = { version = "2", default-features = false, features = ["derive"] }
 
-sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
 
 serai-primitives = { path = "../../primitives", default-features = false }
 coins-primitives = { package = "serai-coins-primitives", path = "../../coins/primitives", default-features = false }
@@ -38,11 +36,9 @@ std = [
   "serde?/std",
 
   "scale/std",
-  "scale-info/std",
 
   "sp-std/std",
   "sp-application-crypto/std",
-  "sp-runtime/std",
 
   "serai-primitives/std",
   "coins-primitives/std",

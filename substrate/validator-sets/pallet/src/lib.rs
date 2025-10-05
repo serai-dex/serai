@@ -8,13 +8,13 @@ mod tests;
 
 use core::marker::PhantomData;
 
-use scale::{Encode, Decode};
-use scale_info::TypeInfo;
+use scale::{Encode, Decode, DecodeWithMemTracking};
 
 use sp_std::{vec, vec::Vec};
 use sp_core::sr25519::{Public, Signature};
 use sp_application_crypto::RuntimePublic;
-use sp_session::{ShouldEndSession, GetSessionNumber, GetValidatorCount};
+use sp_session::{GetSessionNumber, GetValidatorCount};
+use pallet_session::ShouldEndSession;
 use sp_runtime::{KeyTypeId, ConsensusEngineId, traits::IsMember};
 use sp_staking::offence::{ReportOffence, Offence, OffenceError};
 
@@ -22,7 +22,7 @@ use frame_system::{pallet_prelude::*, RawOrigin};
 use frame_support::{
   pallet_prelude::*,
   sp_runtime::SaturatedConversion,
-  traits::{DisabledValidators, KeyOwnerProofSystem, FindAuthor},
+  traits::{DisabledValidators, KeyOwnerProofSystem, FindAuthor, OneSessionHandler},
   BoundedVec, WeakBoundedVec, StoragePrefixedMap,
 };
 
@@ -41,7 +41,7 @@ use pallet_grandpa::{
   EquivocationOffence as GrandpaEquivocationOffence,
 };
 
-#[derive(Debug, Encode, Decode, TypeInfo, PartialEq, Eq, Clone)]
+#[derive(Debug, Encode, Decode, DecodeWithMemTracking, PartialEq, Eq, Clone)]
 pub struct MembershipProof<T: pallet::Config>(pub Public, pub PhantomData<T>);
 impl<T: pallet::Config> GetSessionNumber for MembershipProof<T> {
   fn session(&self) -> u32 {
@@ -80,23 +80,21 @@ pub mod pallet {
     frame_system::Config<AccountId = Public>
     + coins_pallet::Config
     + dex_pallet::Config
+    + pallet_session::Config
     + pallet_babe::Config
     + pallet_grandpa::Config
-    + TypeInfo
   {
-    type RuntimeEvent: IsType<<Self as frame_system::Config>::RuntimeEvent> + From<Event<Self>>;
-
     type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
   }
 
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, serde::Serialize, serde::Deserialize)]
+  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
   pub struct AllEmbeddedEllipticCurveKeysAtGenesis {
     pub embedwards25519: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
     pub secq256k1: BoundedVec<u8, ConstU32<{ MAX_KEY_LEN }>>,
   }
 
   #[pallet::genesis_config]
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+  #[derive(Clone, Debug)]
   pub struct GenesisConfig<T: Config> {
     /// Networks to spawn Serai with, and the stake requirement per key share.
     ///
@@ -266,7 +264,8 @@ pub mod pallet {
       Amount(u64::from_be_bytes(raw))
     }
     fn recover_key_from_sorted_allocation_key(key: &[u8]) -> Public {
-      Public(key[(key.len() - 32) ..].try_into().unwrap())
+      let key: [u8; 32] = key[(key.len() - 32) ..].try_into().unwrap();
+      key.into()
     }
     // Returns if this validator already had an allocation set.
     fn set_allocation(network: NetworkId, key: Public, amount: Amount) -> bool {
@@ -861,10 +860,13 @@ pub mod pallet {
         ),
         Some(session),
       );
-      Grandpa::<T>::new_session(
+      fn grandpa_map(i: &(Public, u64)) -> (&Public, GrandpaAuthorityId) {
+        (&i.0, i.0.into())
+      }
+      Grandpa::<T>::on_new_session(
         true,
-        session,
-        now_validators.into_iter().map(|(id, w)| (GrandpaAuthorityId::from(id), w)).collect(),
+        now_validators.iter().map(grandpa_map),
+        next_validators.iter().map(grandpa_map),
       );
 
       // Clear SeraiDisabledIndices, only preserving keys still present in the new session
@@ -1370,19 +1372,17 @@ pub mod pallet {
     fn is_disabled(index: u32) -> bool {
       SeraiDisabledIndices::<T>::get(index).is_some()
     }
-  }
-}
-
-sp_api::decl_runtime_apis! {
-  #[api_version(1)]
-  pub trait ValidatorSetsApi {
-    /// Returns the validator set for a given network.
-    fn validators(network_id: NetworkId) -> Vec<PublicKey>;
-
-    /// Returns the external network key for a given external network.
-    fn external_network_key(
-      network: ExternalNetworkId,
-    ) -> Option<Vec<u8>>;
+    fn disabled_validators() -> Vec<u32> {
+      // TODO: Use a storage iterator here
+      let mut res = vec![];
+      for i in 0 .. MAX_KEY_SHARES_PER_SET {
+        let i = i.into();
+        if Self::is_disabled(i) {
+          res.push(i);
+        }
+      }
+      res
+    }
   }
 }
 

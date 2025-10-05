@@ -284,7 +284,7 @@ async fn handle_network(
             &mut txn,
             ExternalValidatorSet { network, session },
             slash_report,
-            Signature(signature),
+            Signature::from(signature),
           );
         }
       },

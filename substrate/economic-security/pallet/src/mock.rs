@@ -6,7 +6,7 @@ use core::marker::PhantomData;
 use std::collections::HashMap;
 
 use frame_support::{
-  construct_runtime,
+  derive_impl, construct_runtime,
   traits::{ConstU16, ConstU32, ConstU64},
 };
 
@@ -58,10 +58,9 @@ construct_runtime!(
   }
 );
 
+#[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
 impl frame_system::Config for Test {
   type BaseCallFilter = frame_support::traits::Everything;
-  type BlockWeights = ();
-  type BlockLength = ();
   type RuntimeOrigin = RuntimeOrigin;
   type RuntimeCall = RuntimeCall;
   type Nonce = u64;
@@ -72,16 +71,6 @@ impl frame_system::Config for Test {
   type Block = Block;
   type RuntimeEvent = RuntimeEvent;
   type BlockHashCount = ConstU64<250>;
-  type DbWeight = ();
-  type Version = ();
-  type PalletInfo = PalletInfo;
-  type AccountData = ();
-  type OnNewAccount = ();
-  type OnKilledAccount = ();
-  type SystemWeightInfo = ();
-  type SS58Prefix = ();
-  type OnSetCode = ();
-  type MaxConsumers = ConstU32<16>;
 }
 
 impl timestamp::Config for Test {
@@ -89,6 +78,16 @@ impl timestamp::Config for Test {
   type OnTimestampSet = Babe;
   type MinimumPeriod = ConstU64<{ (TARGET_BLOCK_TIME * 1000) / 2 }>;
   type WeightInfo = ();
+}
+
+pub struct GetSession;
+impl pallet_session::GetCurrentSessionForSubstrate for GetSession {
+  fn get() -> u32 {
+    0
+  }
+}
+impl pallet_session::Config for Test {
+  type Session = GetSession;
 }
 
 impl babe::Config for Test {
@@ -100,6 +99,7 @@ impl babe::Config for Test {
 
   type WeightInfo = ();
   type MaxAuthorities = MaxAuthorities;
+  type MaxNominators = MaxAuthorities;
 
   type KeyOwnerProof = MembershipProof<Self>;
   type EquivocationReportSystem = ();
@@ -110,6 +110,7 @@ impl grandpa::Config for Test {
 
   type WeightInfo = ();
   type MaxAuthorities = MaxAuthorities;
+  type MaxNominators = MaxAuthorities;
 
   type MaxSetIdSessionEntries = ConstU64<0>;
   type KeyOwnerProof = MembershipProof<Self>;
@@ -117,18 +118,14 @@ impl grandpa::Config for Test {
 }
 
 impl coins::Config for Test {
-  type RuntimeEvent = RuntimeEvent;
   type AllowMint = ValidatorSets;
 }
 
 impl coins::Config<coins::Instance1> for Test {
-  type RuntimeEvent = RuntimeEvent;
   type AllowMint = ();
 }
 
 impl dex::Config for Test {
-  type RuntimeEvent = RuntimeEvent;
-
   type LPFee = ConstU32<3>; // 0.3%
   type MintMinLiquidity = ConstU64<10000>;
 
@@ -140,13 +137,10 @@ impl dex::Config for Test {
 }
 
 impl validator_sets::Config for Test {
-  type RuntimeEvent = RuntimeEvent;
   type ShouldEndSession = Babe;
 }
 
-impl Config for Test {
-  type RuntimeEvent = RuntimeEvent;
-}
+impl Config for Test {}
 
 // For a const we can't define
 pub fn genesis_participants() -> Vec<Pair> {
@@ -202,7 +196,7 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
       .into_iter()
       .map(|validator| (validator.public().into(), 1))
       .collect(),
-    epoch_config: Some(BABE_GENESIS_EPOCH_CONFIG),
+    epoch_config: BABE_GENESIS_EPOCH_CONFIG,
     _config: PhantomData,
   }
   .assimilate_storage(&mut t)

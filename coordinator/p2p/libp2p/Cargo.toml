@@ -35,7 +35,7 @@ tributary-sdk = { path = "../../tributary-sdk" }
 
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["sync"] }
-libp2p = { version = "0.54", default-features = false, features = ["tokio", "tcp", "noise", "yamux", "ping", "request-response", "gossipsub", "macros"] }
+libp2p = { version = "0.56", default-features = false, features = ["tokio", "tcp", "noise", "yamux", "ping", "request-response", "gossipsub", "macros"] }
 
 log = { version = "0.4", default-features = false, features = ["std"] }
 serai-task = { path = "../../../common/task", version = "0.1" }

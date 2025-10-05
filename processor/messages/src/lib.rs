@@ -1,3 +1,5 @@
+#![expect(clippy::cast_possible_truncation)]
+
 use core::fmt;
 use std::collections::HashMap;
 

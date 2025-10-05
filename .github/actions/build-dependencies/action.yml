@@ -38,11 +38,15 @@ runs:
       shell: bash
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
-          sudo apt install -y ca-certificates protobuf-compiler
+          sudo apt install -y ca-certificates protobuf-compiler libclang-dev
         elif [ "$RUNNER_OS" == "Windows" ]; then
           choco install protoc
         elif [ "$RUNNER_OS" == "macOS" ]; then
-          brew install protobuf
+          brew install protobuf llvm
+          HOMEBREW_ROOT_PATH=/opt/homebrew # macOS 14+
+          if [ $(sw_vers -productVersion | awk -F "." '{ print $1 }') = "13" ]; then HOMEBREW_ROOT_PATH=/usr/local; fi # macOS 13
+          ls $HOMEBREW_ROOT_PATH/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
+          echo "DYLD_LIBRARY_PATH=$HOMEBREW_ROOT_PATH/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
         fi
 
     - name: Install solc

@@ -12,8 +12,7 @@ use serde::{Serialize, Deserialize};
 
 use sp_std::vec::Vec;
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale::{Encode, Decode, DecodeWithMemTracking, MaxEncodedLen};
 
 use serai_primitives::*;
 use validator_sets_primitives::ValidatorSet;
@@ -23,7 +22,9 @@ pub const INITIAL_GENESIS_LP_SHARES: u64 = 10_000;
 // This is the account to hold and manage the genesis liquidity.
 pub const GENESIS_LIQUIDITY_ACCOUNT: SeraiAddress = system_address(b"GenesisLiquidity-account");
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(
+  Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen,
+)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -33,7 +34,9 @@ pub struct Values {
   pub dai: u64,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(
+  Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen,
+)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]

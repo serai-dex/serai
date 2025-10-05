@@ -1,10 +1,11 @@
+#![expect(clippy::cast_possible_truncation)]
+
 use core::{num::NonZero, time::Duration};
 
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale::{Encode, Decode, MaxEncodedLen, DecodeWithMemTracking};
 
 #[cfg(feature = "borsh")]
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -26,7 +27,9 @@ fn downtime_per_slash_point(validators: NonZero<u16>) -> Duration {
 }
 
 /// A slash for a validator.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(
+  Clone, Copy, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, DecodeWithMemTracking,
+)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -206,7 +209,7 @@ impl Slash {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, TypeInfo, MaxEncodedLen)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, DecodeWithMemTracking)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SlashReport(pub BoundedVec<Slash, ConstU32<{ MAX_KEY_SHARES_PER_SET_U32 }>>);
 

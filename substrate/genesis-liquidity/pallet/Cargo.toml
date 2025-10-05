@@ -13,21 +13,20 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-machete]
-ignored = ["scale", "scale-info"]
+ignored = ["scale"]
 
 [lints]
 workspace = true
 
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-scale-info = { version = "2", default-features = false, features = ["derive"] }
 
-frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
 
-sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-application-crypto = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
 
 dex-pallet = { package = "serai-dex-pallet", path = "../../dex/pallet", default-features = false }
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
@@ -42,7 +41,6 @@ validator-sets-primitives = { package = "serai-validator-sets-primitives", path 
 [features]
 std = [
   "scale/std",
-  "scale-info/std",
 
   "frame-system/std",
   "frame-support/std",

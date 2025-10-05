@@ -23,9 +23,7 @@ pub mod pallet {
   use serai_primitives::*;
 
   #[pallet::config]
-  pub trait Config: frame_system::Config + CoinsConfig + DexConfig {
-    type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
-  }
+  pub trait Config: frame_system::Config + CoinsConfig + DexConfig {}
 
   #[pallet::event]
   #[pallet::generate_deposit(fn deposit_event)]

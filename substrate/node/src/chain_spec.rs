@@ -1,3 +1,5 @@
+#![expect(unused_imports, dead_code, redundant_closure_call)]
+
 use core::marker::PhantomData;
 
 use sp_core::Pair as PairTrait;
@@ -14,7 +16,7 @@ use serai_runtime::{
   SignalsConfig, BabeConfig, GrandpaConfig, EmissionsConfig,
 };
 
-pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
+pub type ChainSpec = sc_service::GenericChainSpec;
 
 fn account_from_name(name: &'static str) -> PublicKey {
   insecure_pair_from_name(name).public()
@@ -36,8 +38,8 @@ fn wasm_binary() -> Vec<u8> {
   WASM_BINARY.ok_or("compiled in wasm not available").unwrap().to_vec()
 }
 
+/*
 fn devnet_genesis(
-  wasm_binary: &[u8],
   validators: &[&'static str],
   endowed_accounts: Vec<PublicKey>,
 ) -> RuntimeGenesisConfig {
@@ -72,7 +74,7 @@ fn devnet_genesis(
     .collect::<Vec<_>>();
 
   RuntimeGenesisConfig {
-    system: SystemConfig { code: wasm_binary.to_vec(), _config: PhantomData },
+    system: SystemConfig { _config: PhantomData },
 
     transaction_payment: Default::default(),
 
@@ -94,8 +96,8 @@ fn devnet_genesis(
     },
     signals: SignalsConfig::default(),
     babe: BabeConfig {
-      authorities: validators.iter().map(|validator| (validator.0.into(), 1)).collect(),
-      epoch_config: Some(BABE_GENESIS_EPOCH_CONFIG),
+      authorities: validators.iter().map(|validator| ((*validator).into(), 1)).collect(),
+      epoch_config: BABE_GENESIS_EPOCH_CONFIG,
       _config: PhantomData,
     },
     grandpa: GrandpaConfig {
@@ -105,8 +107,7 @@ fn devnet_genesis(
   }
 }
 
-/*
-fn testnet_genesis(wasm_binary: &[u8], validators: Vec<&'static str>) -> RuntimeGenesisConfig {
+fn testnet_genesis(validators: Vec<&'static str>) -> RuntimeGenesisConfig {
   let validators = validators
     .into_iter()
     .map(|validator| Public::decode(&mut hex::decode(validator).unwrap().as_slice()).unwrap())
@@ -130,7 +131,7 @@ fn testnet_genesis(wasm_binary: &[u8], validators: Vec<&'static str>) -> Runtime
   assert_eq!(validators.iter().collect::<HashSet<_>>().len(), validators.len());
 
   RuntimeGenesisConfig {
-    system: SystemConfig { code: wasm_binary.to_vec(), _config: PhantomData },
+    system: SystemConfig { _config: PhantomData },
 
     transaction_payment: Default::default(),
 
@@ -150,7 +151,7 @@ fn testnet_genesis(wasm_binary: &[u8], validators: Vec<&'static str>) -> Runtime
     signals: SignalsConfig::default(),
     babe: BabeConfig {
       authorities: validators.iter().map(|validator| ((*validator).into(), 1)).collect(),
-      epoch_config: Some(BABE_GENESIS_EPOCH_CONFIG),
+      epoch_config: BABE_GENESIS_EPOCH_CONFIG,
       _config: PhantomData,
     },
     grandpa: GrandpaConfig {
@@ -161,18 +162,59 @@ fn testnet_genesis(wasm_binary: &[u8], validators: Vec<&'static str>) -> Runtime
 }
 */
 
-pub fn development_config() -> ChainSpec {
-  let wasm_binary = wasm_binary();
+fn genesis(
+  name: &'static str,
+  id: &'static str,
+  chain_type: ChainType,
+  protocol_id: &'static str,
+  config: &RuntimeGenesisConfig,
+) -> ChainSpec {
+  use sp_core::{
+    Encode,
+    traits::{RuntimeCode, WrappedRuntimeCode, CodeExecutor},
+  };
+  use sc_service::ChainSpec as _;
 
-  ChainSpec::from_genesis(
-    // Name
+  let bin = wasm_binary();
+  let hash = sp_core::blake2_256(&bin).to_vec();
+
+  let mut chain_spec = sc_chain_spec::ChainSpecBuilder::new(&bin, None)
+    .with_name(name)
+    .with_id(id)
+    .with_chain_type(chain_type)
+    .with_protocol_id(protocol_id)
+    .build();
+
+  let mut ext = sp_state_machine::BasicExternalities::new_empty();
+  let code_fetcher = WrappedRuntimeCode(bin.clone().into());
+  sc_executor::WasmExecutor::<sp_io::SubstrateHostFunctions>::builder()
+    .with_allow_missing_host_functions(true)
+    .build()
+    .call(
+      &mut ext,
+      &RuntimeCode { heap_pages: None, code_fetcher: &code_fetcher, hash },
+      "GenesisApi_build",
+      &config.encode(),
+      sp_core::traits::CallContext::Onchain,
+    )
+    .0
+    .unwrap();
+  let mut storage = ext.into_storages();
+  storage.top.insert(sp_core::storage::well_known_keys::CODE.to_vec(), bin);
+  chain_spec.set_storage(storage);
+
+  chain_spec
+}
+
+pub fn development_config() -> ChainSpec {
+  genesis(
     "Development Network",
-    // ID
     "devnet",
     ChainType::Development,
-    move || {
-      devnet_genesis(
-        &wasm_binary,
+    "serai-devnet",
+    &(move || {
+      /*
+      let _ = devnet_genesis(
         &["Alice"],
         vec![
           account_from_name("Alice"),
@@ -182,35 +224,22 @@ pub fn development_config() -> ChainSpec {
           account_from_name("Eve"),
           account_from_name("Ferdie"),
         ],
-      )
-    },
-    // Bootnodes
-    vec![],
-    // Telemetry
-    None,
-    // Protocol ID
-    Some("serai-devnet"),
-    // Fork ID
-    None,
-    // Properties
-    None,
-    // Extensions
-    None,
+      );
+      */
+      todo!("TODO")
+    })(),
   )
 }
 
 pub fn local_config() -> ChainSpec {
-  let wasm_binary = wasm_binary();
-
-  ChainSpec::from_genesis(
-    // Name
+  genesis(
     "Local Test Network",
-    // ID
     "local",
     ChainType::Local,
-    move || {
-      devnet_genesis(
-        &wasm_binary,
+    "serai-local",
+    &(move || {
+      /*
+      let _ = devnet_genesis(
         &["Alice", "Bob", "Charlie", "Dave"],
         vec![
           account_from_name("Alice"),
@@ -220,55 +249,31 @@ pub fn local_config() -> ChainSpec {
           account_from_name("Eve"),
           account_from_name("Ferdie"),
         ],
-      )
-    },
-    // Bootnodes
-    vec![],
-    // Telemetry
-    None,
-    // Protocol ID
-    Some("serai-local"),
-    // Fork ID
-    None,
-    // Properties
-    None,
-    // Extensions
-    None,
+      );
+      */
+      todo!("TODO")
+    })(),
   )
 }
 
+#[allow(clippy::redundant_closure_call)]
 pub fn testnet_config() -> ChainSpec {
-  // let wasm_binary = wasm_binary();
-
-  ChainSpec::from_genesis(
-    // Name
-    "Test Network 2",
-    // ID
-    "testnet-2",
+  genesis(
+    "Test Network 0",
+    "testnet-0",
     ChainType::Live,
-    move || {
-      // let _ = testnet_genesis(&wasm_binary, vec![])
-      todo!()
-    },
-    // Bootnodes
-    vec![],
-    // Telemetry
-    None,
-    // Protocol ID
-    Some("serai-testnet-2"),
-    // Fork ID
-    None,
-    // Properties
-    None,
-    // Extensions
-    None,
+    "serai-testnet-0",
+    &(move || {
+      // let _ = testnet_genesis(vec![]);
+      todo!("TODO")
+    })(),
   )
 }
 
 pub fn bootnode_multiaddrs(id: &str) -> Vec<libp2p::Multiaddr> {
   match id {
     "devnet" | "local" => vec![],
-    "testnet-2" => todo!(),
+    "testnet-0" => todo!("TODO"),
     _ => panic!("unrecognized network ID"),
   }
 }

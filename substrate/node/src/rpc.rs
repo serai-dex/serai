@@ -1,7 +1,10 @@
+#![expect(unused_imports)]
+
 use std::{sync::Arc, ops::Deref, collections::HashSet};
 
 use rand_core::{RngCore, OsRng};
 
+use sp_core::Encode;
 use sp_blockchain::{Error as BlockchainError, HeaderBackend, HeaderMetadata};
 use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
@@ -9,24 +12,25 @@ use sp_api::ProvideRuntimeApi;
 use serai_runtime::{
   in_instructions::primitives::Shorthand,
   primitives::{ExternalNetworkId, NetworkId, PublicKey, SubstrateAmount, QuotePriceParams},
-  validator_sets::ValidatorSetsApi,
+  // validator_sets::ValidatorSetsApi,
   dex::DexApi,
-  Block, Nonce,
+  Block,
+  Nonce,
+  SeraiRuntimeApi,
 };
 
 use tokio::sync::RwLock;
 
-use jsonrpsee::{RpcModule, core::Error};
-use scale::Encode;
+use jsonrpsee::RpcModule;
+// use scale::Encode;
 
-pub use sc_rpc_api::DenyUnsafe;
+use sc_client_api::BlockBackend;
 use sc_transaction_pool_api::TransactionPool;
 
 pub struct FullDeps<C, P> {
   pub id: String,
   pub client: Arc<C>,
   pub pool: Arc<P>,
-  pub deny_unsafe: DenyUnsafe,
   pub authority_discovery: Option<sc_authority_discovery::Service>,
 }
 
@@ -34,6 +38,7 @@ pub fn create_full<
   C: ProvideRuntimeApi<Block>
     + HeaderBackend<Block>
     + HeaderMetadata<Block, Error = BlockchainError>
+    + BlockBackend<Block>
     + Send
     + Sync
     + 'static,
@@ -42,9 +47,9 @@ pub fn create_full<
   deps: FullDeps<C, P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
 where
-  C::Api: substrate_frame_rpc_system::AccountNonceApi<Block, PublicKey, Nonce>
+  C::Api: frame_system_rpc_runtime_api::AccountNonceApi<Block, PublicKey, Nonce>
     + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, SubstrateAmount>
-    + ValidatorSetsApi<Block>
+    + SeraiRuntimeApi<Block>
     + DexApi<Block>
     + BlockBuilder<Block>,
 {
@@ -56,9 +61,9 @@ where
   use bitcoin_serai::bitcoin;
 
   let mut module = RpcModule::new(());
-  let FullDeps { id, client, pool, deny_unsafe, authority_discovery } = deps;
+  let FullDeps { id, client, pool, authority_discovery } = deps;
 
-  module.merge(System::new(client.clone(), pool, deny_unsafe).into_rpc())?;
+  module.merge(System::new(client.clone(), pool).into_rpc())?;
   module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
   if let Some(authority_discovery) = authority_discovery {
@@ -66,17 +71,25 @@ where
       RpcModule::new((id, client.clone(), RwLock::new(authority_discovery)));
     authority_discovery_module.register_async_method(
       "p2p_validators",
-      |params, context| async move {
-        let network: NetworkId = params.parse()?;
+      |params, context, _ext| async move {
+        let [network]: [NetworkId; 1] = params.parse()?;
         let (id, client, authority_discovery) = &*context;
         let latest_block = client.info().best_hash;
 
         let validators = client.runtime_api().validators(latest_block, network).map_err(|_| {
-          Error::to_call_error(std::io::Error::other(format!(
-            "couldn't get validators from the latest block, which is likely a fatal bug. {}",
-            "please report this at https://github.com/serai-dex/serai/issues",
-          )))
-        })?;
+          jsonrpsee::types::error::ErrorObjectOwned::owned(
+            -1,
+            format!(
+              "couldn't get validators from the latest block, which is likely a fatal bug. {}",
+              "please report this at https://github.com/serai-dex/serai",
+            ),
+            Option::<()>::None,
+          )
+        });
+        let validators = match validators {
+          Ok(validators) => validators,
+          Err(e) => return Err(e),
+        };
         // Always return the protocol's bootnodes
         let mut all_p2p_addresses = crate::chain_spec::bootnode_multiaddrs(id);
         // Additionally returns validators found over the DHT
@@ -96,9 +109,9 @@ where
           // It isn't beneficial to use multiple addresses for a single peer here
           if !returned_addresses.is_empty() {
             all_p2p_addresses.push(
-              returned_addresses.remove(
-                usize::try_from(OsRng.next_u64() >> 32).unwrap() % returned_addresses.len(),
-              ),
+              returned_addresses
+                .remove(usize::try_from(OsRng.next_u64() >> 32).unwrap() % returned_addresses.len())
+                .into(),
             );
           }
         }
@@ -108,6 +121,7 @@ where
     module.merge(authority_discovery_module)?;
   }
 
+  /* TODO
   let mut serai_json_module = RpcModule::new(client);
 
   // add network address rpc
@@ -199,5 +213,35 @@ where
   })?;
 
   module.merge(serai_json_module)?;
+  */
+
+  let mut block_bin_module = RpcModule::new(client);
+  block_bin_module.register_async_method(
+    "chain_getBlockBin",
+    |params, client, _ext| async move {
+      let [block_hash]: [String; 1] = params.parse()?;
+      let Some(block_hash) = hex::decode(&block_hash).ok().and_then(|bytes| {
+        <[u8; 32]>::try_from(bytes.as_slice())
+          .map(<Block as sp_runtime::traits::Block>::Hash::from)
+          .ok()
+      }) else {
+        return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+          -1,
+          "requested block hash wasn't a valid hash",
+          Option::<()>::None,
+        ));
+      };
+      let Some(block) = client.block(block_hash).ok().flatten() else {
+        return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+          -1,
+          "couldn't find requested block",
+          Option::<()>::None,
+        ));
+      };
+      Ok(hex::encode(block.block.encode()))
+    },
+  )?;
+  module.merge(block_bin_module)?;
+
   Ok(module)
 }

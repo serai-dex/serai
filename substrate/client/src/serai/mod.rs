@@ -291,7 +291,7 @@ impl Serai {
     self
       .0
       .rpc()
-      .system_account_next_index(&sp_core::sr25519::Public(address.0).to_string())
+      .system_account_next_index(&sp_core::sr25519::Public::from(address.0).to_string())
       .await
       .map_err(|_| SeraiError::ConnectionError)
   }
@@ -316,7 +316,7 @@ impl Serai {
     &self,
     network: ExternalNetworkId,
   ) -> Result<Vec<multiaddr::Multiaddr>, SeraiError> {
-    self.call("p2p_validators", network).await
+    self.call("p2p_validators", [network]).await
   }
 
   // TODO: move this to SeraiValidatorSets?

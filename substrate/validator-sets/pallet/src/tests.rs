@@ -65,7 +65,7 @@ fn set_keys_for_session(network: ExternalNetworkId) {
     network,
     KeyPair(insecure_pair_from_name("Alice").public(), vec![].try_into().unwrap()),
     vec![].try_into().unwrap(),
-    Signature([0u8; 64]),
+    Signature::from([0u8; 64]),
   )
   .unwrap();
 }
@@ -103,7 +103,7 @@ fn set_keys_signature(set: &ExternalValidatorSet, key_pair: &KeyPair, pairs: &[P
     &set_keys_message(set, key_pair),
   );
 
-  Signature(sig.to_bytes())
+  Signature::from(sig.to_bytes())
 }
 
 fn get_ordered_keys(network: NetworkId, participants: &[Pair]) -> Vec<Pair> {
@@ -465,7 +465,7 @@ fn set_keys_keys_exist() {
       network,
       KeyPair(insecure_pair_from_name("name").public(), Vec::new().try_into().unwrap()),
       vec![].try_into().unwrap(),
-      Signature([0u8; 64]),
+      Signature::from([0u8; 64]),
     )
     .unwrap();
 
@@ -473,7 +473,7 @@ fn set_keys_keys_exist() {
       network,
       key_pair: KeyPair(insecure_pair_from_name("name").public(), Vec::new().try_into().unwrap()),
       signature_participants: vec![].try_into().unwrap(),
-      signature: Signature([0u8; 64]),
+      signature: Signature::from([0u8; 64]),
     };
 
     assert_eq!(

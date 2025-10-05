@@ -19,7 +19,6 @@ workspace = true
 zeroize = { version = "^1.5", features = ["derive"], optional = true }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
-scale-info = { version = "2", default-features = false, features = ["derive"] }
 
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
 serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
@@ -31,7 +30,6 @@ std = [
   "zeroize",
 
   "scale/std",
-  "scale-info/std",
 
   "borsh?/std",
   "serde?/std",

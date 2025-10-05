@@ -5,7 +5,9 @@ use serai_validator_sets_primitives::ValidatorSet;
 pub use serai_signals_primitives as primitives;
 use primitives::SignalId;
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
+#[derive(
+  Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
+)]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
@@ -17,7 +19,9 @@ pub enum Call {
   stand_against { signal_id: SignalId, for_network: NetworkId },
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale_info::TypeInfo)]
+#[derive(
+  Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
+)]
 #[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(serde::Serialize))]
 #[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]

@@ -2,16 +2,10 @@
 
 use super::*;
 
-use frame_support::{
-  construct_runtime,
-  traits::{ConstU32, ConstU64},
-};
+use frame_support::{construct_runtime, derive_impl};
 
-use sp_core::{H256, sr25519::Public};
-use sp_runtime::{
-  traits::{BlakeTwo256, IdentityLookup},
-  BuildStorage,
-};
+use sp_core::sr25519::Public;
+use sp_runtime::{traits::IdentityLookup, BuildStorage};
 
 use crate as coins;
 
@@ -25,35 +19,14 @@ construct_runtime!(
   }
 );
 
+#[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
 impl frame_system::Config for Test {
-  type BaseCallFilter = frame_support::traits::Everything;
-  type BlockWeights = ();
-  type BlockLength = ();
-  type RuntimeOrigin = RuntimeOrigin;
-  type RuntimeCall = RuntimeCall;
-  type Nonce = u64;
-  type Hash = H256;
-  type Hashing = BlakeTwo256;
   type AccountId = Public;
   type Lookup = IdentityLookup<Self::AccountId>;
   type Block = Block;
-  type RuntimeEvent = RuntimeEvent;
-  type BlockHashCount = ConstU64<250>;
-  type DbWeight = ();
-  type Version = ();
-  type PalletInfo = PalletInfo;
-  type AccountData = ();
-  type OnNewAccount = ();
-  type OnKilledAccount = ();
-  type SystemWeightInfo = ();
-  type SS58Prefix = ();
-  type OnSetCode = ();
-  type MaxConsumers = ConstU32<16>;
 }
 
 impl Config for Test {
-  type RuntimeEvent = RuntimeEvent;
-
   type AllowMint = ();
 }
 

@@ -17,7 +17,7 @@ fn set_keys_for_session(network: ExternalNetworkId) {
     network,
     KeyPair(insecure_pair_from_name("Alice").public(), vec![].try_into().unwrap()),
     vec![].try_into().unwrap(),
-    Signature([0u8; 64]),
+    Signature::from([0u8; 64]),
   )
   .unwrap();
 }

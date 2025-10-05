@@ -43,12 +43,11 @@ pub mod pallet {
 
   #[pallet::config]
   pub trait Config<I: 'static = ()>: frame_system::Config<AccountId = Public> {
-    type RuntimeEvent: From<Event<Self, I>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
     type AllowMint: AllowMint;
   }
 
   #[pallet::genesis_config]
-  #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+  #[derive(Clone, Debug)]
   pub struct GenesisConfig<T: Config<I>, I: 'static = ()> {
     pub accounts: Vec<(T::AccountId, Balance)>,
     pub _ignore: PhantomData<I>,
@@ -279,6 +278,22 @@ pub mod pallet {
         Err(_) => Err(InvalidTransaction::Payment)?,
         Ok(()) => Ok(Some(fee)),
       }
+    }
+
+    fn can_withdraw_fee(
+      who: &Public,
+      _call: &T::RuntimeCall,
+      _dispatch_info: &DispatchInfoOf<T::RuntimeCall>,
+      fee: Self::Balance,
+      _tip: Self::Balance,
+    ) -> Result<(), TransactionValidityError> {
+      if fee == 0 {
+        return Ok(());
+      }
+      if Self::balance(*who, Coin::Serai).0 < fee {
+        Err(InvalidTransaction::Payment)?;
+      }
+      Ok(())
     }
 
     fn correct_and_deposit_fee(

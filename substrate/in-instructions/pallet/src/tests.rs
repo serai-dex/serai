@@ -22,7 +22,7 @@ fn set_keys_for_session(key: Public) {
       n,
       KeyPair(key, vec![].try_into().unwrap()),
       vec![].try_into().unwrap(),
-      Signature([0u8; 64]),
+      Signature::from([0u8; 64]),
     )
     .unwrap();
   }
@@ -80,7 +80,7 @@ fn validate_batch() {
     }
 
     let call = pallet::Call::<Test>::execute_batch {
-      batch: SignedBatch { batch: batch.clone(), signature: Signature([0u8; 64]) },
+      batch: SignedBatch { batch: batch.clone(), signature: Signature::from([0u8; 64]) },
     };
     assert_eq!(
       InInstructions::validate_unsigned(TransactionSource::External, &call),
@@ -95,7 +95,7 @@ fn validate_batch() {
 
     // 0 signature should be invalid
     let call = pallet::Call::<Test>::execute_batch {
-      batch: SignedBatch { batch: batch.clone(), signature: Signature([0u8; 64]) },
+      batch: SignedBatch { batch: batch.clone(), signature: Signature::from([0u8; 64]) },
     };
     assert_eq!(
       InInstructions::validate_unsigned(TransactionSource::External, &call),
@@ -121,7 +121,7 @@ fn validate_batch() {
 
     // can't submit in the first block(Block 0)
     let call = pallet::Call::<Test>::execute_batch {
-      batch: SignedBatch { batch: batch.clone(), signature: signature.clone() },
+      batch: SignedBatch { batch: batch.clone(), signature },
     };
     assert_eq!(
       InInstructions::validate_unsigned(TransactionSource::External, &call),
@@ -133,7 +133,7 @@ fn validate_batch() {
 
     // first batch id should be 0
     let call = pallet::Call::<Test>::execute_batch {
-      batch: SignedBatch { batch: batch.clone(), signature: signature.clone() },
+      batch: SignedBatch { batch: batch.clone(), signature },
     };
     assert_eq!(
       InInstructions::validate_unsigned(TransactionSource::External, &call),
@@ -146,7 +146,7 @@ fn validate_batch() {
 
     // can't have more than 1 batch per block
     let call = pallet::Call::<Test>::execute_batch {
-      batch: SignedBatch { batch: batch.clone(), signature: signature.clone() },
+      batch: SignedBatch { batch: batch.clone(), signature },
     };
     assert_eq!(
       InInstructions::validate_unsigned(TransactionSource::External, &call),
@@ -224,7 +224,7 @@ fn transfer_instruction() {
           balance: ExternalBalance { coin, amount },
         }],
       },
-      signature: Signature([0u8; 64]),
+      signature: Signature::from([0u8; 64]),
     };
     InInstructions::execute_batch(RawOrigin::None.into(), batch).unwrap();
 
@@ -250,7 +250,7 @@ fn dex_instruction_add_liquidity() {
           balance: ExternalBalance { coin, amount },
         }],
       },
-      signature: Signature([0u8; 64]),
+      signature: Signature::from([0u8; 64]),
     };
 
     // we should have a liquid pool before we can swap
@@ -328,7 +328,7 @@ fn dex_instruction_swap() {
           balance: ExternalBalance { coin, amount },
         }],
       },
-      signature: Signature([0u8; 64]),
+      signature: Signature::from([0u8; 64]),
     };
 
     // we can't send SRI to external address
@@ -418,7 +418,7 @@ fn genesis_liquidity_instruction() {
           balance: ExternalBalance { coin, amount },
         }],
       },
-      signature: Signature([0u8; 64]),
+      signature: Signature::from([0u8; 64]),
     };
 
     InInstructions::execute_batch(RawOrigin::None.into(), batch.clone()).unwrap();
@@ -456,7 +456,7 @@ fn swap_to_staked_sri_instruction() {
       coin.network(),
       KeyPair(insecure_pair_from_name("random-key").public(), Vec::new().try_into().unwrap()),
       Vec::new().try_into().unwrap(),
-      Signature([0u8; 64]),
+      Signature::from([0u8; 64]),
     )
     .unwrap();
 
@@ -479,7 +479,7 @@ fn swap_to_staked_sri_instruction() {
           balance: ExternalBalance { coin, amount },
         }],
       },
-      signature: Signature([0u8; 64]),
+      signature: Signature::from([0u8; 64]),
     };
 
     InInstructions::execute_batch(RawOrigin::None.into(), batch.clone()).unwrap();

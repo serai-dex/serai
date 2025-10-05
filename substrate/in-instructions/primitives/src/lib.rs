@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![expect(clippy::cast_possible_truncation)]
 
 #[cfg(feature = "std")]
 use zeroize::Zeroize;
@@ -10,14 +11,12 @@ use borsh::{BorshSerialize, BorshDeserialize};
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale::{Encode, Decode, DecodeWithMemTracking, MaxEncodedLen};
 
 use sp_application_crypto::sr25519::Signature;
 
 #[cfg(not(feature = "std"))]
 use sp_std::vec::Vec;
-use sp_runtime::RuntimeDebug;
 
 #[rustfmt::skip]
 use serai_primitives::{BlockHash, ExternalNetworkId, NetworkId, ExternalBalance, Balance, SeraiAddress, ExternalAddress, system_address};
@@ -30,7 +29,7 @@ pub const MAX_BATCH_SIZE: usize = 25_000; // ~25kb
 // This is the account which will be the origin for any dispatched `InInstruction`s.
 pub const IN_INSTRUCTION_EXECUTOR: SeraiAddress = system_address(b"InInstructions-executor");
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -59,7 +58,7 @@ impl OutAddress {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -71,7 +70,7 @@ pub enum DexCall {
   Swap(Balance, OutAddress),
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -82,7 +81,7 @@ pub enum InInstruction {
   SwapToStakedSRI(SeraiAddress, NetworkId),
 }
 
-#[derive(Clone, PartialEq, Eq, Encode, Decode, MaxEncodedLen, TypeInfo, RuntimeDebug)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -91,7 +90,7 @@ pub struct RefundableInInstruction {
   pub instruction: InInstruction,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, MaxEncodedLen, TypeInfo)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, MaxEncodedLen)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -100,7 +99,7 @@ pub struct InInstructionWithBalance {
   pub balance: ExternalBalance,
 }
 
-#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking)]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -111,7 +110,7 @@ pub struct Batch {
   pub instructions: Vec<InInstructionWithBalance>,
 }
 
-#[derive(Clone, PartialEq, Eq, Encode, Decode, TypeInfo, RuntimeDebug)]
+#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking)]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct SignedBatch {
@@ -130,7 +129,8 @@ pub struct SignedBatch {
 impl Zeroize for SignedBatch {
   fn zeroize(&mut self) {
     self.batch.zeroize();
-    self.signature.as_mut().zeroize();
+    let signature: &mut [u8] = self.signature.as_mut();
+    signature.zeroize();
   }
 }
 

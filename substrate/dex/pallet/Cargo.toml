@@ -13,24 +13,23 @@ all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-machete]
-ignored = ["scale", "scale-info"]
+ignored = ["scale"]
 
 [lints]
 workspace = true
 
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3.6.1", default-features = false }
-scale-info = { version = "2.5.0", default-features = false, features = ["derive"] }
 
-sp-std = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-io = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-api = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/substrate", default-features = false }
-sp-core = { git = "https://github.com/serai-dex/substrate", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+sp-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
 
-frame-system = { git = "https://github.com/serai-dex/substrate", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/substrate", default-features = false }
-frame-benchmarking = { git = "https://github.com/serai-dex/substrate", default-features = false, optional = true }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false, optional = true }
 
 coins-pallet = { package = "serai-coins-pallet", path = "../../coins/pallet", default-features = false }
 
@@ -43,7 +42,6 @@ rand_core = { version = "0.6", default-features = false, features = ["getrandom"
 default = ["std"]
 std = [
   "scale/std",
-  "scale-info/std",
 
   "sp-std/std",
   "sp-io/std",
