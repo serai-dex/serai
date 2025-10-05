@@ -8,7 +8,7 @@ use ciphersuite::Ciphersuite;
 use dkg_musig::musig;
 use schnorrkel::Schnorrkel;
 
-use sp_core::{sr25519::Signature, Pair as PairTrait};
+use sp_core::Pair as PairTrait;
 
 use serai_abi::{
   genesis_liquidity::primitives::{oraclize_values_message, Values},
@@ -114,6 +114,6 @@ async fn set_values(serai: &Serai, values: &Values) {
 
   // oraclize values
   let _ =
-    publish_tx(serai, &SeraiGenesisLiquidity::oraclize_values(*values, Signature(sig.to_bytes())))
+    publish_tx(serai, &SeraiGenesisLiquidity::oraclize_values(*values, sig.to_bytes().into()))
       .await;
 }

@@ -125,7 +125,7 @@ pub fn test_key_gen<N: Network>() {
     let KeyConfirmed { mut substrate_keys, mut network_keys } = key_gen.confirm(
       &mut txn,
       ID.session,
-      &KeyPair(sr25519::Public(res.0), res.1.clone().try_into().unwrap()),
+      &KeyPair(sr25519::Public::from(res.0), res.1.clone().try_into().unwrap()),
     );
     txn.commit();
 

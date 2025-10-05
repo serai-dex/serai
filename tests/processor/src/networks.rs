@@ -1,3 +1,5 @@
+#![allow(deprecated)]
+
 use zeroize::Zeroizing;
 use rand_core::{RngCore, OsRng};
 

@@ -1,3 +1,5 @@
+#![expect(clippy::cast_possible_truncation)]
+
 #[cfg(feature = "networks")]
 pub mod networks;
 

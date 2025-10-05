@@ -7,6 +7,10 @@ runs:
     - name: Remove unused packages
       shell: bash
       run: |
+        # Ensure the repositories are synced
+        sudo apt update -y
+
+        # Actually perform the removals
         sudo apt remove -y "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
         sudo apt remove -y "*nodejs*" "*npm*" "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
         sudo apt remove -y "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
@@ -14,8 +18,9 @@ runs:
         sudo apt remove -y --allow-remove-essential -f shim-signed *python3*
         # This removal command requires the prior removals due to unmet dependencies otherwise
         sudo apt remove -y "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
+
         # Reinstall python3 as a general dependency of a functional operating system
-        sudo apt install python3
+        sudo apt install -y python3 --fix-missing
       if: runner.os == 'Linux'
 
     - name: Remove unused packages
@@ -33,11 +38,15 @@ runs:
       shell: bash
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
-          sudo apt install -y ca-certificates protobuf-compiler
+          sudo apt install -y ca-certificates protobuf-compiler libclang-dev
         elif [ "$RUNNER_OS" == "Windows" ]; then
           choco install protoc
         elif [ "$RUNNER_OS" == "macOS" ]; then
-          brew install protobuf
+          brew install protobuf llvm
+          HOMEBREW_ROOT_PATH=/opt/homebrew # macOS 14+
+          if [ $(sw_vers -productVersion | awk -F "." '{ print $1 }') = "13" ]; then HOMEBREW_ROOT_PATH=/usr/local; fi # macOS 13
+          ls $HOMEBREW_ROOT_PATH/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
+          echo "DYLD_LIBRARY_PATH=$HOMEBREW_ROOT_PATH/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
         fi
 
     - name: Install solc

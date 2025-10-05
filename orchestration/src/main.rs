@@ -118,7 +118,7 @@ WORKDIR /home/{user}
 
     Os::Debian => format!(
       r#"
-FROM debian:bookworm-slim AS image
+FROM debian:trixie-slim AS image
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
@@ -147,7 +147,7 @@ fn build_serai_service(prelude: &str, release: bool, features: &str, package: &s
 
   format!(
     r#"
-FROM rust:1.89-slim-bookworm AS builder
+FROM rust:1.90-slim-trixie AS builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
@@ -155,7 +155,7 @@ RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
 
 # Add dev dependencies
-RUN apt install -y pkg-config clang
+RUN apt install -y pkg-config libclang-dev clang
 
 # Dependencies for the Serai node
 RUN apt install -y make protobuf-compiler

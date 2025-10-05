@@ -11,8 +11,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale::{Encode, Decode, DecodeWithMemTracking, MaxEncodedLen};
 
 /// The type used for amounts within Substrate.
 // Distinct from Amount due to Substrate's requirements on this type.
@@ -22,7 +21,16 @@ use scale_info::TypeInfo;
 pub type SubstrateAmount = u64;
 /// The type used for amounts.
 #[derive(
-  Clone, Copy, PartialEq, Eq, PartialOrd, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  PartialOrd,
+  Debug,
+  Encode,
+  Decode,
+  DecodeWithMemTracking,
+  MaxEncodedLen,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]

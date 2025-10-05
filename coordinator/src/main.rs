@@ -1,3 +1,5 @@
+#![expect(clippy::cast_possible_truncation)]
+
 use core::ops::Deref;
 use std::{
   sync::{OnceLock, Arc},
@@ -269,12 +271,15 @@ async fn handle_processor_message<D: Db, P: P2p>(
       coordinator::ProcessorMessage::SignedSlashReport { session, signature } => {
         let set = ExternalValidatorSet { network, session: *session };
         let signature: &[u8] = signature.as_ref();
-        let signature = serai_client::Signature(signature.try_into().unwrap());
+        let signature = <[u8; 64]>::try_from(signature).unwrap();
+        let signature: serai_client::Signature = signature.into();
 
         let slashes = crate::tributary::SlashReport::get(&txn, set)
           .expect("signed slash report despite not having slash report locally");
-        let slashes_pubs =
-          slashes.iter().map(|(address, points)| (Public(*address), *points)).collect::<Vec<_>>();
+        let slashes_pubs = slashes
+          .iter()
+          .map(|(address, points)| (Public::from(*address), *points))
+          .collect::<Vec<_>>();
 
         let tx = serai_client::SeraiValidatorSets::report_slashes(
           network,
@@ -284,7 +289,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             .collect::<Vec<_>>()
             .try_into()
             .unwrap(),
-          signature.clone(),
+          signature,
         );
 
         loop {
@@ -501,7 +506,7 @@ async fn handle_processor_message<D: Db, P: P2p>(
             &mut txn,
             key,
             spec,
-            &KeyPair(Public(substrate_key), network_key.try_into().unwrap()),
+            &KeyPair(Public::from(substrate_key), network_key.try_into().unwrap()),
             id.attempt,
           );
 

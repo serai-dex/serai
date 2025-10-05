@@ -19,7 +19,7 @@ use dkg::Participant;
 use scale::Encode;
 
 use serai_client::{
-  primitives::{BlockHash, Signature},
+  primitives::BlockHash,
   in_instructions::{
     primitives::{Batch, SignedBatch, batch_message},
     InInstructionsEvent,
@@ -166,12 +166,11 @@ pub async fn batch(
   OsRng.fill_bytes(&mut schnorrkel_key_pair[32 .. 64]);
   schnorrkel_key_pair[64 ..]
     .copy_from_slice(&(<Ristretto as Ciphersuite>::generator() * **substrate_key).to_bytes());
-  let signature = Signature(
-    schnorrkel::keys::Keypair::from_bytes(&schnorrkel_key_pair)
-      .unwrap()
-      .sign_simple(b"substrate", &batch_message(&batch))
-      .to_bytes(),
-  );
+  let signature = schnorrkel::keys::Keypair::from_bytes(&schnorrkel_key_pair)
+    .unwrap()
+    .sign_simple(b"substrate", &batch_message(&batch))
+    .to_bytes()
+    .into();
 
   let batch = SignedBatch { batch, signature };
 

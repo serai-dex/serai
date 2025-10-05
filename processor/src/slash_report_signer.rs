@@ -183,7 +183,7 @@ impl SlashReportSigner {
                 .report
                 .clone()
                 .into_iter()
-                .map(|(validator, points)| (Public(validator), points))
+                .map(|(validator, points)| (Public::from(validator), points))
                 .collect::<Vec<_>>(),
             ),
           ) {

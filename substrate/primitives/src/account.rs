@@ -6,8 +6,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 #[cfg(feature = "serde")]
 use serde::{Serialize, Deserialize};
 
-use scale::{Encode, Decode, MaxEncodedLen};
-use scale_info::TypeInfo;
+use scale::{Encode, Decode, DecodeWithMemTracking, MaxEncodedLen};
 
 use sp_core::sr25519::Public;
 pub use sp_core::sr25519::Signature;
@@ -31,7 +30,7 @@ pub fn borsh_deserialize_public<R: borsh::io::Read>(
   reader: &mut R,
 ) -> Result<Public, borsh::io::Error> {
   let public: [u8; 32] = borsh::BorshDeserialize::deserialize_reader(reader)?;
-  Ok(Public(public))
+  Ok(public.into())
 }
 
 #[cfg(feature = "borsh")]
@@ -47,12 +46,22 @@ pub fn borsh_deserialize_signature<R: borsh::io::Read>(
   reader: &mut R,
 ) -> Result<Signature, borsh::io::Error> {
   let signature: [u8; 64] = borsh::BorshDeserialize::deserialize_reader(reader)?;
-  Ok(Signature(signature))
+  Ok(signature.into())
 }
 
 // TODO: Remove this for solely Public?
 #[derive(
-  Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Encode, Decode, MaxEncodedLen, TypeInfo,
+  Clone,
+  Copy,
+  PartialEq,
+  Eq,
+  PartialOrd,
+  Ord,
+  Debug,
+  Encode,
+  Decode,
+  DecodeWithMemTracking,
+  MaxEncodedLen,
 )]
 #[cfg_attr(feature = "std", derive(Zeroize))]
 #[cfg_attr(feature = "borsh", derive(BorshSerialize, BorshDeserialize))]

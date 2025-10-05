@@ -40,7 +40,6 @@ pub mod pallet {
     + CoinsConfig
     + coins_pallet::Config<coins_pallet::Instance1>
   {
-    type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
   }
 
   #[pallet::error]

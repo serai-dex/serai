@@ -9,7 +9,7 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use frost::dkg::Participant;
 
 use scale::{Encode, Decode};
-use serai_client::{Signature, validator_sets::primitives::KeyPair};
+use serai_client::validator_sets::primitives::KeyPair;
 
 use tributary::{Signed, TransactionKind, TransactionTrait};
 
@@ -554,7 +554,7 @@ impl<
                 self.spec.set(),
                 removed.into_iter().map(|key| key.to_bytes().into()).collect(),
                 key_pair,
-                Signature(sig),
+                sig.into(),
               )
               .await;
           }

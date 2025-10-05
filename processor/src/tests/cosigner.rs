@@ -118,7 +118,7 @@ fn test_cosigner() {
         assert_eq!(signed_block, block);
         assert!(Public::from_raw(keys[&participant_one].group_key().to_bytes()).verify(
           &cosign_block_msg(block_number, block),
-          &Signature(signature.try_into().unwrap())
+          &Signature::from(<[u8; 64]>::try_from(signature).unwrap())
         ));
       }
       _ => panic!("didn't get cosigned block back"),

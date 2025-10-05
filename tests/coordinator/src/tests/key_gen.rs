@@ -14,10 +14,7 @@ use ciphersuite::{
 use ciphersuite_kp256::Secp256k1;
 use dkg::ThresholdParams;
 
-use serai_client::{
-  validator_sets::primitives::{ExternalValidatorSet, KeyPair, Session},
-  Public,
-};
+use serai_client::validator_sets::primitives::{ExternalValidatorSet, KeyPair, Session};
 use messages::{key_gen::KeyGenId, CoordinatorMessage};
 
 use crate::tests::*;
@@ -207,7 +204,7 @@ pub async fn key_gen<C: Ciphersuite>(
       .await
       .unwrap()
       .unwrap(),
-    KeyPair(Public(substrate_key), network_key.try_into().unwrap())
+    KeyPair(substrate_key.into(), network_key.try_into().unwrap())
   );
 
   for processor in &mut *processors {
