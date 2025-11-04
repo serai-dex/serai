@@ -119,7 +119,7 @@ impl<D: Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
 
             self
               .coordinator
-              .publish_slash_report_signature(session, slash_report, Signature::from(signature))
+              .publish_slash_report_signature(session, slash_report, Signature(signature))
               .await
               .map_err(|e| {
                 format!("couldn't send slash report signature to the coordinator: {e:?}")

@@ -252,7 +252,7 @@ impl SlashReport {
 
 #[test]
 fn test_penalty() {
-  for validators in [1, 50, 100, KeyShares::MAX_PER_SET_U32] {
+  for validators in [1, 50, 100, KeyShares::MAX_PER_SET] {
     let validators = NonZero::new(validators).unwrap();
     // 12 hours of slash points should only decrease the rewards proportionately
     let twelve_hours_of_slash_points =

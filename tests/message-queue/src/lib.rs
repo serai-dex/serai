@@ -5,7 +5,7 @@ use rand_core::OsRng;
 use ciphersuite::{group::GroupEncoding, WrappedGroup};
 use dalek_ff_group::Ristretto;
 
-use serai_primitives::{ExternalNetworkId, EXTERNAL_NETWORKS};
+use serai_primitives::network_id::ExternalNetworkId;
 
 use dockertest::{
   PullPolicy, Image, LogAction, LogPolicy, LogSource, LogOptions, TestBodySpecification,
@@ -20,8 +20,7 @@ pub fn instance() -> (
   serai_docker_tests::build("message-queue".to_string());
 
   let coord_key = <Ristretto as WrappedGroup>::F::random(&mut OsRng);
-  let priv_keys = EXTERNAL_NETWORKS
-    .into_iter()
+  let priv_keys = ExternalNetworkId::all()
     .map(|n| (n, <Ristretto as WrappedGroup>::F::random(&mut OsRng)))
     .collect::<HashMap<_, _>>();
 

@@ -1,5 +1,3 @@
-#![expect(clippy::cast_possible_truncation)]
-
 use core::fmt::Debug;
 
 use std::{
