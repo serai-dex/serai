@@ -13,8 +13,7 @@ rust-version = "1.65"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[lints]
-workspace = true
+[workspace]
 
 [dependencies]
 std-shims = { path = "../../common/std-shims", default-features = false, features = ["alloc"] }

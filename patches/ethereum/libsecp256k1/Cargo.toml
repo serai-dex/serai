@@ -12,6 +12,8 @@ edition = "2021"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[workspace]
+
 [features]
 std = []
 static-context = []

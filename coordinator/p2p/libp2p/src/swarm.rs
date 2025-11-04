@@ -92,7 +92,8 @@ impl SwarmTask {
         }
       }
       gossip::Event::Subscribed { .. } | gossip::Event::Unsubscribed { .. } => {}
-      gossip::Event::GossipsubNotSupported { peer_id } => {
+      gossip::Event::GossipsubNotSupported { peer_id } |
+      gossip::Event::SlowPeer { peer_id, .. } => {
         let _: Result<_, _> = self.swarm.disconnect_peer_id(peer_id);
       }
     }

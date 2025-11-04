@@ -1,19 +1,20 @@
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
+use core::{pin::Pin, future::Future};
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use futures_util::FutureExt;
+use ::tokio::sync::Mutex;
 
 use tower_service::Service as TowerService;
+use hyper::{Uri, header::HeaderValue, body::Bytes, client::conn::http1::SendRequest, rt::Executor};
+pub use hyper;
+
+use hyper_util::client::legacy::{Client as HyperClient, connect::HttpConnector};
+
 #[cfg(feature = "tls")]
 use hyper_rustls::{HttpsConnectorBuilder, HttpsConnector};
-use hyper::{Uri, header::HeaderValue, body::Bytes, client::conn::http1::SendRequest};
-use hyper_util::{
-  rt::tokio::TokioExecutor,
-  client::legacy::{Client as HyperClient, connect::HttpConnector},
-};
-pub use hyper;
 
 mod request;
 pub use request::*;
@@ -37,27 +38,47 @@ type Connector = HttpConnector;
 type Connector = HttpsConnector<HttpConnector>;
 
 #[derive(Clone, Debug)]
-enum Connection {
+enum Connection<
+  E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>,
+> {
   ConnectionPool(HyperClient<Connector, Full<Bytes>>),
   Connection {
+    executor: E,
     connector: Connector,
     host: Uri,
     connection: Arc<Mutex<Option<SendRequest<Full<Bytes>>>>>,
   },
 }
 
+/// An HTTP client.
+///
+/// `tls` is only guaranteed to work when using the `tokio` executor. Instantiating a client when
+/// the `tls` feature is active without using the `tokio` executor will cause errors.
 #[derive(Clone, Debug)]
-pub struct Client {
-  connection: Connection,
+pub struct Client<
+  E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>,
+> {
+  connection: Connection<E>,
 }
 
-impl Client {
+impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>>
+  Client<E>
+{
   #[allow(clippy::unnecessary_wraps)]
   fn connector() -> Result<Connector, Error> {
     let mut res = HttpConnector::new();
     res.set_keepalive(Some(core::time::Duration::from_secs(60)));
     res.set_nodelay(true);
     res.set_reuse_address(true);
+
+    #[cfg(feature = "tls")]
+    if core::any::TypeId::of::<E>() !=
+      core::any::TypeId::of::<hyper_util::rt::tokio::TokioExecutor>()
+    {
+      Err(Error::ConnectionError(
+        "`tls` feature enabled but not using the `tokio` executor".into(),
+      ))?;
+    }
 
     #[cfg(feature = "tls")]
     res.enforce_http(false);
@@ -79,19 +100,23 @@ impl Client {
     Ok(res)
   }
 
-  pub fn with_connection_pool() -> Result<Client, Error> {
+  pub fn with_executor_and_connection_pool(executor: E) -> Result<Client<E>, Error> {
     Ok(Client {
       connection: Connection::ConnectionPool(
-        HyperClient::builder(TokioExecutor::new())
+        HyperClient::builder(executor)
           .pool_idle_timeout(core::time::Duration::from_secs(60))
           .build(Self::connector()?),
       ),
     })
   }
 
-  pub fn without_connection_pool(host: &str) -> Result<Client, Error> {
+  pub fn with_executor_and_without_connection_pool(
+    executor: E,
+    host: &str,
+  ) -> Result<Client<E>, Error> {
     Ok(Client {
       connection: Connection::Connection {
+        executor,
         connector: Self::connector()?,
         host: {
           let uri: Uri = host.parse().map_err(|_| Error::InvalidUri)?;
@@ -105,7 +130,7 @@ impl Client {
     })
   }
 
-  pub async fn request<R: Into<Request>>(&self, request: R) -> Result<Response<'_>, Error> {
+  pub async fn request<R: Into<Request>>(&self, request: R) -> Result<Response<'_, E>, Error> {
     let request: Request = request.into();
     let Request { mut request, response_size_limit } = request;
     if let Some(header_host) = request.headers().get(hyper::header::HOST) {
@@ -141,7 +166,7 @@ impl Client {
       Connection::ConnectionPool(client) => {
         client.request(request).await.map_err(Error::HyperUtil)?
       }
-      Connection::Connection { connector, host, connection } => {
+      Connection::Connection { executor, connector, host, connection } => {
         let mut connection_lock = connection.lock().await;
 
         // If there's not a connection...
@@ -153,9 +178,8 @@ impl Client {
           let call_res = call_res.map_err(Error::ConnectionError);
           let (requester, connection) =
             hyper::client::conn::http1::handshake(call_res?).await.map_err(Error::Hyper)?;
-          // This will die when we drop the requester, so we don't need to track an AbortHandle
-          // for it
-          tokio::spawn(connection);
+          // This task will die when we drop the requester
+          executor.execute(Box::pin(connection.map(|_| ())));
           *connection_lock = Some(requester);
         }
 
@@ -178,3 +202,22 @@ impl Client {
     Ok(Response { response, size_limit: response_size_limit, client: self })
   }
 }
+
+#[cfg(feature = "tokio")]
+mod tokio {
+  use hyper_util::rt::tokio::TokioExecutor;
+  use super::*;
+
+  pub type TokioClient = Client<TokioExecutor>;
+  impl Client<TokioExecutor> {
+    pub fn with_connection_pool() -> Result<Self, Error> {
+      Self::with_executor_and_connection_pool(TokioExecutor::new())
+    }
+
+    pub fn without_connection_pool(host: &str) -> Result<Self, Error> {
+      Self::with_executor_and_without_connection_pool(TokioExecutor::new(), host)
+    }
+  }
+}
+#[cfg(feature = "tokio")]
+pub use tokio::TokioClient;

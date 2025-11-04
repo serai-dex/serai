@@ -12,3 +12,5 @@ rust-version = "1.70"
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]

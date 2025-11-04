@@ -28,8 +28,10 @@ impl<A: Send + Sync + Clone + PartialEq + Debug + WriteAddendum> Addendum for A 
 
 /// Algorithm trait usable by the FROST signing machine to produce signatures..
 pub trait Algorithm<C: Curve>: Send + Sync {
-  /// The transcript format this algorithm uses. This likely should NOT be the IETF-compatible
-  /// transcript included in this crate.
+  /// The transcript format this algorithm uses.
+  ///
+  /// This MUST NOT be the IETF-compatible transcript included in this crate UNLESS this is an
+  /// IETF-specified ciphersuite.
   type Transcript: Sync + Clone + Debug + Transcript;
   /// Serializable addendum, used in algorithms requiring more data than just the nonces.
   type Addendum: Addendum;
@@ -69,8 +71,10 @@ pub trait Algorithm<C: Curve>: Send + Sync {
   ) -> Result<(), FrostError>;
 
   /// Sign a share with the given secret/nonce.
+  ///
   /// The secret will already have been its lagrange coefficient applied so it is the necessary
   /// key share.
+  ///
   /// The nonce will already have been processed into the combined form d + (e * p).
   fn sign_share(
     &mut self,
@@ -85,6 +89,7 @@ pub trait Algorithm<C: Curve>: Send + Sync {
   fn verify(&self, group_key: C::G, nonces: &[Vec<C::G>], sum: C::F) -> Option<Self::Signature>;
 
   /// Verify a specific share given as a response.
+  ///
   /// This function should return a series of pairs whose products should sum to zero for a valid
   /// share. Any error raised is treated as the share being invalid.
   #[allow(clippy::type_complexity, clippy::result_unit_err)]
@@ -99,8 +104,10 @@ pub trait Algorithm<C: Curve>: Send + Sync {
 mod sealed {
   pub use super::*;
 
-  /// IETF-compliant transcript. This is incredibly naive and should not be used within larger
-  /// protocols.
+  /// IETF-compliant transcript.
+  ///
+  /// This is incredibly naive and MUST NOT be used within larger protocols. No guarantees are made
+  /// about its safety EXCEPT as used with the IETF-specified FROST ciphersuites.
   #[derive(Clone, Debug)]
   pub struct IetfTranscript(pub(crate) Vec<u8>);
   impl Transcript for IetfTranscript {
@@ -131,6 +138,7 @@ pub(crate) use sealed::IetfTranscript;
 /// HRAm usable by the included Schnorr signature algorithm to generate challenges.
 pub trait Hram<C: Curve>: Send + Sync + Clone {
   /// HRAm function to generate a challenge.
+  ///
   /// H2 from the IETF draft, despite having a different argument set (not being pre-formatted).
   #[allow(non_snake_case)]
   fn hram(R: &C::G, A: &C::G, m: &[u8]) -> C::F;

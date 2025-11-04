@@ -31,19 +31,19 @@ serde_json = { version = "1", optional = true }
 serai-abi = { path = "../abi", version = "0.1" }
 
 multiaddr = { version = "0.18", optional = true }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "4f33730048e616ebdd8243ff0461e53eea03bb9b", optional = true }
-sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "4f33730048e616ebdd8243ff0461e53eea03bb9b", optional = true }
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "4f33730048e616ebdd8243ff0461e53eea03bb9b", optional = true }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5dfddc95c32994c1c09bd0c7a9e3633f1e5c7cc4", optional = true }
+sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5dfddc95c32994c1c09bd0c7a9e3633f1e5c7cc4", optional = true }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5dfddc95c32994c1c09bd0c7a9e3633f1e5c7cc4", optional = true }
 
 async-lock = "3"
 
-simple-request = { path = "../../common/request", version = "0.2", optional = true }
+simple-request = { path = "../../common/request", version = "0.3", optional = true }
 
 bitcoin = { version = "0.32", optional = true }
 
 ciphersuite = { path = "../../crypto/ciphersuite", optional = true }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
-monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c", version = "0.1.0", default-features = false, features = ["std"], optional = true }
+monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "030c60974f0f0306849c1795bca854a3bbb757b4", version = "0.1.0", default-features = false, features = ["std"], optional = true }
 
 [dev-dependencies]
 rand_core = "0.6"

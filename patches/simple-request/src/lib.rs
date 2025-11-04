@@ -1,7 +1,10 @@
-pub use simple_request::{hyper, Error, Request, Response};
+use hyper_util::rt::tokio::TokioExecutor;
+pub use simple_request::{hyper, Error, Request};
 
 #[derive(Clone, Debug)]
-pub struct Client(simple_request::Client);
+pub struct Client(simple_request::Client<TokioExecutor>);
+
+pub type Response<'a> = simple_request::Response<'a, TokioExecutor>;
 
 impl Client {
   pub fn with_connection_pool() -> Client {

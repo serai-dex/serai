@@ -26,6 +26,6 @@ ff = { version = "0.13", default-features = false, features = ["bits"] }
 ff-group-tests = { version = "0.13", path = "../ff-group-tests", optional = true }
 
 [features]
-alloc = ["zeroize/alloc", "crypto-bigint/alloc", "ff/alloc"]
+alloc = ["zeroize/alloc", "ff/alloc"]
 std = ["alloc", "zeroize/std", "subtle/std", "rand_core/std", "ff/std", "ff-group-tests"]
 default = ["std"]

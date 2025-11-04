@@ -30,7 +30,7 @@ use messages::{
 };
 use serai_message_queue::{Service, Metadata, client::MessageQueue};
 
-use serai_client::{primitives::Signature, Serai};
+use serai_client::Serai;
 
 use dockertest::{PullPolicy, Image, TestBodySpecification, DockerOperations};
 
@@ -323,18 +323,16 @@ impl Processor {
               schnorrkel_key_pair[64 ..].copy_from_slice(
                 &(<Ristretto as WrappedGroup>::generator() * *substrate_key).to_bytes(),
               );
-              let signature = Signature(
-                schnorrkel::keys::Keypair::from_bytes(&schnorrkel_key_pair)
-                  .unwrap()
-                  .sign_simple(b"substrate", &cosign_block_msg(block_number, block))
-                  .to_bytes(),
-              );
+              let signature = schnorrkel::keys::Keypair::from_bytes(&schnorrkel_key_pair)
+                .unwrap()
+                .sign_simple(b"substrate", &cosign_block_msg(block_number, block))
+                .to_bytes();
 
               send_message(
                 messages::coordinator::ProcessorMessage::CosignedBlock {
                   block_number,
                   block,
-                  signature: signature.0.to_vec(),
+                  signature: signature.to_vec(),
                 }
                 .into(),
               )

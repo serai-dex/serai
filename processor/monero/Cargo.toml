@@ -28,8 +28,8 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = fals
 dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std", "ed25519"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
 
-monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c", default-features = false, features = ["std", "multisig"] }
-monero-simple-request-rpc = { git = "https://github.com/monero-oxide/monero-oxide", rev = "f6f4dd7dc5b7c6e057b2eac2ec4980bb7a1c707c", default-features = false }
+monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "030c60974f0f0306849c1795bca854a3bbb757b4", default-features = false, features = ["std", "multisig"] }
+monero-simple-request-rpc = { git = "https://github.com/monero-oxide/monero-oxide", rev = "030c60974f0f0306849c1795bca854a3bbb757b4", default-features = false }
 
 serai-client = { path = "../../substrate/client", default-features = false, features = ["monero"] }
 

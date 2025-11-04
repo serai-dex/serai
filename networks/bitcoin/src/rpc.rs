@@ -6,7 +6,7 @@ use thiserror::Error;
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::json;
 
-use simple_request::{hyper, Request, Client};
+use simple_request::{hyper, Request, TokioClient as Client};
 
 use bitcoin::{
   hashes::{Hash, hex::FromHex},
@@ -119,6 +119,7 @@ impl Rpc {
         .unwrap(),
     );
     request.with_basic_auth();
+    request.set_response_size_limit(Some(100 * 1024 * 1024));
     let mut res = self
       .client
       .request(request)

@@ -19,7 +19,7 @@ workspace = true
 tower = "0.5"
 
 serde_json = { version = "1", default-features = false }
-simple-request = { path = "../../../common/request", version = "0.2", default-features = false }
+simple-request = { path = "../../../common/request", version = "0.3", default-features = false, features = ["tokio"] }
 
 alloy-json-rpc = { version = "1", default-features = false }
 alloy-transport = { version = "1", default-features = false }

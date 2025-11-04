@@ -94,7 +94,7 @@ async fn signable_transaction(
           RctType::ClsagBulletproofPlus => 16,
           _ => panic!("selecting decoys for an unsupported RctType"),
         },
-        reference_block.0.block.number().unwrap() + 1,
+        reference_block.0.block.number() + 1,
         input.0.clone(),
       )
       .await?,

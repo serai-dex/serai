@@ -1,3 +1,5 @@
+#![expect(clippy::cast_possible_truncation)]
+
 use std::collections::HashMap;
 
 use borsh::{BorshSerialize, BorshDeserialize};

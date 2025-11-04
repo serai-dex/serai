@@ -175,7 +175,7 @@ thiserror = { path = "patches/thiserror" }
 
 # Dependencies from monero-oxide which originate from within our own tree
 std-shims = { path = "patches/std-shims" }
-simple-request = { path = "common/request" }
+simple-request = { path = "patches/simple-request" }
 multiexp = { path = "crypto/multiexp" }
 flexible-transcript = { path = "crypto/transcript" }
 ciphersuite = { path = "patches/ciphersuite" }

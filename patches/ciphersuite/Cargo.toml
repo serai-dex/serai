@@ -12,8 +12,7 @@ edition = "2021"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[lints]
-workspace = true
+[workspace]
 
 [dependencies]
 std-shims = { path = "../../common/std-shims", version = "0.1.4", default-features = false, optional = true }

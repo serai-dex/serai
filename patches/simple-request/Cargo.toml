@@ -1,6 +1,6 @@
 [package]
 name = "simple-request"
-version = "0.1.99"
+version = "0.2.99"
 description = "simple-request which patches to the latest update"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/patches/simple-request"
@@ -13,11 +13,11 @@ rust-version = "1.65"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[lints]
-workspace = true
+[workspace]
 
 [dependencies]
-simple-request = { path = "../../common/request" }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+simple-request = { path = "../../common/request", features = ["tokio"] }
 
 [features]
 tls = ["simple-request/tls"]

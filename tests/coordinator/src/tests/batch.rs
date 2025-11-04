@@ -18,7 +18,7 @@ use dkg::Participant;
 use scale::Encode;
 
 use serai_client::{
-  primitives::{BlockHash, Signature},
+  primitives::BlockHash,
   in_instructions::{
     primitives::{Batch, SignedBatch, batch_message},
     InInstructionsEvent,
@@ -169,7 +169,8 @@ pub async fn batch(
     schnorrkel::keys::Keypair::from_bytes(&schnorrkel_key_pair)
       .unwrap()
       .sign_simple(b"substrate", &batch_message(&batch))
-      .to_bytes(),
+      .to_bytes()
+      .into(),
   );
 
   let batch = SignedBatch { batch, signature };

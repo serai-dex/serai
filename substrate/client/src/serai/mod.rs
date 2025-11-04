@@ -316,7 +316,7 @@ impl Serai {
     &self,
     network: ExternalNetworkId,
   ) -> Result<Vec<multiaddr::Multiaddr>, SeraiError> {
-    self.call("p2p_validators", network).await
+    self.call("p2p_validators", [network]).await
   }
 
   // TODO: move this to SeraiValidatorSets?
@@ -324,7 +324,7 @@ impl Serai {
     &self,
     network: ExternalNetworkId,
   ) -> Result<String, SeraiError> {
-    self.call("external_network_address", network).await
+    self.call("external_network_address", [network]).await
   }
 
   // TODO: move this to SeraiInInstructions?

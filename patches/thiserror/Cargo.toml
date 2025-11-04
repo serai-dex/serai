@@ -12,5 +12,7 @@ edition = "2021"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[workspace]
+
 [dependencies]
 thiserror = { version = "2", features = ["std"] }

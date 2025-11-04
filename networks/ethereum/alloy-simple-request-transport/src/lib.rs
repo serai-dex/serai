@@ -1,4 +1,4 @@
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 
 use core::task;
@@ -7,7 +7,7 @@ use std::io;
 use alloy_json_rpc::{RequestPacket, ResponsePacket};
 use alloy_transport::{TransportError, TransportErrorKind, TransportFut};
 
-use simple_request::{hyper, Error, Request, Client};
+use simple_request::{hyper, Error, Request, TokioClient as Client};
 
 use tower::Service;
 
