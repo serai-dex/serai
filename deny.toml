@@ -111,7 +111,6 @@ unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
   "https://github.com/rust-lang-nursery/lazy-static.rs",
-  "https://github.com/kayabaNerve/elliptic-curves",
   "https://github.com/monero-oxide/monero-oxide",
   "https://github.com/serai-dex/patch-polkadot-sdk",
 ]

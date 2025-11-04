@@ -53,8 +53,7 @@ async fn main() {
         let db = db.clone();
         tokio::spawn(async move {
           let mut db = db.clone();
-          loop {
-            let Ok(msg_len) = socket.read_u32_le().await else { break };
+          while let Ok(msg_len) = socket.read_u32_le().await {
             let mut buf = vec![0; usize::try_from(msg_len).unwrap()];
             let Ok(_) = socket.read_exact(&mut buf).await else { break };
 

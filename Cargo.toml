@@ -128,8 +128,9 @@ modular-frost = { path = "crypto/frost" }
 # https://github.com/rust-lang-nursery/lazy-static.rs/issues/201
 lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
 
-# `matches` has an `std` alternative
+# These have `std` alternatives
 matches = { path = "patches/matches" }
+home = { path = "patches/home" }
 
 # directories-next was created because directories was unmaintained
 # directories-next is now unmaintained while directories is maintained
@@ -183,7 +184,7 @@ range_plus_one = "deny"
 redundant_closure_for_method_calls = "deny"
 redundant_else = "deny"
 string_add_assign = "deny"
-unchecked_duration_subtraction = "deny"
+unchecked_time_subtraction = "deny"
 unnecessary_box_returns = "deny"
 unnecessary_join = "deny"
 unnecessary_wraps = "deny"
@@ -205,6 +206,7 @@ unnecessary_map_or = "allow"
 result_large_err = "allow"
 unneeded_struct_pattern = "allow"
 [workspace.lints.rust]
+unused = "allow" # TODO: https://github.com/rust-lang/rust/issues/147648
 mismatched_lifetime_syntaxes = "allow"
 unused_attributes = "allow"
-unused-parens = "allow"
+unused_parens = "allow"

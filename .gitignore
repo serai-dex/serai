@@ -1,7 +1,14 @@
 target
+
+# Don't commit any `Cargo.lock` which aren't the workspace's
+Cargo.lock
+!./Cargo.lock
+
+# Don't commit any `Dockerfile`, as they're auto-generated, except the only one which isn't
 Dockerfile
 Dockerfile.fast-epoch
 !orchestration/runtime/Dockerfile
+
 .test-logs
 
 .vscode
