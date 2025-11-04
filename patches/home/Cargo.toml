@@ -1,0 +1,16 @@
+[package]
+name = "home"
+version = "0.5.99"
+description = "Replacement for `home` which uses the `std` impl"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/home"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2024"
+rust-version = "1.85"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]

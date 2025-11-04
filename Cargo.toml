@@ -185,6 +185,9 @@ modular-frost = { path = "crypto/frost" }
 # https://github.com/rust-lang-nursery/lazy-static.rs/issues/201
 lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
 
+# These has an `std` alternative since Rust's 2024 edition
+home = { path = "patches/home" }
+
 # directories-next was created because directories was unmaintained
 # directories-next is now unmaintained while directories is maintained
 # The directories author pulls in ridiculously pointless crates and prefers
@@ -241,7 +244,7 @@ redundant_closure_for_method_calls = "deny"
 redundant_else = "deny"
 string_add_assign = "deny"
 string_slice = "deny"
-unchecked_duration_subtraction = "deny"
+unchecked_time_subtraction = "deny"
 uninlined_format_args = "deny"
 unnecessary_box_returns = "deny"
 unnecessary_join = "deny"
@@ -250,3 +253,6 @@ unnested_or_patterns = "deny"
 unused_async = "deny"
 unused_self = "deny"
 zero_sized_map_values = "deny"
+
+[workspace.lints.rust]
+unused = "allow" # TODO: https://github.com/rust-lang/rust/issues/147648
