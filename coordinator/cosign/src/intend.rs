@@ -1,11 +1,10 @@
 use core::future::Future;
 use std::{sync::Arc, collections::HashMap};
 
-use serai_client::{
-  primitives::{SeraiAddress, Amount},
-  validator_sets::primitives::ExternalValidatorSet,
-  Serai,
+use serai_abi::primitives::{
+  balance::Amount, validator_sets::ExternalValidatorSet, address::SeraiAddress,
 };
+use serai_client::Serai;
 
 use serai_db::*;
 use serai_task::ContinuallyRan;

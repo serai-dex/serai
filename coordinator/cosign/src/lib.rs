@@ -9,11 +9,16 @@ use blake2::{Digest, Blake2s256};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{
-  primitives::{ExternalNetworkId, SeraiAddress},
-  validator_sets::primitives::{Session, ExternalValidatorSet, KeyPair},
-  Public, Block, Serai, TemporalSerai,
+use serai_abi::{
+  primitives::{
+    crypto::{Public, KeyPair},
+    network_id::ExternalNetworkId,
+    validator_sets::{Session, ExternalValidatorSet},
+    address::SeraiAddress,
+  },
+  Block,
 };
+use serai_client::{Serai, TemporalSerai};
 
 use serai_db::*;
 use serai_task::*;
@@ -155,8 +160,8 @@ async fn keys_for_network(
 async fn cosigning_sets(
   serai: &TemporalSerai<'_>,
 ) -> Result<Vec<(ExternalValidatorSet, Public)>, String> {
-  let mut sets = Vec::with_capacity(serai_client::primitives::EXTERNAL_NETWORKS.len());
-  for network in serai_client::primitives::EXTERNAL_NETWORKS {
+  let mut sets = vec![];
+  for network in ExternalNetworkId::all() {
     let Some((session, keys)) = keys_for_network(serai, network).await? else {
       // If this network doesn't have usable keys, move on
       continue;
@@ -282,8 +287,8 @@ impl<D: Db> Cosigning<D> {
   /// If this global session hasn't produced any notable cosigns, this will return the latest
   /// cosigns for this session.
   pub fn notable_cosigns(getter: &impl Get, global_session: [u8; 32]) -> Vec<SignedCosign> {
-    let mut cosigns = Vec::with_capacity(serai_client::primitives::EXTERNAL_NETWORKS.len());
-    for network in serai_client::primitives::EXTERNAL_NETWORKS {
+    let mut cosigns = vec![];
+    for network in ExternalNetworkId::all() {
       if let Some(cosign) = NetworksLatestCosignedBlock::get(getter, global_session, network) {
         cosigns.push(cosign);
       }
@@ -300,7 +305,7 @@ impl<D: Db> Cosigning<D> {
       let mut cosigns = Faults::get(&self.db, faulted).expect("faulted with no faults");
       // Also include all of our recognized-as-honest cosigns in an attempt to induce fault
       // identification in those who see the faulty cosigns as honest
-      for network in serai_client::primitives::EXTERNAL_NETWORKS {
+      for network in ExternalNetworkId::all() {
         if let Some(cosign) = NetworksLatestCosignedBlock::get(&self.db, faulted, network) {
           if cosign.cosign.global_session == faulted {
             cosigns.push(cosign);
@@ -312,8 +317,8 @@ impl<D: Db> Cosigning<D> {
       let Some(global_session) = evaluator::currently_evaluated_global_session(&self.db) else {
         return vec![];
       };
-      let mut cosigns = Vec::with_capacity(serai_client::primitives::EXTERNAL_NETWORKS.len());
-      for network in serai_client::primitives::EXTERNAL_NETWORKS {
+      let mut cosigns = vec![];
+      for network in ExternalNetworkId::all() {
         if let Some(cosign) = NetworksLatestCosignedBlock::get(&self.db, global_session, network) {
           cosigns.push(cosign);
         }

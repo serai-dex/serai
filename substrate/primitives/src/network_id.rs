@@ -5,7 +5,9 @@ use borsh::{io, BorshSerialize, BorshDeserialize};
 use crate::coin::{ExternalCoin, Coin};
 
 /// Identifier for an embedded elliptic curve.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[rustfmt::skip]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
+#[derive(BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
@@ -20,7 +22,9 @@ pub enum EmbeddedEllipticCurve {
 /// The type used to identify external networks.
 ///
 /// This type serializes to a subset of `NetworkId`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[rustfmt::skip]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
+#[derive(BorshSerialize, BorshDeserialize)]
 #[borsh(use_discriminant = true)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
@@ -73,7 +77,7 @@ impl ExternalNetworkId {
 }
 
 /// The type used to identify networks.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
