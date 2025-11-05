@@ -16,7 +16,8 @@ use sc_client_api::BlockBackend;
 
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
-use serai_runtime::{Block, RuntimeApi};
+use serai_abi::SubstrateBlock as Block;
+use serai_runtime::RuntimeApi;
 
 use sc_consensus_babe::{self, SlotProportion};
 use sc_consensus_grandpa as grandpa;

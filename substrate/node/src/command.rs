@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use serai_runtime::Block;
+use serai_abi::SubstrateBlock as Block;
 
 use sc_service::{PruningMode, PartialComponents};
 
@@ -18,15 +18,15 @@ impl SubstrateCli for Cli {
   }
 
   fn impl_version() -> String {
-    env!("SUBSTRATE_CLI_IMPL_VERSION").to_string()
+    String::new()
   }
 
   fn description() -> String {
-    env!("CARGO_PKG_DESCRIPTION").to_string()
+    String::new()
   }
 
   fn author() -> String {
-    env!("CARGO_PKG_AUTHORS").to_string()
+    String::new()
   }
 
   fn support_url() -> String {

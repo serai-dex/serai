@@ -301,6 +301,12 @@ mod pallet {
       requirement
     }
 
+    pub fn selected_validators(
+      set: ValidatorSet,
+    ) -> impl Iterator<Item = (Public, KeySharesStruct)> {
+      Abstractions::<T>::selected_validators(set)
+    }
+
     /* TODO
     pub fn distribute_block_rewards(
       network: NetworkId,

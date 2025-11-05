@@ -6,7 +6,7 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 extern crate alloc;
 
-use alloc::borrow::Cow;
+use alloc::{borrow::Cow, vec::Vec};
 
 use sp_core::{ConstU32, ConstU64, sr25519::Public};
 use sp_runtime::{Perbill, Weight};
@@ -16,6 +16,7 @@ use serai_abi::{
   primitives::{
     network_id::{ExternalNetworkId, NetworkId},
     balance::{Amount, ExternalBalance},
+    validator_sets::ValidatorSet,
     address::SeraiAddress,
   },
   SubstrateHeader as Header, SubstrateBlock,
@@ -319,7 +320,31 @@ impl From<serai_abi::Call> for RuntimeCall {
 
 type Executive = frame_executive::Executive<Runtime, Block, Context, Runtime, AllPalletsWithSystem>;
 
+sp_api::decl_runtime_apis! {
+  #[api_version(1)]
+  pub trait GenesisApi {
+    fn build(genesis: RuntimeGenesisConfig);
+  }
+  #[api_version(1)]
+  pub trait SeraiApi {
+    fn validators(network_id: NetworkId) -> Vec<Public>;
+  }
+}
+
+const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
+pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
+  sp_consensus_babe::BabeEpochConfiguration {
+    c: PRIMARY_PROBABILITY,
+    allowed_slots: sp_consensus_babe::AllowedSlots::PrimaryAndSecondaryPlainSlots,
+  };
+
 sp_api::impl_runtime_apis! {
+  impl crate::GenesisApi<Block> for Runtime {
+    fn build(genesis: RuntimeGenesisConfig) {
+      <RuntimeGenesisConfig as frame_support::traits::BuildGenesisConfig>::build(&genesis)
+    }
+  }
+
   impl sp_api::Core<Block> for Runtime {
     fn version() -> RuntimeVersion {
       VERSION
@@ -329,6 +354,148 @@ sp_api::impl_runtime_apis! {
     }
     fn execute_block(block: Block) {
       Executive::execute_block(block);
+    }
+  }
+
+  impl sp_block_builder::BlockBuilder<Block> for Runtime {
+    fn apply_extrinsic(
+      extrinsic: <Block as sp_runtime::traits::Block>::Extrinsic,
+    ) -> sp_runtime::ApplyExtrinsicResult {
+      Executive::apply_extrinsic(extrinsic)
+    }
+
+    fn finalize_block() -> Header {
+      Executive::finalize_block()
+    }
+
+    fn inherent_extrinsics(
+      data: sp_inherents::InherentData,
+    ) -> Vec<<Block as sp_runtime::traits::Block>::Extrinsic> {
+      data.create_extrinsics()
+    }
+
+    fn check_inherents(
+      block: Block,
+      data: sp_inherents::InherentData,
+    ) -> sp_inherents::CheckInherentsResult {
+      data.check_extrinsics(&block)
+    }
+  }
+
+  impl sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block> for Runtime {
+    fn validate_transaction(
+      source: sp_runtime::transaction_validity::TransactionSource,
+      tx: <Block as sp_runtime::traits::Block>::Extrinsic,
+      block_hash: <Block as sp_runtime::traits::Block>::Hash,
+    ) -> sp_runtime::transaction_validity::TransactionValidity {
+      Executive::validate_transaction(source, tx, block_hash)
+    }
+  }
+
+  impl sp_consensus_babe::BabeApi<Block> for Runtime {
+    fn configuration() -> sp_consensus_babe::BabeConfiguration {
+      use frame_support::traits::Get;
+
+      let epoch_config = Babe::epoch_config().unwrap_or(BABE_GENESIS_EPOCH_CONFIG);
+      sp_consensus_babe::BabeConfiguration {
+        slot_duration: Babe::slot_duration(),
+        epoch_length: <Runtime as pallet_babe::Config>::EpochDuration::get(),
+        c: epoch_config.c,
+        authorities: Babe::authorities().to_vec(),
+        randomness: Babe::randomness(),
+        allowed_slots: epoch_config.allowed_slots,
+      }
+    }
+
+    fn current_epoch_start() -> sp_consensus_babe::Slot {
+      Babe::current_epoch_start()
+    }
+
+    fn current_epoch() -> sp_consensus_babe::Epoch {
+      Babe::current_epoch()
+    }
+
+    fn next_epoch() -> sp_consensus_babe::Epoch {
+      Babe::next_epoch()
+    }
+
+    // TODO: Revisit
+    fn generate_key_ownership_proof(
+      _slot: sp_consensus_babe::Slot,
+      _authority_id: pallet_babe::AuthorityId,
+    ) -> Option<sp_consensus_babe::OpaqueKeyOwnershipProof> {
+      None
+    }
+
+    // TODO: Revisit
+    fn submit_report_equivocation_unsigned_extrinsic(
+      equivocation_proof: sp_consensus_babe::EquivocationProof<Header>,
+      _: sp_consensus_babe::OpaqueKeyOwnershipProof,
+    ) -> Option<()> {
+      None
+    }
+  }
+
+  impl sp_consensus_grandpa::GrandpaApi<Block> for Runtime {
+    fn grandpa_authorities() -> sp_consensus_grandpa::AuthorityList {
+      Grandpa::grandpa_authorities()
+    }
+
+    fn current_set_id() -> sp_consensus_grandpa::SetId {
+      Grandpa::current_set_id()
+    }
+
+    // TODO: Revisit
+    fn generate_key_ownership_proof(
+      _set_id: sp_consensus_grandpa::SetId,
+      _authority_id: pallet_grandpa::AuthorityId,
+    ) -> Option<sp_consensus_grandpa::OpaqueKeyOwnershipProof> {
+      None
+    }
+
+    // TODO: Revisit
+    fn submit_report_equivocation_unsigned_extrinsic(
+      equivocation_proof: sp_consensus_grandpa::EquivocationProof<
+        <Block as sp_runtime::traits::Block>::Hash,
+        u64,
+      >,
+      _: sp_consensus_grandpa::OpaqueKeyOwnershipProof,
+    ) -> Option<()> {
+      None
+    }
+  }
+
+  impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
+    fn authorities() -> Vec<sp_authority_discovery::AuthorityId> {
+      // Converts to `[u8; 32]` so it can be hashed
+      let mut all = alloc::collections::BTreeSet::<[u8; 32]>::new();
+      for network in NetworkId::all() {
+        for participant in
+          <Self as crate::runtime_decl_for_serai_api::SeraiApi<Block>>::validators(network) {
+          all.insert(participant.into());
+        }
+      }
+      all
+        .into_iter()
+        .map(|id| sp_authority_discovery::AuthorityId::from(sp_core::sr25519::Public::from(id)))
+        .collect()
+    }
+  }
+
+  impl crate::SeraiApi<Block> for Runtime {
+    fn validators(network: NetworkId) -> Vec<Public> {
+      // Returning the latest-decided, not latest and active, means the active set
+      // may fail to peer find if there isn't sufficient overlap. If a large amount reboot,
+      // forcing some validators to successfully peer find in order for the threshold to become
+      // online again, this may cause a liveness failure.
+      //
+      // This is assumed not to matter in real life, yet an interesting note.
+      let Some(session) = ValidatorSets::latest_decided_session(network) else {
+        return alloc::vec![]
+      };
+      ValidatorSets::selected_validators(ValidatorSet { network, session })
+        .map(|validator| validator.0)
+        .collect()
     }
   }
 }
@@ -406,95 +573,7 @@ impl serai_abi::TransactionContext for Context {
 }
 
 /* TODO
-use core::marker::PhantomData;
-
-// Re-export all components
-pub use serai_primitives as primitives;
-pub use primitives::{BlockNumber, Header};
-
-pub use frame_system as system;
-pub use frame_support as support;
-
-pub use pallet_timestamp as timestamp;
-
-pub use pallet_transaction_payment as transaction_payment;
-
-pub use coins_pallet as coins;
-pub use dex_pallet as dex;
-
-pub use validator_sets_pallet as validator_sets;
-
-pub use in_instructions_pallet as in_instructions;
-
-pub use signals_pallet as signals;
-
-pub use genesis_liquidity_pallet as genesis_liquidity;
-pub use emissions_pallet as emissions;
-
-pub use economic_security_pallet as economic_security;
-
-// Actually used by the runtime
-use sp_core::OpaqueMetadata;
-use sp_std::prelude::*;
-
-use sp_version::RuntimeVersion;
-#[cfg(feature = "std")]
-use sp_version::NativeVersion;
-
-use sp_runtime::{
-  create_runtime_str, generic, impl_opaque_keys, KeyTypeId,
-  traits::{Convert, BlakeTwo256, Block as BlockT},
-  transaction_validity::{TransactionSource, TransactionValidity},
-  BoundedVec, Perbill, ApplyExtrinsicResult,
-};
-
-#[allow(unused_imports)]
-use primitives::{
-  NetworkId, ExternalNetworkId, PublicKey, AccountLookup, SubstrateAmount, Coin, EXTERNAL_NETWORKS,
-  MEDIAN_PRICE_WINDOW_LENGTH, HOURS, DAYS, MINUTES, TARGET_BLOCK_TIME, BLOCK_SIZE,
-  FAST_EPOCH_DURATION,
-};
-
-use support::{
-  traits::{ConstU8, ConstU16, ConstU32, ConstU64, Contains},
-  weights::{
-    constants::{RocksDbWeight, WEIGHT_REF_TIME_PER_SECOND},
-    IdentityFee, Weight,
-  },
-  parameter_types, construct_runtime,
-};
-
 use validator_sets::MembershipProof;
-
-use sp_authority_discovery::AuthorityId as AuthorityDiscoveryId;
-use babe::AuthorityId as BabeId;
-use grandpa::AuthorityId as GrandpaId;
-
-/// A hash of some data used by the chain.
-pub type Hash = sp_core::H256;
-
-pub type SignedExtra = (
-  system::CheckNonZeroSender<Runtime>,
-  system::CheckWeight<Runtime>, TODO
-);
-
-pub mod opaque {
-  use super::*;
-
-  impl_opaque_keys! {
-    pub struct SessionKeys {
-      pub babe: Babe,
-      pub grandpa: Grandpa,
-    }
-  }
-}
-
-pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
-pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
-  sp_consensus_babe::BabeEpochConfiguration {
-    c: PRIMARY_PROBABILITY,
-    allowed_slots: sp_consensus_babe::AllowedSlots::PrimaryAndSecondaryPlainSlots,
-  };
 
 const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
 
@@ -589,33 +668,6 @@ impl pallet_authorship::Config for Runtime {
 /// Longevity of an offence report.
 pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
 
-construct_runtime!(
-  pub enum Runtime {
-    System: system exclude_parts { Call },
-
-    Timestamp: timestamp,
-
-    TransactionPayment: transaction_payment,
-
-    Coins: coins,
-    LiquidityTokens: coins::<Instance1>::{Pallet, Call, Storage, Event<T>},
-    Dex: dex,
-
-    ValidatorSets: validator_sets,
-    GenesisLiquidity: genesis_liquidity,
-    Emissions: emissions,
-
-    EconomicSecurity: economic_security,
-
-    InInstructions: in_instructions,
-
-    Signals: signals,
-
-    Babe: babe,
-    Grandpa: grandpa,
-  }
-);
-
 #[cfg(feature = "runtime-benchmarks")]
 #[macro_use]
 extern crate frame_benchmarking;
@@ -637,229 +689,7 @@ mod benches {
 }
 
 sp_api::impl_runtime_apis! {
-  impl sp_api::Core<Block> for Runtime {
-    fn version() -> RuntimeVersion {
-      VERSION
-    }
-
-    fn execute_block(block: Block) {
-      Executive::execute_block(block);
-    }
-
-    fn initialize_block(header: &Header) {
-      Executive::initialize_block(header)
-    }
-  }
-
-  impl sp_api::Metadata<Block> for Runtime {
-    fn metadata() -> OpaqueMetadata {
-      OpaqueMetadata::new(Runtime::metadata().into())
-    }
-
-    fn metadata_at_version(version: u32) -> Option<OpaqueMetadata> {
-      Runtime::metadata_at_version(version)
-    }
-
-    fn metadata_versions() -> sp_std::vec::Vec<u32> {
-      Runtime::metadata_versions()
-    }
-  }
-
-  impl sp_block_builder::BlockBuilder<Block> for Runtime {
-    fn apply_extrinsic(extrinsic: <Block as BlockT>::Extrinsic) -> ApplyExtrinsicResult {
-      Executive::apply_extrinsic(extrinsic)
-    }
-
-    fn finalize_block() -> Header {
-      Executive::finalize_block()
-    }
-
-    fn inherent_extrinsics(data: sp_inherents::InherentData) -> Vec<<Block as BlockT>::Extrinsic> {
-      data.create_extrinsics()
-    }
-
-    fn check_inherents(
-      block: Block,
-      data: sp_inherents::InherentData,
-    ) -> sp_inherents::CheckInherentsResult {
-      data.check_extrinsics(&block)
-    }
-  }
-
-  impl sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block> for Runtime {
-    fn validate_transaction(
-      source: TransactionSource,
-      tx: <Block as BlockT>::Extrinsic,
-      block_hash: <Block as BlockT>::Hash,
-    ) -> TransactionValidity {
-      Executive::validate_transaction(source, tx, block_hash)
-    }
-  }
-
-  impl sp_offchain::OffchainWorkerApi<Block> for Runtime {
-    fn offchain_worker(header: &Header) {
-      Executive::offchain_worker(header)
-    }
-  }
-
-  impl sp_session::SessionKeys<Block> for Runtime {
-    fn generate_session_keys(seed: Option<Vec<u8>>) -> Vec<u8> {
-      opaque::SessionKeys::generate(seed)
-    }
-
-    fn decode_session_keys(
-      encoded: Vec<u8>,
-    ) -> Option<Vec<(Vec<u8>, KeyTypeId)>> {
-      opaque::SessionKeys::decode_into_raw_public_keys(&encoded)
-    }
-  }
-
-  impl sp_consensus_babe::BabeApi<Block> for Runtime {
-    fn configuration() -> sp_consensus_babe::BabeConfiguration {
-      use support::traits::Get;
-
-      let epoch_config = Babe::epoch_config().unwrap_or(BABE_GENESIS_EPOCH_CONFIG);
-      sp_consensus_babe::BabeConfiguration {
-        slot_duration: Babe::slot_duration(),
-        epoch_length: <Runtime as babe::Config>::EpochDuration::get(),
-        c: epoch_config.c,
-        authorities: Babe::authorities().to_vec(),
-        randomness: Babe::randomness(),
-        allowed_slots: epoch_config.allowed_slots,
-      }
-    }
-
-    fn current_epoch_start() -> sp_consensus_babe::Slot {
-      Babe::current_epoch_start()
-    }
-
-    fn current_epoch() -> sp_consensus_babe::Epoch {
-      Babe::current_epoch()
-    }
-
-    fn next_epoch() -> sp_consensus_babe::Epoch {
-      Babe::next_epoch()
-    }
-
-    // This refers to a key being 'owned' by an authority in a system with multiple keys per
-    // validator
-    // Since we do not have such an infrastructure, we do not need this
-    fn generate_key_ownership_proof(
-      _slot: sp_consensus_babe::Slot,
-      _authority_id: BabeId,
-    ) -> Option<sp_consensus_babe::OpaqueKeyOwnershipProof> {
-      Some(sp_consensus_babe::OpaqueKeyOwnershipProof::new(vec![]))
-    }
-
-    fn submit_report_equivocation_unsigned_extrinsic(
-      equivocation_proof: sp_consensus_babe::EquivocationProof<Header>,
-      _: sp_consensus_babe::OpaqueKeyOwnershipProof,
-    ) -> Option<()> {
-      let proof = MembershipProof(equivocation_proof.offender.clone().into(), PhantomData);
-      Babe::submit_unsigned_equivocation_report(equivocation_proof, proof)
-    }
-  }
-
-  impl sp_consensus_grandpa::GrandpaApi<Block> for Runtime {
-    fn grandpa_authorities() -> sp_consensus_grandpa::AuthorityList {
-      Grandpa::grandpa_authorities()
-    }
-
-    fn current_set_id() -> sp_consensus_grandpa::SetId {
-      Grandpa::current_set_id()
-    }
-
-    fn generate_key_ownership_proof(
-      _set_id: sp_consensus_grandpa::SetId,
-      _authority_id: GrandpaId,
-    ) -> Option<sp_consensus_grandpa::OpaqueKeyOwnershipProof> {
-      Some(sp_consensus_grandpa::OpaqueKeyOwnershipProof::new(vec![]))
-    }
-
-    fn submit_report_equivocation_unsigned_extrinsic(
-      equivocation_proof: sp_consensus_grandpa::EquivocationProof<<Block as BlockT>::Hash, u64>,
-      _: sp_consensus_grandpa::OpaqueKeyOwnershipProof,
-    ) -> Option<()> {
-      let proof = MembershipProof(equivocation_proof.offender().clone().into(), PhantomData);
-      Grandpa::submit_unsigned_equivocation_report(equivocation_proof, proof)
-    }
-  }
-
-  impl frame_system_rpc_runtime_api::AccountNonceApi<Block, PublicKey, Nonce> for Runtime {
-    fn account_nonce(account: PublicKey) -> Nonce {
-      System::account_nonce(account)
-    }
-  }
-
-  impl pallet_transaction_payment_rpc_runtime_api::TransactionPaymentApi<
-    Block,
-    SubstrateAmount
-  > for Runtime {
-    fn query_info(
-      uxt: <Block as BlockT>::Extrinsic,
-      len: u32,
-    ) -> pallet_transaction_payment_rpc_runtime_api::RuntimeDispatchInfo<SubstrateAmount> {
-      TransactionPayment::query_info(uxt, len)
-    }
-
-    fn query_fee_details(
-      uxt: <Block as BlockT>::Extrinsic,
-      len: u32,
-    ) -> transaction_payment::FeeDetails<SubstrateAmount> {
-      TransactionPayment::query_fee_details(uxt, len)
-    }
-
-    fn query_weight_to_fee(weight: Weight) -> SubstrateAmount {
-      TransactionPayment::weight_to_fee(weight)
-    }
-
-    fn query_length_to_fee(length: u32) -> SubstrateAmount {
-      TransactionPayment::length_to_fee(length)
-    }
-  }
-
-  impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
-    fn authorities() -> Vec<AuthorityDiscoveryId> {
-      // Converts to `[u8; 32]` so it can be hashed
-      let serai_validators = Babe::authorities()
-        .into_iter()
-        .map(|(id, _)| id.into_inner().0)
-        .collect::<hashbrown::HashSet<_>>();
-      let mut all = serai_validators;
-      for network in EXTERNAL_NETWORKS {
-        // Returning the latest-decided, not latest and active, means the active set
-        // may fail to peer find if there isn't sufficient overlap. If a large amount reboot,
-        // forcing some validators to successfully peer find in order for the threshold to become
-        // online again, this may cause a liveness failure.
-        //
-        // This is assumed not to matter in real life, yet an interesting note.
-        let participants =
-          ValidatorSets::participants_for_latest_decided_set(NetworkId::from(network))
-            .map_or(vec![], BoundedVec::into_inner);
-        for (participant, _) in participants {
-          all.insert(participant.0);
-        }
-      }
-      all.into_iter().map(|id| AuthorityDiscoveryId::from(PublicKey::from_raw(id))).collect()
-    }
-  }
-
   impl validator_sets::ValidatorSetsApi<Block> for Runtime {
-    fn validators(network_id: NetworkId) -> Vec<PublicKey> {
-      if network_id == NetworkId::Serai {
-        Babe::authorities()
-          .into_iter()
-          .map(|(id, _)| id.into_inner())
-          .collect()
-      } else {
-        ValidatorSets::participants_for_latest_decided_set(network_id)
-          .map_or(
-            vec![],
-            |vec| vec.into_inner().into_iter().map(|(validator, _)| validator).collect()
-          )
-      }
-    }
-
     fn external_network_key(network: ExternalNetworkId) -> Option<Vec<u8>> {
       ValidatorSets::external_network_key(network)
     }

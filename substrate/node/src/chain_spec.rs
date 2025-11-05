@@ -1,4 +1,4 @@
-#![expect(unused_imports, dead_code, redundant_closure_call)]
+#![expect(unused_imports, dead_code)]
 
 use core::marker::PhantomData;
 
@@ -10,103 +10,94 @@ use ciphersuite::{group::GroupEncoding, Ciphersuite};
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 
-use serai_runtime::{
-  primitives::*, validator_sets::AllEmbeddedEllipticCurveKeysAtGenesis, WASM_BINARY,
-  BABE_GENESIS_EPOCH_CONFIG, RuntimeGenesisConfig, SystemConfig, CoinsConfig, ValidatorSetsConfig,
-  SignalsConfig, BabeConfig, GrandpaConfig, EmissionsConfig,
+use serai_abi::{
+  primitives::{
+    prelude::*,
+    crypto::{Public, SignedEmbeddedEllipticCurveKeys},
+  },
+  SubstrateBlock as Block,
 };
+use serai_runtime::*;
 
 pub type ChainSpec = sc_service::GenericChainSpec;
 
-fn account_from_name(name: &'static str) -> PublicKey {
-  insecure_pair_from_name(name).public()
+fn insecure_account_from_name(name: &'static str) -> Public {
+  sp_core::sr25519::Pair::from_string(&format!("//{name}"), None).unwrap().public().into()
 }
 
 fn insecure_arbitrary_public_key_from_name<C: Ciphersuite>(name: &'static str) -> Vec<u8> {
-  let key = insecure_arbitrary_key_from_name::<C>(name);
+  let key = C::hash_to_F(name.as_bytes());
   (C::generator() * key).to_bytes().as_ref().to_vec()
+}
+
+fn insecure_embedded_elliptic_curve_keys_from_name(
+  name: &'static str,
+) -> Vec<SignedEmbeddedEllipticCurveKeys> {
+  vec![] // TODO
 }
 
 fn wasm_binary() -> Vec<u8> {
   // TODO: Accept a config of runtime path
-  const WASM_PATH: &str = "/runtime/serai.wasm";
-  if let Ok(binary) = std::fs::read(WASM_PATH) {
-    log::info!("using {WASM_PATH}");
+  const DEFAULT_WASM_PATH: &str = "/runtime/serai.wasm";
+  let path = serai_env::var("SERAI_WASM").unwrap_or(DEFAULT_WASM_PATH.to_string());
+  if let Ok(binary) = std::fs::read(&path) {
+    log::info!("using {path} for the WASM");
     return binary;
   }
   log::info!("using built-in wasm");
   WASM_BINARY.ok_or("compiled in wasm not available").unwrap().to_vec()
 }
 
-/*
 fn devnet_genesis(
   validators: &[&'static str],
-  endowed_accounts: Vec<PublicKey>,
+  endowed_accounts: Vec<Public>,
 ) -> RuntimeGenesisConfig {
   let validators = validators
     .iter()
     .map(|name| {
-      (
-        account_from_name(name),
-        AllEmbeddedEllipticCurveKeysAtGenesis {
-          embedwards25519: insecure_arbitrary_public_key_from_name::<Embedwards25519>(name)
-            .try_into()
-            .unwrap(),
-          secq256k1: insecure_arbitrary_public_key_from_name::<Secq256k1>(name).try_into().unwrap(),
-        },
-      )
-    })
-    .collect::<Vec<_>>();
-  let key_shares = NETWORKS
-    .iter()
-    .map(|network| match network {
-      NetworkId::Serai => (NetworkId::Serai, Amount(50_000 * 10_u64.pow(8))),
-      NetworkId::External(ExternalNetworkId::Bitcoin) => {
-        (NetworkId::External(ExternalNetworkId::Bitcoin), Amount(1_000_000 * 10_u64.pow(8)))
-      }
-      NetworkId::External(ExternalNetworkId::Ethereum) => {
-        (NetworkId::External(ExternalNetworkId::Ethereum), Amount(1_000_000 * 10_u64.pow(8)))
-      }
-      NetworkId::External(ExternalNetworkId::Monero) => {
-        (NetworkId::External(ExternalNetworkId::Monero), Amount(100_000 * 10_u64.pow(8)))
-      }
+      (insecure_account_from_name(name), insecure_embedded_elliptic_curve_keys_from_name(name))
     })
     .collect::<Vec<_>>();
 
   RuntimeGenesisConfig {
     system: SystemConfig { _config: PhantomData },
 
-    transaction_payment: Default::default(),
-
     coins: CoinsConfig {
       accounts: endowed_accounts
         .into_iter()
-        .map(|a| (a, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
+        .map(|address| (address.into(), Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
         .collect(),
-      _ignore: Default::default(),
+      _instance: PhantomData,
     },
 
+    liquidity_tokens: LiquidityTokensConfig { accounts: vec![], _instance: PhantomData },
+
     validator_sets: ValidatorSetsConfig {
-      networks: key_shares.clone(),
-      participants: validators.clone(),
-    },
-    emissions: EmissionsConfig {
-      networks: key_shares,
-      participants: validators.iter().map(|(validator, _)| *validator).collect(),
+      participants: validators
+        .iter()
+        .map(|validator| (validator.0.into(), validator.1.clone()))
+        .collect(),
     },
     signals: SignalsConfig::default(),
     babe: BabeConfig {
-      authorities: validators.iter().map(|validator| ((*validator).into(), 1)).collect(),
+      authorities: validators
+        .iter()
+        .map(|validator| (sp_core::sr25519::Public::from(validator.0).into(), 1))
+        .collect(),
       epoch_config: BABE_GENESIS_EPOCH_CONFIG,
       _config: PhantomData,
     },
     grandpa: GrandpaConfig {
-      authorities: validators.into_iter().map(|validator| (validator.0.into(), 1)).collect(),
+      authorities: validators
+        .into_iter()
+        .map(|validator| (sp_core::sr25519::Public::from(validator.0).into(), 1))
+        .collect(),
       _config: PhantomData,
     },
   }
 }
 
+/*
 fn testnet_genesis(validators: Vec<&'static str>) -> RuntimeGenesisConfig {
   let validators = validators
     .into_iter()
@@ -133,21 +124,16 @@ fn testnet_genesis(validators: Vec<&'static str>) -> RuntimeGenesisConfig {
   RuntimeGenesisConfig {
     system: SystemConfig { _config: PhantomData },
 
-    transaction_payment: Default::default(),
-
     coins: CoinsConfig {
       accounts: validators
         .iter()
         .map(|a| (*a, Balance { coin: Coin::Serai, amount: Amount(5_000_000 * 10_u64.pow(8)) }))
         .collect(),
-      _ignore: Default::default(),
     },
 
     validator_sets: ValidatorSetsConfig {
-      networks: key_shares.clone(),
       participants: validators.clone(),
     },
-    emissions: EmissionsConfig { networks: key_shares, participants: validators.clone() },
     signals: SignalsConfig::default(),
     babe: BabeConfig {
       authorities: validators.iter().map(|validator| ((*validator).into(), 1)).collect(),
@@ -212,22 +198,17 @@ pub fn development_config() -> ChainSpec {
     "devnet",
     ChainType::Development,
     "serai-devnet",
-    &(move || {
-      /*
-      let _ = devnet_genesis(
-        &["Alice"],
-        vec![
-          account_from_name("Alice"),
-          account_from_name("Bob"),
-          account_from_name("Charlie"),
-          account_from_name("Dave"),
-          account_from_name("Eve"),
-          account_from_name("Ferdie"),
-        ],
-      );
-      */
-      todo!("TODO")
-    })(),
+    &devnet_genesis(
+      &["Alice"],
+      vec![
+        insecure_account_from_name("Alice"),
+        insecure_account_from_name("Bob"),
+        insecure_account_from_name("Charlie"),
+        insecure_account_from_name("Dave"),
+        insecure_account_from_name("Eve"),
+        insecure_account_from_name("Ferdie"),
+      ],
+    ),
   )
 }
 
@@ -237,22 +218,17 @@ pub fn local_config() -> ChainSpec {
     "local",
     ChainType::Local,
     "serai-local",
-    &(move || {
-      /*
-      let _ = devnet_genesis(
-        &["Alice", "Bob", "Charlie", "Dave"],
-        vec![
-          account_from_name("Alice"),
-          account_from_name("Bob"),
-          account_from_name("Charlie"),
-          account_from_name("Dave"),
-          account_from_name("Eve"),
-          account_from_name("Ferdie"),
-        ],
-      );
-      */
-      todo!("TODO")
-    })(),
+    &devnet_genesis(
+      &["Alice", "Bob", "Charlie", "Dave"],
+      vec![
+        insecure_account_from_name("Alice"),
+        insecure_account_from_name("Bob"),
+        insecure_account_from_name("Charlie"),
+        insecure_account_from_name("Dave"),
+        insecure_account_from_name("Eve"),
+        insecure_account_from_name("Ferdie"),
+      ],
+    ),
   )
 }
 

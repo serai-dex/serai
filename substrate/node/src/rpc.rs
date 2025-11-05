@@ -9,20 +9,12 @@ use sp_blockchain::{Error as BlockchainError, HeaderBackend, HeaderMetadata};
 use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
 
-use serai_runtime::{
-  in_instructions::primitives::Shorthand,
-  primitives::{ExternalNetworkId, NetworkId, PublicKey, SubstrateAmount, QuotePriceParams},
-  // validator_sets::ValidatorSetsApi,
-  dex::DexApi,
-  Block,
-  Nonce,
-  SeraiRuntimeApi,
-};
+use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
+use serai_runtime::*;
 
 use tokio::sync::RwLock;
 
 use jsonrpsee::RpcModule;
-// use scale::Encode;
 
 use sc_client_api::BlockBackend;
 use sc_transaction_pool_api::TransactionPool;
@@ -35,36 +27,19 @@ pub struct FullDeps<C, P> {
 }
 
 pub fn create_full<
-  C: ProvideRuntimeApi<Block>
-    + HeaderBackend<Block>
-    + HeaderMetadata<Block, Error = BlockchainError>
-    + BlockBackend<Block>
+  C: 'static
     + Send
     + Sync
-    + 'static,
-  P: TransactionPool + 'static,
+    + ProvideRuntimeApi<Block, Api: BlockBuilder<Block> + serai_runtime::SeraiApi<Block>>
+    + HeaderBackend<Block>
+    + HeaderMetadata<Block, Error = BlockchainError>
+    + BlockBackend<Block>,
+  P: 'static + TransactionPool,
 >(
   deps: FullDeps<C, P>,
-) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>>
-where
-  C::Api: frame_system_rpc_runtime_api::AccountNonceApi<Block, PublicKey, Nonce>
-    + pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, SubstrateAmount>
-    + SeraiRuntimeApi<Block>
-    + DexApi<Block>
-    + BlockBuilder<Block>,
-{
-  use substrate_frame_rpc_system::{System, SystemApiServer};
-  use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
-  use ciphersuite::{GroupIo, WithPreferredHash};
-  use ciphersuite_kp256::{k256::elliptic_curve::point::AffineCoordinates, Secp256k1};
-  use dalek_ff_group::Ed25519;
-  use bitcoin_serai::bitcoin;
-
+) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>> {
   let mut module = RpcModule::new(());
   let FullDeps { id, client, pool, authority_discovery } = deps;
-
-  module.merge(System::new(client.clone(), pool).into_rpc())?;
-  module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 
   if let Some(authority_discovery) = authority_discovery {
     let mut authority_discovery_module =
@@ -72,13 +47,24 @@ where
     authority_discovery_module.register_async_method(
       "p2p_validators",
       |params, context, _ext| async move {
-        let [network]: [NetworkId; 1] = params.parse()?;
+        let [network]: [String; 1] = params.parse()?;
+        let network = match network.to_lowercase().as_str() {
+          "serai" => NetworkId::Serai,
+          "bitcoin" => ExternalNetworkId::Bitcoin.into(),
+          "ethereum" => ExternalNetworkId::Ethereum.into(),
+          "monero" => ExternalNetworkId::Monero.into(),
+          _ => Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+            -1,
+            "network to fetch the `p2p_validators` of was unrecognized".to_string(),
+            Option::<()>::None,
+          ))?,
+        };
         let (id, client, authority_discovery) = &*context;
         let latest_block = client.info().best_hash;
 
         let validators = client.runtime_api().validators(latest_block, network).map_err(|_| {
           jsonrpsee::types::error::ErrorObjectOwned::owned(
-            -1,
+            -2,
             format!(
               "couldn't get validators from the latest block, which is likely a fatal bug. {}",
               "please report this at https://github.com/serai-dex/serai",
@@ -122,6 +108,11 @@ where
   }
 
   /* TODO
+  use ciphersuite::{GroupIo, WithPreferredHash};
+  use ciphersuite_kp256::{k256::elliptic_curve::point::AffineCoordinates, Secp256k1};
+  use dalek_ff_group::Ed25519;
+  use bitcoin_serai::bitcoin;
+
   let mut serai_json_module = RpcModule::new(client);
 
   // add network address rpc
@@ -216,31 +207,28 @@ where
   */
 
   let mut block_bin_module = RpcModule::new(client);
-  block_bin_module.register_async_method(
-    "chain_getBlockBin",
-    |params, client, _ext| async move {
-      let [block_hash]: [String; 1] = params.parse()?;
-      let Some(block_hash) = hex::decode(&block_hash).ok().and_then(|bytes| {
-        <[u8; 32]>::try_from(bytes.as_slice())
-          .map(<Block as sp_runtime::traits::Block>::Hash::from)
-          .ok()
-      }) else {
-        return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-          -1,
-          "requested block hash wasn't a valid hash",
-          Option::<()>::None,
-        ));
-      };
-      let Some(block) = client.block(block_hash).ok().flatten() else {
-        return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-          -1,
-          "couldn't find requested block",
-          Option::<()>::None,
-        ));
-      };
-      Ok(hex::encode(block.block.encode()))
-    },
-  )?;
+  block_bin_module.register_async_method("serai_block", |params, client, _ext| async move {
+    let [block_hash]: [String; 1] = params.parse()?;
+    let Some(block_hash) = hex::decode(&block_hash).ok().and_then(|bytes| {
+      <[u8; 32]>::try_from(bytes.as_slice())
+        .map(<Block as sp_runtime::traits::Block>::Hash::from)
+        .ok()
+    }) else {
+      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+        -1,
+        "requested block hash wasn't a valid hash",
+        Option::<()>::None,
+      ));
+    };
+    let Some(block) = client.block(block_hash).ok().flatten() else {
+      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+        -1,
+        "couldn't find requested block",
+        Option::<()>::None,
+      ));
+    };
+    Ok(hex::encode(block.block.encode()))
+  })?;
   module.merge(block_bin_module)?;
 
   Ok(module)

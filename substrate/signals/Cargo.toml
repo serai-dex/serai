@@ -21,10 +21,10 @@ workspace = true
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5dfddc95c32994c1c09bd0c7a9e3633f1e5c7cc4", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "dd8f2ab6c80c609f15714f554194529116b717ef", default-features = false }
 
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5dfddc95c32994c1c09bd0c7a9e3633f1e5c7cc4", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5dfddc95c32994c1c09bd0c7a9e3633f1e5c7cc4", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "dd8f2ab6c80c609f15714f554194529116b717ef", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "dd8f2ab6c80c609f15714f554194529116b717ef", default-features = false }
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
 
