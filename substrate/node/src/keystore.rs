@@ -5,6 +5,12 @@ use sp_keystore::*;
 
 pub struct Keystore(sr25519::Pair);
 
+impl From<sr25519::Pair> for Keystore {
+  fn from(keypair: sr25519::Pair) -> Self {
+    Self(keypair)
+  }
+}
+
 impl Keystore {
   pub fn from_env() -> Option<Self> {
     let mut key_hex = serai_env::var("KEY")?;

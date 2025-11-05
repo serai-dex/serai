@@ -1,12 +1,15 @@
-#![expect(unused_imports, dead_code)]
-
 use core::marker::PhantomData;
 
 use sp_core::Pair as PairTrait;
 
 use sc_service::ChainType;
 
-use ciphersuite::{group::GroupEncoding, Ciphersuite};
+use rand_core::OsRng;
+use zeroize::Zeroizing;
+use ciphersuite::{
+  group::{ff::Field, GroupEncoding},
+  WrappedGroup, Ciphersuite,
+};
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 
@@ -25,15 +28,28 @@ fn insecure_account_from_name(name: &'static str) -> Public {
   sp_core::sr25519::Pair::from_string(&format!("//{name}"), None).unwrap().public().into()
 }
 
-fn insecure_arbitrary_public_key_from_name<C: Ciphersuite>(name: &'static str) -> Vec<u8> {
-  let key = C::hash_to_F(name.as_bytes());
-  (C::generator() * key).to_bytes().as_ref().to_vec()
-}
-
-fn insecure_embedded_elliptic_curve_keys_from_name(
+fn insecure_embedded_elliptic_curve_keys(
   name: &'static str,
 ) -> Vec<SignedEmbeddedEllipticCurveKeys> {
-  vec![] // TODO
+  vec![
+    SignedEmbeddedEllipticCurveKeys::bitcoin(
+      &mut OsRng,
+      insecure_account_from_name(name),
+      &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
+      &Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut OsRng)),
+    ),
+    SignedEmbeddedEllipticCurveKeys::ethereum(
+      &mut OsRng,
+      insecure_account_from_name(name),
+      &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
+      &Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut OsRng)),
+    ),
+    SignedEmbeddedEllipticCurveKeys::monero(
+      &mut OsRng,
+      insecure_account_from_name(name),
+      &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
+    ),
+  ]
 }
 
 fn wasm_binary() -> Vec<u8> {
@@ -54,9 +70,7 @@ fn devnet_genesis(
 ) -> RuntimeGenesisConfig {
   let validators = validators
     .iter()
-    .map(|name| {
-      (insecure_account_from_name(name), insecure_embedded_elliptic_curve_keys_from_name(name))
-    })
+    .map(|name| (insecure_account_from_name(name), insecure_embedded_elliptic_curve_keys(name)))
     .collect::<Vec<_>>();
 
   RuntimeGenesisConfig {
@@ -80,20 +94,12 @@ fn devnet_genesis(
     },
     signals: SignalsConfig::default(),
     babe: BabeConfig {
-      authorities: validators
-        .iter()
-        .map(|validator| (sp_core::sr25519::Public::from(validator.0).into(), 1))
-        .collect(),
+      // We leave this empty as `serai-validator-sets-pallet` initializes the authorities
+      authorities: vec![],
       epoch_config: BABE_GENESIS_EPOCH_CONFIG,
       _config: PhantomData,
     },
-    grandpa: GrandpaConfig {
-      authorities: validators
-        .into_iter()
-        .map(|validator| (sp_core::sr25519::Public::from(validator.0).into(), 1))
-        .collect(),
-      _config: PhantomData,
-    },
+    grandpa: GrandpaConfig { authorities: vec![], _config: PhantomData },
   }
 }
 

@@ -57,12 +57,18 @@ frame_support::parameter_types! {
 
   // TODO
   pub BlockLength: frame_system::limits::BlockLength =
-    frame_system::limits::BlockLength::max_with_normal_ratio(0, Perbill::from_percent(0));
+    frame_system::limits::BlockLength::max_with_normal_ratio(
+      100 * 1024,
+      Perbill::from_percent(75),
+    );
   // TODO
   pub BlockWeights: frame_system::limits::BlockWeights =
     frame_system::limits::BlockWeights::with_sensible_defaults(
-      Weight::from_parts(0, 0),
-      Perbill::from_percent(0),
+      Weight::from_parts(
+        2u64 * frame_support::weights::constants::WEIGHT_REF_TIME_PER_SECOND,
+        u64::MAX,
+      ),
+      Perbill::from_percent(75),
     );
 }
 
@@ -161,7 +167,7 @@ impl serai_validator_sets_pallet::Config for Runtime {
 }
 impl serai_signals_pallet::Config for Runtime {
   type RetirementValidityDuration = ConstU64<0>; // TODO
-  type RetirementLockInDuration = ConstU64<0>; // TODO
+  type RetirementLockInDuration = ConstU64<1>; // TODO
 }
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
@@ -177,7 +183,8 @@ impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
 impl pallet_timestamp::Config for Runtime {
   type Moment = u64;
   type OnTimestampSet = Babe;
-  type MinimumPeriod = ConstU64<0>; // TODO
+  // TODO
+  type MinimumPeriod = ConstU64<{ (6 * 1000) / 2 }>;
   type WeightInfo = ();
 }
 
@@ -197,9 +204,10 @@ impl pallet_session::Config for Runtime {
 type MaxAuthorities =
   ConstU32<{ serai_abi::primitives::validator_sets::KeyShares::MAX_PER_SET_U32 }>;
 impl pallet_babe::Config for Runtime {
-  type EpochDuration = ConstU64<0>; // TODO
+  // TODO
+  type EpochDuration = ConstU64<{ (7 * 24 * 60 * 60 * 1000) / (6 * 1000) }>;
 
-  type ExpectedBlockTime = ConstU64<0>; // TODO
+  type ExpectedBlockTime = ConstU64<{ 6 * 1000 }>; // TODO
   type EpochChangeTrigger = pallet_babe::ExternalTrigger;
 
   type WeightInfo = ();
@@ -341,7 +349,13 @@ pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
 sp_api::impl_runtime_apis! {
   impl crate::GenesisApi<Block> for Runtime {
     fn build(genesis: RuntimeGenesisConfig) {
-      <RuntimeGenesisConfig as frame_support::traits::BuildGenesisConfig>::build(&genesis)
+      Core::genesis();
+      Core::start_transaction();
+      <RuntimeGenesisConfig as frame_support::traits::BuildGenesisConfig>::build(&genesis);
+      Core::end_transaction([0; 32]);
+      <
+        serai_core_pallet::EndOfBlock<Runtime> as frame_support::traits::PostTransactions
+      >::post_transactions();
     }
   }
 

@@ -92,6 +92,11 @@ pub fn new_partial(
   let keystore: Arc<dyn sp_keystore::Keystore> =
     if let Some(keystore) = crate::keystore::Keystore::from_env() {
       Arc::new(keystore)
+    } else if let Some(seed) = config.dev_key_seed.as_ref() {
+      Arc::new(crate::keystore::Keystore::from(
+        <sp_core::sr25519::Pair as sp_core::Pair>::from_string(seed, None)
+          .expect("dev key had invalid seed"),
+      ))
     } else {
       keystore_container.keystore()
     };
@@ -288,10 +293,6 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 
   let role = config.role;
   let keystore = keystore_container;
-  if let Some(seed) = config.dev_key_seed.as_ref() {
-    let _ =
-      keystore.sr25519_generate_new(sp_core::crypto::key_types::AUTHORITY_DISCOVERY, Some(seed));
-  }
   let prometheus_registry = config.prometheus_registry().cloned();
 
   // TODO: Ensure we're considered as an authority is a validator of an external network

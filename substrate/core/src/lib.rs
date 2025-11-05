@@ -98,6 +98,13 @@ pub mod pallet {
       });
     }
 
+    /// The code to run on genesis.
+    pub fn genesis() {
+      BlocksCommitmentMerkle::<T>::new_expecting_none();
+      BlockTransactionsCommitmentMerkle::<T>::new_expecting_none();
+      BlockEventsCommitmentMerkle::<T>::new_expecting_none();
+    }
+
     /// The code to run when beginning execution of a transaction.
     ///
     /// The caller MUST ensure two transactions aren't simultaneously started.
@@ -126,6 +133,7 @@ pub mod pallet {
     /// Fetch all of Serai's events.
     ///
     /// This MUST only be used for testing purposes.
+    #[cfg(any(feature = "std", feature = "runtime-benchmarks", test))]
     pub fn events() -> Vec<serai_abi::Event>
     where
       serai_abi::Event: TryFrom<T::RuntimeEvent>,
@@ -144,15 +152,13 @@ pub struct StartOfBlock<T: Config>(PhantomData<T>);
 impl<T: Config> frame_support::traits::PreInherents for StartOfBlock<T> {
   fn pre_inherents() {
     use frame_support::pallet_prelude::Zero;
+    // `Pallet::genesis` is expected to be used for the genesis block
+    assert!(!frame_system::Pallet::<T>::block_number().is_zero());
 
-    if frame_system::Pallet::<T>::block_number().is_zero() {
-      BlocksCommitmentMerkle::<T>::new_expecting_none();
-    } else {
-      let parent_hash = frame_system::Pallet::<T>::parent_hash();
-      Blocks::<T>::set(parent_hash, Some(()));
-      let parent_hash: [u8; 32] = parent_hash.into();
-      BlocksCommitmentMerkle::<T>::append(&parent_hash);
-    }
+    let parent_hash = frame_system::Pallet::<T>::parent_hash();
+    Blocks::<T>::set(parent_hash, Some(()));
+    let parent_hash: [u8; 32] = parent_hash.into();
+    BlocksCommitmentMerkle::<T>::append(&parent_hash);
 
     BlockTransactionsCommitmentMerkle::<T>::new_expecting_none();
     BlockEventsCommitmentMerkle::<T>::new_expecting_none();

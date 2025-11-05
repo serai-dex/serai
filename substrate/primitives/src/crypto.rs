@@ -1,10 +1,17 @@
-use zeroize::Zeroize;
+use core::ops::Deref;
+
+use rand_core::{RngCore, CryptoRng};
+
+use zeroize::{Zeroize, Zeroizing};
 use borsh::{io, BorshSerialize, BorshDeserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
 
 use ciphersuite::{
-  group::{ff::FromUniformBytes, GroupEncoding},
+  group::{
+    ff::{Field, PrimeField, FromUniformBytes},
+    GroupEncoding,
+  },
   WrappedGroup, GroupCanonicalEncoding,
 };
 use embedwards25519::Embedwards25519;
@@ -211,9 +218,7 @@ impl SignedEmbeddedEllipticCurveKeys {
     }
   }
 
-  /// Verify these key(s)' signature(s), returning the key(s) if valid.
-  pub fn verify(self, validator: Public) -> Option<EmbeddedEllipticCurveKeys> {
-    // Sample a unified challenge
+  fn transcript(&self, validator: Public) -> [u8; 64] {
     let transcript = match &self {
       Self::Bitcoin(e, s, e_sig, s_sig) => [
         [ExternalNetworkId::Bitcoin as u8].as_slice(),
@@ -237,7 +242,12 @@ impl SignedEmbeddedEllipticCurveKeys {
         [[ExternalNetworkId::Monero as u8].as_slice(), &validator.0, e, &e_sig[.. 32]].concat()
       }
     };
-    let challenge = sp_core::hashing::blake2_512(&transcript);
+    sp_core::hashing::blake2_512(&transcript)
+  }
+
+  /// Verify these key(s)' signature(s), returning the key(s) if valid.
+  pub fn verify(self, validator: Public) -> Option<EmbeddedEllipticCurveKeys> {
+    let challenge = self.transcript(validator);
 
     // Verify the Schnorr signatures
     match &self {
@@ -274,6 +284,137 @@ impl SignedEmbeddedEllipticCurveKeys {
       Self::Ethereum(e, s, _, _) => EmbeddedEllipticCurveKeys::Ethereum(e, s),
       Self::Monero(e, _) => EmbeddedEllipticCurveKeys::Monero(e),
     })
+  }
+
+  #[doc(hidden)]
+  pub fn bitcoin(
+    rng: &mut (impl RngCore + CryptoRng),
+    validator: Public,
+    embedwards25519: &Zeroizing<<Embedwards25519 as WrappedGroup>::F>,
+    secq256k1: &Zeroizing<<Secq256k1 as WrappedGroup>::F>,
+  ) -> Self {
+    let em_public_key =
+      (<Embedwards25519 as WrappedGroup>::generator() * embedwards25519.deref()).to_bytes();
+    let em_nonce = Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut *rng));
+    let em_nonce_commitment = <Embedwards25519 as WrappedGroup>::generator() * em_nonce.deref();
+    let mut em_sig = [0; 64];
+    em_sig[.. 32].copy_from_slice(em_nonce_commitment.to_bytes().as_ref());
+
+    let secq_public_key = (<Secq256k1 as WrappedGroup>::generator() * secq256k1.deref()).to_bytes();
+    let secq_nonce = Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut *rng));
+    let secq_nonce_commitment = <Secq256k1 as WrappedGroup>::generator() * secq_nonce.deref();
+    let mut secq_sig = [0; 65];
+    secq_sig[.. 33].copy_from_slice(secq_nonce_commitment.to_bytes().as_ref());
+
+    let challenge =
+      SignedEmbeddedEllipticCurveKeys::Bitcoin(em_public_key, secq_public_key, em_sig, secq_sig)
+        .transcript(validator);
+
+    em_sig[32 ..].copy_from_slice(
+      SchnorrSignature::<Embedwards25519>::sign(
+        embedwards25519,
+        em_nonce,
+        <<Embedwards25519 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(
+          &challenge,
+        ),
+      )
+      .s
+      .to_repr()
+      .as_ref(),
+    );
+
+    secq_sig[33 ..].copy_from_slice(
+      SchnorrSignature::<Secq256k1>::sign(
+        secq256k1,
+        secq_nonce,
+        <<Secq256k1 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(&challenge),
+      )
+      .s
+      .to_repr()
+      .as_ref(),
+    );
+
+    SignedEmbeddedEllipticCurveKeys::Bitcoin(em_public_key, secq_public_key, em_sig, secq_sig)
+  }
+
+  #[doc(hidden)]
+  pub fn ethereum(
+    rng: &mut (impl RngCore + CryptoRng),
+    validator: Public,
+    embedwards25519: &Zeroizing<<Embedwards25519 as WrappedGroup>::F>,
+    secq256k1: &Zeroizing<<Secq256k1 as WrappedGroup>::F>,
+  ) -> Self {
+    let em_public_key =
+      (<Embedwards25519 as WrappedGroup>::generator() * embedwards25519.deref()).to_bytes();
+    let em_nonce = Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut *rng));
+    let em_nonce_commitment = <Embedwards25519 as WrappedGroup>::generator() * em_nonce.deref();
+    let mut em_sig = [0; 64];
+    em_sig[.. 32].copy_from_slice(em_nonce_commitment.to_bytes().as_ref());
+
+    let secq_public_key = (<Secq256k1 as WrappedGroup>::generator() * secq256k1.deref()).to_bytes();
+    let secq_nonce = Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut *rng));
+    let secq_nonce_commitment = <Secq256k1 as WrappedGroup>::generator() * secq_nonce.deref();
+    let mut secq_sig = [0; 65];
+    secq_sig[.. 33].copy_from_slice(secq_nonce_commitment.to_bytes().as_ref());
+
+    let challenge =
+      SignedEmbeddedEllipticCurveKeys::Ethereum(em_public_key, secq_public_key, em_sig, secq_sig)
+        .transcript(validator);
+
+    em_sig[32 ..].copy_from_slice(
+      SchnorrSignature::<Embedwards25519>::sign(
+        embedwards25519,
+        em_nonce,
+        <<Embedwards25519 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(
+          &challenge,
+        ),
+      )
+      .s
+      .to_repr()
+      .as_ref(),
+    );
+
+    secq_sig[33 ..].copy_from_slice(
+      SchnorrSignature::<Secq256k1>::sign(
+        secq256k1,
+        secq_nonce,
+        <<Secq256k1 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(&challenge),
+      )
+      .s
+      .to_repr()
+      .as_ref(),
+    );
+
+    SignedEmbeddedEllipticCurveKeys::Ethereum(em_public_key, secq_public_key, em_sig, secq_sig)
+  }
+
+  #[doc(hidden)]
+  pub fn monero(
+    rng: &mut (impl RngCore + CryptoRng),
+    validator: Public,
+    embedwards25519: &Zeroizing<<Embedwards25519 as WrappedGroup>::F>,
+  ) -> Self {
+    let em_public_key =
+      (<Embedwards25519 as WrappedGroup>::generator() * embedwards25519.deref()).to_bytes();
+    let em_nonce = Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut *rng));
+    let em_nonce_commitment = <Embedwards25519 as WrappedGroup>::generator() * em_nonce.deref();
+    let mut em_sig = [0; 64];
+    em_sig[.. 32].copy_from_slice(em_nonce_commitment.to_bytes().as_ref());
+    let challenge =
+      SignedEmbeddedEllipticCurveKeys::Monero(em_public_key, em_sig).transcript(validator);
+    em_sig[32 ..].copy_from_slice(
+      SchnorrSignature::<Embedwards25519>::sign(
+        embedwards25519,
+        em_nonce,
+        <<Embedwards25519 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(
+          &challenge,
+        ),
+      )
+      .s
+      .to_repr()
+      .as_ref(),
+    );
+    SignedEmbeddedEllipticCurveKeys::Monero(em_public_key, em_sig)
   }
 }
 
