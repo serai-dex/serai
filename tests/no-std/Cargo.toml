@@ -46,6 +46,9 @@ frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false,
 
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["hazmat"], optional = true }
 
+serai-client-bitcoin = { path = "../../substrate/client/bitcoin", default-features = false, optional = true }
+serai-client-ethereum = { path = "../../substrate/client/ethereum", default-features = false, optional = true }
+
 [features]
 alloc = [
   "std-shims/alloc",
@@ -75,4 +78,7 @@ alloc = [
   "frost-schnorrkel",
 
   "bitcoin-serai",
+
+  "serai-client-bitcoin",
+  "serai-client-ethereum",
 ]

@@ -12,7 +12,7 @@ use bitcoin_serai::{
   wallet::Scanner,
 };
 
-use serai_client::networks::bitcoin::Address;
+use serai_client_bitcoin::Address;
 
 use serai_db::Get;
 use primitives::OutputType;

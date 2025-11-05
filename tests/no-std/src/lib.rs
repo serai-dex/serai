@@ -30,4 +30,7 @@ pub mod alloc {
   pub use frost_schnorrkel;
 
   pub use bitcoin_serai;
+
+  pub use serai_client_bitcoin;
+  pub use serai_client_ethereum;
 }

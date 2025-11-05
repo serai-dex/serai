@@ -1,6 +1,6 @@
 use alloy_core::primitives::{FixedBytes, Address};
 
-use serai_client::primitives::balance::Amount;
+use serai_primitives::balance::Amount;
 
 pub(crate) mod output;
 pub(crate) mod transaction;

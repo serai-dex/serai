@@ -39,11 +39,9 @@ async-lock = "3"
 
 simple-request = { path = "../../common/request", version = "0.3", optional = true }
 
-bitcoin = { version = "0.32", optional = true }
-
-ciphersuite = { path = "../../crypto/ciphersuite", optional = true }
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", optional = true }
-monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "030c60974f0f0306849c1795bca854a3bbb757b4", version = "0.1.0", default-features = false, features = ["std"], optional = true }
+serai-client-bitcoin = { path = "./bitcoin", optional = true }
+serai-client-ethereum = { path = "./ethereum", optional = true }
+serai-client-monero = { path = "./monero", optional = true }
 
 [dev-dependencies]
 rand_core = "0.6"
@@ -67,9 +65,9 @@ serai-docker-tests = { path = "../../tests/docker" }
 serai = ["thiserror/std", "scale", "serde", "serde_json", "multiaddr", "sp-core", "sp-runtime", "frame-system", "simple-request"]
 
 networks = []
-bitcoin = ["networks", "dep:bitcoin"]
-ethereum = ["networks"]
-monero = ["networks", "ciphersuite", "dalek-ff-group", "monero-address"]
+bitcoin = ["networks", "serai-client-bitcoin"]
+ethereum = ["networks", "serai-client-ethereum"]
+monero = ["networks", "serai-client-monero"]
 
 # Assumes the default usage is to use Serai as a DEX, which doesn't actually
 # require connecting to a Serai node

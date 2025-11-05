@@ -18,7 +18,7 @@ use bitcoin_serai::{
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::networks::bitcoin::Address;
+use serai_client_bitcoin::Address;
 
 use crate::output::OutputId;
 

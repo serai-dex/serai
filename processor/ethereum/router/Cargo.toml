@@ -41,7 +41,8 @@ ethereum-primitives = { package = "serai-processor-ethereum-primitives", path = 
 ethereum-deployer = { package = "serai-processor-ethereum-deployer", path = "../deployer", default-features = false }
 erc20 = { package = "serai-processor-ethereum-erc20", path = "../erc20", default-features = false }
 
-serai-client = { path = "../../../substrate/client", default-features = false, features = ["ethereum"] }
+serai-primitives = { path = "../../../substrate/primitives", default-features = false, features = ["std"] }
+serai-client-ethereum = { path = "../../../substrate/client/ethereum", default-features = false }
 
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 

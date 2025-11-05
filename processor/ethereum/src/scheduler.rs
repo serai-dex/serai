@@ -2,10 +2,8 @@ use std::collections::HashMap;
 
 use alloy_core::primitives::U256;
 
-use serai_client::{
-  primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::ExternalBalance},
-  networks::ethereum::Address,
-};
+use serai_primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::ExternalBalance};
+use serai_client_ethereum::Address;
 
 use serai_db::Db;
 

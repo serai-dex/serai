@@ -7,13 +7,11 @@ use monero_wallet::WalletOutput;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{
-  primitives::{
-    coin::ExternalCoin,
-    balance::{Amount, ExternalBalance},
-  },
-  networks::monero::Address,
+use serai_primitives::{
+  coin::ExternalCoin,
+  balance::{Amount, ExternalBalance},
 };
+use serai_client_monero::Address;
 
 use primitives::{OutputType, ReceivedOutput};
 

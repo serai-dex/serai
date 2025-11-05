@@ -1,0 +1,27 @@
+[package]
+name = "serai-client-bitcoin"
+version = "0.1.0"
+description = "Bitcoin client library for the Serai network"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client/bitcoin"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["serai"]
+edition = "2021"
+rust-version = "1.85"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+borsh = { version = "1", default-features = false, features = ["derive"] }
+
+serai-primitives = { path = "../../primitives", version = "0.1", default-features = false }
+
+bitcoin = { version = "0.32", default-features = false }
+
+[features]
+std = ["borsh/std", "serai-primitives/std", "bitcoin/std"]

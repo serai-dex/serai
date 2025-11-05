@@ -2,7 +2,7 @@ use core::future::Future;
 
 use monero_simple_request_rpc::{prelude::*, SimpleRequestTransport};
 
-use serai_client::primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount};
+use serai_primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount};
 
 use scanner::ScannerFeed;
 use signers::TransactionPublisher;

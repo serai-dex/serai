@@ -21,9 +21,8 @@ use alloy_rpc_types_eth::{BlockId, Log, Filter, TransactionInput, TransactionReq
 use alloy_transport::{TransportErrorKind, RpcError};
 use alloy_provider::{Provider, RootProvider};
 
-use serai_client::{
-  primitives::instructions::RefundableInInstruction, networks::ethereum::Address as SeraiAddress,
-};
+use serai_primitives::instructions::RefundableInInstruction;
+use serai_client_ethereum::Address as SeraiAddress;
 
 use ethereum_primitives::LogIndex;
 use ethereum_schnorr::{PublicKey, Signature};

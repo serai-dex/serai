@@ -39,7 +39,8 @@ alloy-simple-request-transport = { path = "../../networks/ethereum/alloy-simple-
 alloy-rpc-client = { version = "1", default-features = false }
 alloy-provider = { version = "1", default-features = false }
 
-serai-client = { path = "../../substrate/client", default-features = false, features = ["ethereum"] }
+serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
+serai-client-ethereum = { path = "../../substrate/client/ethereum", default-features = false }
 
 zalloc = { path = "../../common/zalloc" }
 log = { version = "0.4", default-features = false, features = ["std"] }

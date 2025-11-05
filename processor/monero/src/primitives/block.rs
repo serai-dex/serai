@@ -8,7 +8,7 @@ use monero_wallet::{
   GuaranteedScanner,
 };
 
-use serai_client::networks::monero::Address;
+use serai_client_monero::Address;
 
 use primitives::{ReceivedOutput, EventualityTracker};
 use crate::{

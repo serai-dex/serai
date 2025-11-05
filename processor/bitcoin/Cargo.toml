@@ -30,7 +30,8 @@ frost = { package = "modular-frost", path = "../../crypto/frost", default-featur
 secp256k1 = { version = "0.29", default-features = false, features = ["std", "global-context", "rand-std"] }
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["std"] }
 
-serai-client = { path = "../../substrate/client", default-features = false, features = ["bitcoin"] }
+serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
+serai-client-bitcoin = { path = "../../substrate/client/bitcoin", default-features = false }
 
 zalloc = { path = "../../common/zalloc" }
 log = { version = "0.4", default-features = false, features = ["std"] }

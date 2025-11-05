@@ -13,14 +13,12 @@ use bitcoin_serai::{
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::Get;
 
-use serai_client::{
-  primitives::{
-    coin::ExternalCoin,
-    balance::{Amount, ExternalBalance},
-    address::ExternalAddress,
-  },
-  networks::bitcoin::Address,
+use serai_primitives::{
+  coin::ExternalCoin,
+  balance::{Amount, ExternalBalance},
+  address::ExternalAddress,
 };
+use serai_client_bitcoin::Address;
 
 use primitives::{OutputType, ReceivedOutput};
 

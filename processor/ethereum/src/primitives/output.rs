@@ -7,14 +7,12 @@ use alloy_core::primitives::U256;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{
-  primitives::{
-    network_id::ExternalNetworkId,
-    coin::ExternalCoin,
-    balance::{Amount, ExternalBalance},
-  },
-  networks::ethereum::Address,
+use serai_primitives::{
+  network_id::ExternalNetworkId,
+  coin::ExternalCoin,
+  balance::{Amount, ExternalBalance},
 };
+use serai_client_ethereum::Address;
 
 use primitives::{OutputType, ReceivedOutput};
 use ethereum_router::{Coin as EthereumCoin, InInstruction as EthereumInInstruction};

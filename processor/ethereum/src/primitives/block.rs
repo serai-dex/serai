@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ciphersuite::*;
 use ciphersuite_kp256::Secp256k1;
 
-use serai_client::networks::ethereum::Address;
+use serai_client_ethereum::Address;
 
 use primitives::{ReceivedOutput, EventualityTracker};
 

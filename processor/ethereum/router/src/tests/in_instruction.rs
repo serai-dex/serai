@@ -5,9 +5,9 @@ use alloy_sol_types::SolCall;
 
 use alloy_consensus::{TxLegacy, Signed};
 
-use serai_client::{
-  primitives::SeraiAddress,
-  primitives::instructions::{InInstruction as SeraiInInstruction, RefundableInInstruction},
+use serai_primitives::{
+  address::SeraiAddress,
+  instructions::{InInstruction as SeraiInInstruction, RefundableInInstruction},
 };
 
 use ethereum_primitives::LogIndex;
@@ -17,8 +17,8 @@ use crate::{InInstruction, tests::*};
 impl Test {
   pub(crate) fn in_instruction() -> RefundableInInstruction {
     RefundableInInstruction {
-      origin: None,
-      instruction: SeraiInInstruction::Transfer(SeraiAddress([0xff; 32])),
+      return_address: None,
+      instruction: SeraiInInstruction::Transfer { to: SeraiAddress([0xff; 32]) },
     }
   }
 
@@ -140,7 +140,7 @@ async fn test_erc20_router_in_instruction() {
     input: crate::abi::inInstructionCall::new((
       coin.into(),
       amount,
-      borsh::to_vec(shorthand).unwrap().into(),
+      borsh::to_vec(&shorthand).unwrap().into(),
     ))
     .abi_encode()
     .into(),

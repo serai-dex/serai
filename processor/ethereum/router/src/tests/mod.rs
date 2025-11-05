@@ -20,7 +20,7 @@ use alloy_provider::{
 
 use alloy_node_bindings::{Anvil, AnvilInstance};
 
-use serai_client::networks::ethereum::{ContractDeployment, Address as SeraiEthereumAddress};
+use serai_client_ethereum::{ContractDeployment, Address as SeraiEthereumAddress};
 
 use ethereum_schnorr::{PublicKey, Signature};
 use ethereum_deployer::Deployer;

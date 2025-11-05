@@ -2,7 +2,7 @@ use core::future::Future;
 
 use bitcoin_serai::rpc::{RpcError, Rpc as BRpc};
 
-use serai_client::primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount};
+use serai_primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount};
 
 use serai_db::Db;
 use scanner::ScannerFeed;

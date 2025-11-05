@@ -8,10 +8,8 @@ use bitcoin_serai::{
   wallet::{TransactionError, SignableTransaction as BSignableTransaction, p2tr_script_buf},
 };
 
-use serai_client::{
-  primitives::{coin::ExternalCoin, balance::Amount},
-  networks::bitcoin::Address,
-};
+use serai_primitives::{coin::ExternalCoin, balance::Amount};
+use serai_client_bitcoin::Address;
 
 use serai_db::Db;
 use primitives::{OutputType, ReceivedOutput, Payment};

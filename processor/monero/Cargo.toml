@@ -31,7 +31,8 @@ frost = { package = "modular-frost", path = "../../crypto/frost", default-featur
 monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "030c60974f0f0306849c1795bca854a3bbb757b4", default-features = false, features = ["std", "multisig"] }
 monero-simple-request-rpc = { git = "https://github.com/monero-oxide/monero-oxide", rev = "030c60974f0f0306849c1795bca854a3bbb757b4", default-features = false }
 
-serai-client = { path = "../../substrate/client", default-features = false, features = ["monero"] }
+serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
+serai-client-monero = { path = "../../substrate/client/monero", default-features = false }
 
 zalloc = { path = "../../common/zalloc" }
 log = { version = "0.4", default-features = false, features = ["std"] }

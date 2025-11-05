@@ -5,7 +5,7 @@ use ciphersuite::GroupIo;
 
 use monero_address::{Network, AddressType as MoneroAddressType, MoneroAddress};
 
-use crate::primitives::address::ExternalAddress;
+use serai_primitives::address::ExternalAddress;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum AddressType {

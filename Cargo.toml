@@ -62,8 +62,8 @@ members = [
   "processor/ethereum/primitives",
   "processor/ethereum/test-primitives",
   "processor/ethereum/deployer",
-  "processor/ethereum/router",
   "processor/ethereum/erc20",
+  "processor/ethereum/router",
   "processor/ethereum",
   "processor/monero",
 
@@ -93,6 +93,9 @@ members = [
   "substrate/runtime",
   "substrate/node",
 
+  "substrate/client/bitcoin",
+  "substrate/client/ethereum",
+  "substrate/client/monero",
   "substrate/client",
 
   "orchestration",

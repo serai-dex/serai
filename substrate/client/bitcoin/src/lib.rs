@@ -1,3 +1,5 @@
+#![no_std]
+
 use core::{str::FromStr, fmt};
 
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -10,7 +12,7 @@ use bitcoin::{
   address::{AddressType, NetworkChecked, Address as BAddress},
 };
 
-use crate::primitives::address::ExternalAddress;
+use serai_primitives::address::ExternalAddress;
 
 // SCALE-encodable representation of Bitcoin addresses, used internally.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]

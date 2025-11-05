@@ -6,7 +6,7 @@ use ciphersuite_kp256::Secp256k1;
 
 use bitcoin_serai::bitcoin::block::{Header, Block as BBlock};
 
-use serai_client::networks::bitcoin::Address;
+use serai_client_bitcoin::Address;
 
 use serai_db::Db;
 use primitives::{ReceivedOutput, EventualityTracker};

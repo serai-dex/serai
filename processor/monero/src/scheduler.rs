@@ -9,10 +9,8 @@ use dalek_ff_group::Ed25519;
 
 use monero_wallet::interface::prelude::*;
 
-use serai_client::{
-  primitives::{coin::ExternalCoin, balance::Amount},
-  networks::monero::Address,
-};
+use serai_primitives::{coin::ExternalCoin, balance::Amount};
+use serai_client_monero::Address;
 
 use primitives::{OutputType, ReceivedOutput, Payment};
 use scanner::{KeyFor, AddressFor, OutputFor, BlockFor};

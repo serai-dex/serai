@@ -1,9 +1,11 @@
+#![no_std]
+
 use core::str::FromStr;
-use std::io::Read;
+use std_shims::{vec::Vec, io::Read};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use crate::primitives::address::ExternalAddress;
+use serai_primitives::address::ExternalAddress;
 
 /// THe maximum amount of gas an address is allowed to specify as its gas limit.
 ///

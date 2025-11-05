@@ -6,7 +6,7 @@ use alloy_rpc_types_eth::{Header, BlockNumberOrTag};
 use alloy_transport::{RpcError, TransportErrorKind};
 use alloy_provider::{Provider, RootProvider};
 
-use serai_client::primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount};
+use serai_primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount};
 
 use tokio::task::JoinSet;
 
