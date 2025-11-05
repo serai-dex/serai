@@ -35,6 +35,9 @@ mod mutex_shim {
 pub use mutex_shim::{ShimMutex as Mutex, MutexGuard};
 
 #[rustversion::before(1.80)]
+pub use spin::Lazy as LazyLock;
+
+#[rustversion::since(1.80)]
 #[cfg(not(feature = "std"))]
 pub use spin::Lazy as LazyLock;
 #[rustversion::since(1.80)]
