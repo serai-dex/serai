@@ -1,11 +1,11 @@
 [package]
 name = "serai-client-monero"
 version = "0.1.0"
-description = "Monero client library for the Serai network"
+description = "A client for the Serai network's Monero functionality"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client/monero"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-keywords = ["serai"]
+keywords = ["serai", "monero"]
 edition = "2021"
 rust-version = "1.85"
 

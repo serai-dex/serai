@@ -1,11 +1,11 @@
 [package]
 name = "serai-client-bitcoin"
 version = "0.1.0"
-description = "Bitcoin client library for the Serai network"
+description = "A client for the Serai network's Bitcoin functionality"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client/bitcoin"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-keywords = ["serai"]
+keywords = ["serai", "bitcoin"]
 edition = "2021"
 rust-version = "1.85"
 

@@ -1,0 +1,86 @@
+use std::{sync::Arc, ops::Deref, collections::HashSet};
+
+use rand_core::{RngCore, OsRng};
+
+use sp_core::Encode;
+use sp_blockchain::{Error as BlockchainError, HeaderBackend};
+use sp_api::ProvideRuntimeApi;
+
+use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
+use serai_runtime::*;
+
+use tokio::sync::RwLock;
+
+use jsonrpsee::RpcModule;
+
+pub(crate) fn module<
+  C: 'static
+    + Send
+    + Sync
+    + HeaderBackend<Block>
+    + ProvideRuntimeApi<Block, Api: serai_runtime::SeraiApi<Block>>,
+>(
+  id: String,
+  client: Arc<C>,
+  authority_discovery: sc_authority_discovery::Service,
+) -> Result<RpcModule<impl 'static + Send + Sync>, Box<dyn std::error::Error + Send + Sync>> {
+  let mut module = RpcModule::new((id, client, RwLock::new(authority_discovery)));
+  module.register_async_method("p2p_validators", |params, context, _ext| async move {
+    let [network]: [String; 1] = params.parse()?;
+    let network = match network.to_lowercase().as_str() {
+      "serai" => NetworkId::Serai,
+      "bitcoin" => ExternalNetworkId::Bitcoin.into(),
+      "ethereum" => ExternalNetworkId::Ethereum.into(),
+      "monero" => ExternalNetworkId::Monero.into(),
+      _ => Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+        -1,
+        "network to fetch the `p2p_validators` of was unrecognized".to_string(),
+        Option::<()>::None,
+      ))?,
+    };
+    let (id, client, authority_discovery) = &*context;
+    let latest_block = client.info().best_hash;
+
+    let validators = client.runtime_api().validators(latest_block, network).map_err(|_| {
+      jsonrpsee::types::error::ErrorObjectOwned::owned(
+        -2,
+        format!(
+          "couldn't get validators from the latest block, which is likely a fatal bug. {}",
+          "please report this at https://github.com/serai-dex/serai",
+        ),
+        Option::<()>::None,
+      )
+    });
+    let validators = match validators {
+      Ok(validators) => validators,
+      Err(e) => return Err(e),
+    };
+    // Always return the protocol's bootnodes
+    let mut all_p2p_addresses = crate::chain_spec::bootnode_multiaddrs(id);
+    // Additionally returns validators found over the DHT
+    for validator in validators {
+      let mut returned_addresses = authority_discovery
+        .write()
+        .await
+        .get_addresses_by_authority_id(validator.into())
+        .await
+        .unwrap_or_else(HashSet::new)
+        .into_iter()
+        .collect::<Vec<_>>();
+      // Randomly select an address
+      // There should be one, there may be two if their IP address changed, and more should only
+      // occur if they have multiple proxies/an IP address changing frequently/some issue
+      // preventing consistent self-identification
+      // It isn't beneficial to use multiple addresses for a single peer here
+      if !returned_addresses.is_empty() {
+        all_p2p_addresses.push(
+          returned_addresses
+            .remove(usize::try_from(OsRng.next_u64() >> 32).unwrap() % returned_addresses.len())
+            .into(),
+        );
+      }
+    }
+    Ok(all_p2p_addresses)
+  })?;
+  Ok(module)
+}

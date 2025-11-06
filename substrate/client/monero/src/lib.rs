@@ -1,3 +1,7 @@
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+
 use core::{str::FromStr, fmt};
 
 use dalek_ff_group::{EdwardsPoint, Ed25519};

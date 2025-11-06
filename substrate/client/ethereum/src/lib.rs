@@ -1,4 +1,7 @@
-#![no_std]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 use core::str::FromStr;
 use std_shims::{vec::Vec, io::Read};
@@ -12,6 +15,7 @@ use serai_primitives::address::ExternalAddress;
 /// Payments to an address with a gas limit which exceed this value will be dropped entirely.
 pub const ADDRESS_GAS_LIMIT: u32 = 950_000;
 
+/// A contract to deploy, enabling executing arbitrary code.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct ContractDeployment {
   /// The gas limit to use for this contract's execution.
@@ -26,8 +30,8 @@ pub struct ContractDeployment {
   code: Vec<u8>,
 }
 
-/// A contract to deploy, enabling executing arbitrary code.
 impl ContractDeployment {
+  /// Create a new `ContractDeployment`.
   pub fn new(gas_limit: u32, code: Vec<u8>) -> Option<Self> {
     // Check the gas limit is less the address gas limit
     if gas_limit > ADDRESS_GAS_LIMIT {
@@ -44,9 +48,11 @@ impl ContractDeployment {
     Some(Self { gas_limit, code })
   }
 
+  /// The gas limit to use when deploying (and executing) this contract.
   pub fn gas_limit(&self) -> u32 {
     self.gas_limit
   }
+  /// The code for the contract to deploy.
   pub fn code(&self) -> &[u8] {
     &self.code
   }

@@ -1,5 +1,3 @@
-#![expect(unused_imports)]
-
 use std::{sync::Arc, ops::Deref, collections::HashSet};
 
 use rand_core::{RngCore, OsRng};
@@ -18,6 +16,9 @@ use jsonrpsee::RpcModule;
 
 use sc_client_api::BlockBackend;
 use sc_transaction_pool_api::TransactionPool;
+
+mod blockchain;
+mod p2p_validators;
 
 pub struct FullDeps<C, P> {
   pub id: String,
@@ -38,74 +39,14 @@ pub fn create_full<
 >(
   deps: FullDeps<C, P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>> {
-  let mut module = RpcModule::new(());
   let FullDeps { id, client, pool, authority_discovery } = deps;
 
+  let mut root = RpcModule::new(());
+  root.merge(blockchain::module(client.clone())?)?;
   if let Some(authority_discovery) = authority_discovery {
-    let mut authority_discovery_module =
-      RpcModule::new((id, client.clone(), RwLock::new(authority_discovery)));
-    authority_discovery_module.register_async_method(
-      "p2p_validators",
-      |params, context, _ext| async move {
-        let [network]: [String; 1] = params.parse()?;
-        let network = match network.to_lowercase().as_str() {
-          "serai" => NetworkId::Serai,
-          "bitcoin" => ExternalNetworkId::Bitcoin.into(),
-          "ethereum" => ExternalNetworkId::Ethereum.into(),
-          "monero" => ExternalNetworkId::Monero.into(),
-          _ => Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-            -1,
-            "network to fetch the `p2p_validators` of was unrecognized".to_string(),
-            Option::<()>::None,
-          ))?,
-        };
-        let (id, client, authority_discovery) = &*context;
-        let latest_block = client.info().best_hash;
-
-        let validators = client.runtime_api().validators(latest_block, network).map_err(|_| {
-          jsonrpsee::types::error::ErrorObjectOwned::owned(
-            -2,
-            format!(
-              "couldn't get validators from the latest block, which is likely a fatal bug. {}",
-              "please report this at https://github.com/serai-dex/serai",
-            ),
-            Option::<()>::None,
-          )
-        });
-        let validators = match validators {
-          Ok(validators) => validators,
-          Err(e) => return Err(e),
-        };
-        // Always return the protocol's bootnodes
-        let mut all_p2p_addresses = crate::chain_spec::bootnode_multiaddrs(id);
-        // Additionally returns validators found over the DHT
-        for validator in validators {
-          let mut returned_addresses = authority_discovery
-            .write()
-            .await
-            .get_addresses_by_authority_id(validator.into())
-            .await
-            .unwrap_or_else(HashSet::new)
-            .into_iter()
-            .collect::<Vec<_>>();
-          // Randomly select an address
-          // There should be one, there may be two if their IP address changed, and more should only
-          // occur if they have multiple proxies/an IP address changing frequently/some issue
-          // preventing consistent self-identification
-          // It isn't beneficial to use multiple addresses for a single peer here
-          if !returned_addresses.is_empty() {
-            all_p2p_addresses.push(
-              returned_addresses
-                .remove(usize::try_from(OsRng.next_u64() >> 32).unwrap() % returned_addresses.len())
-                .into(),
-            );
-          }
-        }
-        Ok(all_p2p_addresses)
-      },
-    )?;
-    module.merge(authority_discovery_module)?;
+    root.merge(p2p_validators::module(id, client, authority_discovery)?)?;
   }
+  Ok(root)
 
   /* TODO
   use ciphersuite::{GroupIo, WithPreferredHash};
@@ -205,31 +146,4 @@ pub fn create_full<
 
   module.merge(serai_json_module)?;
   */
-
-  let mut block_bin_module = RpcModule::new(client);
-  block_bin_module.register_async_method("serai_block", |params, client, _ext| async move {
-    let [block_hash]: [String; 1] = params.parse()?;
-    let Some(block_hash) = hex::decode(&block_hash).ok().and_then(|bytes| {
-      <[u8; 32]>::try_from(bytes.as_slice())
-        .map(<Block as sp_runtime::traits::Block>::Hash::from)
-        .ok()
-    }) else {
-      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-        -1,
-        "requested block hash wasn't a valid hash",
-        Option::<()>::None,
-      ));
-    };
-    let Some(block) = client.block(block_hash).ok().flatten() else {
-      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-        -1,
-        "couldn't find requested block",
-        Option::<()>::None,
-      ));
-    };
-    Ok(hex::encode(block.block.encode()))
-  })?;
-  module.merge(block_bin_module)?;
-
-  Ok(module)
 }
