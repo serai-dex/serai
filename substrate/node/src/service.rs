@@ -34,16 +34,17 @@ pub type FullClient = TFullClient<Block, RuntimeApi, Executor>;
 
 type SelectChain = sc_consensus::LongestChain<FullBackend, Block>;
 type GrandpaBlockImport = grandpa::GrandpaBlockImport<FullBackend, Block, FullClient, SelectChain>;
-type BabeBlockImport = sc_consensus_babe::BabeBlockImport<Block, FullClient, GrandpaBlockImport>;
+type BabeBlockImport<CIDP> =
+  sc_consensus_babe::BabeBlockImport<Block, FullClient, GrandpaBlockImport, CIDP, SelectChain>;
 
-type PartialComponents = sc_service::PartialComponents<
+type PartialComponents<CIDP> = sc_service::PartialComponents<
   FullClient,
   FullBackend,
   SelectChain,
   sc_consensus::DefaultImportQueue<Block>,
   sc_transaction_pool::TransactionPoolWrapper<Block, FullClient>,
   (
-    BabeBlockImport,
+    BabeBlockImport<CIDP>,
     sc_consensus_babe::BabeLink<Block>,
     grandpa::LinkHalf<Block, FullClient, SelectChain>,
     grandpa::SharedVoterState,
@@ -58,9 +59,22 @@ fn create_inherent_data_providers(
   (BabeInherent::from_timestamp_and_slot_duration(*timestamp, slot_duration), timestamp)
 }
 
+#[allow(clippy::type_complexity)]
 pub fn new_partial(
   config: &Configuration,
-) -> Result<(PartialComponents, Arc<dyn sp_keystore::Keystore>), ServiceError> {
+) -> Result<
+  (
+    PartialComponents<
+      impl sp_inherents::CreateInherentDataProviders<
+        Block,
+        (),
+        InherentDataProviders: sc_consensus_slots::InherentDataProviderExt,
+      >,
+    >,
+    Arc<dyn sp_keystore::Keystore>,
+  ),
+  ServiceError,
+> {
   let telemetry = config
     .telemetry_endpoints
     .clone()
@@ -117,6 +131,7 @@ pub fn new_partial(
   .with_prometheus(config.prometheus_registry())
   .build();
   let transaction_pool = Arc::new(transaction_pool);
+  let offchain_tx_pool_factory = OffchainTransactionPoolFactory::new(transaction_pool.clone());
 
   let (grandpa_block_import, grandpa_link) = grandpa::block_import(
     client.clone(),
@@ -127,27 +142,27 @@ pub fn new_partial(
   )?;
   let justification_import = grandpa_block_import.clone();
 
+  let babe_config = sc_consensus_babe::configuration(&*client)?;
+  let slot_duration = babe_config.slot_duration();
   let (block_import, babe_link) = sc_consensus_babe::block_import(
-    sc_consensus_babe::configuration(&*client)?,
+    babe_config,
     grandpa_block_import,
     client.clone(),
+    move |_, ()| async move { Ok(create_inherent_data_providers(slot_duration)) },
+    select_chain.clone(),
+    offchain_tx_pool_factory,
   )?;
 
-  let slot_duration = babe_link.config().slot_duration();
   let (import_queue, babe_handle) =
     sc_consensus_babe::import_queue(sc_consensus_babe::ImportQueueParams {
       link: babe_link.clone(),
       block_import: block_import.clone(),
       justification_import: Some(Box::new(justification_import)),
+      slot_duration,
       client: client.clone(),
-      select_chain: select_chain.clone(),
-      create_inherent_data_providers: move |_, ()| async move {
-        Ok(create_inherent_data_providers(slot_duration))
-      },
       spawner: &task_manager.spawn_essential_handle(),
       registry: config.prometheus_registry(),
       telemetry: telemetry.as_ref().map(Telemetry::handle),
-      offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
     })?;
   // This can't be dropped, or BABE breaks
   // We don't have anything to do with it though
