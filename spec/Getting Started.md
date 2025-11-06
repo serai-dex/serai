@@ -36,8 +36,8 @@ rustup target add wasm32v1-none --toolchain nightly
 
 ```
 cargo install svm-rs
-svm install 0.8.26
-svm use 0.8.26
+svm install 0.8.29
+svm use 0.8.29
 ```
 
 ### Install foundry (for tests)

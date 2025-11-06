@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.26;
+pragma solidity ^0.8.29;
 
 /// @title A library for verifying Schnorr signatures
 /// @author Luke Parker <lukeparker@serai.exchange>

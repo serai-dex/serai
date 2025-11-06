@@ -6,7 +6,7 @@ use std::{path::PathBuf, fs, process::Command};
 
 /// Build contracts from the specified path, outputting the artifacts to the specified path.
 ///
-/// Requires solc 0.8.26.
+/// Requires solc 0.8.29.
 pub fn build(
   include_paths: &[&str],
   contracts_path: &str,
@@ -35,8 +35,8 @@ pub fn build(
     if let Some(version) = line.strip_prefix("Version: ") {
       let version =
         version.split('+').next().ok_or_else(|| "no value present on line".to_string())?;
-      if version != "0.8.26" {
-        Err(format!("version was {version}, 0.8.26 required"))?
+      if version != "0.8.29" {
+        Err(format!("version was {version}, 0.8.29 required"))?
       }
     }
   }
