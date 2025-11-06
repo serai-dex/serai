@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.26;
+pragma solidity ^0.8.29;
 
 /// @title Serai Router (without functions overriden by selector collisions)
 /// @author Luke Parker <lukeparker@serai.exchange>

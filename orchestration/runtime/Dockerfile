@@ -1,10 +1,10 @@
-# rust:1.89.0-slim-bookworm as of August 1st, 2025 (GMT)
-FROM --platform=linux/amd64 rust@sha256:703cfb0f80db8eb8a3452bf5151162472039c1b37fe4fb2957b495a6f0104ae7 AS deterministic
+# rust:1.91.0-slim-bookworm as of November 5th, 2025 (GMT)
+FROM --platform=linux/amd64 rust@sha256:91f3c97d542bff86d69b027d60f52bbafd7b60cc02321a56dbc1a9e6bfef1c55 AS deterministic
 
 # Move to a Debian package snapshot
 RUN rm -rf /etc/apt/sources.list.d/debian.sources && \
   rm -rf /var/lib/apt/lists/* && \
-  echo "deb [arch=amd64] http://snapshot.debian.org/archive/debian/20250801T000000Z bookworm main" > /etc/apt/sources.list && \
+  echo "deb [arch=amd64] http://snapshot.debian.org/archive/debian/20251105T000000Z bookworm main" > /etc/apt/sources.list && \
   apt update
 
 # Install dependencies

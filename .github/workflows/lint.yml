@@ -52,7 +52,7 @@ jobs:
           key: rust-advisory-db
 
       - name: Install cargo deny
-        run: cargo +1.90 install cargo-deny --version =0.18.4
+        run: cargo +1.91 install cargo-deny --version =0.18.5
 
       - name: Run cargo deny
         run: cargo deny -L error --all-features check --hide-inclusion-graph
@@ -88,8 +88,8 @@ jobs:
       - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
       - name: Verify all dependencies are in use
         run: |
-          cargo +1.90 install cargo-machete --version =0.9.1
-          cargo +1.90 machete
+          cargo +1.91 install cargo-machete --version =0.9.1
+          cargo +1.91 machete
 
   msrv:
     runs-on: ubuntu-latest
@@ -98,7 +98,7 @@ jobs:
       - name: Verify claimed `rust-version`
         shell: bash
         run: |
-          cargo +1.90 install cargo-msrv --version =0.18.4
+          cargo +1.91 install cargo-msrv --version =0.18.4
 
           function check_msrv {
             # We `cd` into the directory passed as the first argument, but will return to the
@@ -190,12 +190,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+
+      - name: Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
       - name: Slither
         run: |
-          python3 -m pip install solc-select
-          solc-select install 0.8.26
-          solc-select use 0.8.26
-
           python3 -m pip install slither-analyzer
 
           slither --include-paths ./networks/ethereum/schnorr/contracts/Schnorr.sol

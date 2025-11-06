@@ -5,12 +5,12 @@ inputs:
   monero-version:
     description: "Monero version to download and run as a regtest node"
     required: false
-    default: v0.18.3.4
+    default: v0.18.4.3
 
   bitcoin-version:
     description: "Bitcoin version to download and run as a regtest node"
     required: false
-    default: "29.1"
+    default: "30.0"
 
 runs:
   using: "composite"

@@ -7,7 +7,7 @@ pub fn bitcoin(orchestration_path: &Path, network: Network) {
   const DOWNLOAD_BITCOIN: &str = r#"
 FROM alpine:latest AS bitcoin
 
-ENV BITCOIN_VERSION=29.1
+ENV BITCOIN_VERSION=30.0
 
 RUN apk --no-cache add wget git gnupg
 
