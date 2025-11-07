@@ -286,6 +286,13 @@ mod substrate {
     header: SubstrateHeader,
     transactions: Vec<Transaction>,
   }
+
+  impl From<SubstrateBlock> for Block {
+    fn from(block: SubstrateBlock) -> Self {
+      Self { header: (&block.header).into(), transactions: block.transactions }
+    }
+  }
+
   impl sp_core::serde::Serialize for SubstrateBlock {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

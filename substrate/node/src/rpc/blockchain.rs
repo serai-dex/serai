@@ -4,15 +4,15 @@ use rand_core::{RngCore, OsRng};
 
 use sp_core::Encode;
 use sp_blockchain::{Error as BlockchainError, HeaderMetadata, HeaderBackend};
+use sp_consensus::BlockStatus;
 use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
+use sc_client_api::BlockBackend;
 
 use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
 use serai_runtime::*;
 
 use jsonrpsee::RpcModule;
-
-use sc_client_api::BlockBackend;
 
 pub(crate) fn module<
   C: 'static
@@ -26,7 +26,8 @@ pub(crate) fn module<
   client: Arc<C>,
 ) -> Result<RpcModule<impl 'static + Send + Sync>, Box<dyn std::error::Error + Send + Sync>> {
   let mut module = RpcModule::new(client);
-  module.register_async_method("serai_block", |params, client, _ext| async move {
+
+  module.register_async_method("serai_isFinalized", |params, client, _ext| async move {
     let [block_hash]: [String; 1] = params.parse()?;
     let Some(block_hash) = hex::decode(&block_hash).ok().and_then(|bytes| {
       <[u8; 32]>::try_from(bytes.as_slice())
@@ -39,14 +40,69 @@ pub(crate) fn module<
         Option::<()>::None,
       ));
     };
-    let Some(block) = client.block(block_hash).ok().flatten() else {
+    let finalized = client.info().finalized_number;
+    let Ok(Some(number)) = client.number(block_hash) else {
+      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+        -2,
+        "failed to fetch block's number",
+        Option::<()>::None,
+      ));
+    };
+    let Ok(status) = client.block_status(block_hash) else {
+      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+        -3,
+        "failed to fetch block's status",
+        Option::<()>::None,
+      ));
+    };
+    Ok(
+      matches!(status, BlockStatus::InChainWithState | BlockStatus::InChainPruned) &&
+        (number <= finalized),
+    )
+  })?;
+
+  module.register_async_method("serai_block", |params, client, _ext| async move {
+    let block_hash = if let Ok([block_hash]) = params.parse::<[String; 1]>() {
+      let Some(block_hash) = hex::decode(&block_hash).ok().and_then(|bytes| {
+        <[u8; 32]>::try_from(bytes.as_slice())
+          .map(<Block as sp_runtime::traits::Block>::Hash::from)
+          .ok()
+      }) else {
+        return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+          -1,
+          "requested block hash wasn't a valid hash",
+          Option::<()>::None,
+        ));
+      };
+      block_hash
+    } else {
+      let Ok([block_number]) = params.parse::<[u64; 1]>() else {
+        return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+          -1,
+          "requested block wasn't a valid hash nor number",
+          Option::<()>::None,
+        ));
+      };
+      let Ok(Some(block_hash)) = client.block_hash(block_number) else {
+        return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
+          -2,
+          "couldn't find requested block's hash",
+          Option::<()>::None,
+        ));
+      };
+      block_hash
+    };
+
+    let Ok(Some(block)) = client.block(block_hash) else {
       return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
         -2,
         "couldn't find requested block",
         Option::<()>::None,
       ));
     };
-    Ok(hex::encode(block.block.encode()))
+
+    Ok(hex::encode(borsh::to_vec(&serai_abi::Block::from(block.block)).unwrap()))
   })?;
+
   Ok(module)
 }

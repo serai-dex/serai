@@ -27,3 +27,6 @@ borsh = { version = "1", default-features = false, features = ["std"] }
 serai-abi = { path = "../../abi", version = "0.1" }
 
 async-lock = "3"
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["rt", "macros"] }

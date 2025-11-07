@@ -3,6 +3,7 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use core::fmt;
 extern crate alloc;
 
 use zeroize::Zeroize;
@@ -79,6 +80,15 @@ impl From<[u8; 32]> for BlockHash {
 impl From<sp_core::H256> for BlockHash {
   fn from(hash: sp_core::H256) -> BlockHash {
     BlockHash(hash.into())
+  }
+}
+
+impl fmt::Display for BlockHash {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    for byte in self.0 {
+      write!(f, "{byte:02x}")?;
+    }
+    Ok(())
   }
 }
 

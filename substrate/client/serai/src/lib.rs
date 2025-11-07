@@ -2,7 +2,8 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
-use std::io::Read;
+use core::future::Future;
+use std::{sync::Arc, io::Read};
 
 use thiserror::Error;
 use core_json_traits::{JsonDeserialize, JsonStructure};
@@ -11,7 +12,10 @@ use simple_request::{hyper, Request, TokioClient};
 
 use borsh::BorshDeserialize;
 pub use serai_abi as abi;
-use abi::{primitives::network_id::ExternalNetworkId, Event};
+use abi::{
+  primitives::{BlockHash, network_id::ExternalNetworkId},
+  Block, Event,
+};
 
 use async_lock::RwLock;
 
@@ -23,13 +27,16 @@ pub enum RpcError {
   InternalError(String),
   /// A failure with the connection occurred.
   #[error("failed to communicate with serai")]
-  ConnectionError,
+  ConnectionError(simple_request::Error),
   /// The node provided an invalid response.
   #[error("node is faulty: {0}")]
   InvalidNode(String),
   /// The response contained an error.
   #[error("error in response: {0}")]
   ErrorInResponse(String),
+  /// The requested block wasn't finalized.
+  #[error("the requested block wasn't finalized")]
+  NotFinalized,
 }
 
 /// An RPC client to a Serai node.
@@ -40,15 +47,15 @@ pub struct Serai {
 }
 
 /// An RPC client to a Serai node, scoped to a specific block.
+///
+/// Upon any request being made for the events emitted by this block, the entire list of events
+/// from this block will be cached within this. This allows future calls for events to be done
+/// cheaply.
+#[derive(Clone)]
 pub struct TemporalSerai<'a> {
   serai: &'a Serai,
-  block: [u8; 32],
-  events: RwLock<Option<Vec<Event>>>,
-}
-impl Clone for TemporalSerai<'_> {
-  fn clone(&self) -> Self {
-    Self { serai: self.serai, block: self.block, events: RwLock::new(None) }
-  }
+  block: BlockHash,
+  events: Arc<RwLock<Option<Vec<Event>>>>,
 }
 
 impl Serai {
@@ -58,7 +65,7 @@ impl Serai {
     params: &str,
   ) -> Result<ResponseValue, RpcError> {
     let request =
-      format!(r#"{{ "jsonrpc": "2.0", "id": 0, "method": {method}, "params": {params} }}"#);
+      format!(r#"{{ "jsonrpc": "2.0", "id": 0, "method": "{method}", "params": {params} }}"#);
     let request = hyper::Request::post(&self.url)
       .header("Content-Type", "application/json")
       .body(request.as_bytes().to_vec().into())
@@ -78,10 +85,10 @@ impl Serai {
       .client
       .request(request)
       .await
-      .map_err(|_| RpcError::ConnectionError)?
+      .map_err(RpcError::ConnectionError)?
       .body()
       .await
-      .map_err(|_| RpcError::ConnectionError)?;
+      .map_err(RpcError::ConnectionError)?;
     let mut response_vec = Vec::with_capacity(1024);
     response_reader.read_to_end(&mut response_vec).map_err(|_| {
       RpcError::InternalError("couldn't read response from `simple-request` into `Vec`".to_string())
@@ -108,19 +115,46 @@ impl Serai {
 
   /// Create a new RPC client.
   pub fn new(url: String) -> Result<Self, RpcError> {
-    let client = TokioClient::with_connection_pool().map_err(|_| RpcError::ConnectionError)?;
+    let client = TokioClient::with_connection_pool().map_err(RpcError::ConnectionError)?;
     Ok(Serai { url, client })
   }
 
-  /// Fetch a block from the Serai blockchain.
-  pub async fn block(&self, hash: [u8; 32]) -> Result<serai_abi::Block, RpcError> {
-    let bin: String = self.call("serai_block", &format!("[{}]", hex::encode(hash))).await?;
-    serai_abi::Block::deserialize(
+  /// Fetch if a block is finalized.
+  pub async fn finalized(&self, block: BlockHash) -> Result<bool, RpcError> {
+    self.call("serai_isFinalized", &format!(r#"["{block}"]"#)).await
+  }
+
+  async fn block_internal(
+    block: impl Future<Output = Result<String, RpcError>>,
+  ) -> Result<Block, RpcError> {
+    let bin = block.await?;
+    Block::deserialize(
       &mut hex::decode(&bin)
         .map_err(|_| RpcError::InvalidNode("node returned non-hex-encoded block".to_string()))?
         .as_slice(),
     )
     .map_err(|_| RpcError::InvalidNode("node returned invalid block".to_string()))
+  }
+
+  /// Fetch a block from the Serai blockchain.
+  pub async fn block(&self, block: BlockHash) -> Result<Block, RpcError> {
+    Self::block_internal(self.call("serai_block", &format!(r#"["{block}"]"#))).await
+  }
+
+  /// Fetch a block from the Serai blockchain by its number.
+  pub async fn block_by_number(&self, block: u64) -> Result<Block, RpcError> {
+    Self::block_internal(self.call("serai_block", &format!("[{block}]"))).await
+  }
+
+  /// Scope this RPC client to the state as of specific block.
+  ///
+  /// This will yield an error if the block chosen isn't finalized. This ensures, given an honest
+  /// node, that this scope will be available for the lifetime of this object.
+  pub async fn at<'a>(&'a self, block: BlockHash) -> Result<TemporalSerai<'a>, RpcError> {
+    if !self.finalized(block).await? {
+      Err(RpcError::NotFinalized)?;
+    }
+    Ok(TemporalSerai { serai: self, block, events: Arc::new(RwLock::new(None)) })
   }
 
   /// Return the P2P addresses for the validators of the specified network.
@@ -129,9 +163,9 @@ impl Serai {
       .call(
         "p2p_validators",
         match network {
-          ExternalNetworkId::Bitcoin => "[bitcoin]",
-          ExternalNetworkId::Ethereum => "[ethereum]",
-          ExternalNetworkId::Monero => "[monero]",
+          ExternalNetworkId::Bitcoin => r#"["bitcoin"]"#,
+          ExternalNetworkId::Ethereum => r#"["ethereum"]"#,
+          ExternalNetworkId::Monero => r#"["monero"]"#,
           _ => Err(RpcError::InternalError("unrecognized external network ID".to_string()))?,
         },
       )

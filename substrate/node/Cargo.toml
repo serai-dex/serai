@@ -38,6 +38,7 @@ sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b48e
 sp-inherents = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b48efb12bf49a0dba1b3633403f716010b99dc56" }
 sp-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b48efb12bf49a0dba1b3633403f716010b99dc56" }
 sp-blockchain = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b48efb12bf49a0dba1b3633403f716010b99dc56" }
+sp-consensus = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b48efb12bf49a0dba1b3633403f716010b99dc56" }
 sp-state-machine = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b48efb12bf49a0dba1b3633403f716010b99dc56" }
 sp-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b48efb12bf49a0dba1b3633403f716010b99dc56" }
 sp-keystore = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "b48efb12bf49a0dba1b3633403f716010b99dc56" }
@@ -53,6 +54,7 @@ serai-runtime = { path = "../runtime", features = ["std"] }
 
 clap = { version = "4", features = ["derive"] }
 
+borsh = { version = "1", default-features = false, features = ["std"] }
 futures-util = "0.3"
 tokio = { version = "1", features = ["sync", "rt-multi-thread"] }
 jsonrpsee = { version = "0.24", features = ["server"] }
