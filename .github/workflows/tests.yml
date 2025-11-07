@@ -95,6 +95,7 @@ jobs:
             -p serai-in-instructions-pallet \
             -p serai-runtime \
             -p serai-node
+            -p serai-substrate-tests
 
   test-serai-client:
     runs-on: ubuntu-latest

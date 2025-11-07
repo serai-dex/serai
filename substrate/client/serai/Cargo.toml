@@ -30,3 +30,6 @@ async-lock = "3"
 
 [dev-dependencies]
 tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
+dockertest = "0.5"
+serai-docker-tests = { path = "../../../tests/docker" }
+serai-substrate-tests = { path = "../../../tests/substrate" }

@@ -1,11 +1,21 @@
 use std::{
-  sync::{Mutex, OnceLock},
+  sync::{Mutex, LazyLock},
   collections::{HashSet, HashMap},
   time::SystemTime,
   path::PathBuf,
   fs, env,
   process::Command,
 };
+
+use dockertest::{LogSource, LogAction, LogPolicy, LogOptions};
+
+pub fn handle(desc: &str) -> String {
+  static UNIQUE_ID: LazyLock<Mutex<u16>> = LazyLock::new(|| Mutex::new(0));
+  let mut unique_id_lock = UNIQUE_ID.lock().unwrap();
+  let unique_id = *unique_id_lock;
+  *unique_id_lock += 1;
+  format!("{desc}-{unique_id}")
+}
 
 pub fn fresh_logs_folder(first: bool, label: &str) -> String {
   let logs_path = [std::env::current_dir().unwrap().to_str().unwrap(), ".test-logs", label]
@@ -22,30 +32,33 @@ pub fn fresh_logs_folder(first: bool, label: &str) -> String {
   logs_path.to_str().unwrap().to_string()
 }
 
-// TODO: Merge this with what's in serai-orchestrator/have serai-orchestrator perform building
-static BUILT: OnceLock<Mutex<HashMap<String, bool>>> = OnceLock::new();
+pub fn log_options(path: String) -> LogOptions {
+  LogOptions {
+    action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+      LogAction::Forward
+    } else {
+      LogAction::ForwardToFile { path }
+    },
+    policy: LogPolicy::Always,
+    source: LogSource::Both,
+  }
+}
+
+// TODO: Should `serai-orchestrator` handle building?
 pub fn build(name: String) {
-  let built = BUILT.get_or_init(|| Mutex::new(HashMap::new()));
+  static BUILT: LazyLock<Mutex<HashMap<String, bool>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
   // Only one call to build will acquire this lock
-  let mut built_lock = built.lock().unwrap();
+  let mut built_lock = BUILT.lock().unwrap();
   if built_lock.contains_key(&name) {
     // If it was built, return
     return;
   }
 
   // Else, hold the lock while we build
-  let mut repo_path = env::current_exe().unwrap();
-  repo_path.pop();
-  assert!(repo_path.as_path().ends_with("deps"));
-  repo_path.pop();
-  assert!(repo_path.as_path().ends_with("debug"));
-  repo_path.pop();
-  assert!(repo_path.as_path().ends_with("target"));
-  repo_path.pop();
 
   // Run the orchestrator to ensure the most recent files exist
   if !Command::new("cargo")
-    .current_dir(&repo_path)
     .arg("run")
     .arg("-p")
     .arg("serai-orchestrator")
@@ -62,7 +75,6 @@ pub fn build(name: String) {
   }
 
   if !Command::new("cargo")
-    .current_dir(&repo_path)
     .arg("run")
     .arg("-p")
     .arg("serai-orchestrator")
@@ -78,6 +90,18 @@ pub fn build(name: String) {
     panic!("failed to run the orchestrator");
   }
 
+  let mut repo_path = PathBuf::from(
+    core::str::from_utf8(
+      &Command::new("cargo")
+        .args(["locate-project", "--workspace", "--message-format", "plain"])
+        .output()
+        .expect("couldn't locate workspace with `cargo`")
+        .stdout,
+    )
+    .expect("`cargo` outputted non-UTF-8 bytes to `stdout`"),
+  );
+  repo_path.pop(); // Pop the `Cargo.toml` term
+
   let mut orchestration_path = repo_path.clone();
   orchestration_path.push("orchestration");
   if name != "runtime" {
@@ -91,8 +115,6 @@ pub fn build(name: String) {
   if name.contains("-processor") {
     dockerfile_path =
       dockerfile_path.join("processor").join(name.split('-').next().unwrap()).join("Dockerfile");
-  } else if name == "serai-fast-epoch" {
-    dockerfile_path = dockerfile_path.join("serai").join("Dockerfile.fast-epoch");
   } else {
     dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
   }
@@ -150,7 +172,7 @@ pub fn build(name: String) {
           meta(repo_path.join("message-queue")),
           meta(repo_path.join("coordinator")),
         ],
-        "runtime" | "serai" | "serai-fast-epoch" => vec![
+        "runtime" | "serai" => vec![
           meta(repo_path.join("common")),
           meta(repo_path.join("crypto")),
           meta(repo_path.join("substrate")),

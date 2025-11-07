@@ -109,6 +109,7 @@ members = [
   "tests/message-queue",
   # TODO "tests/processor",
   # TODO "tests/coordinator",
+  "tests/substrate",
   # TODO "tests/full-stack",
   "tests/reproducible-runtime",
 ]
