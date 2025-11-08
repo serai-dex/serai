@@ -27,7 +27,11 @@ pub(crate) fn module<
 ) -> Result<RpcModule<impl 'static + Send + Sync>, Box<dyn std::error::Error + Send + Sync>> {
   let mut module = RpcModule::new(client);
 
-  module.register_async_method("serai_isFinalized", |params, client, _ext| async move {
+  module.register_method("serai_latestFinalizedBlockNumber", |_params, client, _ext| {
+    client.info().finalized_number
+  });
+
+  module.register_method("serai_isFinalized", |params, client, _ext| {
     let [block_hash]: [String; 1] = params.parse()?;
     let Some(block_hash) = hex::decode(&block_hash).ok().and_then(|bytes| {
       <[u8; 32]>::try_from(bytes.as_slice())
@@ -61,7 +65,7 @@ pub(crate) fn module<
     )
   })?;
 
-  module.register_async_method("serai_block", |params, client, _ext| async move {
+  module.register_method("serai_block", |params, client, _ext| {
     let block_hash = if let Ok([block_hash]) = params.parse::<[String; 1]>() {
       let Some(block_hash) = hex::decode(&block_hash).ok().and_then(|bytes| {
         <[u8; 32]>::try_from(bytes.as_slice())

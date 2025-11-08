@@ -119,6 +119,11 @@ impl Serai {
     Ok(Serai { url, client })
   }
 
+  /// Fetch the latest finalized block number.
+  pub async fn latest_finalized_block_number(&self) -> Result<u64, RpcError> {
+    self.call("serai_latestFinalizedBlockNumber", "[]").await
+  }
+
   /// Fetch if a block is finalized.
   pub async fn finalized(&self, block: BlockHash) -> Result<bool, RpcError> {
     self.call("serai_isFinalized", &format!(r#"["{block}"]"#)).await
@@ -146,11 +151,11 @@ impl Serai {
     Self::block_internal(self.call("serai_block", &format!("[{block}]"))).await
   }
 
-  /// Scope this RPC client to the state as of specific block.
+  /// Scope this RPC client to the state as of a specific block.
   ///
   /// This will yield an error if the block chosen isn't finalized. This ensures, given an honest
   /// node, that this scope will be available for the lifetime of this object.
-  pub async fn at<'a>(&'a self, block: BlockHash) -> Result<TemporalSerai<'a>, RpcError> {
+  pub async fn as_of<'a>(&'a self, block: BlockHash) -> Result<TemporalSerai<'a>, RpcError> {
     if !self.finalized(block).await? {
       Err(RpcError::NotFinalized)?;
     }

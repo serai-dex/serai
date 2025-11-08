@@ -36,7 +36,7 @@ async fn block_has_events_justifying_a_cosign(
   block_number: u64,
 ) -> Result<(Block, HasEvents), String> {
   let block = serai
-    .finalized_block_by_number(block_number)
+    .block_by_number(block_number)
     .await
     .map_err(|e| format!("{e:?}"))?
     .ok_or_else(|| "couldn't get block which should've been finalized".to_string())?;
@@ -66,7 +66,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
     async move {
       let start_block_number = ScanCosignFrom::get(&self.db).unwrap_or(1);
       let latest_block_number =
-        self.serai.latest_finalized_block().await.map_err(|e| format!("{e:?}"))?.number();
+        self.serai.latest_finalized_block_number().await.map_err(|e| format!("{e:?}"))?.number();
 
       for block_number in start_block_number ..= latest_block_number {
         let mut txn = self.db.txn();

@@ -149,7 +149,7 @@ fn build_serai_service(prelude: &str, release: bool, features: &str, package: &s
 
   format!(
     r#"
-FROM rust:1.90-slim-trixie AS builder
+FROM rust:1.91-slim-trixie AS builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload

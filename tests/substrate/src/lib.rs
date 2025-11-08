@@ -29,14 +29,14 @@ pub async fn rpc(ops: &DockerOperations, handle: Handle) -> Serai {
   let serai_rpc = ops.handle(&handle.0).host_port(9944).unwrap();
   let serai_rpc = format!("http://{}:{}", serai_rpc.0, serai_rpc.1);
 
-  // If the RPC server has yet to start, sleep for up to 60s until it does
+  // If the RPC server has yet to start, sleep for up to 5 minutes until it does
   let client = Serai::new(serai_rpc.clone()).unwrap();
-  for _ in 0 .. 180 {
+  for _ in 0 .. 300 {
     tokio::time::sleep(Duration::from_secs(1)).await;
     if client.block_by_number(0).await.is_err() {
       continue;
     }
     return client;
   }
-  panic!("serai RPC server wasn't available after 60s");
+  panic!("serai RPC server wasn't available after 5 minutes");
 }
