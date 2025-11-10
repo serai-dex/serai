@@ -14,9 +14,9 @@ pub(crate) async fn rpc() -> Rpc {
   // If this node has already been interacted with, clear its chain
   if rpc.get_latest_block_number().await.unwrap() > 0 {
     rpc
-      .rpc_call(
+      .call(
         "invalidateblock",
-        serde_json::json!([hex::encode(rpc.get_block_hash(1).await.unwrap())]),
+        &format!(r#"["{}"]"#, hex::encode(rpc.get_block_hash(1).await.unwrap())),
       )
       .await
       .unwrap()
