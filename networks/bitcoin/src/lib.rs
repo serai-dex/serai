@@ -14,7 +14,7 @@ pub(crate) mod crypto;
 /// Wallet functionality to create transactions.
 pub mod wallet;
 /// A minimal asynchronous Bitcoin RPC client.
-#[cfg(feature = "std")]
+#[cfg(feature = "rpc")]
 pub mod rpc;
 
 #[cfg(test)]

@@ -41,21 +41,21 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
   let block_number = rpc.get_latest_block_number().await.unwrap() + 1;
 
   rpc
-    .rpc_call::<Vec<String>>(
+    .call::<Vec<String>>(
       "generatetoaddress",
-      serde_json::json!([
-        1,
+      &format!(
+        r#"[1, "{}"]"#,
         Address::from_script(&p2tr_script_buf(key).unwrap(), Network::Regtest).unwrap()
-      ]),
+      ),
     )
     .await
     .unwrap();
 
   // Mine until maturity
   rpc
-    .rpc_call::<Vec<String>>(
+    .call::<Vec<String>>(
       "generatetoaddress",
-      serde_json::json!([100, Address::p2sh(Script::new(), Network::Regtest).unwrap()]),
+      &format!(r#"[100, "{}"]"#, Address::p2sh(Script::new(), Network::Regtest).unwrap()),
     )
     .await
     .unwrap();

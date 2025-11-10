@@ -1,10 +1,7 @@
-use core::fmt::Debug;
-use std::collections::HashSet;
+use core::{str::FromStr, fmt::Debug};
+use std::{io::Read, collections::HashSet};
 
 use thiserror::Error;
-
-use serde::{Deserialize, de::DeserializeOwned};
-use serde_json::json;
 
 use simple_request::{hyper, Request, TokioClient as Client};
 
@@ -14,17 +11,10 @@ use bitcoin::{
   Txid, Transaction, BlockHash, Block,
 };
 
-#[derive(Clone, PartialEq, Eq, Debug, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Error {
   code: isize,
   message: String,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(untagged)]
-enum RpcResponse<T> {
-  Ok { result: T },
-  Err { error: Error },
 }
 
 /// A minimal asynchronous Bitcoin RPC client.
@@ -34,14 +24,14 @@ pub struct Rpc {
   url: String,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum RpcError {
   #[error("couldn't connect to node")]
   ConnectionError,
   #[error("request had an error: {0:?}")]
   RequestError(Error),
   #[error("node replied with invalid JSON")]
-  InvalidJson(serde_json::error::Category),
+  InvalidJson,
   #[error("node sent an invalid response ({0})")]
   InvalidResponse(&'static str),
   #[error("node was missing expected methods")]
@@ -66,7 +56,7 @@ impl Rpc {
       Rpc { client: Client::with_connection_pool().map_err(|_| RpcError::ConnectionError)?, url };
 
     // Make an RPC request to verify the node is reachable and sane
-    let res: String = rpc.rpc_call("help", json!([])).await?;
+    let res: String = rpc.call("help", "[]").await?;
 
     // Verify all methods we expect are present
     // If we had a more expanded RPC, due to differences in RPC versions, it wouldn't make sense to
@@ -103,18 +93,16 @@ impl Rpc {
   }
 
   /// Perform an arbitrary RPC call.
-  pub async fn rpc_call<Response: DeserializeOwned + Debug>(
+  pub async fn call<Response: 'static + Default + core_json_traits::JsonDeserialize>(
     &self,
     method: &str,
-    params: serde_json::Value,
+    params: &str,
   ) -> Result<Response, RpcError> {
     let mut request = Request::from(
       hyper::Request::post(&self.url)
         .header("Content-Type", "application/json")
         .body(
-          serde_json::to_vec(&json!({ "jsonrpc": "2.0", "method": method, "params": params }))
-            .unwrap()
-            .into(),
+          format!(r#"{{ "method": "{method}", "params": {params} }}"#).as_bytes().to_vec().into(),
         )
         .unwrap(),
     );
@@ -129,11 +117,52 @@ impl Rpc {
       .await
       .map_err(|_| RpcError::ConnectionError)?;
 
-    let res: RpcResponse<Response> =
-      serde_json::from_reader(&mut res).map_err(|e| RpcError::InvalidJson(e.classify()))?;
+    #[derive(Default, core_json_derive::JsonDeserialize)]
+    struct InternalError {
+      code: Option<i64>,
+      message: Option<String>,
+    }
+
+    #[derive(core_json_derive::JsonDeserialize)]
+    struct RpcResponse<T: core_json_traits::JsonDeserialize> {
+      result: Option<T>,
+      error: Option<InternalError>,
+    }
+    impl<T: core_json_traits::JsonDeserialize> Default for RpcResponse<T> {
+      fn default() -> Self {
+        Self { result: None, error: None }
+      }
+    }
+
+    // TODO: `core_json::ReadAdapter`
+    let mut res_vec = vec![];
+    res.read_to_end(&mut res_vec).map_err(|_| RpcError::ConnectionError)?;
+    let res = <RpcResponse<Response> as core_json_traits::JsonStructure>::deserialize_structure::<
+      _,
+      core_json_traits::ConstStack<32>,
+    >(res_vec.as_slice())
+    .map_err(|_| RpcError::InvalidJson)?;
+
     match res {
-      RpcResponse::Ok { result } => Ok(result),
-      RpcResponse::Err { error } => Err(RpcError::RequestError(error)),
+      RpcResponse { result: Some(result), error: None } => Ok(result),
+      RpcResponse { result: None, error: Some(error) } => {
+        let code =
+          error.code.ok_or_else(|| RpcError::InvalidResponse("error was missing `code`"))?;
+        let code = isize::try_from(code)
+          .map_err(|_| RpcError::InvalidResponse("error code exceeded isize::MAX"))?;
+        let message =
+          error.message.ok_or_else(|| RpcError::InvalidResponse("error was missing `message`"))?;
+        Err(RpcError::RequestError(Error { code, message }))
+      }
+      // `invalidateblock` yields this edge case
+      RpcResponse { result: None, error: None } => {
+        if core::any::TypeId::of::<Response>() == core::any::TypeId::of::<()>() {
+          Ok(Default::default())
+        } else {
+          Err(RpcError::InvalidResponse("response lacked both a result and an error"))
+        }
+      }
+      _ => Err(RpcError::InvalidResponse("response contained both a result and an error")),
     }
   }
 
@@ -146,16 +175,17 @@ impl Rpc {
     // tip block of the current chain. The "height" of a block is defined as the amount of blocks
     // present when the block was created. Accordingly, the genesis block has height 0, and
     // getblockcount will return 0 when it's only the only block, despite their being one block.
-    self.rpc_call("getblockcount", json!([])).await
+    usize::try_from(self.call::<u64>("getblockcount", "[]").await?)
+      .map_err(|_| RpcError::InvalidResponse("latest block number exceeded usize::MAX"))
   }
 
   /// Get the hash of a block by the block's number.
   pub async fn get_block_hash(&self, number: usize) -> Result<[u8; 32], RpcError> {
-    let mut hash = self
-      .rpc_call::<BlockHash>("getblockhash", json!([number]))
-      .await?
-      .as_raw_hash()
-      .to_byte_array();
+    let mut hash =
+      BlockHash::from_str(&self.call::<String>("getblockhash", &format!("[{number}]")).await?)
+        .map_err(|_| RpcError::InvalidResponse("block hash was not valid hex"))?
+        .as_raw_hash()
+        .to_byte_array();
     // bitcoin stores the inner bytes in reverse order.
     hash.reverse();
     Ok(hash)
@@ -163,16 +193,25 @@ impl Rpc {
 
   /// Get a block's number by its hash.
   pub async fn get_block_number(&self, hash: &[u8; 32]) -> Result<usize, RpcError> {
-    #[derive(Deserialize, Debug)]
+    #[derive(Default, core_json_derive::JsonDeserialize)]
     struct Number {
-      height: usize,
+      height: Option<u64>,
     }
-    Ok(self.rpc_call::<Number>("getblockheader", json!([hex::encode(hash)])).await?.height)
+    usize::try_from(
+      self
+        .call::<Number>("getblockheader", &format!(r#"["{}"]"#, hex::encode(hash)))
+        .await?
+        .height
+        .ok_or_else(|| {
+          RpcError::InvalidResponse("`getblockheader` did not include `height` field")
+        })?,
+    )
+    .map_err(|_| RpcError::InvalidResponse("block number exceeded usize::MAX"))
   }
 
   /// Get a block by its hash.
   pub async fn get_block(&self, hash: &[u8; 32]) -> Result<Block, RpcError> {
-    let hex = self.rpc_call::<String>("getblock", json!([hex::encode(hash), 0])).await?;
+    let hex = self.call::<String>("getblock", &format!(r#"["{}", 0]"#, hex::encode(hash))).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)
       .map_err(|_| RpcError::InvalidResponse("node didn't use hex to encode the block"))?;
     let block: Block = encode::deserialize(&bytes)
@@ -189,8 +228,13 @@ impl Rpc {
 
   /// Publish a transaction.
   pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<Txid, RpcError> {
-    let txid = match self.rpc_call("sendrawtransaction", json!([encode::serialize_hex(tx)])).await {
-      Ok(txid) => txid,
+    let txid = match self
+      .call::<String>("sendrawtransaction", &format!(r#"["{}"]"#, encode::serialize_hex(tx)))
+      .await
+    {
+      Ok(txid) => {
+        Txid::from_str(&txid).map_err(|_| RpcError::InvalidResponse("TXID was not valid hex"))?
+      }
       Err(e) => {
         // A const from Bitcoin's bitcoin/src/rpc/protocol.h
         const RPC_VERIFY_ALREADY_IN_CHAIN: isize = -27;
@@ -211,7 +255,8 @@ impl Rpc {
 
   /// Get a transaction by its hash.
   pub async fn get_transaction(&self, hash: &[u8; 32]) -> Result<Transaction, RpcError> {
-    let hex = self.rpc_call::<String>("getrawtransaction", json!([hex::encode(hash)])).await?;
+    let hex =
+      self.call::<String>("getrawtransaction", &format!(r#"["{}"]"#, hex::encode(hash))).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)
       .map_err(|_| RpcError::InvalidResponse("node didn't use hex to encode the transaction"))?;
     let tx: Transaction = encode::deserialize(&bytes)
