@@ -169,9 +169,7 @@ overflow-checks = true
 ark-ff-3 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.3" }
 ark-ff-4 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.4" }
 c-kzg = { path = "patches/ethereum/c-kzg" }
-rug = { path = "patches/ethereum/rug" }
 secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-30" }
-secp256k1-31 = { package = "secp256k1", path = "patches/ethereum/secp256k1-31" }
 
 # Updates to the latest version
 darling = { path = "patches/darling" }
