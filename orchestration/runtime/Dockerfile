@@ -1,10 +1,10 @@
-# rust:1.91.0-slim-bookworm as of November 5th, 2025 (GMT)
-FROM --platform=linux/amd64 rust@sha256:91f3c97d542bff86d69b027d60f52bbafd7b60cc02321a56dbc1a9e6bfef1c55 AS deterministic
+# rust:1.91.1-slim-trixie as of November 11th, 2025 (GMT)
+FROM --platform=linux/amd64 rust@sha256:ccdbe08a0b10498bc5f3cac3d736af7b8eb6cb0ecfc1e8a504e93d8ee76a8e8e AS deterministic
 
 # Move to a Debian package snapshot
 RUN rm -rf /etc/apt/sources.list.d/debian.sources && \
   rm -rf /var/lib/apt/lists/* && \
-  echo "deb [arch=amd64] http://snapshot.debian.org/archive/debian/20251105T000000Z bookworm main" > /etc/apt/sources.list && \
+  echo "deb [arch=amd64] http://snapshot.debian.org/archive/debian/20251111T000000Z trixie main" > /etc/apt/sources.list && \
   apt update
 
 # Install dependencies
