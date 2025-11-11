@@ -52,7 +52,7 @@ fn insecure_embedded_elliptic_curve_keys(
   ]
 }
 
-fn wasm_binary() -> Vec<u8> {
+fn wasm_binary(dev: bool) -> Vec<u8> {
   // TODO: Accept a config of runtime path
   const DEFAULT_WASM_PATH: &str = "/runtime/serai.wasm";
   let path = serai_env::var("SERAI_WASM").unwrap_or(DEFAULT_WASM_PATH.to_string());
@@ -60,6 +60,11 @@ fn wasm_binary() -> Vec<u8> {
     log::info!("using {path} for the WASM");
     return binary;
   }
+
+  if !dev {
+    panic!("runtime WASM was not provided");
+  }
+
   log::info!("using built-in wasm");
   WASM_BINARY.ok_or("compiled in wasm not available").unwrap().to_vec()
 }
@@ -167,7 +172,7 @@ fn genesis(
   };
   use sc_service::ChainSpec as _;
 
-  let bin = wasm_binary();
+  let bin = wasm_binary(matches!(chain_type, ChainType::Development));
   let hash = sp_core::blake2_256(&bin).to_vec();
 
   let mut chain_spec = sc_chain_spec::ChainSpecBuilder::new(&bin, None)
