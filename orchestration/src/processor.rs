@@ -28,6 +28,7 @@ RUN svm use 0.8.29
       } else {
         ""
       },
+      Os::Debian,
       network.release(),
       &format!("binaries {} {coin}", network.db()),
       "serai-processor",
