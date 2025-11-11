@@ -143,13 +143,20 @@ WORKDIR /home/{user}
   }
 }
 
-fn build_serai_service(prelude: &str, release: bool, features: &str, package: &str) -> String {
+fn build_serai_service(
+  prelude: &str,
+  os: Os,
+  release: bool,
+  features: &str,
+  package: &str,
+) -> String {
   let profile = if release { "release" } else { "debug" };
   let profile_flag = if release { "--release" } else { "" };
 
-  format!(
-    r#"
-FROM rust:1.90-slim-trixie AS builder
+  (match os {
+    Os::Debian => {
+      r#"
+FROM rust:1.91-slim-trixie AS builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
@@ -161,7 +168,25 @@ RUN apt install -y pkg-config libclang-dev clang
 
 # Dependencies for the Serai node
 RUN apt install -y make protobuf-compiler
+"#
+    }
+    Os::Alpine => {
+      r#"
+FROM rust:1.91-alpine AS builder
 
+COPY --from=mimalloc-alpine libmimalloc.so /usr/lib
+ENV LD_PRELOAD=libmimalloc.so
+
+RUN apk update && apk upgrade
+
+# Add dev dependencies
+RUN apk add clang-dev
+"#
+    }
+  })
+  .to_owned() +
+    &format!(
+      r#"
 # Add the wasm toolchain
 RUN rustup target add wasm32v1-none
 
@@ -195,7 +220,7 @@ RUN --mount=type=cache,target=/root/.cargo \
   cargo build {profile_flag} --features "{features}" -p {package} && \
   mv /serai/target/{profile}/{package} /serai/bin
 "#
-  )
+    )
 }
 
 pub fn write_dockerfile(path: PathBuf, dockerfile: &str) {

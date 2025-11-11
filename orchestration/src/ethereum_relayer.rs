@@ -4,7 +4,13 @@ use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
 pub fn ethereum_relayer(orchestration_path: &Path, network: Network) {
   let setup = mimalloc(Os::Debian).to_string() +
-    &build_serai_service("", network.release(), network.db(), "serai-ethereum-relayer");
+    &build_serai_service(
+      "",
+      Os::Debian,
+      network.release(),
+      network.db(),
+      "serai-ethereum-relayer",
+    );
 
   let env_vars = [
     ("DB_PATH", "/volume/ethereum-relayer-db".to_string()),

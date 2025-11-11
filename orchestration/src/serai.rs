@@ -12,9 +12,10 @@ pub fn serai(
   serai_key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
 ) {
   // Always builds in release for performance reasons
-  let setup = mimalloc(Os::Debian).to_string() + &build_serai_service("", true, "", "serai-node");
-  let setup_fast_epoch =
-    mimalloc(Os::Debian).to_string() + &build_serai_service("", true, "fast-epoch", "serai-node");
+  let setup =
+    mimalloc(Os::Debian).to_string() + &build_serai_service("", Os::Debian, true, "", "serai-node");
+  let setup_fast_epoch = mimalloc(Os::Debian).to_string() +
+    &build_serai_service("", Os::Debian, true, "fast-epoch", "serai-node");
 
   let env_vars = [("KEY", hex::encode(serai_key.to_repr()))];
   let mut env_vars_str = String::new();

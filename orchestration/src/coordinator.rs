@@ -19,6 +19,7 @@ pub fn coordinator(
   let setup = mimalloc(Os::Debian).to_string() +
     &build_serai_service(
       "",
+      Os::Debian,
       network.release(),
       &format!("{db} {longer_reattempts}"),
       "serai-coordinator",
