@@ -1,10 +1,10 @@
-# rust:1.91.0-slim-trixie as of November 8th, 2025 (GMT)
-FROM --platform=linux/amd64 rust@sha256:e415522de69c288c462eaed441655a283cece8f5dd20df74600277fe9a27e7ed AS deterministic
+# rust:1.91.1-slim-trixie as of November 11th, 2025 (GMT)
+FROM --platform=linux/amd64 rust@sha256:ccdbe08a0b10498bc5f3cac3d736af7b8eb6cb0ecfc1e8a504e93d8ee76a8e8e AS deterministic
 
 # Move to a Debian package snapshot
 RUN rm -rf /etc/apt/sources.list.d/debian.sources && \
   rm -rf /var/lib/apt/lists/* && \
-  echo "deb [arch=amd64] http://snapshot.debian.org/archive/debian/20251108T000000Z trixie main" > /etc/apt/sources.list && \
+  echo "deb [arch=amd64] http://snapshot.debian.org/archive/debian/20251111T000000Z trixie main" > /etc/apt/sources.list && \
   apt update
 
 # Install dependencies
