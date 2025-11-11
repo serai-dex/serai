@@ -22,7 +22,8 @@ async fn blockchain() {
     .run_async(async |ops| {
       let serai = serai_substrate_tests::rpc(&ops, handle).await;
 
-      let test_block = |number| {
+      // Check the sanity of fetching a block
+      let test_finalized_block = |number| {
         let serai = &serai;
         async move {
           let block = serai.block_by_number(number).await.unwrap();
@@ -31,24 +32,52 @@ async fn blockchain() {
         }
       };
 
-      test_block(0).await;
+      test_finalized_block(0).await;
       let finalized = serai.latest_finalized_block_number().await.unwrap();
-      test_block(finalized).await;
+      test_finalized_block(finalized).await;
 
-      let mut next_finalized;
-      {
-        let mut i = 0;
-        while {
-          next_finalized = serai.latest_finalized_block_number().await.unwrap();
-          next_finalized == finalized
-        } {
+      // Check unfinalized blocks are marked as unfinalized
+      'outer: {
+        for _ in 0 .. 10 {
           tokio::time::sleep(core::time::Duration::from_secs(6)).await;
-          i += 1;
-          assert!(i < 50, "serai didn't finalize a block within five minutes");
+
+          let latest_finalized = serai.latest_finalized_block_number().await.unwrap();
+          // Fetch the unfinalized block after, if it exists
+          let Ok(block) = serai.block_by_number(latest_finalized + 1).await else {
+            continue;
+          };
+          // Check if it's considered finalized
+          let considered_finalized = serai.finalized(block.header.hash()).await.unwrap();
+          // Ensure the finalized block is the same, meaning this block didn't become finalized as
+          // we made these RPC requests
+          if latest_finalized != serai.latest_finalized_block_number().await.unwrap() {
+            continue;
+          }
+
+          // Check the block wasn't considered finalized
+          assert!(!considered_finalized);
+          break 'outer;
         }
+        panic!("couldn't find an unfinalized block to check wasn't considered finalized");
+      };
+
+      // Check the finalized block advances
+      {
+        let mut next_finalized;
+        {
+          let mut i = 0;
+          while {
+            next_finalized = serai.latest_finalized_block_number().await.unwrap();
+            next_finalized == finalized
+          } {
+            tokio::time::sleep(core::time::Duration::from_secs(6)).await;
+            i += 1;
+            assert!(i < 50, "serai didn't finalize a block within five minutes");
+          }
+        }
+        assert!(next_finalized > finalized);
+        test_finalized_block(next_finalized).await;
       }
-      assert!(next_finalized > finalized);
-      test_block(next_finalized).await;
 
       println!("Finished `serai-client/blockchain` test");
     })
