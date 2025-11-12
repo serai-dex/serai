@@ -7,10 +7,10 @@ FROM alpine:latest AS mimalloc-alpine
 RUN apk update && apk upgrade && apk --no-cache add gcc g++ libc-dev make cmake git
 RUN git clone https://github.com/microsoft/mimalloc && \
   cd mimalloc && \
-  git checkout 43ce4bd7fd34bcc730c1c7471c99995597415488 && \
+  git checkout fbd8b99c2b828428947d70fdc046bb55609be93e && \
   mkdir -p out/secure && \
   cd out/secure && \
-  cmake -DMI_SECURE=ON ../.. && \
+  cmake -DMI_SECURE=ON -DMI_GUARDED=on ../.. && \
   make && \
   cp ./libmimalloc-secure.so ../../../libmimalloc.so
 "#;
@@ -21,10 +21,10 @@ FROM debian:trixie-slim AS mimalloc-debian
 RUN apt update && apt upgrade -y && apt install -y gcc g++ make cmake git
 RUN git clone https://github.com/microsoft/mimalloc && \
   cd mimalloc && \
-  git checkout 43ce4bd7fd34bcc730c1c7471c99995597415488 && \
+  git checkout fbd8b99c2b828428947d70fdc046bb55609be93e && \
   mkdir -p out/secure && \
   cd out/secure && \
-  cmake -DMI_SECURE=ON ../.. && \
+  cmake -DMI_SECURE=ON -DMI_GUARDED=on ../.. && \
   make && \
   cp ./libmimalloc-secure.so ../../../libmimalloc.so
 "#;

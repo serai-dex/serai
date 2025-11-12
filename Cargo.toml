@@ -171,10 +171,6 @@ ark-ff-4 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.4" }
 c-kzg = { path = "patches/ethereum/c-kzg" }
 secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-30" }
 
-# Updates to the latest version
-darling = { path = "patches/darling" }
-thiserror = { path = "patches/thiserror" }
-
 # Dependencies from monero-oxide which originate from within our own tree
 std-shims = { path = "patches/std-shims" }
 simple-request = { path = "patches/simple-request" }
@@ -185,11 +181,17 @@ dalek-ff-group = { path = "crypto/dalek-ff-group" }
 minimal-ed448 = { path = "crypto/ed448" }
 modular-frost = { path = "crypto/frost" }
 
+# Patch due to `std` now including the required functionality
+is_terminal_polyfill = { path = "./patches/is_terminal_polyfill" }
+# This has a non-deprecated `std` alternative since Rust's 2024 edition
+home = { path = "patches/home" }
+
+# Updates to the latest version
+darling = { path = "patches/darling" }
+thiserror = { path = "patches/thiserror" }
+
 # https://github.com/rust-lang-nursery/lazy-static.rs/issues/201
 lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
-
-# These has an `std` alternative since Rust's 2024 edition
-home = { path = "patches/home" }
 
 # directories-next was created because directories was unmaintained
 # directories-next is now unmaintained while directories is maintained
@@ -203,8 +205,8 @@ directories-next = { path = "patches/directories-next" }
 k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
 p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
 
-# Patch due to `std` now including the required functionality
-is_terminal_polyfill = { path = "./patches/is_terminal_polyfill" }
+# `jemalloc` conflicts with `mimalloc`, so patch to a `rocksdb` which never uses `jemalloc`
+librocksdb-sys = { path = "patches/librocksdb-sys" }
 
 [workspace.lints.clippy]
 incompatible_msrv = "allow" # Manually verified with a GitHub workflow

@@ -1,0 +1,35 @@
+[package]
+name = "librocksdb-sys"
+version = "0.17.99"
+description = "Replacement for `librocksdb-sys` which removes the `jemalloc` feature"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/librocksdb-sys"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2018"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+# librocksdb-sys 0.17.3+10.4.2, with the commit provided by crates.io in `cargo_vcs_info.json`
+librocksdb-sys = { git = "https://github.com/rust-rocksdb/rust-rocksdb", commit = "bb7d2168eab1bc7849f23adbcb825e3aba1bd2f4", default-features = false }
+
+[features]
+default = ["librocksdb-sys/default"]
+jemalloc = []
+static = ["librocksdb-sys/static"]
+bindgen-runtime = ["librocksdb-sys/bindgen-runtime"]
+bindgen-static = ["librocksdb-sys/bindgen-static"]
+mt_static = ["librocksdb-sys/mt_static"]
+io-uring = ["librocksdb-sys/io-uring"]
+snappy = ["librocksdb-sys/snappy"]
+lz4 = ["librocksdb-sys/lz4"]
+zstd = ["librocksdb-sys/zstd"]
+zlib = ["librocksdb-sys/zlib"]
+bzip2 = ["librocksdb-sys/bzip2"]
+rtti = ["librocksdb-sys/rtti"]
+lto = ["librocksdb-sys/lto"]
