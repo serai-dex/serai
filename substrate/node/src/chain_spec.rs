@@ -20,7 +20,7 @@ use serai_abi::{
   },
   SubstrateBlock as Block,
 };
-use serai_runtime::*;
+use serai_runtime::GenesisConfig;
 
 pub type ChainSpec = sc_service::GenericChainSpec;
 
@@ -66,95 +66,32 @@ fn wasm_binary(dev: bool) -> Vec<u8> {
   }
 
   log::info!("using built-in wasm");
-  WASM_BINARY.ok_or("compiled in wasm not available").unwrap().to_vec()
+  serai_runtime::WASM_BINARY.ok_or("compiled in wasm not available").unwrap().to_vec()
 }
 
-fn devnet_genesis(
-  validators: &[&'static str],
-  endowed_accounts: Vec<Public>,
-) -> RuntimeGenesisConfig {
-  let validators = validators
-    .iter()
-    .map(|name| (insecure_account_from_name(name), insecure_embedded_elliptic_curve_keys(name)))
-    .collect::<Vec<_>>();
-
-  RuntimeGenesisConfig {
-    system: SystemConfig { _config: PhantomData },
-
-    coins: CoinsConfig {
-      accounts: endowed_accounts
-        .into_iter()
-        .map(|address| (address.into(), Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
-        .collect(),
-      _instance: PhantomData,
-    },
-
-    liquidity_tokens: LiquidityTokensConfig { accounts: vec![], _instance: PhantomData },
-
-    validator_sets: ValidatorSetsConfig {
-      participants: validators
-        .iter()
-        .map(|validator| (validator.0.into(), validator.1.clone()))
-        .collect(),
-    },
-    signals: SignalsConfig::default(),
-    babe: BabeConfig {
-      // We leave this empty as `serai-validator-sets-pallet` initializes the authorities
-      authorities: vec![],
-      epoch_config: BABE_GENESIS_EPOCH_CONFIG,
-      _config: PhantomData,
-    },
-    grandpa: GrandpaConfig { authorities: vec![], _config: PhantomData },
+fn devnet_genesis(validators: &[&'static str], endowed_accounts: Vec<Public>) -> GenesisConfig {
+  GenesisConfig {
+    validators: validators
+      .iter()
+      .map(|name| (insecure_account_from_name(name), insecure_embedded_elliptic_curve_keys(name)))
+      .collect(),
+    coins: endowed_accounts
+      .into_iter()
+      .map(|address| (address, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))
+      .collect(),
   }
 }
 
 /*
-fn testnet_genesis(validators: Vec<&'static str>) -> RuntimeGenesisConfig {
-  let validators = validators
-    .into_iter()
-    .map(|validator| Public::decode(&mut hex::decode(validator).unwrap().as_slice()).unwrap())
-    .collect::<Vec<_>>();
-  let key_shares = NETWORKS
-    .iter()
-    .map(|network| match network {
-      NetworkId::Serai => (NetworkId::Serai, Amount(50_000 * 10_u64.pow(8))),
-      NetworkId::External(ExternalNetworkId::Bitcoin) => {
-        (NetworkId::External(ExternalNetworkId::Bitcoin), Amount(1_000_000 * 10_u64.pow(8)))
-      }
-      NetworkId::External(ExternalNetworkId::Ethereum) => {
-        (NetworkId::External(ExternalNetworkId::Ethereum), Amount(1_000_000 * 10_u64.pow(8)))
-      }
-      NetworkId::External(ExternalNetworkId::Monero) => {
-        (NetworkId::External(ExternalNetworkId::Monero), Amount(100_000 * 10_u64.pow(8)))
-      }
-    })
-    .collect::<Vec<_>>();
-
-  assert_eq!(validators.iter().collect::<HashSet<_>>().len(), validators.len());
-
-  RuntimeGenesisConfig {
-    system: SystemConfig { _config: PhantomData },
-
-    coins: CoinsConfig {
-      accounts: validators
-        .iter()
-        .map(|a| (*a, Balance { coin: Coin::Serai, amount: Amount(5_000_000 * 10_u64.pow(8)) }))
-        .collect(),
-    },
-
-    validator_sets: ValidatorSetsConfig {
-      participants: validators.clone(),
-    },
-    signals: SignalsConfig::default(),
-    babe: BabeConfig {
-      authorities: validators.iter().map(|validator| ((*validator).into(), 1)).collect(),
-      epoch_config: BABE_GENESIS_EPOCH_CONFIG,
-      _config: PhantomData,
-    },
-    grandpa: GrandpaConfig {
-      authorities: validators.into_iter().map(|validator| (validator.into(), 1)).collect(),
-      _config: PhantomData,
-    },
+fn testnet_genesis(validators: &[&'static str]) -> GenesisConfig {
+  GenesisConfig {
+    validators: validators
+      .iter()
+      .map(|name| {
+        (insecure_account_from_name(name), insecure_embedded_elliptic_curve_keys(name))
+      })
+      .collect(),
+    coins: vec![],
   }
 }
 */
@@ -164,7 +101,7 @@ fn genesis(
   id: &'static str,
   chain_type: ChainType,
   protocol_id: &'static str,
-  config: &RuntimeGenesisConfig,
+  config: &GenesisConfig,
 ) -> ChainSpec {
   use sp_core::{
     Encode,

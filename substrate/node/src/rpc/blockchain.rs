@@ -10,7 +10,6 @@ use sp_api::ProvideRuntimeApi;
 use sc_client_api::BlockBackend;
 
 use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
-use serai_runtime::*;
 
 use jsonrpsee::RpcModule;
 

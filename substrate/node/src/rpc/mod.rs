@@ -8,7 +8,6 @@ use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
 
 use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
-use serai_runtime::*;
 
 use tokio::sync::RwLock;
 

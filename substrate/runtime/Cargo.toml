@@ -20,19 +20,22 @@ workspace = true
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
-sp-session = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
-sp-inherents = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
 sp-version = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
+
 sp-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
+sp-transaction-pool = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
+sp-inherents = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
+sp-block-builder = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
 sp-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
 sp-consensus-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
-sp-block-builder = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
-sp-transaction-pool = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
 sp-authority-discovery = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
+sp-session = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
 
 frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "726437c7bbff34ec322483dac2b657e126c22233", default-features = false }
@@ -57,13 +60,14 @@ std = [
 
   "sp-core/std",
   "sp-session/std",
+
   "sp-version/std",
   "sp-runtime/std",
   "sp-api/std",
+  "sp-transaction-pool/std",
+  "sp-block-builder/std",
   "sp-consensus-babe/std",
   "sp-consensus-grandpa/std",
-  "sp-block-builder/std",
-  "sp-transaction-pool/std",
   "sp-authority-discovery/std",
 
   "serai-abi/std",

@@ -7,18 +7,14 @@ use sp_blockchain::{Error as BlockchainError, HeaderBackend};
 use sp_api::ProvideRuntimeApi;
 
 use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
-use serai_runtime::*;
+use serai_runtime::SeraiApi;
 
 use tokio::sync::RwLock;
 
 use jsonrpsee::RpcModule;
 
 pub(crate) fn module<
-  C: 'static
-    + Send
-    + Sync
-    + HeaderBackend<Block>
-    + ProvideRuntimeApi<Block, Api: serai_runtime::SeraiApi<Block>>,
+  C: 'static + Send + Sync + HeaderBackend<Block> + ProvideRuntimeApi<Block, Api: SeraiApi<Block>>,
 >(
   id: String,
   client: Arc<C>,
@@ -62,7 +58,7 @@ pub(crate) fn module<
       let mut returned_addresses = authority_discovery
         .write()
         .await
-        .get_addresses_by_authority_id(validator.into())
+        .get_addresses_by_authority_id(sp_core::sr25519::Public::from(validator).into())
         .await
         .unwrap_or_else(HashSet::new)
         .into_iter()
