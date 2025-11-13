@@ -35,7 +35,7 @@ alloy-provider = { version = "1", default-features = false }
 
 revm = { version = "33", default-features = false }
 
-ethereum-schnorr = { package = "ethereum-schnorr-contract", path = "../../../networks/ethereum/schnorr", default-features = false }
+ethereum-schnorr = { package = "ethereum-schnorr-contract", path = "../../../networks/ethereum/schnorr", default-features = false, features = ["std"] }
 
 ethereum-primitives = { package = "serai-processor-ethereum-primitives", path = "../primitives", default-features = false }
 ethereum-deployer = { package = "serai-processor-ethereum-deployer", path = "../deployer", default-features = false }

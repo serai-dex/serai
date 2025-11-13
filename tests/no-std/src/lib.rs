@@ -16,6 +16,8 @@ pub use embedwards25519;
 
 pub use schnorr_signatures;
 
+pub use ethereum_schnorr_contract;
+
 #[cfg(feature = "alloc")]
 pub mod alloc {
   pub use multiexp;
