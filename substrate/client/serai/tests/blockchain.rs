@@ -22,6 +22,18 @@ async fn blockchain() {
     .run_async(async |ops| {
       let serai = serai_substrate_tests::rpc(&ops, handle).await;
 
+      'outer: {
+        for _ in 0 .. (5 * 10) {
+          tokio::time::sleep(core::time::Duration::from_secs(6)).await;
+
+          let latest_finalized = serai.latest_finalized_block_number().await.unwrap();
+          if latest_finalized > 0 {
+            break 'outer;
+          }
+        }
+        panic!("finalized block remained the genesis block for over five minutes");
+      };
+
       // Check the sanity of fetching a block
       let test_finalized_block = |number| {
         let serai = &serai;

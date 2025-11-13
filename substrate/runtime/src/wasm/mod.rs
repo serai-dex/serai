@@ -505,6 +505,9 @@ sp_api::impl_runtime_apis! {
   }
 
   impl crate::SeraiApi<Block> for Runtime {
+    fn events() -> Vec<Vec<u8>> {
+      Core::events()
+    }
     fn validators(network: NetworkId) -> Vec<serai_abi::primitives::crypto::Public> {
       // Returning the latest-decided, not latest and active, means the active set
       // may fail to peer find if there isn't sufficient overlap. If a large amount reboot,

@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
-use core::future::Future;
+use core::{ops::Deref, convert::AsRef, future::Future};
 use std::{sync::Arc, io::Read};
 
 use thiserror::Error;
@@ -18,6 +18,10 @@ use abi::{
 };
 
 use async_lock::RwLock;
+
+/// RPC client functionality for the validator sets module.
+pub mod validator_sets;
+use validator_sets::*;
 
 /// An error from the RPC.
 #[derive(Debug, Error)]
@@ -175,5 +179,47 @@ impl Serai {
         },
       )
       .await
+  }
+}
+
+impl<'a> TemporalSerai<'a> {
+  /// Fetch the events for this block.
+  ///
+  /// The returned `Option` will always be `Some(_)`.
+  async fn events(&self) -> Result<async_lock::RwLockReadGuard<'_, Option<Vec<Event>>>, RpcError> {
+    let mut events = self.events.read().await;
+    if events.is_none() {
+      drop(events);
+      {
+        let mut events_mut = self.events.write().await;
+        if events_mut.is_none() {
+          *events_mut = Some(
+            self
+              .serai
+              .call::<Vec<String>>("serai_events", &format!(r#"["{}"]"#, self.block))
+              .await?
+              .into_iter()
+              .map(|event| {
+                Event::deserialize(
+                  &mut hex::decode(&event)
+                    .map_err(|_| {
+                      RpcError::InvalidNode("node returned non-hex-encoded event".to_string())
+                    })?
+                    .as_slice(),
+                )
+                .map_err(|_| RpcError::InvalidNode("node returned invalid event".to_string()))
+              })
+              .collect::<Result<_, _>>()?,
+          );
+        }
+      }
+      events = self.events.read().await;
+    }
+    Ok(events)
+  }
+
+  /// Scope to the validator sets module.
+  pub fn validator_sets(&self) -> ValidatorSets<'_> {
+    ValidatorSets(self)
   }
 }

@@ -4,10 +4,13 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
-use serai_abi::primitives::{
-  crypto::{Public, SignedEmbeddedEllipticCurveKeys},
-  network_id::NetworkId,
-  balance::Balance,
+use serai_abi::{
+  primitives::{
+    crypto::{Public, SignedEmbeddedEllipticCurveKeys},
+    network_id::NetworkId,
+    balance::Balance,
+  },
+  Event,
 };
 
 #[cfg(feature = "std")]
@@ -30,6 +33,7 @@ sp_api::decl_runtime_apis! {
     fn build(genesis: GenesisConfig);
   }
   pub trait SeraiApi {
+    fn events() -> Vec<Vec<u8>>;
     fn validators(network_id: NetworkId) -> Vec<Public>;
   }
 }
@@ -169,6 +173,9 @@ mod apis {
     }
 
     impl crate::SeraiApi<Block> for Runtime {
+      fn events() -> Vec<Vec<u8>> {
+        unimplemented!("runtime is only implemented when WASM")
+      }
       fn validators(
         network: serai_abi::primitives::network_id::NetworkId
       ) -> Vec<serai_abi::primitives::crypto::Public> {

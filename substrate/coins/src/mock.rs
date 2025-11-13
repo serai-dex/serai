@@ -28,18 +28,6 @@ impl crate::Config<CoinsInstance> for Test {
   type AllowMint = crate::AlwaysAllowMint;
 }
 
-impl TryFrom<RuntimeEvent> for serai_abi::Event {
-  type Error = ();
-  fn try_from(event: RuntimeEvent) -> Result<serai_abi::Event, ()> {
-    match event {
-      RuntimeEvent::Core(serai_core_pallet::Event::Event(event)) => {
-        Ok(serai_abi::Event::deserialize_reader(&mut event.as_slice()).unwrap())
-      }
-      _ => Err(()),
-    }
-  }
-}
-
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
   let mut storage = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 

@@ -132,15 +132,16 @@ pub mod pallet {
 
     /// Fetch all of Serai's events.
     ///
-    /// This MUST only be used for testing purposes.
-    #[cfg(any(feature = "std", feature = "runtime-benchmarks", test))]
-    pub fn events() -> Vec<serai_abi::Event>
+    /// This MUST NOT be called during a transaction/block's execution.
+    pub fn events() -> Vec<Vec<u8>>
     where
-      serai_abi::Event: TryFrom<T::RuntimeEvent>,
+      T::RuntimeEvent: TryInto<Event<T>>,
     {
-      frame_system::Pallet::<T>::events()
-        .into_iter()
-        .filter_map(|e| serai_abi::Event::try_from(e.event).ok())
+      frame_system::Pallet::<T>::read_events_no_consensus()
+        .filter_map(|e| match e.event.try_into() {
+          Ok(Event::Event(bytes)) => Some(bytes),
+          _ => None,
+        })
         .collect()
     }
   }
