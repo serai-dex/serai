@@ -10,7 +10,6 @@ ignore = [
   "RUSTSEC-2022-0061", # https://github.com/serai-dex/serai/227
   "RUSTSEC-2024-0370", # proc-macro-error is unmaintained
   "RUSTSEC-2024-0436", # paste is unmaintained
-  "RUSTSEC-2025-0057", # https://github.com/bytecodealliance/wasmtime/pull/11634
 ]
 
 [licenses]
@@ -126,12 +125,22 @@ multiple-versions = "warn"
 wildcards = "warn"
 highlight = "all"
 deny = [
+  # Contains a non-reproducible binary blob
+  # https://github.com/serde-rs/serde/pull/2514
+  # https://github.com/serde-rs/serde/issues/2575
   { name = "serde_derive", version = ">=1.0.172, <1.0.185" },
+  # Introduced an insecure implementation of `borsh` removed with `0.15.1`
+  # https://github.com/rust-lang/hashbrown/issues/576
   { name = "hashbrown", version = "=0.15.0" },
+
   # Legacy which _no one_ should use anymore
   { name = "is-terminal", version = "*" },
   # Stop introduction into the tree without realizing it
   { name = "once_cell_polyfill", version = "*" },
+
+  # Conflicts with our usage of mimalloc
+  # https://github.com/serai-dex/serai/issues/690
+  { name = "tikv-jemalloc-sys", version = "*" },
 ]
 
 [sources]
@@ -143,5 +152,6 @@ allow-git = [
   "https://github.com/kayabaNerve/elliptic-curves",
   "https://github.com/monero-oxide/monero-oxide",
   "https://github.com/kayabaNerve/monero-oxide",
+  "https://github.com/rust-rocksdb/rust-rocksdb",
   "https://github.com/serai-dex/patch-polkadot-sdk",
 ]
