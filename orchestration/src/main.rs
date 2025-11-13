@@ -188,7 +188,6 @@ RUN apk add clang-dev
     &format!(
       r#"
 # Add the wasm toolchain
-RUN rustup component add rust-src
 RUN rustup target add wasm32v1-none
 
 {prelude}

@@ -2,4 +2,4 @@
 channel = "1.91.1"
 targets = ["wasm32v1-none"]
 profile = "minimal"
-components = ["rust-src", "rustfmt", "clippy"]
+components = ["rustfmt", "clippy"]
