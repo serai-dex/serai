@@ -1,4 +1,4 @@
-use std::io;
+use std_shims::io;
 
 use sha3::{Digest, Keccak256};
 
@@ -77,6 +77,7 @@ impl Signature {
   }
 
   /// Write the signature.
+  #[cfg(feature = "alloc")]
   pub fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
     writer.write_all(&self.to_bytes())
   }

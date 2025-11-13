@@ -16,10 +16,12 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-subtle = { version = "2", default-features = false, features = ["std"] }
-sha3 = { version = "0.10", default-features = false, features = ["std"] }
-group = { version = "0.13", default-features = false, features = ["alloc"] }
-k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic"] }
+std-shims = { path = "../../../common/std-shims", version = "0.1", default-features = false }
+
+subtle = { version = "2", default-features = false }
+sha3 = { version = "0.10", default-features = false }
+group = { version = "0.13", default-features = false }
+k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic"] }
 
 [build-dependencies]
 build-solidity-contracts = { path = "../build-contracts", version = "0.1" }
@@ -40,3 +42,8 @@ alloy-provider = { version = "1", default-features = false }
 alloy-node-bindings = { version = "1", default-features = false }
 
 tokio = { version = "1", default-features = false, features = ["macros"] }
+
+[features]
+alloc = ["std-shims/alloc", "group/alloc"]
+std = ["alloc", "std-shims/std", "subtle/std", "sha3/std", "k256/std"]
+default = ["std"]
