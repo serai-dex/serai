@@ -201,6 +201,9 @@ lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev
 option-ext = { path = "patches/option-ext" }
 directories-next = { path = "patches/directories-next" }
 
+# Patch from a fork back to upstream
+parity-bip39 = { path = "patches/parity-bip39" }
+
 # Patch to include `FromUniformBytes<64>` over `Scalar`
 k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
 p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
