@@ -1,0 +1,30 @@
+[package]
+name = "parity-bip39"
+version = "2.99.99"
+description = "Patch back to the upstream library"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/parity-bip39"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+bip39 = { git = "https://github.com/rust-bitcoin/rust-bip39", commit = "f735e2559f30049f6738d1bf68c69a0b7bd7b858", default-features = false }
+
+[features]
+default = ["bip39/default"]
+alloc = ["bip39/alloc"]
+std = ["bip39/std"]
+
+unicode-normalization = ["bip39/unicode-normalization"]
+all-languages = ["bip39/all-languages"]
+
+zeroize = ["bip39/zeroize"]
+rand_core = ["bip39/rand_core"]
+rand = ["bip39/rand"]
