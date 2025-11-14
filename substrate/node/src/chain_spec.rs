@@ -1,7 +1,15 @@
 use core::marker::PhantomData;
+use std::sync::Arc;
 
-use sp_core::Pair as PairTrait;
-
+use sp_core::{Decode, storage::Storage, Pair as PairTrait};
+use sp_runtime::{
+  traits::{Block as _, Header as _},
+  BuildStorage,
+};
+use sc_client_db::Backend;
+use sc_executor::RuntimeVersionOf;
+use sc_chain_spec::{BuildGenesisBlock, GenesisBlockBuilder, ChainSpec as ChainSpecTrait};
+use sc_client_api::BlockImportOperation;
 use sc_service::ChainType;
 
 use rand_core::OsRng;
@@ -200,4 +208,46 @@ pub fn bootnode_multiaddrs(id: &str) -> Vec<libp2p::Multiaddr> {
     "testnet-0" => todo!("TODO"),
     _ => panic!("unrecognized network ID"),
   }
+}
+
+struct GenesisBlock<Executor>(
+  GenesisBlockBuilder<Block, Backend<Block>, Executor>,
+  sp_runtime::Digest,
+);
+impl<Executor: RuntimeVersionOf> BuildGenesisBlock<Block> for GenesisBlock<Executor> {
+  type BlockImportOperation = sc_client_db::BlockImportOperation<Block>;
+
+  fn build_genesis_block(self) -> sp_blockchain::Result<(Block, Self::BlockImportOperation)> {
+    let (genesis_block, op) = self.0.build_genesis_block()?;
+
+    let mut header = genesis_block.header().clone();
+    *header.digest_mut() = self.1;
+    let genesis_block = Block::new(header, genesis_block.extrinsics().to_vec());
+
+    Ok((genesis_block, op))
+  }
+}
+
+pub(super) fn genesis_block(
+  chain_spec: &dyn ChainSpecTrait,
+  backend: Arc<Backend<Block>>,
+  executor: impl RuntimeVersionOf,
+) -> Result<
+  impl BuildGenesisBlock<Block, BlockImportOperation = sc_client_db::BlockImportOperation<Block>>,
+  sc_service::error::Error,
+> {
+  let storage = chain_spec.as_storage_builder().build_storage()?;
+  let digest = {
+    let digest_key = [sp_core::twox_128(b"System"), sp_core::twox_128(b"Digest")].concat();
+    sp_runtime::Digest::decode(
+      &mut storage.top.get(&digest_key).expect("System Digest not set").as_slice(),
+    )
+    .expect("failed to decode System Digest")
+  };
+
+  let commit_genesis_state = true;
+  Ok(GenesisBlock(
+    GenesisBlockBuilder::new_with_storage(storage, commit_genesis_state, backend, executor)?,
+    digest,
+  ))
 }

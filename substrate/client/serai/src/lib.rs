@@ -153,8 +153,7 @@ impl Serai {
 
   /// Fetch a block from the Serai blockchain by its number.
   pub async fn block_by_number(&self, block: u64) -> Result<Block, RpcError> {
-    Self::block_internal(self.call("blockchain/block", &format!(r#"{{ "block": "{block}" }}"#)))
-      .await
+    Self::block_internal(self.call("blockchain/block", &format!(r#"{{ "block": {block} }}"#))).await
   }
 
   /// Scope this RPC client to the state as of a specific block.

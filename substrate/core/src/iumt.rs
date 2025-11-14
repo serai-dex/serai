@@ -8,8 +8,8 @@ use serai_abi::primitives::merkle::{UnbalancedMerkleTree, IncrementalUnbalancedM
 /// `IncrementalUnbalancedMerkleTree`.
 pub struct IncrementalUnbalancedMerkleTree<
   T: frame_support::StorageValue<Iumt, Query = Option<Iumt>>,
-  const BRANCH_TAG: u8 = 1,
-  const LEAF_TAG: u8 = 0,
+  const BRANCH_TAG: u8,
+  const LEAF_TAG: u8,
 >(PhantomData<T>);
 impl<
     T: frame_support::StorageValue<Iumt, Query = Option<Iumt>>,

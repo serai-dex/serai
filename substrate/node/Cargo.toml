@@ -62,6 +62,7 @@ jsonrpsee = { version = "0.24", features = ["server"] }
 sc-transaction-pool = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5" }
 sc-transaction-pool-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5" }
 sc-basic-authorship = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5" }
+sc-client-db = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5" }
 sc-executor = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5" }
 sc-service = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5" }
 sc-client-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5" }

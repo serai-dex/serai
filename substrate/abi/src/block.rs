@@ -7,15 +7,26 @@ use crate::{
   Transaction,
 };
 
+/// The tag for a block's header, forming a leaf of the Merkle tree which is `builds_upon`.
+pub const BLOCK_HEADER_LEAF_TAG: u8 = 0;
+/// The tag for branch hashes in `builds_upon`.
+pub const BLOCK_HEADER_BRANCH_TAG: u8 = 1;
+
+/// The tag for a transaction, forming a leaf of the Merkle tree which is the transactions'
+/// commitment.
+pub const TRANSACTION_COMMITMENT_LEAF_TAG: u8 = 2;
+/// The tag for branch hashes in the transactions' commitment.
+pub const TRANSACTION_COMMITMENT_BRANCH_TAG: u8 = 3;
+
 /// The tag for the hash of a transaction's event, forming a leaf of the Merkle tree of its events.
-pub const TRANSACTION_EVENTS_COMMITMENT_LEAF_TAG: u8 = 0;
-/// The tag for the branch hashes of transaction events.
-pub const TRANSACTION_EVENTS_COMMITMENT_BRANCH_TAG: u8 = 1;
+pub const TRANSACTION_EVENTS_COMMITMENT_LEAF_TAG: u8 = 4;
+/// The tag for the branch hashes of the Merkle tree for a transaction's events.
+pub const TRANSACTION_EVENTS_COMMITMENT_BRANCH_TAG: u8 = 5;
 /// The tag for the hash of a transaction's hash and its events' Merkle root, forming a leaf of the
-/// Merkle tree which is the events commitment.
-pub const EVENTS_COMMITMENT_LEAF_TAG: u8 = 2;
-/// The tag for for the branch hashes of the Merkle tree which is the events commitments.
-pub const EVENTS_COMMITMENT_BRANCH_TAG: u8 = 3;
+/// Merkle tree which is the events' commitment.
+pub const EVENTS_COMMITMENT_LEAF_TAG: u8 = 6;
+/// The tag for branch hashes in the events' commitment.
+pub const EVENTS_COMMITMENT_BRANCH_TAG: u8 = 7;
 
 /// A V1 header for a block.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
@@ -38,7 +49,8 @@ pub struct HeaderV1 {
   pub builds_upon: UnbalancedMerkleTree,
   /// The UNIX time in milliseconds this block was created at.
   pub unix_time_in_millis: u64,
-  /// The commitment to the transactions within this block.
+  /// The commitment to the transactions within this block, including the inherent start/end of
+  /// block transactions.
   pub transactions_commitment: UnbalancedMerkleTree,
   /// The commitment to the events within this block.
   ///

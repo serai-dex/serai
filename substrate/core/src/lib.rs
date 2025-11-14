@@ -4,8 +4,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::marker::PhantomData;
-
 extern crate alloc;
+
+use frame_support::traits::{PreInherents, PostTransactions};
 
 mod iumt;
 pub use iumt::*;
@@ -15,7 +16,10 @@ pub use iumt::*;
 pub mod pallet {
   use alloc::vec::Vec;
 
-  use frame_support::pallet_prelude::*;
+  use frame_support::{
+    sp_runtime::traits::{Header, Block},
+    pallet_prelude::*,
+  };
 
   use serai_abi::primitives::{prelude::*, merkle::IncrementalUnbalancedMerkleTree as Iumt};
 
@@ -28,14 +32,21 @@ pub mod pallet {
   #[pallet::storage]
   #[pallet::unbounded]
   pub(super) type BlocksCommitment<T: Config> = StorageValue<_, Iumt, OptionQuery>;
-  pub(super) type BlocksCommitmentMerkle<T> = IncrementalUnbalancedMerkleTree<BlocksCommitment<T>>;
+  pub(super) type BlocksCommitmentMerkle<T> = IncrementalUnbalancedMerkleTree<
+    BlocksCommitment<T>,
+    { serai_abi::BLOCK_HEADER_BRANCH_TAG },
+    { serai_abi::BLOCK_HEADER_LEAF_TAG },
+  >;
 
   /// The Merkle tree of all transactions within the current block.
   #[pallet::storage]
   #[pallet::unbounded]
   pub(super) type BlockTransactionsCommitment<T: Config> = StorageValue<_, Iumt, OptionQuery>;
-  pub(super) type BlockTransactionsCommitmentMerkle<T> =
-    IncrementalUnbalancedMerkleTree<BlockTransactionsCommitment<T>>;
+  pub(super) type BlockTransactionsCommitmentMerkle<T> = IncrementalUnbalancedMerkleTree<
+    BlockTransactionsCommitment<T>,
+    { serai_abi::TRANSACTION_COMMITMENT_BRANCH_TAG },
+    { serai_abi::TRANSACTION_COMMITMENT_LEAF_TAG },
+  >;
 
   /// The hashes of events caused by the current transaction.
   #[pallet::storage]
@@ -99,10 +110,16 @@ pub mod pallet {
     }
 
     /// The code to run on genesis.
-    pub fn genesis() {
+    pub fn genesis(config: &impl frame_support::traits::BuildGenesisConfig) {
       BlocksCommitmentMerkle::<T>::new_expecting_none();
       BlockTransactionsCommitmentMerkle::<T>::new_expecting_none();
       BlockEventsCommitmentMerkle::<T>::new_expecting_none();
+
+      Self::start_transaction();
+      <_>::build(config);
+      Self::end_transaction([0; 32]);
+
+      EndOfBlock::<T>::post_transactions();
     }
 
     /// The code to run when beginning execution of a transaction.
@@ -150,7 +167,7 @@ pub use pallet::*;
 
 /// The code to run at the start of a block for this pallet.
 pub struct StartOfBlock<T: Config>(PhantomData<T>);
-impl<T: Config> frame_support::traits::PreInherents for StartOfBlock<T> {
+impl<T: Config> PreInherents for StartOfBlock<T> {
   fn pre_inherents() {
     use frame_support::pallet_prelude::Zero;
     // `Pallet::genesis` is expected to be used for the genesis block
@@ -163,13 +180,30 @@ impl<T: Config> frame_support::traits::PreInherents for StartOfBlock<T> {
 
     BlockTransactionsCommitmentMerkle::<T>::new_expecting_none();
     BlockEventsCommitmentMerkle::<T>::new_expecting_none();
+
+    Pallet::<T>::start_transaction();
+
+    // Other modules' `PreInherents`
+
+    let block_number: sp_core::U256 = frame_system::Pallet::<T>::block_number().into();
+    let start_of_block_transaction_hash = block_number.to_big_endian();
+    Pallet::<T>::end_transaction(start_of_block_transaction_hash);
   }
 }
 
 /// The code to run at the end of a block for this pallet.
 pub struct EndOfBlock<T: Config>(PhantomData<T>);
-impl<T: Config> frame_support::traits::PostTransactions for EndOfBlock<T> {
+impl<T: Config> PostTransactions for EndOfBlock<T> {
   fn post_transactions() {
+    Pallet::<T>::start_transaction();
+
+    // Other modules' `PostInherents`
+
+    let block_number: sp_core::U256 = frame_system::Pallet::<T>::block_number().into();
+    let mut end_of_block_transaction_hash = block_number.to_big_endian();
+    end_of_block_transaction_hash[.. 16].copy_from_slice(&[0xff; 16]);
+    Pallet::<T>::end_transaction(end_of_block_transaction_hash);
+
     use serai_abi::SeraiExecutionDigest;
     frame_system::Pallet::<T>::deposit_log(
       frame_support::sp_runtime::generic::DigestItem::Consensus(

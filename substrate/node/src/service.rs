@@ -95,12 +95,19 @@ pub fn new_partial(
     config.executor.runtime_cache_size,
   );
 
-  let (client, backend, keystore_container, task_manager) =
-    sc_service::new_full_parts::<Block, RuntimeApi, _>(
+  let (client, backend, keystore_container, task_manager) = {
+    let telemetry = telemetry.as_ref().map(|(_, telemetry)| telemetry.handle());
+    let backend = sc_service::new_db_backend(config.db_config())?;
+
+    sc_service::new_full_parts_with_genesis_builder::<Block, RuntimeApi, _, _>(
       config,
-      telemetry.as_ref().map(|(_, telemetry)| telemetry.handle()),
-      executor,
-    )?;
+      telemetry,
+      executor.clone(),
+      backend.clone(),
+      super::chain_spec::genesis_block(&*config.chain_spec, backend, executor)?,
+      false,
+    )?
+  };
   let client = Arc::new(client);
 
   let keystore: Arc<dyn sp_keystore::Keystore> =

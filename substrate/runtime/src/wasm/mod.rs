@@ -356,14 +356,7 @@ sp_api::impl_runtime_apis! {
         grandpa: GrandpaConfig { authorities: vec![], _config: PhantomData },
       };
 
-      Core::genesis();
-      Core::start_transaction();
-      <RuntimeGenesisConfig as frame_support::traits::BuildGenesisConfig>::build(&config);
-      Core::end_transaction([0; 32]);
-
-      <
-        serai_core_pallet::EndOfBlock<Runtime> as frame_support::traits::PostTransactions
-      >::post_transactions();
+      Core::genesis(&config);
     }
   }
 

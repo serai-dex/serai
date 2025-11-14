@@ -100,7 +100,7 @@ impl<'a> ValidatorSets<'a> {
         .0
         .call::<Option<_>>(
           "validator-sets/session",
-          &format!(r#" "network": {} "#, rpc_network(network)?),
+          &format!(r#", "network": {} "#, rpc_network(network)?),
         )
         .await?
         .map(Session),
@@ -114,7 +114,7 @@ impl<'a> ValidatorSets<'a> {
         .0
         .call::<Option<_>>(
           "validator-sets/current_stake",
-          &format!(r#" "network": {} "#, rpc_network(network)?),
+          &format!(r#", "network": {} "#, rpc_network(network)?),
         )
         .await?
         .map(Amount),
@@ -128,7 +128,7 @@ impl<'a> ValidatorSets<'a> {
       .call::<Option<String>>(
         "validator-sets/keys",
         &format!(
-          r#" "set": {{ "network": {}, "session": {} }} "#,
+          r#", "set": {{ "network": {}, "session": {} }} "#,
           rpc_network(set.network)?,
           set.session.0
         ),

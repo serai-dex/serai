@@ -1,4 +1,4 @@
-use std::{sync::Arc, ops::Deref, collections::HashSet};
+use std::{sync::Arc, ops::Deref, convert::AsRef, collections::HashSet};
 
 use rand_core::{RngCore, OsRng};
 
@@ -17,6 +17,16 @@ use jsonrpsee::RpcModule;
 
 use super::utils::{Error, block_hash};
 
+fn network_from_str(network: impl AsRef<str>) -> Result<NetworkId, Error> {
+  Ok(match network.as_ref().to_lowercase().as_str() {
+    "serai" => NetworkId::Serai,
+    "bitcoin" => NetworkId::External(ExternalNetworkId::Bitcoin),
+    "ethereum" => NetworkId::External(ExternalNetworkId::Ethereum),
+    "monero" => NetworkId::External(ExternalNetworkId::Monero),
+    _ => Err(Error::InvalidRequest("unrecognized network requested"))?,
+  })
+}
+
 pub(super) fn network(params: &jsonrpsee::types::params::Params) -> Result<NetworkId, Error> {
   #[derive(sp_core::serde::Deserialize)]
   #[serde(crate = "sp_core::serde")]
@@ -28,13 +38,7 @@ pub(super) fn network(params: &jsonrpsee::types::params::Params) -> Result<Netwo
     Err(Error::InvalidRequest(r#"missing `string` "network" field"#))?
   };
 
-  Ok(match network.network.to_lowercase().as_str() {
-    "serai" => NetworkId::Serai,
-    "bitcoin" => NetworkId::External(ExternalNetworkId::Bitcoin),
-    "ethereum" => NetworkId::External(ExternalNetworkId::Ethereum),
-    "monero" => NetworkId::External(ExternalNetworkId::Monero),
-    _ => Err(Error::InvalidRequest("unrecognized network requested"))?,
-  })
+  network_from_str(network.network)
 }
 
 pub(super) fn set(params: &jsonrpsee::types::params::Params) -> Result<ValidatorSet, Error> {
@@ -49,15 +53,7 @@ pub(super) fn set(params: &jsonrpsee::types::params::Params) -> Result<Validator
     Err(Error::InvalidRequest(r#"missing `object` "set" field"#))?
   };
 
-  let network = match set.network.to_lowercase().as_str() {
-    "serai" => NetworkId::Serai,
-    "bitcoin" => NetworkId::External(ExternalNetworkId::Bitcoin),
-    "ethereum" => NetworkId::External(ExternalNetworkId::Ethereum),
-    "monero" => NetworkId::External(ExternalNetworkId::Monero),
-    _ => Err(Error::InvalidRequest("unrecognized network requested"))?,
-  };
-
-  Ok(ValidatorSet { network, session: Session(set.session) })
+  Ok(ValidatorSet { network: network_from_str(set.network)?, session: Session(set.session) })
 }
 
 pub(crate) fn module<
