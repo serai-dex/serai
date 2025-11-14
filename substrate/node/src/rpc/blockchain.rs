@@ -15,7 +15,7 @@ use serai_runtime::SeraiApi;
 
 use jsonrpsee::RpcModule;
 
-use super::utils::block_hash;
+use super::utils::{Error, block_hash};
 
 pub(crate) fn module<
   C: 'static
@@ -34,50 +34,37 @@ pub(crate) fn module<
     client.info().finalized_number
   });
 
-  module.register_method("blockchain/is_finalized", |params, client, _ext| {
-    let block_hash = block_hash(&**client, &params)?;
-    let finalized = client.info().finalized_number;
-    let Ok(Some(number)) = client.number(block_hash) else {
-      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-        -2,
-        "failed to fetch block's number",
-        Option::<()>::None,
-      ));
-    };
-    let Ok(status) = client.block_status(block_hash) else {
-      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-        -3,
-        "failed to fetch block's status",
-        Option::<()>::None,
-      ));
-    };
-    Ok(
-      matches!(status, BlockStatus::InChainWithState | BlockStatus::InChainPruned) &&
-        (number <= finalized),
-    )
-  })?;
+  module.register_method(
+    "blockchain/is_finalized",
+    |params, client, _ext| -> Result<_, Error> {
+      let block_hash = block_hash(&**client, &params)?;
+      let finalized = client.info().finalized_number;
+      let Ok(Some(number)) = client.number(block_hash) else {
+        Err(Error::Missing("failed to fetch block's number"))?
+      };
+      let Ok(status) = client.block_status(block_hash) else {
+        Err(Error::Internal("failed to fetch block's status"))?
+      };
+      Ok(
+        matches!(status, BlockStatus::InChainWithState | BlockStatus::InChainPruned) &&
+          (number <= finalized),
+      )
+    },
+  )?;
 
-  module.register_method("blockchain/block", |params, client, _ext| {
+  module.register_method("blockchain/block", |params, client, _ext| -> Result<_, Error> {
     let block_hash = block_hash(&**client, &params)?;
     let Ok(Some(block)) = client.block(block_hash) else {
-      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-        -2,
-        "couldn't find requested block",
-        Option::<()>::None,
-      ));
+      Err(Error::Missing("couldn't find requested block"))?
     };
 
     Ok(hex::encode(borsh::to_vec(&serai_abi::Block::from(block.block)).unwrap()))
   })?;
 
-  module.register_method("blockchain/events", |params, client, _ext| {
+  module.register_method("blockchain/events", |params, client, _ext| -> Result<_, Error> {
     let block_hash = block_hash(&**client, &params)?;
     let Ok(events) = client.runtime_api().events(block_hash) else {
-      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-        -2,
-        "couldn't fetch the events for the requested block",
-        Option::<()>::None,
-      ));
+      Err(Error::Missing("couldn't fetch the events for the requested block"))?
     };
     Ok(events.into_iter().map(hex::encode).collect::<Vec<String>>())
   })?;

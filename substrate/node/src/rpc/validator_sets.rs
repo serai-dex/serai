@@ -15,11 +15,9 @@ use serai_runtime::SeraiApi;
 
 use jsonrpsee::RpcModule;
 
-use super::utils::block_hash;
+use super::utils::{Error, block_hash};
 
-pub(super) fn network(
-  params: &jsonrpsee::types::params::Params,
-) -> Result<NetworkId, jsonrpsee::types::error::ErrorObjectOwned> {
+pub(super) fn network(params: &jsonrpsee::types::params::Params) -> Result<NetworkId, Error> {
   #[derive(sp_core::serde::Deserialize)]
   #[serde(crate = "sp_core::serde")]
   struct Network {
@@ -27,11 +25,7 @@ pub(super) fn network(
   }
 
   let Ok(network) = params.parse::<Network>() else {
-    return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-      -1,
-      r#"missing `string` "network" field"#,
-      Option::<()>::None,
-    ));
+    Err(Error::InvalidRequest(r#"missing `string` "network" field"#))?
   };
 
   Ok(match network.network.to_lowercase().as_str() {
@@ -39,17 +33,11 @@ pub(super) fn network(
     "bitcoin" => NetworkId::External(ExternalNetworkId::Bitcoin),
     "ethereum" => NetworkId::External(ExternalNetworkId::Ethereum),
     "monero" => NetworkId::External(ExternalNetworkId::Monero),
-    _ => Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-      -1,
-      "unrecognized network requested",
-      Option::<()>::None,
-    ))?,
+    _ => Err(Error::InvalidRequest("unrecognized network requested"))?,
   })
 }
 
-pub(super) fn set(
-  params: &jsonrpsee::types::params::Params,
-) -> Result<ValidatorSet, jsonrpsee::types::error::ErrorObjectOwned> {
+pub(super) fn set(params: &jsonrpsee::types::params::Params) -> Result<ValidatorSet, Error> {
   #[derive(sp_core::serde::Deserialize)]
   #[serde(crate = "sp_core::serde")]
   struct Set {
@@ -58,11 +46,7 @@ pub(super) fn set(
   }
 
   let Ok(set) = params.parse::<Set>() else {
-    return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-      -1,
-      r#"missing `object` "set" field"#,
-      Option::<()>::None,
-    ));
+    Err(Error::InvalidRequest(r#"missing `object` "set" field"#))?
   };
 
   let network = match set.network.to_lowercase().as_str() {
@@ -70,11 +54,7 @@ pub(super) fn set(
     "bitcoin" => NetworkId::External(ExternalNetworkId::Bitcoin),
     "ethereum" => NetworkId::External(ExternalNetworkId::Ethereum),
     "monero" => NetworkId::External(ExternalNetworkId::Monero),
-    _ => Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-      -1,
-      "unrecognized network requested",
-      Option::<()>::None,
-    ))?,
+    _ => Err(Error::InvalidRequest("unrecognized network requested"))?,
   };
 
   Ok(ValidatorSet { network, session: Session(set.session) })
@@ -93,48 +73,38 @@ pub(crate) fn module<
 ) -> RpcModule<impl 'static + Send + Sync> {
   let mut module = RpcModule::new(client);
 
-  module.register_method("validator-sets/current_session", |params, client, _ext| {
-    let block_hash = block_hash(&**client, &params)?;
-    let network = network(&params)?;
-    let Ok(session) = client.runtime_api().current_session(block_hash, network) else {
-      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-        -2,
-        "couldn't fetch the session for the requested network",
-        Option::<()>::None,
-      ));
-    };
-    Ok(session.map(|session| session.0))
-  });
+  module.register_method(
+    "validator-sets/current_session",
+    |params, client, _ext| -> Result<_, Error> {
+      let block_hash = block_hash(&**client, &params)?;
+      let network = network(&params)?;
+      let Ok(session) = client.runtime_api().current_session(block_hash, network) else {
+        Err(Error::Internal("couldn't fetch the session for the requested network"))?
+      };
+      Ok(session.map(|session| session.0))
+    },
+  );
 
-  module.register_method("validator-sets/current_stake", |params, client, _ext| {
-    let block_hash = block_hash(&**client, &params)?;
-    let network = network(&params)?;
-    let Ok(stake) = client.runtime_api().current_stake(block_hash, network) else {
-      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-        -2,
-        "couldn't fetch the total allocated stake for the requested network",
-        Option::<()>::None,
-      ));
-    };
-    Ok(stake.map(|stake| stake.0))
-  });
+  module.register_method(
+    "validator-sets/current_stake",
+    |params, client, _ext| -> Result<_, Error> {
+      let block_hash = block_hash(&**client, &params)?;
+      let network = network(&params)?;
+      let Ok(stake) = client.runtime_api().current_stake(block_hash, network) else {
+        Err(Error::Internal("couldn't fetch the total allocated stake for the requested network"))?
+      };
+      Ok(stake.map(|stake| stake.0))
+    },
+  );
 
-  module.register_method("validator-sets/keys", |params, client, _ext| {
+  module.register_method("validator-sets/keys", |params, client, _ext| -> Result<_, Error> {
     let block_hash = block_hash(&**client, &params)?;
     let set = set(&params)?;
     let Ok(set) = ExternalValidatorSet::try_from(set) else {
-      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-        -1,
-        "requested keys for a non-extenral validator set",
-        Option::<()>::None,
-      ));
+      Err(Error::InvalidRequest("requested keys for a non-external validator set"))?
     };
     let Ok(key_pair) = client.runtime_api().keys(block_hash, set) else {
-      return Err(jsonrpsee::types::error::ErrorObjectOwned::owned(
-        -2,
-        "couldn't fetch the keys for the requested validator set",
-        Option::<()>::None,
-      ));
+      Err(Error::Internal("couldn't fetch the keys for the requested validator set"))?
     };
     Ok(hex::encode(borsh::to_vec(&key_pair).unwrap()))
   });
