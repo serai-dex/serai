@@ -1,7 +1,8 @@
 use serai_abi::{
   primitives::{
     network_id::{ExternalNetworkId, NetworkId},
-    validator_sets::{Session, ValidatorSet},
+    balance::Amount,
+    validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
   },
   validator_sets::Event,
 };
@@ -125,7 +126,24 @@ async fn validator_sets() {
         );
       }
 
-      println!("Finished `serai-client/blockchain` test");
+      {
+        let serai =
+          serai.as_of(serai.block_by_number(0).await.unwrap().header.hash()).await.unwrap();
+        let serai = serai.validator_sets();
+        for network in NetworkId::all() {
+          assert_eq!(serai.current_session(network).await.unwrap(), Some(Session(0)));
+          assert_eq!(serai.current_stake(network).await.unwrap(), Some(Amount(0)));
+          match network {
+            NetworkId::Serai => {}
+            NetworkId::External(network) => assert_eq!(
+              serai.keys(ExternalValidatorSet { network, session: Session(0) }).await.unwrap(),
+              None
+            ),
+          }
+        }
+      }
+
+      println!("Finished `serai-client/validator_sets` test");
     })
     .await;
 }

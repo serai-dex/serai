@@ -16,7 +16,9 @@ use jsonrpsee::RpcModule;
 use sc_client_api::BlockBackend;
 use sc_transaction_pool_api::TransactionPool;
 
+mod utils;
 mod blockchain;
+mod validator_sets;
 mod p2p_validators;
 
 pub struct FullDeps<C, P> {
@@ -42,6 +44,7 @@ pub fn create_full<
 
   let mut root = RpcModule::new(());
   root.merge(blockchain::module(client.clone())?)?;
+  root.merge(validator_sets::module(client.clone()))?;
   if let Some(authority_discovery) = authority_discovery {
     root.merge(p2p_validators::module(id, client, authority_discovery)?)?;
   }

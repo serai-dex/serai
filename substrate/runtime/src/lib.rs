@@ -6,9 +6,10 @@ extern crate alloc;
 use alloc::vec::Vec;
 use serai_abi::{
   primitives::{
-    crypto::{Public, SignedEmbeddedEllipticCurveKeys},
+    crypto::{Public, SignedEmbeddedEllipticCurveKeys, KeyPair},
     network_id::NetworkId,
-    balance::Balance,
+    validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
+    balance::{Amount, Balance},
   },
   Event,
 };
@@ -34,7 +35,10 @@ sp_api::decl_runtime_apis! {
   }
   pub trait SeraiApi {
     fn events() -> Vec<Vec<u8>>;
-    fn validators(network_id: NetworkId) -> Vec<Public>;
+    fn validators(network: NetworkId) -> Vec<Public>;
+    fn current_session(network: NetworkId) -> Option<Session>;
+    fn current_stake(network: NetworkId) -> Option<Amount>;
+    fn keys(set: ExternalValidatorSet) -> Option<KeyPair>;
   }
 }
 
@@ -43,6 +47,8 @@ sp_api::decl_runtime_apis! {
 mod apis {
   use alloc::borrow::Cow;
   use serai_abi::{SubstrateHeader as Header, SubstrateBlock as Block};
+
+  use super::*;
 
   #[sp_version::runtime_version]
   pub const VERSION: sp_version::RuntimeVersion = sp_version::RuntimeVersion {
@@ -179,6 +185,15 @@ mod apis {
       fn validators(
         network: serai_abi::primitives::network_id::NetworkId
       ) -> Vec<serai_abi::primitives::crypto::Public> {
+        unimplemented!("runtime is only implemented when WASM")
+      }
+      fn current_session(network: NetworkId) -> Option<Session> {
+        unimplemented!("runtime is only implemented when WASM")
+      }
+      fn current_stake(network: NetworkId) -> Option<Amount> {
+        unimplemented!("runtime is only implemented when WASM")
+      }
+      fn keys(set: ExternalValidatorSet) -> Option<KeyPair> {
         unimplemented!("runtime is only implemented when WASM")
       }
     }

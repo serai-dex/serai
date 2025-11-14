@@ -125,12 +125,12 @@ impl Serai {
 
   /// Fetch the latest finalized block number.
   pub async fn latest_finalized_block_number(&self) -> Result<u64, RpcError> {
-    self.call("serai_latestFinalizedBlockNumber", "[]").await
+    self.call("blockchain/latest_finalized_block_number", "[]").await
   }
 
   /// Fetch if a block is finalized.
   pub async fn finalized(&self, block: BlockHash) -> Result<bool, RpcError> {
-    self.call("serai_isFinalized", &format!(r#"["{block}"]"#)).await
+    self.call("blockchain/is_finalized", &format!(r#"{{ "block": "{block}" }}"#)).await
   }
 
   async fn block_internal(
@@ -147,12 +147,14 @@ impl Serai {
 
   /// Fetch a block from the Serai blockchain.
   pub async fn block(&self, block: BlockHash) -> Result<Block, RpcError> {
-    Self::block_internal(self.call("serai_block", &format!(r#"["{block}"]"#))).await
+    Self::block_internal(self.call("blockchain/block", &format!(r#"{{ "block": "{block}" }}"#)))
+      .await
   }
 
   /// Fetch a block from the Serai blockchain by its number.
   pub async fn block_by_number(&self, block: u64) -> Result<Block, RpcError> {
-    Self::block_internal(self.call("serai_block", &format!("[{block}]"))).await
+    Self::block_internal(self.call("blockchain/block", &format!(r#"{{ "block": "{block}" }}"#)))
+      .await
   }
 
   /// Scope this RPC client to the state as of a specific block.
@@ -183,6 +185,14 @@ impl Serai {
 }
 
 impl<'a> TemporalSerai<'a> {
+  async fn call<ResponseValue: Default + JsonDeserialize>(
+    &self,
+    method: &str,
+    params: &str,
+  ) -> Result<ResponseValue, RpcError> {
+    self.serai.call(method, &format!(r#"{{ "block": "{}", {params} }}"#, self.block)).await
+  }
+
   /// Fetch the events for this block.
   ///
   /// The returned `Option` will always be `Some(_)`.
@@ -195,8 +205,7 @@ impl<'a> TemporalSerai<'a> {
         if events_mut.is_none() {
           *events_mut = Some(
             self
-              .serai
-              .call::<Vec<String>>("serai_events", &format!(r#"["{}"]"#, self.block))
+              .call::<Vec<String>>("blockchain/events", "")
               .await?
               .into_iter()
               .map(|event| {

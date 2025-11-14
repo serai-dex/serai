@@ -9,7 +9,7 @@ use serai_abi::{
   primitives::{
     network_id::{ExternalNetworkId, NetworkId},
     balance::{Amount, ExternalBalance},
-    validator_sets::ValidatorSet,
+    validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
     address::SeraiAddress,
   },
   SubstrateHeader as Header, SubstrateBlock,
@@ -521,6 +521,21 @@ sp_api::impl_runtime_apis! {
       ValidatorSets::selected_validators(ValidatorSet { network, session })
         .map(|validator| validator.0.into())
         .collect()
+    }
+    fn current_session(network: NetworkId) -> Option<Session> {
+      ValidatorSets::current_session(network)
+    }
+    fn current_stake(network: NetworkId) -> Option<Amount> {
+      ValidatorSets::stake_for_current_validator_set(network)
+    }
+    fn keys(set: ExternalValidatorSet) -> Option<serai_abi::primitives::crypto::KeyPair> {
+      ValidatorSets::oraclization_key(set)
+        .and_then(|oraclization_key| {
+          ValidatorSets::external_key(set)
+            .map(|external_key| {
+              serai_abi::primitives::crypto::KeyPair(oraclization_key.into(), external_key)
+            })
+        })
     }
   }
 }

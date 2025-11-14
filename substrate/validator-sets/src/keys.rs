@@ -33,6 +33,9 @@ pub(crate) trait Keys {
 
   /// The oraclization key for a validator set.
   fn oraclization_key(set: ExternalValidatorSet) -> Option<Public>;
+
+  /// The external key for a validator set.
+  fn external_key(set: ExternalValidatorSet) -> Option<ExternalKey>;
 }
 
 impl<S: KeysStorage> Keys for S {
@@ -52,5 +55,9 @@ impl<S: KeysStorage> Keys for S {
 
   fn oraclization_key(set: ExternalValidatorSet) -> Option<Public> {
     S::OraclizationKeys::get(set)
+  }
+
+  fn external_key(set: ExternalValidatorSet) -> Option<ExternalKey> {
+    S::ExternalKeys::get(set)
   }
 }

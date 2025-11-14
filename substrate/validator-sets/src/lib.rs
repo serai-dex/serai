@@ -307,6 +307,14 @@ mod pallet {
       Abstractions::<T>::selected_validators(set)
     }
 
+    pub fn oraclization_key(set: ExternalValidatorSet) -> Option<Public> {
+      Abstractions::<T>::oraclization_key(set)
+    }
+
+    pub fn external_key(set: ExternalValidatorSet) -> Option<ExternalKey> {
+      Abstractions::<T>::external_key(set)
+    }
+
     /* TODO
     pub fn distribute_block_rewards(
       network: NetworkId,
