@@ -21,12 +21,12 @@ workspace = true
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
 
-sp-std = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5", default-features = false }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5", default-features = false }
-sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
+sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
 
 dex-pallet = { package = "serai-dex-pallet", path = "../dex", default-features = false }
 coins-pallet = { package = "serai-coins-pallet", path = "../coins", default-features = false }

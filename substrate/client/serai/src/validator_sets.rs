@@ -99,7 +99,7 @@ impl<'a> ValidatorSets<'a> {
       self
         .0
         .call::<Option<_>>(
-          "validator-sets/session",
+          "validator-sets/current_session",
           &format!(r#", "network": {} "#, rpc_network(network)?),
         )
         .await?

@@ -20,10 +20,12 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
 
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "71fa60b900c8ad068f1b9ce8100508506377fbf5", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
+
+pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
 
@@ -37,14 +39,17 @@ std = [
   "frame-system/std",
   "frame-support/std",
 
+  "pallet-timestamp/std",
+
   "serai-abi/std",
 ]
 
 runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
+  "pallet-timestamp/runtime-benchmarks",
 ]
 
-try-runtime = ["serai-abi/try-runtime"]
+try-runtime = ["pallet-timestamp/try-runtime", "serai-abi/try-runtime"]
 
 default = ["std"]

@@ -10,6 +10,7 @@ construct_runtime!(
   pub enum Test
   {
     System: frame_system,
+    Timestamp: pallet_timestamp,
     Core: serai_core_pallet,
     Coins: coins::<CoinsInstance>,
   }
@@ -21,6 +22,9 @@ impl frame_system::Config for Test {
   type Lookup = frame_support::sp_runtime::traits::IdentityLookup<Self::AccountId>;
   type Block = frame_system::mocking::MockBlock<Test>;
 }
+
+#[derive_impl(pallet_timestamp::config_preludes::TestDefaultConfig)]
+impl pallet_timestamp::Config for Test {}
 
 impl serai_core_pallet::Config for Test {}
 

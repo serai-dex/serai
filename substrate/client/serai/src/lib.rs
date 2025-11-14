@@ -189,7 +189,7 @@ impl<'a> TemporalSerai<'a> {
     method: &str,
     params: &str,
   ) -> Result<ResponseValue, RpcError> {
-    self.serai.call(method, &format!(r#"{{ "block": "{}", {params} }}"#, self.block)).await
+    self.serai.call(method, &format!(r#"{{ "block": "{}" {params} }}"#, self.block)).await
   }
 
   /// Fetch the events for this block.

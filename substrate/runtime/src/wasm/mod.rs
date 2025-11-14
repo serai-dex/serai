@@ -2,7 +2,10 @@ use core::marker::PhantomData;
 use alloc::{borrow::Cow, vec, vec::Vec};
 
 use sp_core::{ConstU32, ConstU64, sr25519::Public};
-use sp_runtime::{Perbill, Weight};
+use sp_runtime::{
+  Perbill, Weight,
+  traits::{Header as _, Block as _},
+};
 use sp_version::RuntimeVersion;
 
 use serai_abi::{
@@ -12,12 +15,10 @@ use serai_abi::{
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
     address::SeraiAddress,
   },
-  SubstrateHeader as Header, SubstrateBlock,
+  SubstrateHeader as Header, SubstrateBlock as Block,
 };
 
 use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance};
-
-type Block = SubstrateBlock;
 
 /// The lookup for a SeraiAddress -> Public.
 pub struct Lookup;
@@ -90,6 +91,10 @@ mod runtime {
 
   #[runtime::pallet_index(5)]
   pub type LiquidityTokens = serai_coins_pallet::Pallet<Runtime, LiquidityTokensInstance>;
+
+  #[runtime::pallet_index(0xfd)]
+  #[runtime::disable_inherent]
+  pub type Timestamp = pallet_timestamp::Pallet<Runtime>;
 
   #[runtime::pallet_index(0xfe)]
   pub type Babe = pallet_babe::Pallet<Runtime>;
@@ -166,13 +171,6 @@ impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
 }
 
-/*
-  `pallet-babe` requires we implement `pallet-timestamp` for the associated constants. It does not
-  actually require we offer the timestamp pallet however, and we don't as we follow our methodology
-  (using the block header for timestamps, not an inherent transaction).
-
-  TODO: Set timestamp when executing a block.
-*/
 impl pallet_timestamp::Config for Runtime {
   type Moment = u64;
   type OnTimestampSet = Babe;
@@ -181,6 +179,8 @@ impl pallet_timestamp::Config for Runtime {
   type WeightInfo = ();
 }
 
+// pallet-babe requires `pallet-session` for `GetCurrentSessionForSubstrate` but not it itself
+// We ensure this by having patched `pallet-session` to omit the pallet
 #[doc(hidden)]
 pub struct GetCurrentSessionForSubstrate;
 impl pallet_session::GetCurrentSessionForSubstrate for GetCurrentSessionForSubstrate {
@@ -393,7 +393,59 @@ sp_api::impl_runtime_apis! {
       block: Block,
       data: sp_inherents::InherentData,
     ) -> sp_inherents::CheckInherentsResult {
-      data.check_extrinsics(&block)
+      let mut result = data.check_extrinsics(&block);
+
+      // Handle the `SeraiPreExecutionDigest`
+      'outer: {
+        use serai_abi::SeraiPreExecutionDigest;
+
+        const INHERENT_ID: [u8; 8] = [
+          SeraiPreExecutionDigest::CONSENSUS_ID[0],
+          SeraiPreExecutionDigest::CONSENSUS_ID[1],
+          SeraiPreExecutionDigest::CONSENSUS_ID[2],
+          SeraiPreExecutionDigest::CONSENSUS_ID[3],
+          0, 0, 0, 0
+        ];
+
+        for log in block.header().digest().logs() {
+          match log {
+            sp_runtime::DigestItem::PreRuntime(consensus, encoded)
+              if *consensus == SeraiPreExecutionDigest::CONSENSUS_ID =>
+            {
+              let Ok(SeraiPreExecutionDigest { unix_time_in_millis }) =
+                <_ as borsh::BorshDeserialize>::deserialize_reader(&mut encoded.as_slice()) else {
+                // We don't handle this error as we can't in this position
+                let _ = result.put_error(
+                  INHERENT_ID,
+                  &sp_inherents::MakeFatalError::from("invalid `SeraiPreExecutionDigest`"),
+                );
+                return result;
+              };
+
+              use frame_support::inherent::ProvideInherent;
+              match pallet_timestamp::Pallet::<Runtime>::check_inherent(
+                &pallet_timestamp::Call::<Runtime>::set { now: unix_time_in_millis },
+                &data
+              ) {
+                Ok(()) => {},
+                Err(e) => {
+                  let _ = result.put_error(sp_timestamp::INHERENT_IDENTIFIER, &e);
+                }
+              }
+
+              break 'outer;
+            }
+            _ => {}
+          }
+        }
+
+        let _ = result.put_error(
+          INHERENT_ID,
+          &sp_inherents::MakeFatalError::from("missing `SeraiPreExecutionDigest`")
+        );
+      }
+
+      result
     }
   }
 
@@ -711,8 +763,6 @@ mod benches {
     [frame_benchmarking, BaselineBench::<Runtime>]
 
     [system, SystemBench::<Runtime>]
-
-    [pallet_timestamp, Timestamp]
 
     [balances, Balances]
 

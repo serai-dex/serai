@@ -80,7 +80,10 @@ pub mod pallet {
   }
 
   #[pallet::config]
-  pub trait Config: frame_system::Config<Hash: Into<[u8; 32]>> {}
+  pub trait Config:
+    frame_system::Config<Hash: Into<[u8; 32]>> + pallet_timestamp::Config<Moment = u64>
+  {
+  }
 
   #[pallet::pallet]
   pub struct Pallet<T>(_);
@@ -183,6 +186,20 @@ impl<T: Config> PreInherents for StartOfBlock<T> {
 
     Pallet::<T>::start_transaction();
 
+    // Handle the `SeraiPreExecutionDigest`
+    /*
+      These calls panic but this is desired behavior. All blocks, except the genesis, should have
+      this and the timestamp should be valid.
+    */
+    {
+      let digest = serai_abi::SeraiPreExecutionDigest::find(&frame_system::Pallet::<T>::digest());
+      pallet_timestamp::Pallet::<T>::set(
+        frame_system::RawOrigin::None.into(),
+        digest.unix_time_in_millis,
+      )
+      .expect("failed to set timestamp");
+    }
+
     // Other modules' `PreInherents`
 
     let block_number: sp_core::U256 = frame_system::Pallet::<T>::block_number().into();
@@ -197,7 +214,7 @@ impl<T: Config> PostTransactions for EndOfBlock<T> {
   fn post_transactions() {
     Pallet::<T>::start_transaction();
 
-    // Other modules' `PostInherents`
+    // Other modules' `PostTransactions`
 
     let block_number: sp_core::U256 = frame_system::Pallet::<T>::block_number().into();
     let mut end_of_block_transaction_hash = block_number.to_big_endian();

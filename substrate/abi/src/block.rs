@@ -159,6 +159,29 @@ mod substrate {
     pub unix_time_in_millis: u64,
   }
 
+  impl SeraiPreExecutionDigest {
+    /// The consensus ID for a Serai pre-execution digest.
+    pub const CONSENSUS_ID: [u8; 4] = *b"SRIP";
+
+    /// Find the pre-execution digest within a `Digest`.
+    ///
+    /// This will panic if the digest either isn't found or is invalid.
+    pub fn find(digest: &Digest) -> Self {
+      for log in digest.logs() {
+        match log {
+          DigestItem::PreRuntime(consensus, encoded)
+            if *consensus == SeraiPreExecutionDigest::CONSENSUS_ID =>
+          {
+            return <_>::deserialize_reader(&mut encoded.as_slice())
+              .expect("invalid `SeraiPreExecutionDigest`");
+          }
+          _ => {}
+        }
+      }
+      panic!("missing `SeraiPreExecutionDigest`");
+    }
+  }
+
   /// The digest for all of the Serai-specific header fields determined during execution of the
   /// block.
   #[derive(Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
@@ -169,11 +192,6 @@ mod substrate {
     pub transactions_commitment: UnbalancedMerkleTree,
     /// The commitment to the events within this block.
     pub events_commitment: UnbalancedMerkleTree,
-  }
-
-  impl SeraiPreExecutionDigest {
-    /// The consensus ID for a Serai pre-execution digest.
-    pub const CONSENSUS_ID: [u8; 4] = *b"SRIP";
   }
 
   impl SeraiExecutionDigest {
