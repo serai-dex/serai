@@ -32,11 +32,12 @@ impl<'a> ValidatorSets<'a> {
     Ok(
       self
         .0
-        .events()
+        .events_borrowed()
         .await?
         .as_ref()
         .expect("`TemporalSerai::events` returned None")
         .iter()
+        .flat_map(IntoIterator::into_iter)
         .filter_map(|event| match event {
           serai_abi::Event::ValidatorSets(event) => Some(event.clone()),
           _ => None,
@@ -127,11 +128,7 @@ impl<'a> ValidatorSets<'a> {
       .0
       .call::<Option<String>>(
         "validator-sets/keys",
-        &format!(
-          r#", "network": {}, "session": {} "#,
-          rpc_network(set.network)?,
-          set.session.0
-        ),
+        &format!(r#", "network": {}, "session": {} "#, rpc_network(set.network)?, set.session.0),
       )
       .await?
     else {

@@ -550,7 +550,7 @@ sp_api::impl_runtime_apis! {
   }
 
   impl crate::SeraiApi<Block> for Runtime {
-    fn events() -> Vec<Vec<u8>> {
+    fn events() -> Vec<Vec<Vec<u8>>> {
       Core::events()
     }
     fn validators(network: NetworkId) -> Vec<serai_abi::primitives::crypto::Public> {

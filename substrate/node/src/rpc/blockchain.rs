@@ -66,7 +66,12 @@ pub(crate) fn module<
     let Ok(events) = client.runtime_api().events(block_hash) else {
       Err(Error::Missing("couldn't fetch the events for the requested block"))?
     };
-    Ok(events.into_iter().map(hex::encode).collect::<Vec<String>>())
+    Ok(
+      events
+        .into_iter()
+        .map(|events_per_tx| events_per_tx.into_iter().map(hex::encode).collect::<Vec<_>>())
+        .collect::<Vec<_>>(),
+    )
   })?;
 
   Ok(module)

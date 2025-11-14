@@ -29,6 +29,7 @@ fn mint() {
     // test events
     let mint_events = Core::events()
       .iter()
+      .flat_map(IntoIterator::into_iter)
       .map(|event| borsh::from_slice::<serai_abi::Event>(event.as_slice()).unwrap())
       .filter_map(|event| {
         if let serai_abi::Event::Coins(e) = &event {
@@ -83,6 +84,7 @@ fn burn_with_instruction() {
 
     let burn_events = Core::events()
       .iter()
+      .flat_map(IntoIterator::into_iter)
       .map(|event| borsh::from_slice::<serai_abi::Event>(event.as_slice()).unwrap())
       .filter_map(|event| {
         if let serai_abi::Event::Coins(e) = &event {

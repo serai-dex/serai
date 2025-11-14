@@ -59,7 +59,7 @@ pub struct Serai {
 pub struct TemporalSerai<'a> {
   serai: &'a Serai,
   block: BlockHash,
-  events: Arc<RwLock<Option<Vec<Event>>>>,
+  events: Arc<RwLock<Option<Vec<Vec<Event>>>>>,
 }
 
 impl Serai {
@@ -195,7 +195,9 @@ impl<'a> TemporalSerai<'a> {
   /// Fetch the events for this block.
   ///
   /// The returned `Option` will always be `Some(_)`.
-  async fn events(&self) -> Result<async_lock::RwLockReadGuard<'_, Option<Vec<Event>>>, RpcError> {
+  async fn events_borrowed(
+    &self,
+  ) -> Result<async_lock::RwLockReadGuard<'_, Option<Vec<Vec<Event>>>>, RpcError> {
     let mut events = self.events.read().await;
     if events.is_none() {
       drop(events);
@@ -204,26 +206,39 @@ impl<'a> TemporalSerai<'a> {
         if events_mut.is_none() {
           *events_mut = Some(
             self
-              .call::<Vec<String>>("blockchain/events", "")
+              .call::<Vec<Vec<String>>>("blockchain/events", "")
               .await?
               .into_iter()
-              .map(|event| {
-                Event::deserialize(
-                  &mut hex::decode(&event)
-                    .map_err(|_| {
-                      RpcError::InvalidNode("node returned non-hex-encoded event".to_string())
-                    })?
-                    .as_slice(),
-                )
-                .map_err(|_| RpcError::InvalidNode("node returned invalid event".to_string()))
+              .map(|events_per_tx| {
+                events_per_tx
+                  .into_iter()
+                  .map(|event| {
+                    Event::deserialize(
+                      &mut hex::decode(&event)
+                        .map_err(|_| {
+                          RpcError::InvalidNode("node returned non-hex-encoded event".to_string())
+                        })?
+                        .as_slice(),
+                    )
+                    .map_err(|_| RpcError::InvalidNode("node returned invalid event".to_string()))
+                  })
+                  .collect::<Result<Vec<_>, _>>()
               })
-              .collect::<Result<_, _>>()?,
+              .collect::<Result<Vec<_>, _>>()?,
           );
         }
       }
       events = self.events.read().await;
     }
     Ok(events)
+  }
+
+  /// Fetch the events for this block.
+  ///
+  /// These will be grouped by the transactions which emitted them, including the inherent
+  /// transactions at the start and end of every block.
+  pub async fn events(&self) -> Result<Vec<Vec<Event>>, RpcError> {
+    Ok(self.events_borrowed().await?.clone().expect("`TemporalSerai::events` returned None"))
   }
 
   /// Scope to the validator sets module.

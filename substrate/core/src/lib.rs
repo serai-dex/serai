@@ -14,7 +14,7 @@ pub use iumt::*;
 #[expect(clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 pub mod pallet {
-  use alloc::vec::Vec;
+  use alloc::{vec::Vec, vec};
 
   use frame_support::{
     sp_runtime::traits::{Header, Block},
@@ -75,6 +75,8 @@ pub mod pallet {
   #[pallet::event]
   #[pallet::generate_deposit(pub(super) fn deposit_event)]
   pub enum Event<T: Config> {
+    /// A transaction begun.
+    BeginTransaction,
     /// An event from Serai.
     Event(Vec<u8>),
   }
@@ -130,6 +132,7 @@ pub mod pallet {
     /// The caller MUST ensure two transactions aren't simultaneously started.
     pub fn start_transaction() {
       TransactionEventsMerkle::<T>::new_expecting_none();
+      Self::deposit_event(Event::BeginTransaction);
     }
 
     /// Emit an event.
@@ -150,19 +153,24 @@ pub mod pallet {
       BlockEventsCommitmentMerkle::<T>::append(&(&transaction_hash, &transaction_events_root));
     }
 
-    /// Fetch all of Serai's events.
+    /// Fetch all of Serai's events for each transaction.
     ///
     /// This MUST NOT be called during a transaction/block's execution.
-    pub fn events() -> Vec<Vec<u8>>
+    pub fn events() -> Vec<Vec<Vec<u8>>>
     where
       T::RuntimeEvent: TryInto<Event<T>>,
     {
-      frame_system::Pallet::<T>::read_events_no_consensus()
-        .filter_map(|e| match e.event.try_into() {
-          Ok(Event::Event(bytes)) => Some(bytes),
-          _ => None,
-        })
-        .collect()
+      let mut result = vec![];
+      for event in frame_system::Pallet::<T>::read_events_no_consensus() {
+        match event.event.try_into() {
+          Ok(Event::BeginTransaction) => result.push(vec![]),
+          Ok(Event::Event(bytes)) => {
+            result.last_mut().expect("Serai event outside of a transaction").push(bytes)
+          }
+          Err(_) => {}
+        }
+      }
+      result
     }
   }
 }

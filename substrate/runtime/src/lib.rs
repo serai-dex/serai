@@ -34,7 +34,7 @@ sp_api::decl_runtime_apis! {
     fn build(genesis: GenesisConfig);
   }
   pub trait SeraiApi {
-    fn events() -> Vec<Vec<u8>>;
+    fn events() -> Vec<Vec<Vec<u8>>>;
     fn validators(network: NetworkId) -> Vec<Public>;
     fn current_session(network: NetworkId) -> Option<Session>;
     fn current_stake(network: NetworkId) -> Option<Amount>;
@@ -179,7 +179,7 @@ mod apis {
     }
 
     impl crate::SeraiApi<Block> for Runtime {
-      fn events() -> Vec<Vec<u8>> {
+      fn events() -> Vec<Vec<Vec<u8>>> {
         unimplemented!("runtime is only implemented when WASM")
       }
       fn validators(
