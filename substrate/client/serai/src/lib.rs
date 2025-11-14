@@ -109,10 +109,10 @@ impl Serai {
       Response { result: None, error: Some(error) } => {
         Err(RpcError::ErrorInResponse(error.message))
       }
-      Response { result: Some(_), error: Some(_) } | Response { result: None, error: None } => {
-        Err(RpcError::InvalidNode(
-          "node didn't exclusively provide either `result` or `error`".to_string(),
-        ))
+      // TODO: https://github.com/core-json/core-json/issues/18
+      Response { result: None, error: None } => Ok(Default::default()),
+      Response { result: Some(_), error: Some(_) } => {
+        Err(RpcError::InvalidNode("node didn't provided both `result` and `error`".to_string()))
       }
     }
   }

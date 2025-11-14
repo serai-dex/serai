@@ -102,7 +102,7 @@ pub(crate) fn module<
     let Ok(key_pair) = client.runtime_api().keys(block_hash, set) else {
       Err(Error::Internal("couldn't fetch the keys for the requested validator set"))?
     };
-    Ok(hex::encode(borsh::to_vec(&key_pair).unwrap()))
+    Ok(key_pair.map(|key_pair| hex::encode(borsh::to_vec(&key_pair).unwrap())))
   });
 
   module

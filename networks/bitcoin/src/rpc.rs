@@ -155,6 +155,7 @@ impl Rpc {
         Err(RpcError::RequestError(Error { code, message }))
       }
       // `invalidateblock` yields this edge case
+      // TODO: https://github.com/core-json/core-json/issues/18
       RpcResponse { result: None, error: None } => {
         if core::any::TypeId::of::<Response>() == core::any::TypeId::of::<()>() {
           Ok(Default::default())

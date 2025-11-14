@@ -128,7 +128,7 @@ impl<'a> ValidatorSets<'a> {
       .call::<Option<String>>(
         "validator-sets/keys",
         &format!(
-          r#", "set": {{ "network": {}, "session": {} }} "#,
+          r#", "network": {}, "session": {} "#,
           rpc_network(set.network)?,
           set.session.0
         ),
