@@ -253,7 +253,7 @@ mod substrate {
           for log in header.consensus.digest.logs() {
             match log {
               DigestItem::PreRuntime(consensus, encoded)
-                if *consensus == SeraiExecutionDigest::CONSENSUS_ID =>
+                if *consensus == SeraiPreExecutionDigest::CONSENSUS_ID =>
               {
                 pre_execution_digest =
                   SeraiPreExecutionDigest::deserialize_reader(&mut encoded.as_slice()).ok();

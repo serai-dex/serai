@@ -22,6 +22,8 @@ use serai_runtime::RuntimeApi;
 use sc_consensus_babe::{self, SlotProportion};
 use sc_consensus_grandpa as grandpa;
 
+mod proposer;
+
 #[cfg(not(feature = "runtime-benchmarks"))]
 pub type Executor = WasmExecutor<ExtendedHostFunctions<SubstrateHostFunctions, ()>>;
 #[cfg(feature = "runtime-benchmarks")]
@@ -31,6 +33,8 @@ pub type Executor = WasmExecutor<
 
 type FullBackend = sc_service::TFullBackend<Block>;
 pub type FullClient = TFullClient<Block, RuntimeApi, Executor>;
+
+pub type TransactionPool = sc_transaction_pool::TransactionPoolWrapper<Block, FullClient>;
 
 type SelectChain = sc_consensus::LongestChain<FullBackend, Block>;
 type GrandpaBlockImport = grandpa::GrandpaBlockImport<FullBackend, Block, FullClient, SelectChain>;
@@ -42,7 +46,7 @@ type PartialComponents<CIDP> = sc_service::PartialComponents<
   FullBackend,
   SelectChain,
   sc_consensus::DefaultImportQueue<Block>,
-  sc_transaction_pool::TransactionPoolWrapper<Block, FullClient>,
+  TransactionPool,
   (
     BabeBlockImport<CIDP>,
     sc_consensus_babe::BabeLink<Block>,
@@ -391,13 +395,13 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       keystore: keystore.clone(),
       client: client.clone(),
       select_chain,
-      env: sc_basic_authorship::ProposerFactory::new(
+      env: proposer::ProposerFactory(sc_basic_authorship::ProposerFactory::new(
         task_manager.spawn_handle(),
         client,
         transaction_pool.clone(),
         prometheus_registry.as_ref(),
         telemetry.as_ref().map(Telemetry::handle),
-      ),
+      )),
       block_import,
       sync_oracle: sync_service.clone(),
       justification_sync_link: sync_service.clone(),
