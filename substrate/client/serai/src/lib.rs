@@ -19,6 +19,10 @@ use abi::{
 
 use async_lock::RwLock;
 
+/// RPC client functionality for the coins module.
+pub mod coins;
+use coins::*;
+
 /// RPC client functionality for the validator sets module.
 pub mod validator_sets;
 use validator_sets::*;
@@ -243,6 +247,11 @@ impl<'a> TemporalSerai<'a> {
   /// transactions at the start and end of every block.
   pub async fn events(&self) -> Result<Vec<Vec<Event>>, RpcError> {
     Ok(self.events_borrowed().await?.clone().expect("`TemporalSerai::events` returned None"))
+  }
+
+  /// Scope to the coins module.
+  pub fn coins(&self) -> Coins<'_> {
+    Coins(self)
   }
 
   /// Scope to the validator sets module.
