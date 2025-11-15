@@ -11,6 +11,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_abi::{
   primitives::{
+    BlockHash,
     crypto::{Public, KeyPair},
     network_id::ExternalNetworkId,
     validator_sets::{Session, ExternalValidatorSet},
@@ -18,7 +19,7 @@ use serai_abi::{
   },
   Block,
 };
-use serai_client::{Serai, TemporalSerai};
+use serai_client_serai::{Serai, TemporalSerai};
 
 use serai_db::*;
 use serai_task::*;
@@ -86,7 +87,7 @@ create_db! {
     // The following are populated by the intend task and used throughout the library
 
     // An index of Substrate blocks
-    SubstrateBlockHash: (block_number: u64) -> [u8; 32],
+    SubstrateBlockHash: (block_number: u64) -> BlockHash,
     // A mapping from a global session's ID to its relevant information.
     GlobalSessions: (global_session: [u8; 32]) -> GlobalSession,
     // The last block to be cosigned by a global session.
@@ -124,7 +125,7 @@ async fn keys_for_network(
   network: ExternalNetworkId,
 ) -> Result<Option<(Session, KeyPair)>, String> {
   let Some(latest_session) =
-    serai.validator_sets().session(network.into()).await.map_err(|e| format!("{e:?}"))?
+    serai.validator_sets().current_session(network.into()).await.map_err(|e| format!("{e:?}"))?
   else {
     // If this network hasn't had a session declared, move on
     return Ok(None);
@@ -272,7 +273,10 @@ impl<D: Db> Cosigning<D> {
   }
 
   /// Fetch a cosigned Substrate block's hash by its block number.
-  pub fn cosigned_block(getter: &impl Get, block_number: u64) -> Result<Option<[u8; 32]>, Faulted> {
+  pub fn cosigned_block(
+    getter: &impl Get,
+    block_number: u64,
+  ) -> Result<Option<BlockHash>, Faulted> {
     if block_number > Self::latest_cosigned_block_number(getter)? {
       return Ok(None);
     }

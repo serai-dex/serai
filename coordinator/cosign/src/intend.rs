@@ -1,10 +1,13 @@
 use core::future::Future;
 use std::{sync::Arc, collections::HashMap};
 
+use blake2::{Digest, Blake2b256};
+
 use serai_abi::primitives::{
   balance::Amount, validator_sets::ExternalValidatorSet, address::SeraiAddress,
+  merkle::IncrementalUnbalancedMerkleTree,
 };
-use serai_client::Serai;
+use serai_client_serai::Serai;
 
 use serai_db::*;
 use serai_task::ContinuallyRan;
@@ -14,6 +17,7 @@ use crate::*;
 create_db!(
   CosignIntend {
     ScanCosignFrom: () -> u64,
+    BuildsUpon: () -> IncrementalUnbalancedMerkleTree,
   }
 );
 
@@ -40,9 +44,9 @@ async fn block_has_events_justifying_a_cosign(
     .await
     .map_err(|e| format!("{e:?}"))?
     .ok_or_else(|| "couldn't get block which should've been finalized".to_string())?;
-  let serai = serai.as_of(block.hash());
+  let serai = serai.as_of(block.header.hash()).await.map_err(|e| format!("{e:?}"))?;
 
-  if !serai.validator_sets().key_gen_events().await.map_err(|e| format!("{e:?}"))?.is_empty() {
+  if !serai.validator_sets().set_keys_events().await.map_err(|e| format!("{e:?}"))?.is_empty() {
     return Ok((block, HasEvents::Notable));
   }
 
@@ -66,7 +70,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
     async move {
       let start_block_number = ScanCosignFrom::get(&self.db).unwrap_or(1);
       let latest_block_number =
-        self.serai.latest_finalized_block_number().await.map_err(|e| format!("{e:?}"))?.number();
+        self.serai.latest_finalized_block_number().await.map_err(|e| format!("{e:?}"))?;
 
       for block_number in start_block_number ..= latest_block_number {
         let mut txn = self.db.txn();
@@ -76,26 +80,35 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             .await
             .map_err(|e| format!("{e:?}"))?;
 
+        let mut builds_upon =
+          BuildsUpon::get(&txn).unwrap_or(IncrementalUnbalancedMerkleTree::new());
+
         // Check we are indexing a linear chain
-        if (block_number > 1) &&
-          (<[u8; 32]>::from(block.header.parent_hash) !=
-            SubstrateBlockHash::get(&txn, block_number - 1)
-              .expect("indexing a block but haven't indexed its parent"))
+        if block.header.builds_upon() !=
+          builds_upon.clone().calculate(serai_abi::BLOCK_HEADER_BRANCH_TAG)
         {
           Err(format!(
             "node's block #{block_number} doesn't build upon the block #{} prior indexed",
             block_number - 1
           ))?;
         }
-        let block_hash = block.hash();
+        let block_hash = block.header.hash();
         SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
+        builds_upon.append(
+          serai_abi::BLOCK_HEADER_BRANCH_TAG,
+          Blake2b256::new_with_prefix([serai_abi::BLOCK_HEADER_LEAF_TAG])
+            .chain_update(block_hash.0)
+            .finalize()
+            .into(),
+        );
+        BuildsUpon::set(&mut txn, &builds_upon);
 
         let global_session_for_this_block = LatestGlobalSessionIntended::get(&txn);
 
         // If this is notable, it creates a new global session, which we index into the database
         // now
         if has_events == HasEvents::Notable {
-          let serai = self.serai.as_of(block_hash);
+          let serai = self.serai.as_of(block_hash).await.map_err(|e| format!("{e:?}"))?;
           let sets_and_keys = cosigning_sets(&serai).await?;
           let global_session =
             GlobalSession::id(sets_and_keys.iter().map(|(set, _key)| *set).collect());
@@ -109,7 +122,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             keys.insert(set.network, SeraiAddress::from(*key));
             let stake = serai
               .validator_sets()
-              .total_allocated_stake(set.network.into())
+              .current_stake(set.network.into())
               .await
               .map_err(|e| format!("{e:?}"))?
               .unwrap_or(Amount(0))

@@ -3,7 +3,7 @@
 //! Types used when cosigning Serai. For more info, please see `serai-cosign`.
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::{crypto::Public, network_id::ExternalNetworkId};
+use serai_primitives::{BlockHash, crypto::Public, network_id::ExternalNetworkId};
 
 /// The schnorrkel context to used when signing a cosign.
 pub const COSIGN_CONTEXT: &[u8] = b"/serai/coordinator/cosign";
@@ -16,7 +16,7 @@ pub struct CosignIntent {
   /// The number of the block to cosign.
   pub block_number: u64,
   /// The hash of the block to cosign.
-  pub block_hash: [u8; 32],
+  pub block_hash: BlockHash,
   /// If this cosign must be handled before further cosigns are.
   pub notable: bool,
 }
@@ -29,7 +29,7 @@ pub struct Cosign {
   /// The number of the block to cosign.
   pub block_number: u64,
   /// The hash of the block to cosign.
-  pub block_hash: [u8; 32],
+  pub block_hash: BlockHash,
   /// The actual cosigner.
   pub cosigner: ExternalNetworkId,
 }

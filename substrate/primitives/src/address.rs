@@ -65,6 +65,17 @@ impl From<SeraiAddress> for Public {
   }
 }
 
+impl From<crate::crypto::Public> for SeraiAddress {
+  fn from(key: crate::crypto::Public) -> Self {
+    Public::from(key).into()
+  }
+}
+impl From<SeraiAddress> for crate::crypto::Public {
+  fn from(address: SeraiAddress) -> Self {
+    Public::from(address).into()
+  }
+}
+
 // We use Bech32m to encode addresses
 impl core::fmt::Display for SeraiAddress {
   fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {

@@ -73,7 +73,7 @@ impl UnbalancedMerkleTree {
 }
 
 /// An unbalanced Merkle tree which is incrementally created.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::DecodeWithMemTracking)
