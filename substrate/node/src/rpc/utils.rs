@@ -6,7 +6,7 @@ use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
 pub(super) enum Error {
   Internal(&'static str),
   InvalidRequest(&'static str),
-  Missing(&'static str),
+  InvalidStateReference,
 }
 
 impl From<Error> for jsonrpsee::types::error::ErrorObjectOwned {
@@ -18,9 +18,11 @@ impl From<Error> for jsonrpsee::types::error::ErrorObjectOwned {
       Error::InvalidRequest(str) => {
         jsonrpsee::types::error::ErrorObjectOwned::owned(-2, str, Option::<()>::None)
       }
-      Error::Missing(str) => {
-        jsonrpsee::types::error::ErrorObjectOwned::owned(-3, str, Option::<()>::None)
-      }
+      Error::InvalidStateReference => jsonrpsee::types::error::ErrorObjectOwned::owned(
+        -4,
+        "the block used as the reference was not locally held",
+        Option::<()>::None,
+      ),
     }
   }
 }
@@ -30,7 +32,7 @@ pub(super) fn block_hash<
 >(
   client: &C,
   params: &jsonrpsee::types::params::Params,
-) -> Result<<Block as sp_runtime::traits::Block>::Hash, Error> {
+) -> Result<Option<<Block as sp_runtime::traits::Block>::Hash>, Error> {
   #[derive(sp_core::serde::Deserialize)]
   #[serde(crate = "sp_core::serde")]
   struct BlockByHash {
@@ -50,13 +52,13 @@ pub(super) fn block_hash<
     }) else {
       return Err(Error::InvalidRequest("requested block hash wasn't a valid hash"));
     };
-    block_hash
+    Some(block_hash)
   } else {
     let Ok(block_number) = params.parse::<BlockByNumber>() else {
       return Err(Error::InvalidRequest("requested block wasn't a valid hash nor number"));
     };
-    let Ok(Some(block_hash)) = client.block_hash(block_number.block) else {
-      return Err(Error::Missing("no block hash for that block number"));
+    let Ok(block_hash) = client.block_hash(block_number.block) else {
+      return Err(Error::Internal("couldn't fetch block hash for block number"));
     };
     block_hash
   })

@@ -53,7 +53,7 @@ async fn validator_sets() {
         // The genesis block should have the expected events
         {
           let mut events = serai
-            .as_of(serai.block_by_number(0).await.unwrap().header.hash())
+            .as_of(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
             .await
             .unwrap()
             .validator_sets()
@@ -98,7 +98,7 @@ async fn validator_sets() {
 
         assert_eq!(
           serai
-            .as_of(serai.block_by_number(0).await.unwrap().header.hash())
+            .as_of(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
             .await
             .unwrap()
             .validator_sets()
@@ -115,7 +115,7 @@ async fn validator_sets() {
       {
         assert_eq!(
           serai
-            .as_of(serai.block_by_number(1).await.unwrap().header.hash())
+            .as_of(serai.block_by_number(1).await.unwrap().unwrap().header.hash())
             .await
             .unwrap()
             .validator_sets()
@@ -126,7 +126,7 @@ async fn validator_sets() {
         );
         assert_eq!(
           serai
-            .as_of(serai.block_by_number(1).await.unwrap().header.hash())
+            .as_of(serai.block_by_number(1).await.unwrap().unwrap().header.hash())
             .await
             .unwrap()
             .validator_sets()
@@ -138,8 +138,10 @@ async fn validator_sets() {
       }
 
       {
-        let serai =
-          serai.as_of(serai.block_by_number(0).await.unwrap().header.hash()).await.unwrap();
+        let serai = serai
+          .as_of(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
+          .await
+          .unwrap();
         let serai = serai.validator_sets();
         for network in NetworkId::all() {
           match network {

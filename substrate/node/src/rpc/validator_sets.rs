@@ -72,7 +72,9 @@ pub(crate) fn module<
   module.register_method(
     "validator-sets/current_session",
     |params, client, _ext| -> Result<_, Error> {
-      let block_hash = block_hash(&**client, &params)?;
+      let Some(block_hash) = block_hash(&**client, &params)? else {
+        Err(Error::InvalidStateReference)?
+      };
       let network = network(&params)?;
       let Ok(session) = client.runtime_api().current_session(block_hash, network) else {
         Err(Error::Internal("couldn't fetch the session for the requested network"))?
@@ -84,7 +86,9 @@ pub(crate) fn module<
   module.register_method(
     "validator-sets/current_stake",
     |params, client, _ext| -> Result<_, Error> {
-      let block_hash = block_hash(&**client, &params)?;
+      let Some(block_hash) = block_hash(&**client, &params)? else {
+        Err(Error::InvalidStateReference)?
+      };
       let network = network(&params)?;
       let Ok(stake) = client.runtime_api().current_stake(block_hash, network) else {
         Err(Error::Internal("couldn't fetch the total allocated stake for the requested network"))?
@@ -94,7 +98,9 @@ pub(crate) fn module<
   );
 
   module.register_method("validator-sets/keys", |params, client, _ext| -> Result<_, Error> {
-    let block_hash = block_hash(&**client, &params)?;
+    let Some(block_hash) = block_hash(&**client, &params)? else {
+      Err(Error::InvalidStateReference)?
+    };
     let set = set(&params)?;
     let Ok(set) = ExternalValidatorSet::try_from(set) else {
       Err(Error::InvalidRequest("requested keys for a non-external validator set"))?

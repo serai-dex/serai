@@ -49,8 +49,8 @@ async fn blockchain() {
       let test_finalized_block = |number| {
         let serai = &serai;
         async move {
-          let block = serai.block_by_number(number).await.unwrap();
-          assert_eq!(serai.block(block.header.hash()).await.unwrap(), block);
+          let block = serai.block_by_number(number).await.unwrap().unwrap();
+          assert_eq!(serai.block(block.header.hash()).await.unwrap().unwrap(), block);
           assert!(serai.finalized(block.header.hash()).await.unwrap());
         }
       };
@@ -70,7 +70,7 @@ async fn blockchain() {
             continue;
           };
           // Check if it's considered finalized
-          let considered_finalized = serai.finalized(block.header.hash()).await.unwrap();
+          let considered_finalized = serai.finalized(block.unwrap().header.hash()).await.unwrap();
           // Ensure the finalized block is the same, meaning this block didn't become finalized as
           // we made these RPC requests
           if latest_finalized != serai.latest_finalized_block_number().await.unwrap() {
@@ -108,7 +108,7 @@ async fn blockchain() {
         let mut observed_consensus_commitments = HashSet::new();
         let mut tagged_block_hashes = vec![];
         for i in 0 ..= last_block_number {
-          let block = serai.block_by_number(i).await.unwrap();
+          let block = serai.block_by_number(i).await.unwrap().unwrap();
 
           assert_eq!(block.header.number(), i);
 

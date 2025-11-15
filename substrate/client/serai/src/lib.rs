@@ -134,25 +134,29 @@ impl Serai {
   }
 
   async fn block_internal(
-    block: impl Future<Output = Result<String, RpcError>>,
-  ) -> Result<Block, RpcError> {
+    block: impl Future<Output = Result<Option<String>, RpcError>>,
+  ) -> Result<Option<Block>, RpcError> {
     let bin = block.await?;
-    Block::deserialize(
-      &mut hex::decode(&bin)
-        .map_err(|_| RpcError::InvalidNode("node returned non-hex-encoded block".to_string()))?
-        .as_slice(),
-    )
-    .map_err(|_| RpcError::InvalidNode("node returned invalid block".to_string()))
+    bin
+      .map(|bin| {
+        Block::deserialize(
+          &mut hex::decode(&bin)
+            .map_err(|_| RpcError::InvalidNode("node returned non-hex-encoded block".to_string()))?
+            .as_slice(),
+        )
+        .map_err(|_| RpcError::InvalidNode("node returned invalid block".to_string()))
+      })
+      .transpose()
   }
 
   /// Fetch a block from the Serai blockchain.
-  pub async fn block(&self, block: BlockHash) -> Result<Block, RpcError> {
+  pub async fn block(&self, block: BlockHash) -> Result<Option<Block>, RpcError> {
     Self::block_internal(self.call("blockchain/block", &format!(r#"{{ "block": "{block}" }}"#)))
       .await
   }
 
   /// Fetch a block from the Serai blockchain by its number.
-  pub async fn block_by_number(&self, block: u64) -> Result<Block, RpcError> {
+  pub async fn block_by_number(&self, block: u64) -> Result<Option<Block>, RpcError> {
     Self::block_internal(self.call("blockchain/block", &format!(r#"{{ "block": {block} }}"#))).await
   }
 

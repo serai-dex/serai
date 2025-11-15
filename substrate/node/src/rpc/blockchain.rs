@@ -37,10 +37,12 @@ pub(crate) fn module<
   module.register_method(
     "blockchain/is_finalized",
     |params, client, _ext| -> Result<_, Error> {
-      let block_hash = block_hash(&**client, &params)?;
+      let Some(block_hash) = block_hash(&**client, &params)? else {
+        return Ok(false);
+      };
       let finalized = client.info().finalized_number;
       let Ok(Some(number)) = client.number(block_hash) else {
-        Err(Error::Missing("failed to fetch block's number"))?
+        return Ok(false);
       };
       let Ok(status) = client.block_status(block_hash) else {
         Err(Error::Internal("failed to fetch block's status"))?
@@ -53,18 +55,22 @@ pub(crate) fn module<
   )?;
 
   module.register_method("blockchain/block", |params, client, _ext| -> Result<_, Error> {
-    let block_hash = block_hash(&**client, &params)?;
+    let Some(block_hash) = block_hash(&**client, &params)? else {
+      return Ok(None);
+    };
     let Ok(Some(block)) = client.block(block_hash) else {
-      Err(Error::Missing("couldn't find requested block"))?
+      return Ok(None);
     };
 
-    Ok(hex::encode(borsh::to_vec(&serai_abi::Block::from(block.block)).unwrap()))
+    Ok(Some(hex::encode(borsh::to_vec(&serai_abi::Block::from(block.block)).unwrap())))
   })?;
 
   module.register_method("blockchain/events", |params, client, _ext| -> Result<_, Error> {
-    let block_hash = block_hash(&**client, &params)?;
+    let Some(block_hash) = block_hash(&**client, &params)? else {
+      Err(Error::InvalidStateReference)?
+    };
     let Ok(events) = client.runtime_api().events(block_hash) else {
-      Err(Error::Missing("couldn't fetch the events for the requested block"))?
+      Err(Error::InvalidStateReference)?
     };
     Ok(
       events
