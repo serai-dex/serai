@@ -326,14 +326,20 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       latest_decided_set,
       KeySharesStruct::try_from(total_key_shares).expect("amortization failure"),
     );
-    for (key, key_shares) in selected_validators {
+    for (key, key_shares) in &selected_validators {
       Storage::SelectedValidators::insert(
-        selected_validators_key(latest_decided_set, key),
+        selected_validators_key(latest_decided_set, *key),
         key_shares,
       );
     }
 
-    Core::<Storage::Config>::emit_event(Event::SetDecided { set: latest_decided_set });
+    Core::<Storage::Config>::emit_event(Event::SetDecided {
+      set: latest_decided_set,
+      validators: selected_validators
+        .into_iter()
+        .map(|(key, key_shares)| (key.into(), key_shares))
+        .collect(),
+    });
 
     true
   }

@@ -1,8 +1,9 @@
 use serai_abi::{
   primitives::{
+    address::SeraiAddress,
     network_id::{ExternalNetworkId, NetworkId},
     balance::Amount,
-    validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
+    validator_sets::{Session, ExternalValidatorSet, ValidatorSet, KeyShares},
   },
   validator_sets::Event,
 };
@@ -43,8 +44,13 @@ async fn validator_sets() {
         panic!("finalized block remained the genesis block for over five minutes");
       };
 
-      // The genesis block should have the expected events
       {
+        use sp_core::{Pair as _, sr25519::Pair};
+        let genesis_validators = vec![(
+          SeraiAddress::from(Pair::from_string("//Alice", None).unwrap().public()),
+          KeyShares(1),
+        )];
+        // The genesis block should have the expected events
         {
           let mut events = serai
             .as_of(serai.block_by_number(0).await.unwrap().header.hash())
@@ -58,27 +64,32 @@ async fn validator_sets() {
           let mut expected = vec![
             Event::SetDecided {
               set: ValidatorSet { network: NetworkId::Serai, session: Session(0) },
+              validators: genesis_validators.clone(),
             },
             Event::SetDecided {
               set: ValidatorSet { network: NetworkId::Serai, session: Session(1) },
+              validators: genesis_validators.clone(),
             },
             Event::SetDecided {
               set: ValidatorSet {
                 network: NetworkId::External(ExternalNetworkId::Bitcoin),
                 session: Session(0),
               },
+              validators: genesis_validators.clone(),
             },
             Event::SetDecided {
               set: ValidatorSet {
                 network: NetworkId::External(ExternalNetworkId::Ethereum),
                 session: Session(0),
               },
+              validators: genesis_validators.clone(),
             },
             Event::SetDecided {
               set: ValidatorSet {
                 network: NetworkId::External(ExternalNetworkId::Monero),
                 session: Session(0),
               },
+              validators: genesis_validators.clone(),
             },
           ];
           expected.sort_by_key(|event| borsh::to_vec(event).unwrap());

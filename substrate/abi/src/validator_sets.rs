@@ -1,3 +1,5 @@
+use alloc::vec::Vec;
+
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{
@@ -96,6 +98,8 @@ pub enum Event {
   SetDecided {
     /// The set decided.
     set: ValidatorSet,
+    /// The validators decided to be included in the set.
+    validators: Vec<(SeraiAddress, KeyShares)>,
   },
   /// A validator set has set their keys.
   SetKeys {
