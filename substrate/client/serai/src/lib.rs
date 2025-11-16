@@ -175,6 +175,22 @@ impl Serai {
     Ok(TemporalSerai { serai: self, block, events: Arc::new(RwLock::new(None)) })
   }
 
+  /// Scope this RPC client to the state as of the latest finalized block.
+  pub async fn as_of_latest_finalized_block<'a>(
+    &'a self,
+    block: BlockHash,
+  ) -> Result<TemporalSerai<'a>, RpcError> {
+    let block = self
+      .block_by_number(self.latest_finalized_block_number().await?)
+      .await?
+      .ok_or_else(|| RpcError::InvalidNode("couldn't fetch latest finalized block".to_string()))?;
+    Ok(TemporalSerai {
+      serai: self,
+      block: block.header.hash(),
+      events: Arc::new(RwLock::new(None)),
+    })
+  }
+
   /// Return the P2P addresses for the validators of the specified network.
   pub async fn p2p_validators(&self, network: ExternalNetworkId) -> Result<Vec<String>, RpcError> {
     self
