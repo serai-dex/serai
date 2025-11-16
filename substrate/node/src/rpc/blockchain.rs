@@ -1,4 +1,5 @@
-use std::{sync::Arc, ops::Deref, collections::HashSet};
+use core::{ops::Deref, future::Future};
+use std::{sync::Arc, collections::HashSet};
 
 use rand_core::{RngCore, OsRng};
 
@@ -8,8 +9,9 @@ use sp_consensus::BlockStatus;
 use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
 use sc_client_api::BlockBackend;
+use sc_transaction_pool_api::TransactionPool;
 
-use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
+use serai_abi::{primitives::prelude::*, Transaction, SubstrateBlock as Block};
 
 use serai_runtime::SeraiApi;
 
@@ -27,6 +29,7 @@ pub(crate) fn module<
     + ProvideRuntimeApi<Block, Api: SeraiApi<Block>>,
 >(
   client: Arc<C>,
+  pool: Arc<impl 'static + TransactionPool<Block = Block>>,
 ) -> Result<RpcModule<impl 'static + Send + Sync>, Box<dyn std::error::Error + Send + Sync>> {
   let mut module = RpcModule::new(client);
 
@@ -78,6 +81,37 @@ pub(crate) fn module<
         .map(|events_per_tx| events_per_tx.into_iter().map(hex::encode).collect::<Vec<_>>())
         .collect::<Vec<_>>(),
     )
+  })?;
+
+  module.register_async_method("blockchain/publish_transaction", move |params, client, _ext| {
+    let pool = pool.clone();
+    async move {
+      #[derive(sp_core::serde::Deserialize)]
+      #[serde(crate = "sp_core::serde")]
+      struct TransactionRequest {
+        transaction: String,
+      };
+      let Ok(transaction) = params.parse::<TransactionRequest>() else {
+        return Err(Error::InvalidRequest(r#"missing `string` "transaction" field"#));
+      };
+      let Ok(transaction) = hex::decode(transaction.transaction) else {
+        Err(Error::InvalidRequest(r#"transaction was not hex-encoded"#))?
+      };
+      let Ok(transaction) =
+        <Transaction as borsh::BorshDeserialize>::deserialize_reader(&mut transaction.as_slice())
+      else {
+        Err(Error::InvalidRequest(r#"transaction could not be deserialized"#))?
+      };
+      pool
+        .submit_one(
+          client.info().best_hash,
+          sc_transaction_pool_api::TransactionSource::External,
+          transaction,
+        )
+        .await
+        .map_err(|e| Error::InvalidTransaction(format!("{e}")))?;
+      Ok(())
+    }
   })?;
 
   Ok(module)

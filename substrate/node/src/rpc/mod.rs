@@ -36,14 +36,14 @@ pub fn create_full<
     + HeaderBackend<Block>
     + HeaderMetadata<Block, Error = BlockchainError>
     + BlockBackend<Block>,
-  P: 'static + TransactionPool,
+  P: 'static + TransactionPool<Block = Block>,
 >(
   deps: FullDeps<C, P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>> {
   let FullDeps { id, client, pool, authority_discovery } = deps;
 
   let mut root = RpcModule::new(());
-  root.merge(blockchain::module(client.clone())?)?;
+  root.merge(blockchain::module(client.clone(), pool)?)?;
   root.merge(validator_sets::module(client.clone()))?;
   if let Some(authority_discovery) = authority_discovery {
     root.merge(p2p_validators::module(id, client, authority_discovery)?)?;

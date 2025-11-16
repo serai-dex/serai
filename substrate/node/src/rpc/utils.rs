@@ -7,6 +7,7 @@ pub(super) enum Error {
   Internal(&'static str),
   InvalidRequest(&'static str),
   InvalidStateReference,
+  InvalidTransaction(String),
 }
 
 impl From<Error> for jsonrpsee::types::error::ErrorObjectOwned {
@@ -19,8 +20,13 @@ impl From<Error> for jsonrpsee::types::error::ErrorObjectOwned {
         jsonrpsee::types::error::ErrorObjectOwned::owned(-2, str, Option::<()>::None)
       }
       Error::InvalidStateReference => jsonrpsee::types::error::ErrorObjectOwned::owned(
-        -4,
+        -3,
         "the block used as the reference was not locally held",
+        Option::<()>::None,
+      ),
+      Error::InvalidTransaction(str) => jsonrpsee::types::error::ErrorObjectOwned::owned(
+        -4,
+        format!("transaction was not accepted to the mempool: {str}"),
         Option::<()>::None,
       ),
     }

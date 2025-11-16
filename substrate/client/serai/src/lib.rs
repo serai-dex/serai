@@ -14,18 +14,16 @@ use borsh::BorshDeserialize;
 pub use serai_abi as abi;
 use abi::{
   primitives::{BlockHash, network_id::ExternalNetworkId},
-  Block, Event,
+  Transaction, Block, Event,
 };
 
 use async_lock::RwLock;
 
-/// RPC client functionality for the coins module.
-pub mod coins;
-use coins::*;
+mod coins;
+pub use coins::Coins;
 
-/// RPC client functionality for the validator sets module.
-pub mod validator_sets;
-use validator_sets::*;
+mod validator_sets;
+pub use validator_sets::ValidatorSets;
 
 /// An error from the RPC.
 #[derive(Debug, Error)]
@@ -162,6 +160,16 @@ impl Serai {
   /// Fetch a block from the Serai blockchain by its number.
   pub async fn block_by_number(&self, block: u64) -> Result<Option<Block>, RpcError> {
     Self::block_internal(self.call("blockchain/block", &format!(r#"{{ "block": {block} }}"#))).await
+  }
+
+  /// Publish a transaction onto the Serai blockchain.
+  pub async fn publish_transaction(&self, transaction: &Transaction) -> Result<(), RpcError> {
+    self
+      .call(
+        "blockchain/publish_transaction",
+        &format!(r#"{{ "transaction": {} }}"#, hex::encode(borsh::to_vec(transaction).unwrap())),
+      )
+      .await
   }
 
   /// Scope this RPC client to the state as of a specific block.
