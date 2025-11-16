@@ -1,7 +1,7 @@
 [package]
 name = "serai-client"
 version = "0.1.0"
-description = "Client library for the Serai network"
+description = "A client for Serai and its connected networks"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
@@ -17,58 +17,17 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-zeroize = "^1.5"
-thiserror = { version = "2", default-features = false, optional = true }
-
-bitvec = { version = "1", default-features = false, features = ["alloc", "serde"] }
-
-hex = "0.4"
-scale = { package = "parity-scale-codec", version = "3", optional = true }
-borsh = { version = "1", features = ["derive"] }
-serde = { version = "1", features = ["derive"], optional = true }
-serde_json = { version = "1", optional = true }
-
-serai-abi = { path = "../abi", version = "0.1" }
-
-multiaddr = { version = "0.18", optional = true }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", optional = true }
-sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", optional = true }
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", optional = true }
-
-async-lock = "3"
-
-simple-request = { path = "../../common/request", version = "0.3", optional = true }
+serai-client-serai = { path = "./serai", optional = true }
 
 serai-client-bitcoin = { path = "./bitcoin", optional = true }
 serai-client-ethereum = { path = "./ethereum", optional = true }
 serai-client-monero = { path = "./monero", optional = true }
 
-[dev-dependencies]
-rand_core = "0.6"
-hex = "0.4"
-
-blake2 = "0.11.0-rc.0"
-
-ciphersuite = { path = "../../crypto/ciphersuite" }
-dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
-ciphersuite-kp256 = { path = "../../crypto/ciphersuite/kp256" }
-dkg-musig = { path = "../../crypto/dkg/musig" }
-frost = { package = "modular-frost", path = "../../crypto/frost", features = ["tests"] }
-schnorrkel = { path = "../../crypto/schnorrkel", package = "frost-schnorrkel" }
-
-tokio = "1"
-
-dockertest = "0.5"
-serai-docker-tests = { path = "../../tests/docker" }
-
 [features]
-serai = ["thiserror/std", "scale", "serde", "serde_json", "multiaddr", "sp-core", "sp-runtime", "frame-system", "simple-request"]
+serai = ["serai-client-serai"]
 
-networks = []
-bitcoin = ["networks", "serai-client-bitcoin"]
-ethereum = ["networks", "serai-client-ethereum"]
-monero = ["networks", "serai-client-monero"]
+bitcoin = ["serai-client-bitcoin"]
+ethereum = ["serai-client-ethereum"]
+monero = ["serai-client-monero"]
 
-# Assumes the default usage is to use Serai as a DEX, which doesn't actually
-# require connecting to a Serai node
-default = ["bitcoin", "ethereum", "monero"]
+default = ["serai", "bitcoin", "ethereum", "monero"]
