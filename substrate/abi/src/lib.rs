@@ -61,6 +61,37 @@ pub enum Call {
   InInstructions(in_instructions::Call) = 7,
 }
 
+impl From<coins::Call> for Call {
+  fn from(call: coins::Call) -> Self {
+    Self::Coins(call)
+  }
+}
+impl From<validator_sets::Call> for Call {
+  fn from(call: validator_sets::Call) -> Self {
+    Self::ValidatorSets(call)
+  }
+}
+impl From<signals::Call> for Call {
+  fn from(call: signals::Call) -> Self {
+    Self::Signals(call)
+  }
+}
+impl From<dex::Call> for Call {
+  fn from(call: dex::Call) -> Self {
+    Self::Dex(call)
+  }
+}
+impl From<genesis_liquidity::Call> for Call {
+  fn from(call: genesis_liquidity::Call) -> Self {
+    Self::GenesisLiquidity(call)
+  }
+}
+impl From<in_instructions::Call> for Call {
+  fn from(call: in_instructions::Call) -> Self {
+    Self::InInstructions(call)
+  }
+}
+
 impl Call {
   pub(crate) fn is_signed(&self) -> bool {
     match self {
