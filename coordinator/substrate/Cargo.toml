@@ -24,7 +24,7 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
 
-serai-client = { path = "../../substrate/client", version = "0.1", default-features = false, features = ["serai"] }
+serai-client-serai = { path = "../../substrate/client/serai", default-features = false }
 
 log = { version = "0.4", default-features = false, features = ["std"] }
 

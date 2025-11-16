@@ -10,7 +10,10 @@ use tokio::sync::mpsc;
 
 use serai_db::{DbTxn, Db as DbTrait};
 
-use serai_client::validator_sets::primitives::{Session, ExternalValidatorSet};
+use serai_client_serai::abi::primitives::{
+  network_id::ExternalNetworkId,
+  validator_sets::{Session, ExternalValidatorSet},
+};
 use message_queue::{Service, Metadata, client::MessageQueue};
 
 use tributary_sdk::Tributary;
@@ -39,7 +42,7 @@ impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
       let mut made_progress = false;
 
       // Handle the Canonical events
-      for network in serai_client::primitives::EXTERNAL_NETWORKS {
+      for network in ExternalNetworkId::all() {
         loop {
           let mut txn = self.db.txn();
           let Some(msg) = serai_coordinator_substrate::Canonical::try_recv(&mut txn, network)

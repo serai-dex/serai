@@ -3,7 +3,10 @@ use std::sync::Arc;
 
 use serai_db::{DbTxn, Db};
 
-use serai_client::{validator_sets::primitives::ExternalValidatorSet, Serai};
+use serai_client_serai::{
+  abi::primitives::{network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet},
+  Serai,
+};
 
 use serai_task::ContinuallyRan;
 
@@ -28,7 +31,7 @@ impl<D: Db> ContinuallyRan for SetKeysTask<D> {
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let mut made_progress = false;
-      for network in serai_client::primitives::EXTERNAL_NETWORKS {
+      for network in ExternalNetworkId::all() {
         let mut txn = self.db.txn();
         let Some((session, keys)) = Keys::take(&mut txn, network) else {
           // No keys to set
@@ -40,7 +43,8 @@ impl<D: Db> ContinuallyRan for SetKeysTask<D> {
         let serai =
           self.serai.as_of_latest_finalized_block().await.map_err(|e| format!("{e:?}"))?;
         let serai = serai.validator_sets();
-        let current_session = serai.session(network.into()).await.map_err(|e| format!("{e:?}"))?;
+        let current_session =
+          serai.current_session(network.into()).await.map_err(|e| format!("{e:?}"))?;
         let current_session = current_session.map(|session| session.0);
         // Only attempt to set these keys if this isn't a retired session
         if Some(session.0) < current_session {
@@ -67,7 +71,7 @@ impl<D: Db> ContinuallyRan for SetKeysTask<D> {
           continue;
         };
 
-        match self.serai.publish(&keys).await {
+        match self.serai.publish_transaction(&keys).await {
           Ok(()) => {
             txn.commit();
             made_progress = true;

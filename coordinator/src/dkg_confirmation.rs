@@ -12,10 +12,8 @@ use frost_schnorrkel::{
 
 use serai_db::{DbTxn, Db as DbTrait};
 
-use serai_client::{
-  primitives::SeraiAddress,
-  validator_sets::primitives::{ExternalValidatorSet, musig_context, set_keys_message},
-};
+#[rustfmt::skip]
+use serai_client_serai::abi::primitives::{validator_sets::ExternalValidatorSet, address::SeraiAddress};
 
 use serai_task::{DoesNotError, ContinuallyRan};
 
@@ -160,7 +158,7 @@ impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
     let (machine, preprocess) = AlgorithmMachine::new(
       schnorrkel(),
       // We use a 1-of-1 Musig here as we don't know who will actually be in this Musig yet
-      musig(musig_context(set.into()), key, &[public_key]).unwrap(),
+      musig(ExternalValidatorSet::musig_context(&set), key, &[public_key]).unwrap(),
     )
     .preprocess(&mut OsRng);
     // We take the preprocess so we can use it in a distinct machine with the actual Musig
@@ -260,9 +258,12 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                 })
                 .collect::<Vec<_>>();
 
-              let keys =
-                musig(musig_context(self.set.set.into()), self.key.clone(), &musig_public_keys)
-                  .unwrap();
+              let keys = musig(
+                ExternalValidatorSet::musig_context(&self.set.set),
+                self.key.clone(),
+                &musig_public_keys,
+              )
+              .unwrap();
 
               // Rebuild the machine
               let (machine, preprocess_from_cache) =
@@ -296,9 +297,10 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
               };
 
               // Calculate our share
-              let (machine, share) = match handle_frost_error(
-                machine.sign(preprocesses, &set_keys_message(&self.set.set, &key_pair)),
-              ) {
+              let (machine, share) = match handle_frost_error(machine.sign(
+                preprocesses,
+                &ExternalValidatorSet::set_keys_message(&self.set.set, &key_pair),
+              )) {
                 Ok((machine, share)) => (machine, share),
                 // This yields the *musig participant index*
                 Err(participant) => {

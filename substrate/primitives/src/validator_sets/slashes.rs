@@ -217,6 +217,7 @@ pub struct SlashReport(
 );
 
 /// An error when converting from a `Vec`.
+#[derive(Debug)]
 pub enum FromVecError {
   /// The source `Vec` was too long to be converted.
   TooLong,

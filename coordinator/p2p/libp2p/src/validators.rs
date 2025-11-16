@@ -4,9 +4,8 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
-use serai_client::{
-  primitives::ExternalNetworkId, validator_sets::primitives::Session, SeraiError, Serai,
-};
+use serai_client_serai::abi::primitives::{network_id::ExternalNetworkId, validator_sets::Session};
+use serai_client_serai::{RpcError, Serai};
 
 use serai_task::{Task, ContinuallyRan};
 
@@ -52,7 +51,7 @@ impl Validators {
   async fn session_changes(
     serai: impl Borrow<Serai>,
     sessions: impl Borrow<HashMap<ExternalNetworkId, Session>>,
-  ) -> Result<Vec<(ExternalNetworkId, Session, HashSet<PeerId>)>, SeraiError> {
+  ) -> Result<Vec<(ExternalNetworkId, Session, HashSet<PeerId>)>, RpcError> {
     /*
       This uses the latest finalized block, not the latest cosigned block, which should be fine as
       in the worst case, we'd connect to unexpected validators. They still shouldn't be able to
@@ -69,10 +68,11 @@ impl Validators {
       // FuturesUnordered can be bad practice as it'll cause timeouts if infrequently polled, but
       // we poll it till it yields all futures with the most minimal processing possible
       let mut futures = FuturesUnordered::new();
-      for network in serai_client::primitives::EXTERNAL_NETWORKS {
+      for network in ExternalNetworkId::all() {
         let sessions = sessions.borrow();
+        let temporal_serai = temporal_serai.borrow();
         futures.push(async move {
-          let session = match temporal_serai.session(network.into()).await {
+          let session = match temporal_serai.current_session(network.into()).await {
             Ok(Some(session)) => session,
             Ok(None) => return Ok(None),
             Err(e) => return Err(e),
@@ -81,12 +81,16 @@ impl Validators {
           if sessions.get(&network) == Some(&session) {
             Ok(None)
           } else {
-            match temporal_serai.active_network_validators(network.into()).await {
-              Ok(validators) => Ok(Some((
+            match temporal_serai.current_validators(network.into()).await {
+              Ok(Some(validators)) => Ok(Some((
                 network,
                 session,
-                validators.into_iter().map(peer_id_from_public).collect(),
+                validators
+                  .into_iter()
+                  .map(|validator| peer_id_from_public(validator.into()))
+                  .collect(),
               ))),
+              Ok(None) => panic!("network has session yet no validators"),
               Err(e) => Err(e),
             }
           }
@@ -153,7 +157,7 @@ impl Validators {
   }
 
   /// Update the view of the validators.
-  pub(crate) async fn update(&mut self) -> Result<(), SeraiError> {
+  pub(crate) async fn update(&mut self) -> Result<(), RpcError> {
     let session_changes = Self::session_changes(&*self.serai, &self.sessions).await?;
     self.incorporate_session_changes(session_changes);
     Ok(())
@@ -206,7 +210,7 @@ impl ContinuallyRan for UpdateValidatorsTask {
   const DELAY_BETWEEN_ITERATIONS: u64 = 60;
   const MAX_DELAY_BETWEEN_ITERATIONS: u64 = 5 * 60;
 
-  type Error = SeraiError;
+  type Error = RpcError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {

@@ -9,8 +9,9 @@ use ciphersuite::group::GroupEncoding;
 use dkg::Participant;
 
 use serai_primitives::{
-  address::SeraiAddress,
+  BlockHash,
   validator_sets::{ExternalValidatorSet, Slash},
+  address::SeraiAddress,
 };
 
 use serai_db::*;
@@ -25,7 +26,7 @@ use tributary_sdk::{
   Transaction as TributaryTransaction, Block, TributaryReader, P2p,
 };
 
-use serai_cosign::CosignIntent;
+use serai_cosign_types::CosignIntent;
 use serai_coordinator_substrate::NewSetInformation;
 
 use messages::sign::{VariantSignId, SignId};
@@ -79,7 +80,7 @@ impl CosignIntents {
   fn take(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
   ) -> Option<CosignIntent> {
     db::CosignIntents::take(txn, set, substrate_block_hash)
   }
@@ -113,7 +114,7 @@ impl SubstrateBlockPlans {
   pub fn set(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
     plans: &Vec<[u8; 32]>,
   ) {
     db::SubstrateBlockPlans::set(txn, set, substrate_block_hash, plans);
@@ -121,7 +122,7 @@ impl SubstrateBlockPlans {
   fn take(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
   ) -> Option<Vec<[u8; 32]>> {
     db::SubstrateBlockPlans::take(txn, set, substrate_block_hash)
   }

@@ -2,12 +2,14 @@ use borsh::BorshDeserialize;
 
 pub use serai_abi::{
   primitives::{
-    crypto::KeyPair,
+    crypto::{Signature, KeyPair, EmbeddedEllipticCurveKeys},
     network_id::{ExternalNetworkId, NetworkId},
-    validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
+    validator_sets::{Session, ExternalValidatorSet, ValidatorSet, SlashReport},
     balance::Amount,
+    address::SeraiAddress,
   },
-  validator_sets::Event,
+  validator_sets::{Call, Event},
+  UnsignedCall, Transaction,
 };
 
 use crate::{RpcError, TemporalSerai};
@@ -24,9 +26,9 @@ fn rpc_network(network: impl Into<NetworkId>) -> Result<&'static str, RpcError> 
 
 /// A `TemporalSerai` scoped to the validator sets module.
 #[derive(Clone)]
-pub struct ValidatorSets<'a>(pub(super) &'a TemporalSerai<'a>);
+pub struct ValidatorSets<'serai>(pub(super) &'serai TemporalSerai<'serai>);
 
-impl<'a> ValidatorSets<'a> {
+impl<'serai> ValidatorSets<'serai> {
   /// The events from the validator sets module.
   pub async fn events(&self) -> Result<Vec<Event>, RpcError> {
     Ok(
@@ -108,7 +110,7 @@ impl<'a> ValidatorSets<'a> {
     )
   }
 
-  /// The stake for the current validators for specified network.
+  /// The stake for the current validators for the specified network.
   pub async fn current_stake(&self, network: NetworkId) -> Result<Option<Amount>, RpcError> {
     Ok(
       self
@@ -141,5 +143,39 @@ impl<'a> ValidatorSets<'a> {
     )
     .map(Some)
     .map_err(|_| RpcError::InvalidNode("validator set's keys weren't a valid key pair".to_string()))
+  }
+
+  /// Create a transaction to set a validator set's keys.
+  pub fn set_keys(
+    network: ExternalNetworkId,
+    key_pair: KeyPair,
+    signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
+    signature: Signature,
+  ) -> Transaction {
+    Transaction::Unsigned {
+      call: UnsignedCall::try_from(serai_abi::Call::from(Call::set_keys {
+        network,
+        key_pair,
+        signature_participants,
+        signature,
+      }))
+      .expect("`set_keys` wasn't an unsigned call?"),
+    }
+  }
+
+  /// Create a transaction to report the slashes for a validator set.
+  pub fn report_slashes(
+    network: ExternalNetworkId,
+    slashes: SlashReport,
+    signature: Signature,
+  ) -> Transaction {
+    Transaction::Unsigned {
+      call: UnsignedCall::try_from(serai_abi::Call::from(Call::report_slashes {
+        network,
+        slashes,
+        signature,
+      }))
+      .expect("`report_slashes` wasn't an unsigned call?"),
+    }
   }
 }

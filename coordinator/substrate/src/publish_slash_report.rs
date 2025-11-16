@@ -3,7 +3,10 @@ use std::sync::Arc;
 
 use serai_db::{DbTxn, Db};
 
-use serai_client::{primitives::ExternalNetworkId, validator_sets::primitives::Session, Serai};
+use serai_client_serai::{
+  abi::primitives::{network_id::ExternalNetworkId, validator_sets::Session},
+  Serai,
+};
 
 use serai_task::ContinuallyRan;
 
@@ -36,7 +39,8 @@ impl<D: Db> PublishSlashReportTask<D> {
     let serai = self.serai.as_of_latest_finalized_block().await.map_err(|e| format!("{e:?}"))?;
     let serai = serai.validator_sets();
     let session_after_slash_report = Session(session.0 + 1);
-    let current_session = serai.session(network.into()).await.map_err(|e| format!("{e:?}"))?;
+    let current_session =
+      serai.current_session(network.into()).await.map_err(|e| format!("{e:?}"))?;
     let current_session = current_session.map(|session| session.0);
     // Only attempt to publish the slash report for session #n while session #n+1 is still
     // active
@@ -55,14 +59,13 @@ impl<D: Db> PublishSlashReportTask<D> {
     }
 
     // If this session which should publish a slash report already has, move on
-    let key_pending_slash_report =
-      serai.key_pending_slash_report(network).await.map_err(|e| format!("{e:?}"))?;
-    if key_pending_slash_report.is_none() {
+    if !serai.pending_slash_report(network).await.map_err(|e| format!("{e:?}"))? {
       txn.commit();
       return Ok(false);
     };
 
-    match self.serai.publish(&slash_report).await {
+    // Since this slash report is still pending, publish it
+    match self.serai.publish_transaction(&slash_report).await {
       Ok(()) => {
         txn.commit();
         Ok(true)
@@ -84,7 +87,7 @@ impl<D: Db> ContinuallyRan for PublishSlashReportTask<D> {
     async move {
       let mut made_progress = false;
       let mut error = None;
-      for network in serai_client::primitives::EXTERNAL_NETWORKS {
+      for network in ExternalNetworkId::all() {
         let network_res = self.publish(network).await;
         // We made progress if any network successfully published their slash report
         made_progress |= network_res == Ok(true);

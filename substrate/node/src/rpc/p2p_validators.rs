@@ -48,7 +48,10 @@ pub(crate) fn module<
       Err(e) => Err(e)?,
     };
     // Always return the protocol's bootnodes
-    let mut all_p2p_addresses = crate::chain_spec::bootnode_multiaddrs(id);
+    let mut all_p2p_addresses = crate::chain_spec::bootnode_multiaddrs(id)
+      .iter()
+      .map(ToString::to_string)
+      .collect::<Vec<_>>();
     // Additionally returns validators found over the DHT
     for validator in validators {
       let mut returned_addresses = authority_discovery
@@ -66,9 +69,11 @@ pub(crate) fn module<
       // It isn't beneficial to use multiple addresses for a single peer here
       if !returned_addresses.is_empty() {
         all_p2p_addresses.push(
-          returned_addresses
-            .remove(usize::try_from(OsRng.next_u64() >> 32).unwrap() % returned_addresses.len())
-            .into(),
+          libp2p::Multiaddr::from(
+            returned_addresses
+              .remove(usize::try_from(OsRng.next_u64() >> 32).unwrap() % returned_addresses.len()),
+          )
+          .to_string(),
         );
       }
     }

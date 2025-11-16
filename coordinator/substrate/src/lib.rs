@@ -8,10 +8,14 @@ use borsh::{BorshSerialize, BorshDeserialize};
 
 use dkg::Participant;
 
-use serai_client::{
-  primitives::{ExternalNetworkId, SeraiAddress, Signature},
-  validator_sets::primitives::{Session, ExternalValidatorSet, KeyPair, SlashReport},
-  in_instructions::primitives::SignedBatch,
+use serai_client_serai::abi::{
+  primitives::{
+    network_id::ExternalNetworkId,
+    validator_sets::{Session, ExternalValidatorSet, SlashReport},
+    crypto::{Signature, KeyPair},
+    address::SeraiAddress,
+    instructions::SignedBatch,
+  },
   Transaction,
 };
 
@@ -19,6 +23,7 @@ use serai_db::*;
 
 mod canonical;
 pub use canonical::CanonicalEventStream;
+use canonical::last_indexed_batch_id;
 mod ephemeral;
 pub use ephemeral::EphemeralEventStream;
 
@@ -37,7 +42,7 @@ pub struct NewSetInformation {
   pub set: ExternalValidatorSet,
   /// The Serai block which declared it.
   pub serai_block: [u8; 32],
-  /// The time of the block which declared it, in seconds.
+  /// The time of the block which declared it, in seconds since the epoch.
   pub declaration_time: u64,
   /// The threshold to use.
   pub threshold: u16,
@@ -96,9 +101,9 @@ mod _public_db {
   create_db!(
     CoordinatorSubstrate {
       // Keys to set on the Serai network
-      Keys: (network: ExternalNetworkId) -> (Session, Vec<u8>),
+      Keys: (network: ExternalNetworkId) -> (Session, Transaction),
       // Slash reports to publish onto the Serai network
-      SlashReports: (network: ExternalNetworkId) -> (Session, Vec<u8>),
+      SlashReports: (network: ExternalNetworkId) -> (Session, Transaction),
     }
   );
 }
@@ -171,7 +176,7 @@ impl Keys {
       }
     }
 
-    let tx = serai_client::validator_sets::SeraiValidatorSets::set_keys(
+    let tx = serai_client_serai::ValidatorSets::set_keys(
       set.network,
       key_pair,
       signature_participants,
@@ -192,7 +197,7 @@ pub struct SignedBatches;
 impl SignedBatches {
   /// Send a `SignedBatch` to publish onto Serai.
   pub fn send(txn: &mut impl DbTxn, batch: &SignedBatch) {
-    _public_db::SignedBatches::send(txn, batch.batch.network, batch);
+    _public_db::SignedBatches::send(txn, batch.batch.network(), batch);
   }
   pub(crate) fn try_recv(txn: &mut impl DbTxn, network: ExternalNetworkId) -> Option<SignedBatch> {
     _public_db::SignedBatches::try_recv(txn, network)
@@ -219,11 +224,8 @@ impl SlashReports {
       }
     }
 
-    let tx = serai_client::validator_sets::SeraiValidatorSets::report_slashes(
-      set.network,
-      slash_report,
-      signature,
-    );
+    let tx =
+      serai_client_serai::ValidatorSets::report_slashes(set.network, slash_report, signature);
     _public_db::SlashReports::set(txn, set.network, &(set.session, tx));
   }
   pub(crate) fn take(

@@ -14,9 +14,14 @@ use borsh::BorshDeserialize;
 
 use tokio::sync::mpsc;
 
-use serai_client::{
-  primitives::{ExternalNetworkId, PublicKey, SeraiAddress, Signature},
-  validator_sets::primitives::{ExternalValidatorSet, KeyPair},
+use serai_client_serai::{
+  abi::primitives::{
+    BlockHash,
+    crypto::{Public, Signature, ExternalKey, KeyPair},
+    network_id::ExternalNetworkId,
+    validator_sets::ExternalValidatorSet,
+    address::SeraiAddress,
+  },
   Serai,
 };
 use message_queue::{Service, client::MessageQueue};
@@ -61,9 +66,7 @@ async fn serai() -> Arc<Serai> {
     let Ok(serai) = Serai::new(format!(
       "http://{}:9944",
       serai_env::var("SERAI_HOSTNAME").expect("Serai hostname wasn't provided")
-    ))
-    .await
-    else {
+    )) else {
       log::error!("couldn't connect to the Serai node");
       tokio::time::sleep(delay).await;
       delay = (delay + SERAI_CONNECTION_DELAY).min(MAX_SERAI_CONNECTION_DELAY);
@@ -213,10 +216,12 @@ async fn handle_network(
             &mut txn,
             ExternalValidatorSet { network, session },
             &KeyPair(
-              PublicKey::from_raw(substrate_key),
-              network_key
-                .try_into()
-                .expect("generated a network key which exceeds the maximum key length"),
+              Public(substrate_key),
+              ExternalKey(
+                network_key
+                  .try_into()
+                  .expect("generated a network key which exceeds the maximum key length"),
+              ),
             ),
           );
         }
@@ -284,12 +289,13 @@ async fn handle_network(
             &mut txn,
             ExternalValidatorSet { network, session },
             slash_report,
-            Signature::from(signature),
+            Signature(signature),
           );
         }
       },
       messages::ProcessorMessage::Substrate(msg) => match msg {
         messages::substrate::ProcessorMessage::SubstrateBlockAck { block, plans } => {
+          let block = BlockHash(block);
           let mut by_session = HashMap::new();
           for plan in plans {
             by_session
@@ -481,7 +487,7 @@ async fn main() {
   );
 
   // Handle each of the networks
-  for network in serai_client::primitives::EXTERNAL_NETWORKS {
+  for network in ExternalNetworkId::all() {
     tokio::spawn(handle_network(db.clone(), message_queue.clone(), serai.clone(), network));
   }
 

@@ -1,16 +1,14 @@
-#![expect(clippy::cast_possible_truncation)]
-
 use std::collections::HashMap;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::{address::SeraiAddress, validator_sets::primitives::ExternalValidatorSet};
+use serai_primitives::{BlockHash, validator_sets::ExternalValidatorSet, address::SeraiAddress};
 
 use messages::sign::{VariantSignId, SignId};
 
 use serai_db::*;
 
-use serai_cosign::CosignIntent;
+use serai_cosign_types::CosignIntent;
 
 use crate::transaction::SigningProtocolRound;
 
@@ -124,7 +122,7 @@ impl Topic {
       Topic::DkgConfirmation { attempt, round: _ } => Some({
         let id = {
           let mut id = [0; 32];
-          let encoded_set = borsh::to_vec(set).unwrap();
+          let encoded_set = borsh::to_vec(&set).unwrap();
           id[.. encoded_set.len()].copy_from_slice(&encoded_set);
           VariantSignId::Batch(id)
         };
@@ -234,18 +232,18 @@ create_db!(
     SlashPoints: (set: ExternalValidatorSet, validator: SeraiAddress) -> u32,
 
     // The cosign intent for a Substrate block
-    CosignIntents: (set: ExternalValidatorSet, substrate_block_hash: [u8; 32]) -> CosignIntent,
+    CosignIntents: (set: ExternalValidatorSet, substrate_block_hash: BlockHash) -> CosignIntent,
     // The latest Substrate block to cosign.
-    LatestSubstrateBlockToCosign: (set: ExternalValidatorSet) -> [u8; 32],
+    LatestSubstrateBlockToCosign: (set: ExternalValidatorSet) -> BlockHash,
     // The hash of the block we're actively cosigning.
-    ActivelyCosigning: (set: ExternalValidatorSet) -> [u8; 32],
+    ActivelyCosigning: (set: ExternalValidatorSet) -> BlockHash,
     // If this block has already been cosigned.
-    Cosigned: (set: ExternalValidatorSet, substrate_block_hash: [u8; 32]) -> (),
+    Cosigned: (set: ExternalValidatorSet, substrate_block_hash: BlockHash) -> (),
 
     // The plans to recognize upon a `Transaction::SubstrateBlock` being included on-chain.
     SubstrateBlockPlans: (
       set: ExternalValidatorSet,
-      substrate_block_hash: [u8; 32]
+      substrate_block_hash: BlockHash
     ) -> Vec<[u8; 32]>,
 
     // The weight accumulated for a topic.
@@ -293,26 +291,26 @@ impl TributaryDb {
   pub(crate) fn latest_substrate_block_to_cosign(
     getter: &impl Get,
     set: ExternalValidatorSet,
-  ) -> Option<[u8; 32]> {
+  ) -> Option<BlockHash> {
     LatestSubstrateBlockToCosign::get(getter, set)
   }
   pub(crate) fn set_latest_substrate_block_to_cosign(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
   ) {
     LatestSubstrateBlockToCosign::set(txn, set, &substrate_block_hash);
   }
   pub(crate) fn actively_cosigning(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-  ) -> Option<[u8; 32]> {
+  ) -> Option<BlockHash> {
     ActivelyCosigning::get(txn, set)
   }
   pub(crate) fn start_cosigning(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
     substrate_block_number: u64,
   ) {
     assert!(
@@ -337,14 +335,14 @@ impl TributaryDb {
   pub(crate) fn mark_cosigned(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
   ) {
     Cosigned::set(txn, set, substrate_block_hash, &());
   }
   pub(crate) fn cosigned(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
   ) -> bool {
     Cosigned::get(txn, set, substrate_block_hash).is_some()
   }

@@ -1,11 +1,11 @@
-use core::future::Future;
+use core::{future::Future, str::FromStr};
 use std::{sync::Arc, collections::HashSet};
 
 use rand_core::{RngCore, OsRng};
 
 use tokio::sync::mpsc;
 
-use serai_client::{SeraiError, Serai};
+use serai_client_serai::{RpcError, Serai};
 
 use libp2p::{
   core::multiaddr::{Protocol, Multiaddr},
@@ -50,7 +50,7 @@ impl ContinuallyRan for DialTask {
   const DELAY_BETWEEN_ITERATIONS: u64 = 5 * 60;
   const MAX_DELAY_BETWEEN_ITERATIONS: u64 = 10 * 60;
 
-  type Error = SeraiError;
+  type Error = RpcError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
@@ -94,6 +94,13 @@ impl ContinuallyRan for DialTask {
               usize::try_from(OsRng.next_u64() % u64::try_from(potential_peers.len()).unwrap())
                 .unwrap();
             let randomly_selected_peer = potential_peers.swap_remove(index_to_dial);
+            let Ok(randomly_selected_peer) = libp2p::Multiaddr::from_str(&randomly_selected_peer)
+            else {
+              log::error!(
+                "peer from substrate wasn't a valid `Multiaddr`: {randomly_selected_peer}"
+              );
+              continue;
+            };
 
             log::info!("found peer from substrate: {randomly_selected_peer}");
 

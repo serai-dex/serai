@@ -1,7 +1,7 @@
 use core::future::Future;
 use std::time::{Duration, SystemTime};
 
-use serai_primitives::{MAX_KEY_SHARES_PER_SET, ExternalValidatorSet};
+use serai_primitives::validator_sets::{ExternalValidatorSet, KeyShares};
 
 use futures_lite::FutureExt;
 
@@ -30,7 +30,7 @@ pub const MIN_BLOCKS_PER_BATCH: usize = BLOCKS_PER_MINUTE + 1;
 /// commit is `8 + (validators * 32) + (32 + (validators * 32))` (for the time, list of validators,
 /// and aggregate signature). Accordingly, this should be a safe over-estimate.
 pub const BATCH_SIZE_LIMIT: usize = MIN_BLOCKS_PER_BATCH *
-  (tributary_sdk::BLOCK_SIZE_LIMIT + 32 + ((MAX_KEY_SHARES_PER_SET as usize) * 128));
+  (tributary_sdk::BLOCK_SIZE_LIMIT + 32 + ((KeyShares::MAX_PER_SET as usize) * 128));
 
 /// Sends a heartbeat to other validators on regular intervals informing them of our Tributary's
 /// tip.

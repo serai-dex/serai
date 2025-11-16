@@ -42,7 +42,7 @@ messages = { package = "serai-processor-messages", path = "../processor/messages
 message-queue = { package = "serai-message-queue", path = "../message-queue" }
 tributary-sdk = { path = "./tributary-sdk" }
 
-serai-client = { path = "../substrate/client", default-features = false, features = ["serai"] }
+serai-client-serai = { path = "../substrate/client/serai", default-features = false }
 
 log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"] }

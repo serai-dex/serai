@@ -3,11 +3,13 @@ use std::{sync::Arc, collections::HashMap};
 
 use blake2::{Digest, Blake2b256};
 
-use serai_abi::primitives::{
-  balance::Amount, validator_sets::ExternalValidatorSet, address::SeraiAddress,
-  merkle::IncrementalUnbalancedMerkleTree,
+use serai_client_serai::{
+  abi::primitives::{
+    balance::Amount, validator_sets::ExternalValidatorSet, address::SeraiAddress,
+    merkle::IncrementalUnbalancedMerkleTree,
+  },
+  Serai,
 };
-use serai_client_serai::Serai;
 
 use serai_db::*;
 use serai_task::ContinuallyRan;
@@ -85,7 +87,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
 
         // Check we are indexing a linear chain
         if block.header.builds_upon() !=
-          builds_upon.clone().calculate(serai_abi::BLOCK_HEADER_BRANCH_TAG)
+          builds_upon.clone().calculate(serai_client_serai::abi::BLOCK_HEADER_BRANCH_TAG)
         {
           Err(format!(
             "node's block #{block_number} doesn't build upon the block #{} prior indexed",
@@ -95,8 +97,8 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         let block_hash = block.header.hash();
         SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
         builds_upon.append(
-          serai_abi::BLOCK_HEADER_BRANCH_TAG,
-          Blake2b256::new_with_prefix([serai_abi::BLOCK_HEADER_LEAF_TAG])
+          serai_client_serai::abi::BLOCK_HEADER_BRANCH_TAG,
+          Blake2b256::new_with_prefix([serai_client_serai::abi::BLOCK_HEADER_LEAF_TAG])
             .chain_update(block_hash.0)
             .finalize()
             .into(),

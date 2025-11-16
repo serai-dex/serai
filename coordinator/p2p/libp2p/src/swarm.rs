@@ -6,7 +6,7 @@ use std::{
 
 use borsh::BorshDeserialize;
 
-use serai_client::validator_sets::primitives::ExternalValidatorSet;
+use serai_client_serai::abi::primitives::validator_sets::ExternalValidatorSet;
 
 use tokio::sync::{mpsc, oneshot, RwLock};
 

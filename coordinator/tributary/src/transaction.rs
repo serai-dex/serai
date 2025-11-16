@@ -14,7 +14,7 @@ use schnorr::SchnorrSignature;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::{addess::SeraiAddress, validator_sets::MAX_KEY_SHARES_PER_SET};
+use serai_primitives::{BlockHash, validator_sets::KeyShares, address::SeraiAddress};
 
 use messages::sign::VariantSignId;
 
@@ -137,7 +137,7 @@ pub enum Transaction {
   /// be the one selected to be cosigned.
   Cosign {
     /// The hash of the Substrate block to cosign
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
   },
 
   /// Note an intended-to-be-cosigned Substrate block as cosigned
@@ -175,7 +175,7 @@ pub enum Transaction {
   /// cosigning the block in question, it'd be safe to provide this and move on to the next cosign.
   Cosigned {
     /// The hash of the Substrate block which was cosigned
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
   },
 
   /// Acknowledge a Substrate block
@@ -186,7 +186,7 @@ pub enum Transaction {
   /// resulting from its handling.
   SubstrateBlock {
     /// The hash of the Substrate block
-    hash: [u8; 32],
+    hash: BlockHash,
   },
 
   /// Acknowledge a Batch
@@ -250,11 +250,11 @@ impl TransactionTrait for Transaction {
         signed.to_tributary_signed(0),
       ),
       Transaction::DkgConfirmationPreprocess { attempt, signed, .. } => TransactionKind::Signed(
-        borsh::to_vec(b"DkgConfirmation".as_slice(), attempt).unwrap(),
+        borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
         signed.to_tributary_signed(0),
       ),
       Transaction::DkgConfirmationShare { attempt, signed, .. } => TransactionKind::Signed(
-        borsh::to_vec(b"DkgConfirmation".as_slice(), attempt).unwrap(),
+        borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
         signed.to_tributary_signed(1),
       ),
 
@@ -264,7 +264,7 @@ impl TransactionTrait for Transaction {
       Transaction::Batch { .. } => TransactionKind::Provided("Batch"),
 
       Transaction::Sign { id, attempt, round, signed, .. } => TransactionKind::Signed(
-        borsh::to_vec(b"Sign".as_slice(), id, attempt).unwrap(),
+        borsh::to_vec(&(b"Sign".as_slice(), id, attempt)).unwrap(),
         signed.to_tributary_signed(round.nonce()),
       ),
 
@@ -303,14 +303,14 @@ impl TransactionTrait for Transaction {
       Transaction::Batch { .. } => {}
 
       Transaction::Sign { data, .. } => {
-        if data.len() > usize::from(MAX_KEY_SHARES_PER_SET) {
+        if data.len() > usize::from(KeyShares::MAX_PER_SET) {
           Err(TransactionError::InvalidContent)?
         }
         // TODO: MAX_SIGN_LEN
       }
 
       Transaction::SlashReport { slash_points, .. } => {
-        if slash_points.len() > usize::from(MAX_KEY_SHARES_PER_SET) {
+        if slash_points.len() > usize::from(KeyShares::MAX_PER_SET) {
           Err(TransactionError::InvalidContent)?
         }
       }

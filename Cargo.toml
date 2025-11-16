@@ -93,10 +93,10 @@ members = [
   "substrate/runtime",
   "substrate/node",
 
+  "substrate/client/serai",
   "substrate/client/bitcoin",
   "substrate/client/ethereum",
   "substrate/client/monero",
-  "substrate/client/serai",
   "substrate/client",
 
   "orchestration",

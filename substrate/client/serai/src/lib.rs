@@ -25,6 +25,9 @@ pub use coins::Coins;
 mod validator_sets;
 pub use validator_sets::ValidatorSets;
 
+mod in_instructions;
+pub use in_instructions::InInstructions;
+
 /// An error from the RPC.
 #[derive(Debug, Error)]
 pub enum RpcError {
@@ -58,8 +61,8 @@ pub struct Serai {
 /// from this block will be cached within this. This allows future calls for events to be done
 /// cheaply.
 #[derive(Clone)]
-pub struct TemporalSerai<'a> {
-  serai: &'a Serai,
+pub struct TemporalSerai<'serai> {
+  serai: &'serai Serai,
   block: BlockHash,
   events: Arc<RwLock<Option<Vec<Vec<Event>>>>>,
 }
@@ -176,7 +179,7 @@ impl Serai {
   ///
   /// This will yield an error if the block chosen isn't finalized. This ensures, given an honest
   /// node, that this scope will be available for the lifetime of this object.
-  pub async fn as_of<'a>(&'a self, block: BlockHash) -> Result<TemporalSerai<'a>, RpcError> {
+  pub async fn as_of(&self, block: BlockHash) -> Result<TemporalSerai<'_>, RpcError> {
     if !self.finalized(block).await? {
       Err(RpcError::NotFinalized)?;
     }
@@ -184,10 +187,7 @@ impl Serai {
   }
 
   /// Scope this RPC client to the state as of the latest finalized block.
-  pub async fn as_of_latest_finalized_block<'a>(
-    &'a self,
-    block: BlockHash,
-  ) -> Result<TemporalSerai<'a>, RpcError> {
+  pub async fn as_of_latest_finalized_block(&self) -> Result<TemporalSerai<'_>, RpcError> {
     let block = self
       .block_by_number(self.latest_finalized_block_number().await?)
       .await?
@@ -215,7 +215,7 @@ impl Serai {
   }
 }
 
-impl<'a> TemporalSerai<'a> {
+impl<'serai> TemporalSerai<'serai> {
   async fn call<ResponseValue: Default + JsonDeserialize>(
     &self,
     method: &str,
@@ -281,5 +281,10 @@ impl<'a> TemporalSerai<'a> {
   /// Scope to the validator sets module.
   pub fn validator_sets(&self) -> ValidatorSets<'_> {
     ValidatorSets(self)
+  }
+
+  /// Scope to the in instructions module.
+  pub fn in_instructions(&self) -> InInstructions<'_> {
+    InInstructions(self)
   }
 }

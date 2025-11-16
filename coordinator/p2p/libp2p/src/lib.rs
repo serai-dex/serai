@@ -13,9 +13,10 @@ use rand_core::{RngCore, OsRng};
 use zeroize::Zeroizing;
 use schnorrkel::Keypair;
 
-use serai_client::{
-  primitives::{ExternalNetworkId, PublicKey},
-  validator_sets::primitives::ExternalValidatorSet,
+use serai_client_serai::{
+  abi::primitives::{
+    crypto::Public, network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet,
+  },
   Serai,
 };
 
@@ -66,7 +67,7 @@ use dial::DialTask;
 
 const PORT: u16 = 30563; // 5132 ^ (('c' << 8) | 'o')
 
-fn peer_id_from_public(public: PublicKey) -> PeerId {
+fn peer_id_from_public(public: Public) -> PeerId {
   // 0 represents the identity Multihash, that no hash was performed
   // It's an internal constant so we can't refer to the constant inside libp2p
   PeerId::from_multihash(Multihash::wrap(0, &public.0).unwrap()).unwrap()

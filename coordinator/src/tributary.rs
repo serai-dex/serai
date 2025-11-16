@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 
 use serai_db::{Get, DbTxn, Db as DbTrait, create_db, db_channel};
 
-use serai_client::validator_sets::primitives::ExternalValidatorSet;
+use serai_client_serai::abi::primitives::validator_sets::ExternalValidatorSet;
 
 use tributary_sdk::{TransactionKind, TransactionError, ProvidedError, TransactionTrait, Tributary};
 

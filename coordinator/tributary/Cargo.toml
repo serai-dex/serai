@@ -36,7 +36,7 @@ serai-task = { path = "../../common/task", version = "0.1" }
 
 tributary-sdk = { path = "../tributary-sdk" }
 
-serai-cosign = { path = "../cosign" }
+serai-cosign-types = { path = "../cosign/types" }
 serai-coordinator-substrate = { path = "../substrate" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }

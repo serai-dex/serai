@@ -83,6 +83,12 @@ impl Header {
       Header::V1(HeaderV1 { builds_upon, .. }) => *builds_upon,
     }
   }
+  /// Get the UNIX time, in milliseconds since the epoch, for when this block was proposed.
+  pub fn unix_time_in_millis(&self) -> u64 {
+    match self {
+      Header::V1(HeaderV1 { unix_time_in_millis, .. }) => *unix_time_in_millis,
+    }
+  }
   /// The commitment to the transactions within this block.
   pub fn transactions_commitment(&self) -> UnbalancedMerkleTree {
     match self {

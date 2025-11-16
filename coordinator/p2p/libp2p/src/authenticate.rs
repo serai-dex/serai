@@ -7,7 +7,7 @@ use rand_core::{RngCore, OsRng};
 use blake2::{Digest, Blake2s256};
 use schnorrkel::{Keypair, PublicKey, Signature};
 
-use serai_client::primitives::PublicKey as Public;
+use serai_client_serai::abi::primitives::crypto::Public;
 
 use futures_util::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::{
@@ -104,7 +104,7 @@ impl OnlyValidators {
       .verify_simple(PROTOCOL.as_bytes(), &msg, &sig)
       .map_err(|_| io::Error::other("invalid signature"))?;
 
-    Ok(peer_id_from_public(Public::from_raw(public_key.to_bytes())))
+    Ok(peer_id_from_public(Public(public_key.to_bytes())))
   }
 }
 
