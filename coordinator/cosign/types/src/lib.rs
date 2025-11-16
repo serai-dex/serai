@@ -1,4 +1,4 @@
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs)]
 //! Types used when cosigning Serai. For more info, please see `serai-cosign`.
 use borsh::{BorshSerialize, BorshDeserialize};
