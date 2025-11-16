@@ -1,3 +1,5 @@
+use core::str::FromStr;
+
 use borsh::BorshDeserialize;
 
 pub use serai_abi::{
@@ -143,6 +145,72 @@ impl<'serai> ValidatorSets<'serai> {
     )
     .map(Some)
     .map_err(|_| RpcError::InvalidNode("validator set's keys weren't a valid key pair".to_string()))
+  }
+
+  /// The current validators for the specified network.
+  pub async fn current_validators(
+    &self,
+    network: NetworkId,
+  ) -> Result<Option<Vec<SeraiAddress>>, RpcError> {
+    self
+      .0
+      .call::<Option<Vec<String>>>(
+        "validator-sets/current_validators",
+        &format!(r#", "network": {} "#, rpc_network(network)?),
+      )
+      .await?
+      .map(|validators| {
+        validators
+          .into_iter()
+          .map(|addr| {
+            SeraiAddress::from_str(&addr)
+              .map_err(|_| RpcError::InvalidNode("validator's address was invalid".to_string()))
+          })
+          .collect()
+      })
+      .transpose()
+  }
+
+  /// If the prior validators for this network is still expected to publish a slash report.
+  pub async fn pending_slash_report(&self, network: ExternalNetworkId) -> Result<bool, RpcError> {
+    self
+      .0
+      .call(
+        "validator-sets/pending_slash_report",
+        &format!(r#", "network": {} "#, rpc_network(network)?),
+      )
+      .await
+  }
+
+  /// The key on an embedded elliptic curve for the specified validator.
+  pub async fn embedded_elliptic_curve_keys(
+    &self,
+    validator: SeraiAddress,
+    network: ExternalNetworkId,
+  ) -> Result<Option<EmbeddedEllipticCurveKeys>, RpcError> {
+    let Some(keys) = self
+      .0
+      .call::<Option<String>>(
+        "validator-sets/embedded_elliptic_curve_keys",
+        &format!(r#", "validator": {validator}, "network": {} "#, rpc_network(network)?),
+      )
+      .await?
+    else {
+      return Ok(None);
+    };
+    EmbeddedEllipticCurveKeys::deserialize(
+      &mut hex::decode(keys)
+        .map_err(|_| {
+          RpcError::InvalidNode(
+            "validator's embedded elliptic curve keys weren't valid hex".to_string(),
+          )
+        })?
+        .as_slice(),
+    )
+    .map(Some)
+    .map_err(|_| {
+      RpcError::InvalidNode("validator's embedded elliptic curve keys weren't valid".to_string())
+    })
   }
 
   /// Create a transaction to set a validator set's keys.

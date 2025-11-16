@@ -6,10 +6,11 @@ extern crate alloc;
 use alloc::vec::Vec;
 use serai_abi::{
   primitives::{
-    crypto::{Public, SignedEmbeddedEllipticCurveKeys, KeyPair},
-    network_id::NetworkId,
+    crypto::{Public, EmbeddedEllipticCurveKeys, SignedEmbeddedEllipticCurveKeys, KeyPair},
+    network_id::{ExternalNetworkId, NetworkId},
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
     balance::{Amount, Balance},
+    address::SeraiAddress,
   },
   Event,
 };
@@ -39,6 +40,12 @@ sp_api::decl_runtime_apis! {
     fn current_session(network: NetworkId) -> Option<Session>;
     fn current_stake(network: NetworkId) -> Option<Amount>;
     fn keys(set: ExternalValidatorSet) -> Option<KeyPair>;
+    fn current_validators(network: NetworkId) -> Option<Vec<SeraiAddress>>;
+    fn pending_slash_report(network: ExternalNetworkId) -> bool;
+    fn embedded_elliptic_curve_keys(
+      validator: SeraiAddress,
+      network: ExternalNetworkId,
+    ) -> Option<EmbeddedEllipticCurveKeys>;
   }
 }
 
@@ -183,7 +190,7 @@ mod apis {
         unimplemented!("runtime is only implemented when WASM")
       }
       fn validators(
-        network: serai_abi::primitives::network_id::NetworkId
+        network: NetworkId
       ) -> Vec<serai_abi::primitives::crypto::Public> {
         unimplemented!("runtime is only implemented when WASM")
       }
@@ -194,6 +201,18 @@ mod apis {
         unimplemented!("runtime is only implemented when WASM")
       }
       fn keys(set: ExternalValidatorSet) -> Option<KeyPair> {
+        unimplemented!("runtime is only implemented when WASM")
+      }
+      fn current_validators(network: NetworkId) -> Option<Vec<SeraiAddress>> {
+        unimplemented!("runtime is only implemented when WASM")
+      }
+      fn pending_slash_report(network: ExternalNetworkId) -> bool {
+        unimplemented!("runtime is only implemented when WASM")
+      }
+      fn embedded_elliptic_curve_keys(
+        validator: SeraiAddress,
+        network: ExternalNetworkId,
+      ) -> Option<EmbeddedEllipticCurveKeys> {
         unimplemented!("runtime is only implemented when WASM")
       }
     }

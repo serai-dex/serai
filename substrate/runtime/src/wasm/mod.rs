@@ -10,6 +10,7 @@ use sp_version::RuntimeVersion;
 
 use serai_abi::{
   primitives::{
+    crypto::EmbeddedEllipticCurveKeys,
     network_id::{ExternalNetworkId, NetworkId},
     balance::{Amount, ExternalBalance},
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
@@ -581,6 +582,23 @@ sp_api::impl_runtime_apis! {
               serai_abi::primitives::crypto::KeyPair(oraclization_key.into(), external_key)
             })
         })
+    }
+    fn current_validators(network: NetworkId) -> Option<Vec<SeraiAddress>> {
+      let session = ValidatorSets::current_session(network)?;
+      Some(
+        ValidatorSets::selected_validators(ValidatorSet { network, session })
+          .map(|(key, _key_shares)| SeraiAddress::from(key))
+          .collect()
+      )
+    }
+    fn pending_slash_report(network: ExternalNetworkId) -> bool {
+      ValidatorSets::pending_slash_report(network)
+    }
+    fn embedded_elliptic_curve_keys(
+      validator: SeraiAddress,
+      network: ExternalNetworkId,
+    ) -> Option<EmbeddedEllipticCurveKeys> {
+      ValidatorSets::embedded_elliptic_curve_keys(validator.into(), network)
     }
   }
 }

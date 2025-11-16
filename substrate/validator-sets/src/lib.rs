@@ -32,7 +32,10 @@ mod pallet {
 
   use serai_abi::{
     primitives::{
-      crypto::{SignedEmbeddedEllipticCurveKeys, ExternalKey, KeyPair, Signature},
+      crypto::{
+        EmbeddedEllipticCurveKeys as EmbeddedEllipticCurveKeysStruct,
+        SignedEmbeddedEllipticCurveKeys, ExternalKey, KeyPair, Signature,
+      },
       network_id::*,
       coin::*,
       balance::*,
@@ -313,6 +316,19 @@ mod pallet {
 
     pub fn external_key(set: ExternalValidatorSet) -> Option<ExternalKey> {
       Abstractions::<T>::external_key(set)
+    }
+
+    pub fn pending_slash_report(network: ExternalNetworkId) -> bool {
+      Abstractions::<T>::waiting_for_slash_report(network).is_some()
+    }
+
+    pub fn embedded_elliptic_curve_keys(
+      validator: Public,
+      network: ExternalNetworkId,
+    ) -> Option<EmbeddedEllipticCurveKeysStruct> {
+      <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::embedded_elliptic_curve_keys(
+        validator, network,
+      )
     }
 
     /* TODO
