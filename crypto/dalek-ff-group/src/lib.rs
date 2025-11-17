@@ -286,21 +286,3 @@ prime_field::odd_prime_field_with_specific_repr!(
   false,
   crate::ThirtyTwoArray
 );
-
-impl FieldElement {
-  /// This method is hidden as it's not part of our API commitment and has no guarantees made for
-  /// it. It MAY panic for an undefined class of inputs.
-  // TODO: `monero-oxide` requires this. PR `monero-oxide` to not require this.
-  #[doc(hidden)]
-  pub const fn from_u256(value: &crypto_bigint::U256) -> Self {
-    let mut bytes = [0; 32];
-
-    let mut i = 0;
-    while i < 256 {
-      bytes[i / 32] |= (value.bit_vartime(i) as u8) << (i % 8);
-      i += 1;
-    }
-
-    FieldElement::from_bytes(&bytes).unwrap()
-  }
-}

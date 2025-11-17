@@ -165,19 +165,19 @@ panic = "unwind"
 overflow-checks = true
 
 [patch.crates-io]
-# Point to empty crates for unused crates in our tree
+# Point to empty crates for crates unused within in our tree
 ark-ff-3 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.3" }
 ark-ff-4 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.4" }
 c-kzg = { path = "patches/ethereum/c-kzg" }
 secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-30" }
 
-# Dependencies from monero-oxide which originate from within our own tree
+# Dependencies from monero-oxide which originate from within our own tree,  potentially shimmed to account for deviations since publishing
 std-shims = { path = "patches/std-shims" }
 simple-request = { path = "patches/simple-request" }
 multiexp = { path = "crypto/multiexp" }
 flexible-transcript = { path = "crypto/transcript" }
 ciphersuite = { path = "patches/ciphersuite" }
-dalek-ff-group = { path = "crypto/dalek-ff-group" }
+dalek-ff-group = { path = "patches/dalek-ff-group" }
 minimal-ed448 = { path = "crypto/ed448" }
 modular-frost = { path = "crypto/frost" }
 
