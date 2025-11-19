@@ -65,7 +65,7 @@ fn create_inherent_data_providers(
 
 #[allow(clippy::type_complexity)]
 pub fn new_partial(
-  config: &Configuration,
+  config: &mut Configuration,
 ) -> Result<
   (
     PartialComponents<
@@ -79,6 +79,15 @@ pub fn new_partial(
   ),
   ServiceError,
 > {
+  // TODO: Copy events on block import, allow arbitrary pruning of state
+  config.state_pruning = Some(sc_service::PruningMode::ArchiveCanonical);
+  config.blocks_pruning = sc_service::BlocksPruning::KeepAll;
+
+  config.network.node_name = "serai".to_string();
+  config.network.client_version = "0.1.0".to_string();
+  config.network.listen_addresses =
+    vec!["/ip4/0.0.0.0/tcp/30333".parse().unwrap(), "/ip6/::/tcp/30333".parse().unwrap()];
+
   let telemetry = config
     .telemetry_endpoints
     .clone()
@@ -208,12 +217,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       other: (block_import, babe_link, grandpa_link, shared_voter_state, mut telemetry),
     },
     keystore_container,
-  ) = new_partial(&config)?;
-
-  config.network.node_name = "serai".to_string();
-  config.network.client_version = "0.1.0".to_string();
-  config.network.listen_addresses =
-    vec!["/ip4/0.0.0.0/tcp/30333".parse().unwrap(), "/ip6/::/tcp/30333".parse().unwrap()];
+  ) = new_partial(&mut config)?;
 
   type N = sc_network::service::NetworkWorker<Block, <Block as sp_runtime::traits::Block>::Hash>;
   let mut net_config = sc_network::config::FullNetworkConfiguration::<_, _, N>::new(
