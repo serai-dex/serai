@@ -27,7 +27,7 @@ pub(crate) trait EmbeddedEllipticCurveKeys {
   fn set_embedded_elliptic_curve_keys(
     validator: Public,
     keys: SignedEmbeddedEllipticCurveKeys,
-  ) -> Result<(), ()>;
+  ) -> Result<EmbeddedEllipticCurveKeysStruct, ()>;
 
   /// Get a validator's embedded elliptic curve keys, for an external network.
   fn embedded_elliptic_curve_keys(
@@ -45,10 +45,10 @@ impl<S: EmbeddedEllipticCurveKeysStorage> EmbeddedEllipticCurveKeys for S {
   fn set_embedded_elliptic_curve_keys(
     validator: Public,
     keys: SignedEmbeddedEllipticCurveKeys,
-  ) -> Result<(), ()> {
+  ) -> Result<EmbeddedEllipticCurveKeysStruct, ()> {
     let keys = keys.verify(validator.into()).ok_or(())?;
-    S::EmbeddedEllipticCurveKeys::set(keys.network(), validator, Some(keys));
-    Ok(())
+    S::EmbeddedEllipticCurveKeys::insert(keys.network(), validator, keys);
+    Ok(keys)
   }
 
   /// Get a validator's embedded elliptic curve keys, for an external network.

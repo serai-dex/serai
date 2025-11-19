@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{
-  crypto::{SignedEmbeddedEllipticCurveKeys, KeyPair, Signature},
+  crypto::{EmbeddedEllipticCurveKeys, SignedEmbeddedEllipticCurveKeys, KeyPair, Signature},
   address::SeraiAddress,
   balance::Amount,
   network_id::*,
@@ -125,8 +125,8 @@ pub enum Event {
   SetEmbeddedEllipticCurveKeys {
     /// The validator which set their keys.
     validator: SeraiAddress,
-    /// The network which they set embedded elliptic curve keys for.
-    network: ExternalNetworkId,
+    /// The embedded elliptic curve keys they set.
+    keys: EmbeddedEllipticCurveKeys,
   },
   /// A validator's allocation to a network has increased.
   Allocation {

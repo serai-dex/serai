@@ -29,7 +29,6 @@ serai-client-serai = { path = "../../substrate/client/serai", default-features =
 log = { version = "0.4", default-features = false, features = ["std"] }
 
 futures = { version = "0.3", default-features = false, features = ["std"] }
-tokio = { version = "1", default-features = false }
 
 serai-db = { path = "../../common/db", version = "0.1.1" }
 serai-task = { path = "../../common/task", version = "0.1" }

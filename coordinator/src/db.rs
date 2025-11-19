@@ -50,7 +50,6 @@ fn tributary_db_folder(set: ExternalValidatorSet) -> String {
     ExternalNetworkId::Bitcoin => "Bitcoin",
     ExternalNetworkId::Ethereum => "Ethereum",
     ExternalNetworkId::Monero => "Monero",
-    _ => panic!("unrecognized `ExternalNetworkId`"),
   };
   format!("{root_path}/tributary-{network}-{}", set.session.0)
 }

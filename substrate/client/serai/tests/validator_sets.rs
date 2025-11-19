@@ -3,6 +3,7 @@ use serai_abi::{
     address::SeraiAddress,
     network_id::{ExternalNetworkId, NetworkId},
     balance::Amount,
+    crypto::EmbeddedEllipticCurveKeys,
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet, KeyShares},
   },
   validator_sets::Event,
@@ -44,67 +45,94 @@ async fn validator_sets() {
         panic!("finalized block remained the genesis block for over five minutes");
       };
 
+      // The genesis block should have the expected events
       {
         use sp_core::{Pair as _, sr25519::Pair};
         let genesis_validators = vec![(
           SeraiAddress::from(Pair::from_string("//Alice", None).unwrap().public()),
           KeyShares(1),
         )];
-        // The genesis block should have the expected events
+
         {
-          let mut events = serai
-            .as_of(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
+          let events = serai
+            .events(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
             .await
             .unwrap()
             .validator_sets()
-            .set_decided_events()
-            .await
-            .unwrap();
-          events.sort_by_key(|event| borsh::to_vec(event).unwrap());
-          let mut expected = vec![
-            Event::SetDecided {
-              set: ValidatorSet { network: NetworkId::Serai, session: Session(0) },
-              validators: genesis_validators.clone(),
-            },
-            Event::SetDecided {
-              set: ValidatorSet { network: NetworkId::Serai, session: Session(1) },
-              validators: genesis_validators.clone(),
-            },
-            Event::SetDecided {
-              set: ValidatorSet {
-                network: NetworkId::External(ExternalNetworkId::Bitcoin),
-                session: Session(0),
+            .set_embedded_elliptic_curve_keys_events()
+            .cloned()
+            .collect::<Vec<_>>();
+          assert_eq!(events.len(), ExternalNetworkId::all().collect::<Vec<_>>().len());
+
+          let state = serai.state().await.unwrap();
+          for (event, network) in events.into_iter().zip(ExternalNetworkId::all()) {
+            assert_eq!(
+              event,
+              Event::SetEmbeddedEllipticCurveKeys {
+                validator: genesis_validators[0].0,
+                keys: state
+                  .embedded_elliptic_curve_keys(genesis_validators[0].0, network)
+                  .await
+                  .unwrap()
+                  .unwrap(),
+              }
+            );
+          }
+        }
+
+        {
+          assert_eq!(
+            serai
+              .events(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
+              .await
+              .unwrap()
+              .validator_sets()
+              .set_decided_events()
+              .cloned()
+              .collect::<Vec<_>>(),
+            vec![
+              Event::SetDecided {
+                set: ValidatorSet { network: NetworkId::Serai, session: Session(0) },
+                validators: genesis_validators.clone(),
               },
-              validators: genesis_validators.clone(),
-            },
-            Event::SetDecided {
-              set: ValidatorSet {
-                network: NetworkId::External(ExternalNetworkId::Ethereum),
-                session: Session(0),
+              Event::SetDecided {
+                set: ValidatorSet {
+                  network: NetworkId::External(ExternalNetworkId::Bitcoin),
+                  session: Session(0)
+                },
+                validators: genesis_validators.clone(),
               },
-              validators: genesis_validators.clone(),
-            },
-            Event::SetDecided {
-              set: ValidatorSet {
-                network: NetworkId::External(ExternalNetworkId::Monero),
-                session: Session(0),
+              Event::SetDecided {
+                set: ValidatorSet {
+                  network: NetworkId::External(ExternalNetworkId::Ethereum),
+                  session: Session(0)
+                },
+                validators: genesis_validators.clone(),
               },
-              validators: genesis_validators.clone(),
-            },
-          ];
-          expected.sort_by_key(|event| borsh::to_vec(event).unwrap());
-          assert_eq!(events, expected);
+              Event::SetDecided {
+                set: ValidatorSet {
+                  network: NetworkId::External(ExternalNetworkId::Monero),
+                  session: Session(0)
+                },
+                validators: genesis_validators.clone(),
+              },
+              Event::SetDecided {
+                set: ValidatorSet { network: NetworkId::Serai, session: Session(1) },
+                validators: genesis_validators.clone(),
+              },
+            ]
+          );
         }
 
         assert_eq!(
           serai
-            .as_of(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
+            .events(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
             .await
             .unwrap()
             .validator_sets()
             .accepted_handover_events()
-            .await
-            .unwrap(),
+            .cloned()
+            .collect::<Vec<_>>(),
           vec![Event::AcceptedHandover {
             set: ValidatorSet { network: NetworkId::Serai, session: Session(0) }
           }]
@@ -115,34 +143,30 @@ async fn validator_sets() {
       {
         assert_eq!(
           serai
-            .as_of(serai.block_by_number(1).await.unwrap().unwrap().header.hash())
+            .events(serai.block_by_number(1).await.unwrap().unwrap().header.hash())
             .await
             .unwrap()
             .validator_sets()
             .set_decided_events()
-            .await
-            .unwrap(),
+            .cloned()
+            .collect::<Vec<_>>(),
           vec![],
         );
         assert_eq!(
           serai
-            .as_of(serai.block_by_number(1).await.unwrap().unwrap().header.hash())
+            .events(serai.block_by_number(1).await.unwrap().unwrap().header.hash())
             .await
             .unwrap()
             .validator_sets()
             .accepted_handover_events()
-            .await
-            .unwrap(),
+            .cloned()
+            .collect::<Vec<_>>(),
           vec![],
         );
       }
 
       {
-        let serai = serai
-          .as_of(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
-          .await
-          .unwrap();
-        let serai = serai.validator_sets();
+        let serai = serai.state().await.unwrap();
         for network in NetworkId::all() {
           match network {
             NetworkId::Serai => {

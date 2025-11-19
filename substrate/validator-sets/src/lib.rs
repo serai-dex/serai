@@ -193,11 +193,8 @@ mod pallet {
       for (participant, keys) in &self.participants {
         for (network, keys) in ExternalNetworkId::all().zip(keys.iter().cloned()) {
           assert_eq!(network, keys.network());
-          <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::set_embedded_elliptic_curve_keys(
-            *participant,
-            keys,
-          )
-          .expect("genesis embedded elliptic curve keys weren't valid");
+          Pallet::<T>::set_embedded_elliptic_curve_keys_internal(*participant, keys)
+            .expect("genesis embedded elliptic curve keys weren't valid");
         }
       }
       for network in NetworkId::all() {
@@ -329,6 +326,23 @@ mod pallet {
       <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::embedded_elliptic_curve_keys(
         validator, network,
       )
+    }
+
+    fn set_embedded_elliptic_curve_keys_internal(
+      validator: Public,
+      keys: SignedEmbeddedEllipticCurveKeys,
+    ) -> DispatchResult {
+      let network = keys.network();
+      let keys =
+        <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::set_embedded_elliptic_curve_keys(
+          validator, keys,
+        )
+        .map_err(|()| Error::<T>::InvalidEmbeddedEllipticCurveKeys)?;
+      Core::<T>::emit_event(Event::SetEmbeddedEllipticCurveKeys {
+        validator: validator.into(),
+        keys,
+      });
+      Ok(())
     }
 
     /* TODO
@@ -492,16 +506,7 @@ mod pallet {
       keys: SignedEmbeddedEllipticCurveKeys,
     ) -> DispatchResult {
       let validator = ensure_signed(origin)?;
-      let network = keys.network();
-      <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::set_embedded_elliptic_curve_keys(
-        validator, keys,
-      )
-      .map_err(|()| Error::<T>::InvalidEmbeddedEllipticCurveKeys)?;
-      Core::<T>::emit_event(Event::SetEmbeddedEllipticCurveKeys {
-        validator: validator.into(),
-        network,
-      });
-      Ok(())
+      Self::set_embedded_elliptic_curve_keys_internal(validator, keys)
     }
 
     #[pallet::call_index(3)]

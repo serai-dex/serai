@@ -36,8 +36,7 @@ impl<D: Db> PublishSlashReportTask<D> {
 
     // This uses the latest finalized block, not the latest cosigned block, which should be
     // fine as in the worst case, the only impact is no longer attempting TX publication
-    let serai = self.serai.as_of_latest_finalized_block().await.map_err(|e| format!("{e:?}"))?;
-    let serai = serai.validator_sets();
+    let serai = self.serai.state().await.map_err(|e| format!("{e:?}"))?;
     let session_after_slash_report = Session(session.0 + 1);
     let current_session =
       serai.current_session(network.into()).await.map_err(|e| format!("{e:?}"))?;

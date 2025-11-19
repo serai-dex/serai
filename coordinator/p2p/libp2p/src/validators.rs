@@ -60,8 +60,7 @@ impl Validators {
 
       Besides, we can't connect to historical validators, only the current validators.
     */
-    let temporal_serai = serai.borrow().as_of_latest_finalized_block().await?;
-    let temporal_serai = temporal_serai.validator_sets();
+    let serai = serai.borrow().state().await?;
 
     let mut session_changes = vec![];
     {
@@ -70,9 +69,9 @@ impl Validators {
       let mut futures = FuturesUnordered::new();
       for network in ExternalNetworkId::all() {
         let sessions = sessions.borrow();
-        let temporal_serai = temporal_serai.borrow();
+        let serai = serai.borrow();
         futures.push(async move {
-          let session = match temporal_serai.current_session(network.into()).await {
+          let session = match serai.current_session(network.into()).await {
             Ok(Some(session)) => session,
             Ok(None) => return Ok(None),
             Err(e) => return Err(e),
@@ -81,7 +80,7 @@ impl Validators {
           if sessions.get(&network) == Some(&session) {
             Ok(None)
           } else {
-            match temporal_serai.current_validators(network.into()).await {
+            match serai.current_validators(network.into()).await {
               Ok(Some(validators)) => Ok(Some((
                 network,
                 session,

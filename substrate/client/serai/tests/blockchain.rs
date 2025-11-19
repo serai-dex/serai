@@ -133,7 +133,11 @@ async fn blockchain() {
               .chain(block.transactions.iter().map(serai_abi::Transaction::hash))
               .chain(core::iter::once(end_transaction));
 
-            let events = serai.as_of(block.header.hash()).await.unwrap().events().await.unwrap();
+            let events = serai.events(block.header.hash()).await.unwrap();
+            let events = events
+              .events()
+              .map(|iter| iter.into_iter().cloned().collect::<Vec<_>>())
+              .collect::<Vec<_>>();
             assert_eq!(events.len(), 2 + block.transactions.len());
 
             let mut transaction_leaves = vec![];

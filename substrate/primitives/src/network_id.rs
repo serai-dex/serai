@@ -30,7 +30,6 @@ pub enum EmbeddedEllipticCurve {
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
-#[non_exhaustive]
 pub enum ExternalNetworkId {
   /// The Bitcoin network.
   Bitcoin = 1,

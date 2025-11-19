@@ -17,8 +17,6 @@ use abi::{
   Transaction, Block, Event,
 };
 
-use async_lock::RwLock;
-
 mod coins;
 pub use coins::Coins;
 
@@ -55,16 +53,18 @@ pub struct Serai {
   client: TokioClient,
 }
 
-/// An RPC client to a Serai node, scoped to a specific block.
-///
-/// Upon any request being made for the events emitted by this block, the entire list of events
-/// from this block will be cached within this. This allows future calls for events to be done
-/// cheaply.
+/// The events from a specific block.
 #[derive(Clone)]
-pub struct TemporalSerai<'serai> {
+pub struct Events {
+  // These are cached within an `Arc` for cheap `Clone`s
+  events: Arc<Vec<Vec<Event>>>,
+}
+
+/// An RPC client to a Serai node, scoped to a specific block.
+#[derive(Clone)]
+pub struct State<'serai> {
   serai: &'serai Serai,
   block: BlockHash,
-  events: Arc<RwLock<Option<Vec<Vec<Event>>>>>,
 }
 
 impl Serai {
@@ -175,28 +175,41 @@ impl Serai {
       .await
   }
 
-  /// Scope this RPC client to the state as of a specific block.
-  ///
-  /// This will yield an error if the block chosen isn't finalized. This ensures, given an honest
-  /// node, that this scope will be available for the lifetime of this object.
-  pub async fn as_of(&self, block: BlockHash) -> Result<TemporalSerai<'_>, RpcError> {
-    if !self.finalized(block).await? {
-      Err(RpcError::NotFinalized)?;
-    }
-    Ok(TemporalSerai { serai: self, block, events: Arc::new(RwLock::new(None)) })
+  /// Fetch the events of a specific block.
+  pub async fn events(&self, block: BlockHash) -> Result<Events, RpcError> {
+    Ok(Events {
+      events: Arc::new(
+        self
+          .call::<Vec<Vec<String>>>("blockchain/events", &format!(r#"{{ "block": "{block}" }}"#))
+          .await?
+          .into_iter()
+          .map(|events_per_tx| {
+            events_per_tx
+              .into_iter()
+              .map(|event| {
+                Event::deserialize(
+                  &mut hex::decode(&event)
+                    .map_err(|_| {
+                      RpcError::InvalidNode("node returned non-hex-encoded event".to_string())
+                    })?
+                    .as_slice(),
+                )
+                .map_err(|_| RpcError::InvalidNode("node returned invalid event".to_string()))
+              })
+              .collect::<Result<Vec<_>, _>>()
+          })
+          .collect::<Result<Vec<_>, _>>()?,
+      ),
+    })
   }
 
   /// Scope this RPC client to the state as of the latest finalized block.
-  pub async fn as_of_latest_finalized_block(&self) -> Result<TemporalSerai<'_>, RpcError> {
+  pub async fn state(&self) -> Result<State<'_>, RpcError> {
     let block = self
       .block_by_number(self.latest_finalized_block_number().await?)
       .await?
       .ok_or_else(|| RpcError::InvalidNode("couldn't fetch latest finalized block".to_string()))?;
-    Ok(TemporalSerai {
-      serai: self,
-      block: block.header.hash(),
-      events: Arc::new(RwLock::new(None)),
-    })
+    Ok(State { serai: self, block: block.header.hash() })
   }
 
   /// Return the P2P addresses for the validators of the specified network.
@@ -208,83 +221,43 @@ impl Serai {
           ExternalNetworkId::Bitcoin => r#"["bitcoin"]"#,
           ExternalNetworkId::Ethereum => r#"["ethereum"]"#,
           ExternalNetworkId::Monero => r#"["monero"]"#,
-          _ => Err(RpcError::InternalError("unrecognized external network ID".to_string()))?,
         },
       )
       .await
   }
 }
 
-impl<'serai> TemporalSerai<'serai> {
+impl Events {
+  /// The events within this container.
+  ///
+  /// This will yield the events for each transaction within the block, including the implicit
+  /// transactions at the start and end of each block, within an outer container.
+  pub fn events(&self) -> impl Iterator<Item: IntoIterator<Item = &Event>> {
+    self.events.iter()
+  }
+
+  /// Scope to the coins module.
+  pub fn coins(&self) -> Coins {
+    Coins(self.clone())
+  }
+
+  /// Scope to the validator sets module.
+  pub fn validator_sets(&self) -> ValidatorSets {
+    ValidatorSets(self.clone())
+  }
+
+  /// Scope to the in instructions module.
+  pub fn in_instructions(&self) -> InInstructions {
+    InInstructions(self.clone())
+  }
+}
+
+impl<'serai> State<'serai> {
   async fn call<ResponseValue: Default + JsonDeserialize>(
     &self,
     method: &str,
     params: &str,
   ) -> Result<ResponseValue, RpcError> {
     self.serai.call(method, &format!(r#"{{ "block": "{}" {params} }}"#, self.block)).await
-  }
-
-  /// Fetch the events for this block.
-  ///
-  /// The returned `Option` will always be `Some(_)`.
-  async fn events_borrowed(
-    &self,
-  ) -> Result<async_lock::RwLockReadGuard<'_, Option<Vec<Vec<Event>>>>, RpcError> {
-    let mut events = self.events.read().await;
-    if events.is_none() {
-      drop(events);
-      {
-        let mut events_mut = self.events.write().await;
-        if events_mut.is_none() {
-          *events_mut = Some(
-            self
-              .call::<Vec<Vec<String>>>("blockchain/events", "")
-              .await?
-              .into_iter()
-              .map(|events_per_tx| {
-                events_per_tx
-                  .into_iter()
-                  .map(|event| {
-                    Event::deserialize(
-                      &mut hex::decode(&event)
-                        .map_err(|_| {
-                          RpcError::InvalidNode("node returned non-hex-encoded event".to_string())
-                        })?
-                        .as_slice(),
-                    )
-                    .map_err(|_| RpcError::InvalidNode("node returned invalid event".to_string()))
-                  })
-                  .collect::<Result<Vec<_>, _>>()
-              })
-              .collect::<Result<Vec<_>, _>>()?,
-          );
-        }
-      }
-      events = self.events.read().await;
-    }
-    Ok(events)
-  }
-
-  /// Fetch the events for this block.
-  ///
-  /// These will be grouped by the transactions which emitted them, including the inherent
-  /// transactions at the start and end of every block.
-  pub async fn events(&self) -> Result<Vec<Vec<Event>>, RpcError> {
-    Ok(self.events_borrowed().await?.clone().expect("`TemporalSerai::events` returned None"))
-  }
-
-  /// Scope to the coins module.
-  pub fn coins(&self) -> Coins<'_> {
-    Coins(self)
-  }
-
-  /// Scope to the validator sets module.
-  pub fn validator_sets(&self) -> ValidatorSets<'_> {
-    ValidatorSets(self)
-  }
-
-  /// Scope to the in instructions module.
-  pub fn in_instructions(&self) -> InInstructions<'_> {
-    InInstructions(self)
   }
 }

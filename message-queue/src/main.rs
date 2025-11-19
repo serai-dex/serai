@@ -219,7 +219,6 @@ async fn main() {
       ExternalNetworkId::Bitcoin => "BITCOIN_KEY",
       ExternalNetworkId::Ethereum => "ETHEREUM_KEY",
       ExternalNetworkId::Monero => "MONERO_KEY",
-      _ => panic!("unrecognized network"),
     }) else {
       continue;
     };

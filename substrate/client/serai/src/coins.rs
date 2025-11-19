@@ -1,76 +1,37 @@
 pub use serai_abi::coins::Event;
 
-use crate::{RpcError, TemporalSerai};
+use crate::{RpcError, Events};
 
-/// A `TemporalSerai` scoped to the coins module.
+/// An `Events` scoped to the coins module.
 #[derive(Clone)]
-pub struct Coins<'a>(pub(super) &'a TemporalSerai<'a>);
+pub struct Coins(pub(super) Events);
 
-impl<'a> Coins<'a> {
+impl Coins {
   /// The events from the coins module.
-  pub async fn events(&self) -> Result<Vec<Event>, RpcError> {
-    Ok(
-      self
-        .0
-        .events_borrowed()
-        .await?
-        .as_ref()
-        .expect("`TemporalSerai::events` returned None")
-        .iter()
-        .flat_map(IntoIterator::into_iter)
-        .filter_map(|event| match event {
-          serai_abi::Event::Coins(event) => Some(event.clone()),
-          _ => None,
-        })
-        .collect(),
-    )
+  pub fn events(&self) -> impl Iterator<Item = &Event> {
+    self.0.events().flatten().filter_map(|event| match event {
+      serai_abi::Event::Coins(event) => Some(event),
+      _ => None,
+    })
   }
 
   /// The `Mint` events from the coins module.
-  pub async fn mint_events(&self) -> Result<Vec<Event>, RpcError> {
-    Ok(
-      self
-        .events()
-        .await?
-        .into_iter()
-        .filter(|event| matches!(event, Event::Mint { .. }))
-        .collect(),
-    )
+  pub fn mint_events(&self) -> impl Iterator<Item = &Event> {
+    self.events().filter(|event| matches!(event, Event::Mint { .. }))
   }
 
   /// The `Transfer` events from the coins module.
-  pub async fn transfer_events(&self) -> Result<Vec<Event>, RpcError> {
-    Ok(
-      self
-        .events()
-        .await?
-        .into_iter()
-        .filter(|event| matches!(event, Event::Transfer { .. }))
-        .collect(),
-    )
+  pub fn transfer_events(&self) -> impl Iterator<Item = &Event> {
+    self.events().filter(|event| matches!(event, Event::Transfer { .. }))
   }
 
   /// The `Burn` events from the coins module.
-  pub async fn burn_events(&self) -> Result<Vec<Event>, RpcError> {
-    Ok(
-      self
-        .events()
-        .await?
-        .into_iter()
-        .filter(|event| matches!(event, Event::Burn { .. }))
-        .collect(),
-    )
+  pub fn burn_events(&self) -> impl Iterator<Item = &Event> {
+    self.events().filter(|event| matches!(event, Event::Burn { .. }))
   }
 
   /// The `BurnWithInstruction` events from the coins module.
-  pub async fn burn_with_instruction_events(&self) -> Result<Vec<Event>, RpcError> {
-    Ok(
-      self
-        .events()
-        .await?
-        .into_iter()
-        .filter(|event| matches!(event, Event::BurnWithInstruction { .. }))
-        .collect(),
-    )
+  pub fn burn_with_instruction_events(&self) -> impl Iterator<Item = &Event> {
+    self.events().filter(|event| matches!(event, Event::BurnWithInstruction { .. }))
   }
 }

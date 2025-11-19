@@ -4,42 +4,24 @@ pub use serai_abi::{
   UnsignedCall, Transaction,
 };
 
-use crate::{RpcError, TemporalSerai};
+use crate::{RpcError, Events};
 
-/// A `TemporalSerai` scoped to the in instructions module.
+/// An `Events` scoped to the in instructions module.
 #[derive(Clone)]
-pub struct InInstructions<'serai>(pub(super) &'serai TemporalSerai<'serai>);
+pub struct InInstructions(pub(super) Events);
 
-impl<'serai> InInstructions<'serai> {
+impl InInstructions {
   /// The events from the in instructions module.
-  pub async fn events(&self) -> Result<Vec<Event>, RpcError> {
-    Ok(
-      self
-        .0
-        .events_borrowed()
-        .await?
-        .as_ref()
-        .expect("`TemporalSerai::events` returned None")
-        .iter()
-        .flat_map(IntoIterator::into_iter)
-        .filter_map(|event| match event {
-          serai_abi::Event::InInstructions(event) => Some(event.clone()),
-          _ => None,
-        })
-        .collect(),
-    )
+  fn events(&self) -> impl Iterator<Item = &Event> {
+    self.0.events().flatten().filter_map(|event| match event {
+      serai_abi::Event::InInstructions(event) => Some(event),
+      _ => None,
+    })
   }
 
   /// The `Batch` events from the in instructions module.
-  pub async fn batch_events(&self) -> Result<Vec<Event>, RpcError> {
-    Ok(
-      self
-        .events()
-        .await?
-        .into_iter()
-        .filter(|event| matches!(event, Event::Batch { .. }))
-        .collect(),
-    )
+  pub fn batch_events(&self) -> impl Iterator<Item = &Event> {
+    self.events().filter(|event| matches!(event, Event::Batch { .. }))
   }
 
   /// Create a transaction to execute a batch.

@@ -73,21 +73,13 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
               }
               Err(serai_cosign::Faulted) => return Err("cosigning process faulted".to_string()),
             };
-            let temporal_serai = serai.as_of(block_hash).await.map_err(|e| format!("{e}"))?;
-            let temporal_serai_validators = temporal_serai.validator_sets();
-            let temporal_serai_instructions = temporal_serai.in_instructions();
-            let temporal_serai_coins = temporal_serai.coins();
-
-            let (block, set_keys_events, slash_report_events, batch_events, burn_events) =
-              tokio::try_join!(
-                serai.block(block_hash),
-                temporal_serai_validators.set_keys_events(),
-                temporal_serai_validators.slash_report_events(),
-                temporal_serai_instructions.batch_events(),
-                temporal_serai_coins.burn_with_instruction_events(),
-              )
-              .map_err(|e| format!("{e:?}"))?;
-            let Some(block) = block else {
+            let events = serai.events(block_hash).await.map_err(|e| format!("{e}"))?;
+            let set_keys_events = events.validator_sets().set_keys_events().cloned().collect();
+            let slash_report_events =
+              events.validator_sets().slash_report_events().cloned().collect();
+            let batch_events = events.in_instructions().batch_events().cloned().collect();
+            let burn_events = events.coins().burn_with_instruction_events().cloned().collect();
+            let Some(block) = serai.block(block_hash).await.map_err(|e| format!("{e:?}"))? else {
               Err(format!("Serai node didn't have cosigned block #{block_number}"))?
             };
 

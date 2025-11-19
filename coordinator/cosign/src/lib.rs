@@ -20,7 +20,7 @@ use serai_client_serai::{
     },
     Block,
   },
-  Serai, TemporalSerai,
+  Serai, State,
 };
 
 use serai_db::*;
@@ -59,7 +59,7 @@ use delay::LatestCosignedBlockNumber;
 pub(crate) struct GlobalSession {
   pub(crate) start_block_number: u64,
   pub(crate) sets: Vec<ExternalValidatorSet>,
-  pub(crate) keys: HashMap<ExternalNetworkId, SeraiAddress>,
+  pub(crate) keys: HashMap<ExternalNetworkId, Public>,
   pub(crate) stakes: HashMap<ExternalNetworkId, u64>,
   pub(crate) total_stake: u64,
 }
@@ -119,60 +119,6 @@ create_db! {
     // The global session which faulted.
     FaultedSession: () -> [u8; 32],
   }
-}
-
-/// Fetch the keys used for cosigning by a specific network.
-async fn keys_for_network(
-  serai: &TemporalSerai<'_>,
-  network: ExternalNetworkId,
-) -> Result<Option<(Session, KeyPair)>, String> {
-  let Some(latest_session) =
-    serai.validator_sets().current_session(network.into()).await.map_err(|e| format!("{e:?}"))?
-  else {
-    // If this network hasn't had a session declared, move on
-    return Ok(None);
-  };
-
-  // Get the keys for the latest session
-  if let Some(keys) = serai
-    .validator_sets()
-    .keys(ExternalValidatorSet { network, session: latest_session })
-    .await
-    .map_err(|e| format!("{e:?}"))?
-  {
-    return Ok(Some((latest_session, keys)));
-  }
-
-  // If the latest session has yet to set keys, use the prior session
-  if let Some(prior_session) = latest_session.0.checked_sub(1).map(Session) {
-    if let Some(keys) = serai
-      .validator_sets()
-      .keys(ExternalValidatorSet { network, session: prior_session })
-      .await
-      .map_err(|e| format!("{e:?}"))?
-    {
-      return Ok(Some((prior_session, keys)));
-    }
-  }
-
-  Ok(None)
-}
-
-/// Fetch the `ExternalValidatorSet`s, and their associated keys, used for cosigning as of this
-/// block.
-async fn cosigning_sets(
-  serai: &TemporalSerai<'_>,
-) -> Result<Vec<(ExternalValidatorSet, Public)>, String> {
-  let mut sets = vec![];
-  for network in ExternalNetworkId::all() {
-    let Some((session, keys)) = keys_for_network(serai, network).await? else {
-      // If this network doesn't have usable keys, move on
-      continue;
-    };
-
-    sets.push((ExternalValidatorSet { network, session }, keys.0));
-  }
-  Ok(sets)
 }
 
 /// An object usable to request notable cosigns for a block.
@@ -379,13 +325,8 @@ impl<D: Db> Cosigning<D> {
 
     // Check the cosign's signature
     {
-      let key = Public::from({
-        let Some(key) = global_session.keys.get(&network) else {
-          Err(IntakeCosignError::NonParticipatingNetwork)?
-        };
-        *key
-      });
-
+      let key =
+        *global_session.keys.get(&network).ok_or(IntakeCosignError::NonParticipatingNetwork)?;
       if !signed_cosign.verify_signature(key) {
         Err(IntakeCosignError::InvalidSignature)?;
       }
