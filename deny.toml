@@ -151,7 +151,6 @@ allow-git = [
   "https://github.com/rust-lang-nursery/lazy-static.rs",
   "https://github.com/kayabaNerve/elliptic-curves",
   "https://github.com/monero-oxide/monero-oxide",
-  "https://github.com/kayabaNerve/monero-oxide",
   "https://github.com/rust-bitcoin/rust-bip39",
   "https://github.com/rust-rocksdb/rust-rocksdb",
   "https://github.com/serai-dex/patch-polkadot-sdk",

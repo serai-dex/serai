@@ -4,39 +4,43 @@
 
 use core::{str::FromStr, fmt};
 
-use dalek_ff_group::{EdwardsPoint, Ed25519};
-use ciphersuite::GroupIo;
+use ciphersuite::{group::GroupEncoding, GroupIo};
+use dalek_ff_group::Ed25519;
 
+use monero_ed25519::{CompressedPoint, Point};
 use monero_address::{Network, AddressType as MoneroAddressType, MoneroAddress};
 
 use serai_primitives::address::ExternalAddress;
+
+#[allow(non_snake_case)]
+fn read_G(reader: &mut impl borsh::io::Read) -> borsh::io::Result<Point> {
+  // We use `Ed25519::read_G` for the strong canonicalization requirements before using
+  //` monero-ed25519` for the actual values
+  CompressedPoint::from(Ed25519::read_G(reader)?.to_bytes()).decompress().ok_or_else(|| {
+    borsh::io::Error::other(
+      "canonically-encoded torsion-free point was rejected by `monero-ed25519`",
+    )
+  })
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum AddressType {
   Legacy,
   Subaddress,
-  Featured(u8),
 }
 
 /// A representation of a Monero address.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Address {
   kind: AddressType,
-  spend: EdwardsPoint,
-  view: EdwardsPoint,
+  spend: Point,
+  view: Point,
 }
 
 fn byte_for_kind(kind: AddressType) -> u8 {
-  // We use the second and third highest bits for the type
-  // This leaves the top bit open for interpretation as a VarInt later
   match kind {
     AddressType::Legacy => 0,
-    AddressType::Subaddress => 1 << 5,
-    AddressType::Featured(flags) => {
-      // The flags only take up the low three bits
-      debug_assert!(flags <= 0b111);
-      (2 << 5) | flags
-    }
+    AddressType::Subaddress => 1,
   }
 }
 
@@ -52,18 +56,13 @@ impl borsh::BorshDeserialize for Address {
     let mut kind_byte = [0xff];
     reader.read_exact(&mut kind_byte)?;
     let kind_byte = kind_byte[0];
-    let kind = match kind_byte >> 5 {
+    let kind = match kind_byte {
       0 => AddressType::Legacy,
       1 => AddressType::Subaddress,
-      2 => AddressType::Featured(kind_byte & 0b111),
       _ => Err(borsh::io::Error::other("unrecognized type"))?,
     };
-    // Check this wasn't malleated
-    if byte_for_kind(kind) != kind_byte {
-      Err(borsh::io::Error::other("malleated type byte"))?;
-    }
-    let spend = Ed25519::read_G(reader)?;
-    let view = Ed25519::read_G(reader)?;
+    let spend = read_G(reader)?;
+    let view = read_G(reader)?;
     Ok(Self { kind, spend, view })
   }
 }
@@ -75,20 +74,13 @@ impl TryFrom<MoneroAddress> for Address {
     let view = address.view().compress().to_bytes();
     let kind = match address.kind() {
       MoneroAddressType::Legacy => AddressType::Legacy,
-      MoneroAddressType::LegacyIntegrated(_) => Err(())?,
       MoneroAddressType::Subaddress => AddressType::Subaddress,
-      MoneroAddressType::Featured { subaddress, payment_id, guaranteed } => {
-        if payment_id.is_some() {
-          Err(())?
-        }
-        // This maintains the same bit layout as featured addresses use
-        AddressType::Featured(u8::from(*subaddress) + (u8::from(*guaranteed) << 2))
-      }
+      MoneroAddressType::LegacyIntegrated(_) | MoneroAddressType::Featured { .. } => Err(())?,
     };
     Ok(Address {
       kind,
-      spend: Ed25519::read_G(&mut spend.as_slice()).map_err(|_| ())?,
-      view: Ed25519::read_G(&mut view.as_slice()).map_err(|_| ())?,
+      spend: read_G(&mut spend.as_slice()).map_err(|_| ())?,
+      view: read_G(&mut view.as_slice()).map_err(|_| ())?,
     })
   }
 }
@@ -98,16 +90,8 @@ impl From<Address> for MoneroAddress {
     let kind = match address.kind {
       AddressType::Legacy => MoneroAddressType::Legacy,
       AddressType::Subaddress => MoneroAddressType::Subaddress,
-      AddressType::Featured(features) => {
-        debug_assert!(features <= 0b111);
-        let subaddress = (features & 1) != 0;
-        let integrated = (features & (1 << 1)) != 0;
-        debug_assert!(!integrated);
-        let guaranteed = (features & (1 << 2)) != 0;
-        MoneroAddressType::Featured { subaddress, payment_id: None, guaranteed }
-      }
     };
-    MoneroAddress::new(Network::Mainnet, kind, address.spend.0, address.view.0)
+    MoneroAddress::new(Network::Mainnet, kind, address.spend, address.view)
   }
 }
 

@@ -7,7 +7,7 @@ use rand_chacha::ChaCha20Rng;
 use ciphersuite::*;
 use dalek_ff_group::Ed25519;
 
-use monero_wallet::interface::prelude::*;
+use monero_wallet::{ed25519::CompressedPoint, interface::prelude::*};
 
 use serai_primitives::{coin::ExternalCoin, balance::Amount};
 use serai_client_monero::Address;
@@ -116,8 +116,8 @@ async fn signable_transaction(
       MoneroAddress::new(
         Network::Mainnet,
         AddressType::Legacy,
-        <Ed25519 as WrappedGroup>::generator().0,
-        <Ed25519 as WrappedGroup>::generator().0,
+        CompressedPoint::G.decompress().unwrap(),
+        CompressedPoint::G.decompress().unwrap(),
       ),
       0,
     ));

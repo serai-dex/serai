@@ -23,4 +23,6 @@ serai-primitives = { path = "../../primitives", version = "0.1", default-feature
 
 ciphersuite = { path = "../../../crypto/ciphersuite", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
-monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "030c60974f0f0306849c1795bca854a3bbb757b4", version = "0.1.0", default-features = false, features = ["std"] }
+
+monero-ed25519 = { git = "https://github.com/monero-oxide/monero-oxide", rev = "af0368e16395dbdda47cd53e54ccdb78a80b87bf", version = "0.1.0", default-features = false, features = ["std"] }
+monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "af0368e16395dbdda47cd53e54ccdb78a80b87bf", version = "0.1.0", default-features = false, features = ["std"] }

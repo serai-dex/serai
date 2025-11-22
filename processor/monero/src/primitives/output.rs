@@ -1,6 +1,9 @@
 use std::io;
 
-use ciphersuite::WrappedGroup;
+use ciphersuite::{
+  group::{ff::PrimeField, GroupEncoding},
+  WrappedGroup,
+};
 use dalek_ff_group::Ed25519;
 
 use monero_wallet::WalletOutput;
@@ -65,9 +68,11 @@ impl ReceivedOutput<<Ed25519 as WrappedGroup>::G, Address> for Output {
     // The spend key will be a key we generated, so it'll be in the prime-order subgroup
     // The output's key is the spend key + (key_offset * G), so it's in the prime-order subgroup if
     // the spend key is
-    dalek_ff_group::EdwardsPoint(
-      self.0.key() - (*<Ed25519 as WrappedGroup>::generator() * self.0.key_offset()),
-    )
+    dalek_ff_group::EdwardsPoint::from_bytes(&self.0.key().compress().to_bytes()).unwrap() -
+      dalek_ff_group::EdwardsPoint(
+        *<Ed25519 as WrappedGroup>::generator() *
+          dalek_ff_group::Scalar::from_repr(<[u8; 32]>::from(self.0.key_offset())).unwrap(),
+      )
   }
 
   fn presumed_origin(&self) -> Option<Address> {

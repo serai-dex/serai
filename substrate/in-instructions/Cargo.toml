@@ -24,14 +24,14 @@ bitvec = { version = "1", default-features = false, features = ["alloc"] }
 
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "max-encoded-len"] }
 
-sp-std = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
-sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
-sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
+sp-std = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5d194a8965b1ce24bac0ece84bae5ad05c30fffb", default-features = false }
+sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5d194a8965b1ce24bac0ece84bae5ad05c30fffb", default-features = false }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5d194a8965b1ce24bac0ece84bae5ad05c30fffb", default-features = false }
+sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5d194a8965b1ce24bac0ece84bae5ad05c30fffb", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5d194a8965b1ce24bac0ece84bae5ad05c30fffb", default-features = false }
 
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5d194a8965b1ce24bac0ece84bae5ad05c30fffb", default-features = false }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5d194a8965b1ce24bac0ece84bae5ad05c30fffb", default-features = false }
 
 serai-primitives = { path = "../primitives", default-features = false }
 
@@ -42,9 +42,9 @@ genesis-liquidity-pallet = { package = "serai-genesis-liquidity-pallet", path = 
 emissions-pallet = { package = "serai-emissions-pallet", path = "../emissions", default-features = false }
 
 [dev-dependencies]
-pallet-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
-pallet-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
-pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "e01101b68c5b0f588dd4cdee48f801a2c1f75b84", default-features = false }
+pallet-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5d194a8965b1ce24bac0ece84bae5ad05c30fffb", default-features = false }
+pallet-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5d194a8965b1ce24bac0ece84bae5ad05c30fffb", default-features = false }
+pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5d194a8965b1ce24bac0ece84bae5ad05c30fffb", default-features = false }
 
 economic-security-pallet = { package = "serai-economic-security-pallet", path = "../economic-security", default-features = false }
 
