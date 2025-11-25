@@ -30,7 +30,7 @@ serai-abi = { path = "../../abi", version = "0.1", default-features = false, fea
 
 [dev-dependencies]
 blake2 = { version = "0.11.0-rc.3", default-features = false }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "5d194a8965b1ce24bac0ece84bae5ad05c30fffb" }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "8c36534bb0bd5a02979f94bb913d11d55fe7eadc" }
 
 tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 dockertest = "0.5"

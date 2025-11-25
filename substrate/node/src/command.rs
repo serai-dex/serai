@@ -51,12 +51,6 @@ pub fn run() -> sc_cli::Result<()> {
   let mut cli = Cli::from_args();
 
   match &cli.subcommand {
-    Some(Subcommand::Key(cmd)) => cmd.run(&cli),
-
-    Some(Subcommand::BuildSpec(cmd)) => {
-      cli.create_runner(cmd)?.sync_run(|config| cmd.run(config.chain_spec, config.network))
-    }
-
     Some(Subcommand::CheckBlock(cmd)) => cli.create_runner(cmd)?.async_run(|mut config| {
       let PartialComponents { client, task_manager, import_queue, .. } =
         service::new_partial(&mut config)?.0;

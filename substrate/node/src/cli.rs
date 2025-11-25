@@ -12,13 +12,6 @@ pub struct Cli {
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
-  // Key management CLI utilities
-  #[clap(subcommand)]
-  Key(sc_cli::KeySubcommand),
-
-  // Build a chain specification
-  BuildSpec(sc_cli::BuildSpecCmd),
-
   // Validate blocks
   CheckBlock(sc_cli::CheckBlockCmd),
 
