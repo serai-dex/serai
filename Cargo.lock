@@ -10569,6 +10569,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "substrate-median"
+version = "0.1.0"
+dependencies = [
+ "frame-support",
+ "parity-scale-codec",
+ "rand_core 0.6.4",
+ "sp-io",
+]
+
+[[package]]
 name = "substrate-prometheus-endpoint"
 version = "0.17.6"
 source = "git+https://github.com/serai-dex/patch-polkadot-sdk?rev=da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b#da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b"

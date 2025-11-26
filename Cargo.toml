@@ -76,6 +76,8 @@ members = [
   "coordinator/p2p/libp2p",
   "coordinator",
 
+  "substrate/median",
+
   "substrate/primitives",
 
   "substrate/coins/primitives",

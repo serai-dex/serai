@@ -1,0 +1,28 @@
+[package]
+name = "substrate-median"
+version = "0.1.0"
+description = "Efficient calculation of medians within a Substrate (FRAME) runtime"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/median"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+rust-version = "1.85"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+frame-support = { version = "45", git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "8c36534bb0bd5a02979f94bb913d11d55fe7eadc", default-features = false }
+
+[features]
+std = ["scale/std", "frame-support/std"]
+default = ["std"]
