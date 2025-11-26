@@ -1,6 +1,6 @@
 use core::cmp::Ord;
 
-/// A trait to take the average of two values
+/// A trait for calculating the average of two values.
 pub trait Average {
   /// Calculate the average of two values.
   fn average(value: Self, other: Self) -> Self;

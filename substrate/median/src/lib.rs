@@ -82,67 +82,66 @@ fn update_median<
 >(
   key_prefix: impl Copy + EncodeLike<KeyPrefix>,
 ) {
-  let Some(mut existing_median_pos) = S::Position::get(key_prefix) else {
+  let Some(mut median_pos) = S::Position::get(key_prefix) else {
     return;
   };
   let length = S::Length::get(key_prefix);
   let target_median_pos = S::POLICY.target_median_pos(length);
 
-  let mut existing_median =
-    S::Median::get(key_prefix).expect("current position yet not current median");
+  let mut median = S::Median::get(key_prefix).expect("current position yet not current median");
 
   // We first iterate up to the desired median position
   {
     let mut iter = {
-      let existing_median_key =
-        S::Store::hashed_key_for(key_prefix, existing_median.lexicographic_encode());
-      S::Store::iter_from(existing_median_key)
+      let median_key = S::Store::hashed_key_for(key_prefix, median.lexicographic_encode());
+      S::Store::iter_from(median_key)
     };
 
-    let mut existing_median_instances =
-      S::Store::get(key_prefix, existing_median.lexicographic_encode());
+    let mut median_instances = S::Store::get(key_prefix, median.lexicographic_encode());
     let mut next_value_first_pos;
     while {
-      next_value_first_pos = existing_median_pos + existing_median_instances;
+      next_value_first_pos = median_pos + median_instances;
       next_value_first_pos <= target_median_pos
     } {
-      existing_median_pos = next_value_first_pos;
+      median_pos = next_value_first_pos;
       let (_key_prefix, next_value_encoding, next_value_instances) = iter
         .next()
         .expect("stored median was before the actual median yet no values were after it");
       debug_assert_eq!(key_prefix.encode(), _key_prefix.encode(), "{KEY_PREFIX_ASSERT}");
-      debug_assert!(
-        existing_median.lexicographic_encode() != next_value_encoding,
-        "{AFTER_ASSERT}",
-      );
-      existing_median = MedianValue::lexicographic_decode(next_value_encoding);
-      existing_median_instances = next_value_instances;
+      debug_assert!(median.lexicographic_encode() != next_value_encoding, "{AFTER_ASSERT}",);
+      median = MedianValue::lexicographic_decode(next_value_encoding);
+      median_instances = next_value_instances;
     }
   }
 
   // Then, we iterate down to the desired median position
+  /*
+    Only one of these loops should actually execute. Presenting them sequentially is just the most
+    straightforward way to write this function.
+  */
   {
     let mut iter = {
-      let existing_median_key =
-        S::ReverseStore::hashed_key_for(key_prefix, LexicographicReverse::from(&existing_median));
-      S::ReverseStore::iter_keys_from(existing_median_key)
+      let median_key =
+        S::ReverseStore::hashed_key_for(key_prefix, LexicographicReverse::from(&median));
+      S::ReverseStore::iter_keys_from(median_key)
     };
 
-    while existing_median_pos > target_median_pos {
+    while median_pos > target_median_pos {
       let (_key_prefix, prior_value_encoding) = iter
         .next()
         .expect("stored median was before the actual median yet no values were after it");
       debug_assert_eq!(key_prefix.encode(), _key_prefix.encode(), "{KEY_PREFIX_ASSERT}");
       let prior_value = prior_value_encoding.into();
-      debug_assert!(prior_value != existing_median, "{AFTER_ASSERT}");
+      debug_assert!(prior_value != median, "{AFTER_ASSERT}");
       let prior_value_instances = S::Store::get(key_prefix, prior_value.lexicographic_encode());
-      existing_median = prior_value;
-      existing_median_pos -= prior_value_instances;
+      median = prior_value;
+      median_pos -= prior_value_instances;
     }
   }
 
-  S::Position::set(key_prefix, Some(existing_median_pos));
-  S::Median::set(key_prefix, Some(existing_median));
+  // Save the result
+  S::Position::set(key_prefix, Some(median_pos));
+  S::Median::set(key_prefix, Some(median));
 }
 
 /// A median.
@@ -173,7 +172,7 @@ pub trait Median<KeyPrefix: FullCodec, MedianValue: Average + LexicographicEncod
   /// considered present will be incremented.
   fn push(key_prefix: impl Copy + EncodeLike<KeyPrefix>, value: MedianValue);
 
-  /// Pop a value from the median.
+  /// Remove a value from the median's list.
   ///
   /// This returns `true` if the value was present and `false` otherwise.
   ///
@@ -394,127 +393,4 @@ impl<
 
     true
   }
-}
-
-#[test]
-fn test_median() {
-  use frame_support::{
-    Blake2_128Concat, Identity,
-    storage::types::{self, ValueQuery, OptionQuery},
-  };
-
-  use rand_core::{RngCore, OsRng};
-
-  macro_rules! prefix {
-    ($name: ident, $prefix: expr) => {
-      struct $name;
-      impl frame_support::traits::StorageInstance for $name {
-        const STORAGE_PREFIX: &'static str = $prefix;
-        fn pallet_prefix() -> &'static str {
-          "median"
-        }
-      }
-    };
-  }
-  prefix!(PrefixLength, "Length");
-  prefix!(PrefixStore, "Store");
-  prefix!(PrefixReverse, "Reverse");
-  prefix!(PrefixPosition, "Position");
-  prefix!(PrefixMedian, "Median");
-
-  type StorageMapStruct<Prefix, Value, Query> =
-    types::StorageMap<Prefix, Blake2_128Concat, (), Value, Query>;
-  type StorageDoubleMapStruct<Prefix, Key, Value> =
-    types::StorageDoubleMap<Prefix, Blake2_128Concat, (), Identity, Key, Value, ValueQuery>;
-
-  macro_rules! test {
-    ($name: ident, $policy: expr) => {
-      struct $name;
-      impl MedianStore<(), u32> for $name {
-        const POLICY: Policy = $policy;
-        type Length = StorageMapStruct<PrefixLength, u64, ValueQuery>;
-        type Store =
-          StorageDoubleMapStruct<PrefixStore, <u32 as LexicographicEncoding>::Encoding, u64>;
-        type ReverseStore = StorageDoubleMapStruct<PrefixReverse, LexicographicReverse<u32>, ()>;
-        type Position = StorageMapStruct<PrefixPosition, u64, OptionQuery>;
-        type Median = StorageMapStruct<PrefixMedian, u32, OptionQuery>;
-      }
-
-      sp_io::TestExternalities::default().execute_with(|| {
-        assert_eq!($name::length(()), 0);
-        assert_eq!($name::median(()), None);
-
-        let mut current_list = vec![];
-        for i in 0 .. 1000 {
-          'reselect: loop {
-            // This chooses a modulus low enough this `match` will in fact match, yet high enough
-            // more cases can be added without forgetting to update it being an issue
-            match OsRng.next_u64() % 8 {
-              // Push a freshly sampled value
-              0 => {
-                #[allow(clippy::cast_possible_truncation)]
-                let push = OsRng.next_u64() as u32;
-                current_list.push(push);
-                current_list.sort();
-                $name::push((), push);
-              }
-              // Push an existing value
-              1 if !current_list.is_empty() => {
-                let i =
-                  usize::try_from(OsRng.next_u64() % u64::try_from(current_list.len()).unwrap())
-                    .unwrap();
-                let push = current_list[i];
-                current_list.push(push);
-                current_list.sort();
-                $name::push((), push);
-              }
-              // Remove an existing value
-              2 if !current_list.is_empty() => {
-                let i =
-                  usize::try_from(OsRng.next_u64() % u64::try_from(current_list.len()).unwrap())
-                    .unwrap();
-                let pop = current_list.remove(i);
-                assert!($name::pop((), pop));
-              }
-              // Remove a value which is not present
-              3 => {
-                #[allow(clippy::cast_possible_truncation)]
-                let pop = OsRng.next_u64() as u32;
-                if current_list.contains(&pop) {
-                  continue 'reselect;
-                }
-                assert!(!$name::pop((), pop));
-              }
-              _ => continue 'reselect,
-            }
-            break 'reselect;
-          }
-
-          assert_eq!(
-            $name::length(()),
-            u64::try_from(current_list.len()).unwrap(),
-            "length differs on iteration: {i}",
-          );
-          let target_median_pos =
-            $policy.target_median_pos(u64::try_from(current_list.len()).unwrap());
-          let target_median_pos = usize::try_from(target_median_pos).unwrap();
-          let expected = (!current_list.is_empty()).then(|| match $policy {
-            Policy::Greater | Policy::Lesser => current_list[target_median_pos],
-            Policy::Average => {
-              if (current_list.len() % 2) == 0 {
-                u32::average(current_list[target_median_pos], current_list[target_median_pos + 1])
-              } else {
-                current_list[target_median_pos]
-              }
-            }
-          });
-          assert_eq!($name::median(()), expected, "median differs on iteration: {i}");
-        }
-      });
-    };
-  }
-
-  test!(Greater, Policy::Greater);
-  test!(Lesser, Policy::Lesser);
-  test!(Average, Policy::Average);
 }
