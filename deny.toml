@@ -80,6 +80,7 @@ exceptions = [
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator" },
 
   { allow = ["AGPL-3.0-only"], name = "pallet-session" },
+  { allow = ["AGPL-3.0-only"], name = "substrate-median" },
 
   { allow = ["AGPL-3.0-only"], name = "serai-core-pallet" },
   { allow = ["AGPL-3.0-only"], name = "serai-coins-pallet" },

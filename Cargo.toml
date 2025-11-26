@@ -80,6 +80,8 @@ members = [
   "substrate/primitives",
   "substrate/abi",
 
+  "substrate/median",
+
   "substrate/core",
   "substrate/coins",
   "substrate/validator-sets",

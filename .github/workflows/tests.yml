@@ -84,6 +84,7 @@ jobs:
           GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
             -p serai-primitives \
             -p serai-abi \
+            -p substrate-median \
             -p serai-core-pallet \
             -p serai-coins-pallet \
             -p serai-validator-sets-pallet \
