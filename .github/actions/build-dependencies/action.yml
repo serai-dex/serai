@@ -52,7 +52,7 @@ runs:
     - name: Install solc
       shell: bash
       run: |
-        cargo +1.91 install svm-rs --version =0.5.19
+        cargo +1.91.1 install svm-rs --version =0.5.21
         svm install 0.8.29
         svm use 0.8.29
 
@@ -75,11 +75,8 @@ runs:
       if: runner.os == 'Linux'
 
     - name: Install rootless Docker
-      uses: docker/setup-docker-action@b60f85385d03ac8acfca6d9996982511d8620a19
+      uses: docker/setup-docker-action@e61617a16c407a86262fb923c35a616ddbe070b3 # 4.6.0
       with:
         rootless: true
         set-host: true
       if: runner.os == 'Linux'
-
-    # - name: Cache Rust
-    #   uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43

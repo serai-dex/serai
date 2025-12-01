@@ -10,7 +10,7 @@ fn monero_internal(
   monero_binary: &str,
   ports: &str,
 ) {
-  const MONERO_VERSION: &str = "0.18.4.3";
+  const MONERO_VERSION: &str = "0.18.4.4";
 
   let arch = match std::env::consts::ARCH {
     // We probably would run this without issues yet it's not worth needing to provide support for
@@ -41,7 +41,7 @@ RUN tar -xvjf monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2 --strip-components=1
     network.label(),
   );
 
-  let setup = mimalloc(os).to_string() + &download_monero;
+  let setup = mimalloc(os) + &download_monero;
 
   let run_monero = format!(
     r#"

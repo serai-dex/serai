@@ -29,7 +29,7 @@ RUN tar xzvf bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz
 RUN mv bitcoin-${BITCOIN_VERSION}/bin/bitcoind .
 "#;
 
-  let setup = mimalloc(Os::Debian).to_string() + DOWNLOAD_BITCOIN;
+  let setup = mimalloc(Os::Debian) + DOWNLOAD_BITCOIN;
 
   let run_bitcoin = format!(
     r#"

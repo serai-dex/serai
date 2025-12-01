@@ -22,12 +22,12 @@ workspace = true
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
 
 bitvec = { version = "1", default-features = false, features = ["alloc"] }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "8c36534bb0bd5a02979f94bb913d11d55fe7eadc", default-features = false }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
 serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
-sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "8c36534bb0bd5a02979f94bb913d11d55fe7eadc", default-features = false, features = ["serde"], optional = true }
-frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "8c36534bb0bd5a02979f94bb913d11d55fe7eadc", default-features = false, optional = true }
+sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["serde"], optional = true }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
 
 serai-primitives = { path = "../primitives", version = "0.1", default-features = false }
 

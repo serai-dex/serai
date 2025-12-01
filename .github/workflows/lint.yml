@@ -15,7 +15,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Get nightly version to use
         id: nightly
@@ -43,16 +43,10 @@ jobs:
   deny:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
-
-      - name: Advisory Cache
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
-        with:
-          path: ~/.cargo/advisory-db
-          key: rust-advisory-db
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Install cargo deny
-        run: cargo +1.91 install cargo-deny --version =0.18.5
+        run: cargo +1.91.1 install cargo-deny --version =0.18.6
 
       - name: Run cargo deny
         run: cargo deny -L error --all-features check --hide-inclusion-graph
@@ -60,7 +54,7 @@ jobs:
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Get nightly version to use
         id: nightly
@@ -73,10 +67,10 @@ jobs:
       - name: Run rustfmt
         run: cargo +${{ steps.nightly.outputs.version }} fmt -- --check
 
-      - name: Install foundry
-        uses: foundry-rs/foundry-toolchain@8f1998e9878d786675189ef566a2e4bf24869773
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@50d5a8956f2e319df19e6b57539d7e2acb9f8c1e # 1.5.0
         with:
-          version: nightly-41d4e5437107f6f42c7711123890147bc736a609
+          version: v1.5.0
           cache: false
 
       - name: Run forge fmt
@@ -85,20 +79,20 @@ jobs:
   machete:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
       - name: Verify all dependencies are in use
         run: |
-          cargo +1.91 install cargo-machete --version =0.9.1
-          cargo +1.91 machete
+          cargo +1.91.1 install cargo-machete --version =0.9.1
+          cargo +1.91.1 machete
 
   msrv:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
       - name: Verify claimed `rust-version`
         shell: bash
         run: |
-          cargo +1.91 install cargo-msrv --version =0.18.4
+          cargo +1.91.1 install cargo-msrv --version =0.18.4
 
           function check_msrv {
             # We `cd` into the directory passed as the first argument, but will return to the
@@ -189,16 +183,16 @@ jobs:
   slither:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
 
       - name: Slither
         run: |
-          python3 -m pip install slither-analyzer
+          python3 -m pip install slither-analyzer==0.11.3
 
-          slither --include-paths ./networks/ethereum/schnorr/contracts/Schnorr.sol
+          slither ./networks/ethereum/schnorr/contracts/Schnorr.sol
           slither --include-paths ./networks/ethereum/schnorr/contracts ./networks/ethereum/schnorr/contracts/tests/Schnorr.sol
           slither processor/ethereum/deployer/contracts/Deployer.sol
           slither processor/ethereum/erc20/contracts/IERC20.sol

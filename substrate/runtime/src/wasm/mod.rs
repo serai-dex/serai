@@ -114,7 +114,6 @@ impl frame_system::Config for Runtime {
   type BlockLength = BlockLength;
   type RuntimeOrigin = RuntimeOrigin;
   type RuntimeCall = RuntimeCall;
-  type RuntimeTask = ();
   type Nonce = u32;
   type Hash = <Self::Block as sp_runtime::traits::Block>::Hash;
   type Hashing = sp_runtime::traits::BlakeTwo256;

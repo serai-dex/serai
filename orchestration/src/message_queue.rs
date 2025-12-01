@@ -13,7 +13,7 @@ pub fn message_queue(
   ethereum_key: <Ristretto as WrappedGroup>::G,
   monero_key: <Ristretto as WrappedGroup>::G,
 ) {
-  let setup = mimalloc(Os::Alpine).to_string() +
+  let setup = mimalloc(Os::Alpine) +
     &build_serai_service("", Os::Alpine, network.release(), network.db(), "serai-message-queue");
 
   let env_vars = [

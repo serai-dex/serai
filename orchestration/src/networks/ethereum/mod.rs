@@ -17,7 +17,7 @@ pub fn ethereum(orchestration_path: &Path, network: Network) {
       (reth(network), nimbus(network))
     };
 
-  let download = mimalloc(Os::Alpine).to_string() + &el_download + &cl_download;
+  let download = mimalloc(Os::Alpine) + &el_download + &cl_download;
 
   let run = format!(
     r#"
@@ -26,7 +26,7 @@ CMD ["/run.sh"]
 "#,
     network.label()
   );
-  let run = mimalloc(Os::Debian).to_string() +
+  let run = mimalloc(Os::Debian) +
     &os(Os::Debian, &(el_run_as_root + "\r\n" + &cl_run_as_root), "ethereum") +
     &el_run +
     &cl_run +

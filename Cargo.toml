@@ -214,8 +214,8 @@ parity-bip39 = { path = "patches/parity-bip39" }
 k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
 p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
 
-# `jemalloc` conflicts with `mimalloc`, so patch to a `rocksdb` which never uses `jemalloc`
-librocksdb-sys = { path = "patches/librocksdb-sys" }
+# `jemalloc` conflicts with `mimalloc`, so patch to a `kvdb-rocksdb` which never exposes `jemalloc`
+kvdb-rocksdb = { path = "patches/kvdb-rocksdb" }
 
 [workspace.lints.clippy]
 incompatible_msrv = "allow" # Manually verified with a GitHub workflow

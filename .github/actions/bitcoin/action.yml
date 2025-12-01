@@ -12,7 +12,7 @@ runs:
   steps:
     - name: Bitcoin Daemon Cache
       id: cache-bitcoind
-      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # 4.2.4
       with:
         path: bitcoin.tar.gz
         key: bitcoind-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}

@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
 pub fn ethereum_relayer(orchestration_path: &Path, network: Network) {
-  let setup = mimalloc(Os::Debian).to_string() +
+  let setup = mimalloc(Os::Debian) +
     &build_serai_service(
       "",
       Os::Debian,

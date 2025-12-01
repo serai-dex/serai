@@ -1,0 +1,20 @@
+[package]
+name = "kvdb-rocksdb"
+version = "0.20.99"
+description = "Replacement for `kvdb-rocksdb` which removes the `jemalloc` feature"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/kvdb-rocksdb"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+kvdb-rocksdb = { version = "0.21", default-features = false }
+
+[features]
+jemalloc = []

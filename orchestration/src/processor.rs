@@ -17,7 +17,7 @@ pub fn processor(
   substrate_evrf_key: Zeroizing<Vec<u8>>,
   network_evrf_key: Zeroizing<Vec<u8>>,
 ) {
-  let setup = mimalloc(Os::Debian).to_string() +
+  let setup = mimalloc(Os::Debian) +
     &build_serai_service(
       if coin == "ethereum" {
         r#"

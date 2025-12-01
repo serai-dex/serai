@@ -575,14 +575,9 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
           };
           let msgs = (
             decode_signed_message::<TendermintNetwork<TD, Transaction, P>>(&data.0).unwrap(),
-            if data.1.is_some() {
-              Some(
-                decode_signed_message::<TendermintNetwork<TD, Transaction, P>>(&data.1.unwrap())
-                  .unwrap(),
-              )
-            } else {
-              None
-            },
+            data.1.as_ref().map(|data| {
+              decode_signed_message::<TendermintNetwork<TD, Transaction, P>>(data).unwrap()
+            }),
           );
 
           // Since anything with evidence is fundamentally faulty behavior, not just temporal

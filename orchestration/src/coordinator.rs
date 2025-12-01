@@ -16,7 +16,7 @@ pub fn coordinator(
 ) {
   let db = network.db();
   let longer_reattempts = if network == Network::Dev { "longer-reattempts" } else { "" };
-  let setup = mimalloc(Os::Debian).to_string() +
+  let setup = mimalloc(Os::Debian) +
     &build_serai_service(
       "",
       Os::Debian,
