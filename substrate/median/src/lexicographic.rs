@@ -1,4 +1,5 @@
 use core::cmp::Ord;
+use alloc::vec::Vec;
 
 use scale::FullCodec;
 

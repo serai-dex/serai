@@ -1,9 +1,13 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 #![deny(missing_docs)]
 
 use core::cmp::Ordering;
+
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 
 use scale::{EncodeLike, FullCodec};
 use frame_support::storage::*;

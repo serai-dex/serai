@@ -8,21 +8,26 @@ use serai_primitives::{
   balance::{Amount, ExternalBalance, Balance},
 };
 
+/// The address used for a liquidity pool by the DEX.
+pub fn address(coin: ExternalCoin) -> SeraiAddress {
+  SeraiAddress::system(borsh::to_vec(&(b"DEX", coin)).unwrap())
+}
+
 /// A call to the DEX.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {
   /// Add liquidity.
   add_liquidity {
-    /// The coin to add liquidity for.
-    coin: ExternalCoin,
+    /// The pool to add liquidity to, specified by its external coin.
+    external_coin: ExternalCoin,
     /// The intended amount of SRI to add as liquidity.
     sri_intended: Amount,
     /// The intended amount of the coin to add as liquidity.
-    coin_intended: Amount,
+    external_coin_intended: Amount,
     /// The minimum amount of SRI to add as liquidity.
     sri_minimum: Amount,
     /// The minimum amount of the coin to add as liquidity.
-    coin_minimum: Amount,
+    external_coin_minimum: Amount,
   },
   /// Transfer these liquidity tokens to the specified address.
   transfer_liquidity {
@@ -40,17 +45,17 @@ pub enum Call {
     /// The minimum amount of SRI to receive.
     sri_minimum: Amount,
     /// The minimum amount of the coin to receive.
-    coin_minimum: Amount,
+    external_coin_minimum: Amount,
   },
   /// Swap an exact amount of coins.
-  swap_exact {
+  swap {
     /// The coins to swap.
     coins_to_swap: Balance,
     /// The minimum balance to receive.
     minimum_to_receive: Balance,
   },
   /// Swap for an exact amount of coins.
-  swap_for_exact {
+  swap_for {
     /// The coins to receive.
     coins_to_receive: Balance,
     /// The maximum amount to swap.
@@ -64,8 +69,8 @@ impl Call {
       Call::add_liquidity { .. } |
       Call::transfer_liquidity { .. } |
       Call::remove_liquidity { .. } |
-      Call::swap_exact { .. } |
-      Call::swap_for_exact { .. } => true,
+      Call::swap { .. } |
+      Call::swap_for { .. } => true,
     }
   }
 }
@@ -84,7 +89,7 @@ pub enum Event {
     /// The amount of liquidity tokens which were minted.
     liquidity_tokens_minted: Amount,
     /// The amount of the coin which was added to the pool's liquidity.
-    coin_amount: Amount,
+    external_coin_amount: Amount,
     /// The amount of SRI which was added to the pool's liquidity.
     sri_amount: Amount,
   },
@@ -98,7 +103,7 @@ pub enum Event {
     /// The mount of liquidity tokens which were burnt.
     liquidity_tokens_burnt: Amount,
     /// The amount of the coin which was removed from the pool's liquidity.
-    coin_amount: Amount,
+    external_coin_amount: Amount,
     /// The amount of SRI which was removed from the pool's liquidity.
     sri_amount: Amount,
   },

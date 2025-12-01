@@ -227,6 +227,13 @@ mod pallet {
       Self::emit_event(Event::Transfer { from: from.into(), to: to.into(), coins });
       Ok(())
     }
+
+    /// Burn `coins` from `from`.
+    pub fn burn_fn(from: Public, coins: Balance) -> Result<(), Error<T, I>> {
+      Self::burn_internal(from, coins)?;
+      Self::emit_event(Event::Burn { from: from.into(), coins });
+      Ok(())
+    }
   }
 
   #[pallet::call]
@@ -245,8 +252,7 @@ mod pallet {
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn burn(origin: OriginFor<T>, coins: Balance) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      Self::burn_internal(from, coins)?;
-      Self::emit_event(Event::Burn { from: from.into(), coins });
+      Self::burn_fn(from, coins)?;
       Ok(())
     }
 

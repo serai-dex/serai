@@ -1,4 +1,4 @@
-//! Test environment for Coins pallet.
+//! Test environment for the Coins pallet.
 
 use borsh::BorshDeserialize;
 

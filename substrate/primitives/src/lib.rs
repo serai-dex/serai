@@ -38,6 +38,9 @@ pub mod network_id;
 /// Types for identifying and working with validator sets.
 pub mod validator_sets;
 
+/// Types for the DEX.
+pub mod dex;
+
 /// Types for signaling.
 pub mod signals;
 

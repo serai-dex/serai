@@ -93,6 +93,9 @@ mod runtime {
   #[runtime::pallet_index(5)]
   pub type LiquidityTokens = serai_coins_pallet::Pallet<Runtime, LiquidityTokensInstance>;
 
+  #[runtime::pallet_index(6)]
+  pub type Dex = serai_dex_pallet::Pallet<Runtime>;
+
   #[runtime::pallet_index(0xfd)]
   #[runtime::disable_inherent]
   pub type Timestamp = pallet_timestamp::Pallet<Runtime>;
@@ -171,6 +174,7 @@ impl serai_signals_pallet::Config for Runtime {
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
 }
+impl serai_dex_pallet::Config for Runtime {}
 
 impl pallet_timestamp::Config for Runtime {
   type Moment = u64;
@@ -292,16 +296,35 @@ impl From<serai_abi::Call> for RuntimeCall {
       serai_abi::Call::Dex(call) => {
         use serai_abi::dex::Call;
         match call {
+          Call::add_liquidity {
+            external_coin,
+            sri_intended,
+            external_coin_intended,
+            sri_minimum,
+            external_coin_minimum,
+          } => RuntimeCall::Dex(serai_dex_pallet::Call::add_liquidity {
+            external_coin,
+            sri_intended,
+            external_coin_intended,
+            sri_minimum,
+            external_coin_minimum,
+          }),
           Call::transfer_liquidity { to, liquidity_tokens } => {
-            RuntimeCall::LiquidityTokens(serai_coins_pallet::Call::transfer {
-              to: to.into(),
-              coins: liquidity_tokens.into(),
+            RuntimeCall::Dex(serai_dex_pallet::Call::transfer_liquidity { to, liquidity_tokens })
+          }
+          Call::remove_liquidity { liquidity_tokens, sri_minimum, external_coin_minimum } => {
+            RuntimeCall::Dex(serai_dex_pallet::Call::remove_liquidity {
+              liquidity_tokens,
+              sri_minimum,
+              external_coin_minimum,
             })
           }
-          Call::add_liquidity { .. } |
-          Call::remove_liquidity { .. } |
-          Call::swap_exact { .. } |
-          Call::swap_for_exact { .. } => todo!("TODO"),
+          Call::swap { coins_to_swap, minimum_to_receive } => {
+            RuntimeCall::Dex(serai_dex_pallet::Call::swap { coins_to_swap, minimum_to_receive })
+          }
+          Call::swap_for { coins_to_receive, maximum_to_swap } => {
+            RuntimeCall::Dex(serai_dex_pallet::Call::swap_for { coins_to_receive, maximum_to_swap })
+          }
         }
       }
       serai_abi::Call::GenesisLiquidity(call) => {

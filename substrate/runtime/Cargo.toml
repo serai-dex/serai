@@ -53,6 +53,7 @@ serai-core-pallet = { path = "../core", default-features = false }
 serai-coins-pallet = { path = "../coins", default-features = false }
 serai-validator-sets-pallet = { path = "../validator-sets", default-features = false }
 serai-signals-pallet = { path = "../signals", default-features = false }
+serai-dex-pallet = { path = "../dex", default-features = false }
 
 [build-dependencies]
 substrate-wasm-builder = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "8c36534bb0bd5a02979f94bb913d11d55fe7eadc" }
@@ -88,6 +89,7 @@ std = [
   "serai-coins-pallet/std",
   "serai-validator-sets-pallet/std",
   "serai-signals-pallet/std",
+  "serai-dex-pallet/std",
 ]
 
 try-runtime = [
@@ -107,6 +109,7 @@ try-runtime = [
   "serai-coins-pallet/try-runtime",
   "serai-validator-sets-pallet/try-runtime",
   "serai-signals-pallet/try-runtime",
+  "serai-dex-pallet/try-runtime",
 ]
 
 runtime-benchmarks = [
@@ -123,6 +126,7 @@ runtime-benchmarks = [
   "serai-coins-pallet/runtime-benchmarks",
   "serai-validator-sets-pallet/runtime-benchmarks",
   "serai-signals-pallet/runtime-benchmarks",
+  "serai-dex-pallet/runtime-benchmarks",
 ]
 
 default = ["std"]
