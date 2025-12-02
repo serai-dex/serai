@@ -10,6 +10,8 @@ mod mock;
 #[expect(clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 mod pallet {
+  use alloc::vec::Vec;
+
   use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
@@ -18,7 +20,7 @@ mod pallet {
       prelude::*,
       dex::{Error as PrimitivesError, Reserves, Premise},
     },
-    Event,
+    dex::Event,
   };
 
   use serai_core_pallet::Pallet as Core;
@@ -99,10 +101,20 @@ mod pallet {
       let (sri_actual, external_coin_actual, liquidity) = if supply == 0 {
         let sri_actual = sri_intended;
         let external_coin_actual = external_coin_intended;
-        let liquidity = Amount(
-          u64::try_from((u128::from(sri_actual.0) * u128::from(external_coin_actual.0)).isqrt())
-            .map_err(|_| Error::<T>::Overflow)?,
-        );
+        /*
+          The best way to explain this is to first consider how would one would write shares of a
+          liquidity pool with only a single coin (however purposeless that may be). The immediate
+          suggestion would simply be to use the amount of the singular coin initially added as the
+          initial amount of shares, with further shares being distributed pro-rata as further
+          liquidity is added. This inherently has the amount of liquidity tokens approximate the
+          magnitude and scale of the underlying coin.
+
+          When we scale the two-coin case, this methodology no longer immediately applies. The
+          solution here is to take the product, and then the square root, of the two values. This
+          provides a magnitude/scale of the liquidity tokens approximately in-between both coins.
+        */
+        let liquidity = (u128::from(sri_actual.0) * u128::from(external_coin_actual.0)).isqrt();
+        let liquidity = Amount(u64::try_from(liquidity).map_err(|_| Error::<T>::Overflow)?);
         if liquidity.0 < MINIMUM_LIQUIDITY {
           Err(Error::<T>::InvalidLiquidity)?;
         }
@@ -149,6 +161,10 @@ mod pallet {
           Amount(sri_liquidity.min(external_coin_liquidity))
         };
 
+        if liquidity == Amount(0) {
+          Err(Error::<T>::Unsatisfied)?;
+        }
+
         (sri_actual, external_coin_actual, liquidity)
       };
 
@@ -162,12 +178,15 @@ mod pallet {
         pool.into(),
         Balance { coin: Coin::from(external_coin), amount: external_coin_actual },
       )?;
-      LiquidityTokens::<T>::mint(
-        from,
-        Balance { coin: Coin::from(external_coin), amount: liquidity },
-      )?;
+      let liquidity_tokens = ExternalBalance { coin: external_coin, amount: liquidity };
+      LiquidityTokens::<T>::mint(from, liquidity_tokens.into())?;
 
-      // TODO: Event
+      Self::emit_event(Event::LiquidityAddition {
+        recipient: from.into(),
+        liquidity_tokens,
+        sri_amount: sri_actual,
+        external_coin_amount: external_coin_actual,
+      });
 
       Ok(())
     }
@@ -183,7 +202,7 @@ mod pallet {
       let from = ensure_signed(origin)?;
       LiquidityTokens::<T>::transfer_fn(from, to.into(), liquidity_tokens.into())?;
 
-      // TODO: Event
+      Self::emit_event(Event::LiquidityTransfer { from: from.into(), to, liquidity_tokens });
 
       Ok(())
     }
@@ -234,7 +253,12 @@ mod pallet {
         Balance { coin: Coin::from(external_coin), amount: external_coin_amount },
       )?;
 
-      // TODO: Event
+      Self::emit_event(Event::LiquidityRemoval {
+        from: from.into(),
+        liquidity_tokens,
+        sri_amount,
+        external_coin_amount,
+      });
 
       Ok(())
     }
@@ -254,6 +278,7 @@ mod pallet {
 
       let swaps = Premise::route(coins_to_swap.coin, minimum_to_receive.coin)
         .ok_or(Error::<T>::FromToSelf)?;
+      let mut deltas = Vec::with_capacity(swaps.len() + 1);
       for swap in &swaps {
         let external_coin = swap.external_coin();
         let pool = serai_abi::dex::address(external_coin);
@@ -273,11 +298,9 @@ mod pallet {
           be credited both as part of the reserves _and_ the amount in if violated.
         */
         assert!(transfer_from != pool, "swap routed from a coin to itself");
-        Coins::<T>::transfer_fn(
-          transfer_from.into(),
-          pool.into(),
-          Balance { coin: swap.r#in(), amount: next_amount },
-        )?;
+        let delta = Balance { coin: swap.r#in(), amount: next_amount };
+        Coins::<T>::transfer_fn(transfer_from.into(), pool.into(), delta)?;
+        deltas.push(delta);
 
         // Update the current status
         transfer_from = pool;
@@ -290,13 +313,11 @@ mod pallet {
       }
 
       // Transfer the resulting coins to the origin
-      Coins::<T>::transfer_fn(
-        transfer_from.into(),
-        origin.into(),
-        Balance { coin: minimum_to_receive.coin, amount: next_amount },
-      )?;
+      let delta = Balance { coin: minimum_to_receive.coin, amount: next_amount };
+      Coins::<T>::transfer_fn(transfer_from.into(), origin.into(), delta)?;
+      deltas.push(delta);
 
-      // TODO: Event
+      Self::emit_event(Event::Swap { from: origin, deltas });
 
       Ok(())
     }
@@ -316,6 +337,7 @@ mod pallet {
 
       let swaps = Premise::route(maximum_to_swap.coin, coins_to_receive.coin)
         .ok_or(Error::<T>::FromToSelf)?;
+      let mut deltas = Vec::with_capacity(swaps.len() + 1);
       let mut i = swaps.len();
       while {
         i -= 1;
@@ -342,11 +364,9 @@ mod pallet {
           excluded when determining the reserves on the next iteration.
         */
         assert!(transfer_to != pool, "swap routed to a coin from itself");
-        Coins::<T>::transfer_fn(
-          pool.into(),
-          transfer_to.into(),
-          Balance { coin: swap.out(), amount: next_amount },
-        )?;
+        let delta = Balance { coin: swap.out(), amount: next_amount };
+        Coins::<T>::transfer_fn(pool.into(), transfer_to.into(), delta)?;
+        deltas.push(delta);
 
         transfer_to = pool;
         next_amount = swap.quote_for_out(reserves, next_amount).map_err(Error::<T>::from)?;
@@ -360,13 +380,12 @@ mod pallet {
       }
 
       // Transfer the necessary coins from the origin
-      Coins::<T>::transfer_fn(
-        origin.into(),
-        transfer_to.into(),
-        Balance { coin: maximum_to_swap.coin, amount: next_amount },
-      )?;
+      let delta = Balance { coin: maximum_to_swap.coin, amount: next_amount };
+      Coins::<T>::transfer_fn(origin.into(), transfer_to.into(), delta)?;
+      deltas.push(delta);
 
-      // TODO: Event
+      deltas.reverse();
+      Self::emit_event(Event::Swap { from: origin, deltas });
 
       Ok(())
     }

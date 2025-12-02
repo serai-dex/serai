@@ -79,41 +79,43 @@ impl Call {
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
   /// Liquidity was added to a pool.
-  LiquidityAdded {
-    /// The account which added the liquidity.
-    origin: SeraiAddress,
-    /// The account which received the liquidity tokens.
+  LiquidityAddition {
+    /// The account which received the minted liquidity tokens.
     recipient: SeraiAddress,
-    /// The pool liquidity was added to.
-    pool: ExternalCoin,
-    /// The amount of liquidity tokens which were minted.
-    liquidity_tokens_minted: Amount,
-    /// The amount of the coin which was added to the pool's liquidity.
-    external_coin_amount: Amount,
+    /// The liquidity tokens which were minted.
+    liquidity_tokens: ExternalBalance,
     /// The amount of SRI which was added to the pool's liquidity.
     sri_amount: Amount,
+    /// The amount of the coin which was added to the pool's liquidity.
+    external_coin_amount: Amount,
+  },
+
+  /// The specified liquidity tokens were transferred.
+  LiquidityTransfer {
+    /// The address transferred from.
+    from: SeraiAddress,
+    /// The address transferred to.
+    to: SeraiAddress,
+    /// The liquidity tokens transferred.
+    liquidity_tokens: ExternalBalance,
   },
 
   /// Liquidity was removed from a pool.
-  LiquidityRemoved {
+  LiquidityRemoval {
     /// The account which removed the liquidity.
-    origin: SeraiAddress,
-    /// The pool liquidity was removed from.
-    pool: ExternalCoin,
-    /// The mount of liquidity tokens which were burnt.
-    liquidity_tokens_burnt: Amount,
-    /// The amount of the coin which was removed from the pool's liquidity.
-    external_coin_amount: Amount,
+    from: SeraiAddress,
+    /// The liquidity tokens which were burnt.
+    liquidity_tokens: ExternalBalance,
     /// The amount of SRI which was removed from the pool's liquidity.
     sri_amount: Amount,
+    /// The amount of the coin which was removed from the pool's liquidity.
+    external_coin_amount: Amount,
   },
 
   /// A swap through the liquidity pools occurred.
   Swap {
     /// The account which made the swap.
-    origin: SeraiAddress,
-    /// The recipient for the output of the swap.
-    recipient: SeraiAddress,
+    from: SeraiAddress,
     /// The deltas incurred by the pools.
     ///
     /// For a swap of sriABC to sriDEF, this would be
