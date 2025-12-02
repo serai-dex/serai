@@ -96,6 +96,9 @@ mod runtime {
   #[runtime::pallet_index(6)]
   pub type Dex = serai_dex_pallet::Pallet<Runtime>;
 
+  #[runtime::pallet_index(7)]
+  pub type GenesisLiquidity = serai_genesis_liquidity_pallet::Pallet<Runtime>;
+
   #[runtime::pallet_index(0xfd)]
   #[runtime::disable_inherent]
   pub type Timestamp = pallet_timestamp::Pallet<Runtime>;
@@ -174,6 +177,7 @@ impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
 }
 impl serai_dex_pallet::Config for Runtime {}
+impl serai_genesis_liquidity_pallet::Config for Runtime {}
 
 impl pallet_timestamp::Config for Runtime {
   type Moment = u64;
@@ -329,7 +333,23 @@ impl From<serai_abi::Call> for RuntimeCall {
       serai_abi::Call::GenesisLiquidity(call) => {
         use serai_abi::genesis_liquidity::Call;
         match call {
-          Call::oraclize_values { .. } | Call::remove_liquidity { .. } => todo!("TODO"),
+          Call::oraclize_values { values, signature } => {
+            RuntimeCall::GenesisLiquidity(serai_genesis_liquidity_pallet::Call::oraclize_values {
+              values,
+              signature,
+            })
+          }
+          Call::transfer_genesis_liquidity { to, genesis_liquidity } => {
+            RuntimeCall::GenesisLiquidity(
+              serai_genesis_liquidity_pallet::Call::transfer_genesis_liquidity {
+                to,
+                genesis_liquidity,
+              },
+            )
+          }
+          Call::remove_genesis_liquidity { genesis_liquidity } => RuntimeCall::GenesisLiquidity(
+            serai_genesis_liquidity_pallet::Call::remove_genesis_liquidity { genesis_liquidity },
+          ),
         }
       }
       serai_abi::Call::InInstructions(call) => {

@@ -78,6 +78,10 @@ mod pallet {
     }
   }
 
+  /// The minimum amount of liquidity allowed to be initially added.
+  ///
+  /// This should be sufficiently low it isn't inaccessible, yet sufficiently high that future
+  /// additions can be reasonably grained when their share of the new supply is calculated.
   const MINIMUM_LIQUIDITY: u64 = 1 << 16;
 
   #[pallet::call]

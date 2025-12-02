@@ -8386,7 +8386,6 @@ dependencies = [
  "serai-core-pallet",
  "sp-core",
  "sp-io",
- "substrate-median",
 ]
 
 [[package]]
@@ -8509,14 +8508,11 @@ dependencies = [
  "frame-support",
  "frame-system",
  "parity-scale-codec",
+ "serai-abi",
  "serai-coins-pallet",
+ "serai-core-pallet",
  "serai-dex-pallet",
- "serai-economic-security-pallet",
- "serai-primitives",
- "serai-validator-sets-pallet",
- "sp-application-crypto",
  "sp-core",
- "sp-std",
 ]
 
 [[package]]
@@ -9028,6 +9024,7 @@ dependencies = [
  "serai-coins-pallet",
  "serai-core-pallet",
  "serai-dex-pallet",
+ "serai-genesis-liquidity-pallet",
  "serai-signals-pallet",
  "serai-validator-sets-pallet",
  "sp-api",

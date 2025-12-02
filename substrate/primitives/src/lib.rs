@@ -29,8 +29,8 @@ pub mod coin;
 /// The `Amount`, `ExternalBalance`, and `Balance` types.
 pub mod balance;
 
-/// Types for genesis.
-pub mod genesis;
+/// Types for the genesis liquidity functionality.
+pub mod genesis_liquidity;
 
 /// Types for identifying networks and their properties.
 pub mod network_id;
