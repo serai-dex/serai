@@ -55,7 +55,7 @@ pub fn reproducibly_builds() {
         .arg("--rm")
         .arg(&image)
         .arg("sha256sum")
-        .arg("/serai/target/release/wbuild/serai-runtime/serai_runtime.wasm")
+        .arg("/serai/serai.wasm")
         .output(),
     );
     // Attempt to clean up the image

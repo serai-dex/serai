@@ -48,6 +48,10 @@ WORKDIR /serai
 
 # Build the runtime
 RUN cargo build --release -p serai-runtime
+# Copy the artifact
+RUN cp /serai/target/release/wbuild/serai-runtime/serai_runtime.wasm /serai/serai.wasm
+# Clean up the build directory
+RUN cargo clean
 
 # Copy the runtime to the provided volume
-CMD ["cp", "/serai/target/release/wbuild/serai-runtime/serai_runtime.wasm", "/volume/serai.wasm"]
+CMD ["cp", "/serai/serai.wasm", "/volume/serai.wasm"]
