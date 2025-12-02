@@ -99,6 +99,9 @@ mod runtime {
   #[runtime::pallet_index(7)]
   pub type GenesisLiquidity = serai_genesis_liquidity_pallet::Pallet<Runtime>;
 
+  #[runtime::pallet_index(8)]
+  pub type InInstructions = serai_in_instructions_pallet::Pallet<Runtime>;
+
   #[runtime::pallet_index(0xfd)]
   #[runtime::disable_inherent]
   pub type Timestamp = pallet_timestamp::Pallet<Runtime>;
@@ -178,6 +181,7 @@ impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
 }
 impl serai_dex_pallet::Config for Runtime {}
 impl serai_genesis_liquidity_pallet::Config for Runtime {}
+impl serai_in_instructions_pallet::Config for Runtime {}
 
 impl pallet_timestamp::Config for Runtime {
   type Moment = u64;
@@ -355,7 +359,9 @@ impl From<serai_abi::Call> for RuntimeCall {
       serai_abi::Call::InInstructions(call) => {
         use serai_abi::in_instructions::Call;
         match call {
-          Call::execute_batch { .. } => todo!("TODO"),
+          Call::execute_batch { batch } => {
+            RuntimeCall::InInstructions(serai_in_instructions_pallet::Call::execute_batch { batch })
+          }
         }
       }
     }

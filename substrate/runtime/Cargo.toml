@@ -55,6 +55,7 @@ serai-validator-sets-pallet = { path = "../validator-sets", default-features = f
 serai-signals-pallet = { path = "../signals", default-features = false }
 serai-dex-pallet = { path = "../dex", default-features = false }
 serai-genesis-liquidity-pallet = { path = "../genesis-liquidity", default-features = false }
+serai-in-instructions-pallet = { path = "../in-instructions", default-features = false }
 
 [build-dependencies]
 substrate-wasm-builder = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
@@ -92,6 +93,7 @@ std = [
   "serai-signals-pallet/std",
   "serai-dex-pallet/std",
   "serai-genesis-liquidity-pallet/std",
+  "serai-in-instructions-pallet/std",
 ]
 
 try-runtime = [
@@ -113,6 +115,7 @@ try-runtime = [
   "serai-signals-pallet/try-runtime",
   "serai-dex-pallet/try-runtime",
   "serai-genesis-liquidity-pallet/try-runtime",
+  "serai-in-instructions-pallet/try-runtime",
 ]
 
 runtime-benchmarks = [
@@ -131,6 +134,7 @@ runtime-benchmarks = [
   "serai-signals-pallet/runtime-benchmarks",
   "serai-dex-pallet/runtime-benchmarks",
   "serai-genesis-liquidity-pallet/runtime-benchmarks",
+  "serai-in-instructions-pallet/runtime-benchmarks",
 ]
 
 default = ["std"]

@@ -171,3 +171,26 @@ impl Zeroize for SignedBatch {
     self.signature.0.as_mut().zeroize();
   }
 }
+
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::Encode for SignedBatch {
+  fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
+    f(&borsh::to_vec(self).unwrap())
+  }
+}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::MaxEncodedLen for SignedBatch {
+  fn max_encoded_len() -> usize {
+    Batch::MAX_SIZE + 64
+  }
+}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::EncodeLike<SignedBatch> for SignedBatch {}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::Decode for SignedBatch {
+  fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
+    crate::read_scale_as_borsh(input)
+  }
+}
+#[cfg(feature = "non_canonical_scale_derivations")]
+impl scale::DecodeWithMemTracking for SignedBatch {}
