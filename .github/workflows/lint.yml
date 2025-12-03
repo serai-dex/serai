@@ -46,7 +46,7 @@ jobs:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Install cargo deny
-        run: cargo +1.91.1 install cargo-deny --version =0.18.7
+        run: cargo +1.91.1 install cargo-deny --version =0.18.8
 
       - name: Run cargo deny
         run: cargo deny -L error --all-features check --hide-inclusion-graph

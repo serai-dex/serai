@@ -79,7 +79,6 @@ exceptions = [
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-libp2p-p2p" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator" },
 
-  { allow = ["AGPL-3.0-only"], name = "pallet-session" },
   { allow = ["AGPL-3.0-only"], name = "substrate-median" },
 
   { allow = ["AGPL-3.0-only"], name = "serai-core-pallet" },
@@ -152,6 +151,5 @@ allow-git = [
   "https://github.com/rust-lang-nursery/lazy-static.rs",
   "https://github.com/kayabaNerve/elliptic-curves",
   "https://github.com/monero-oxide/monero-oxide",
-  "https://github.com/rust-bitcoin/rust-bip39",
   "https://github.com/serai-dex/patch-polkadot-sdk",
 ]

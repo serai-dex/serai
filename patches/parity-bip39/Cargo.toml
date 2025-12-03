@@ -15,7 +15,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [workspace]
 
 [dependencies]
-bip39 = { git = "https://github.com/rust-bitcoin/rust-bip39", commit = "f735e2559f30049f6738d1bf68c69a0b7bd7b858", default-features = false }
+bip39 = { version = "2.2.1", default-features = false }
 
 [features]
 default = ["bip39/default"]
