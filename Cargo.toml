@@ -116,6 +116,19 @@ members = [
   "tests/reproducible-runtime",
 ]
 
+[profile.dev]
+panic = "abort"
+overflow-checks = true
+[profile.release]
+panic = "abort"
+overflow-checks = true
+# These do not respect the `panic` configuration value, so we don't provide them
+[profile.test]
+# panic = "abort" # https://github.com/rust-lang/issues/67650
+overflow-checks = true
+[profile.bench]
+overflow-checks = true
+
 [profile.dev.package]
 # Always compile Monero (and a variety of dependencies) with optimizations due
 # to the extensive operations required for Bulletproofs
@@ -164,10 +177,6 @@ revm-interpreter = { opt-level = 3 }
 revm-precompile = { opt-level = 3 }
 revm-primitives = { opt-level = 3 }
 revm-state = { opt-level = 3 }
-
-[profile.release]
-panic = "unwind"
-overflow-checks = true
 
 [patch.crates-io]
 # Point to empty crates for crates unused within in our tree
