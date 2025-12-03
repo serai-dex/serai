@@ -8,6 +8,9 @@ extern crate alloc;
 
 use frame_support::traits::{PreInherents, PostTransactions};
 
+mod limits;
+pub use limits::Limits;
+
 mod iumt;
 pub use iumt::*;
 
@@ -83,7 +86,8 @@ pub mod pallet {
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config<Hash: Into<[u8; 32]>> + pallet_timestamp::Config<Moment = u64>
+    frame_system::Config<Hash: Into<[u8; 32]>, BlockLength = Limits, BlockWeights = Limits>
+    + pallet_timestamp::Config<Moment = u64>
   {
   }
 
@@ -120,7 +124,7 @@ pub mod pallet {
       BlockTransactionsCommitmentMerkle::<T>::new_expecting_none();
       BlockEventsCommitmentMerkle::<T>::new_expecting_none();
 
-      Self::start_transaction();
+      Self::start_transaction(0);
       <_>::build(config);
       Self::end_transaction([0; 32]);
 
@@ -130,7 +134,15 @@ pub mod pallet {
     /// The code to run when beginning execution of a transaction.
     ///
     /// The caller MUST ensure two transactions aren't simultaneously started.
-    pub fn start_transaction() {
+    pub fn start_transaction(len: usize) {
+      {
+        let existing_len = frame_system::AllExtrinsicsLen::<T>::get().unwrap_or(0);
+        let new_len = existing_len.saturating_add(u32::try_from(len).unwrap_or(u32::MAX));
+        // We panic here as this should've been caught earlier during validation
+        assert!(new_len <= u32::try_from(serai_abi::Block::SIZE_LIMIT).unwrap());
+        frame_system::AllExtrinsicsLen::<T>::set(Some(new_len));
+      }
+
       TransactionEventsMerkle::<T>::new_expecting_none();
       Self::deposit_event(Event::BeginTransaction);
     }
@@ -192,7 +204,21 @@ impl<T: Config> PreInherents for StartOfBlock<T> {
     BlockTransactionsCommitmentMerkle::<T>::new_expecting_none();
     BlockEventsCommitmentMerkle::<T>::new_expecting_none();
 
-    Pallet::<T>::start_transaction();
+    /*
+      We assign the implicit transaction with the block the length of the block itself: its
+      header's length and the length of the length-prefix for the list of transactions.
+
+      The length-prefix will be a little-endian `u32`, as `Block` will be borsh-serialized
+      (https://borsh.io).
+
+      The length of each actual transaction is expected to be accurate as the SCALE implementation
+      defers to the `borsh` serialization.
+    */
+    assert!(
+      frame_system::AllExtrinsicsLen::<T>::get().is_none(),
+      "AllExtrinsicsLen wasn't killed at the end of the last block"
+    );
+    Pallet::<T>::start_transaction(serai_abi::Header::SIZE + 4);
 
     // Handle the `SeraiPreExecutionDigest`
     /*
@@ -220,7 +246,7 @@ impl<T: Config> PreInherents for StartOfBlock<T> {
 pub struct EndOfBlock<T: Config>(PhantomData<T>);
 impl<T: Config> PostTransactions for EndOfBlock<T> {
   fn post_transactions() {
-    Pallet::<T>::start_transaction();
+    Pallet::<T>::start_transaction(0);
 
     // Other modules' `PostTransactions`
 
@@ -228,6 +254,8 @@ impl<T: Config> PostTransactions for EndOfBlock<T> {
     let mut end_of_block_transaction_hash = block_number.to_big_endian();
     end_of_block_transaction_hash[.. 16].copy_from_slice(&[0xff; 16]);
     Pallet::<T>::end_transaction(end_of_block_transaction_hash);
+
+    frame_system::AllExtrinsicsLen::<T>::kill();
 
     use serai_abi::SeraiExecutionDigest;
     frame_system::Pallet::<T>::deposit_log(

@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 use alloc::{borrow::Cow, vec, vec::Vec};
 
-use sp_core::{ConstU32, ConstU64, sr25519::Public};
+use sp_core::{Get, ConstU32, ConstU64, sr25519::Public};
 use sp_runtime::{
   Perbill, Weight,
   traits::{Header as _, Block as _},
@@ -21,51 +21,10 @@ use serai_abi::{
 
 use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance};
 
-/// The lookup for a SeraiAddress -> Public.
-pub struct Lookup;
-impl sp_runtime::traits::StaticLookup for Lookup {
-  type Source = SeraiAddress;
-  type Target = Public;
-  fn lookup(source: SeraiAddress) -> Result<Public, sp_runtime::traits::LookupError> {
-    Ok(source.into())
-  }
-  fn unlookup(source: Public) -> SeraiAddress {
-    source.into()
-  }
-}
-
-// TODO: Remove
-#[sp_version::runtime_version]
-pub const VERSION: RuntimeVersion = RuntimeVersion {
-  spec_name: Cow::Borrowed("serai"),
-  impl_name: Cow::Borrowed("core"),
-  authoring_version: 0,
-  spec_version: 0,
-  impl_version: 0,
-  apis: RUNTIME_API_VERSIONS,
-  transaction_version: 0,
-  system_version: 0,
-};
-
-frame_support::parameter_types! {
-  pub const Version: RuntimeVersion = VERSION;
-
-  // TODO
-  pub BlockLength: frame_system::limits::BlockLength =
-    frame_system::limits::BlockLength::max_with_normal_ratio(
-      100 * 1024,
-      Perbill::from_percent(75),
-    );
-  // TODO
-  pub BlockWeights: frame_system::limits::BlockWeights =
-    frame_system::limits::BlockWeights::with_sensible_defaults(
-      Weight::from_parts(
-        2u64 * frame_support::weights::constants::WEIGHT_REF_TIME_PER_SECOND,
-        u64::MAX,
-      ),
-      Perbill::from_percent(75),
-    );
-}
+/// Maps `serai_abi` types into the types expected within the Substrate runtime
+mod map;
+/// The configuration for `frame_system`.
+mod system;
 
 #[frame_support::runtime]
 mod runtime {
@@ -111,45 +70,6 @@ mod runtime {
 
   #[runtime::pallet_index(0xff)]
   pub type Grandpa = pallet_grandpa::Pallet<Runtime>;
-}
-
-impl frame_system::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-  type BaseCallFilter = frame_support::traits::Everything;
-  type BlockWeights = BlockWeights;
-  type BlockLength = BlockLength;
-  type RuntimeOrigin = RuntimeOrigin;
-  type RuntimeCall = RuntimeCall;
-  type Nonce = u32;
-  type Hash = <Self::Block as sp_runtime::traits::Block>::Hash;
-  type Hashing = sp_runtime::traits::BlakeTwo256;
-  type AccountId = sp_core::sr25519::Public;
-  type Lookup = Lookup;
-  type Block = Block;
-  // Don't track old block hashes within the System pallet
-  // We use not a number -> hash index, but a hash -> () index, in our own pallet
-  type BlockHashCount = ConstU64<1>;
-  type DbWeight = frame_support::weights::constants::RocksDbWeight;
-  type Version = Version;
-  type PalletInfo = PalletInfo;
-  type AccountData = ();
-  type OnNewAccount = ();
-  type OnKilledAccount = ();
-  // We use the default weights as we never expose/call any of these methods
-  type SystemWeightInfo = ();
-  // We also don't use the provided extensions framework
-  type ExtensionsWeightInfo = ();
-  // We don't invoke any hooks on-set-code as we don't perform upgrades via the blockchain yet via
-  // nodes, ensuring everyone who upgrades consents to the rules they upgrade to
-  type OnSetCode = ();
-  type MaxConsumers = ConstU32<{ u32::MAX }>;
-  // No migrations set
-  type SingleBlockMigrations = ();
-  type MultiBlockMigrator = ();
-
-  type PreInherents = serai_core_pallet::StartOfBlock<Runtime>;
-  type PostInherents = ();
-  type PostTransactions = serai_core_pallet::EndOfBlock<Runtime>;
 }
 
 impl serai_core_pallet::Config for Runtime {}
@@ -237,137 +157,6 @@ impl pallet_grandpa::Config for Runtime {
   type EquivocationReportSystem = ();
 }
 
-impl From<Option<SeraiAddress>> for RuntimeOrigin {
-  fn from(signer: Option<SeraiAddress>) -> Self {
-    match signer {
-      None => RuntimeOrigin::none(),
-      Some(signer) => RuntimeOrigin::signed(signer.into()),
-    }
-  }
-}
-
-impl From<serai_abi::Call> for RuntimeCall {
-  fn from(call: serai_abi::Call) -> Self {
-    match call {
-      serai_abi::Call::Coins(call) => {
-        use serai_abi::coins::Call;
-        use serai_coins_pallet::Call as Scall;
-        RuntimeCall::Coins(match call {
-          Call::transfer { to, coins } => Scall::transfer { to: to.into(), coins },
-          Call::burn { coins } => Scall::burn { coins },
-          Call::burn_with_instruction { instruction } => {
-            Scall::burn_with_instruction { instruction }
-          }
-        })
-      }
-      serai_abi::Call::ValidatorSets(call) => {
-        use serai_abi::validator_sets::Call;
-        use serai_validator_sets_pallet::Call as Scall;
-        RuntimeCall::ValidatorSets(match call {
-          Call::set_keys { network, key_pair, signature_participants, signature } => {
-            Scall::set_keys { network, key_pair, signature_participants, signature }
-          }
-          Call::report_slashes { network, slashes, signature } => {
-            Scall::report_slashes { network, slashes, signature }
-          }
-          Call::set_embedded_elliptic_curve_keys { keys } => {
-            Scall::set_embedded_elliptic_curve_keys { keys }
-          }
-          Call::allocate { network, amount } => Scall::allocate { network, amount },
-          Call::deallocate { network, amount } => Scall::deallocate { network, amount },
-          Call::claim_deallocation { deallocation } => Scall::claim_deallocation {
-            network: deallocation.network,
-            session: deallocation.session,
-          },
-        })
-      }
-      serai_abi::Call::Signals(call) => {
-        use serai_abi::signals::Call;
-        use serai_signals_pallet::Call as Scall;
-        RuntimeCall::Signals(match call {
-          Call::register_retirement_signal { in_favor_of } => {
-            Scall::register_retirement_signal { in_favor_of }
-          }
-          Call::revoke_retirement_signal { was_in_favor_of } => {
-            Scall::revoke_retirement_signal { retirement_signal: was_in_favor_of }
-          }
-          Call::favor { signal, with_network } => Scall::favor { signal, with_network },
-          Call::revoke_favor { signal, with_network } => {
-            Scall::revoke_favor { signal, with_network }
-          }
-          Call::stand_against { signal, with_network } => {
-            Scall::stand_against { signal, with_network }
-          }
-        })
-      }
-      serai_abi::Call::Dex(call) => {
-        use serai_abi::dex::Call;
-        match call {
-          Call::add_liquidity {
-            external_coin,
-            sri_intended,
-            external_coin_intended,
-            sri_minimum,
-            external_coin_minimum,
-          } => RuntimeCall::Dex(serai_dex_pallet::Call::add_liquidity {
-            external_coin,
-            sri_intended,
-            external_coin_intended,
-            sri_minimum,
-            external_coin_minimum,
-          }),
-          Call::transfer_liquidity { to, liquidity_tokens } => {
-            RuntimeCall::Dex(serai_dex_pallet::Call::transfer_liquidity { to, liquidity_tokens })
-          }
-          Call::remove_liquidity { liquidity_tokens, sri_minimum, external_coin_minimum } => {
-            RuntimeCall::Dex(serai_dex_pallet::Call::remove_liquidity {
-              liquidity_tokens,
-              sri_minimum,
-              external_coin_minimum,
-            })
-          }
-          Call::swap { coins_to_swap, minimum_to_receive } => {
-            RuntimeCall::Dex(serai_dex_pallet::Call::swap { coins_to_swap, minimum_to_receive })
-          }
-          Call::swap_for { coins_to_receive, maximum_to_swap } => {
-            RuntimeCall::Dex(serai_dex_pallet::Call::swap_for { coins_to_receive, maximum_to_swap })
-          }
-        }
-      }
-      serai_abi::Call::GenesisLiquidity(call) => {
-        use serai_abi::genesis_liquidity::Call;
-        match call {
-          Call::oraclize_values { values, signature } => {
-            RuntimeCall::GenesisLiquidity(serai_genesis_liquidity_pallet::Call::oraclize_values {
-              values,
-              signature,
-            })
-          }
-          Call::transfer_genesis_liquidity { to, genesis_liquidity } => {
-            RuntimeCall::GenesisLiquidity(
-              serai_genesis_liquidity_pallet::Call::transfer_genesis_liquidity {
-                to,
-                genesis_liquidity,
-              },
-            )
-          }
-          Call::remove_genesis_liquidity { genesis_liquidity } => RuntimeCall::GenesisLiquidity(
-            serai_genesis_liquidity_pallet::Call::remove_genesis_liquidity { genesis_liquidity },
-          ),
-        }
-      }
-      serai_abi::Call::InInstructions(call) => {
-        use serai_abi::in_instructions::Call;
-        match call {
-          Call::execute_batch { batch } => {
-            RuntimeCall::InInstructions(serai_in_instructions_pallet::Call::execute_batch { batch })
-          }
-        }
-      }
-    }
-  }
-}
-
 type Executive = frame_executive::Executive<Runtime, Block, Context, Runtime, AllPalletsWithSystem>;
 
 const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
@@ -411,7 +200,7 @@ sp_api::impl_runtime_apis! {
 
   impl sp_api::Core<Block> for Runtime {
     fn version() -> RuntimeVersion {
-      VERSION
+      <Runtime as frame_system::Config>::Version::get()
     }
     fn initialize_block(header: &Header) -> sp_runtime::ExtrinsicInclusionMode {
       Executive::initialize_block(header)
@@ -667,13 +456,19 @@ impl serai_abi::TransactionContext for Context {
     }
   }
 
+  /// The size of the current block.
+  fn current_block_size(&self) -> usize {
+    let current_block_size = frame_system::AllExtrinsicsLen::<Runtime>::get().unwrap_or(0);
+    usize::try_from(current_block_size).unwrap_or(usize::MAX)
+  }
+
   /// If a block is present in the blockchain.
   fn block_is_present_in_blockchain(&self, hash: &serai_abi::primitives::BlockHash) -> bool {
     serai_core_pallet::Pallet::<Runtime>::block_exists(hash)
   }
   /// The time embedded into the current block.
-  fn current_time(&self) -> Option<u64> {
-    todo!("TODO")
+  fn current_time(&self) -> u64 {
+    pallet_timestamp::Pallet::<Runtime>::get()
   }
   /// Get the next nonce for an account.
   fn next_nonce(&self, signer: &SeraiAddress) -> u32 {
@@ -695,8 +490,8 @@ impl serai_abi::TransactionContext for Context {
     }
   }
 
-  fn start_transaction(&self) {
-    Core::start_transaction()
+  fn start_transaction(&self, len: usize) {
+    Core::start_transaction(len)
   }
   fn consume_next_nonce(&self, signer: &SeraiAddress) {
     serai_core_pallet::Pallet::<Runtime>::consume_next_nonce(signer)
@@ -726,26 +521,7 @@ impl serai_abi::TransactionContext for Context {
 /* TODO
 use validator_sets::MembershipProof;
 
-const NORMAL_DISPATCH_RATIO: Perbill = Perbill::from_percent(75);
-
-parameter_types! {
-  pub const Version: RuntimeVersion = VERSION;
-
-  pub const SS58Prefix: u8 = 42; // TODO: Remove for Bech32m
-
-  // 1 MB block size limit
-  pub BlockLength: system::limits::BlockLength =
-    system::limits::BlockLength::max_with_normal_ratio(BLOCK_SIZE, NORMAL_DISPATCH_RATIO);
-  pub BlockWeights: system::limits::BlockWeights =
-    system::limits::BlockWeights::with_sensible_defaults(
-      Weight::from_parts(2u64 * WEIGHT_REF_TIME_PER_SECOND, u64::MAX),
-      NORMAL_DISPATCH_RATIO,
-    );
-}
-
 impl timestamp::Config for Runtime {
-  type Moment = u64;
-  type OnTimestampSet = Babe;
   type MinimumPeriod = ConstU64<{ (TARGET_BLOCK_TIME * 1000) / 2 }>;
   type WeightInfo = ();
 }
@@ -782,14 +558,6 @@ impl signals::Config for Runtime {
   type RetirementLockInDuration = ConstU32<{ (2 * 7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
 }
 
-impl in_instructions::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
-
-impl genesis_liquidity::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
-
 impl emissions::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
 }
@@ -818,54 +586,4 @@ impl pallet_authorship::Config for Runtime {
 
 /// Longevity of an offence report.
 pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
-
-#[cfg(feature = "runtime-benchmarks")]
-#[macro_use]
-extern crate frame_benchmarking;
-
-#[cfg(feature = "runtime-benchmarks")]
-mod benches {
-  define_benchmarks!(
-    [frame_benchmarking, BaselineBench::<Runtime>]
-
-    [system, SystemBench::<Runtime>]
-
-    [balances, Balances]
-
-    [babe, Babe]
-    [grandpa, Grandpa]
-  );
-}
-
-sp_api::impl_runtime_apis! {
-  impl validator_sets::ValidatorSetsApi<Block> for Runtime {
-    fn external_network_key(network: ExternalNetworkId) -> Option<Vec<u8>> {
-      ValidatorSets::external_network_key(network)
-    }
-  }
-
-  impl dex::DexApi<Block> for Runtime {
-    fn quote_price_exact_tokens_for_tokens(
-      coin1: Coin,
-      coin2: Coin,
-      amount: SubstrateAmount,
-      include_fee: bool
-    ) -> Option<SubstrateAmount> {
-      Dex::quote_price_exact_tokens_for_tokens(coin1, coin2, amount, include_fee)
-    }
-
-    fn quote_price_tokens_for_exact_tokens(
-      coin1: Coin,
-      coin2: Coin,
-      amount: SubstrateAmount,
-      include_fee: bool
-    ) -> Option<SubstrateAmount> {
-      Dex::quote_price_tokens_for_exact_tokens(coin1, coin2, amount, include_fee)
-    }
-
-    fn get_reserves(coin1: Coin, coin2: Coin) -> Option<(SubstrateAmount, SubstrateAmount)> {
-      Dex::get_reserves(&coin1, &coin2).ok()
-    }
-  }
-}
 */

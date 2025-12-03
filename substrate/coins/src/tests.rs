@@ -10,7 +10,7 @@ pub type CoinsEvent = serai_abi::coins::Event;
 #[test]
 fn mint() {
   new_test_ext().execute_with(|| {
-    Core::start_transaction();
+    Core::start_transaction(0);
 
     // minting u64::MAX should work
     let coin = Coin::Serai;
@@ -51,7 +51,7 @@ fn mint() {
 #[test]
 fn burn_with_instruction() {
   new_test_ext().execute_with(|| {
-    Core::start_transaction();
+    Core::start_transaction(0);
 
     // mint some coin
     let coin = Coin::External(ExternalCoin::Bitcoin);
@@ -106,7 +106,7 @@ fn burn_with_instruction() {
 #[test]
 fn transfer() {
   new_test_ext().execute_with(|| {
-    Core::start_transaction();
+    Core::start_transaction(0);
 
     // mint some coin
     let coin = Coin::External(ExternalCoin::Bitcoin);

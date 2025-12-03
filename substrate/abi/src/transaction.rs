@@ -279,12 +279,13 @@ mod substrate {
     /// The implicit context to verify transactions with.
     fn implicit_context() -> ImplicitContext;
 
+    /// The size of the current block.
+    fn current_block_size(&self) -> usize;
+
     /// If a block is present in the blockchain.
     fn block_is_present_in_blockchain(&self, hash: &BlockHash) -> bool;
     /// The time embedded into the current block.
-    ///
-    /// Returns `None` if the time has yet to be set.
-    fn current_time(&self) -> Option<u64>;
+    fn current_time(&self) -> u64;
     /// Get the next nonce for an account.
     fn next_nonce(&self, signer: &SeraiAddress) -> u32;
     /// If the signer can pay the SRI fee.
@@ -295,7 +296,7 @@ mod substrate {
     ) -> Result<(), TransactionValidityError>;
 
     /// Begin execution of a transaction.
-    fn start_transaction(&self);
+    fn start_transaction(&self, len: usize);
     /// Consume the next nonce for an account.
     ///
     /// This MUST NOT be called if the next nonce is `u32::MAX`. The caller MAY panic in that case.
@@ -390,9 +391,14 @@ mod substrate {
   impl<Context: TransactionContext> TransactionWithContext<Context> {
     fn validate_except_fee<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
       &self,
+      len: usize,
       source: TransactionSource,
       mempool_priority_if_signed: u64,
     ) -> TransactionValidity {
+      if self.1.current_block_size().saturating_add(len) > crate::Block::SIZE_LIMIT {
+        Err(TransactionValidityError::Invalid(InvalidTransaction::ExhaustsResources))?;
+      }
+
       match &self.0 {
         Transaction::Unsigned { call } => {
           let ValidTransaction { priority: _, requires, provides, longevity: _, propagate: _ } =
@@ -417,13 +423,8 @@ mod substrate {
             Err(TransactionValidityError::Unknown(UnknownTransaction::CannotLookup))?;
           }
           if let Some(include_by) = *include_by {
-            if let Some(current_time) = self.1.current_time() {
-              if current_time >= u64::from(include_by) {
-                // Since this transaction has a time bound which has passed, error
-                Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
-              }
-            } else {
-              // Since this transaction has a time bound, yet we don't know the time, error
+            if self.1.current_time() >= u64::from(include_by) {
+              // Since this transaction has a time bound which has passed, error
               Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
             }
           }
@@ -471,7 +472,7 @@ mod substrate {
       &self,
       source: TransactionSource,
       info: &DispatchInfo,
-      _len: usize,
+      len: usize,
     ) -> TransactionValidity {
       let mempool_priority_if_signed = match &self.0 {
         Transaction::Unsigned { .. } => {
@@ -493,19 +494,19 @@ mod substrate {
           }
         }
       };
-      self.validate_except_fee::<V>(source, mempool_priority_if_signed)
+      self.validate_except_fee::<V>(len, source, mempool_priority_if_signed)
     }
 
     fn apply<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
       self,
       _info: &DispatchInfo,
-      _len: usize,
+      len: usize,
     ) -> sp_runtime::ApplyExtrinsicResultWithInfo<PostDispatchInfo> {
       // We use 0 for the mempool priority, as this is no longer in the mempool so it's irrelevant
-      self.validate_except_fee::<V>(TransactionSource::InBlock, 0)?;
+      self.validate_except_fee::<V>(len, TransactionSource::InBlock, 0)?;
 
       // Start the transaction
-      self.1.start_transaction();
+      self.1.start_transaction(len);
 
       let transaction_hash = self.0.hash();
 

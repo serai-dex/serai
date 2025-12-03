@@ -63,6 +63,11 @@ pub struct HeaderV1 {
   pub consensus_commitment: [u8; 32],
 }
 
+impl HeaderV1 {
+  /// The size of a serialized V1 header.
+  pub const SIZE: usize = 8 + 32 + 8 + 32 + 32 + 32;
+}
+
 /// A header for a block.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Header {
@@ -71,6 +76,9 @@ pub enum Header {
 }
 
 impl Header {
+  /// The size of a serialized header.
+  pub const SIZE: usize = 1 + HeaderV1::SIZE;
+
   /// Get the hash of the header.
   pub fn number(&self) -> u64 {
     match self {
@@ -109,14 +117,21 @@ impl Header {
 
 /// A block.
 ///
-/// This does not guarantee consistency. The header's `transactions_root` may not match the
-/// contained transactions.
+/// This does not guarantee consistency nor validity. The header's `transactions_root` may not
+/// match the contained transactions, among other ill effects.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Block {
   /// The block's header.
   pub header: Header,
   /// The block's transactions.
   pub transactions: Vec<Transaction>,
+}
+
+impl Block {
+  /// The size limit for a block.
+  ///
+  /// This is not enforced upon deserialization. Be careful accordingly.
+  pub const SIZE_LIMIT: usize = 1024 * 1024;
 }
 
 #[cfg(feature = "substrate")]
@@ -133,7 +148,7 @@ mod substrate {
 
   use super::*;
 
-  // Add `serde` implementations which treat self as a `Vec<u8>`
+  // Add `serde` implementations which treat `self` as a `Vec<u8>`
   impl sp_core::serde::Serialize for Transaction {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

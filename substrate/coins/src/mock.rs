@@ -21,6 +21,8 @@ impl frame_system::Config for Test {
   type AccountId = sp_core::sr25519::Public;
   type Lookup = frame_support::sp_runtime::traits::IdentityLookup<Self::AccountId>;
   type Block = frame_system::mocking::MockBlock<Test>;
+  type BlockLength = serai_core_pallet::Limits;
+  type BlockWeights = serai_core_pallet::Limits;
 }
 
 #[derive_impl(pallet_timestamp::config_preludes::TestDefaultConfig)]
