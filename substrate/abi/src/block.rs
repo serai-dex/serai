@@ -131,7 +131,7 @@ impl Block {
   /// The size limit for a block.
   ///
   /// This is not enforced upon deserialization. Be careful accordingly.
-  pub const SIZE_LIMIT: usize = 1024 * 1024;
+  pub const SIZE_LIMIT: usize = 512 * 1024;
 }
 
 #[cfg(feature = "substrate")]
