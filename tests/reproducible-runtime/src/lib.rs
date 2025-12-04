@@ -54,8 +54,9 @@ pub fn reproducibly_builds() {
         .arg("--quiet")
         .arg("--rm")
         .arg(&image)
+        .arg("busybox")
         .arg("sha256sum")
-        .arg("/serai/serai.wasm")
+        .arg("/serai.wasm")
         .output(),
     );
     // Attempt to clean up the image
