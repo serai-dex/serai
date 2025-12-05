@@ -20,5 +20,9 @@ mod std_runtime_api;
 pub use std_runtime_api::RuntimeApi;
 
 // If this isn't WASM, regardless of what it is, we include the WASM blob from the build script
-#[cfg(not(target_family = "wasm"))]
-include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
+#[cfg(all(not(target_family = "wasm"), debug_assertions))]
+pub const WASM: &[u8] =
+  include_bytes!(concat!(env!("OUT_DIR"), "/target/wasm32v1-none/debug/serai_runtime.wasm"));
+#[cfg(all(not(target_family = "wasm"), not(debug_assertions)))]
+pub const WASM: &[u8] =
+  include_bytes!(concat!(env!("OUT_DIR"), "/target/wasm32v1-none/release/serai_runtime.wasm"));

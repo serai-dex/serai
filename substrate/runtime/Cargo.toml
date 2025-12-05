@@ -70,9 +70,6 @@ serai-dex-pallet = { path = "../dex", default-features = false }
 serai-genesis-liquidity-pallet = { path = "../genesis-liquidity", default-features = false }
 serai-in-instructions-pallet = { path = "../in-instructions", default-features = false }
 
-[build-dependencies]
-substrate-wasm-builder = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
-
 [features]
 std = [
   "scale/std",

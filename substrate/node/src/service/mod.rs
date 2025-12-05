@@ -6,7 +6,7 @@ use sp_timestamp::InherentDataProvider as TimestampInherent;
 use sp_consensus_babe::{SlotDuration, inherents::InherentDataProvider as BabeInherent};
 
 use sp_io::SubstrateHostFunctions;
-use sc_executor::{sp_wasm_interface::ExtendedHostFunctions, WasmExecutor};
+use sc_executor::{sp_wasm_interface::ExtendedHostFunctions, HeapAllocStrategy, WasmExecutor};
 
 use sc_network::{Event, NetworkEventStream, NetworkBackend};
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
@@ -99,14 +99,13 @@ pub fn new_partial(
     })
     .transpose()?;
 
-  #[allow(deprecated)]
-  let executor = Executor::new(
-    config.executor.wasm_method,
-    config.executor.default_heap_pages,
-    config.executor.max_runtime_instances,
-    None,
-    config.executor.runtime_cache_size,
-  );
+  let executor = Executor::builder()
+    .with_execution_method(config.executor.wasm_method)
+    .with_onchain_heap_alloc_strategy(HeapAllocStrategy::Dynamic { maximum_pages: None })
+    .with_offchain_heap_alloc_strategy(HeapAllocStrategy::Dynamic { maximum_pages: None })
+    .with_max_runtime_instances(config.executor.max_runtime_instances)
+    .with_runtime_cache_size(config.executor.runtime_cache_size)
+    .build();
 
   let (client, backend, keystore_container, task_manager) = {
     let telemetry = telemetry.as_ref().map(|(_, telemetry)| telemetry.handle());

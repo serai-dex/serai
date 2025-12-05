@@ -74,7 +74,7 @@ fn wasm_binary(dev: bool) -> Vec<u8> {
   }
 
   log::info!("using built-in wasm");
-  serai_runtime::WASM_BINARY.ok_or("compiled in wasm not available").unwrap().to_vec()
+  serai_runtime::WASM.to_vec()
 }
 
 fn devnet_genesis(validators: &[&'static str], endowed_accounts: Vec<Public>) -> GenesisConfig {

@@ -37,6 +37,6 @@ COPY --from=builder /bin/busybox /bin/
 ENV LD_LIBRARY_PATH=/lib/
 ENV PATH=/bin
 # Copy the artifact itself
-COPY --from=builder /serai/target/release/wbuild/serai-runtime/serai_runtime.wasm /serai.wasm
+COPY --from=builder /serai/target/release/serai_runtime.wasm /serai.wasm
 # By default, copy the artifact to `/volume`, presumably a provided volume
 CMD ["busybox", "cp", "/serai.wasm", "/volume/serai.wasm"]
