@@ -6,12 +6,63 @@ pub use std::sync::{Arc, Weak};
 
 mod mutex_shim {
   #[cfg(not(feature = "std"))]
-  pub use spin::{Mutex, MutexGuard};
+  mod spin_mutex {
+    use core::ops::{Deref, DerefMut};
+
+    // We wrap this in an `Option` so we can consider `None` as poisoned
+    pub(super) struct Mutex<T>(spin::Mutex<Option<T>>);
+
+    /// An acquired view of a `Mutex`.
+    pub struct MutexGuard<'mutex, T> {
+      mutex: spin::MutexGuard<'mutex, Option<T>>,
+      // This is `Some` for the lifetime of this guard, and is only represented as an `Option` due
+      // to needing to move it on `Drop` (which solely gives us a mutable reference to `self`)
+      value: Option<T>,
+    }
+
+    impl<T> Mutex<T> {
+      pub(super) const fn new(value: T) -> Self {
+        Self(spin::Mutex::new(Some(value)))
+      }
+
+      pub(super) fn lock(&self) -> MutexGuard<'_, T> {
+        let mut mutex = self.0.lock();
+        // Take from the `Mutex` so future acquisitions will see `None` unless this is restored
+        let value = mutex.take();
+        // Check the prior acquisition did in fact restore the value
+        if value.is_none() {
+          panic!("locking a `spin::Mutex` held by a thread which panicked");
+        }
+        MutexGuard { mutex, value }
+      }
+    }
+
+    impl<T> Deref for MutexGuard<'_, T> {
+      type Target = T;
+      fn deref(&self) -> &T {
+        self.value.as_ref().expect("no value yet checked upon lock acquisition")
+      }
+    }
+    impl<T> DerefMut for MutexGuard<'_, T> {
+      fn deref_mut(&mut self) -> &mut T {
+        self.value.as_mut().expect("no value yet checked upon lock acquisition")
+      }
+    }
+
+    impl<'mutex, T> Drop for MutexGuard<'mutex, T> {
+      fn drop(&mut self) {
+        // Restore the value
+        *self.mutex = self.value.take();
+      }
+    }
+  }
+  #[cfg(not(feature = "std"))]
+  pub use spin_mutex::*;
+
   #[cfg(feature = "std")]
   pub use std::sync::{Mutex, MutexGuard};
 
   /// A shimmed `Mutex` with an API mutual to `spin` and `std`.
-  #[derive(Default, Debug)]
   pub struct ShimMutex<T>(Mutex<T>);
   impl<T> ShimMutex<T> {
     /// Construct a new `Mutex`.
@@ -21,8 +72,9 @@ mod mutex_shim {
 
     /// Acquire a lock on the contents of the `Mutex`.
     ///
-    /// On no-`std` environments, this may spin until the lock is acquired. On `std` environments,
-    /// this may panic if the `Mutex` was poisoned.
+    /// This will panic if the `Mutex` was poisoned.
+    ///
+    /// On no-`std` environments, the implementation presumably defers to that of a spin lock.
     pub fn lock(&self) -> MutexGuard<'_, T> {
       #[cfg(feature = "std")]
       let res = self.0.lock().unwrap();
