@@ -184,7 +184,11 @@ alloy-eip2124 = { path = "patches/ethereum/alloy-eip2124" }
 ark-ff-3 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.3" }
 ark-ff-4 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.4" }
 c-kzg = { path = "patches/ethereum/c-kzg" }
-secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-30" }
+fastrlp-3 = { package = "fastrlp", path = "patches/ethereum/fastrlp-0.3" }
+fastrlp-4 = { package = "fastrlp", path = "patches/ethereum/fastrlp-0.4" }
+primitive-types-12 = { package = "primitive-types", path = "patches/ethereum/primitive-types-0.12" }
+rlp = { path = "patches/ethereum/rlp" }
+secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-0.30" }
 
 # Dependencies from monero-oxide which originate from within our own tree,  potentially shimmed to account for deviations since publishing
 std-shims = { path = "patches/std-shims" }

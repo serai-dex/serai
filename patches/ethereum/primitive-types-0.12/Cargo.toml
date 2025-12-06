@@ -1,9 +1,9 @@
 [package]
-name = "secp256k1"
-version = "0.30.99"
+name = "primitive-types"
+version = "0.12.99"
 description = "Patch to an empty crate"
 license = "MIT"
-repository = "https://github.com/serai-dex/serai/tree/develop/patches/ethereum/secp256k1-30"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/ethereum/primitive-types"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
@@ -15,9 +15,4 @@ rustdoc-args = ["--cfg", "docsrs"]
 [workspace]
 
 [features]
-alloc = []
 std = []
-rand = []
-serde = []
-global-context = []
-recovery = []
