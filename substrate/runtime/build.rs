@@ -11,6 +11,16 @@ fn main() {
   const WASM: &str = "-C link-arg=--export-table";
   const REQUIRED_BY_SUBSTRATE: &str = "--cfg substrate_runtime";
   const SAFETY: &str = "-C overflow-checks=true -C panic=abort";
+  // `symbol-mangling-version` is defined to provide an explicit, canonical definition of symbols.
+  // `embed-bitcode=false` is set as the bitcode is unnecessary yet takes notable time to compile.
+  /*
+    Rust's LTO requires bitcode, forcing us to defer to the linker's LTO. While this would suggest
+    we _should_ set `embed-bitcode=true`, Rust's documentation suggests that's likely not desired
+    and should solely be done when compiling one library with mixed methods of linking. When
+    compiling and linking just once (as seen here), it's suggested to use the linker's LTO instead.
+
+    https://doc.rust-lang.org/1.91.1/rustc/codegen-options/index.html#embed-bitcode
+  */
   const COMPILATION: &str =
     "-C symbol-mangling-version=v0 -C embed-bitcode=false -C linker-plugin-lto=true";
 
@@ -78,6 +88,7 @@ fn main() {
     let wasm_file = env::var("CARGO_PKG_NAME").unwrap().replace('-', "_") + ".wasm";
     let src_file = target_dir.join("wasm32v1-none").join(&profile).join(&wasm_file);
     let dst_file = {
+      // TODO: This sets `dst_dir` to the default target directory, not the actual
       let mut dst_dir = workspace.clone();
       // e.g. workspace/target/debug
       dst_dir.extend(["target", &profile]);
