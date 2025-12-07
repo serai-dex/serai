@@ -73,11 +73,10 @@ impl frame_system::Config for Runtime {
   // We assume `serai-node` will be run using the RocksDB backend
   type DbWeight = frame_support::weights::constants::RocksDbWeight;
   /*
-    Serai does not expose `frame_system::Call` nor does it use transaction extensions. We
-    accordingly have no consequence to using the default weights for these accordingly.
+    Serai does not expose `frame_system::Call`. We accordingly have no consequence to using the
+    default weights for these accordingly.
   */
   type SystemWeightInfo = ();
-  type ExtensionsWeightInfo = ();
 
   // We also don't use `frame_system`'s account system at all, leaving us to bottom these out.
   type AccountData = ();

@@ -103,9 +103,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-consensus"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b6440213a22df93a87ed512d2f668e7dc1d62a05642d107f82d61edc9e12370"
+checksum = "2e318e25fb719e747a7e8db1654170fc185024f3ed5b10f86c08d448a912f6e2"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -130,9 +130,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-consensus-any"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15d0bea09287942405c4f9d2a4f22d1e07611c2dbd9d5bf94b75366340f9e6e0"
+checksum = "364380a845193a317bcb7a5398fc86cdb66c47ebe010771dde05f6869bf9e64a"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -183,9 +183,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-eips"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bd2c7ae05abcab4483ce821f12f285e01c0b33804e6883dd9ca1569a87ee2be"
+checksum = "a4c4d7c5839d9f3a467900c625416b24328450c65702eb3d8caff8813e4d1d33"
 dependencies = [
  "alloy-eip2124",
  "alloy-eip2930",
@@ -206,9 +206,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-genesis"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc47eaae86488b07ea8e20236184944072a78784a1f4993f8ec17b3aa5d08c21"
+checksum = "1ba4b1be0988c11f0095a2380aa596e35533276b8fa6c9e06961bbfe0aebcac5"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
@@ -244,9 +244,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-json-rpc"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "003f46c54f22854a32b9cc7972660a476968008ad505427eabab49225309ec40"
+checksum = "f72cf87cda808e593381fb9f005ffa4d2475552b7a6c5ac33d087bf77d82abd0"
 dependencies = [
  "alloy-primitives",
  "alloy-sol-types",
@@ -259,9 +259,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-network"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f4029954d9406a40979f3a3b46950928a0fdcfe3ea8a9b0c17490d57e8aa0e3"
+checksum = "12aeb37b6f2e61b93b1c3d34d01ee720207c76fe447e2a2c217e433ac75b17f5"
 dependencies = [
  "alloy-consensus",
  "alloy-consensus-any",
@@ -285,9 +285,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-network-primitives"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7805124ad69e57bbae7731c9c344571700b2a18d351bda9e0eba521c991d1bcb"
+checksum = "abd29ace62872083e30929cd9b282d82723196d196db589f3ceda67edcc05552"
 dependencies = [
  "alloy-consensus",
  "alloy-eips",
@@ -298,9 +298,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-node-bindings"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b03d35475a02d2a8b76209cb4a1336cb7d85331d10a0f6ec329ee42151695c19"
+checksum = "b2b000c0790644bd4effe719f4272f0023167567ca9534e4e071f6f18c4f7e44"
 dependencies = [
  "alloy-genesis",
  "alloy-hardforks",
@@ -346,9 +346,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-provider"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d369e12c92870d069e0c9dc5350377067af8a056e29e3badf8446099d7e00889"
+checksum = "9b710636d7126e08003b8217e24c09f0cca0b46d62f650a841736891b1ed1fc1"
 dependencies = [
  "alloy-chains",
  "alloy-consensus",
@@ -406,9 +406,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rpc-client"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31c89883fe6b7381744cbe80fef638ac488ead4f1956a4278956a1362c71cd2e"
+checksum = "d0882e72d2c1c0c79dcf4ab60a67472d3f009a949f774d4c17d0bdb669cfde05"
 dependencies = [
  "alloy-json-rpc",
  "alloy-primitives",
@@ -426,9 +426,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rpc-types-any"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b43c1622aac2508d528743fd4cfdac1dea92d5a8fa894038488ff7edd0af0b32"
+checksum = "6a63fb40ed24e4c92505f488f9dd256e2afaed17faa1b7a221086ebba74f4122"
 dependencies = [
  "alloy-consensus-any",
  "alloy-rpc-types-eth",
@@ -437,9 +437,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rpc-types-debug"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1b2ca3a434a6d49910a7e8e51797eb25db42ef8a5578c52d877fcb26d0afe7bc"
+checksum = "4936f579d9d10eae01772b2ab3497f9d568684f05f26f8175e12f9a1a2babc33"
 dependencies = [
  "alloy-primitives",
  "derive_more 2.0.1",
@@ -449,9 +449,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rpc-types-eth"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed5fafb741c19b3cca4cdd04fa215c89413491f9695a3e928dee2ae5657f607e"
+checksum = "9eae0c7c40da20684548cbc8577b6b7447f7bf4ddbac363df95e3da220e41e72"
 dependencies = [
  "alloy-consensus",
  "alloy-consensus-any",
@@ -470,9 +470,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-rpc-types-trace"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c55324323aa634b01bdecb2d47462a8dce05f5505b14a6e5db361eef16eda476"
+checksum = "ef206a4b8d436fbb7cf2e6a61c692d11df78f9382becc3c9a283bd58e64f0583"
 dependencies = [
  "alloy-primitives",
  "alloy-rpc-types-eth",
@@ -484,9 +484,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-serde"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6f180c399ca7c1e2fe17ea58343910cad0090878a696ff5a50241aee12fc529"
+checksum = "c0df1987ed0ff2d0159d76b52e7ddfc4e4fbddacc54d2fbee765e0d14d7c01b5"
 dependencies = [
  "alloy-primitives",
  "serde",
@@ -495,9 +495,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-signer"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecc39ad2c0a3d2da8891f4081565780703a593f090f768f884049aa3aa929cbc"
+checksum = "6ff69deedee7232d7ce5330259025b868c5e6a52fa8dffda2c861fb3a5889b24"
 dependencies = [
  "alloy-primitives",
  "async-trait",
@@ -510,9 +510,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-signer-local"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "930e17cb1e46446a193a593a3bfff8d0ecee4e510b802575ebe300ae2e43ef75"
+checksum = "72cfe0be3ec5a8c1a46b2e5a7047ed41121d360d97f4405bb7c1c784880c86cb"
 dependencies = [
  "alloy-consensus",
  "alloy-network",
@@ -607,9 +607,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-transport"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cae82426d98f8bc18f53c5223862907cac30ab8fc5e4cd2bb50808e6d3ab43d8"
+checksum = "be98b07210d24acf5b793c99b759e9a696e4a2e67593aec0487ae3b3e1a2478c"
 dependencies = [
  "alloy-json-rpc",
  "auto_impl",
@@ -646,9 +646,9 @@ dependencies = [
 
 [[package]]
 name = "alloy-tx-macros"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae109e33814b49fc0a62f2528993aa8a2dd346c26959b151f05441dc0b9da292"
+checksum = "333544408503f42d7d3792bfc0f7218b643d968a03d2c0ed383ae558fb4a76d0"
 dependencies = [
  "darling 0.21.3",
  "proc-macro2",
@@ -1106,9 +1106,9 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "base64ct"
-version = "1.8.0"
+version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55248b47b0caf0546f7988906588779981c43bb1bc9d0c44087278f80cdb44ba"
+checksum = "0e050f626429857a27ddccb31e0aca21356bfa709c04041aefddac081a8f068a"
 
 [[package]]
 name = "bech32"
@@ -1164,9 +1164,9 @@ checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
 
 [[package]]
 name = "bitcoin"
-version = "0.32.7"
+version = "0.32.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0fda569d741b895131a88ee5589a467e73e9c4718e958ac9308e4f7dc44b6945"
+checksum = "1e499f9fc0407f50fe98af744ab44fa67d409f76b6772e1689ec8485eb0c0f66"
 dependencies = [
  "base58ck",
  "bech32",
@@ -1447,9 +1447,9 @@ version = "2.99.99"
 
 [[package]]
 name = "cc"
-version = "1.2.48"
+version = "1.2.49"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c481bdbf0ed3b892f6f806287d72acd515b352a4ec27a208489b8c1bc839633a"
+checksum = "90583009037521a116abf44494efecd645ba48b6622457080f080b85544e2215"
 dependencies = [
  "find-msvc-tools",
  "jobserver",
@@ -2854,7 +2854,7 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 [[package]]
 name = "fork-tree"
 version = "13.0.1"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
 ]
@@ -2881,7 +2881,7 @@ dependencies = [
 [[package]]
 name = "frame-benchmarking"
 version = "43.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "frame-support",
  "frame-support-procedural",
@@ -2904,7 +2904,7 @@ dependencies = [
 [[package]]
 name = "frame-executive"
 version = "43.0.1"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -2920,7 +2920,7 @@ dependencies = [
 [[package]]
 name = "frame-support"
 version = "43.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "array-bytes",
  "environmental",
@@ -2951,7 +2951,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural"
 version = "35.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "Inflector",
  "cfg-expr",
@@ -2970,7 +2970,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural-tools"
 version = "13.0.1"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "frame-support-procedural-tools-derive",
  "proc-macro-crate 3.4.0",
@@ -2982,7 +2982,7 @@ dependencies = [
 [[package]]
 name = "frame-support-procedural-tools-derive"
 version = "12.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2992,7 +2992,7 @@ dependencies = [
 [[package]]
 name = "frame-system"
 version = "43.0.1"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "cfg-if",
  "frame-support",
@@ -3009,7 +3009,7 @@ dependencies = [
 [[package]]
 name = "frame-try-runtime"
 version = "0.49.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "frame-support",
  "parity-scale-codec",
@@ -5631,7 +5631,7 @@ dependencies = [
 [[package]]
 name = "pallet-authorship"
 version = "43.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -5642,7 +5642,7 @@ dependencies = [
 [[package]]
 name = "pallet-babe"
 version = "43.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5663,7 +5663,7 @@ dependencies = [
 [[package]]
 name = "pallet-grandpa"
 version = "43.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5683,7 +5683,7 @@ dependencies = [
 [[package]]
 name = "pallet-session"
 version = "43.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "frame-support",
  "frame-system",
@@ -5694,7 +5694,7 @@ dependencies = [
 [[package]]
 name = "pallet-timestamp"
 version = "42.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "frame-benchmarking",
  "frame-support",
@@ -5762,12 +5762,6 @@ dependencies = [
  "quote",
  "syn 2.0.111",
 ]
-
-[[package]]
-name = "parity-wasm"
-version = "0.45.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1ad0aff30c1da14b1254fcb2af73e1fa9a28670e584a626f53a369d0e157304"
 
 [[package]]
 name = "parking"
@@ -7015,7 +7009,7 @@ dependencies = [
 [[package]]
 name = "sc-allocator"
 version = "34.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "log",
  "sp-core",
@@ -7026,7 +7020,7 @@ dependencies = [
 [[package]]
 name = "sc-authority-discovery"
 version = "0.53.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-trait",
  "futures",
@@ -7056,7 +7050,7 @@ dependencies = [
 [[package]]
 name = "sc-basic-authorship"
 version = "0.52.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "futures",
  "log",
@@ -7078,7 +7072,7 @@ dependencies = [
 [[package]]
 name = "sc-block-builder"
 version = "0.47.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -7093,7 +7087,7 @@ dependencies = [
 [[package]]
 name = "sc-chain-spec"
 version = "46.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "sc-client-api",
@@ -7114,7 +7108,7 @@ dependencies = [
 [[package]]
 name = "sc-cli"
 version = "0.55.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "array-bytes",
  "chrono",
@@ -7150,7 +7144,7 @@ dependencies = [
 [[package]]
 name = "sc-client-api"
 version = "42.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "fnv",
  "futures",
@@ -7176,7 +7170,7 @@ dependencies = [
 [[package]]
 name = "sc-client-db"
 version = "0.49.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "hash-db",
  "kvdb",
@@ -7203,7 +7197,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus"
 version = "0.52.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-trait",
  "futures",
@@ -7225,7 +7219,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-babe"
 version = "0.53.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-trait",
  "fork-tree",
@@ -7262,7 +7256,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-epochs"
 version = "0.52.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "fork-tree",
  "parity-scale-codec",
@@ -7275,7 +7269,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-grandpa"
 version = "0.38.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "ahash",
  "array-bytes",
@@ -7318,7 +7312,7 @@ dependencies = [
 [[package]]
 name = "sc-consensus-slots"
 version = "0.52.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-trait",
  "futures",
@@ -7340,7 +7334,7 @@ dependencies = [
 [[package]]
 name = "sc-executor"
 version = "0.45.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "parking_lot",
@@ -7360,18 +7354,17 @@ dependencies = [
 [[package]]
 name = "sc-executor-common"
 version = "0.41.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "sc-allocator",
  "sp-wasm-interface",
  "thiserror 2.0.17",
- "wasm-instrument",
 ]
 
 [[package]]
 name = "sc-executor-wasmtime"
 version = "0.41.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "anyhow",
  "log",
@@ -7387,7 +7380,7 @@ dependencies = [
 [[package]]
 name = "sc-informant"
 version = "0.52.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "console",
  "futures",
@@ -7403,7 +7396,7 @@ dependencies = [
 [[package]]
 name = "sc-keystore"
 version = "38.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "array-bytes",
  "parking_lot",
@@ -7417,7 +7410,7 @@ dependencies = [
 [[package]]
 name = "sc-network"
 version = "0.53.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "array-bytes",
  "async-channel",
@@ -7461,7 +7454,7 @@ dependencies = [
 [[package]]
 name = "sc-network-common"
 version = "0.51.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "bitflags 1.3.2",
  "parity-scale-codec",
@@ -7471,7 +7464,7 @@ dependencies = [
 [[package]]
 name = "sc-network-gossip"
 version = "0.53.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "ahash",
  "futures",
@@ -7490,7 +7483,7 @@ dependencies = [
 [[package]]
 name = "sc-network-sync"
 version = "0.52.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "array-bytes",
  "async-channel",
@@ -7524,7 +7517,7 @@ dependencies = [
 [[package]]
 name = "sc-network-transactions"
 version = "0.52.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "array-bytes",
  "futures",
@@ -7543,7 +7536,7 @@ dependencies = [
 [[package]]
 name = "sc-network-types"
 version = "0.19.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "bs58",
  "bytes",
@@ -7564,7 +7557,7 @@ dependencies = [
 [[package]]
 name = "sc-proposer-metrics"
 version = "0.20.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "log",
  "substrate-prometheus-endpoint",
@@ -7573,7 +7566,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc"
 version = "48.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "futures",
  "jsonrpsee",
@@ -7592,7 +7585,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-api"
 version = "0.52.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "jsonrpsee",
  "parity-scale-codec",
@@ -7604,7 +7597,7 @@ dependencies = [
 [[package]]
 name = "sc-rpc-server"
 version = "25.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "dyn-clone",
  "forwarded-header-value",
@@ -7628,7 +7621,7 @@ dependencies = [
 [[package]]
 name = "sc-service"
 version = "0.54.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-trait",
  "directories",
@@ -7688,7 +7681,7 @@ dependencies = [
 [[package]]
 name = "sc-state-db"
 version = "0.40.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "log",
  "parity-scale-codec",
@@ -7698,7 +7691,7 @@ dependencies = [
 [[package]]
 name = "sc-sysinfo"
 version = "45.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "derive_more 1.0.0",
  "futures",
@@ -7718,7 +7711,7 @@ dependencies = [
 [[package]]
 name = "sc-telemetry"
 version = "30.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "chrono",
  "futures",
@@ -7737,7 +7730,7 @@ dependencies = [
 [[package]]
 name = "sc-tracing"
 version = "42.0.1"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "chrono",
  "console",
@@ -7765,7 +7758,7 @@ dependencies = [
 [[package]]
 name = "sc-tracing-proc-macro"
 version = "11.1.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "proc-macro-crate 3.4.0",
  "proc-macro2",
@@ -7776,7 +7769,7 @@ dependencies = [
 [[package]]
 name = "sc-transaction-pool"
 version = "42.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-trait",
  "futures",
@@ -7806,7 +7799,7 @@ dependencies = [
 [[package]]
 name = "sc-transaction-pool-api"
 version = "42.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-trait",
  "futures",
@@ -7823,7 +7816,7 @@ dependencies = [
 [[package]]
 name = "sc-utils"
 version = "20.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-channel",
  "futures",
@@ -9361,7 +9354,7 @@ dependencies = [
 [[package]]
 name = "sp-api"
 version = "39.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "hash-db",
  "log",
@@ -9380,7 +9373,7 @@ dependencies = [
 [[package]]
 name = "sp-api-proc-macro"
 version = "25.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "Inflector",
  "blake2 0.10.6",
@@ -9394,7 +9387,7 @@ dependencies = [
 [[package]]
 name = "sp-application-crypto"
 version = "43.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "serde",
@@ -9405,7 +9398,7 @@ dependencies = [
 [[package]]
 name = "sp-arithmetic"
 version = "28.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "integer-sqrt",
  "num-traits",
@@ -9417,7 +9410,7 @@ dependencies = [
 [[package]]
 name = "sp-authority-discovery"
 version = "39.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -9427,7 +9420,7 @@ dependencies = [
 [[package]]
 name = "sp-block-builder"
 version = "39.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "sp-api",
  "sp-inherents",
@@ -9437,7 +9430,7 @@ dependencies = [
 [[package]]
 name = "sp-blockchain"
 version = "42.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "futures",
  "parity-scale-codec",
@@ -9456,7 +9449,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus"
 version = "0.45.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-trait",
  "futures",
@@ -9470,7 +9463,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-babe"
 version = "0.45.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -9487,7 +9480,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-grandpa"
 version = "26.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "finality-grandpa",
  "log",
@@ -9503,7 +9496,7 @@ dependencies = [
 [[package]]
 name = "sp-consensus-slots"
 version = "0.45.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "serde",
@@ -9513,7 +9506,7 @@ dependencies = [
 [[package]]
 name = "sp-core"
 version = "38.1.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "array-bytes",
  "bitflags 1.3.2",
@@ -9551,7 +9544,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-hashing"
 version = "0.1.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "blake2b_simd",
  "byteorder",
@@ -9564,7 +9557,7 @@ dependencies = [
 [[package]]
 name = "sp-crypto-hashing-proc-macro"
 version = "0.1.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "quote",
  "sp-crypto-hashing",
@@ -9574,7 +9567,7 @@ dependencies = [
 [[package]]
 name = "sp-database"
 version = "10.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "kvdb",
  "parking_lot",
@@ -9583,7 +9576,7 @@ dependencies = [
 [[package]]
 name = "sp-debug-derive"
 version = "14.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -9593,7 +9586,7 @@ dependencies = [
 [[package]]
 name = "sp-externalities"
 version = "0.30.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "environmental",
  "parity-scale-codec",
@@ -9603,7 +9596,7 @@ dependencies = [
 [[package]]
 name = "sp-genesis-builder"
 version = "0.20.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -9612,7 +9605,7 @@ dependencies = [
 [[package]]
 name = "sp-inherents"
 version = "39.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-trait",
  "impl-trait-for-tuples",
@@ -9624,7 +9617,7 @@ dependencies = [
 [[package]]
 name = "sp-io"
 version = "43.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "bytes",
  "log",
@@ -9645,7 +9638,7 @@ dependencies = [
 [[package]]
 name = "sp-keyring"
 version = "44.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "sp-core",
  "sp-runtime",
@@ -9655,7 +9648,7 @@ dependencies = [
 [[package]]
 name = "sp-keystore"
 version = "0.44.1"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "parking_lot",
@@ -9666,7 +9659,7 @@ dependencies = [
 [[package]]
 name = "sp-panic-handler"
 version = "13.0.2"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "backtrace",
  "regex",
@@ -9675,7 +9668,7 @@ dependencies = [
 [[package]]
 name = "sp-rpc"
 version = "36.0.1"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "rustc-hash",
  "serde",
@@ -9684,7 +9677,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime"
 version = "44.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "either",
  "hash256-std-hasher",
@@ -9707,7 +9700,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface"
 version = "32.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "bytes",
  "parity-scale-codec",
@@ -9721,7 +9714,7 @@ dependencies = [
 [[package]]
 name = "sp-runtime-interface-proc-macro"
 version = "20.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "Inflector",
  "expander",
@@ -9734,7 +9727,7 @@ dependencies = [
 [[package]]
 name = "sp-session"
 version = "41.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "sp-api",
@@ -9746,7 +9739,7 @@ dependencies = [
 [[package]]
 name = "sp-staking"
 version = "41.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "sp-core",
@@ -9756,7 +9749,7 @@ dependencies = [
 [[package]]
 name = "sp-state-machine"
 version = "0.48.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "hash-db",
  "log",
@@ -9776,12 +9769,12 @@ dependencies = [
 [[package]]
 name = "sp-std"
 version = "14.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 
 [[package]]
 name = "sp-storage"
 version = "22.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -9793,7 +9786,7 @@ dependencies = [
 [[package]]
 name = "sp-timestamp"
 version = "39.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "async-trait",
  "parity-scale-codec",
@@ -9805,7 +9798,7 @@ dependencies = [
 [[package]]
 name = "sp-tracing"
 version = "19.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "regex",
@@ -9817,7 +9810,7 @@ dependencies = [
 [[package]]
 name = "sp-transaction-pool"
 version = "39.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "sp-api",
  "sp-runtime",
@@ -9826,7 +9819,7 @@ dependencies = [
 [[package]]
 name = "sp-trie"
 version = "41.1.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "ahash",
  "foldhash 0.1.5",
@@ -9849,7 +9842,7 @@ dependencies = [
 [[package]]
 name = "sp-version"
 version = "42.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "impl-serde",
  "parity-scale-codec",
@@ -9863,7 +9856,7 @@ dependencies = [
 [[package]]
 name = "sp-version-proc-macro"
 version = "15.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "parity-scale-codec",
  "proc-macro-warning",
@@ -9875,7 +9868,7 @@ dependencies = [
 [[package]]
 name = "sp-wasm-interface"
 version = "24.0.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "anyhow",
  "impl-trait-for-tuples",
@@ -9887,7 +9880,7 @@ dependencies = [
 [[package]]
 name = "sp-weights"
 version = "33.1.0"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "bounded-collections",
  "parity-scale-codec",
@@ -10027,7 +10020,7 @@ dependencies = [
 [[package]]
 name = "substrate-prometheus-endpoint"
 version = "0.17.7"
-source = "git+https://github.com/serai-dex/patch-polkadot-sdk#0cd66846e58f167b09b48a77c3f70bf7b2b67000"
+source = "git+https://github.com/serai-dex/patch-polkadot-sdk#48548a4d5137fe14183452c8b2ca8a403e92130d"
 dependencies = [
  "hyper",
  "log",
@@ -10380,9 +10373,9 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.23.7"
+version = "0.23.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6485ef6d0d9b5d0ec17244ff7eb05310113c3f316f2d14200d4de56b3cb98f8d"
+checksum = "5d7cbc3b4b49633d57a0509303158ca50de80ae32c265093b24c414705807832"
 dependencies = [
  "indexmap 2.12.1",
  "toml_datetime",
@@ -10841,15 +10834,6 @@ checksum = "06d642d8c5ecc083aafe9ceb32809276a304547a3a6eeecceb5d8152598bc71f"
 dependencies = [
  "leb128fmt",
  "wasmparser",
-]
-
-[[package]]
-name = "wasm-instrument"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a47ecb37b9734d1085eaa5ae1a81e60801fd8c28d4cabdd8aedb982021918bc"
-dependencies = [
- "parity-wasm",
 ]
 
 [[package]]

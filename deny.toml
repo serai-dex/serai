@@ -7,8 +7,7 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
 
 ignore = [
-  "RUSTSEC-2022-0061", # https://github.com/serai-dex/serai/227
-  "RUSTSEC-2024-0370", # proc-macro-error is unmaintained
+  "RUSTSEC-2024-0370", # `proc-macro-error` is unmaintained, in-tree due to Substrate/`litep2p`
   "RUSTSEC-2024-0436", # paste is unmaintained
 ]
 

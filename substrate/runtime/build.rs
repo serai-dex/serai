@@ -9,7 +9,7 @@ fn main() {
   // https://github.com/rust-lang/rust/issues/145491
   const ONE_45491: &str = "-C link-arg=--mllvm=-mcpu=mvp,--mllvm=-mattr=+mutable-globals";
   const WASM: &str = "-C link-arg=--export-table";
-  const REQUIRED_BY_SUBSTRATE: &str = "--cfg substrate_runtime -C link-arg=--import-memory";
+  const REQUIRED_BY_SUBSTRATE: &str = "--cfg substrate_runtime";
   const SAFETY: &str = "-C overflow-checks=true -C panic=abort";
   const COMPILATION: &str =
     "-C symbol-mangling-version=v0 -C embed-bitcode=false -C linker-plugin-lto=true";
