@@ -21,7 +21,7 @@ fn monero_internal(
   };
 
   #[rustfmt::skip]
-  let download_monero = format!(r#"
+  let mut download_monero = format!(r#"
 FROM alpine:latest AS monero
 
 RUN apk --no-cache add wget gnupg
@@ -40,6 +40,16 @@ RUN tar -xvjf monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2 --strip-components=1
 "#,
     network.label(),
   );
+
+  if os == Os::Alpine {
+    // Increase the default stack size, as Monero does heavily use its stack
+    download_monero += &format!(
+      r#"
+ADD orchestration/increase_default_stack_size.sh .
+RUN ./increase_default_stack_size.sh {monero_binary}
+"#
+    );
+  }
 
   let setup = mimalloc(os) + &download_monero;
 
@@ -69,13 +79,13 @@ CMD ["/run.sh"]
 }
 
 pub fn monero(orchestration_path: &Path, network: Network) {
-  monero_internal(network, Os::Debian, orchestration_path, "monero", "monerod", "18080 18081")
+  monero_internal(network, Os::Alpine, orchestration_path, "monero", "monerod", "18080 18081")
 }
 
 pub fn monero_wallet_rpc(orchestration_path: &Path) {
   monero_internal(
     Network::Dev,
-    Os::Debian,
+    Os::Alpine,
     orchestration_path,
     "monero-wallet-rpc",
     "monero-wallet-rpc",

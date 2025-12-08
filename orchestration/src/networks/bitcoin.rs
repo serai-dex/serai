@@ -29,7 +29,7 @@ RUN tar xzvf bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz
 RUN mv bitcoin-${BITCOIN_VERSION}/bin/bitcoind .
 "#;
 
-  let setup = mimalloc(Os::Debian) + DOWNLOAD_BITCOIN;
+  let setup = mimalloc(Os::Alpine) + DOWNLOAD_BITCOIN;
 
   let run_bitcoin = format!(
     r#"
@@ -43,7 +43,7 @@ CMD ["/run.sh"]
     network.label()
   );
 
-  let run = os(Os::Debian, "", "bitcoin") + &run_bitcoin;
+  let run = os(Os::Alpine, "", "bitcoin") + &run_bitcoin;
   let res = setup + &run;
 
   let mut bitcoin_path = orchestration_path.to_path_buf();
