@@ -27,7 +27,8 @@ read_bytes() {
    dd bs=1 skip="$1" count="$2" if="$ELF" 2> /dev/null | hex
 }
 hex_to_octal() {
-  printf "ibase=16; obase=8; %s\n" "$1" | bc
+  HEX=$(printf "%s" "$1" | tr "[:lower:]" "[:upper:]")
+  printf "ibase=16; obase=8; %s\n" "$HEX" | bc
 }
 write_bytes() {
   POS=$1
@@ -47,7 +48,7 @@ write_bytes() {
 # Magic
 MAGIC=$(read_bytes 0 4)
 # shellcheck disable=SC2059
-EXPECTED_MAGIC=$(printf \\"$(hex_to_octal 7F)"ELF | hex)
+EXPECTED_MAGIC=$(printf \\"$(hex_to_octal 7f)"ELF | hex)
 if [ ! "$MAGIC" = "$EXPECTED_MAGIC" ]; then
   echo "Not ELF"
   exit 2
@@ -78,6 +79,12 @@ read_integer_by_offset() {
   OFFSET=$(value_per_bits "$1" "$2")
   BYTES=$(read_bytes "$OFFSET" "$3")
   BYTES=$(swap_native_endian "$BYTES")
+  BYTES=$(printf "%s" "$BYTES" | tr "[:lower:]" "[:upper:]")
+  LESS_THAN_SANITY=$(printf "ibase=16; if(%s < 6FFFFFFF)1;\n" "$BYTES" | bc)
+  if [ ! "$LESS_THAN_SANITY" = "1" ]; then
+    echo "Integer value is approximate to 2**31, risking a signed long overflow"
+    exit 4
+  fi
   printf "%i" $(( 0x$BYTES ))
 }
 
@@ -88,7 +95,7 @@ case $LITTLE_ENDIAN in
   "02") LITTLE_ENDIAN=0;;
   *)
     echo "Not little- or big- endian"
-    exit 4
+    exit 5
     ;;
 esac
 
@@ -119,13 +126,13 @@ swap_native_endian() {
 ELF_VERSION=$(read_bytes 6 1)
 if [ ! "$ELF_VERSION" = "01" ]; then
   echo "Unknown ELF Version ($ELF_VERSION)"
-  exit 5
+  exit 6
 fi
 
 ELF_VERSION_2=$(read_bytes $((0x14)) 4)
 if [ ! "$ELF_VERSION_2" = "$(swap_native_endian 00000001)" ]; then
   echo "Unknown secondary ELF Version ($ELF_VERSION_2)"
-  exit 6
+  exit 7
 fi
 
 # Find where the program headers are
@@ -134,7 +141,7 @@ PROGRAM_HEADER_SIZE=$(value_per_bits 0x20 0x38)
 DECLARED_PROGRAM_HEADER_SIZE=$(read_integer_by_offset 0x2a 0x36 2)
 if [ ! "$PROGRAM_HEADER_SIZE" -eq "$DECLARED_PROGRAM_HEADER_SIZE" ]; then
   echo "Unexpected size of a program header ($DECLARED_PROGRAM_HEADER_SIZE)"
-  exit 7
+  exit 8
 fi
 program_header_start() {
   printf "%i" $((PROGRAM_HEADERS_OFFSET + ($1 * PROGRAM_HEADER_SIZE)))
@@ -162,6 +169,8 @@ while [ "$NEXT_PROGRAM_HEADER" -ne -1 ]; do
   fi
   FOUND=1
 
+  # This line is the only line really risking an arithmetic overflow, yet the bound on the start of
+  # the section, combined with a maximum section length of `0xffff * 0x38`, makes this fit
   MEMSZ_OFFSET=$(( $(program_header_start "$THIS_PROGRAM_HEADER") + $(value_per_bits 0x14 0x28) ))
   MEMSZ_LEN=$(value_per_bits 4 8)
   # `MEMSZ_OFFSET MEMSZ_OFFSET` as we've already derived it depending on the amount of bits
@@ -178,7 +187,7 @@ done
 
 if [ "$FOUND" -eq 0 ]; then
   echo "\`PT_GNU_STACK\` program header not found"
-  exit 8
+  exit 9
 fi
 
 echo "All instances of \`PT_GNU_STACK\` patched to be at least 8 MB"
