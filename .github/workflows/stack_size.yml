@@ -60,7 +60,9 @@ jobs:
           done
 
           read_stack() {
-            printf "%i" $((readelf $1 -l | grep STACK -A1 | tail -n1 | sed -E s/^[[:space:]]*//g | cut -f2 -d' '))
+            STACK_INFO=$(readelf "$1" -l | grep STACK -A1)
+            MEMSZ=$(echo $STACK_INFO | tail -n1 | sed -E s/^[[:space:]]*//g | cut -f2 -d' ')
+            printf "%i" $((MEMSZ))
           }
           INITIAL_STACK=$(read_stack monerod)
           if [ "$INITIAL_STACK" -ne "0" ]; then
