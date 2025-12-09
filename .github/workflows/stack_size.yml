@@ -8,8 +8,6 @@ on:
     paths:
       - orchestration/increase_default_stack_size.sh
   workflow_dispatch:
-    paths:
-      - orchestration/increase_default_stack_size.sh
 
 jobs:
   stack_size:
