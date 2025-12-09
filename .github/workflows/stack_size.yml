@@ -27,8 +27,7 @@ jobs:
 
           cp monerod monerod-muslstack
           GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
-          ls
-          muslstack -s $STACK ./monerod-muslstack
+          ./muslstack -s $STACK ./monerod-muslstack
 
           cp monerod monerod-chelf
           git clone https://github.com/Gottox/chelf
