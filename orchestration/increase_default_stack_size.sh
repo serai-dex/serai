@@ -26,6 +26,9 @@ hex() {
 read_bytes() {
    dd bs=1 skip="$1" count="$2" if="$ELF" 2> /dev/null | hex
 }
+hex_to_octal() {
+  printf "ibase=16; obase=8; %s\n" "$1" | bc
+}
 write_bytes() {
   POS=$1
   BYTES=$2
@@ -34,15 +37,17 @@ write_bytes() {
     # Advance to the third byte, as in, after the first two bytes
     BYTES=$(printf "%s" "$BYTES" | tail -c+3)
 
+    NEXT=$(hex_to_octal "$NEXT")
     # shellcheck disable=SC2059
-    printf "\x$NEXT" | dd conv=notrunc bs=1 seek="$POS" of="$ELF" 2> /dev/null
+    printf \\"$NEXT" | dd conv=notrunc bs=1 seek="$POS" of="$ELF" 2> /dev/null
     POS=$((POS + 1))
   done
 }
 
 # Magic
 MAGIC=$(read_bytes 0 4)
-EXPECTED_MAGIC=$(printf "\x7ELF" | hex)
+# shellcheck disable=SC2059
+EXPECTED_MAGIC=$(printf \\"$(hex_to_octal 7F)"ELF | hex)
 if [ ! "$MAGIC" = "$EXPECTED_MAGIC" ]; then
   echo "Not ELF"
   exit 2
