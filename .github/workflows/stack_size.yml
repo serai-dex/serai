@@ -1,0 +1,93 @@
+name: Check Update Default Stack Size
+
+on:
+  push:
+    paths:
+      - "orchestration/increase_default_stack_size.sh"
+  pull_request:
+    paths:
+      - "orchestration/increase_default_stack_size.sh"
+  workflow_dispatch:
+  # Also run weekly to ensure this doesn't inadvertently decay
+  schedule:
+    - cron: "0 0 * * 1"
+
+jobs:
+  stack_size:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+
+      - name: Download Monero
+        uses: ./.github/actions/monero
+
+      - name: Verify expected behavior
+        shell: bash
+        run: |
+          cp /usr/bin/monerod monerod
+
+          STACK=$((8 * 1024 * 1024))
+
+          cp monerod monerod-chelf
+          git clone https://github.com/Gottox/chelf
+          cd chelf
+          git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
+          make
+          ./chelf -s $STACK ../monerod-chelf
+          cd ..
+
+          cp monerod monerod-muslstack
+          GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
+          ./muslstack -s $STACK ./monerod-muslstack
+
+          sudo apt update -y
+          sudo apt install -y ksh bash dash zsh busybox mksh yash
+          sudo ln -s $(which busybox) /usr/bin/ash
+          sudo ln -s $(which busybox) /usr/bin/hush
+          cargo install brush-shell
+          for shell in sh ksh bash dash zsh ash hush mksh yash brush; do
+            cp monerod monerod-idss-$shell
+            ln -s $(which $shell) sh
+            ./sh ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
+            rm ./sh
+          done
+
+          sha256() {
+            sha256sum "$1" | cut -d' ' -f1
+          }
+          CHELF=$(sha256 monerod-chelf)
+          find . -iname "monerod-*" | while read -r bin; do
+            BIN=$(sha256 "$bin")
+            if [ ! "$CHELF" = "$BIN" ]; then
+              echo "Different artifact between monerod-chelf ($CHELF) and $bin ($BIN)"
+              exit 1
+            fi
+          done
+
+          read_stack() {
+            STACK_INFO=$(readelf "$1" -l | grep STACK -A1)
+            MEMSZ=$(echo "$STACK_INFO" | tail -n1 | sed -E s/^[[:space:]]*//g | cut -f2 -d' ')
+            printf "%i" $((MEMSZ))
+          }
+          INITIAL_STACK=$(read_stack monerod)
+          if [ "$INITIAL_STACK" -ne "0" ]; then
+            echo "Initial \`PT_GNU_STACK\` wasn't 0"
+            exit 2
+          fi
+
+          UPDATED_STACK=$(read_stack monerod-chelf)
+          if [ "$UPDATED_STACK" -ne "$STACK" ]; then
+            echo "Updated \`PT_GNU_STACK\` ($UPDATED_STACK) wasn't 8 MB ($STACK)"
+            exit 3
+          fi
+
+          # Only one byte should be different due to the bit pattern of 8 MB
+          BYTES_DIFFERENT=$(cmp -l monerod monerod-chelf | wc -l || true)
+          if [ "$BYTES_DIFFERENT" -ne 1 ]; then
+            echo "More than one byte was different between the two binaries"
+            exit 4
+          fi

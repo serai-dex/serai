@@ -62,7 +62,7 @@ runs:
         docker system prune -a --volumes
         sudo apt remove -y *docker*
         # Install uidmap which will be required for the explicitly installed Docker
-        sudo apt install uidmap
+        sudo apt install -y uidmap
       if: runner.os == 'Linux'
 
     - name: Update system dependencies
