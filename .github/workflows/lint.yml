@@ -208,7 +208,7 @@ jobs:
         - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
         - name: shellcheck
           run: |
-            sudo apt install shellcheck
+            sudo apt install -y shellcheck
             find . -iname "*.sh" | while read -r script; do
               shellcheck --enable=all --shell=sh --severity=info $script
             done

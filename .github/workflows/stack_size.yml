@@ -37,12 +37,16 @@ jobs:
           GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
           ./muslstack -s $STACK ./monerod-muslstack
 
-          sudo apt install bash dash zsh busybox
-          ln -s $(which busybox) /usr/bin/ash
-          ln -s $(which busybox) /usr/bin/hush
-          for shell in sh bash dash zsh ash hush; do
+          sudo apt update -y
+          sudo apt upgrade -y
+          sudo apt install -y ksh bash tcsh dash zsh busybox
+          sudo ln -s $(which busybox) /usr/bin/ash
+          sudo ln -s $(which busybox) /usr/bin/hush
+          for shell in sh ksh bash tcsh dash zsh ash hush; do
             cp monerod monerod-idss-$shell
-            $shell ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
+            ln -s $(which $shell) sh
+            ./sh ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
+            rm ./sh
           done
 
           find . -iname "monerod-*" | while read -r bin; do
