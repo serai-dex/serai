@@ -33,7 +33,7 @@ write_bytes() {
   POS=$1
   BYTES=$2
   while [ ! "$BYTES" = "" ]; do
-    NEXT=$(printf "%s" "$BYTES" | head -c2)
+    NEXT=$(printf "%s" "$BYTES" | cut -c-2)
     # Advance to the third byte, as in, after the first two bytes
     BYTES=$(printf "%s" "$BYTES" | tail -c+3)
 
@@ -106,9 +106,13 @@ swap_native_endian() {
     return
   fi
 
-  while [ ! "$BYTES" = "" ]; do
+  while :; do
     printf "%s" "$BYTES" | tail -c2
-    BYTES=$(printf "%s" "$BYTES" | head -c-2)
+    NEW_LENGTH=$(( $(printf "%s" "$BYTES" | wc -c) - 2 ))
+    if [ "$NEW_LENGTH" -eq 0 ]; then
+      break
+    fi
+    BYTES=$(printf "%s" "$BYTES" | cut -c-$NEW_LENGTH)
   done
 }
 
@@ -149,7 +153,7 @@ while [ "$NEXT_PROGRAM_HEADER" -ne -1 ]; do
   NEXT_PROGRAM_HEADER=$(( NEXT_PROGRAM_HEADER - 1 ))
   PROGRAM_HEADER=$(read_program_header "$THIS_PROGRAM_HEADER")
 
-  HEADER_TYPE=$(printf "%s" "$PROGRAM_HEADER" | head -c8)
+  HEADER_TYPE=$(printf "%s" "$PROGRAM_HEADER" | cut -c-8)
   HEADER_TYPE=$(swap_native_endian "$HEADER_TYPE")
   # `PT_GNU_STACK`
   # https://github.com/torvalds/linux/blob/c2f2b01b74be8b40a2173372bcd770723f87e7b2/include/uapi/linux/elf.h#L41
