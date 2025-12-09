@@ -34,7 +34,7 @@ jobs:
           cd chelf
           git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
           make
-          chelf -s $STACK ../monerod-chelf
+          ./chelf -s $STACK ../monerod-chelf
           cd ..
 
           if [ ! "$(sha256sum monerod-muslstack)" = "$(sha256sum monerod-chelf)" ]; then
