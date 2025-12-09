@@ -49,13 +49,6 @@ jobs:
             rm ./sh
           done
 
-          find . -iname "monerod-*" | while read -r bin; do
-            readelf $bin -l
-            sha256sum $bin
-          done
-
-          echo "Verifying artifacts are equivalent"
-
           sha256() {
             sha256sum "$1" | cut -d' ' -f1
           }
@@ -68,8 +61,6 @@ jobs:
             fi
           done
 
-          echo "Verified artifacts are equivalent"
-
           read_stack() {
             STACK_INFO=$(readelf "$1" -l | grep STACK -A1)
             MEMSZ=$(echo "$STACK_INFO" | tail -n1 | sed -E s/^[[:space:]]*//g | cut -f2 -d' ')
@@ -81,25 +72,15 @@ jobs:
             exit 2
           fi
 
-          echo "Verified \`read_stack\` agrees the binary started with 0"
-
           UPDATED_STACK=$(read_stack monerod-chelf)
           if [ "$UPDATED_STACK" -ne "$STACK" ]; then
             echo "Updated \`PT_GNU_STACK\` ($UPDATED_STACK) wasn't 8 MB ($STACK)"
             exit 3
           fi
 
-          echo "Verified \`read_stack\` agrees the binary's stack is now 8 MB"
-
           # Only one byte should be different due to the bit pattern of 8 MB
-          ls monerod
-          ls monerod-chelf
-          cmp --help
-          BYTES_DIFFERENT=$(cmp -l monerod monerod-chelf | wc -l)
-          echo $BYTES_DIFFERENT
+          BYTES_DIFFERENT=$(cmp -l monerod monerod-chelf | wc -l || true)
           if [ "$BYTES_DIFFERENT" -ne 1 ]; then
             echo "More than one byte was different between the two binaries"
             exit 4
           fi
-
-          echo "Verified only a single byte is different between the two binaries"
