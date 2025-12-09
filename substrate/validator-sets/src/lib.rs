@@ -345,6 +345,14 @@ mod pallet {
       Ok(())
     }
 
+    /// Have the latest decided session become the current session.
+    ///
+    /// This is restricted to `ExternalNetworkId` as this process happens internally for
+    /// `NetworkId::Serai`.
+    pub fn accept_handover(network: ExternalNetworkId) {
+      Abstractions::<T>::accept_handover(network.into());
+    }
+
     /* TODO
     pub fn distribute_block_rewards(
       network: NetworkId,

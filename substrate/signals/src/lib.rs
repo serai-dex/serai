@@ -234,6 +234,11 @@ pub mod pallet {
 
       Ok(())
     }
+
+    /// Check if an external network was halted.
+    pub fn halted(network: ExternalNetworkId) -> bool {
+      Halted::<T>::contains_key(network)
+    }
   }
 
   /// An error from the `signals` pallet.

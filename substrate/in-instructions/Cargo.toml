@@ -23,6 +23,7 @@ workspace = true
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
 frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
@@ -32,6 +33,7 @@ serai-abi = { path = "../abi", default-features = false, features = ["substrate"
 serai-core-pallet = { path = "../core", default-features = false }
 serai-coins-pallet = { path = "../coins", default-features = false }
 serai-validator-sets-pallet = { path = "../validator-sets", default-features = false }
+serai-signals-pallet = { path = "../signals", default-features = false }
 serai-dex-pallet = { path = "../dex", default-features = false }
 serai-genesis-liquidity-pallet = { path = "../genesis-liquidity", default-features = false }
 
@@ -40,6 +42,7 @@ std = [
   "scale/std",
 
   "sp-core/std",
+  "sp-application-crypto/std",
 
   "frame-system/std",
   "frame-support/std",
@@ -49,6 +52,7 @@ std = [
   "serai-core-pallet/std",
   "serai-coins-pallet/std",
   "serai-validator-sets-pallet/std",
+  "serai-signals-pallet/std",
   "serai-dex-pallet/std",
   "serai-genesis-liquidity-pallet/std",
 ]
@@ -61,6 +65,7 @@ try-runtime = [
   "serai-core-pallet/try-runtime",
   "serai-coins-pallet/try-runtime",
   "serai-validator-sets-pallet/try-runtime",
+  "serai-signals-pallet/try-runtime",
   "serai-dex-pallet/try-runtime",
   "serai-genesis-liquidity-pallet/try-runtime",
 ]
@@ -72,6 +77,7 @@ runtime-benchmarks = [
   "serai-core-pallet/runtime-benchmarks",
   "serai-coins-pallet/runtime-benchmarks",
   "serai-validator-sets-pallet/runtime-benchmarks",
+  "serai-signals-pallet/runtime-benchmarks",
   "serai-dex-pallet/runtime-benchmarks",
   "serai-genesis-liquidity-pallet/runtime-benchmarks",
 ]
