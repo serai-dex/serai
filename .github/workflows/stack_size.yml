@@ -23,6 +23,9 @@ jobs:
 
       - name: Download Monero
         uses: ./.github/actions/monero
+
+      - name: Verify expected behavior
+        shell: bash
         run: |
           cp /usr/bin/monerod monerod
 
