@@ -1,4 +1,4 @@
-name: Lint
+name: Check Update Default Stack Size
 
 on:
   push:
@@ -26,7 +26,7 @@ jobs:
           STACK=$((8 * 1024 * 1024))
 
           cp monerod monerod-muslstack
-          go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
+          GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
           muslstack -s $STACK ./monerod-muslstack
 
           cp monerod monerod-chelf
