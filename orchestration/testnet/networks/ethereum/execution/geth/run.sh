@@ -1,4 +1,5 @@
 #!/bin/sh
+set -e
 
 #geth --dev --networkid 5208 \
 #  --http --http.api "web3,net,eth,miner" \

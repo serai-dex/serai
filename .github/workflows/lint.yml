@@ -201,3 +201,14 @@ jobs:
           cp processor/ethereum/erc20/contracts/IERC20.sol processor/ethereum/router/contracts/
           cd processor/ethereum/router/contracts
           slither Router.sol
+
+    shellcheck:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        - name: shellcheck
+          run: |
+            sudo apt install shellcheck
+            find . -iname "*.sh" | while read -r script; do
+              shellcheck --enable=all --shell=sh --severity=info $script
+            done
