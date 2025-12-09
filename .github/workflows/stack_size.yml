@@ -38,11 +38,10 @@ jobs:
           ./muslstack -s $STACK ./monerod-muslstack
 
           sudo apt update -y
-          sudo apt upgrade -y
-          sudo apt install -y ksh bash tcsh dash zsh busybox
+          sudo apt install -y ksh bash dash zsh busybox
           sudo ln -s $(which busybox) /usr/bin/ash
           sudo ln -s $(which busybox) /usr/bin/hush
-          for shell in sh ksh bash tcsh dash zsh ash hush; do
+          for shell in sh ksh bash dash zsh ash hush; do
             cp monerod monerod-idss-$shell
             ln -s $(which $shell) sh
             ./sh ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
