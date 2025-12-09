@@ -38,10 +38,11 @@ jobs:
           ./muslstack -s $STACK ./monerod-muslstack
 
           sudo apt update -y
-          sudo apt install -y ksh bash dash zsh busybox
+          sudo apt install -y ksh bash dash zsh busybox mksh yash
           sudo ln -s $(which busybox) /usr/bin/ash
           sudo ln -s $(which busybox) /usr/bin/hush
-          for shell in sh ksh bash dash zsh ash hush; do
+          cargo install brush-shell
+          for shell in sh ksh bash dash zsh ash hush mksh yash brush; do
             cp monerod monerod-idss-$shell
             ln -s $(which $shell) sh
             ./sh ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
@@ -72,7 +73,7 @@ jobs:
 
           UPDATED_STACK=$(read_stack monerod-chelf)
           if [ "$UPDATED_STACK" -ne "$STACK" ]; then
-            echo "Updated \`PT_GNU_STACK\` wasn't 8 MB"
+            echo "Updated \`PT_GNU_STACK\` ($UPDATED_STACK) wasn't 8 MB ($STACK)"
             exit 3
           fi
 
