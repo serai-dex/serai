@@ -54,8 +54,14 @@ jobs:
             sha256sum $bin
           done
 
+          sha256() {
+            sha256sum "$1" | cut -d' ' -f1
+          }
+          CHELF=$(sha256 monerod-chelf)
           find . -iname "monerod-*" | while read -r bin; do
-            if [ ! $(sha256sum monerod-chelf | cut -d' ' -f1) = $(sha256sum $bin | cut -d' ' -f1) ]; then
+            BIN=$(sha256 "$bin")
+            if [ ! "$CHELF" = "$BIN" ]; then
+              echo "Different artifact between monerod-chelf ($CHELF) and $bin ($BIN)"
               exit 1
             fi
           done
