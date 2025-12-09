@@ -92,7 +92,11 @@ jobs:
           echo "Verified \`read_stack\` agrees the binary's stack is now 8 MB"
 
           # Only one byte should be different due to the bit pattern of 8 MB
+          ls monerod
+          ls monerod-chelf
+          cmp --help
           BYTES_DIFFERENT=$(cmp -l monerod monerod-chelf | wc -l)
+          echo $BYTES_DIFFERENT
           if [ "$BYTES_DIFFERENT" -ne 1 ]; then
             echo "More than one byte was different between the two binaries"
             exit 4
