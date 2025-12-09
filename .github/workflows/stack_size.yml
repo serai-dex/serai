@@ -1,0 +1,73 @@
+name: Lint
+
+on:
+  push:
+    paths:
+      - orchestration/increase_default_stack_size.sh
+  pull_request:
+    paths:
+      - orchestration/increase_default_stack_size.sh
+  workflow_dispatch:
+    paths:
+      - orchestration/increase_default_stack_size.sh
+
+jobs:
+  stack_size:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+
+      - name: Download Monero
+        uses: ./.github/actions/monero
+        run: |
+          cp /usr/bin/monerod monerod
+
+          STACK=$((8 * 1024 * 1024))
+
+          cp monerod monerod-muslstack
+          go get github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
+          muslstack -s $STACK ./monerod-muslstack
+
+          cp monerod monerod-chelf
+          git clone https://github.com/Gottox/chelf
+          cd chelf
+          git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
+          make
+          chelf -s $STACK ../monerod-chelf
+          cd ..
+
+          if [ ! "$(sha256sum monerod-muslstack)" = "$(sha256sum monerod-chelf)" ]; then
+            echo "monerod-muslstack != monerod-chelf"
+            exit 1
+          fi
+
+          cp monerod monerod-idss
+          ./orchestration/increase_default_stack_size.sh monerod-idss
+
+          if [ ! "$(sha256sum monerod-muslstack)" = "$(sha256sum monerod-idss)" ]; then
+            echo "monerod-muslstack != monerod-idss"
+            exit 2
+          fi
+
+          INITIAL_STACK=$((readelf monerod -l | grep STACK -A1 | tail -n1 | sed -E s/^[[:space:]]*//g | cut -f2 -d' '))
+          if [ "$INITIAL_STACK" -ne "0" ]; then
+            echo "Initial \`PT_GNU_STACK\` wasn't 0"
+            exit 3
+          fi
+
+          UPDATED_STACK=$((readelf monerod-idss -l | grep STACK -A1 | tail -n1 | sed -E s/^[[:space:]]*//g | cut -f2 -d' '))
+          if [ "$UPDATED_STACK" -ne "$STACK" ]; then
+            echo "Updated \`PT_GNU_STACK\` wasn't 8 MB"
+            exit 4
+          fi
+
+          # Only one byte should be different due to the bit pattern of 8 MB
+          BYTES_DIFFERENT=$(cmp -l monerod monerod-idss | wc -l)
+          if [ "$BYTES_DIFFERENT" -ne 1 ]; then
+            echo "More than one byte was different between the two binaries"
+            exit 5
+          fi
