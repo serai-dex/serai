@@ -9,7 +9,7 @@ jobs:
   stack_size:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
+        os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04]
     runs-on: ${{ matrix.os }}
 
     steps:
