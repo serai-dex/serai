@@ -37,21 +37,21 @@ jobs:
           cd chelf
           git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
           make
-          ./chelf -s $STACK ../monerod-chelf
+          ./chelf -s "$STACK" ../monerod-chelf
           cd ..
 
           cp monerod monerod-muslstack
           GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
-          ./muslstack -s $STACK ./monerod-muslstack
+          ./muslstack -s "$STACK" ./monerod-muslstack
 
           sudo apt update -y
           sudo apt install -y ksh bash dash zsh busybox sash mksh posh yash
-          sudo ln -s $(which busybox) /usr/bin/ash
-          sudo ln -s $(which busybox) /usr/bin/hush
+          sudo ln -s "$(which busybox)" /usr/bin/ash
+          sudo ln -s "$(which busybox)" /usr/bin/hush
           cargo install brush-shell
           for shell in sh ksh bash dash zsh ash hush sash mksh lksh posh yash brush; do
             cp monerod monerod-idss-$shell
-            ln -s $(which $shell) sh
+            ln -s "$(which $shell)" sh
             ./sh ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
             rm ./sh
           done
@@ -70,7 +70,7 @@ jobs:
 
           read_stack() {
             STACK_INFO=$(readelf "$1" -l | grep STACK -A1)
-            MEMSZ=$(echo "$STACK_INFO" | tail -n1 | sed -E s/^[[:space:]]*//g | cut -f2 -d' ')
+            MEMSZ=$(printf "%s\n" "$STACK_INFO" | tail -n1 | sed -E s/^[[:space:]]*//g | cut -f2 -d' ')
             printf "%i" $((MEMSZ))
           }
           INITIAL_STACK=$(read_stack monerod)
