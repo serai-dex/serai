@@ -38,8 +38,8 @@ jobs:
           ./muslstack -s $STACK ./monerod-muslstack
 
           sudo apt install bash dash zsh busybox
-          ln -s /usr/bin/ash $(which busybox)
-          ln -s /usr/bin/hush $(which busybox)
+          ln -s $(which busybox) /usr/bin/ash
+          ln -s $(which busybox) /usr/bin/hush
           for shell in sh bash dash zsh ash hush; do
             cp monerod monerod-idss-$shell
             $shell ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
