@@ -49,16 +49,34 @@ jobs:
           OS=${{ runner.os }}
           if [ "$OS" = "Linux" ]; then
             sudo apt update -y
-            sudo apt install -y ksh bash dash zsh busybox posh mksh yash
+
+            sudo apt install -y ksh bash dash zsh posh yash
+            SHELLS="sh ksh bash dash zsh posh yash"
+
+            # The `mksh` package provides both `mksh` and the legacy-oriented `lksh`
+            sudo apt install -y mksh
+            SHELLS="$SHELLS mksh lksh"
+
+            # `busybox` is a single binary which can be invoked as a variety of programs, including
+            # `ash` (following the Almquist shell, like `dash`) and `hush` (following `bash`)
+            sudo apt install busybox
             sudo ln -s "$(which busybox)" /usr/bin/ash
             sudo ln -s "$(which busybox)" /usr/bin/hush
+            SHELLS="$SHELLS ash hush"
+
+            # `gash` isn't immediately available via the repositories, yet is packaged by Debian
             wget http://ftp.us.debian.org/debian/pool/main/g/gash/gash_0.3.1-1_amd64.deb
-            sudo apt install ./gash_0.3.1-1_amd64.deb
-            SHELLS="sh ksh bash dash zsh ash hush posh mksh lksh gash yash"
+            sudo apt install -y ./gash_0.3.1-1_amd64.deb
+            SHELLS="$SHELLS gash"
+
+            # `pdksh` stopped being packaged over a decade ago, yet is
+            # available (and functional!) from the historical server
+            wget https://snapshot.debian.org/archive/debian/20111024T031453Z/pool/main/p/pdksh/pdksh_5.2.14-26_amd64.deb
+            sudo apt install -y ./pdksh_5.2.14-26_amd64.deb
+            SHELLS="$SHELLS pdksh"
           fi
           if [ "$OS" = "macOS" ]; then
             brew install binutils # `readelf`
-
             # `binutils` is not placed within the path, so find its
             # `readelf` bin and manually move it into our path
             HOMEBREW_ROOT_PATH=/opt/homebrew # Apple Silicon
