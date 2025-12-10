@@ -66,6 +66,7 @@ jobs:
 
           # Install shells available via `go`
           GOBIN=$(pwd) go install github.com/u-root/u-root/cmds/core/gosh@latest
+          mv ./gosh /usr/bin
           SHELLS="$SHELLS gosh"
 
           # Patch with `muslstack`
