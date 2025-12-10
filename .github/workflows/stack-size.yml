@@ -57,8 +57,6 @@ jobs:
           fi
 
           # Install shells available via `cargo`
-          cargo install nsh
-          SHELLS="$SHELLS nsh"
           cargo install brush-shell
           SHELLS="$SHELLS brush"
 
