@@ -51,7 +51,6 @@ jobs:
           fi
           # macOS has the benefit of packaging `oksh`, `osh`, and having distinct core tools
           if [ "$OS" = "macOS" ]; then
-            brew install elfutils # Install `elfutils` for `chelf` has `elf.h` available
             brew install ksh93 bash dash-shell zsh posh mksh oksh yash oils-for-unix
             SHELLS="sh ksh bash dash zsh posh mksh oksh yash osh"
           fi
@@ -64,17 +63,21 @@ jobs:
           GOBIN=$(pwd) go install github.com/u-root/u-root/cmds/core/gosh@latest
           SHELLS="$SHELLS gosh"
 
-          cp monerod monerod-chelf
-          git clone https://github.com/Gottox/chelf
-          cd chelf
-          git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
-          make
-          ./chelf -s "$STACK" ../monerod-chelf
-          cd ..
-
+          # Patch with `muslstack`
           cp monerod monerod-muslstack
           GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
           ./muslstack -s "$STACK" ./monerod-muslstack
+
+          # Patch with `chelf`, which only works on a Linux host
+          if [ "$OS" = "Linux" ]; then
+            cp monerod monerod-chelf
+            git clone https://github.com/Gottox/chelf
+            cd chelf
+            git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
+            make
+            ./chelf -s "$STACK" ../monerod-chelf
+            cd ..
+          fi
 
           # Run our script with all installed shells
           for shell in $SHELLS; do
@@ -88,11 +91,11 @@ jobs:
           sha256() {
             sha256sum "$1" | cut -d' ' -f1
           }
-          CHELF=$(sha256 monerod-chelf)
+          CHELF=$(sha256 monerod-muslstack)
           find . -iname "monerod-*" | while read -r bin; do
             BIN=$(sha256 "$bin")
             if [ ! "$CHELF" = "$BIN" ]; then
-              echo "Different artifact between monerod-chelf ($CHELF) and $bin ($BIN)"
+              echo "Different artifact between monerod-muslstack ($CHELF) and $bin ($BIN)"
               exit 1
             fi
           done
@@ -109,14 +112,14 @@ jobs:
             exit 2
           fi
 
-          UPDATED_STACK=$(read_stack monerod-chelf)
+          UPDATED_STACK=$(read_stack monerod-muslstack)
           if [ "$UPDATED_STACK" -ne "$STACK" ]; then
             echo "Updated \`PT_GNU_STACK\` ($UPDATED_STACK) wasn't 8 MB ($STACK)"
             exit 3
           fi
 
           # Only one byte should be different due to the bit pattern of 8 MB
-          BYTES_DIFFERENT=$(cmp -l monerod monerod-chelf | wc -l || true)
+          BYTES_DIFFERENT=$(cmp -l monerod monerod-muslstack | wc -l || true)
           if [ "$BYTES_DIFFERENT" -ne 1 ]; then
             echo "More than one byte was different between the two binaries"
             exit 4
