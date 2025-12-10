@@ -84,6 +84,9 @@ jobs:
             # Now, we install `mrsh`.
             sudo port install mrsh
             SHELLS="$SHELLS mrsh"
+
+            # `chelf` requires `elf.h` which may be provided via `libelf`
+            sudo port install libelf
           fi
 
           # Install shells available via `cargo`
@@ -95,25 +98,23 @@ jobs:
           # GOBIN=/usr/local/bin go install github.com/u-root/u-root/cmds/core/gosh@latest
           # SHELLS="$SHELLS gosh"
 
+          # Patch with `chelf`
+          cp monerod monerod-chelf
+          git clone https://github.com/Gottox/chelf
+          cd chelf
+          git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
+          make
+          ./chelf -s "$STACK" ../monerod-chelf
+          cd ..
+
           # Patch with `muslstack`
           cp monerod monerod-muslstack
           GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
           ./muslstack -s "$STACK" ./monerod-muslstack
 
-          # Patch with `chelf`, which only works on a Linux host (due to requiring `elf.h`)
-          if [ "$OS" = "Linux" ]; then
-            cp monerod monerod-chelf
-            git clone https://github.com/Gottox/chelf
-            cd chelf
-            git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
-            make
-            ./chelf -s "$STACK" ../monerod-chelf
-            cd ..
-          fi
-
           # Run our script with all installed shells
           for shell in $SHELLS; do
-            echo "Executing $shell"
+            echo "Executing \`$shell\`"
             cp monerod monerod-idss-$shell
             ln -s "$(which $shell)" sh
             ./sh ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
@@ -124,11 +125,11 @@ jobs:
           sha256() {
             sha256sum "$1" | cut -d' ' -f1
           }
-          CHELF=$(sha256 monerod-muslstack)
+          CHELF=$(sha256 monerod-chelf)
           find . -name "monerod-*" | while read -r bin; do
             BIN=$(sha256 "$bin")
             if [ ! "$CHELF" = "$BIN" ]; then
-              echo "Different artifact between monerod-muslstack ($CHELF) and $bin ($BIN)"
+              echo "Different artifact between \`monerod-chelf\` ($CHELF) and \`$bin\` ($BIN)"
               exit 1
             fi
           done
@@ -145,14 +146,14 @@ jobs:
             exit 2
           fi
 
-          UPDATED_STACK=$(read_stack monerod-muslstack)
+          UPDATED_STACK=$(read_stack monerod-chelf)
           if [ "$UPDATED_STACK" -ne "$STACK" ]; then
             echo "Updated \`PT_GNU_STACK\` ($UPDATED_STACK) wasn't 8 MB ($STACK)"
             exit 3
           fi
 
           # Only one byte should be different due to the bit pattern of 8 MB
-          BYTES_DIFFERENT=$(cmp -l monerod monerod-muslstack | wc -l || true)
+          BYTES_DIFFERENT=$(cmp -l monerod monerod-chelf | wc -l || true)
           if [ "$BYTES_DIFFERENT" -ne 1 ]; then
             echo "More than one byte was different between the two binaries"
             exit 4
