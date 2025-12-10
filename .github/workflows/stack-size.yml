@@ -78,6 +78,8 @@ jobs:
             make
             sudo make install
             cd ..
+            PATH=$PATH:/opt/local/bin
+            sudo port -v selfupdate
 
             # Now, we install `mrsh`.
             sudo port install mrsh
