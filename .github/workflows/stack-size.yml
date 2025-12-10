@@ -16,20 +16,28 @@ jobs:
   stack_size:
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04]
+        os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04, macos-15-intel, macos-latest]
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
-      - name: Download Monero
-        uses: ./.github/actions/monero
+      - name: Monero Daemon Cache
+        id: cache-monerod
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # 4.2.4
+        with:
+          path: monerod
+
+      - name: Download the Monero Daemon
+        if: steps.cache-monerod.outputs.cache-hit != 'true'
+        run: |
+          # We explicitly download the Linux binary as this script executes over an ELF binary
+          wget https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.4.4.tar.bz2
+          tar -xvf monero-linux-x64-v0.18.4.4.tar.bz2
+          mv $(find . -name monerod) .
 
       - name: Verify expected behavior
         shell: bash
         run: |
-          cp /usr/bin/monerod monerod
-
           STACK=$((8 * 1024 * 1024))
 
           cp monerod monerod-chelf
@@ -44,18 +52,39 @@ jobs:
           GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
           ./muslstack -s "$STACK" ./monerod-muslstack
 
-          sudo apt update -y
-          sudo apt install -y ksh bash dash zsh busybox mksh posh gash yash
-          sudo ln -s "$(which busybox)" /usr/bin/ash
-          sudo ln -s "$(which busybox)" /usr/bin/hush
+          OS=${{ runner.os }}
+          if [ "$OS" = "Linux" ]; then
+            sudo apt update -y
+            sudo apt install -y ksh bash dash zsh busybox posh mksh gash yash
+            sudo ln -s "$(which busybox)" /usr/bin/ash
+            sudo ln -s "$(which busybox)" /usr/bin/hush
+            SHELLS="sh ksh bash dash zsh ash hush posh mksh lksh gash yash"
+          fi
+          # macOS has the benefit of packaging `oksh`, `osh`, and having distinct core tools
+          if [ "$OS" = "macOS" ]; then
+            brew install ksh93 bash dash-shell zsh posh mksh oksh yash oils-for-unix
+            SHELLS="sh ksh bash dash zsh posh mksh oksh yash osh"
+          fi
+
+          # Install shells available via `cargo`
+          cargo install nsh
+          SHELLS="$SHELLS nsh"
           cargo install brush-shell
-          for shell in sh ksh bash dash zsh ash hush mksh lksh posh gash yash brush; do
+          SHELLS="$SHELLS brush"
+
+          # Install shells available via `go`
+          GOBIN=$(pwd) go install github.com/u-root/u-root/cmds/core/gosh@latest
+          SHELLS="$SHELLS gosh"
+
+          # Run our script with all installed shells
+          for shell in $SHELLS; do
             cp monerod monerod-idss-$shell
             ln -s "$(which $shell)" sh
             ./sh ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
             rm ./sh
           done
 
+          # Verify they all had the same result
           sha256() {
             sha256sum "$1" | cut -d' ' -f1
           }
@@ -68,6 +97,7 @@ jobs:
             fi
           done
 
+          # Verify the integrity of the result
           read_stack() {
             STACK_INFO=$(readelf "$1" -l | grep STACK -A1)
             MEMSZ=$(printf "%s\n" "$STACK_INFO" | tail -n1 | sed -E s/^[[:space:]]*//g | cut -f2 -d' ')
