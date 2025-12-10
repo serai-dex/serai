@@ -19,6 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
+      - name: Install Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # 6.1.0
+        with:
+          go-version: stable
+
       - name: Monero Daemon Cache
         id: cache-monerod
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # 4.2.4
