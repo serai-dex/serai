@@ -56,6 +56,7 @@ jobs:
           fi
           # macOS has the benefit of packaging `oksh`, `osh`, and having distinct core tools
           if [ "$OS" = "macOS" ]; then
+            brew install binutils # `readelf`
             brew install ksh93 bash dash-shell zsh mksh oksh yash oils-for-unix
             SHELLS="sh ksh bash dash zsh mksh oksh yash osh"
           fi
