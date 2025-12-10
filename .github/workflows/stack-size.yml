@@ -39,18 +39,6 @@ jobs:
         run: |
           STACK=$((8 * 1024 * 1024))
 
-          cp monerod monerod-chelf
-          git clone https://github.com/Gottox/chelf
-          cd chelf
-          git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
-          make
-          ./chelf -s "$STACK" ../monerod-chelf
-          cd ..
-
-          cp monerod monerod-muslstack
-          GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
-          ./muslstack -s "$STACK" ./monerod-muslstack
-
           OS=${{ runner.os }}
           if [ "$OS" = "Linux" ]; then
             sudo apt update -y
@@ -61,6 +49,7 @@ jobs:
           fi
           # macOS has the benefit of packaging `oksh`, `osh`, and having distinct core tools
           if [ "$OS" = "macOS" ]; then
+            brew install elfutils # Install `elfutils` for `chelf` has `elf.h` available
             brew install ksh93 bash dash-shell zsh posh mksh oksh yash oils-for-unix
             SHELLS="sh ksh bash dash zsh posh mksh oksh yash osh"
           fi
@@ -74,6 +63,18 @@ jobs:
           # Install shells available via `go`
           GOBIN=$(pwd) go install github.com/u-root/u-root/cmds/core/gosh@latest
           SHELLS="$SHELLS gosh"
+
+          cp monerod monerod-chelf
+          git clone https://github.com/Gottox/chelf
+          cd chelf
+          git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
+          make
+          ./chelf -s "$STACK" ../monerod-chelf
+          cd ..
+
+          cp monerod monerod-muslstack
+          GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
+          ./muslstack -s "$STACK" ./monerod-muslstack
 
           # Run our script with all installed shells
           for shell in $SHELLS; do
