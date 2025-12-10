@@ -70,9 +70,8 @@ jobs:
             brew install ksh93 bash dash-shell zsh mksh oksh yash oils-for-unix
             SHELLS="sh ksh bash dash zsh mksh oksh yash osh"
 
-            # macOS also has the benefit of packaging (via MacPorts) `mrsh`,
-            # which explicitly attempts to be be exactly POSIX, without any extensions.
-            # We first have to install MacPorts, the easiest method being via source.
+            # For the rest of these shells, we will need MacPorts.
+            # The easiest method to install is via source.
             curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.11.6.tar.bz2
             tar xf MacPorts-2.11.6.tar.bz2
             cd MacPorts-2.11.6
@@ -80,13 +79,25 @@ jobs:
             make
             sudo make install
             cd ..
-            PATH=$PATH:/opt/local/bin
+            PATH_BEFORE_MACPORTS=$PATH
+            PATH=$PATH_BEFORE_MACPORTS:/opt/local/bin
             sudo port -v selfupdate
 
-            # Now, we install `mrsh`
             # TODO: https://github.com/serai-dex/serai/issues/704
             # sudo port install mrsh
+            # sudo mv /opt/local/bin/mrsh /usr/local/bin/
             # SHELLS="$SHELLS mrsh"
+
+            sudo port install pdksh
+            sudo mv /opt/local/bin/pdksh /usr/local/bin/
+            SHELLS="$SHELLS pdksh"
+
+            sudo port install ksh93
+            sudo mv $(find /opt/local/bin/ -name "ksh*") /usr/local/bin/ksh93
+            SHELLS="$SHELLS ksh93"
+
+            # Remove MacPorts from the path
+            PATH=$PATH_BEFORE_MACPORTS
           fi
 
           # Install shells available via `cargo`
