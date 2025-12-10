@@ -67,6 +67,21 @@ jobs:
             # TODO: `posh` is packaged but doesn't work: https://github.com/serai-dex/serai/issues/703
             brew install ksh93 bash dash-shell zsh mksh oksh yash oils-for-unix
             SHELLS="sh ksh bash dash zsh mksh oksh yash osh"
+
+            # macOS also has the benefit of packaging (via MacPorts) `mrsh`,
+            # which explicitly attempts to be be exactly POSIX, without any extensions.
+            # We first have to install MacPorts, the easiest method being via source.
+            curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.11.6.tar.bz2
+            tar xf MacPorts-2.11.6.tar.bz2
+            cd MacPorts-2.11.6
+            ./configure
+            make
+            sudo make install
+            cd ..
+
+            # Now, we install `mrsh`.
+            sudo port install mrsh
+            SHELLS="$SHELLS mrsh"
           fi
 
           # Install shells available via `cargo`
