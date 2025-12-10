@@ -42,9 +42,11 @@ jobs:
           OS=${{ runner.os }}
           if [ "$OS" = "Linux" ]; then
             sudo apt update -y
-            sudo apt install -y ksh bash dash zsh busybox posh mksh gash yash
+            sudo apt install -y ksh bash dash zsh busybox posh mksh yash
             sudo ln -s "$(which busybox)" /usr/bin/ash
             sudo ln -s "$(which busybox)" /usr/bin/hush
+            wget http://ftp.us.debian.org/debian/pool/main/g/gash/gash_0.3.1-1_amd64.deb
+            sudo apt install ./gash_0.3.1-1_amd64.deb
             SHELLS="sh ksh bash dash zsh ash hush posh mksh lksh gash yash"
           fi
           # macOS has the benefit of packaging `oksh`, `osh`, and having distinct core tools
