@@ -65,9 +65,10 @@ jobs:
           SHELLS="$SHELLS brush"
 
           # Install shells available via `go`
-          GOBIN=$(pwd) go install github.com/u-root/u-root/cmds/core/gosh@latest
-          sudo mv ./gosh /usr/bin
-          SHELLS="$SHELLS gosh"
+          # TODO: https://github.com/u-root/u-root/issues/3474
+          # GOBIN=$(pwd) go install github.com/u-root/u-root/cmds/core/gosh@latest
+          # sudo mv ./gosh /usr/bin
+          # SHELLS="$SHELLS gosh"
 
           # Patch with `muslstack`
           cp monerod monerod-muslstack
