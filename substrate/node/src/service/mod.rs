@@ -433,7 +433,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       grandpa::run_grandpa_voter(grandpa::GrandpaParams {
         config: grandpa::Config {
           gossip_duration: std::time::Duration::from_millis(333),
-          justification_generation_period: 512,
+          justification_generation_period: 1,
           name: Some(name),
           observer_enabled: false,
           keystore: if role.is_authority() { Some(keystore) } else { None },
