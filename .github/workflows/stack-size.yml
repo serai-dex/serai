@@ -5,8 +5,6 @@ on:
     paths:
       - "orchestration/increase_default_stack_size.sh"
   pull_request:
-    paths:
-      - "orchestration/increase_default_stack_size.sh"
   workflow_dispatch:
   # Also run weekly to ensure this doesn't inadvertently decay
   schedule:
