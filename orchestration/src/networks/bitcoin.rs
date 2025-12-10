@@ -19,7 +19,7 @@ RUN wget -4 https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SU
 # Verify all sigs and check for a valid signature from laanwj -- 71A3
 RUN git clone https://github.com/bitcoin-core/guix.sigs && \
   cd guix.sigs/builder-keys && \
-  find . -iname '*.gpg' -exec gpg --import {} \; && \
+  find . -name '*.gpg' -exec gpg --import {} \; && \
   gpg --verify --status-fd 1 --verify ../../SHA256SUMS.asc ../../SHA256SUMS | grep "^\[GNUPG:\] VALIDSIG.*71A3B16735405025D447E8F274810B012346C9A6"
 
 RUN grep bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz SHA256SUMS | sha256sum -c

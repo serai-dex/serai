@@ -74,7 +74,7 @@ jobs:
           cache: false
 
       - name: Run forge fmt
-        run: FOUNDRY_FMT_SORT_INPUTS=false FOUNDRY_FMT_LINE_LENGTH=100 FOUNDRY_FMT_TAB_WIDTH=2 FOUNDRY_FMT_BRACKET_SPACING=true FOUNDRY_FMT_INT_TYPES=preserve forge fmt --check $(find . -iname "*.sol")
+        run: FOUNDRY_FMT_SORT_INPUTS=false FOUNDRY_FMT_LINE_LENGTH=100 FOUNDRY_FMT_TAB_WIDTH=2 FOUNDRY_FMT_BRACKET_SPACING=true FOUNDRY_FMT_INT_TYPES=preserve forge fmt --check $(find . -name "*.sol")
 
   machete:
     runs-on: ubuntu-latest
@@ -209,6 +209,6 @@ jobs:
         - name: shellcheck
           run: |
             sudo apt install -y shellcheck
-            find . -iname "*.sh" | while read -r script; do
+            find . -name "*.sh" | while read -r script; do
               shellcheck --enable=all --shell=sh --severity=info $script
             done
