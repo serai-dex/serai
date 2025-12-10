@@ -57,6 +57,15 @@ jobs:
           # macOS has the benefit of packaging `oksh`, `osh`, and having distinct core tools
           if [ "$OS" = "macOS" ]; then
             brew install binutils # `readelf`
+
+            # `binutils` is not placed within the path, so find its `readelf` bin and manually move
+            # it into our path. Due to the two possible prefixes, this consolidates them to a single
+            # parent directory which is cursed, yet functional
+            sudo mkdir -p /opt/homebrew
+            sudo cp -r /opt/homebrew /usr/local/opt_homebrew
+            sudo cp $(find /usr/local -name readelf) /usr/bin/
+            sudo rm -rf /usr/local/opt_homebrew
+
             brew install ksh93 bash dash-shell zsh mksh oksh yash oils-for-unix
             SHELLS="sh ksh bash dash zsh mksh oksh yash osh"
           fi
