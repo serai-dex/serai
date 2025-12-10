@@ -54,18 +54,17 @@ jobs:
             sudo apt install ./gash_0.3.1-1_amd64.deb
             SHELLS="sh ksh bash dash zsh ash hush posh mksh lksh gash yash"
           fi
-          # macOS has the benefit of packaging `oksh`, `osh`, and having distinct core tools
           if [ "$OS" = "macOS" ]; then
             brew install binutils # `readelf`
 
-            # `binutils` is not placed within the path, so find its `readelf` bin and manually move
-            # it into our path. Due to the two possible prefixes, this consolidates them to a single
-            # parent directory which is cursed, yet functional
-            sudo mkdir -p /opt/homebrew
-            sudo cp -r /opt/homebrew /usr/local/opt_homebrew
-            sudo cp $(find /usr/local -name readelf) /usr/bin/
-            sudo rm -rf /usr/local/opt_homebrew
+            # `binutils` is not placed within the path, so find its
+            # `readelf` bin and manually move it into our path
+            HOMEBREW_ROOT_PATH=/opt/homebrew # Apple Silicon
+            if [ $(uname -m) = "x86_64" ]; then HOMEBREW_ROOT_PATH=/usr/local; fi # Intel
+            sudo cp $(find "$HOMEBREW_ROOT_PATH" -name readelf) /usr/local/bin/
 
+            # macOS has the benefit of packaging `oksh`, `osh`, and having distinct core tools
+            # TODO: `posh` is packaged but doesn't work: https://github.com/serai-dex/serai/issues/703
             brew install ksh93 bash dash-shell zsh mksh oksh yash oils-for-unix
             SHELLS="sh ksh bash dash zsh mksh oksh yash osh"
           fi
@@ -76,8 +75,7 @@ jobs:
 
           # Install shells available via `go`
           # TODO: https://github.com/u-root/u-root/issues/3474
-          # GOBIN=$(pwd) go install github.com/u-root/u-root/cmds/core/gosh@latest
-          # sudo mv ./gosh /usr/bin
+          # GOBIN=/usr/local/bin go install github.com/u-root/u-root/cmds/core/gosh@latest
           # SHELLS="$SHELLS gosh"
 
           # Patch with `muslstack`
@@ -85,7 +83,7 @@ jobs:
           GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
           ./muslstack -s "$STACK" ./monerod-muslstack
 
-          # Patch with `chelf`, which only works on a Linux host
+          # Patch with `chelf`, which only works on a Linux host (due to requiring `elf.h`)
           if [ "$OS" = "Linux" ]; then
             cp monerod monerod-chelf
             git clone https://github.com/Gottox/chelf
