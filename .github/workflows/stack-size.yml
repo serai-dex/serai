@@ -48,8 +48,8 @@ jobs:
           if [ "$OS" = "Linux" ]; then
             sudo apt update -y
 
-            sudo apt install -y ksh bash dash zsh posh yash
-            SHELLS="sh ksh bash dash zsh posh yash"
+            sudo apt install -y bash dash zsh posh yash
+            SHELLS="sh bash dash zsh posh yash"
 
             # The `mksh` package provides both `mksh` and the legacy-oriented `lksh`
             sudo apt install -y mksh
@@ -72,6 +72,13 @@ jobs:
             wget https://snapshot.debian.org/archive/debian/20111024T031453Z/pool/main/p/pdksh/pdksh_5.2.14-26_amd64.deb
             sudo apt install -y ./pdksh_5.2.14-26_amd64.deb
             SHELLS="$SHELLS pdksh"
+
+            # `pdksh` would (silently) conflict with `ksh` due to providing a fallback
+            # for `ksh` proper, so we now remove the fallback and install `ksh`
+            sudo update-alternatives --remove ksh /bin/pdksh
+            sudo rm -f /bin/ksh /usr/bin/ksh
+            sudo apt install ksh
+            SHELLS="$SHELLS ksh"
           fi
           if [ "$OS" = "macOS" ]; then
             brew install binutils # `readelf`
