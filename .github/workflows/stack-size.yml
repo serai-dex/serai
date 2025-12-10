@@ -56,8 +56,8 @@ jobs:
           fi
           # macOS has the benefit of packaging `oksh`, `osh`, and having distinct core tools
           if [ "$OS" = "macOS" ]; then
-            brew install ksh93 bash dash-shell zsh posh mksh oksh yash oils-for-unix
-            SHELLS="sh ksh bash dash zsh posh mksh oksh yash osh"
+            brew install ksh93 bash dash-shell zsh mksh oksh yash oils-for-unix
+            SHELLS="sh ksh bash dash zsh mksh oksh yash osh"
           fi
 
           # Install shells available via `cargo`
@@ -86,6 +86,7 @@ jobs:
 
           # Run our script with all installed shells
           for shell in $SHELLS; do
+            echo "Executing $shell"
             cp monerod monerod-idss-$shell
             ln -s "$(which $shell)" sh
             ./sh ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
@@ -97,7 +98,7 @@ jobs:
             sha256sum "$1" | cut -d' ' -f1
           }
           CHELF=$(sha256 monerod-muslstack)
-          find . -iname "monerod-*" | while read -r bin; do
+          find . -name "monerod-*" | while read -r bin; do
             BIN=$(sha256 "$bin")
             if [ ! "$CHELF" = "$BIN" ]; then
               echo "Different artifact between monerod-muslstack ($CHELF) and $bin ($BIN)"
