@@ -45,11 +45,11 @@ jobs:
           ./muslstack -s "$STACK" ./monerod-muslstack
 
           sudo apt update -y
-          sudo apt install -y ksh bash dash zsh busybox mksh posh yash
+          sudo apt install -y ksh bash dash zsh busybox mksh posh gash yash
           sudo ln -s "$(which busybox)" /usr/bin/ash
           sudo ln -s "$(which busybox)" /usr/bin/hush
           cargo install brush-shell
-          for shell in sh ksh bash dash zsh ash hush mksh lksh posh yash brush; do
+          for shell in sh ksh bash dash zsh ash hush mksh lksh posh gash yash brush; do
             cp monerod monerod-idss-$shell
             ln -s "$(which $shell)" sh
             ./sh ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
