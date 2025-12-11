@@ -204,15 +204,13 @@ dalek-ff-group = { path = "patches/dalek-ff-group" }
 minimal-ed448 = { path = "crypto/ed448" }
 modular-frost = { path = "crypto/frost" }
 
-# This has a non-deprecated `std` alternative since Rust's 2024 edition
+# Patches due to `std` now including the required functionality
 home = { path = "patches/home" }
+lazy_static = { path = "patches/lazy_static" }
 
 # Updates to the latest version
 darling = { path = "patches/darling" }
 thiserror = { path = "patches/thiserror" }
-
-# https://github.com/rust-lang-nursery/lazy-static.rs/issues/201
-lazy_static = { git = "https://github.com/rust-lang-nursery/lazy-static.rs", rev = "5735630d46572f1e5377c8f2ba0f79d18f53b10c" }
 
 # directories-next was created because directories was unmaintained
 # directories-next is now unmaintained while directories is maintained
