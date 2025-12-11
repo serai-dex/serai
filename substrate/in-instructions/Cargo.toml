@@ -21,6 +21,7 @@ workspace = true
 
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+borsh = { version = "1", default-features = false }
 
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
@@ -40,6 +41,7 @@ serai-genesis-liquidity-pallet = { path = "../genesis-liquidity", default-featur
 [features]
 std = [
   "scale/std",
+  "borsh/std",
 
   "sp-core/std",
   "sp-application-crypto/std",

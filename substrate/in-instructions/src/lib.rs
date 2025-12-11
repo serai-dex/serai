@@ -7,10 +7,11 @@ extern crate alloc;
 #[expect(clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 mod pallet {
+  use sp_core::sr25519::Public;
   use sp_application_crypto::RuntimePublic;
 
+  use frame_support::{pallet_prelude::*, dispatch::RawOrigin};
   use frame_system::pallet_prelude::*;
-  use frame_support::pallet_prelude::*;
 
   use serai_abi::{primitives::prelude::*, in_instructions::Event};
 
@@ -59,6 +60,127 @@ mod pallet {
     fn emit_event(event: Event) {
       Core::<T>::emit_event(event)
     }
+
+    /// Execute an `InInstructionWithBalance`.
+    ///
+    /// We execute this within a database layer to ensure it's atomic, executing entirely or not at
+    /// all.
+    #[frame_support::transactional]
+    fn execute(instruction: InInstructionWithBalance) -> DispatchResult {
+      let InInstructionWithBalance { instruction, balance: external_balance } = instruction;
+      let balance = <Balance as From<ExternalBalance>>::from(external_balance);
+
+      // Mint the balance to ourself
+      let address = serai_abi::in_instructions::address();
+      Coins::<T>::mint(address.into(), balance)?;
+
+      match instruction {
+        InInstruction::GenesisLiquidity(address) => {
+          serai_genesis_liquidity_pallet::Pallet::<T>::add_liquidity(address, external_balance)?;
+        }
+        InInstruction::SwapToStakedSri { validator, minimum } => todo!("TODO"),
+        InInstruction::TransferWithSwap { to, maximum_to_swap, sri } => {
+          serai_dex_pallet::Pallet::<T>::swap_for(
+            RawOrigin::Signed(address.into()).into(),
+            Balance { coin: Coin::Serai, amount: sri },
+            Balance { coin: balance.coin, amount: maximum_to_swap },
+          )?;
+
+          Coins::<T>::transfer_fn(
+            address.into(),
+            to.into(),
+            Balance {
+              coin: balance.coin,
+              amount: Coins::<T>::balance(Public::from(address), balance.coin),
+            },
+          )?;
+          Coins::<T>::transfer_fn(
+            address.into(),
+            to.into(),
+            Balance {
+              coin: Coin::Serai,
+              amount: Coins::<T>::balance(Public::from(address), Coin::Serai),
+            },
+          )?;
+        }
+        InInstruction::Transfer { to } => {
+          Coins::<T>::transfer_fn(address.into(), to.into(), balance)?;
+        }
+        InInstruction::SwapAndAddLiquidity {
+          address: destination,
+          coin,
+          sri_minimum,
+          sri_for_fees,
+        } => {
+          let external_coin = external_balance.coin;
+          serai_dex_pallet::Pallet::<T>::swap(
+            RawOrigin::Signed(address.into()).into(),
+            Balance {
+              coin: Coin::External(external_coin),
+              amount: (balance.amount - coin).ok_or(serai_dex_pallet::Error::<T>::Underflow)?,
+            },
+            Balance {
+              coin: Coin::Serai,
+              amount: (sri_minimum + sri_for_fees).ok_or(serai_dex_pallet::Error::<T>::Overflow)?,
+            },
+          )?;
+
+          let sri_intended = (Coins::<T>::balance(Public::from(address), Coin::Serai) -
+            sri_for_fees)
+            .expect("swapped to amount sufficient for minimum, fees, but received less than fees?");
+          let coin_intended = coin;
+          let coin_minimum = coin;
+          serai_dex_pallet::Pallet::<T>::add_liquidity(
+            RawOrigin::Signed(address.into()).into(),
+            external_coin,
+            sri_intended,
+            coin_intended,
+            sri_minimum,
+            coin_minimum,
+          )?;
+
+          // Transfer the rest, which will be more than the amount requested for fees, to the
+          // destination
+          Coins::<T>::transfer_fn(
+            address.into(),
+            destination.into(),
+            Balance {
+              coin: Coin::Serai,
+              amount: Coins::<T>::balance(Public::from(address), Coin::Serai),
+            },
+          )?;
+        }
+        InInstruction::Swap { address: destination, minimum_to_receive } => {
+          serai_dex_pallet::Pallet::<T>::swap(
+            RawOrigin::Signed(address.into()).into(),
+            balance,
+            minimum_to_receive,
+          )?;
+
+          let coin = minimum_to_receive.coin;
+          let received_amount = Coins::<T>::balance(Public::from(address), coin);
+          let received = Balance { coin, amount: received_amount };
+          Coins::<T>::transfer_fn(address.into(), destination.into(), received)?;
+        }
+        InInstruction::SwapOut { instruction, minimum_to_receive } => {
+          serai_dex_pallet::Pallet::<T>::swap(
+            RawOrigin::Signed(address.into()).into(),
+            balance,
+            minimum_to_receive.into(),
+          )?;
+
+          let coin = minimum_to_receive.coin;
+          let received_amount = Coins::<T>::balance(Public::from(address), Coin::from(coin));
+          let received = ExternalBalance { coin, amount: received_amount };
+          Coins::<T>::burn_with_instruction(
+            RawOrigin::Signed(address.into()).into(),
+            OutInstructionWithBalance { instruction, balance: received },
+          )?;
+        }
+      };
+
+      Ok(())
+    }
   }
 
   #[pallet::call]
@@ -67,7 +189,29 @@ mod pallet {
     #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn execute_batch(origin: OriginFor<T>, batch: SignedBatch) -> DispatchResult {
-      todo!("TODO")
+      let batch = batch.batch;
+      let network = batch.network();
+
+      let mut in_instruction_results = bitvec::vec::BitVec::new();
+      for instruction in batch.instructions() {
+        in_instruction_results.push(Self::execute(instruction.clone()).is_ok());
+      }
+
+      // The publishing session is always the current session
+      let publishing_session =
+        serai_validator_sets_pallet::Pallet::<T>::current_session(NetworkId::from(network))
+          .expect("`SignedBatch` for a network without a session was validated");
+
+      Self::emit_event(Event::Batch {
+        network,
+        publishing_session,
+        id: batch.id(),
+        external_network_block_hash: batch.external_network_block_hash(),
+        in_instructions_hash: sp_core::blake2_256(&borsh::to_vec(batch.instructions()).unwrap()),
+        in_instruction_results,
+      });
+
+      Ok(())
     }
   }
 
@@ -118,6 +262,13 @@ mod pallet {
             Err(InvalidTransaction::BadProof)?;
           }
           signed_by_latest_decided_session = true;
+        }
+      }
+
+      // Verify every coin with the `Batch` corresponds to this network
+      for instruction in batch.batch.instructions() {
+        if instruction.balance.coin.network() != network {
+          Err(InvalidTransaction::Custom(2))?;
         }
       }
 

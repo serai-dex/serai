@@ -8433,6 +8433,7 @@ name = "serai-in-instructions-pallet"
 version = "0.1.0"
 dependencies = [
  "bitvec",
+ "borsh",
  "frame-support",
  "frame-system",
  "parity-scale-codec",
