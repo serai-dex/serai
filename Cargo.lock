@@ -4148,8 +4148,7 @@ dependencies = [
 
 [[package]]
 name = "lazy_static"
-version = "1.5.0"
-source = "git+https://github.com/rust-lang-nursery/lazy-static.rs?rev=5735630d46572f1e5377c8f2ba0f79d18f53b10c#5735630d46572f1e5377c8f2ba0f79d18f53b10c"
+version = "1.99.0"
 
 [[package]]
 name = "leb128fmt"
