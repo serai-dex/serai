@@ -1,5 +1,3 @@
-use core::cmp::Ord;
-
 /// A trait for calculating the average of two values.
 pub trait Average {
   /// Calculate the average of two values.
@@ -11,12 +9,7 @@ macro_rules! impl_prim_uint {
     impl Average for $type {
       /// This rounds as integer division does: by flooring the result.
       fn average(value: Self, other: Self) -> Self {
-        /*
-          Since `value + other` may overflow, without promotion to a wider integer, we perform the
-          halving as the first operation. Then we add back the truncated bit as necessary. This
-          methodology doesn't overflow and doesn't require the existence of a wider integer type.
-        */
-        (value / 2) + (other / 2) + (value & other & 1)
+        value.midpoint(other)
       }
     }
   };
@@ -28,6 +21,7 @@ impl_prim_uint!(u64);
 impl_prim_uint!(u128);
 
 #[test]
+#[expect(clippy::manual_midpoint)]
 fn average() {
   use rand_core::{RngCore, OsRng};
 

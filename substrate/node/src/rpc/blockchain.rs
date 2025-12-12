@@ -1,17 +1,12 @@
-use core::{ops::Deref, future::Future};
-use std::{sync::Arc, collections::HashSet};
+use std::sync::Arc;
 
-use rand_core::{RngCore, OsRng};
-
-use sp_core::Encode;
 use sp_blockchain::{Error as BlockchainError, HeaderMetadata, HeaderBackend};
 use sp_consensus::BlockStatus;
-use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
 use sc_client_api::BlockBackend;
 use sc_transaction_pool_api::TransactionPool;
 
-use serai_abi::{primitives::prelude::*, Transaction, SubstrateBlock as Block};
+use serai_abi::{Transaction, SubstrateBlock as Block};
 
 use serai_runtime::SeraiApi;
 
@@ -35,7 +30,7 @@ pub(crate) fn module<
 
   module.register_method("blockchain/latest_finalized_block_number", |_params, client, _ext| {
     client.info().finalized_number
-  });
+  })?;
 
   module.register_method(
     "blockchain/is_finalized",
@@ -90,7 +85,7 @@ pub(crate) fn module<
       #[serde(crate = "sp_core::serde")]
       struct TransactionRequest {
         transaction: String,
-      };
+      }
       let Ok(transaction) = params.parse::<TransactionRequest>() else {
         return Err(Error::InvalidRequest(r#"missing `string` "transaction" field"#));
       };

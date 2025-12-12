@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{pin::Pin, future::Future};
 use std::sync::Arc;
@@ -64,7 +65,6 @@ pub struct Client<
 impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>>
   Client<E>
 {
-  #[allow(clippy::unnecessary_wraps)]
   fn connector() -> Result<Connector, Error> {
     let mut res = HttpConnector::new();
     res.set_keepalive(Some(core::time::Duration::from_secs(60)));
@@ -122,7 +122,7 @@ impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Outpu
           let uri: Uri = host.parse().map_err(|_| Error::InvalidUri)?;
           if uri.host().is_none() {
             Err(Error::MissingHost)?;
-          };
+          }
           uri
         },
         connection: Arc::new(Mutex::new(None)),
@@ -144,9 +144,7 @@ impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Outpu
       }
     } else {
       let host = match &self.connection {
-        Connection::ConnectionPool(_) => {
-          request.uri().host().ok_or(Error::MissingHost)?.to_string()
-        }
+        Connection::ConnectionPool(_) => request.uri().host().ok_or(Error::MissingHost)?.to_owned(),
         Connection::Connection { host, .. } => {
           let host_str = host.host().unwrap();
           if let Some(uri_host) = request.uri().host() {
@@ -154,7 +152,7 @@ impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Outpu
               Err(Error::InconsistentHost)?;
             }
           }
-          host_str.to_string()
+          host_str.to_owned()
         }
       };
       request

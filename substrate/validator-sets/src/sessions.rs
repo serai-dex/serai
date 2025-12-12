@@ -425,7 +425,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     let new_allocation = (old_allocation + amount).unwrap();
     // Always allow a block reward to be added
     if (!block_reward) && (new_allocation < allocation_per_key_share) {
-      Err(AllocationError::AllocationLessThanKeyShare)?
+      Err(AllocationError::AllocationLessThanKeyShare)?;
     }
 
     {
@@ -522,7 +522,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       let new_allocation =
         (existing_allocation - amount).ok_or(DeallocationError::NotEnoughAllocated)?;
       if (new_allocation != Amount(0)) && (new_allocation < allocation_per_key_share) {
-        Err(DeallocationError::RemainingAllocationLessThanKeyShare)?
+        Err(DeallocationError::RemainingAllocationLessThanKeyShare)?;
       }
 
       Self::set_allocation(network, validator, new_allocation);

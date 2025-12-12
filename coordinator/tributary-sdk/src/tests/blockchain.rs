@@ -50,7 +50,7 @@ fn block_addition() {
   assert_eq!(block.header.parent, genesis);
   assert_eq!(block.header.transactions, [0; 32]);
   blockchain.verify_block::<N>(&block, &validators, false).unwrap();
-  assert!(blockchain.add_block::<N>(&block, vec![], &validators).is_ok());
+  blockchain.add_block::<N>(&block, vec![], &validators).unwrap();
   assert_eq!(blockchain.tip(), block.hash());
   assert_eq!(blockchain.block_number(), 1);
   assert_eq!(
@@ -69,7 +69,7 @@ fn invalid_block() {
 
   // Mutate parent
   {
-    #[allow(clippy::redundant_clone)] // False positive
+    #[expect(clippy::redundant_clone)] // False positive
     let mut block = block.clone();
     block.header.parent = Blake2s256::digest(block.header.parent).into();
     assert!(blockchain.verify_block::<N>(&block, &validators, false).is_err());
@@ -132,6 +132,7 @@ fn invalid_block() {
     blockchain.add_transaction::<N>(true, Transaction::Application(tx), &validators).unwrap();
     let mut block = blockchain.build_block::<N>(&validators);
     blockchain.verify_block::<N>(&block, &validators, false).unwrap();
+    #[expect(clippy::match_wildcard_for_single_variants)]
     match &mut block.transactions[0] {
       Transaction::Application(tx) => {
         tx.1.signature.s += <Ristretto as WrappedGroup>::F::ONE;
@@ -183,7 +184,7 @@ fn signed_transaction() {
 
     // Verify and add the block
     blockchain.verify_block::<N>(&block, &validators, false).unwrap();
-    assert!(blockchain.add_block::<N>(&block, vec![], &validators).is_ok());
+    blockchain.add_block::<N>(&block, vec![], &validators).unwrap();
     assert_eq!(blockchain.tip(), block.hash());
   };
 
@@ -237,7 +238,7 @@ fn provided_transaction() {
     blockchain.verify_block::<N>(&block, &validators, false).unwrap();
 
     // add_block should work for verified blocks
-    assert!(blockchain.add_block::<N>(&block, vec![], &validators).is_ok());
+    blockchain.add_block::<N>(&block, vec![], &validators).unwrap();
 
     let block = Block::new(blockchain.tip(), vec![tx.clone()], vec![]);
 
@@ -259,11 +260,11 @@ fn provided_transaction() {
     // add_block DOES NOT fail for unverified provided transactions if told to add them,
     // since now we can have them later.
     let block1 = Block::new(blockchain.tip(), vec![tx1.clone(), tx3.clone()], vec![]);
-    assert!(blockchain.add_block::<N>(&block1, vec![], &validators).is_ok());
+    blockchain.add_block::<N>(&block1, vec![], &validators).unwrap();
 
     // in fact, we can have many blocks that have provided txs that we don't have locally.
     let block2 = Block::new(blockchain.tip(), vec![tx2.clone(), tx4.clone()], vec![]);
-    assert!(blockchain.add_block::<N>(&block2, vec![], &validators).is_ok());
+    blockchain.add_block::<N>(&block2, vec![], &validators).unwrap();
 
     // make sure we won't return ok for the block before we actually got the txs
     let TransactionKind::Provided(order) = tx1.kind() else { panic!("tx wasn't provided") };
@@ -367,7 +368,7 @@ async fn tendermint_evidence_tx() {
 
     // Verify and add the block
     blockchain.verify_block::<N>(&block, &validators, false).unwrap();
-    assert!(blockchain.add_block::<N>(&block, vec![], &validators).is_ok());
+    blockchain.add_block::<N>(&block, vec![], &validators).unwrap();
     assert_eq!(blockchain.tip(), block.hash());
   };
 

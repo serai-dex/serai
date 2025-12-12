@@ -6,7 +6,7 @@ const FLAGS: &str =
   "-DMI_SECURE=ON -DMI_GUARDED=ON -DMI_BUILD_STATIC=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF";
 
 pub fn mimalloc(os: Os) -> String {
-  let build_script = |env, flags| {
+  let build_script = |env, additional_flags| {
     format!(
       r#"
 #!/bin/sh
@@ -26,7 +26,7 @@ cd out/secure
 # there is a working C++ compiler so CMake doesn't complain, allowing us to not unnecessarily
 # install one. If it was ever invoked, our choice of `false` would immediately let us know.
 # https://github.com/microsoft/mimalloc/issues/1179
-{env} CXX=false cmake -DCMAKE_CXX_COMPILER_WORKS=1 {FLAGS} ../..
+{env} CXX=false cmake -DCMAKE_CXX_COMPILER_WORKS=1 {FLAGS} {additional_flags} ../..
 make
 
 cd ../..
@@ -40,9 +40,9 @@ rm -rf ./mimalloc
     )
   };
 
-  let build_commands = |env, flags| {
+  let build_commands = |env, additional_flags| {
     let mut result = String::new();
-    for line in build_script(env, flags)
+    for line in build_script(env, additional_flags)
       .lines()
       .map(|line| {
         assert!(!line.contains('"'));

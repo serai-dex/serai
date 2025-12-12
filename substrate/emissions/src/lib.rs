@@ -2,23 +2,9 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
-extern crate alloc;
-
-#[expect(clippy::cast_possible_truncation)]
+#[expect(let_underscore_drop, clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 mod pallet {
-  use frame_system::pallet_prelude::*;
-  use frame_support::pallet_prelude::*;
-
-  use serai_abi::primitives::prelude::*;
-
-  use serai_core_pallet::Pallet as Core;
-  type Coins<T> = serai_coins_pallet::Pallet<T, serai_coins_pallet::CoinsInstance>;
-  type LiquidityTokens<T> =
-    serai_coins_pallet::Pallet<T, serai_coins_pallet::LiquidityTokensInstance>;
-
-  use super::*;
-
   /// The configuration of this pallet.
   #[pallet::config]
   pub trait Config:

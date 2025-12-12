@@ -49,7 +49,7 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator]) -> KeyPair {
   }
   // This takes forever on debug, as we use in these tests
   let ci_scaling_factor =
-    1 + u64::from(u8::from(std::env::var("GITHUB_CI") == Ok("true".to_string())));
+    1 + u64::from(u8::from(std::env::var("GITHUB_CI") == Ok("true".to_owned())));
   tokio::time::sleep(core::time::Duration::from_secs(600 * ci_scaling_factor)).await;
   interact_with_all(coordinators, |participant, msg| match msg {
     messages::key_gen::ProcessorMessage::Participation { session: this_session, participation } => {

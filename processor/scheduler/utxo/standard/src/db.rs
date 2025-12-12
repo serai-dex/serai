@@ -34,7 +34,7 @@ impl<S: ScannerFeed> Db<S> {
     OperatingCosts::get(getter, coin).unwrap_or(Amount(0))
   }
   pub(crate) fn set_operating_costs(txn: &mut impl DbTxn, coin: ExternalCoin, amount: Amount) {
-    OperatingCosts::set(txn, coin, &amount)
+    OperatingCosts::set(txn, coin, &amount);
   }
 
   pub(crate) fn outputs(
@@ -103,7 +103,7 @@ impl<S: ScannerFeed> Db<S> {
     balance: ExternalBalance,
     child: &TreeTransaction<AddressFor<S>>,
   ) {
-    PendingBranch::<S>::send(txn, key.to_bytes().as_ref(), balance, child)
+    PendingBranch::<S>::send(txn, key.to_bytes().as_ref(), balance, child);
   }
   pub(crate) fn take_pending_branch(
     txn: &mut impl DbTxn,

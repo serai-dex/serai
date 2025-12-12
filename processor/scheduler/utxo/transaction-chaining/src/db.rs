@@ -26,7 +26,7 @@ impl<S: ScannerFeed> Db<S> {
     OperatingCosts::get(getter, coin).unwrap_or(Amount(0))
   }
   pub(crate) fn set_operating_costs(txn: &mut impl DbTxn, coin: ExternalCoin, amount: Amount) {
-    OperatingCosts::set(txn, coin, &amount)
+    OperatingCosts::set(txn, coin, &amount);
   }
 
   pub(crate) fn outputs(

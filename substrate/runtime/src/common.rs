@@ -1,13 +1,10 @@
 use alloc::vec::Vec;
-use serai_abi::{
-  primitives::{
-    crypto::{Public, EmbeddedEllipticCurveKeys, SignedEmbeddedEllipticCurveKeys, KeyPair},
-    network_id::{ExternalNetworkId, NetworkId},
-    validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
-    balance::{Amount, Balance},
-    address::SeraiAddress,
-  },
-  Event,
+use serai_abi::primitives::{
+  crypto::{Public, EmbeddedEllipticCurveKeys, SignedEmbeddedEllipticCurveKeys, KeyPair},
+  network_id::{ExternalNetworkId, NetworkId},
+  validator_sets::{Session, ExternalValidatorSet},
+  balance::{Amount, Balance},
+  address::SeraiAddress,
 };
 
 /// The genesis configuration for Serai.

@@ -107,13 +107,16 @@ impl ContinuallyRan for DialTask {
             // Map the peer from a Substrate P2P network peer to a Coordinator P2P network peer
             let mapped_peer = randomly_selected_peer
               .into_iter()
-              .filter_map(|protocol| match protocol {
-                // Drop PeerIds from the Substrate P2p network
-                Protocol::P2p(_) => None,
-                // Use our own TCP port
-                Protocol::Tcp(_) => Some(Protocol::Tcp(PORT)),
-                // Pass-through any other specifications (IPv4, IPv6, etc)
-                other => Some(other),
+              .filter_map(|protocol| {
+                #[expect(clippy::wildcard_enum_match_arm)]
+                match protocol {
+                  // Drop PeerIds from the Substrate P2p network
+                  Protocol::P2p(_) => None,
+                  // Use our own TCP port
+                  Protocol::Tcp(_) => Some(Protocol::Tcp(PORT)),
+                  // Pass-through any other specifications (IPv4, IPv6, etc)
+                  other => Some(other),
+                }
               })
               .collect::<Multiaddr>();
 

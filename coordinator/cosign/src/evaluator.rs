@@ -121,7 +121,7 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                 // Since have this cosign, add the set's weight to the weight which has cosigned
                 weight_cosigned +=
                   global_session_info.stakes.get(&set.network).ok_or_else(|| {
-                    "ValidatorSet in global session yet didn't have its stake".to_string()
+                    "ValidatorSet in global session yet didn't have its stake".to_owned()
                   })?;
               }
             }
@@ -175,7 +175,7 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                 if cosign.cosign.block_number >= block_number {
                   weight_cosigned +=
                     global_session_info.stakes.get(&set.network).ok_or_else(|| {
-                      "ValidatorSet in global session yet didn't have its stake".to_string()
+                      "ValidatorSet in global session yet didn't have its stake".to_owned()
                     })?;
                 }
 

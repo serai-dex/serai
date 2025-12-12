@@ -19,7 +19,7 @@ use elliptic_curve::{
 
 use crate::{curve::Curve, algorithm::Hram};
 
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn hash_to_F<C: WrappedGroup<F: PrimeField<Repr = GenericArray<u8, U32>>>>(
   dst: &[u8],
   msg: &[u8],
@@ -110,7 +110,7 @@ macro_rules! kp_curve {
     #[derive(Clone)]
     pub struct $Hram;
     impl Hram<$Curve> for $Hram {
-      #[allow(non_snake_case)]
+      #[expect(non_snake_case)]
       fn hram(
         R: &<$Curve as WrappedGroup>::G,
         A: &<$Curve as WrappedGroup>::G,

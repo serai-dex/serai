@@ -158,7 +158,7 @@ async_sequential! {
     let addr = || p2tr_script_buf(key).unwrap();
     let payments = vec![(addr(), 1000)];
 
-    assert!(SignableTransaction::new(inputs.clone(), &payments, None, None, FEE).is_ok());
+    SignableTransaction::new(inputs.clone(), &payments, None, None, FEE).unwrap();
 
     assert_eq!(
       SignableTransaction::new(vec![], &payments, None, None, FEE),
@@ -166,11 +166,11 @@ async_sequential! {
     );
 
     // No change
-    assert!(SignableTransaction::new(inputs.clone(), &[(addr(), 1000)], None, None, FEE).is_ok());
+    SignableTransaction::new(inputs.clone(), &[(addr(), 1000)], None, None, FEE).unwrap();
     // Consolidation TX
-    assert!(SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, FEE).is_ok());
+    SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, FEE).unwrap();
     // Data
-    assert!(SignableTransaction::new(inputs.clone(), &[], None, Some(vec![]), FEE).is_ok());
+    SignableTransaction::new(inputs.clone(), &[], None, Some(vec![]), FEE).unwrap();
     // No outputs
     assert_eq!(
       SignableTransaction::new(inputs.clone(), &[], None, None, FEE),
@@ -182,9 +182,7 @@ async_sequential! {
       Err(TransactionError::DustPayment),
     );
 
-    assert!(
-      SignableTransaction::new(inputs.clone(), &payments, None, Some(vec![0; 80]), FEE).is_ok()
-    );
+    SignableTransaction::new(inputs.clone(), &payments, None, Some(vec![0; 80]), FEE).unwrap();
     assert_eq!(
       SignableTransaction::new(inputs.clone(), &payments, None, Some(vec![0; 81]), FEE),
       Err(TransactionError::TooMuchData),

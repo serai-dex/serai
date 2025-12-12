@@ -1,3 +1,5 @@
+use core::str::FromStr;
+
 pub(crate) use tokio::{
   io::{AsyncReadExt, AsyncWriteExt},
   net::TcpListener,
@@ -7,27 +9,16 @@ use serai_db::{Get, DbTxn, Db as DbTrait};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-  // Override the panic handler with one which will panic if any tokio task panics
-  {
-    let existing = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic| {
-      existing(panic);
-      const MSG: &str = "exiting the process due to a task panicking";
-      println!("{MSG}");
-      log::error!("{MSG}");
-      std::process::exit(1);
-    }));
-  }
-
-  if std::env::var("RUST_LOG").is_err() {
-    std::env::set_var("RUST_LOG", serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_string()));
-  }
-  env_logger::init();
-
+  env_logger::builder()
+    .filter_level(
+      log::LevelFilter::from_str(&serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
+        .expect("`RUST_LOG` environment variable had an invalid filter"),
+    )
+    .init();
   log::info!("Starting Ethereum relayer server...");
 
   // Open the DB
-  #[allow(unused_variables, unreachable_code)]
+  #[expect(unused_variables, unreachable_code)]
   let db = {
     #[cfg(all(feature = "parity-db", feature = "rocksdb"))]
     panic!("built with parity-db and rocksdb");

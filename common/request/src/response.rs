@@ -13,16 +13,16 @@ use futures_util::{Stream, StreamExt};
 
 use crate::{Client, Error};
 
-// Borrows the client so its async task lives as long as this response exists.
-#[allow(dead_code)]
 #[derive(Debug)]
 pub struct Response<
-  'a,
+  'client,
   E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>,
 > {
   pub(crate) response: hyper::Response<Incoming>,
   pub(crate) size_limit: Option<usize>,
-  pub(crate) client: &'a Client<E>,
+  // Borrows the client so its async task lives as long as this response exists.
+  #[expect(dead_code)]
+  pub(crate) client: &'client Client<E>,
 }
 
 impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>>

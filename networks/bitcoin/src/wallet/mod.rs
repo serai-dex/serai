@@ -1,6 +1,5 @@
-#[allow(unused_imports)]
-use std_shims::prelude::*;
 use std_shims::{
+  prelude::*,
   collections::HashMap,
   io::{self, Read, Write},
 };

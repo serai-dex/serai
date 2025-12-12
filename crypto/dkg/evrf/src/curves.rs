@@ -1,6 +1,4 @@
-#[allow(unused_imports)]
 use std_shims::prelude::*;
-use std_shims::vec::Vec;
 
 use rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -52,7 +50,7 @@ impl<C: Curves> Generators<C> {
       let key_len = key.len().min(<C::ToweringCurve as Id>::ID.len());
       {
         let key: &mut [u8] = key.as_mut();
-        key[.. key_len].copy_from_slice(&<C::ToweringCurve as Id>::ID[.. key_len])
+        key[.. key_len].copy_from_slice(&<C::ToweringCurve as Id>::ID[.. key_len]);
       }
       key
     })

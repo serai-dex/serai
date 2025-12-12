@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::ops::RangeInclusive;
 use std::{
@@ -31,23 +32,22 @@ use erc20::{Transfer, TopLevelTransfer, TopLevelTransfers, Erc20};
 
 use futures_util::stream::{StreamExt, FuturesUnordered};
 
-#[rustfmt::skip]
-#[expect(warnings)]
-#[expect(needless_pass_by_value)]
-#[expect(clippy::all)]
-#[expect(clippy::ignored_unit_patterns)]
-#[expect(clippy::redundant_closure_for_method_calls)]
 mod _irouter_abi {
   alloy_sol_macro::sol!("contracts/IRouter.sol");
 }
 
-#[rustfmt::skip]
-#[expect(warnings)]
-#[expect(needless_pass_by_value)]
-#[expect(clippy::all)]
-#[expect(clippy::unused_self)]
-#[expect(clippy::ignored_unit_patterns)]
-#[expect(clippy::redundant_closure_for_method_calls)]
+#[expect(
+  unused,
+  clippy::as_conversions,
+  clippy::clone_on_copy,
+  clippy::elidable_lifetime_names,
+  clippy::identity_op,
+  clippy::type_complexity,
+  clippy::unused_self,
+  clippy::useless_conversion
+)]
+// `clippy` thinks these aren't raised when in `expect`, but they are raised
+#[allow(clippy::ignored_unit_patterns, clippy::used_underscore_binding)]
 mod _router_abi {
   include!(concat!(env!("OUT_DIR"), "/serai-processor-ethereum-router/router.rs"));
 }
@@ -136,7 +136,7 @@ pub struct InInstruction {
 
 impl From<&(SeraiAddress, U256)> for abi::OutInstruction {
   fn from((address, amount): &(SeraiAddress, U256)) -> Self {
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let (destinationType, destination) = match address {
       SeraiAddress::Address(address) => {
         // Per the documentation, `DestinationType::Address`'s value is an ABI-encoded address
@@ -513,7 +513,7 @@ impl Router {
       // Double check the address which emitted this log
       if log.address() != self.address {
         Err(TransportErrorKind::Custom(
-          "node returned a log from a different address than requested".to_string().into(),
+          "node returned a log from a different address than requested".to_owned().into(),
         ))?;
       }
       // Double check this is a InInstruction log
@@ -526,11 +526,11 @@ impl Router {
           block_hash: log
             .block_hash
             .ok_or_else(|| {
-              TransportErrorKind::Custom("log didn't have its block hash set".to_string().into())
+              TransportErrorKind::Custom("log didn't have its block hash set".to_owned().into())
             })?
             .into(),
           index_within_block: log.log_index.ok_or_else(|| {
-            TransportErrorKind::Custom("log didn't have its index set".to_string().into())
+            TransportErrorKind::Custom("log didn't have its index set".to_owned().into())
           })?,
         })
       };
@@ -538,7 +538,7 @@ impl Router {
       let id = log_index(&log)?;
 
       let transaction_hash = log.transaction_hash.ok_or_else(|| {
-        TransportErrorKind::Custom("log didn't have its transaction hash set".to_string().into())
+        TransportErrorKind::Custom("log didn't have its transaction hash set".to_owned().into())
       })?;
       let transaction_hash = *transaction_hash;
 
@@ -611,7 +611,7 @@ impl Router {
           if !justified {
             // This is an exploit, a non-conforming ERC20, or an invalid connection
             Err(TransportErrorKind::Custom(
-              "ERC20 InInstruction with no matching transfer log".to_string().into(),
+              "ERC20 InInstruction with no matching transfer log".to_owned().into(),
             ))?;
           }
         }
@@ -650,7 +650,7 @@ impl Router {
       // Double check the address which emitted this log
       if log.address() != self.address {
         Err(TransportErrorKind::Custom(
-          "node returned a log from a different address than requested".to_string().into(),
+          "node returned a log from a different address than requested".to_owned().into(),
         ))?;
       }
 
@@ -688,7 +688,7 @@ impl Router {
               })?;
               if results_len.div_ceil(8) != event.results.len() {
                 Err(TransportErrorKind::Custom(
-                  "resultsLength didn't align with results length".to_string().into(),
+                  "resultsLength didn't align with results length".to_owned().into(),
                 ))?;
               }
               let mut results = Vec::with_capacity(results_len);
@@ -735,13 +735,13 @@ impl Router {
       // Double check the address which emitted this log
       if log.address() != self.address {
         Err(TransportErrorKind::Custom(
-          "node returned a log from a different address than requested".to_string().into(),
+          "node returned a log from a different address than requested".to_owned().into(),
         ))?;
       }
       // Double check the topic
       if log.topics().first() != Some(&EscapedEvent::SIGNATURE_HASH) {
         Err(TransportErrorKind::Custom(
-          "node returned a log for a different topic than filtered to".to_string().into(),
+          "node returned a log for a different topic than filtered to".to_owned().into(),
         ))?;
       }
 
@@ -775,9 +775,11 @@ impl Router {
     Ok(if eth_repr == [0; 32] {
       None
     } else {
-      Some(PublicKey::from_eth_repr(eth_repr).ok_or_else(|| {
-        TransportErrorKind::Custom("invalid key set on router".to_string().into())
-      })?)
+      Some(
+        PublicKey::from_eth_repr(eth_repr).ok_or_else(|| {
+          TransportErrorKind::Custom("invalid key set on router".to_owned().into())
+        })?,
+      )
     })
   }
 
@@ -805,9 +807,11 @@ impl Router {
     let bytes = self.provider.call(call).block(block).await?;
     let res = abi::nextNonceCall::abi_decode_returns(&bytes)
       .map_err(|e| TransportErrorKind::Custom(format!("failed to decode nonce: {e:?}").into()))?;
-    Ok(u64::try_from(res).map_err(|_| {
-      TransportErrorKind::Custom("nonce returned exceeded 2**64".to_string().into())
-    })?)
+    Ok(
+      u64::try_from(res).map_err(|_| {
+        TransportErrorKind::Custom("nonce returned exceeded 2**64".to_owned().into())
+      })?,
+    )
   }
 
   /// Fetch the address the escape hatch was set to

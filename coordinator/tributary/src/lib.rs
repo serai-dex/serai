@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{marker::PhantomData, future::Future};
 use std::collections::HashMap;
@@ -284,7 +285,7 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
               "voted to remove",
             );
           }
-        };
+        }
       }
 
       // Send the participation to the processor
@@ -464,7 +465,7 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
             // Perform the amortization
             for slash_points in &mut median_slash_report {
               *slash_points =
-                slash_points.saturating_sub(worst_validator_in_supermajority_slash_points)
+                slash_points.saturating_sub(worst_validator_in_supermajority_slash_points);
             }
             let amortized_slash_report = median_slash_report;
 
@@ -500,7 +501,7 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
               },
             );
           }
-        };
+        }
       }
 
       Transaction::Sign { id: _, attempt: _, round, data, signed } => {
@@ -554,7 +555,7 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
                   messages::sign::CoordinatorMessage::Shares { id, shares: data_set }
                 }
               },
-            )
+            );
           }
         }
       }

@@ -1,7 +1,8 @@
 use core::{ops::Deref, convert::AsRef};
-#[allow(unused_imports)]
-use std_shims::prelude::*;
-use std_shims::io::{self, Read};
+use std_shims::{
+  prelude::*,
+  io::{self, Read},
+};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -49,7 +50,7 @@ pub trait Curve: GroupIo + Ciphersuite {
   /// Field element from hash. Used to instantiate H1 and H3.
   ///
   /// The `dst` MUST be prefixed by `Self::CONTEXT` by the implementor.
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   fn hash_to_F(dst: &[u8], msg: &[u8]) -> Self::F;
 
   /// Hash the message for the binding factor. H4 from the IETF draft.
@@ -116,7 +117,7 @@ pub trait Curve: GroupIo + Ciphersuite {
   }
 
   /// Read a point from a reader, rejecting identity.
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   fn read_G<R: Read>(reader: &mut R) -> io::Result<Self::G> {
     let res = <Self as GroupIo>::read_G(reader)?;
     if res.is_identity().into() {

@@ -308,7 +308,7 @@ impl SwarmTask {
     }
   }
 
-  #[allow(clippy::too_many_arguments)]
+  #[expect(clippy::too_many_arguments)]
   pub(crate) fn spawn(
     dial_task: TaskHandle,
     to_dial: mpsc::UnboundedReceiver<DialOpts>,

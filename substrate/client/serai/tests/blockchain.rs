@@ -9,8 +9,6 @@ use serai_abi::{
   EVENTS_COMMITMENT_LEAF_TAG, EVENTS_COMMITMENT_BRANCH_TAG,
 };
 
-use serai_client_serai::*;
-
 #[tokio::test]
 async fn blockchain() {
   let mut test = dockertest::DockerTest::new();
@@ -26,7 +24,7 @@ async fn blockchain() {
           .map(str::to_owned)
           .collect(),
       )
-      .replace_env([("RUST_LOG".to_string(), "runtime=debug".to_string())].into()),
+      .replace_env([("RUST_LOG".to_owned(), "runtime=debug".to_owned())].into()),
   );
 
   test
@@ -104,7 +102,7 @@ async fn blockchain() {
 
       // Check the blocks have the expected headers
       {
-        let mut last_block_number = serai.latest_finalized_block_number().await.unwrap();
+        let last_block_number = serai.latest_finalized_block_number().await.unwrap();
         let mut observed_consensus_commitments = HashSet::new();
         let mut tagged_block_hashes = vec![];
         for i in 0 ..= last_block_number {

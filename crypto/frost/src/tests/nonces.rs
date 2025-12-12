@@ -1,4 +1,7 @@
-use std_shims::io::{self, Read};
+use std_shims::{
+  prelude::*,
+  io::{self, Read},
+};
 
 use zeroize::Zeroizing;
 

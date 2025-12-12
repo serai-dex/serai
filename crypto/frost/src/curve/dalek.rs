@@ -30,7 +30,7 @@ macro_rules! dalek_curve {
     #[derive(Copy, Clone)]
     pub struct $Hram;
     impl Hram<$Curve> for $Hram {
-      #[allow(non_snake_case)]
+      #[expect(non_snake_case)]
       fn hram(
         R: &<$Curve as WrappedGroup>::G,
         A: &<$Curve as WrappedGroup>::G,

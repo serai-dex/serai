@@ -1,9 +1,11 @@
+#![expect(clippy::as_conversions, clippy::same_name_method, clippy::used_underscore_binding)]
+
 use core::marker::PhantomData;
 use alloc::{borrow::Cow, vec, vec::Vec};
 
 use sp_core::{Get, ConstU32, ConstU64, sr25519::Public};
 use sp_runtime::{
-  Perbill, Weight,
+  Weight,
   traits::{Header as _, Block as _},
 };
 use sp_version::RuntimeVersion;
@@ -12,7 +14,7 @@ use serai_abi::{
   primitives::{
     crypto::EmbeddedEllipticCurveKeys,
     network_id::{ExternalNetworkId, NetworkId},
-    balance::{Amount, ExternalBalance},
+    balance::Amount,
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
     address::SeraiAddress,
   },
@@ -243,6 +245,7 @@ sp_api::impl_runtime_apis! {
         ];
 
         for log in block.header().digest().logs() {
+          #[expect(clippy::wildcard_enum_match_arm)]
           match log {
             sp_runtime::DigestItem::PreRuntime(consensus, encoded)
               if *consensus == SeraiPreExecutionDigest::CONSENSUS_ID =>
@@ -331,7 +334,7 @@ sp_api::impl_runtime_apis! {
 
     // TODO: Revisit
     fn submit_report_equivocation_unsigned_extrinsic(
-      equivocation_proof: sp_consensus_babe::EquivocationProof<Header>,
+      _equivocation_proof: sp_consensus_babe::EquivocationProof<Header>,
       _: sp_consensus_babe::OpaqueKeyOwnershipProof,
     ) -> Option<()> {
       None
@@ -357,7 +360,7 @@ sp_api::impl_runtime_apis! {
 
     // TODO: Revisit
     fn submit_report_equivocation_unsigned_extrinsic(
-      equivocation_proof: sp_consensus_grandpa::EquivocationProof<
+      _equivocation_proof: sp_consensus_grandpa::EquivocationProof<
         <Block as sp_runtime::traits::Block>::Hash,
         u64,
       >,
@@ -488,10 +491,10 @@ impl serai_abi::TransactionContext for Context {
   }
 
   fn start_transaction(&self, len: usize) {
-    Core::start_transaction(len)
+    Core::start_transaction(len);
   }
   fn consume_next_nonce(&self, signer: &SeraiAddress) {
-    serai_core_pallet::Pallet::<Runtime>::consume_next_nonce(signer)
+    serai_core_pallet::Pallet::<Runtime>::consume_next_nonce(signer);
   }
   /// Have the transaction pay its SRI fee.
   fn pay_fee(
@@ -548,10 +551,10 @@ impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
 impl signals::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   // 1 week
-  #[allow(clippy::cast_possible_truncation)]
+  #[expect(clippy::cast_possible_truncation)]
   type RetirementValidityDuration = ConstU32<{ (7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
   // 2 weeks
-  #[allow(clippy::cast_possible_truncation)]
+  #[expect(clippy::cast_possible_truncation)]
   type RetirementLockInDuration = ConstU32<{ (2 * 7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
 }
 

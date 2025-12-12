@@ -17,9 +17,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-# Macros
-once_cell = { version = "1", default-features = false }
-
 # Encoders
 hex = { version = "0.4", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }

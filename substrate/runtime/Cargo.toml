@@ -73,15 +73,29 @@ serai-emissions-pallet = { path = "../emissions", default-features = false }
 serai-in-instructions-pallet = { path = "../in-instructions", default-features = false }
 
 [features]
+runtime-type = [
+  "scale",
+
+  "sp-version",
+  "sp-runtime",
+
+  "sp-api",
+  "sp-transaction-pool",
+  "sp-inherents",
+  "sp-block-builder",
+  "sp-consensus-babe",
+  "sp-consensus-grandpa",
+  "sp-authority-discovery",
+
+  "serai-abi",
+]
+
 std = [
   "scale/std",
-  "borsh/std",
-
-  "sp-core/std",
-  "sp-session/std",
 
   "sp-version/std",
   "sp-runtime/std",
+
   "sp-api/std",
   "sp-transaction-pool/std",
   "sp-inherents/std",
@@ -91,30 +105,12 @@ std = [
   "sp-authority-discovery/std",
 
   "serai-abi/std",
-
-  "frame-system/std",
-  "frame-support/std",
-  "frame-executive/std",
-
-  "pallet-session/std",
-  "pallet-babe/std",
-  "pallet-grandpa/std",
-
-  "serai-core-pallet/std",
-  "serai-coins-pallet/std",
-  "serai-validator-sets-pallet/std",
-  "serai-signals-pallet/std",
-  "serai-dex-pallet/std",
-  "serai-genesis-liquidity-pallet/std",
-  "serai-economic-security-pallet/std",
-  "serai-emissions-pallet/std",
-  "serai-in-instructions-pallet/std",
 ]
 
 try-runtime = [
-  "sp-runtime/try-runtime",
+  "sp-runtime?/try-runtime",
 
-  "serai-abi/try-runtime",
+  "serai-abi?/try-runtime",
 
   "frame-system/try-runtime",
   "frame-support/try-runtime",
@@ -136,7 +132,7 @@ try-runtime = [
 ]
 
 runtime-benchmarks = [
-  "sp-runtime/runtime-benchmarks",
+  "sp-runtime?/runtime-benchmarks",
 
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",

@@ -1,3 +1,4 @@
+use core::fmt::Write;
 use std::path::Path;
 
 use dalek_ff_group::Ristretto;
@@ -21,12 +22,12 @@ pub fn message_queue(
     ("BITCOIN_KEY", hex::encode(bitcoin_key.to_bytes())),
     ("ETHEREUM_KEY", hex::encode(ethereum_key.to_bytes())),
     ("MONERO_KEY", hex::encode(monero_key.to_bytes())),
-    ("DB_PATH", "/volume/message-queue-db".to_string()),
-    ("RUST_LOG", "info,serai_message_queue=trace".to_string()),
+    ("DB_PATH", "/volume/message-queue-db".to_owned()),
+    ("RUST_LOG", "info,serai_message_queue=trace".to_owned()),
   ];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {
-    env_vars_str += &format!(r#"{env_var}=${{{env_var}:="{value}"}} "#);
+    write!(&mut env_vars_str, r#"{env_var}=${{{env_var}:="{value}"}} "#).unwrap();
   }
 
   let run_message_queue = format!(

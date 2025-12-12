@@ -1,0 +1,5 @@
+disallowed-methods = [
+  "Option::map_or",
+  "Option::map_or_else",
+]
+allow-one-hash-in-raw-strings = true

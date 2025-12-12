@@ -1,4 +1,4 @@
-#![allow(clippy::needless_pass_by_ref_mut)] // False positives
+#![expect(clippy::needless_pass_by_ref_mut)] // False positives
 
 use std::{
   sync::{OnceLock, Arc},
@@ -41,22 +41,22 @@ pub fn coordinator_instance(
   name: &str,
   message_queue_key: <Ristretto as WrappedGroup>::F,
 ) -> TestBodySpecification {
-  serai_docker_tests::build("coordinator".to_string());
+  serai_docker_tests::build("coordinator".to_owned());
 
   TestBodySpecification::with_image(
     Image::with_repository("serai-dev-coordinator").pull_policy(PullPolicy::Never),
   )
   .replace_env(
     [
-      ("MESSAGE_QUEUE_KEY".to_string(), hex::encode(message_queue_key.to_repr())),
-      ("DB_PATH".to_string(), "./coordinator-db".to_string()),
-      ("SERAI_KEY".to_string(), {
+      ("MESSAGE_QUEUE_KEY".to_owned(), hex::encode(message_queue_key.to_repr())),
+      ("DB_PATH".to_owned(), "./coordinator-db".to_owned()),
+      ("SERAI_KEY".to_owned(), {
         use serai_client::primitives::insecure_pair_from_name;
         hex::encode(&insecure_pair_from_name(name).as_ref().secret.to_bytes()[.. 32])
       }),
       (
-        "RUST_LOG".to_string(),
-        "serai_coordinator=trace,".to_string() + "tributary_chain=trace," + "tendermint=trace",
+        "RUST_LOG".to_owned(),
+        "serai_coordinator=trace,".to_owned() + "tributary_chain=trace," + "tendermint=trace",
       ),
     ]
     .into(),
@@ -65,18 +65,18 @@ pub fn coordinator_instance(
 
 pub fn serai_composition(name: &str, fast_epoch: bool) -> TestBodySpecification {
   (if fast_epoch {
-    serai_docker_tests::build("serai-fast-epoch".to_string());
+    serai_docker_tests::build("serai-fast-epoch".to_owned());
     TestBodySpecification::with_image(
       Image::with_repository("serai-dev-serai-fast-epoch").pull_policy(PullPolicy::Never),
     )
   } else {
-    serai_docker_tests::build("serai".to_string());
+    serai_docker_tests::build("serai".to_owned());
     TestBodySpecification::with_image(
       Image::with_repository("serai-dev-serai").pull_policy(PullPolicy::Never),
     )
   })
   .replace_env(
-    [("SERAI_NAME".to_string(), name.to_lowercase()), ("KEY".to_string(), " ".to_string())].into(),
+    [("SERAI_NAME".to_owned(), name.to_lowercase()), ("KEY".to_owned(), " ".to_owned())].into(),
   )
   .set_publish_all_ports(true)
 }
@@ -114,7 +114,7 @@ pub struct Processor {
   network: ExternalNetworkId,
 
   serai_rpc: String,
-  #[allow(unused)]
+  #[expect(unused)]
   handles: Handles,
 
   msgs: mpsc::UnboundedReceiver<messages::CoordinatorMessage>,

@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{future::Future, time::Duration};
 use std::{
@@ -124,7 +125,6 @@ struct Behavior {
   gossip: gossip::Behavior,
 }
 
-#[allow(clippy::type_complexity)]
 struct Libp2pInner {
   peers: Peers,
 

@@ -21,7 +21,7 @@ impl Curve for Ed448 {
 #[derive(Copy, Clone)]
 pub(crate) struct Ietf8032Ed448Hram;
 impl Ietf8032Ed448Hram {
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   pub(crate) fn hram(context: &[u8], R: &Ed448, A: &Ed448, m: &[u8]) -> Scalar {
     let mut digest = <Ed448 as WithPreferredHash>::H::new();
     digest.update(b"SigEd448");
@@ -38,7 +38,7 @@ impl Ietf8032Ed448Hram {
 #[derive(Copy, Clone)]
 pub struct IetfEd448Hram;
 impl Hram<Ed448> for IetfEd448Hram {
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   fn hram(R: &Ed448, A: &Ed448, m: &[u8]) -> Scalar {
     Ietf8032Ed448Hram::hram(&[], R, A, m)
   }

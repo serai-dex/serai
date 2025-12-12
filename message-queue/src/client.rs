@@ -67,7 +67,7 @@ impl MessageQueue {
     match socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await {
       Ok(()) => {}
       Err(e) => Err(format!("couldn't send the message len: {e:?}"))?,
-    };
+    }
     match socket.write_all(&msg).await {
       Ok(()) => {}
       Err(e) => Err(format!("couldn't write the message: {e:?}"))?,

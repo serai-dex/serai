@@ -4,10 +4,7 @@ use std::sync::Arc;
 use futures::stream::{StreamExt, FuturesOrdered};
 
 use serai_client_serai::{
-  abi::{
-    self,
-    primitives::{network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet},
-  },
+  abi::{self, primitives::network_id::ExternalNetworkId},
   Serai,
 };
 
@@ -71,7 +68,7 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
               Ok(None) => {
                 panic!("iterating to latest cosigned block but couldn't get cosigned block")
               }
-              Err(serai_cosign::Faulted) => return Err("cosigning process faulted".to_string()),
+              Err(serai_cosign::Faulted) => return Err("cosigning process faulted".to_owned()),
             };
             let events = serai.events(block_hash).await.map_err(|e| format!("{e}"))?;
             let set_keys_events = events.validator_sets().set_keys_events().cloned().collect();
@@ -166,7 +163,7 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
             };
             if network == *batch_network {
               if batch.is_some() {
-                Err("Serai block had multiple batches for the same network".to_string())?;
+                Err("Serai block had multiple batches for the same network".to_owned())?;
               }
               batch = Some(ExecutedBatch {
                 id: *id,
@@ -185,11 +182,11 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
                   .collect(),
               });
 
-              if LastIndexedBatchId::get(&txn, network) != id.checked_sub(1) {
-                panic!(
-                  "next batch from Serai's ID was not an increment of the last indexed batch's ID"
-                );
-              }
+              assert_eq!(
+                LastIndexedBatchId::get(&txn, network),
+                id.checked_sub(1),
+                "next batch from Serai's ID was not an increment of the last indexed batch's ID"
+              );
               LastIndexedBatchId::set(&mut txn, network, id);
             }
           }

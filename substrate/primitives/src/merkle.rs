@@ -83,7 +83,7 @@ pub struct IncrementalUnbalancedMerkleTree {
   branches: Vec<(u64, [u8; 32])>,
 }
 
-#[allow(clippy::derivable_impls)]
+#[expect(clippy::derivable_impls)]
 impl Default for IncrementalUnbalancedMerkleTree {
   fn default() -> Self {
     Self { branches: Vec::new() }
@@ -147,8 +147,6 @@ impl IncrementalUnbalancedMerkleTree {
 #[cfg(feature = "std")]
 #[test]
 fn unbalanced_merkle_tree() {
-  use sp_core::Encode;
-
   use rand_core::{RngCore, OsRng};
 
   let tag = u8::try_from(OsRng.next_u64() % u64::from(u8::MAX)).unwrap();

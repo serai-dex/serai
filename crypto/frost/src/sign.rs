@@ -1,7 +1,6 @@
 use core::{ops::Deref, fmt::Debug};
-#[allow(unused_imports)]
-use std_shims::prelude::*;
 use std_shims::{
+  prelude::*,
   io::{self, Read, Write},
   collections::HashMap,
 };
@@ -322,7 +321,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
     }
 
     let nonces = self.params.algorithm.nonces();
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let mut B = BindingFactor(HashMap::<Participant, _>::with_capacity(included.len()));
     {
       // Parse the preprocesses
@@ -383,7 +382,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
         .append_message(b"rho_transcript", rho_transcript.challenge(b"merge"));
     }
 
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let Rs = B.nonces(&nonces);
 
     let our_binding_factors = B.binding_factors(multisig_params.i());
@@ -434,7 +433,7 @@ pub trait SignatureMachine<S>: Send + Sync {
 /// Final step of the state machine for the signing process.
 ///
 /// This may panic if an invalid algorithm is provided.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub struct AlgorithmSignatureMachine<C: Curve, A: Algorithm<C>> {
   params: Params<C, A>,
   view: ThresholdView<C>,

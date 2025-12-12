@@ -51,11 +51,11 @@ const G_X: FieldElement = {
 };
 
 fn recover_x(y: FieldElement) -> CtOption<FieldElement> {
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   let D = -<FieldElement as From<u16>>::from(39081u16);
 
   let ysq = y.square();
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   let D_ysq = D * ysq;
   (D_ysq - FieldElement::ONE).invert().and_then(|inverted| {
     let xsq = (ysq - FieldElement::ONE) * inverted;
@@ -121,20 +121,20 @@ impl ConditionallySelectable for Point {
 impl Add for Point {
   type Output = Point;
   fn add(self, other: Self) -> Self {
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let D = -<FieldElement as From<u16>>::from(39081u16);
 
     // 12 muls, 7 additions, 4 negations
     let xcp = self.x * other.x;
     let ycp = self.y * other.y;
     let zcp = self.z * other.z;
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let B = zcp.square();
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let E = D * xcp * ycp;
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let F = B - E;
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let G_ = B + E;
 
     Point {
@@ -173,7 +173,7 @@ impl Neg for Point {
 
 impl Sub for Point {
   type Output = Point;
-  #[allow(clippy::suspicious_arithmetic_impl)]
+  #[expect(clippy::suspicious_arithmetic_impl)]
   fn sub(self, other: Self) -> Self {
     self + other.neg()
   }
@@ -226,9 +226,9 @@ impl Group for Point {
     let ysq = self.y.square();
     let zsq = self.z.square();
     let xy = self.x + self.y;
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let F = xsq + ysq;
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let J = F - zsq.double();
     Point { x: J * (xy.square() - xsq - ysq), y: F * (xsq - ysq), z: F * J }
   }
@@ -276,9 +276,9 @@ impl Mul<Scalar> for Point {
         }
 
         let mut add_by = Point::identity();
-        #[allow(clippy::needless_range_loop)]
+        #[expect(clippy::needless_range_loop)]
         for i in 0 .. 16 {
-          #[allow(clippy::cast_possible_truncation)] // Safe since 0 .. 16
+          #[expect(clippy::cast_possible_truncation, clippy::as_conversions)] // Safe since 0 .. 16
           {
             add_by = <_>::conditional_select(&add_by, &table[i], bits.ct_eq(&(i as u8)));
           }

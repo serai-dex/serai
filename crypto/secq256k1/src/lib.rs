@@ -1,9 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
-
-#[allow(unused_imports)]
-use std_shims::prelude::*;
+#![no_std]
 
 use sha2::digest::array::{typenum::U33, Array};
 use k256::elliptic_curve::{

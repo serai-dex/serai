@@ -1,4 +1,4 @@
-#![allow(clippy::needless_pass_by_ref_mut)] // False positives
+#![expect(clippy::needless_pass_by_ref_mut)] // False positives
 
 use std::sync::{OnceLock, Mutex};
 
@@ -29,7 +29,7 @@ mod tests;
 
 static UNIQUE_ID: OnceLock<Mutex<u16>> = OnceLock::new();
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 #[derive(Clone)]
 pub struct EvrfPublicKeys {
   substrate: [u8; 32],
@@ -79,29 +79,29 @@ pub fn processor_instance(
   )
   .replace_env(
     [
-      ("MESSAGE_QUEUE_KEY".to_string(), hex::encode(message_queue_key.to_repr())),
-      ("SUBSTRATE_EVRF_KEY".to_string(), hex::encode(substrate_evrf_key)),
-      ("NETWORK_EVRF_KEY".to_string(), hex::encode(network_evrf_key)),
-      ("NETWORK".to_string(), network_str.to_string()),
-      ("NETWORK_RPC_LOGIN".to_string(), format!("{RPC_USER}:{RPC_PASS}")),
-      ("NETWORK_RPC_PORT".to_string(), port.to_string()),
-      ("DB_PATH".to_string(), "./processor-db".to_string()),
-      ("RUST_LOG".to_string(), "serai_processor=trace,".to_string()),
+      ("MESSAGE_QUEUE_KEY".to_owned(), hex::encode(message_queue_key.to_repr())),
+      ("SUBSTRATE_EVRF_KEY".to_owned(), hex::encode(substrate_evrf_key)),
+      ("NETWORK_EVRF_KEY".to_owned(), hex::encode(network_evrf_key)),
+      ("NETWORK".to_owned(), network_str.to_string()),
+      ("NETWORK_RPC_LOGIN".to_owned(), format!("{RPC_USER}:{RPC_PASS}")),
+      ("NETWORK_RPC_PORT".to_owned(), port.to_string()),
+      ("DB_PATH".to_owned(), "./processor-db".to_owned()),
+      ("RUST_LOG".to_owned(), "serai_processor=trace,".to_owned()),
     ]
     .into(),
   )];
 
   if network == ExternalNetworkId::Ethereum {
-    serai_docker_tests::build("ethereum-relayer".to_string());
+    serai_docker_tests::build("ethereum-relayer".to_owned());
     res.push(
       TestBodySpecification::with_image(
-        Image::with_repository("serai-dev-ethereum-relayer".to_string())
+        Image::with_repository("serai-dev-ethereum-relayer".to_owned())
           .pull_policy(PullPolicy::Never),
       )
       .replace_env(
         [
-          ("DB_PATH".to_string(), "./ethereum-relayer-db".to_string()),
-          ("RUST_LOG".to_string(), "serai_ethereum_relayer=trace,".to_string()),
+          ("DB_PATH".to_owned(), "./ethereum-relayer-db".to_owned()),
+          ("RUST_LOG".to_owned(), "serai_ethereum_relayer=trace,".to_owned()),
         ]
         .into(),
       )
@@ -203,9 +203,9 @@ pub struct Coordinator {
   network: ExternalNetworkId,
 
   network_handle: String,
-  #[allow(unused)]
+  #[expect(unused)]
   message_queue_handle: String,
-  #[allow(unused)]
+  #[expect(unused)]
   processor_handle: String,
   relayer_handle: String,
 

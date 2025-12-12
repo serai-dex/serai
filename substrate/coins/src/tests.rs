@@ -33,11 +33,7 @@ fn mint() {
       .map(|event| borsh::from_slice::<serai_abi::Event>(event.as_slice()).unwrap())
       .filter_map(|event| {
         if let serai_abi::Event::Coins(e) = &event {
-          if matches!(e, CoinsEvent::Mint { .. }) {
-            Some(e.clone())
-          } else {
-            None
-          }
+          matches!(e, CoinsEvent::Mint { .. }).then(|| e.clone())
         } else {
           None
         }
@@ -45,7 +41,7 @@ fn mint() {
       .collect::<Vec<_>>();
 
     assert_eq!(mint_events, vec![CoinsEvent::Mint { to: to.into(), coins: balance }]);
-  })
+  });
 }
 
 #[test]
@@ -88,11 +84,7 @@ fn burn_with_instruction() {
       .map(|event| borsh::from_slice::<serai_abi::Event>(event.as_slice()).unwrap())
       .filter_map(|event| {
         if let serai_abi::Event::Coins(e) = &event {
-          if matches!(e, CoinsEvent::BurnWithInstruction { .. }) {
-            Some(e.clone())
-          } else {
-            None
-          }
+          matches!(e, CoinsEvent::BurnWithInstruction { .. }).then(|| e.clone())
         } else {
           None
         }
@@ -100,7 +92,7 @@ fn burn_with_instruction() {
       .collect::<Vec<_>>();
 
     assert_eq!(burn_events, vec![CoinsEvent::BurnWithInstruction { from: to.into(), instruction }]);
-  })
+  });
 }
 
 #[test]
@@ -135,5 +127,5 @@ fn transfer() {
 
     // supply shouldn't change
     assert_eq!(Coins::supply(coin), balance.amount);
-  })
+  });
 }

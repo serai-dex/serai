@@ -26,7 +26,7 @@ mod db;
 use db::Db;
 
 /// A scheduler of transactions for networks premised on the UTXO model.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 #[derive(Clone)]
 pub struct Scheduler<S: ScannerFeed, P: TransactionPlanner<S, ()>> {
   planner: P,

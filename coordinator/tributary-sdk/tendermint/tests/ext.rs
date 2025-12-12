@@ -1,3 +1,5 @@
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+
 use core::future::Future;
 use std::{
   sync::Arc,
@@ -103,7 +105,7 @@ impl Block for TestBlock {
   }
 }
 
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 struct TestNetwork(
   u16,
   Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>, SyncedBlockResultReceiver)>>>,
@@ -152,7 +154,7 @@ impl Network for TestNetwork {
     commit: Commit<TestSignatureScheme>,
   ) -> Option<TestBlock> {
     println!("Adding {:?}", &block);
-    assert!(block.valid.is_ok());
+    block.valid.unwrap();
     assert!(self.verify_commit(block.id(), &commit));
     Some(TestBlock { id: (u32::from_le_bytes(block.id) + 1).to_le_bytes(), valid: Ok(()) })
   }

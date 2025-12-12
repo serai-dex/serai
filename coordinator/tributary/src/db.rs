@@ -53,7 +53,7 @@ enum Participating {
 impl Topic {
   // The topic used by the next attempt of this protocol
   fn next_attempt_topic(self) -> Option<Topic> {
-    #[allow(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round: _ } => Some(Topic::DkgConfirmation {
@@ -69,7 +69,7 @@ impl Topic {
 
   // The topic for the re-attempt to schedule
   fn reattempt_topic(self) -> Option<(u32, Topic)> {
-    #[allow(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
@@ -97,7 +97,7 @@ impl Topic {
   ///
   /// Returns None if Topic isn't Topic::Sign
   pub(crate) fn sign_id(self, set: ExternalValidatorSet) -> Option<messages::sign::SignId> {
-    #[allow(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { .. } => None,
@@ -116,7 +116,7 @@ impl Topic {
     self,
     set: ExternalValidatorSet,
   ) -> Option<messages::sign::SignId> {
-    #[allow(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round: _ } => Some({
@@ -137,7 +137,7 @@ impl Topic {
   ///
   /// The preceding topic must define this topic as succeeding
   fn preceding_topic(self) -> Option<Topic> {
-    #[allow(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
@@ -160,7 +160,7 @@ impl Topic {
   ///
   /// The succeeding topic must define this topic as preceding
   fn succeeding_topic(self) -> Option<Topic> {
-    #[allow(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
@@ -181,7 +181,7 @@ impl Topic {
 
   /// If this topic requires recognition before entries are permitted for it.
   pub fn requires_recognition(&self) -> bool {
-    #[allow(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
     match self {
       // We don't require recognition to remove a participant
       Topic::RemoveParticipant { .. } => false,
@@ -201,7 +201,7 @@ impl Topic {
   }
 
   fn participating(&self) -> Participating {
-    #[allow(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => Participating::Everyone,
       Topic::DkgConfirmation { .. } => Participating::Participated,
@@ -401,7 +401,7 @@ impl TributaryDb {
     SlashPoints::get(getter, set, validator).unwrap_or(0) == u32::MAX
   }
 
-  #[allow(clippy::too_many_arguments)]
+  #[expect(clippy::too_many_arguments)]
   pub(crate) fn accumulate<D: Borshy>(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,

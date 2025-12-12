@@ -163,7 +163,6 @@ pub struct KeyGen<P: KeyGenParams> {
 
 impl<P: KeyGenParams> KeyGen<P> {
   /// Create a new key generation instance.
-  #[allow(clippy::new_ret_no_self)]
   pub fn new(
     substrate_evrf_private_key: Zeroizing<
       <<Ristretto as Curves>::EmbeddedCurve as WrappedGroup>::F,
@@ -176,7 +175,7 @@ impl<P: KeyGenParams> KeyGen<P> {
   }
 
   /// Fetch the key shares for a specific session.
-  #[allow(clippy::type_complexity)]
+  #[expect(clippy::type_complexity)]
   pub fn key_shares(
     getter: &impl Get,
     session: Session,

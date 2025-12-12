@@ -70,7 +70,7 @@ pub mod __prime_field_private {
     reconstruction
   }
 
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   pub const fn calculate_S<const LIMBS: usize, P: ConstMontyParams<LIMBS>>() -> u32 {
     let mut i = 0;
     loop {
@@ -196,6 +196,7 @@ macro_rules! odd_prime_field_with_specific_repr {
 
         impl $name {
           /// Create a `$name` from the `Uint` type underlying it.
+          #[expect(clippy::same_name_method)]
           const fn from(value: &UnderlyingUint) -> Self {
             $name(Underlying::new(value))
           }

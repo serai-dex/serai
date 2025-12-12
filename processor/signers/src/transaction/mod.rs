@@ -1,8 +1,5 @@
-use core::future::Future;
-use std::{
-  collections::HashSet,
-  time::{Duration, Instant},
-};
+use core::{future::Future, time::Duration};
+use std::{collections::HashSet, time::Instant};
 
 use frost::dkg::ThresholdKeys;
 
@@ -195,6 +192,7 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
             {
               let mut buf = Vec::with_capacity(256);
               signed_tx.write(&mut buf).unwrap();
+              #[expect(clippy::wildcard_enum_match_arm)]
               SerializedTransactions::set(
                 &mut txn,
                 match id {

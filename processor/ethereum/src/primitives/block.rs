@@ -88,7 +88,6 @@ impl primitives::Block for FullEpoch {
     outputs
   }
 
-  #[allow(clippy::type_complexity)]
   fn check_for_eventuality_resolutions(
     &self,
     eventualities: &mut EventualityTracker<Self::Eventuality>,
@@ -109,7 +108,7 @@ impl primitives::Block for FullEpoch {
       if let (Executed::Batch { results, .. }, Executed::Batch { results: expected_results, .. }) =
         (executed, &mut expected.0)
       {
-        *expected_results = results.clone();
+        expected_results.clone_from(results);
       }
       assert_eq!(
         executed,

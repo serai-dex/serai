@@ -17,7 +17,7 @@ pub fn instance() -> (
   HashMap<ExternalNetworkId, MessageQueuePrivateKey>,
   TestBodySpecification,
 ) {
-  serai_docker_tests::build("message-queue".to_string());
+  serai_docker_tests::build("message-queue".to_owned());
 
   let coord_key = <Ristretto as WrappedGroup>::F::random(&mut OsRng);
   let priv_keys = ExternalNetworkId::all()
@@ -34,21 +34,21 @@ pub fn instance() -> (
   }))
   .replace_env(
     [
-      ("COORDINATOR_KEY".to_string(), hex::encode((Ristretto::generator() * coord_key).to_bytes())),
+      ("COORDINATOR_KEY".to_owned(), hex::encode((Ristretto::generator() * coord_key).to_bytes())),
       (
-        "BITCOIN_KEY".to_string(),
+        "BITCOIN_KEY".to_owned(),
         hex::encode((Ristretto::generator() * priv_keys[&ExternalNetworkId::Bitcoin]).to_bytes()),
       ),
       (
-        "ETHEREUM_KEY".to_string(),
+        "ETHEREUM_KEY".to_owned(),
         hex::encode((Ristretto::generator() * priv_keys[&ExternalNetworkId::Ethereum]).to_bytes()),
       ),
       (
-        "MONERO_KEY".to_string(),
+        "MONERO_KEY".to_owned(),
         hex::encode((Ristretto::generator() * priv_keys[&ExternalNetworkId::Monero]).to_bytes()),
       ),
-      ("DB_PATH".to_string(), "./message-queue-db".to_string()),
-      ("RUST_LOG".to_string(), "serai_message_queue=trace,".to_string()),
+      ("DB_PATH".to_owned(), "./message-queue-db".to_owned()),
+      ("RUST_LOG".to_owned(), "serai_message_queue=trace,".to_owned()),
     ]
     .into(),
   )

@@ -7,7 +7,12 @@ extern crate alloc;
 #[cfg(test)]
 mod mock;
 
-#[expect(clippy::cast_possible_truncation)]
+#[expect(
+  let_underscore_drop,
+  clippy::as_conversions,
+  clippy::cast_possible_truncation,
+  clippy::semicolon_if_nothing_returned
+)]
 #[frame_support::pallet]
 mod pallet {
   use alloc::vec::Vec;

@@ -63,7 +63,7 @@ fn create_inherent_data_providers(
   (BabeInherent::from_timestamp_and_slot_duration(*timestamp, slot_duration), timestamp)
 }
 
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 pub fn new_partial(
   config: &mut Configuration,
 ) -> Result<
@@ -83,8 +83,8 @@ pub fn new_partial(
   config.state_pruning = Some(sc_service::PruningMode::ArchiveCanonical);
   config.blocks_pruning = sc_service::BlocksPruning::KeepAll;
 
-  config.network.node_name = "serai".to_string();
-  config.network.client_version = "0.1.0".to_string();
+  "serai".clone_into(&mut config.network.node_name);
+  "0.1.0".clone_into(&mut config.network.client_version);
   config.network.listen_addresses =
     vec!["/ip4/0.0.0.0/tcp/30333".parse().unwrap(), "/ip6/::/tcp/30333".parse().unwrap()];
 
@@ -253,7 +253,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 
   task_manager.spawn_handle().spawn("bootnodes", "bootnodes", {
     let network = network.clone();
-    let id = config.chain_spec.id().to_string();
+    let id = config.chain_spec.id().to_owned();
 
     async move {
       // Transforms the above Multiaddrs into MultiaddrWithPeerIds
@@ -325,9 +325,9 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
   let prometheus_registry = config.prometheus_registry().cloned();
 
   // TODO: Ensure we're considered as an authority is a validator of an external network
-  let authority_discovery = if role.is_authority() {
+  let authority_discovery = role.is_authority().then(|| {
     let (worker, service) = sc_authority_discovery::new_worker_and_service_with_config(
-      #[allow(clippy::field_reassign_with_default)]
+      #[expect(clippy::field_reassign_with_default)]
       {
         let mut worker = sc_authority_discovery::WorkerConfig::default();
         worker.publish_non_global_ips = publish_non_global_ips;
@@ -337,6 +337,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       client.clone(),
       Arc::new(network.clone()),
       Box::pin(network.event_stream("authority-discovery").filter_map(|e| async move {
+        #[expect(clippy::wildcard_enum_match_arm)]
         match e {
           Event::Dht(e) => Some(e),
           _ => None,
@@ -352,13 +353,11 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       worker.run(),
     );
 
-    Some(service)
-  } else {
-    None
-  };
+    service
+  });
 
   let rpc_builder = {
-    let id = config.chain_spec.id().to_string();
+    let id = config.chain_spec.id().to_owned();
     let client = client.clone();
     let pool = transaction_pool.clone();
 
@@ -436,7 +435,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
           justification_generation_period: 1,
           name: Some(name),
           observer_enabled: false,
-          keystore: if role.is_authority() { Some(keystore) } else { None },
+          keystore: role.is_authority().then_some(keystore),
           local_role: role,
           telemetry: telemetry.as_ref().map(Telemetry::handle),
           protocol_name: grandpa_protocol_name,

@@ -2,9 +2,12 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
-extern crate alloc;
-
-#[expect(clippy::cast_possible_truncation)]
+#[expect(
+  let_underscore_drop,
+  clippy::as_conversions,
+  clippy::cast_possible_truncation,
+  clippy::semicolon_if_nothing_returned
+)]
 #[frame_support::pallet]
 mod pallet {
   use frame_system::pallet_prelude::*;
@@ -16,9 +19,6 @@ mod pallet {
   };
 
   use serai_core_pallet::Pallet as Core;
-  type Coins<T> = serai_coins_pallet::Pallet<T, serai_coins_pallet::CoinsInstance>;
-  type LiquidityTokens<T> =
-    serai_coins_pallet::Pallet<T, serai_coins_pallet::LiquidityTokensInstance>;
 
   use super::*;
 
@@ -42,24 +42,16 @@ mod pallet {
   pub struct Pallet<T>(_);
 
   impl<T: Config> Pallet<T> {
+    #[expect(unused)]
     fn emit_event(event: Event) {
       Core::<T>::emit_event(event)
     }
   }
 
-  /// The minimum amount of liquidity allowed to be initially added.
-  ///
-  /// This should be sufficiently low it isn't inaccessible, yet sufficiently high that future
-  /// additions can be reasonably grained when their share of the new supply is calculated.
-  ///
-  /// This constant is duplicated with `serai-dex-pallet` intentionally as while they have the same
-  /// value, they are distinct constants and don't require being equivalent.
-  const MINIMUM_LIQUIDITY: u64 = 1 << 16;
-
   impl<T: Config> Pallet<T> {
     /// Add liquidity on behalf of the specified address.
     pub fn add_liquidity(to: SeraiAddress, balance: ExternalBalance) -> Result<(), Error<T>> {
-      todo!("TODO")
+      todo!("TODO {to:?} {balance:?}")
     }
   }
 
@@ -75,7 +67,8 @@ mod pallet {
       values: GenesisValues,
       signature: Signature,
     ) -> DispatchResult {
-      todo!("TODO")
+      ensure_none(origin)?;
+      todo!("TODO {values:?} {signature:?}")
     }
 
     /// Transfer genesis liquidity.
@@ -86,7 +79,8 @@ mod pallet {
       to: SeraiAddress,
       genesis_liquidity: ExternalBalance,
     ) -> DispatchResult {
-      todo!("TODO")
+      let signer = ensure_signed(origin)?;
+      todo!("TODO {signer:?} {to:?} {genesis_liquidity:?}")
     }
 
     /// Remove genesis liquidity.
@@ -96,7 +90,8 @@ mod pallet {
       origin: OriginFor<T>,
       genesis_liquidity: ExternalBalance,
     ) -> DispatchResult {
-      todo!("TODO")
+      let signer = ensure_signed(origin)?;
+      todo!("TODO {signer:?} {genesis_liquidity:?}")
     }
   }
 }

@@ -41,7 +41,7 @@ pub(crate) fn queue_output_until_block<S: ScannerFeed>(
         .expect("queueing an output despite no next-to-scan-for-outputs block"),
     "queueing an output for a block already scanned"
   );
-  ScanDb::<S>::queue_output_until_block(txn, queue_for_block, output)
+  ScanDb::<S>::queue_output_until_block(txn, queue_for_block, output);
 }
 
 // Construct an InInstruction from an external output.
@@ -237,8 +237,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
                   )
                 })?);
               }
-              let cost_to_aggregate = costs_to_aggregate[&balance.coin];
-              balance.amount.0 -= 2 * cost_to_aggregate.0;
+              balance.amount.0 -= 2 * costs_to_aggregate[&balance.coin].0;
 
               // Now, check it's still past the dust threshold
               if balance.amount.0 < S::dust(balance.coin).0 {
@@ -275,7 +274,6 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
 
             // Drop External outputs if they're to a multisig which won't report them
             // This means we should report any External output we save to disk here
-            #[allow(clippy::match_same_arms)]
             match key.stage {
               // This multisig isn't yet reporting its External outputs to avoid a DoS
               // Queue the output to be reported when this multisig starts reporting

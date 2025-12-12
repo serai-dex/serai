@@ -1,15 +1,10 @@
-use std::{sync::Arc, ops::Deref, collections::HashSet};
+use std::sync::Arc;
 
-use rand_core::{RngCore, OsRng};
-
-use sp_core::Encode;
 use sp_blockchain::{Error as BlockchainError, HeaderBackend, HeaderMetadata};
 use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
 
-use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
-
-use tokio::sync::RwLock;
+use serai_abi::SubstrateBlock as Block;
 
 use jsonrpsee::RpcModule;
 
@@ -44,7 +39,7 @@ pub fn create_full<
 
   let mut root = RpcModule::new(());
   root.merge(blockchain::module(client.clone(), pool)?)?;
-  root.merge(validator_sets::module(client.clone()))?;
+  root.merge(validator_sets::module(client.clone())?)?;
   if let Some(authority_discovery) = authority_discovery {
     root.merge(p2p_validators::module(id, client, authority_discovery)?)?;
   }
@@ -69,18 +64,18 @@ pub fn create_full<
       let external_key = client
         .runtime_api()
         .external_network_key(latest_block, network)
-        .map_err(|_| Error::Custom("api call error".to_string()))?
-        .ok_or(Error::Custom("no address for the network".to_string()))?;
+        .map_err(|_| Error::Custom("api call error".to_owned()))?
+        .ok_or(Error::Custom("no address for the network".to_owned()))?;
 
       match network {
         ExternalNetworkId::Bitcoin => {
           let key = <Secp256k1 as GroupIo>::read_G::<&[u8]>(&mut external_key.as_slice())
-            .map_err(|_| Error::Custom("invalid key stored in db".to_string()))?;
+            .map_err(|_| Error::Custom("invalid key stored in db".to_owned()))?;
 
           let addr = bitcoin::Address::p2tr_tweaked(
             bitcoin::key::TweakedPublicKey::dangerous_assume_tweaked(
               bitcoin::key::XOnlyPublicKey::from_slice(key.to_affine().x().as_slice()).map_err(
-                |_| Error::Custom("x-coordinate for Bitcoin key was invalid".to_string()),
+                |_| Error::Custom("x-coordinate for Bitcoin key was invalid".to_owned()),
               )?,
             ),
             bitcoin::address::KnownHrp::Mainnet,
@@ -97,7 +92,7 @@ pub fn create_full<
           ));
 
           let spend = <Ed25519 as GroupIo>::read_G::<&[u8]>(&mut external_key.as_slice())
-            .map_err(|_| Error::Custom("invalid key stored in db".to_string()))?;
+            .map_err(|_| Error::Custom("invalid key stored in db".to_owned()))?;
 
           let addr = monero_address::MoneroAddress::new(
             monero_address::Network::Mainnet,
@@ -133,14 +128,14 @@ pub fn create_full<
       client
         .runtime_api()
         .quote_price_exact_tokens_for_tokens(latest_block, coin1, coin2, amount, include_fee)
-        .map_err(|_| Error::Custom("api call error".to_string()))?
-        .ok_or(Error::Custom("invalid params or empty pool".to_string()))?
+        .map_err(|_| Error::Custom("api call error".to_owned()))?
+        .ok_or(Error::Custom("invalid params or empty pool".to_owned()))?
     } else {
       client
         .runtime_api()
         .quote_price_tokens_for_exact_tokens(latest_block, coin1, coin2, amount, include_fee)
-        .map_err(|_| Error::Custom("api call error".to_string()))?
-        .ok_or(Error::Custom("invalid params or empty pool".to_string()))?
+        .map_err(|_| Error::Custom("api call error".to_owned()))?
+        .ok_or(Error::Custom("invalid params or empty pool".to_owned()))?
     };
 
     Ok(amount)

@@ -167,9 +167,7 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
         }
 
         i += 32;
-        if i >= currently_provided.len() {
-          panic!("couldn't find completed TX in currently provided");
-        }
+        assert!(i < currently_provided.len(), "couldn't find completed TX in currently provided");
       }
 
       txn.put(current_provided_key, currently_provided);

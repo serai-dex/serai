@@ -1,3 +1,5 @@
+use std_shims::prelude::*;
+
 use rand_core::OsRng;
 
 use group::ff::Field;

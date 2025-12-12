@@ -1,5 +1,5 @@
 use std_shims::{
-  vec::Vec,
+  prelude::*,
   io::{self, Read, Write},
 };
 
@@ -25,7 +25,7 @@ fn weight<C: WithPreferredHash>(digest: &mut DigestTranscript<C::H>) -> C::F {
 }
 
 /// Aggregate Schnorr signature as defined in <https://eprint.iacr.org/2021/350>.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
 pub struct SchnorrAggregate<C: GroupIo + WithPreferredHash> {
   Rs: Vec<C::G>,
@@ -38,7 +38,7 @@ impl<C: GroupIo + WithPreferredHash> SchnorrAggregate<C> {
     let mut len = [0; 4];
     reader.read_exact(&mut len)?;
 
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let mut Rs = vec![];
     for _ in 0 .. u32::from_le_bytes(len) {
       Rs.push(C::read_G(reader)?);
@@ -56,7 +56,7 @@ impl<C: GroupIo + WithPreferredHash> SchnorrAggregate<C> {
         .expect("more than 4 billion signatures in aggregate")
         .to_le_bytes(),
     )?;
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     for R in &self.Rs {
       writer.write_all(R.to_bytes().as_ref())?;
     }
@@ -70,7 +70,7 @@ impl<C: GroupIo + WithPreferredHash> SchnorrAggregate<C> {
     buf
   }
 
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   pub fn Rs(&self) -> &[C::G] {
     self.Rs.as_slice()
   }
@@ -107,7 +107,6 @@ impl<C: GroupIo + WithPreferredHash> SchnorrAggregate<C> {
 }
 
 /// A signature aggregator capable of consuming signatures in order to produce an aggregate.
-#[allow(non_snake_case)]
 #[derive(Clone, Debug)]
 pub struct SchnorrAggregator<C: GroupIo + WithPreferredHash> {
   digest: DigestTranscript<C::H>,

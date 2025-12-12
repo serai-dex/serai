@@ -40,7 +40,6 @@ mod shims {
     /// Create a new error.
     ///
     /// The error object itself is silently dropped when `alloc` is not enabled.
-    #[allow(unused)]
     pub fn new<E: 'static + IntoBoxSendSyncError>(kind: ErrorKind, error: E) -> Error {
       #[cfg(not(feature = "alloc"))]
       let res = Error { kind };
@@ -52,7 +51,6 @@ mod shims {
     /// Create a new error with `io::ErrorKind::Other` as its kind.
     ///
     /// The error object itself is silently dropped when `alloc` is not enabled.
-    #[allow(unused)]
     pub fn other<E: 'static + IntoBoxSendSyncError>(error: E) -> Error {
       #[cfg(not(feature = "alloc"))]
       let res = Error { kind: ErrorKind::Other };

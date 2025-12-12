@@ -45,7 +45,7 @@ pub trait SmartContract<S: ScannerFeed>: 'static + Send {
 }
 
 /// A scheduler for a smart contract representing the Serai processor.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 #[derive(Clone)]
 pub struct Scheduler<S: ScannerFeed, SC: Send + Sync + SmartContract<S>> {
   smart_contract: SC,

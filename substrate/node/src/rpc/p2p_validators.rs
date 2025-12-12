@@ -1,9 +1,8 @@
-use std::{sync::Arc, ops::Deref, collections::HashSet};
+use std::{sync::Arc, collections::HashSet};
 
 use rand_core::{RngCore, OsRng};
 
-use sp_core::Encode;
-use sp_blockchain::{Error as BlockchainError, HeaderBackend};
+use sp_blockchain::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 
 use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};

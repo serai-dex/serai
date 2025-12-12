@@ -1,6 +1,5 @@
 //! Test environment for the Coins pallet.
-
-use borsh::BorshDeserialize;
+#![expect(clippy::as_conversions, clippy::same_name_method)]
 
 use frame_support::{sp_runtime::BuildStorage, derive_impl, construct_runtime};
 

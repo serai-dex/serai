@@ -1,6 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
 use core::ops::Deref;
 use std_shims::{
@@ -83,7 +83,7 @@ fn binding_factor<C: Ciphersuite>(mut transcript: Vec<u8>, i: u16) -> C::F {
   C::F::from_uniform_bytes(&C::H::digest(&transcript).into())
 }
 
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 fn musig_key_multiexp<C: Ciphersuite>(
   context: [u8; 32],
   keys: &[C::G],

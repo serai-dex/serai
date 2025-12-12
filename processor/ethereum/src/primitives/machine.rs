@@ -22,7 +22,7 @@ use crate::transaction::{Action, Transaction};
 #[derive(Clone, Default, Debug)]
 pub struct EthereumHram;
 impl Hram<Secp256k1> for EthereumHram {
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   fn hram(
     R: &<Secp256k1 as WrappedGroup>::G,
     A: &<Secp256k1 as WrappedGroup>::G,

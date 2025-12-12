@@ -1,8 +1,6 @@
-#![allow(deprecated)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![no_std] // Prevents writing new code, in what should be a simple wrapper, which requires std
 #![doc = include_str!("../README.md")]
-#![allow(clippy::redundant_closure_call)]
 
 use core::{
   borrow::Borrow,
@@ -33,7 +31,7 @@ fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   let bit_ref = black_box(bit_ref);
 
   let mut bit = black_box(*bit_ref);
-  #[allow(clippy::cast_lossless)]
+  #[expect(clippy::cast_lossless, clippy::as_conversions)]
   let res = black_box(bit as u8);
   bit.zeroize();
   debug_assert!((res | 1) == 1);

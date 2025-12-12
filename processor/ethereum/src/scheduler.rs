@@ -20,7 +20,7 @@ fn coin_to_ethereum_coin(coin: ExternalCoin) -> EthereumCoin {
   match coin {
     ExternalCoin::Ether => EthereumCoin::Ether,
     ExternalCoin::Dai => EthereumCoin::Erc20(DAI),
-    _ => unreachable!(),
+    ExternalCoin::Bitcoin | ExternalCoin::Monero => unreachable!(),
   }
 }
 
@@ -85,7 +85,7 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
         ExternalCoin::Dai => {
           U256::try_from(30u64).unwrap() * alloy_core::primitives::utils::Unit::TWEI.wei()
         }
-        _ => unreachable!(),
+        ExternalCoin::Bitcoin | ExternalCoin::Monero => unreachable!(),
       };
 
       // The gas required to perform any interaction with the Router.

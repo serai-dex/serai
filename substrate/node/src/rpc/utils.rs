@@ -1,7 +1,7 @@
 use sp_blockchain::{Error as BlockchainError, HeaderMetadata, HeaderBackend};
 use sc_client_api::BlockBackend;
 
-use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
+use serai_abi::SubstrateBlock as Block;
 
 pub(super) enum Error {
   Internal(&'static str),
@@ -43,12 +43,12 @@ pub(super) fn block_hash<
   #[serde(crate = "sp_core::serde")]
   struct BlockByHash {
     block: String,
-  };
+  }
   #[derive(sp_core::serde::Deserialize)]
   #[serde(crate = "sp_core::serde")]
   struct BlockByNumber {
     block: u64,
-  };
+  }
 
   Ok(if let Ok(block_hash) = params.parse::<BlockByHash>() {
     let Some(block_hash) = hex::decode(&block_hash.block).ok().and_then(|bytes| {

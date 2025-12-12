@@ -34,7 +34,8 @@ use tendermint::{
 use tokio::sync::RwLock;
 
 use crate::{
-  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, ReadWrite, transaction::Transaction as TransactionTrait,
+  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, ReadWrite,
+  transaction::{TransactionError, Transaction as TransactionTrait},
   Transaction, BlockHeader, Block, BlockError, Blockchain, P2p,
 };
 
@@ -301,7 +302,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
     async move {
       let mut to_broadcast = vec![TENDERMINT_MESSAGE];
       msg.serialize(&mut to_broadcast).unwrap();
-      self.p2p.broadcast(self.genesis, to_broadcast).await
+      self.p2p.broadcast(self.genesis, to_broadcast).await;
     }
   }
 
@@ -360,9 +361,28 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
         .verify_block::<Self>(&block, &self.signature_scheme(), false)
         .map_err(|e| match e {
           BlockError::NonLocalProvided(_) => TendermintBlockError::Temporal,
-          _ => {
+          BlockError::TooLargeBlock |
+          BlockError::InvalidParent |
+          BlockError::InvalidTransactions |
+          BlockError::UnsignedAlreadyIncluded |
+          BlockError::ProvidedAlreadyIncluded |
+          BlockError::WrongTransactionOrder |
+          BlockError::DistinctProvided |
+          BlockError::TransactionError(
+            TransactionError::TooLargeTransaction |
+            TransactionError::InvalidSigner |
+            TransactionError::InvalidNonce |
+            TransactionError::InvalidSignature |
+            TransactionError::InvalidContent,
+          ) => {
             log::warn!("Tributary Tendermint validate returning BlockError::Fatal due to {e:?}");
             TendermintBlockError::Fatal
+          }
+          BlockError::TransactionError(TransactionError::ProvidedAddedToMempool) => {
+            unreachable!("system transaction routed to mempool")
+          }
+          BlockError::TransactionError(TransactionError::TooManyInMempool) => {
+            unreachable!("transaction in block was checked against mempool limits")
           }
         })
     }

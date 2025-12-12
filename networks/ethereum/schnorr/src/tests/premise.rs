@@ -1,3 +1,5 @@
+use std_shims::prelude::*;
+
 use rand_core::{RngCore, OsRng};
 
 use sha3::{Digest, Keccak256};
@@ -38,10 +40,7 @@ fn test_ecrecover() {
     .unwrap();
 
   // Sanity check the signature verifies
-  #[allow(clippy::unit_cmp)] // Intended to assert this wasn't changed to Result<bool>
-  {
-    assert_eq!(public.verify_prehash(&Keccak256::digest(MESSAGE), &sig).unwrap(), ());
-  }
+  assert_eq!(public.verify_prehash(&Keccak256::digest(MESSAGE), &sig).unwrap(), ());
 
   // Perform the ecrecover
   assert_eq!(

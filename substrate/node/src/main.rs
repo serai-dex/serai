@@ -1,4 +1,5 @@
-#![allow(clippy::result_large_err)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+#![expect(clippy::result_large_err)]
 
 mod keystore;
 

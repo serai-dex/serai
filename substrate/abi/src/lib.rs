@@ -2,7 +2,16 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
-#![allow(non_camel_case_types)]
+#![expect(non_camel_case_types)]
+// `parity-scale-codec` generates these
+#![cfg_attr(
+  feature = "substrate",
+  expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::semicolon_if_nothing_returned
+  )
+)]
 
 extern crate alloc;
 

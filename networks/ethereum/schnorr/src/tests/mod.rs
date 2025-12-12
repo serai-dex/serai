@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std_shims::{prelude::*, sync::Arc};
 
 use rand_core::{RngCore, OsRng};
 
@@ -51,7 +51,7 @@ async fn setup_test() -> (AnvilInstance, Arc<RootProvider>, Address) {
           env!("OUT_DIR"),
           "/ethereum-schnorr-contract/TestSchnorr.bin-runtime"
         ))
-        .to_string(),
+        .to_owned(),
       ],
     )
     .await

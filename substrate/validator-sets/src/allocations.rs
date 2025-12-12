@@ -202,7 +202,7 @@ fn test_reverse_lexicographic_order() {
     }
 
     let mut amounts_sorted = amounts.clone();
-    amounts_sorted.sort();
+    amounts_sorted.sort_unstable();
     for a in amounts {
       Map::set(a.to_be_bytes(), Some(()));
       MapReverse::set(reverse_lexicographic_order(a.to_be_bytes()), Some(()));

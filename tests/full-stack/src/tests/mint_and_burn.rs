@@ -280,7 +280,7 @@ async fn mint_and_burn_test() {
       let rpc = handles[0].bitcoin(&ops).await;
       let tx =
         rpc.get_block(&rpc.get_block_hash(1).await.unwrap()).await.unwrap().txdata.swap_remove(0);
-      #[allow(clippy::inconsistent_digit_grouping)]
+      #[expect(clippy::inconsistent_digit_grouping)]
       let mut tx = Transaction {
         version: Version(2),
         lock_time: LockTime::ZERO,
@@ -512,7 +512,7 @@ async fn mint_and_burn_test() {
         }
       };
 
-      #[allow(clippy::inconsistent_digit_grouping)]
+      #[expect(clippy::inconsistent_digit_grouping)]
       burn(
         0,
         ExternalCoin::Bitcoin,
@@ -539,7 +539,7 @@ async fn mint_and_burn_test() {
     // TODO: Verify the burns
 
     // Verify the received Bitcoin TX
-    #[allow(clippy::inconsistent_digit_grouping)]
+    #[expect(clippy::inconsistent_digit_grouping)]
     {
       let rpc = handles[0].bitcoin(&ops).await;
 

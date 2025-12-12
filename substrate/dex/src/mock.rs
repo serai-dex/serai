@@ -1,6 +1,5 @@
 //! Test environment for the DEX pallet.
-
-use borsh::BorshDeserialize;
+#![expect(clippy::as_conversions, clippy::same_name_method)]
 
 use frame_support::{sp_runtime::BuildStorage, derive_impl, construct_runtime};
 
@@ -44,6 +43,7 @@ impl serai_coins_pallet::Config<LiquidityTokensInstance> for Test {
 
 impl crate::Config for Test {}
 
+#[expect(dead_code)] // TODO
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
   let mut storage = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
 

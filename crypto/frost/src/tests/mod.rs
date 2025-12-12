@@ -1,4 +1,4 @@
-use std_shims::collections::HashMap;
+use std_shims::{prelude::*, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -69,7 +69,7 @@ pub fn algorithm_machines_without_clone<R: RngCore, C: Curve, A: Algorithm<C>>(
 
   machines
     .into_iter()
-    .filter_map(|(i, machine)| if included.contains(&i) { Some((i, machine)) } else { None })
+    .filter_map(|(i, machine)| included.contains(&i).then_some((i, machine)))
     .collect()
 }
 
@@ -119,7 +119,7 @@ pub(crate) fn preprocess<
 }
 
 // Run the preprocess and generate signature shares
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 pub(crate) fn preprocess_and_shares<
   R: RngCore + CryptoRng,
   M: PreprocessMachine,
@@ -248,7 +248,7 @@ pub fn test_schnorr_with_keys<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
 /// Test a basic Schnorr signature.
 pub fn test_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mut R) {
   let keys = key_gen(&mut *rng);
-  test_schnorr_with_keys::<_, _, H>(&mut *rng, &keys)
+  test_schnorr_with_keys::<_, _, H>(&mut *rng, &keys);
 }
 
 /// Test an offset Schnorr signature.

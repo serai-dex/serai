@@ -19,11 +19,11 @@ impl Request {
       let authority = authority.as_str();
       if authority.contains('@') {
         // Decode the username and password from the URI
-        let mut userpass = authority.split('@').next().unwrap().to_string();
+        let mut userpass = authority.split('@').next().unwrap().to_owned();
 
         let mut userpass_iter = userpass.split(':');
-        let username = userpass_iter.next().unwrap().to_string();
-        let password = userpass_iter.next().map_or_else(String::new, str::to_string);
+        let username = userpass_iter.next().unwrap().to_owned();
+        let password = userpass_iter.next().map(str::to_owned).unwrap_or_else(String::new);
         zeroize::Zeroize::zeroize(&mut userpass);
 
         return Ok((username, password));
@@ -62,7 +62,9 @@ impl Request {
 
   #[cfg(feature = "basic-auth")]
   pub fn with_basic_auth(&mut self) {
-    let _ = self.basic_auth_from_uri();
+    match self.basic_auth_from_uri() {
+      Ok(()) | Err(_) => {}
+    }
   }
 
   /// Set a size limit for the response.

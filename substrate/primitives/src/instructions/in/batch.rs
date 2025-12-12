@@ -32,7 +32,6 @@ use crate::{
 macro_rules! batch_struct {
   (#[$derive: meta] $pub: vis $name: ident) => {
     /// A batch of `InInstruction`s to publish onto Serai.
-    #[allow(clippy::needless_pub_self)]
     #[$derive]
     $pub struct $name {
       /// The size this will be once encoded.
@@ -52,7 +51,10 @@ macro_rules! batch_struct {
   }
 }
 
-batch_struct!(#[derive(BorshDeserialize)] pub(self) BatchDeserialize);
+batch_struct!(
+  #[derive(BorshDeserialize)]
+  BatchDeserialize
+);
 batch_struct!(#[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize)] pub Batch);
 
 impl BorshDeserialize for Batch {
@@ -67,7 +69,7 @@ impl BorshDeserialize for Batch {
         let read = self.reader.read(buf)?;
         self.read = self.read.saturating_add(read);
         if self.read > Batch::MAX_SIZE {
-          #[allow(clippy::io_other_error)]
+          #[cfg_attr(feature = "std", expect(clippy::io_other_error))]
           Err(io::Error::new(io::ErrorKind::Other, "Batch size exceeded maximum"))?;
         }
         Ok(read)

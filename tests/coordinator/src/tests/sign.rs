@@ -199,7 +199,7 @@ async fn sign_test() {
         (pair, address)
       };
 
-      #[allow(clippy::inconsistent_digit_grouping)]
+      #[expect(clippy::inconsistent_digit_grouping)]
       let amount = Amount(1_000_000_00);
       let balance = ExternalBalance { coin: ExternalCoin::Bitcoin, amount };
 
@@ -265,7 +265,7 @@ async fn sign_test() {
       let mut last_serai_block = block_included_in;
       'outer: for _ in 0 .. 20 {
         tokio::time::sleep(Duration::from_secs(6)).await;
-        if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+        if std::env::var("GITHUB_CI") == Ok("true".to_owned()) {
           tokio::time::sleep(Duration::from_secs(6)).await;
         }
 

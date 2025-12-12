@@ -39,7 +39,7 @@ pub fn test_add<F: Field>() {
 
 /// Perform basic tests on sum.
 pub fn test_sum<F: Field>() {
-  assert_eq!((&[] as &[F]).iter().sum::<F>(), F::ZERO, "[].sum() != 0");
+  assert_eq!(core::iter::empty::<F>().sum::<F>(), F::ZERO, "[].sum() != 0");
   assert_eq!([F::ZERO].iter().sum::<F>(), F::ZERO, "[0].sum() != 0");
   assert_eq!([F::ONE].iter().sum::<F>(), F::ONE, "[1].sum() != 1");
 
@@ -51,11 +51,11 @@ pub fn test_sum<F: Field>() {
 
 /// Perform basic tests on subtraction.
 pub fn test_sub<F: Field>() {
-  #[allow(clippy::eq_op)]
+  #[expect(clippy::eq_op)]
   let expr = F::ZERO - F::ZERO;
   assert_eq!(expr, F::ZERO, "0 - 0 != 0");
   assert_eq!(F::ONE - F::ZERO, F::ONE, "1 - 0 != 1");
-  #[allow(clippy::eq_op)]
+  #[expect(clippy::eq_op)]
   let expr = F::ONE - F::ONE;
   assert_eq!(expr, F::ZERO, "1 - 1 != 0");
 }
@@ -79,7 +79,7 @@ pub fn test_mul<F: Field>() {
 
 /// Perform basic tests on product.
 pub fn test_product<F: Field>() {
-  assert_eq!((&[] as &[F]).iter().product::<F>(), F::ONE, "[].product() != 1");
+  assert_eq!(core::iter::empty::<F>().product::<F>(), F::ONE, "[].product() != 1");
   assert_eq!([F::ZERO].iter().product::<F>(), F::ZERO, "[0].product() != 0");
   assert_eq!([F::ONE].iter().product::<F>(), F::ONE, "[1].product() != 1");
 

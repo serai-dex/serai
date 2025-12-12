@@ -114,7 +114,7 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     StartBlock::get(getter)
   }
   pub(crate) fn set_start_block(txn: &mut impl DbTxn, block: u64) {
-    StartBlock::set(txn, &block)
+    StartBlock::set(txn, &block);
   }
 
   fn tidy_keys(txn: &mut impl DbTxn) {

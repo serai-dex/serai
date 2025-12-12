@@ -6,7 +6,7 @@ pub use serai_abi::{
   primitives::{
     crypto::{Signature, KeyPair, EmbeddedEllipticCurveKeys},
     network_id::{ExternalNetworkId, NetworkId},
-    validator_sets::{Session, ExternalValidatorSet, ValidatorSet, SlashReport},
+    validator_sets::{Session, ExternalValidatorSet, SlashReport},
     balance::Amount,
     address::SeraiAddress,
   },
@@ -32,6 +32,7 @@ pub struct ValidatorSets(pub(super) Events);
 impl ValidatorSets {
   /// The events from the validator sets module.
   pub fn events(&self) -> impl Iterator<Item = &Event> {
+    #[expect(clippy::wildcard_enum_match_arm)]
     self.0.events().flatten().filter_map(|event| match event {
       serai_abi::Event::ValidatorSets(event) => Some(event),
       _ => None,
@@ -113,7 +114,7 @@ impl ValidatorSets {
   }
 }
 
-impl<'serai> State<'serai> {
+impl State<'_> {
   /// The current session for the specified network.
   pub async fn current_session(&self, network: NetworkId) -> Result<Option<Session>, RpcError> {
     Ok(
@@ -153,11 +154,11 @@ impl<'serai> State<'serai> {
     };
     KeyPair::deserialize(
       &mut hex::decode(key_pair)
-        .map_err(|_| RpcError::InvalidNode("validator set's keys weren't valid hex".to_string()))?
+        .map_err(|_| RpcError::InvalidNode("validator set's keys weren't valid hex".to_owned()))?
         .as_slice(),
     )
     .map(Some)
-    .map_err(|_| RpcError::InvalidNode("validator set's keys weren't a valid key pair".to_string()))
+    .map_err(|_| RpcError::InvalidNode("validator set's keys weren't a valid key pair".to_owned()))
   }
 
   /// The current validators for the specified network.
@@ -176,7 +177,7 @@ impl<'serai> State<'serai> {
           .into_iter()
           .map(|addr| {
             SeraiAddress::from_str(&addr)
-              .map_err(|_| RpcError::InvalidNode("validator's address was invalid".to_string()))
+              .map_err(|_| RpcError::InvalidNode("validator's address was invalid".to_owned()))
           })
           .collect()
       })
@@ -212,14 +213,14 @@ impl<'serai> State<'serai> {
       &mut hex::decode(keys)
         .map_err(|_| {
           RpcError::InvalidNode(
-            "validator's embedded elliptic curve keys weren't valid hex".to_string(),
+            "validator's embedded elliptic curve keys weren't valid hex".to_owned(),
           )
         })?
         .as_slice(),
     )
     .map(Some)
     .map_err(|_| {
-      RpcError::InvalidNode("validator's embedded elliptic curve keys weren't valid".to_string())
+      RpcError::InvalidNode("validator's embedded elliptic curve keys weren't valid".to_owned())
     })
   }
 }

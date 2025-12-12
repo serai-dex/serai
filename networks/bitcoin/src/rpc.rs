@@ -1,5 +1,6 @@
 use core::{str::FromStr, fmt::Debug};
 use std::{io::Read, collections::HashSet};
+use std_shims::prelude::*;
 
 use thiserror::Error;
 
@@ -14,6 +15,7 @@ use bitcoin::{
 #[derive(Clone, Debug)]
 pub struct Error {
   code: isize,
+  #[expect(dead_code)] // We only want the `Debug` implementation for this
   message: String,
 }
 
@@ -87,7 +89,7 @@ impl Rpc {
     }
     if !expected_methods.is_empty() {
       Err(RpcError::MissingMethods(expected_methods))?;
-    };
+    }
 
     Ok(rpc)
   }

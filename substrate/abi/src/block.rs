@@ -189,6 +189,7 @@ mod substrate {
     /// This will panic if the digest either isn't found or is invalid.
     pub fn find(digest: &Digest) -> Self {
       for log in digest.logs() {
+        #[expect(clippy::wildcard_enum_match_arm)]
         match log {
           DigestItem::PreRuntime(consensus, encoded)
             if *consensus == SeraiPreExecutionDigest::CONSENSUS_ID =>
@@ -277,7 +278,6 @@ mod substrate {
     sp_runtime::Serialize,
     sp_runtime::Deserialize,
   )]
-  #[allow(clippy::cast_possible_truncation)]
   pub enum SubstrateHeader {
     /// A version 1 header.
     V1(SubstrateHeaderV1),
@@ -290,6 +290,7 @@ mod substrate {
           let mut pre_execution_digest = None;
           let mut execution_digest = None;
           for log in header.consensus.digest.logs() {
+            #[expect(clippy::wildcard_enum_match_arm)]
             match log {
               DigestItem::PreRuntime(consensus, encoded)
                 if *consensus == SeraiPreExecutionDigest::CONSENSUS_ID =>

@@ -1,9 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
-
-#[allow(unused_imports)]
-use std_shims::prelude::*;
+#![no_std]
 
 use prime_field::{
   subtle::{Choice, CtOption},
@@ -25,7 +22,7 @@ prime_field::odd_prime_field!(
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct Embedwards25519;
 
-#[allow(deprecated)] // No other way to construct arbitrary `FieldElement` at compile-time :/
+#[expect(deprecated)] // No other way to construct arbitrary `FieldElement` at compile-time :/
 impl ShortWeierstrass for Embedwards25519 {
   type FieldElement = FieldElement;
   const A: FieldElement = FieldElement::from_bits(hex_literal::hex!(

@@ -10,5 +10,5 @@ RUN ~/.foundry/bin/foundryup
 EXPOSE 8545
 "#;
 
-  (String::new(), "RUN apt install git curl -y".to_string(), ANVIL_SETUP.to_string())
+  (String::new(), "RUN apt install git curl -y".to_owned(), ANVIL_SETUP.to_owned())
 }

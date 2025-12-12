@@ -19,7 +19,6 @@ use tendermint::{
 
 pub use tendermint::{Evidence, decode_signed_message};
 
-#[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TendermintTx {
   SlashEvidence(Evidence),

@@ -20,7 +20,7 @@ pub(crate) type Db = std::sync::Arc<serai_db::ParityDb>;
 #[cfg(feature = "rocksdb")]
 pub(crate) type Db = serai_db::RocksDB;
 
-#[allow(unused_variables, unreachable_code)]
+#[expect(unreachable_code)]
 fn db(path: &str) -> Db {
   {
     let path: &Path = path.as_ref();

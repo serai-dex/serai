@@ -117,7 +117,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
     Self { db, feed, scheduler }
   }
 
-  #[allow(clippy::type_complexity)]
+  #[expect(clippy::type_complexity)]
   fn keys_and_keys_with_stages(
     &self,
     block_number: u64,
@@ -261,7 +261,7 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
           // We can know with certainty that the channel is fully populated at this time since
           // we've acknowledged a newer block (so we've handled the state up to this point and any
           // new state will be for the newer block)
-          #[allow(unused_assignments)]
+          #[expect(unused_assignments)]
           {
             made_progress |= self.intake_burns().await?;
           }

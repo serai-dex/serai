@@ -54,7 +54,7 @@ impl<S: ScannerFeed> SubstrateDb<S> {
   }
 
   pub(crate) fn set_last_acknowledged_batch(txn: &mut impl DbTxn, id: u32) {
-    LastAcknowledgedBatch::set(txn, &id)
+    LastAcknowledgedBatch::set(txn, &id);
   }
 
   pub(crate) fn queue_acknowledge_batch(

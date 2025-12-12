@@ -1,7 +1,5 @@
 use core::{marker::PhantomData, ops::Deref, fmt};
-#[allow(unused_imports)]
 use std_shims::prelude::*;
-use std_shims::{vec, vec::Vec};
 
 use zeroize::Zeroizing;
 
@@ -32,32 +30,32 @@ type EmbeddedPoint<C> = (
   <<<C as Curves>::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::FieldElement,
 );
 
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 struct Circuit<
-  'a,
+  'circuit,
   C: Curves,
   CG: Iterator<
     Item = ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
   >,
 > {
-  curve_spec: &'a CurveSpec<<<C::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::FieldElement>,
-  circuit: &'a mut BpCircuit<C::ToweringCurve>,
+  curve_spec:
+    &'circuit CurveSpec<<<C::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::FieldElement>,
+  circuit: &'circuit mut BpCircuit<C::ToweringCurve>,
   challenge:
     DiscreteLogChallenge<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
   challenged_G:
     ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
-  challenged_generators: &'a mut CG,
+  challenged_generators: &'circuit mut CG,
   tape: Tape,
   pedersen_commitment_tape: PedersenCommitmentTape,
 }
 
 impl<
-    'a,
     C: Curves,
     CG: Iterator<
       Item = ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
     >,
-  > Circuit<'a, C, CG>
+  > Circuit<'_, C, CG>
 {
   /// Generate coefficients for secret-sharing via an eVRF.
   ///
@@ -242,7 +240,7 @@ impl<C: Curves> Proof<C> {
       - The participants' public keys, used for performing ECDHs with
     */
     let mut challenged_generators = challenged_generators.into_iter();
-    #[allow(non_snake_case)]
+    #[expect(non_snake_case)]
     let challenged_G = challenged_generators.next().unwrap();
 
     let tape = Tape::new(generators_to_use);
@@ -553,7 +551,7 @@ impl<C: Curves> Proof<C> {
     Ok(ProveResult { coefficients, encryption_keys, proof: transcript.complete() })
   }
 
-  #[allow(clippy::too_many_arguments)]
+  #[expect(clippy::too_many_arguments)]
   pub(super) fn verify(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C::ToweringCurve>,
@@ -661,11 +659,11 @@ impl<C: Curves> Proof<C> {
           multiexp::multiexp_vartime(&weighted_sum_openings),
         )
       };
-      #[allow(non_snake_case)]
+      #[expect(non_snake_case)]
       let A = weighted_sum_commitments - weighted_sum_openings;
 
       // Schnorr signature
-      #[allow(non_snake_case)]
+      #[expect(non_snake_case)]
       let R = transcript.read_point::<C::ToweringCurve>().map_err(|_| ())?;
       let c = transcript.challenge::<C::ToweringCurve>();
       let s = transcript.read_scalar::<C::ToweringCurve>().map_err(|_| ())?;
@@ -677,8 +675,8 @@ impl<C: Curves> Proof<C> {
     }
 
     if !transcript.complete().is_empty() {
-      Err(())?
-    };
+      Err(())?;
+    }
 
     let coefficients = openings[.. coefficients].to_vec();
     let encryption_key_commitments = openings[coefficients.len() ..].to_vec();

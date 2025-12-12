@@ -6,9 +6,8 @@
 // Each nonce remains of the form (d, e) and made into a proper nonce with d + (e * b)
 
 use core::ops::Deref;
-#[allow(unused_imports)]
-use std_shims::prelude::*;
 use std_shims::{
+  prelude::*,
   io::{self, Read, Write},
   collections::HashMap,
 };
@@ -198,10 +197,9 @@ impl<C: Curve> BindingFactor<C> {
     for n in 0 .. planned_nonces.len() {
       nonces.push(Vec::with_capacity(planned_nonces[n].len()));
       for g in 0 .. planned_nonces[n].len() {
-        #[allow(non_snake_case)]
+        #[expect(non_snake_case)]
         let mut D = C::G::identity();
         let mut statements = Vec::with_capacity(self.0.len());
-        #[allow(non_snake_case)]
         for IndividualBinding { commitments, binding_factors } in self.0.values() {
           D += commitments.nonces[n].generators[g].0[0];
           statements

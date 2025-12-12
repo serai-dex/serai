@@ -25,7 +25,6 @@ fn downtime_per_slash_point(validators: NonZero<u16>) -> Duration {
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
-#[cfg_attr(feature = "non_canonical_scale_derivations", allow(clippy::cast_possible_truncation))]
 pub enum Slash {
   /// The slash points accumulated by this validator.
   ///

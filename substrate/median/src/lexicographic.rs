@@ -52,7 +52,7 @@ impl<V: LexicographicEncoding> scale::Encode for LexicographicReverse<V> {
     self.0.size_hint()
   }
   fn encode_to<T: scale::Output + ?Sized>(&self, dest: &mut T) {
-    self.0.encode_to(dest)
+    self.0.encode_to(dest);
   }
   fn encode(&self) -> Vec<u8> {
     self.0.encode()
@@ -126,8 +126,8 @@ fn lexicographic_reverse() {
         break b;
       }
     };
-    let mut a_enc = a.lexicographic_encode();
-    let mut b_enc = b.lexicographic_encode();
+    let a_enc = a.lexicographic_encode();
+    let b_enc = b.lexicographic_encode();
     assert_eq!(a_enc, a_enc);
     assert_eq!(a.cmp(&b), a_enc.cmp(&b_enc));
 

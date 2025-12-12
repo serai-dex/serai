@@ -90,7 +90,12 @@ async fn signable_transaction(
         match rct_type {
           RctType::ClsagBulletproof => 11,
           RctType::ClsagBulletproofPlus => 16,
-          _ => panic!("selecting decoys for an unsupported RctType"),
+          RctType::AggregateMlsagBorromean |
+          RctType::MlsagBorromean |
+          RctType::MlsagBulletproofs |
+          RctType::MlsagBulletproofsCompactAmount => {
+            panic!("selecting decoys for an unsupported RctType")
+          }
         },
         reference_block.0.block.number() + 1,
         input.0.clone(),

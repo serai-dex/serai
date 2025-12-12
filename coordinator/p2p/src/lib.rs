@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::future::Future;
 use std::collections::HashMap;
@@ -178,7 +179,7 @@ pub async fn run<TD: Db, Tx: TransactionTrait, P: P2p>(
           let reader = reader.clone(); // This is a cheap clone
           // We spawn this on a task due to the DB reads needed
           tokio::spawn(async move {
-            handle_heartbeat(&reader, heartbeat.latest_block_hash, channel)
+            handle_heartbeat(&reader, heartbeat.latest_block_hash, channel);
           });
         }
       }

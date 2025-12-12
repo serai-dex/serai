@@ -14,7 +14,7 @@ mod db;
 use db::BatchDb;
 
 // This task begins reporting Batches for signing once the pre-requisities are met.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub(crate) struct ReportTask<D: Db, S: ScannerFeed> {
   db: D,
   _S: PhantomData<S>,

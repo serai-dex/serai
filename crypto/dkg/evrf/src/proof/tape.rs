@@ -52,12 +52,12 @@ impl Tape {
     let dlog =
       self.read_from_tape::<<C::EmbeddedCurveParameters as DiscreteLogParameter>::ScalarBits>();
 
-    struct PointIterator<'a, C: Curves>(
-      &'a mut Tape,
+    struct PointIterator<'tape, C: Curves>(
+      &'tape mut Tape,
       GenericArray<Variable, <C::EmbeddedCurveParameters as DiscreteLogParameter>::ScalarBits>,
       PhantomData<C>,
     );
-    impl<'a, C: Curves> Iterator for PointIterator<'a, C> {
+    impl<C: Curves> Iterator for PointIterator<'_, C> {
       type Item = PointWithDlog<C::EmbeddedCurveParameters>;
       fn next(&mut self) -> Option<Self::Item> {
         let divisor = {

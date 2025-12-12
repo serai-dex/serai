@@ -107,7 +107,7 @@ struct Tasks {
 }
 
 /// The signers used by a processor.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub struct Signers<
   D: Db,
   S: ScannerFeed,

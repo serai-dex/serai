@@ -1,11 +1,10 @@
 #[test]
 pub fn reproducibly_builds() {
-  use std::{collections::HashSet, path::PathBuf, process::Command};
+  use std::{path::PathBuf, process::Command};
 
   use rand_core::{RngCore, OsRng};
 
   const RUNS: usize = 3;
-  const TIMEOUT: u16 = 3 * 60 * 60; // 3 hours
 
   let mut images = vec![];
   for _ in 0 .. RUNS {

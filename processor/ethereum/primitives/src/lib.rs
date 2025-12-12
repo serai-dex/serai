@@ -80,7 +80,7 @@ fn test_deterministically_sign() {
   let tx = TxLegacy { chain_id: None, ..Default::default() };
   let signed = deterministically_sign(tx.clone());
 
-  assert!(signed.recover_signer().is_ok());
+  signed.recover_signer().unwrap();
   let one = alloy_primitives::U256::from(1u64);
   assert_eq!(signed.signature().r(), one);
   assert_eq!(signed.signature().s(), one);

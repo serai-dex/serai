@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std_shims::collections::HashMap;
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;

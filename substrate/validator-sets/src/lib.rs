@@ -1,6 +1,12 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
+#![expect(
+  let_underscore_drop,
+  clippy::as_conversions,
+  clippy::cast_possible_truncation,
+  clippy::semicolon_if_nothing_returned
+)]
 
 extern crate alloc;
 use alloc::{vec, vec::Vec};
@@ -17,7 +23,6 @@ use sessions::{*, GenesisValidators as GenesisValidatorsContainer};
 mod keys;
 use keys::{KeysStorage, Keys as _};
 
-#[expect(clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 mod pallet {
   use sp_core::sr25519::Public;
@@ -332,7 +337,6 @@ mod pallet {
       validator: Public,
       keys: SignedEmbeddedEllipticCurveKeys,
     ) -> DispatchResult {
-      let network = keys.network();
       let keys =
         <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::set_embedded_elliptic_curve_keys(
           validator, keys,

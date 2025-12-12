@@ -60,7 +60,7 @@ impl<D: Db> TransactionPublisher<D> {
         else {
           Err(TransportErrorKind::Custom(
             "publishing transaction yet couldn't find router on chain. was our node reset?"
-              .to_string()
+              .to_owned()
               .into(),
           ))?
         };
@@ -101,23 +101,21 @@ impl<D: Db> signers::TransactionPublisher<Transaction> for TransactionPublisher<
       tx.encode(&mut msg);
 
       let Ok(mut socket) = TcpStream::connect(&self.relayer_url).await else {
-        Err(TransportErrorKind::Custom(
-          "couldn't connect to the relayer server".to_string().into(),
-        ))?
+        Err(TransportErrorKind::Custom("couldn't connect to the relayer server".to_owned().into()))?
       };
       let Ok(()) = socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await else {
         Err(TransportErrorKind::Custom(
-          "couldn't send the message's len to the relayer server".to_string().into(),
+          "couldn't send the message's len to the relayer server".to_owned().into(),
         ))?
       };
       let Ok(()) = socket.write_all(&msg).await else {
         Err(TransportErrorKind::Custom(
-          "couldn't write the message to the relayer server".to_string().into(),
+          "couldn't write the message to the relayer server".to_owned().into(),
         ))?
       };
       if socket.read_u8().await.ok() != Some(1) {
         Err(TransportErrorKind::Custom(
-          "didn't get the ack from the relayer server".to_string().into(),
+          "didn't get the ack from the relayer server".to_owned().into(),
         ))?;
       }
 

@@ -1,5 +1,5 @@
 mod lighthouse;
-#[allow(unused)]
+#[expect(unused)]
 pub use lighthouse::lighthouse;
 
 mod nimbus;

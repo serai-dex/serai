@@ -21,7 +21,7 @@ use processor::networks::{Network, Bitcoin, Ethereum, Monero};
 
 use crate::{*, tests::*};
 
-#[allow(unused)]
+#[expect(unused)]
 pub(crate) async fn recv_sign_preprocesses(
   coordinators: &mut [Coordinator],
   session: Session,
@@ -65,7 +65,7 @@ pub(crate) async fn recv_sign_preprocesses(
   (id.unwrap(), preprocesses)
 }
 
-#[allow(unused)]
+#[expect(unused)]
 pub(crate) async fn sign_tx(
   coordinators: &mut [Coordinator],
   session: Session,

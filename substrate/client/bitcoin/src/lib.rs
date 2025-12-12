@@ -130,7 +130,7 @@ impl TryFrom<ExternalAddress> for Address {
     let mut data = data.as_ref();
     let encoded = EncodedAddress::deserialize_reader(&mut data).map_err(|_| ())?;
     if !data.is_empty() {
-      Err(())?
+      Err(())?;
     }
     Ok(Address(ScriptBuf::from(encoded)))
   }

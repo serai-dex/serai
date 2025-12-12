@@ -20,13 +20,13 @@ impl Get for Transaction<'_> {
 }
 impl DbTxn for Transaction<'_> {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
-    self.1.push((0, key.as_ref().to_vec(), Some(value.as_ref().to_vec())))
+    self.1.push((0, key.as_ref().to_vec(), Some(value.as_ref().to_vec())));
   }
   fn del(&mut self, key: impl AsRef<[u8]>) {
-    self.1.push((0, key.as_ref().to_vec(), None))
+    self.1.push((0, key.as_ref().to_vec(), None));
   }
   fn commit(self) {
-    self.0.commit(self.1).unwrap()
+    self.0.commit(self.1).unwrap();
   }
 }
 

@@ -39,5 +39,5 @@ fn test_algorithm() {
       &Message::from_digest_slice(Hash::hash(MESSAGE).as_ref()).unwrap(),
       &x_only(&keys[&Participant::new(1).unwrap()].group_key()),
     )
-    .unwrap()
+    .unwrap();
 }

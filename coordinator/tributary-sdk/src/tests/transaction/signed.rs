@@ -55,7 +55,7 @@ fn signed_transaction() {
 
   // Different nonce
   {
-    #[allow(clippy::redundant_clone)] // False positive?
+    #[expect(clippy::redundant_clone)] // False positive?
     let mut tx = tx.clone();
     tx.1.nonce = tx.1.nonce.wrapping_add(1);
     assert!(verify_transaction(&tx, genesis, &mut |_, _| Some(tx.1.nonce)).is_err());

@@ -19,7 +19,7 @@ create_db!(
 );
 
 /// An instance of a signing protocol with re-attempts handled internally.
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 pub(crate) struct SigningProtocol<D: Db, M: Clone + PreprocessMachine> {
   db: D,
   // The session this signing protocol is being conducted by.

@@ -1,8 +1,8 @@
-use rand_core::OsRng;
+use alloc::vec;
+
+use rand_core::{RngCore, OsRng};
 
 use zeroize::Zeroize;
-
-use rand_core::RngCore;
 
 use ff::{Field, PrimeFieldBits};
 use group::Group;

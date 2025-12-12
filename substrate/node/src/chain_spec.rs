@@ -1,23 +1,15 @@
-use core::marker::PhantomData;
 use std::sync::Arc;
 
-use sp_core::{Decode, storage::Storage, Pair as PairTrait};
-use sp_runtime::{
-  traits::{Block as _, Header as _},
-  BuildStorage,
-};
+use sp_core::{Decode, Pair as PairTrait};
+use sp_runtime::traits::{Block as _, Header as _};
 use sc_client_db::Backend;
 use sc_executor::RuntimeVersionOf;
 use sc_chain_spec::{BuildGenesisBlock, GenesisBlockBuilder, ChainSpec as ChainSpecTrait};
-use sc_client_api::BlockImportOperation;
 use sc_service::ChainType;
 
 use rand_core::OsRng;
 use zeroize::Zeroizing;
-use ciphersuite::{
-  group::{ff::Field, GroupEncoding},
-  WrappedGroup, Ciphersuite,
-};
+use ciphersuite::{group::ff::Field, WrappedGroup};
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 
@@ -63,15 +55,13 @@ fn insecure_embedded_elliptic_curve_keys(
 fn wasm_binary(dev: bool) -> Vec<u8> {
   // TODO: Accept a config of runtime path
   const DEFAULT_WASM_PATH: &str = "/runtime/serai.wasm";
-  let path = serai_env::var("SERAI_WASM").unwrap_or(DEFAULT_WASM_PATH.to_string());
+  let path = serai_env::var("SERAI_WASM").unwrap_or(DEFAULT_WASM_PATH.to_owned());
   if let Ok(binary) = std::fs::read(&path) {
     log::info!("using {path} for the WASM");
     return binary;
   }
 
-  if !dev {
-    panic!("runtime WASM was not provided");
-  }
+  assert!(dev, "runtime WASM was not provided for non-dev network");
 
   log::info!("using built-in wasm");
   serai_runtime::WASM.to_vec()
@@ -188,7 +178,7 @@ pub fn local_config() -> ChainSpec {
   )
 }
 
-#[allow(clippy::redundant_closure_call)]
+#[expect(clippy::redundant_closure_call)]
 pub fn testnet_config() -> ChainSpec {
   genesis(
     "Test Network 0",

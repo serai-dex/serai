@@ -97,7 +97,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
           TransactionKind::Unsigned => {
             res.txs.insert(hash, Transaction::Application(tx));
           }
-          _ => panic!("mempool database had a provided transaction"),
+          TransactionKind::Provided(_) => panic!("mempool database had a provided transaction"),
         },
       }
     }
@@ -153,7 +153,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
             // If we have too many transactions from this sender, don't add this yet UNLESS we are
             // this sender
             let amount_in_pool = *self.txs_per_signer.get(&signer).unwrap_or(&0) + 1;
-            if !internal && (amount_in_pool > ACCOUNT_MEMPOOL_LIMIT) {
+            if (!internal) && (amount_in_pool > ACCOUNT_MEMPOOL_LIMIT) {
               Err(TransactionError::TooManyInMempool)?;
             }
 
@@ -202,7 +202,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
         TransactionKind::Unsigned => {
           unsigned.push(tx.clone());
         }
-        _ => panic!("provided transaction entered mempool"),
+        TransactionKind::Provided(_) => panic!("provided transaction entered mempool"),
       }
     }
 
@@ -248,7 +248,9 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
       if let TransactionKind::Signed(order, Signed { signer, nonce, .. }) = tx.kind() {
         let signer = signer.to_bytes();
 
-        let amount = *self.txs_per_signer.get(&signer).unwrap() - 1;
+        let amount = *self.txs_per_signer.get(&signer).expect(
+          "removing a transaction from a signer who doesn't have any transactions in the mempool?",
+        ) - 1;
         self.txs_per_signer.insert(signer, amount);
 
         if self.last_nonce_in_mempool.get(&(signer, order.clone())) == Some(&nonce) {

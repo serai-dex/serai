@@ -2,9 +2,12 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
-extern crate alloc;
-
-#[expect(clippy::cast_possible_truncation)]
+#[expect(
+  let_underscore_drop,
+  clippy::as_conversions,
+  clippy::cast_possible_truncation,
+  clippy::semicolon_if_nothing_returned
+)]
 #[frame_support::pallet]
 mod pallet {
   use sp_core::sr25519::Public;
@@ -17,10 +20,6 @@ mod pallet {
 
   use serai_core_pallet::Pallet as Core;
   type Coins<T> = serai_coins_pallet::Pallet<T, serai_coins_pallet::CoinsInstance>;
-  type LiquidityTokens<T> =
-    serai_coins_pallet::Pallet<T, serai_coins_pallet::LiquidityTokensInstance>;
-
-  use super::*;
 
   /// The configuration of this pallet.
   #[pallet::config]
@@ -78,7 +77,9 @@ mod pallet {
         InInstruction::GenesisLiquidity(address) => {
           serai_genesis_liquidity_pallet::Pallet::<T>::add_liquidity(address, external_balance)?;
         }
-        InInstruction::SwapToStakedSri { validator, minimum } => todo!("TODO"),
+        InInstruction::SwapToStakedSri { validator, minimum } => {
+          todo!("TODO {validator:?} {minimum:?}")
+        }
         InInstruction::TransferWithSwap { to, maximum_to_swap, sri } => {
           serai_dex_pallet::Pallet::<T>::swap_for(
             RawOrigin::Signed(address.into()).into(),
@@ -177,7 +178,7 @@ mod pallet {
             OutInstructionWithBalance { instruction, balance: received },
           )?;
         }
-      };
+      }
 
       Ok(())
     }
@@ -189,6 +190,8 @@ mod pallet {
     #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn execute_batch(origin: OriginFor<T>, batch: SignedBatch) -> DispatchResult {
+      ensure_none(origin)?;
+
       let batch = batch.batch;
       let network = batch.network();
 

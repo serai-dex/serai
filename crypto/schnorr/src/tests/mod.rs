@@ -1,4 +1,5 @@
 use core::ops::Deref;
+use std_shims::prelude::*;
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;

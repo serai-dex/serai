@@ -54,14 +54,14 @@ impl<D: Db> PublishSlashReportTask<D> {
       // We already checked the current session wasn't greater, and they're not equal
       assert!(current_session < Some(session_after_slash_report.0));
       // This would mean the Serai node is resyncing and is behind where it prior was
-      Err("have a slash report for a session Serai has yet to retire".to_string())?;
+      Err("have a slash report for a session Serai has yet to retire".to_owned())?;
     }
 
     // If this session which should publish a slash report already has, move on
     if !serai.pending_slash_report(network).await.map_err(|e| format!("{e:?}"))? {
       txn.commit();
       return Ok(false);
-    };
+    }
 
     // Since this slash report is still pending, publish it
     match self.serai.publish_transaction(&slash_report).await {
@@ -95,7 +95,7 @@ impl<D: Db> ContinuallyRan for PublishSlashReportTask<D> {
       }
       // Yield the error
       if let Some(error) = error {
-        Err(error)?
+        Err(error)?;
       }
       Ok(made_progress)
     }

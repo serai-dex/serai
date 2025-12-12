@@ -25,7 +25,6 @@ use db::LatestCosigned;
 ///
 /// Only the latest cosign attempt is kept. We don't work on historical attempts as later cosigns
 /// supersede them.
-#[allow(non_snake_case)]
 pub(crate) struct CosignerTask<D: Db> {
   db: D,
 
