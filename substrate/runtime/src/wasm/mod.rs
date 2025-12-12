@@ -59,7 +59,13 @@ mod runtime {
   pub type GenesisLiquidity = serai_genesis_liquidity_pallet::Pallet<Runtime>;
 
   #[runtime::pallet_index(8)]
+  pub type EconomicSecurity = serai_economic_security_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(9)]
   pub type InInstructions = serai_in_instructions_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0x80)]
+  pub type Emissions = serai_emissions_pallet::Pallet<Runtime>;
 
   #[runtime::pallet_index(0xfd)]
   #[runtime::disable_inherent]
@@ -77,17 +83,6 @@ impl serai_core_pallet::Config for Runtime {}
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint; // TODO
 }
-
-#[doc(hidden)]
-pub struct EconomicSecurity; // TODO
-impl serai_abi::economic_security::EconomicSecurity for EconomicSecurity {
-  fn achieved_economic_security(_network: ExternalNetworkId) -> bool {
-    false
-  }
-  fn sri_value(_balance: ExternalBalance) -> Amount {
-    Amount(0)
-  }
-}
 impl serai_validator_sets_pallet::Config for Runtime {
   type ShouldEndSession = Babe;
   type EconomicSecurity = EconomicSecurity;
@@ -101,6 +96,8 @@ impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
 }
 impl serai_dex_pallet::Config for Runtime {}
 impl serai_genesis_liquidity_pallet::Config for Runtime {}
+impl serai_economic_security_pallet::Config for Runtime {}
+impl serai_emissions_pallet::Config for Runtime {}
 impl serai_in_instructions_pallet::Config for Runtime {}
 
 impl pallet_timestamp::Config for Runtime {

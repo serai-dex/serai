@@ -68,6 +68,8 @@ serai-validator-sets-pallet = { path = "../validator-sets", default-features = f
 serai-signals-pallet = { path = "../signals", default-features = false }
 serai-dex-pallet = { path = "../dex", default-features = false }
 serai-genesis-liquidity-pallet = { path = "../genesis-liquidity", default-features = false }
+serai-economic-security-pallet = { path = "../economic-security", default-features = false }
+serai-emissions-pallet = { path = "../emissions", default-features = false }
 serai-in-instructions-pallet = { path = "../in-instructions", default-features = false }
 
 [features]
@@ -104,6 +106,8 @@ std = [
   "serai-signals-pallet/std",
   "serai-dex-pallet/std",
   "serai-genesis-liquidity-pallet/std",
+  "serai-economic-security-pallet/std",
+  "serai-emissions-pallet/std",
   "serai-in-instructions-pallet/std",
 ]
 
@@ -126,6 +130,8 @@ try-runtime = [
   "serai-signals-pallet/try-runtime",
   "serai-dex-pallet/try-runtime",
   "serai-genesis-liquidity-pallet/try-runtime",
+  "serai-economic-security-pallet/try-runtime",
+  "serai-emissions-pallet/try-runtime",
   "serai-in-instructions-pallet/try-runtime",
 ]
 
@@ -145,6 +151,8 @@ runtime-benchmarks = [
   "serai-signals-pallet/runtime-benchmarks",
   "serai-dex-pallet/runtime-benchmarks",
   "serai-genesis-liquidity-pallet/runtime-benchmarks",
+  "serai-economic-security-pallet/runtime-benchmarks",
+  "serai-emissions-pallet/runtime-benchmarks",
   "serai-in-instructions-pallet/runtime-benchmarks",
 ]
 

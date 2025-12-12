@@ -8314,18 +8314,11 @@ version = "0.1.0"
 dependencies = [
  "frame-support",
  "frame-system",
- "pallet-babe",
- "pallet-grandpa",
- "pallet-timestamp",
  "parity-scale-codec",
+ "serai-abi",
  "serai-coins-pallet",
+ "serai-core-pallet",
  "serai-dex-pallet",
- "serai-primitives",
- "serai-validator-sets-pallet",
- "sp-consensus-babe",
- "sp-core",
- "sp-io",
- "sp-runtime",
 ]
 
 [[package]]
@@ -8335,14 +8328,10 @@ dependencies = [
  "frame-support",
  "frame-system",
  "parity-scale-codec",
+ "serai-abi",
  "serai-coins-pallet",
+ "serai-core-pallet",
  "serai-dex-pallet",
- "serai-economic-security-pallet",
- "serai-genesis-liquidity-pallet",
- "serai-primitives",
- "serai-validator-sets-pallet",
- "sp-runtime",
- "sp-std",
 ]
 
 [[package]]
@@ -8931,6 +8920,8 @@ dependencies = [
  "serai-coins-pallet",
  "serai-core-pallet",
  "serai-dex-pallet",
+ "serai-economic-security-pallet",
+ "serai-emissions-pallet",
  "serai-genesis-liquidity-pallet",
  "serai-in-instructions-pallet",
  "serai-signals-pallet",

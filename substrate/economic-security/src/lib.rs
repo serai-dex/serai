@@ -1,64 +1,56 @@
-#![cfg_attr(not(feature = "std"), no_std)]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![cfg_attr(not(any(feature = "std", test)), no_std)]
 
-#[cfg(test)]
-mod mock;
+extern crate alloc;
 
-#[cfg(test)]
-mod tests;
-
-#[allow(
-  unreachable_patterns,
-  clippy::cast_possible_truncation,
-  clippy::no_effect_underscore_binding,
-  clippy::empty_docs
-)]
+#[expect(clippy::cast_possible_truncation)]
 #[frame_support::pallet]
-pub mod pallet {
+mod pallet {
   use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
-  use dex_pallet::{Config as DexConfig, Pallet as Dex};
-  use coins_pallet::{Config as CoinsConfig, AllowMint};
+  use serai_abi::{primitives::prelude::*, economic_security::Event};
 
-  use serai_primitives::*;
+  use serai_core_pallet::Pallet as Core;
+  type Coins<T> = serai_coins_pallet::Pallet<T, serai_coins_pallet::CoinsInstance>;
+  type LiquidityTokens<T> =
+    serai_coins_pallet::Pallet<T, serai_coins_pallet::LiquidityTokensInstance>;
 
+  use super::*;
+
+  /// The configuration of this pallet.
   #[pallet::config]
-  pub trait Config: frame_system::Config + CoinsConfig + DexConfig {
-    type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
+  pub trait Config:
+    frame_system::Config
+    + serai_core_pallet::Config
+    + serai_coins_pallet::Config<serai_coins_pallet::CoinsInstance>
+    + serai_coins_pallet::Config<serai_coins_pallet::LiquidityTokensInstance>
+    + serai_dex_pallet::Config
+  {
   }
 
-  #[pallet::event]
-  #[pallet::generate_deposit(fn deposit_event)]
-  pub enum Event<T: Config> {
-    EconomicSecurityReached { network: ExternalNetworkId },
-  }
+  /// An error incurred.
+  #[pallet::error]
+  pub enum Error<T> {}
 
+  /// The Pallet struct.
   #[pallet::pallet]
-  pub struct Pallet<T>(PhantomData<T>);
+  pub struct Pallet<T>(_);
 
-  #[pallet::storage]
-  #[pallet::getter(fn economic_security_block)]
-  pub(crate) type EconomicSecurityBlock<T: Config> =
-    StorageMap<_, Identity, ExternalNetworkId, BlockNumberFor<T>, OptionQuery>;
+  impl<T: Config> Pallet<T> {
+    fn emit_event(event: Event) {
+      Core::<T>::emit_event(event)
+    }
+  }
 
-  #[pallet::hooks]
-  impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-    fn on_initialize(n: BlockNumberFor<T>) -> Weight {
-      // we accept we reached economic security once we can mint smallest amount of a network's coin
-      for coin in EXTERNAL_COINS {
-        let existing = EconomicSecurityBlock::<T>::get(coin.network());
-        // TODO: we don't need to check for oracle value if is_allowed returns false when there is
-        // no coin value
-        if existing.is_none() &&
-          Dex::<T>::security_oracle_value(coin).is_some() &&
-          <T as CoinsConfig>::AllowMint::is_allowed(&ExternalBalance { coin, amount: Amount(1) })
-        {
-          EconomicSecurityBlock::<T>::set(coin.network(), Some(n));
-          Self::deposit_event(Event::EconomicSecurityReached { network: coin.network() });
-        }
-      }
-
-      Weight::zero() // TODO
+  // TODO
+  impl<T: Config> serai_abi::economic_security::EconomicSecurity for Pallet<T> {
+    fn achieved_economic_security(_network: ExternalNetworkId) -> bool {
+      false
+    }
+    fn sri_value(_balance: ExternalBalance) -> Amount {
+      Amount(0)
     }
   }
 }

@@ -1,10 +1,10 @@
 [package]
 name = "serai-economic-security-pallet"
 version = "0.1.0"
-description = "Economic Security pallet for Serai"
+description = "Economic security pallet for Serai"
 license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/economic-security"
-authors = ["Akil Demir <akildemir72@gmail.com>"]
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 rust-version = "1.85"
 
@@ -24,22 +24,10 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
-dex-pallet = { package = "serai-dex-pallet", path = "../dex", default-features = false }
-coins-pallet = { package = "serai-coins-pallet", path = "../coins", default-features = false }
-
-serai-primitives = { path = "../primitives", default-features = false }
-
-[dev-dependencies]
-pallet-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
-pallet-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
-pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
-
-validator-sets-pallet = { package = "serai-validator-sets-pallet", path = "../validator-sets", default-features = false }
-
-sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
-sp-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
+serai-core-pallet = { path = "../core", default-features = false }
+serai-coins-pallet = { path = "../coins", default-features = false }
+serai-dex-pallet = { path = "../dex", default-features = false }
 
 [features]
 std = [
@@ -48,27 +36,29 @@ std = [
   "frame-system/std",
   "frame-support/std",
 
-  "sp-io/std",
-  "sp-core/std",
-  "sp-consensus-babe/std",
-
-  "dex-pallet/std",
-  "coins-pallet/std",
-  "validator-sets-pallet/std",
-
-  "serai-primitives/std",
-
-  "pallet-babe/std",
-  "pallet-grandpa/std",
-  "pallet-timestamp/std",
+  "serai-abi/std",
+  "serai-core-pallet/std",
+  "serai-coins-pallet/std",
+  "serai-dex-pallet/std",
 ]
 
 try-runtime = [
   "frame-system/try-runtime",
   "frame-support/try-runtime",
 
-  "sp-runtime/try-runtime",
+  "serai-abi/try-runtime",
+  "serai-core-pallet/try-runtime",
+  "serai-coins-pallet/try-runtime",
+  "serai-dex-pallet/try-runtime",
 ]
 
+runtime-benchmarks = [
+  "frame-system/runtime-benchmarks",
+  "frame-support/runtime-benchmarks",
+
+  "serai-core-pallet/runtime-benchmarks",
+  "serai-coins-pallet/runtime-benchmarks",
+  "serai-dex-pallet/runtime-benchmarks",
+]
 
 default = ["std"]
