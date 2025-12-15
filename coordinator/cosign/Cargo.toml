@@ -31,3 +31,9 @@ serai-db = { path = "../../common/db", version = "0.1.1" }
 serai-task = { path = "../../common/task", version = "0.1" }
 
 serai-cosign-types = { path = "./types" }
+
+[dev-dependencies]
+tokio = { version = "1", default-features = false, features = ["time", "test-util"] }
+
+[features]
+tests = []

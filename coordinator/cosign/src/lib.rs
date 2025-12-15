@@ -37,6 +37,10 @@ mod delay;
 pub use delay::BROADCAST_FREQUENCY;
 use delay::LatestCosignedBlockNumber;
 
+#[cfg(any(test, feature = "tests"))]
+/// Test helpers and fixtures.
+pub mod tests;
+
 /// A 'global session', defined as all validator sets used for cosigning at a given moment.
 ///
 /// We evaluate cosign faults within a global session. This ensures even if cosigners cosign
