@@ -3,7 +3,7 @@
 #![no_std]
 
 use core::{
-  ops::Deref,
+  ops::Deref as _,
   fmt::{self, Debug},
 };
 use std_shims::{prelude::*, sync::Arc, collections::HashMap, io};
@@ -12,8 +12,8 @@ use zeroize::{Zeroize, Zeroizing};
 
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField},
-    GroupEncoding,
+    ff::{Field as _, PrimeField},
+    GroupEncoding as _,
   },
   GroupIo, Id,
 };

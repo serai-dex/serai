@@ -8,7 +8,7 @@ use dalek_ff_group::Ristretto;
 
 use tokio::sync::mpsc;
 
-use serai_db::{DbTxn, Db as DbTrait};
+use serai_db::{DbTxn as _, Db as _};
 
 use serai_client_serai::abi::primitives::{
   network_id::ExternalNetworkId,

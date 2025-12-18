@@ -1,7 +1,7 @@
-use core::{future::Future, str::FromStr};
+use core::{future::Future, str::FromStr as _};
 use std::{sync::Arc, collections::HashSet};
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
 use tokio::sync::mpsc;
 

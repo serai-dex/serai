@@ -3,7 +3,7 @@ use alloc::{vec, vec::Vec};
 use zeroize::Zeroize;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use ciphersuite::{group::GroupEncoding, GroupIo};
+use ciphersuite::{group::GroupEncoding as _, GroupIo};
 use dalek_ff_group::Ristretto;
 
 use sp_core::sr25519::Public;

@@ -4,14 +4,14 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::future::Future;
-use std::{sync::Arc, io::Read};
+use std::{sync::Arc, io::Read as _};
 
 use thiserror::Error;
-use core_json_traits::{JsonDeserialize, JsonStructure};
+use core_json_traits::{JsonDeserialize, JsonStructure as _};
 use core_json_derive::JsonDeserialize;
 use simple_request::{hyper, TokioClient};
 
-use borsh::BorshDeserialize;
+use borsh::BorshDeserialize as _;
 pub use serai_abi as abi;
 use abi::{
   primitives::{BlockHash, network_id::ExternalNetworkId},

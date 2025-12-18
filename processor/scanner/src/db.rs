@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use std::io::{self, Read, Write};
+use std::io::{self, Read as _, Write as _};
 
 use group::GroupEncoding;
 

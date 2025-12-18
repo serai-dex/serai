@@ -23,7 +23,7 @@ impl_prim_uint!(u128);
 #[test]
 #[expect(clippy::manual_midpoint)]
 fn average() {
-  use rand_core::{RngCore, OsRng};
+  use rand_core::{RngCore as _, OsRng};
 
   // Basic sanity checks
   {

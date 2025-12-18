@@ -11,16 +11,16 @@ use std::{
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use group::ff::PrimeField;
+use group::ff::PrimeField as _;
 
 use alloy_core::primitives::{hex, Address, U256, TxKind};
-use alloy_sol_types::{SolValue, SolConstructor, SolCall, SolEvent};
+use alloy_sol_types::{SolValue as _, SolConstructor as _, SolCall as _, SolEvent};
 
 use alloy_consensus::TxLegacy;
 
 use alloy_rpc_types_eth::{BlockId, Log, Filter, TransactionInput, TransactionRequest};
 use alloy_transport::{TransportErrorKind, RpcError};
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider as _, RootProvider};
 
 use serai_primitives::instructions::RefundableInInstruction;
 use serai_client_ethereum::Address as SeraiAddress;
@@ -30,7 +30,7 @@ use ethereum_schnorr::{PublicKey, Signature};
 use ethereum_deployer::Deployer;
 use erc20::{Transfer, TopLevelTransfer, TopLevelTransfers, Erc20};
 
-use futures_util::stream::{StreamExt, FuturesUnordered};
+use futures_util::stream::{StreamExt as _, FuturesUnordered};
 
 mod _irouter_abi {
   alloy_sol_macro::sol!("contracts/IRouter.sol");

@@ -1,6 +1,7 @@
-use transcript::{Transcript, DigestTranscript};
+use transcript::{Transcript as _, DigestTranscript};
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::GroupEncoding, FromUniformBytes, WrappedGroup, WithPreferredHash};
+#[rustfmt::skip]
+use ciphersuite::{group::GroupEncoding as _, FromUniformBytes as _, WrappedGroup, WithPreferredHash};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 

@@ -9,7 +9,7 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
 use zeroize::Zeroizing;
 use schnorrkel::Keypair;
@@ -23,7 +23,7 @@ use serai_client_serai::{
 
 use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
 
-use serai_task::{Task, ContinuallyRan};
+use serai_task::{Task, ContinuallyRan as _};
 
 use serai_cosign::SignedCosign;
 

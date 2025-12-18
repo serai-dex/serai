@@ -146,7 +146,7 @@ async fn most_recent_new_set_event(serai: &Serai, network: NetworkId) -> Validat
 #[tokio::test]
 async fn set_rotation_test() {
   new_test(
-    |mut processors: Vec<Processor>| async move {
+    async move |mut processors: Vec<Processor>| {
       // exclude the last processor from keygen since we will add him later
       let mut excluded = processors.pop().unwrap();
       assert_eq!(processors.len(), COORDINATORS);

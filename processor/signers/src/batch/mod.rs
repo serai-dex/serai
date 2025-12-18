@@ -1,13 +1,13 @@
 use core::future::Future;
 use std::collections::HashSet;
 
-use blake2::{digest::typenum::U32, Digest, Blake2b};
+use blake2::{digest::typenum::U32, Digest as _, Blake2b};
 use ciphersuite::group::GroupEncoding;
 use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
 use serai_primitives::{validator_sets::Session, instructions::SignedBatch};
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get, DbTxn as _, Db};
 
 use messages::sign::VariantSignId;
 

@@ -2,7 +2,7 @@ use std::collections::{VecDeque, HashMap};
 
 use thiserror::Error;
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get as _, DbTxn as _, Db};
 
 use crate::transaction::{TransactionKind, TransactionError, Transaction, verify_transaction};
 

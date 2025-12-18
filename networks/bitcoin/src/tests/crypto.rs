@@ -9,7 +9,7 @@ use frost::{
 };
 
 use crate::{
-  bitcoin::hashes::{Hash as HashTrait, sha256::Hash},
+  bitcoin::hashes::{Hash as _, sha256::Hash},
   crypto::{x_only, Schnorr},
   wallet::tweak_keys,
 };

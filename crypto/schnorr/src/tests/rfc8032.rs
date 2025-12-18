@@ -3,10 +3,10 @@
 // While not all RFC 8032 signatures will work with this library, any canonical ones will, and
 // these vectors are canonical
 
-use sha2::{Digest, Sha512};
+use sha2::{Digest as _, Sha512};
 
 use dalek_ff_group::{Scalar, Ed25519};
-use ciphersuite::{group::GroupEncoding, GroupIo};
+use ciphersuite::{group::GroupEncoding as _, GroupIo as _};
 
 use crate::SchnorrSignature;
 

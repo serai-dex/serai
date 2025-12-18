@@ -1,14 +1,14 @@
 use core::future::Future;
 use std::collections::HashMap;
 
-use borsh::BorshDeserialize;
+use borsh::BorshDeserialize as _;
 
 use serai_db::{Get, DbTxn, Db};
 
 #[rustfmt::skip]
 use serai_primitives::instructions::{RefundableInInstruction, InInstruction, InInstructionWithBalance};
 
-use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Block};
+use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput as _, Block as _};
 
 use crate::{
   lifetime::LifetimeStage,
@@ -16,7 +16,7 @@ use crate::{
     OutputWithInInstruction, Returnable, SenderScanData, ScannerGlobalDb, InInstructionData,
     ScanToBatchDb, ScanToEventualityDb,
   },
-  BlockExt, ScannerFeed, AddressFor, OutputFor, Return, sort_outputs,
+  BlockExt as _, ScannerFeed, AddressFor, OutputFor, Return, sort_outputs,
   eventuality::latest_scannable_block,
 };
 
@@ -317,7 +317,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
 
         // Sort the InInstructions by the output ID
         in_instructions.sort_by(|(output_id_a, _), (output_id_b, _)| {
-          use core::cmp::{Ordering, Ord};
+          use core::cmp::{Ordering, Ord as _};
           let res = output_id_a.as_ref().cmp(output_id_b.as_ref());
           assert!(res != Ordering::Equal, "two outputs within a collection had the same ID");
           res

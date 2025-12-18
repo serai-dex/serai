@@ -1,4 +1,4 @@
-use bitcoin_serai::{bitcoin::hashes::Hash as HashTrait, rpc::RpcError};
+use bitcoin_serai::{bitcoin::hashes::Hash as _, rpc::RpcError};
 
 mod runner;
 use runner::rpc;

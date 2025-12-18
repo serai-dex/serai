@@ -229,7 +229,7 @@ p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab
 [workspace.lints.rust]
 # https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html
 ambiguous_negative_literals = "warn"
-# closure_returning_async_block = "warn" # TODO: Enable
+closure_returning_async_block = "warn"
 deprecated_safe = "warn"
 deref_into_dyn_supertrait = "warn"
 explicit_outlives_requirements = "warn"
@@ -279,8 +279,8 @@ missing_panics_doc = "allow"
 must_use_candidate = "allow" # TODO: Revisit
 naive_bytecount = "allow" # We don't want a suggestion to add an external dependency
 similar_names = "allow"
-single_match_else = "allow" # TODO: Revisit
-struct_excessive_bools = "allow" # TODO: Revisit
+# This triggers on the exhaustive `match opt { Some => {}, None => {} }`, which is excessive
+single_match_else = "allow"
 struct_field_names = "allow"
 too_many_lines = "allow"
 wildcard_imports = "allow"
@@ -317,5 +317,5 @@ string_slice = "warn"
 suspicious_xor_used_as_pow = "warn"
 # todo = "warn" # TODO: Enable
 unnecessary_self_imports = "warn"
-# unused_trait_names = "warn" # TODO: Enable
+unused_trait_names = "warn"
 wildcard_enum_match_arm = "warn"

@@ -1,17 +1,17 @@
 use core::fmt::Debug;
 use std_shims::{prelude::*, io};
 
-use subtle::{Choice, ConstantTimeEq, ConditionallySelectable};
+use subtle::{Choice, ConstantTimeEq as _, ConditionallySelectable as _};
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
 use k256::{
-  elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint},
+  elliptic_curve::{ops::Reduce as _, sec1::ToEncodedPoint as _},
   U256, Scalar, ProjectivePoint,
 };
 
 use bitcoin::{
-  hashes::{HashEngine, Hash, sha256::Hash as Sha256},
+  hashes::{HashEngine as _, Hash as _, sha256::Hash as Sha256},
   key::XOnlyPublicKey,
 };
 

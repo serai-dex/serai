@@ -4,7 +4,7 @@ use std::{
   time::{Duration, Instant},
 };
 
-use borsh::BorshDeserialize;
+use borsh::BorshDeserialize as _;
 
 use serai_client_serai::abi::primitives::validator_sets::ExternalValidatorSet;
 
@@ -14,7 +14,7 @@ use serai_task::TaskHandle;
 
 use serai_cosign::SignedCosign;
 
-use futures_util::StreamExt;
+use futures_util::StreamExt as _;
 use libp2p::{
   identity::PeerId,
   request_response::{InboundRequestId, OutboundRequestId, ResponseChannel},

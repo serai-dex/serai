@@ -8,7 +8,7 @@ pub use dkg_recovery::recover_key;
 use crate::{
   Curve, Participant, ThresholdKeys, FrostError,
   algorithm::{Algorithm, Hram, IetfSchnorr},
-  sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine},
+  sign::{Writable as _, PreprocessMachine, SignMachine, SignatureMachine as _, AlgorithmMachine},
 };
 
 /// Tests for the nonce handling code.

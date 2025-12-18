@@ -1,4 +1,4 @@
-use core::{ops::Deref, convert::AsRef};
+use core::{ops::Deref as _, convert::AsRef};
 use std_shims::{
   prelude::*,
   io::{self, Read},
@@ -6,12 +6,12 @@ use std_shims::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::{Zeroize, Zeroizing};
-use subtle::ConstantTimeEq;
+use zeroize::{Zeroize as _, Zeroizing};
+use subtle::ConstantTimeEq as _;
 
 use ciphersuite::group::{
-  ff::{Field, PrimeField},
-  Group,
+  ff::{Field as _, PrimeField as _},
+  Group as _,
 };
 pub use ciphersuite::{digest::Digest, WrappedGroup, GroupIo, Ciphersuite};
 

@@ -5,15 +5,15 @@ use std::{sync::Arc, io};
 
 use zeroize::Zeroizing;
 
-use borsh::BorshDeserialize;
+use borsh::BorshDeserialize as _;
 
 use ciphersuite::*;
 use dalek_ff_group::Ristretto;
 
 use futures_channel::mpsc::UnboundedReceiver;
-use futures_util::{StreamExt, SinkExt};
+use futures_util::{StreamExt as _, SinkExt as _};
 use ::tendermint::{
-  ext::{BlockNumber, Commit, Block as BlockTrait, Network},
+  ext::{BlockNumber, Commit, Block as _, Network as _},
   SignedMessageFor, SyncedBlock, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
   TendermintMachine, TendermintHandle,
 };

@@ -1,13 +1,13 @@
 use rand::rngs::OsRng;
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;
 
 use crate::{
-  ReadWrite,
-  transaction::{Signed, Transaction, verify_transaction},
+  ReadWrite as _,
+  transaction::{Signed, Transaction as _, verify_transaction},
   tests::{random_signed, random_signed_transaction},
 };
 

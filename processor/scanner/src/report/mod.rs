@@ -1,6 +1,6 @@
 use core::{marker::PhantomData, future::Future};
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
 use serai_primitives::validator_sets::Session;
 

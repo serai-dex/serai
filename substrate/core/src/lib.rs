@@ -194,7 +194,7 @@ pub use pallet::*;
 pub struct StartOfBlock<T: Config>(PhantomData<T>);
 impl<T: Config> PreInherents for StartOfBlock<T> {
   fn pre_inherents() {
-    use frame_support::pallet_prelude::Zero;
+    use frame_support::pallet_prelude::Zero as _;
     // `Pallet::genesis` is expected to be used for the genesis block
     assert!(!frame_system::Pallet::<T>::block_number().is_zero());
 

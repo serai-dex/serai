@@ -11,7 +11,7 @@
 #[frame_support::pallet]
 mod pallet {
   use sp_core::sr25519::Public;
-  use sp_application_crypto::RuntimePublic;
+  use sp_application_crypto::RuntimePublic as _;
 
   use frame_support::{pallet_prelude::*, dispatch::RawOrigin};
   use frame_system::pallet_prelude::*;

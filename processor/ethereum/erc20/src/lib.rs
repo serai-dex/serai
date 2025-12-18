@@ -7,15 +7,15 @@ use std::collections::HashMap;
 
 use alloy_core::primitives::{Address, U256};
 
-use alloy_sol_types::{SolInterface, SolEvent};
+use alloy_sol_types::{SolInterface as _, SolEvent as _};
 
-use alloy_rpc_types_eth::{Log, Filter, TransactionTrait};
+use alloy_rpc_types_eth::{Log, Filter, TransactionTrait as _};
 use alloy_transport::{TransportErrorKind, RpcError};
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider as _, RootProvider};
 
 use ethereum_primitives::LogIndex;
 
-use futures_util::stream::{StreamExt, FuturesUnordered};
+use futures_util::stream::{StreamExt as _, FuturesUnordered};
 
 mod abi {
   alloy_sol_macro::sol!("contracts/IERC20.sol");

@@ -5,10 +5,10 @@
 use core::{pin::Pin, future::Future};
 use std::sync::Arc;
 
-use futures_util::FutureExt;
+use futures_util::FutureExt as _;
 use ::tokio::sync::Mutex;
 
-use tower_service::Service as TowerService;
+use tower_service::Service as _;
 use hyper::{Uri, header::HeaderValue, body::Bytes, client::conn::http1::SendRequest, rt::Executor};
 pub use hyper;
 

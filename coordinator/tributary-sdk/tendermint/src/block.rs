@@ -3,7 +3,7 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get as _, DbTxn as _, Db};
 
 use crate::{
   time::CanonicalInstant,

@@ -1,11 +1,11 @@
-use core::str::FromStr;
+use core::str::FromStr as _;
 
 pub(crate) use tokio::{
-  io::{AsyncReadExt, AsyncWriteExt},
+  io::{AsyncReadExt as _, AsyncWriteExt as _},
   net::TcpListener,
 };
 
-use serai_db::{Get, DbTxn, Db as DbTrait};
+use serai_db::{Get as _, DbTxn as _, Db as _};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {

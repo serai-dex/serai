@@ -5,11 +5,11 @@
 use core::{marker::PhantomData, future::Future};
 use std::collections::HashMap;
 
-use group::GroupEncoding;
+use group::GroupEncoding as _;
 
 use serai_db::{Get, DbTxn, create_db};
 
-use primitives::{ReceivedOutput, Payment};
+use primitives::{ReceivedOutput as _, Payment};
 use scanner::{
   LifetimeStage, ScannerFeed, KeyFor, AddressFor, EventualityFor, BlockFor, SchedulerUpdate,
   KeyScopedEventualities, Scheduler as SchedulerTrait,

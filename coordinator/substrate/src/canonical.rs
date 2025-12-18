@@ -1,7 +1,7 @@
 use core::future::Future;
 use std::sync::Arc;
 
-use futures::stream::{StreamExt, FuturesOrdered};
+use futures::stream::{StreamExt as _, FuturesOrdered};
 
 use serai_client_serai::{
   abi::{self, primitives::network_id::ExternalNetworkId},

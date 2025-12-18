@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
 
-use core::ops::Deref;
+use core::ops::Deref as _;
 #[cfg(feature = "alloc")]
 extern crate alloc;
 #[cfg(feature = "alloc")]
@@ -17,8 +17,8 @@ use zeroize::{Zeroize, Zeroizing};
 
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField},
-    Group, GroupEncoding,
+    ff::{Field as _, PrimeField as _},
+    Group as _, GroupEncoding as _,
   },
   GroupIo,
 };

@@ -1,26 +1,26 @@
-use core::{ops::Deref, fmt::Debug};
+use core::{ops::Deref as _, fmt::Debug};
 use std_shims::{
   prelude::*,
   io::{self, Read, Write},
   collections::HashMap,
 };
 
-use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng as _};
 use rand_chacha::ChaCha20Rng;
 
 use zeroize::{Zeroize, Zeroizing};
 
-use transcript::Transcript;
+use transcript::Transcript as _;
 
-use ciphersuite::group::{ff::PrimeField, GroupEncoding};
+use ciphersuite::group::{ff::PrimeField as _, GroupEncoding as _};
 #[cfg(any(test, feature = "tests"))]
-use ciphersuite::group::ff::Field;
+use ciphersuite::group::ff::Field as _;
 use multiexp::BatchVerifier;
 
 use crate::{
   curve::Curve,
   Participant, FrostError, ThresholdParams, ThresholdKeys, ThresholdView,
-  algorithm::{WriteAddendum, Addendum, Algorithm},
+  algorithm::{WriteAddendum as _, Addendum, Algorithm},
   validate_map,
 };
 

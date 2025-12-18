@@ -125,7 +125,7 @@ fn key_gen_test() {
   for network in EXTERNAL_NETWORKS {
     let (coordinators, test) = new_test(network);
 
-    test.run(|ops| async move {
+    test.run(async move |ops| {
       // Sleep for a second for the message-queue to boot
       // It isn't an error to start immediately, it just silences an error
       tokio::time::sleep(core::time::Duration::from_secs(1)).await;

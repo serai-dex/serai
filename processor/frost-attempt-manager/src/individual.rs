@@ -4,7 +4,7 @@ use rand_core::OsRng;
 
 use frost::{
   Participant, FrostError,
-  sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
+  sign::{Writable as _, PreprocessMachine, SignMachine, SignatureMachine as _},
 };
 
 use serai_primitives::validator_sets::Session;

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{group::GroupEncoding, *};
+use ciphersuite::{group::GroupEncoding as _, *};
 use dkg::*;
 
 use serai_primitives::validator_sets::Session;

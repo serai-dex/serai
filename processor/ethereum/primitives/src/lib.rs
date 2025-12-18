@@ -4,11 +4,11 @@
 
 use ::borsh::{BorshSerialize, BorshDeserialize};
 
-use group::ff::PrimeField;
+use group::ff::PrimeField as _;
 use k256::Scalar;
 
 use alloy_primitives::Signature;
-use alloy_consensus::{SignableTransaction, Signed, TxLegacy};
+use alloy_consensus::{SignableTransaction as _, Signed, TxLegacy};
 
 mod borsh;
 pub use borsh::*;

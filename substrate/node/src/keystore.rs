@@ -1,4 +1,4 @@
-use zeroize::Zeroize;
+use zeroize::Zeroize as _;
 
 use sp_core::{crypto::*, sr25519};
 use sp_keystore::*;

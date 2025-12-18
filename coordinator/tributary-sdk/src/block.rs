@@ -5,7 +5,7 @@ use std::{
 
 use thiserror::Error;
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 use tendermint::ext::{Network, Commit};
 

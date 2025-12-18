@@ -1,4 +1,4 @@
-use alloy_sol_types::SolCall;
+use alloy_sol_types::SolCall as _;
 
 #[test]
 fn selector_collisions() {

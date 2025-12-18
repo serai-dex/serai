@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
 
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std_shims::{
   prelude::*,
   io::{self, Read, Write},
@@ -11,20 +11,20 @@ use std_shims::{
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::{Zeroize as _, Zeroizing};
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField},
-    Group, GroupEncoding,
+    ff::{Field as _, PrimeField as _},
+    Group as _, GroupEncoding as _,
   },
   WrappedGroup, GroupIo,
 };
 use multiexp::multiexp_vartime;
 
 use generalized_bulletproofs::arithmetic_circuit_proof::*;
-use ec_divisors::DivisorCurve;
+use ec_divisors::DivisorCurve as _;
 
 pub use dkg::*;
 

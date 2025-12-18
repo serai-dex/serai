@@ -12,7 +12,7 @@ use serai_primitives::{coin::ExternalCoin, balance::Amount};
 use serai_client_bitcoin::Address;
 
 use serai_db::Db;
-use primitives::{OutputType, ReceivedOutput, Payment};
+use primitives::{OutputType, ReceivedOutput as _, Payment};
 use scanner::{KeyFor, AddressFor, OutputFor, BlockFor};
 use utxo_scheduler::{PlannedTransaction, TransactionPlanner};
 use transaction_chaining_scheduler::{EffectedReceivedOutputs, Scheduler as GenericScheduler};

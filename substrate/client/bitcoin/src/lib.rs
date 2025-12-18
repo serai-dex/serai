@@ -8,7 +8,7 @@ use core::{str::FromStr, fmt};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use bitcoin::{
-  hashes::{Hash as HashTrait, hash160::Hash},
+  hashes::{Hash as _, hash160::Hash},
   PubkeyHash, ScriptHash,
   network::Network,
   WitnessVersion, WitnessProgram, ScriptBuf,

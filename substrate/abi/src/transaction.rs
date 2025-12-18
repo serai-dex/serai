@@ -238,7 +238,8 @@ mod substrate {
   use sp_runtime::{
     transaction_validity::*,
     traits::{
-      Verify, ExtrinsicLike, ExtrinsicCall, Dispatchable, ValidateUnsigned, Checkable, Applyable,
+      Verify as _, ExtrinsicLike, ExtrinsicCall, Dispatchable, ValidateUnsigned, Checkable,
+      Applyable,
     },
     Weight,
   };

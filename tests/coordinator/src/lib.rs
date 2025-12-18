@@ -242,7 +242,7 @@ impl Processor {
           }
           let msg = msg_msg;
 
-          let send_message = |msg: ProcessorMessage| async move {
+          let send_message = async move |msg: ProcessorMessage| {
             queue
               .queue(
                 Metadata {

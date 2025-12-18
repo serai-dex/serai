@@ -2,7 +2,7 @@ use std_shims::prelude::*;
 
 use rand_core::OsRng;
 
-use ciphersuite::GroupIo;
+use ciphersuite::GroupIo as _;
 
 use schnorr::SchnorrSignature;
 

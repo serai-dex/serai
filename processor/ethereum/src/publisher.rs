@@ -1,14 +1,14 @@
 use core::future::Future;
 use std::sync::Arc;
 
-use alloy_rlp::Encodable;
+use alloy_rlp::Encodable as _;
 
 use alloy_transport::{TransportErrorKind, RpcError};
 use alloy_provider::RootProvider;
 
 use tokio::{
   sync::{RwLockReadGuard, RwLock},
-  io::{AsyncReadExt, AsyncWriteExt},
+  io::{AsyncReadExt as _, AsyncWriteExt as _},
   net::TcpStream,
 };
 

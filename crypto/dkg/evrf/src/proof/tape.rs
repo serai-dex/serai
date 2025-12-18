@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use generic_array::{sequence::GenericSequence, ArrayLength, GenericArray};
+use generic_array::{sequence::GenericSequence as _, ArrayLength, GenericArray};
 
 use generalized_bulletproofs_circuit_abstraction::Variable;
 use generalized_bulletproofs_ec_gadgets::{DiscreteLogParameter, Divisor, PointWithDlog};

@@ -4,7 +4,7 @@ use rand_core::OsRng;
 
 use zeroize::Zeroize;
 
-use ff::{Field, PrimeFieldBits};
+use ff::{Field as _, PrimeFieldBits};
 use group::Group;
 
 use k256::ProjectivePoint;

@@ -1,7 +1,7 @@
 use core::future::Future;
 use std::sync::Arc;
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
 use serai_client_serai::{
   abi::primitives::{network_id::ExternalNetworkId, validator_sets::Session},

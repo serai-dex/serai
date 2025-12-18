@@ -11,10 +11,10 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroizing;
 
-use transcript::{Transcript, MerlinTranscript};
+use transcript::{Transcript as _, MerlinTranscript};
 
 use ciphersuite::{
-  group::{ff::PrimeField, GroupEncoding},
+  group::{ff::PrimeField as _, GroupEncoding as _},
   WrappedGroup,
 };
 use schnorr::SchnorrSignature;
@@ -30,7 +30,7 @@ pub mod frost {
   pub use ::frost::*;
 }
 
-use schnorrkel::{PublicKey, Signature, context::SigningTranscript, signing_context};
+use schnorrkel::{PublicKey, Signature, context::SigningTranscript as _, signing_context};
 
 type RistrettoPoint = <Ristretto as WrappedGroup>::G;
 type Scalar = <Ristretto as WrappedGroup>::F;

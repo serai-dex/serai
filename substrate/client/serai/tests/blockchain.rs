@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use blake2::{Digest, Blake2b256};
+use blake2::{Digest as _, Blake2b256};
 
 use serai_abi::{
   primitives::merkle::UnbalancedMerkleTree, BLOCK_HEADER_LEAF_TAG, BLOCK_HEADER_BRANCH_TAG,

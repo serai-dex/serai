@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use group::GroupEncoding;
+use group::GroupEncoding as _;
 
 use serai_primitives::{coin::ExternalCoin, balance::Amount};
 

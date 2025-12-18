@@ -1,6 +1,6 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use core::str::FromStr;
+use core::str::FromStr as _;
 pub(crate) use std::{
   sync::{Arc, RwLock},
   collections::HashMap,
@@ -13,11 +13,11 @@ pub(crate) use schnorr_signatures::SchnorrSignature;
 pub(crate) use serai_primitives::network_id::ExternalNetworkId;
 
 pub(crate) use tokio::{
-  io::{AsyncReadExt, AsyncWriteExt},
+  io::{AsyncReadExt as _, AsyncWriteExt as _},
   net::TcpListener,
 };
 
-use serai_db::{Get, DbTxn, Db as DbTrait};
+use serai_db::{Get, DbTxn, Db as _};
 
 pub(crate) use crate::messages::*;
 

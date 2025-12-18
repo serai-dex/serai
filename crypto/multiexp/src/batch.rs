@@ -4,7 +4,7 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, Zeroizing};
 
-use ff::{Field, PrimeFieldBits};
+use ff::{Field as _, PrimeFieldBits};
 use group::Group;
 
 use crate::{multiexp, multiexp_vartime};

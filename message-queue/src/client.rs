@@ -1,6 +1,6 @@
-use core::ops::Deref;
+use core::ops::Deref as _;
 
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::{Zeroize as _, Zeroizing};
 use rand_core::OsRng;
 
 use dalek_ff_group::Ristretto;
@@ -8,7 +8,7 @@ use ciphersuite::{group::ff::PrimeField, WrappedGroup};
 use schnorr_signatures::SchnorrSignature;
 
 use tokio::{
-  io::{AsyncReadExt, AsyncWriteExt},
+  io::{AsyncReadExt as _, AsyncWriteExt as _},
   net::TcpStream,
 };
 

@@ -12,12 +12,12 @@ use borsh::{BorshSerialize, BorshDeserialize};
 
 use futures_channel::mpsc;
 use futures_util::{
-  FutureExt, StreamExt, SinkExt,
+  FutureExt as _, StreamExt as _, SinkExt as _,
   future::{self, Fuse},
 };
 use patchable_async_sleep::sleep;
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get as _, DbTxn as _, Db as _};
 
 pub mod time;
 use time::{sys_time, CanonicalInstant};
@@ -252,6 +252,10 @@ pub enum SlashEvent {
 
 // Struct for if various upon handlers have been triggered to ensure they don't trigger multiple
 // times.
+//
+// While these `bool`s are awkward, they can be independently triggered, meaning our alternative
+// would simply be `enum Invoked { NotYet, Invoked }`.
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 struct Upons {
   upon_prevotes: bool,

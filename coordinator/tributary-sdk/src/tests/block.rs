@@ -1,9 +1,9 @@
 use std::{sync::Arc, io, collections::HashMap, fmt::Debug};
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::Group, *};
+use ciphersuite::{group::Group as _, *};
 use schnorr::SchnorrSignature;
 
 use serai_db::MemDb;

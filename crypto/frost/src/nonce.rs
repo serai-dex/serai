@@ -5,7 +5,7 @@
 //
 // Each nonce remains of the form (d, e) and made into a proper nonce with d + (e * b)
 
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std_shims::{
   prelude::*,
   io::{self, Read, Write},
@@ -18,7 +18,7 @@ use zeroize::{Zeroize, Zeroizing};
 
 use transcript::Transcript;
 
-use ciphersuite::group::{ff::PrimeField, Group, GroupEncoding};
+use ciphersuite::group::{ff::PrimeField as _, Group as _, GroupEncoding as _};
 use multiexp::multiexp_vartime;
 
 use crate::{curve::Curve, Participant};

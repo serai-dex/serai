@@ -11,7 +11,7 @@ use serai_primitives::{
 
 use serai_cosign::SignedCosign;
 
-use serai_db::{Get, DbTxn, Db, create_db, db_channel};
+use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
 
 use scanner::ScannerFeed;
 

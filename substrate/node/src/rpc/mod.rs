@@ -56,7 +56,7 @@ pub fn create_full<
   // add network address rpc
   serai_json_module.register_async_method(
     "external_network_address",
-    |params, context| async move {
+    async move |params, context| {
       let network: ExternalNetworkId = params.parse()?;
       let client = &*context;
       let latest_block = client.info().best_hash;
@@ -112,14 +112,14 @@ pub fn create_full<
   )?;
 
   // add shorthand encoding rpc
-  serai_json_module.register_async_method("encoded_shorthand", |params, _| async move {
+  serai_json_module.register_async_method("encoded_shorthand", async move |params, _| {
     // decode using serde and encode back using scale
     let shorthand: Shorthand = params.parse()?;
     Ok(shorthand.encode())
   })?;
 
   // add simulating a swap path rpc
-  serai_json_module.register_async_method("quote_price", |params, context| async move {
+  serai_json_module.register_async_method("quote_price", async move |params, context| {
     let client = &*context;
     let latest_block = client.info().best_hash;
     let QuotePriceParams { coin1, coin2, amount, include_fee, exact_in } = params.parse()?;

@@ -197,7 +197,7 @@ pub async fn key_gen<C: WrappedGroup>(
 #[tokio::test]
 async fn key_gen_test() {
   new_test(
-    |mut processors: Vec<Processor>| async move {
+    async move |mut processors: Vec<Processor>| {
       // pop the last participant since genesis keygen has only 4 participants
       processors.pop().unwrap();
       assert_eq!(processors.len(), COORDINATORS);

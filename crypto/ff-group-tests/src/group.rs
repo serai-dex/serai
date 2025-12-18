@@ -1,6 +1,6 @@
 use rand_core::RngCore;
 use group::{
-  ff::{Field, PrimeFieldBits},
+  ff::{Field as _, PrimeFieldBits},
   Group,
   prime::PrimeGroup,
 };

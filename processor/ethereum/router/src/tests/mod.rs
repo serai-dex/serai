@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
-use group::ff::Field;
+use group::ff::Field as _;
 use k256::{Scalar, ProjectivePoint};
 
 use alloy_core::primitives::{Address, U256};
-use alloy_sol_types::{SolValue, SolCall, SolEvent};
+use alloy_sol_types::{SolValue as _, SolCall as _, SolEvent as _};
 
 use alloy_consensus::{TxLegacy, Signed};
 
@@ -14,8 +14,8 @@ use alloy_rpc_types_eth::{BlockNumberOrTag, TransactionInput, TransactionRequest
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_rpc_client::ClientBuilder;
 use alloy_provider::{
-  Provider, RootProvider,
-  ext::{DebugApi, TraceApi},
+  Provider as _, RootProvider,
+  ext::{DebugApi as _, TraceApi as _},
 };
 
 use alloy_node_bindings::{Anvil, AnvilInstance};

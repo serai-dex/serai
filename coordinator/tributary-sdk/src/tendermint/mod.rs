@@ -1,16 +1,16 @@
-use core::{ops::Deref, future::Future};
+use core::{ops::Deref as _, future::Future};
 use std::{sync::Arc, collections::HashMap};
 
-use subtle::ConstantTimeEq;
-use zeroize::{Zeroize, Zeroizing};
+use subtle::ConstantTimeEq as _;
+use zeroize::{Zeroize as _, Zeroizing};
 
-use rand::{SeedableRng, seq::SliceRandom};
+use rand::{SeedableRng as _, seq::SliceRandom as _};
 use rand_chacha::ChaCha12Rng;
 
-use transcript::{Transcript, RecommendedTranscript};
+use transcript::{Transcript as _, RecommendedTranscript};
 
 use ciphersuite::{
-  group::{ff::PrimeField, GroupEncoding},
+  group::{ff::PrimeField as _, GroupEncoding as _},
   *,
 };
 use dalek_ff_group::Ristretto;
@@ -34,7 +34,7 @@ use tendermint::{
 use tokio::sync::RwLock;
 
 use crate::{
-  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, ReadWrite,
+  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, ReadWrite as _,
   transaction::{TransactionError, Transaction as TransactionTrait},
   Transaction, BlockHeader, Block, BlockError, Blockchain, P2p,
 };

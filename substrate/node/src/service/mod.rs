@@ -1,6 +1,6 @@
 use std::{boxed::Box, sync::Arc};
 
-use futures_util::stream::StreamExt;
+use futures_util::stream::StreamExt as _;
 
 use sp_timestamp::InherentDataProvider as TimestampInherent;
 use sp_consensus_babe::{SlotDuration, inherents::InherentDataProvider as BabeInherent};
@@ -8,11 +8,11 @@ use sp_consensus_babe::{SlotDuration, inherents::InherentDataProvider as BabeInh
 use sp_io::SubstrateHostFunctions;
 use sc_executor::{sp_wasm_interface::ExtendedHostFunctions, HeapAllocStrategy, WasmExecutor};
 
-use sc_network::{Event, NetworkEventStream, NetworkBackend};
+use sc_network::{Event, NetworkEventStream as _, NetworkBackend as _};
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
 
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
-use sc_client_api::BlockBackend;
+use sc_client_api::BlockBackend as _;
 
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
@@ -167,6 +167,7 @@ pub fn new_partial(
     babe_config,
     grandpa_block_import,
     client.clone(),
+    #[expect(closure_returning_async_block)] // This doesn't work as an `async` closure
     move |_, ()| async move { Ok(create_inherent_data_providers(slot_duration)) },
     select_chain.clone(),
     offchain_tx_pool_factory,
@@ -259,13 +260,13 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       // Transforms the above Multiaddrs into MultiaddrWithPeerIds
       // While the PeerIds *should* be known in advance and hardcoded, that data wasn't collected in
       // time and this fine for a testnet
-      let bootnodes = || async {
+      let bootnodes = async || {
         use libp2p::{
           core::{
             Endpoint,
             transport::{PortUse, DialOpts},
           },
-          Transport as TransportTrait,
+          Transport as _,
           tcp::tokio::Transport,
           noise::Config,
         };
@@ -306,7 +307,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
         res
       };
 
-      use sc_network::{NetworkStatusProvider, NetworkPeers};
+      use sc_network::{NetworkStatusProvider as _, NetworkPeers as _};
       loop {
         if let Ok(status) = network.status().await {
           if status.num_connected_peers < 3 {
@@ -336,11 +337,11 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       },
       client.clone(),
       Arc::new(network.clone()),
-      Box::pin(network.event_stream("authority-discovery").filter_map(|e| async move {
-        #[expect(clippy::wildcard_enum_match_arm)]
-        match e {
-          Event::Dht(e) => Some(e),
-          _ => None,
+      Box::pin(network.event_stream("authority-discovery").filter_map(async move |e| {
+        if let Event::Dht(e) = e {
+          Some(e)
+        } else {
+          None
         }
       })),
       sc_authority_discovery::Role::PublishAndDiscover(keystore.clone()),
@@ -407,6 +408,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       block_import,
       sync_oracle: sync_service.clone(),
       justification_sync_link: sync_service.clone(),
+      #[expect(closure_returning_async_block)]
       create_inherent_data_providers: move |_, ()| async move {
         Ok(create_inherent_data_providers(slot_duration))
       },

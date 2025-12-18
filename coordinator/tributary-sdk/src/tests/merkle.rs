@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use rand::{RngCore, rngs::OsRng};
+use rand::{RngCore as _, rngs::OsRng};
 
 #[test]
 fn merkle() {

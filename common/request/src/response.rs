@@ -7,9 +7,9 @@ use hyper::{
   body::Incoming,
   rt::Executor,
 };
-use http_body_util::BodyExt;
+use http_body_util::BodyExt as _;
 
-use futures_util::{Stream, StreamExt};
+use futures_util::{Stream as _, StreamExt as _};
 
 use crate::{Client, Error};
 

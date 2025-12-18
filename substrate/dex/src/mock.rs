@@ -1,7 +1,7 @@
 //! Test environment for the DEX pallet.
 #![expect(clippy::as_conversions, clippy::same_name_method)]
 
-use frame_support::{sp_runtime::BuildStorage, derive_impl, construct_runtime};
+use frame_support::{sp_runtime::BuildStorage as _, derive_impl, construct_runtime};
 
 use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance};
 

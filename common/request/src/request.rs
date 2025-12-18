@@ -34,8 +34,8 @@ impl Request {
 
   #[cfg(feature = "basic-auth")]
   pub fn basic_auth(&mut self, username: &str, password: &str) {
-    use zeroize::Zeroize;
-    use base64ct::{Encoding, Base64};
+    use zeroize::Zeroize as _;
+    use base64ct::{Encoding as _, Base64};
 
     let mut formatted = format!("{username}:{password}");
     let mut encoded = Base64::encode_string(formatted.as_bytes());
@@ -53,7 +53,7 @@ impl Request {
     let (mut username, mut password) = self.username_password_from_uri()?;
     self.basic_auth(&username, &password);
 
-    use zeroize::Zeroize;
+    use zeroize::Zeroize as _;
     username.zeroize();
     password.zeroize();
 

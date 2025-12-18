@@ -8,7 +8,7 @@ use std::{
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use futures_util::sink::SinkExt;
+use futures_util::sink::SinkExt as _;
 use tokio::{sync::RwLock, time::sleep};
 
 use serai_db::MemDb;

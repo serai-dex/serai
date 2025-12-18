@@ -1,7 +1,7 @@
 use core::future::Future;
 use std::{sync::Arc, collections::HashMap};
 
-use blake2::{Digest, Blake2b256};
+use blake2::{Digest as _, Blake2b256};
 
 use serai_client_serai::{
   abi::{

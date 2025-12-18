@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use sp_core::{Decode, Pair as PairTrait};
+use sp_core::{Decode as _, Pair as _};
 use sp_runtime::traits::{Block as _, Header as _};
 use sc_client_db::Backend;
 use sc_executor::RuntimeVersionOf;
@@ -9,7 +9,7 @@ use sc_service::ChainType;
 
 use rand_core::OsRng;
 use zeroize::Zeroizing;
-use ciphersuite::{group::ff::Field, WrappedGroup};
+use ciphersuite::{group::ff::Field as _, WrappedGroup};
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 
@@ -102,8 +102,8 @@ fn genesis(
   config: &GenesisConfig,
 ) -> ChainSpec {
   use sp_core::{
-    Encode,
-    traits::{RuntimeCode, WrappedRuntimeCode, CodeExecutor},
+    Encode as _,
+    traits::{RuntimeCode, WrappedRuntimeCode, CodeExecutor as _},
   };
   use sc_service::ChainSpec as _;
 

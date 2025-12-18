@@ -1,22 +1,22 @@
-use core::ops::Deref;
+use core::ops::Deref as _;
 #[cfg(test)]
-use core::str::FromStr;
+use core::str::FromStr as _;
 use std_shims::{prelude::*, collections::HashMap};
 
 use zeroize::Zeroizing;
 
-use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng as _};
 use rand_chacha::ChaCha20Rng;
 
-use ciphersuite::group::{ff::PrimeField, GroupEncoding};
+use ciphersuite::group::{ff::PrimeField as _, GroupEncoding as _};
 
 use crate::{
   curve::Curve,
   Participant, ThresholdKeys,
   algorithm::{Hram, IetfSchnorr},
   sign::{
-    Writable, Nonce, GeneratorCommitments, NonceCommitments, Commitments, Preprocess,
-    PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine,
+    Writable as _, Nonce, GeneratorCommitments, NonceCommitments, Commitments, Preprocess,
+    PreprocessMachine as _, SignMachine as _, SignatureMachine as _, AlgorithmMachine,
   },
   tests::{clone_without, recover_key, test_ciphersuite},
 };

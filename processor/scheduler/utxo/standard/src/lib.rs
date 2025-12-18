@@ -5,7 +5,7 @@
 use core::{marker::PhantomData, future::Future};
 use std::collections::HashMap;
 
-use group::GroupEncoding;
+use group::GroupEncoding as _;
 
 use serai_primitives::{
   coin::ExternalCoin,
@@ -14,7 +14,7 @@ use serai_primitives::{
 
 use serai_db::DbTxn;
 
-use primitives::{ReceivedOutput, Payment};
+use primitives::{ReceivedOutput as _, Payment};
 use scanner::{
   LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor,
   SchedulerUpdate, KeyScopedEventualities, Scheduler as SchedulerTrait,

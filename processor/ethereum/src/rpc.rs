@@ -4,7 +4,7 @@ use std::{sync::Arc, collections::HashSet};
 use alloy_core::primitives::B256;
 use alloy_rpc_types_eth::{Header, BlockNumberOrTag};
 use alloy_transport::{RpcError, TransportErrorKind};
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider as _, RootProvider};
 
 use serai_primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount};
 

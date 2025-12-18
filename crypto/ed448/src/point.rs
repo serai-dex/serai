@@ -4,14 +4,16 @@ use core::{
 };
 
 use prime_field::{
-  subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable},
+  subtle::{
+    Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable as _,
+  },
   zeroize::Zeroize,
   rand_core::RngCore,
 };
 use crypto_bigint::U512;
 
 use ciphersuite::group::{
-  ff::{Field, PrimeField, PrimeFieldBits},
+  ff::{Field as _, PrimeField, PrimeFieldBits as _},
   Group, GroupEncoding,
   prime::PrimeGroup,
 };

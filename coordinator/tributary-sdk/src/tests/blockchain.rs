@@ -1,4 +1,4 @@
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std::{
   collections::{VecDeque, HashMap},
   sync::Arc,
@@ -8,12 +8,12 @@ use std::{
 use zeroize::Zeroizing;
 use rand::rngs::OsRng;
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;
 
-use serai_db::{DbTxn, Db, MemDb};
+use serai_db::{DbTxn as _, Db as _, MemDb};
 
 use crate::{
   ReadWrite, TransactionKind,

@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use group::GroupEncoding;
+use group::GroupEncoding as _;
 
 use serai_primitives::{
   coin::ExternalCoin,
@@ -9,7 +9,7 @@ use serai_primitives::{
 
 use serai_db::{Get, DbTxn, create_db, db_channel};
 
-use primitives::{Payment, ReceivedOutput};
+use primitives::{Payment, ReceivedOutput as _};
 use utxo_scheduler_primitives::TreeTransaction;
 use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor};
 

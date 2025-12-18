@@ -1,13 +1,13 @@
 use core::fmt::Debug;
 use std::io;
 
-use zeroize::Zeroize;
+use zeroize::Zeroize as _;
 use thiserror::Error;
 
-use blake2::{Digest, Blake2b512};
+use blake2::{Digest as _, Blake2b512};
 
 use ciphersuite::{
-  group::{Group, GroupEncoding},
+  group::{Group as _, GroupEncoding as _},
   *,
 };
 use dalek_ff_group::Ristretto;

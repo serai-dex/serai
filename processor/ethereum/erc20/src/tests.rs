@@ -1,4 +1,4 @@
-use alloy_sol_types::SolCall;
+use alloy_sol_types::SolCall as _;
 
 #[test]
 fn selector_collisions() {
@@ -14,7 +14,7 @@ fn selector_collisions() {
 
 #[test]
 fn abi_decode_panic() {
-  use alloy_sol_types::SolInterface;
+  use alloy_sol_types::SolInterface as _;
 
   /*
     The following code panics with alloy-core 0.8, when the validate flag (commented out) is set to

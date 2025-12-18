@@ -1,7 +1,7 @@
 use core::future::Future;
 
 use zeroize::Zeroizing;
-use rand_core::SeedableRng;
+use rand_core::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
 
 use ciphersuite::*;
@@ -12,7 +12,7 @@ use monero_wallet::{ed25519::CompressedPoint, interface::prelude::*};
 use serai_primitives::{coin::ExternalCoin, balance::Amount};
 use serai_client_monero::Address;
 
-use primitives::{OutputType, ReceivedOutput, Payment};
+use primitives::{OutputType, ReceivedOutput as _, Payment};
 use scanner::{KeyFor, AddressFor, OutputFor, BlockFor};
 use utxo_scheduler::{PlannedTransaction, TransactionPlanner};
 

@@ -1,12 +1,12 @@
-use core::{ops::Deref, fmt::Debug};
+use core::{ops::Deref as _, fmt::Debug};
 use std::io;
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
-use blake2::{digest::typenum::U32, Digest, Blake2b};
+use blake2::{digest::typenum::U32, Digest as _, Blake2b};
 use ciphersuite::{
-  group::{Group, GroupEncoding},
+  group::{Group as _, GroupEncoding as _},
   *,
 };
 use dalek_ff_group::Ristretto;

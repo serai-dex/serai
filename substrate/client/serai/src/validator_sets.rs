@@ -1,6 +1,6 @@
-use core::str::FromStr;
+use core::str::FromStr as _;
 
-use borsh::BorshDeserialize;
+use borsh::BorshDeserialize as _;
 
 pub use serai_abi::{
   primitives::{

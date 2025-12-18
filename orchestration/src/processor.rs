@@ -1,10 +1,10 @@
-use core::fmt::Write;
+use core::fmt::Write as _;
 use std::path::Path;
 
 use zeroize::Zeroizing;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::ff::PrimeField, WrappedGroup};
+use ciphersuite::{group::ff::PrimeField as _, WrappedGroup};
 
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 

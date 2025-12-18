@@ -2,7 +2,7 @@
 pub fn reproducibly_builds() {
   use std::{path::PathBuf, process::Command};
 
-  use rand_core::{RngCore, OsRng};
+  use rand_core::{RngCore as _, OsRng};
 
   const RUNS: usize = 3;
 

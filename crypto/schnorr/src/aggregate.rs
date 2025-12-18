@@ -5,14 +5,14 @@ use std_shims::{
 
 use zeroize::Zeroize;
 
-use transcript::{Transcript, DigestTranscript};
+use transcript::{Transcript as _, DigestTranscript};
 
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField},
-    Group, GroupEncoding,
+    ff::{Field as _, PrimeField as _},
+    Group as _, GroupEncoding as _,
   },
-  FromUniformBytes, GroupIo, WithPreferredHash,
+  FromUniformBytes as _, GroupIo, WithPreferredHash,
 };
 use multiexp::multiexp_vartime;
 

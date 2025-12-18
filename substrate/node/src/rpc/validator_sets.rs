@@ -1,4 +1,4 @@
-use core::{convert::AsRef, str::FromStr};
+use core::{convert::AsRef, str::FromStr as _};
 use std::sync::Arc;
 
 use sp_blockchain::{Error as BlockchainError, HeaderMetadata, HeaderBackend};

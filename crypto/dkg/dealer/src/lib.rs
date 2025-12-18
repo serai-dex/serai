@@ -2,14 +2,14 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
 
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std_shims::{vec::Vec, collections::HashMap};
 
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
 
 use ciphersuite::{
-  group::ff::{Field, PrimeField},
+  group::ff::{Field as _, PrimeField},
   GroupIo, Id,
 };
 pub use dkg::*;

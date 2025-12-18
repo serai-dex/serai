@@ -6,7 +6,7 @@
 use core::{fmt::Debug, future::Future};
 use std::{sync::Arc, collections::HashMap, time::Instant};
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 

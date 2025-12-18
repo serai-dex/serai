@@ -12,7 +12,7 @@ use k256::Scalar;
 use frost::{curve::Secp256k1, Participant, ThresholdKeys, FrostError, sign::*};
 
 use bitcoin::{
-  hashes::Hash,
+  hashes::Hash as _,
   sighash::{TapSighashType, SighashCache, Prevouts},
   absolute::LockTime,
   script::{PushBytesBuf, ScriptBuf},

@@ -2,16 +2,16 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
-use k256::{elliptic_curve::sec1::ToEncodedPoint, ProjectivePoint};
+use k256::{elliptic_curve::sec1::ToEncodedPoint as _, ProjectivePoint};
 
 use alloy_core::{
   primitives::{Address, U256, Bytes, Signature, TxKind},
-  hex::FromHex,
+  hex::FromHex as _,
 };
-use alloy_consensus::{SignableTransaction, TxLegacy, Signed};
+use alloy_consensus::{SignableTransaction as _, TxLegacy, Signed};
 
 use alloy_rpc_types_eth::TransactionReceipt;
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider as _, RootProvider};
 
 use ethereum_primitives::{keccak256, deterministically_sign};
 

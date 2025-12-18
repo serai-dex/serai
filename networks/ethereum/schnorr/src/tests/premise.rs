@@ -1,13 +1,14 @@
 use std_shims::prelude::*;
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
-use sha3::{Digest, Keccak256};
-use group::ff::{Field, PrimeField};
+use sha3::{Digest as _, Keccak256};
+use group::ff::{Field as _, PrimeField as _};
 use k256::{
-  elliptic_curve::{ops::Reduce, point::AffineCoordinates, sec1::ToEncodedPoint},
+  elliptic_curve::{ops::Reduce, point::AffineCoordinates as _, sec1::ToEncodedPoint as _},
   ecdsa::{
-    self, hazmat::SignPrimitive, signature::hazmat::PrehashVerifier, SigningKey, VerifyingKey,
+    self, hazmat::SignPrimitive as _, signature::hazmat::PrehashVerifier as _, SigningKey,
+    VerifyingKey,
   },
   U256, Scalar, ProjectivePoint,
 };

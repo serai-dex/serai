@@ -1,8 +1,8 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use core::{cmp::Ordering, str::FromStr};
+use core::{cmp::Ordering, str::FromStr as _};
 
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::{Zeroize as _, Zeroizing};
 
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
@@ -13,7 +13,7 @@ use dkg::Curves;
 use serai_primitives::validator_sets::Session;
 
 use serai_env as env;
-use serai_db::{Get, DbTxn, Db as DbTrait, create_db, db_channel};
+use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
 
 use primitives::EncodableG;
 use ::key_gen::{Ristretto, KeyGenParams, KeyGen};

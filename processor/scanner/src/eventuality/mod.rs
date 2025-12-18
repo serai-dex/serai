@@ -5,7 +5,9 @@ use group::GroupEncoding;
 
 use serai_db::{Get, DbTxn, Db};
 
-use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Eventuality, Block, Payment};
+use primitives::{
+  task::ContinuallyRan, OutputType, ReceivedOutput as _, Eventuality as _, Block as _, Payment,
+};
 
 use crate::{
   lifetime::LifetimeStage,
@@ -13,8 +15,8 @@ use crate::{
     SeraiKey, OutputWithInInstruction, ReceiverScanData, ScannerGlobalDb, SubstrateToEventualityDb,
     ScanToEventualityDb,
   },
-  BlockExt, ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, SchedulerUpdate, Scheduler,
-  CompletedEventualities, sort_outputs,
+  BlockExt as _, ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, SchedulerUpdate,
+  Scheduler, CompletedEventualities, sort_outputs,
   scan::{next_to_scan_for_outputs_block, queue_output_until_block},
 };
 

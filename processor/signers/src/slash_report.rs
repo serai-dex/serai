@@ -4,7 +4,7 @@ use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
 use serai_primitives::{crypto::Signature, validator_sets::Session};
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
 use messages::sign::VariantSignId;
 

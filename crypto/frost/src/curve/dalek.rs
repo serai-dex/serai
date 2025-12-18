@@ -1,7 +1,7 @@
 use subtle::CtOption;
 use zeroize::Zeroize;
 use ciphersuite::{
-  digest::Digest, group::GroupEncoding, FromUniformBytes, WrappedGroup, WithPreferredHash,
+  digest::Digest as _, group::GroupEncoding, FromUniformBytes as _, WrappedGroup, WithPreferredHash,
 };
 use dalek_ff_group::Scalar;
 

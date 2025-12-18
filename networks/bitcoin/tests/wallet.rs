@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
 use k256::{
   elliptic_curve::{
-    group::{ff::Field, Group},
-    sec1::{Tag, ToEncodedPoint},
+    group::{ff::Field as _, Group as _},
+    sec1::{Tag, ToEncodedPoint as _},
   },
   Scalar, ProjectivePoint,
 };
@@ -17,7 +17,7 @@ use frost::{
 
 use bitcoin_serai::{
   bitcoin::{
-    hashes::Hash as HashTrait,
+    hashes::Hash as _,
     blockdata::opcodes::all::OP_RETURN,
     script::{PushBytesBuf, Instruction, Instructions, Script},
     OutPoint, Amount, TxOut, Transaction, Network, Address,

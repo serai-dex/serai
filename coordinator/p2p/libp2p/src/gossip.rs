@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 

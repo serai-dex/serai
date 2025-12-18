@@ -162,7 +162,7 @@ mod substrate {
     where
       D: sp_core::serde::Deserializer<'de>,
     {
-      use sp_core::serde::de::Error;
+      use sp_core::serde::de::Error as _;
       let bytes = <Vec<u8> as sp_core::serde::Deserialize>::deserialize(deserializer)?;
       let mut reader = bytes.as_slice();
       let block = Self::decode(&mut reader).map_err(D::Error::custom)?;
@@ -358,7 +358,7 @@ mod substrate {
     where
       D: sp_core::serde::Deserializer<'de>,
     {
-      use sp_core::serde::de::Error;
+      use sp_core::serde::de::Error as _;
       let bytes = <Vec<u8> as sp_core::serde::Deserialize>::deserialize(deserializer)?;
       let mut reader = bytes.as_slice();
       let block = Self::decode(&mut reader).map_err(D::Error::custom)?;

@@ -1,8 +1,8 @@
 use std::io;
 
-use borsh::BorshDeserialize;
+use borsh::BorshDeserialize as _;
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;

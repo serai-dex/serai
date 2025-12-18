@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
 
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std_shims::{
   vec,
   vec::Vec,
@@ -11,7 +11,8 @@ use std_shims::{
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{digest::Digest, group::GroupEncoding, FromUniformBytes, Ciphersuite};
+#[rustfmt::skip]
+use ciphersuite::{digest::Digest as _, group::GroupEncoding as _, FromUniformBytes as _, Ciphersuite};
 
 pub use dkg::*;
 

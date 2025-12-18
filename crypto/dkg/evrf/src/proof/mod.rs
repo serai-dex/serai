@@ -1,12 +1,12 @@
-use core::{marker::PhantomData, ops::Deref, fmt};
+use core::{marker::PhantomData, ops::Deref as _, fmt};
 use std_shims::prelude::*;
 
 use zeroize::Zeroizing;
 
-use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng as _};
 use rand_chacha::ChaCha20Rng;
 
-use ciphersuite::{group::ff::Field, WrappedGroup};
+use ciphersuite::{group::ff::Field as _, WrappedGroup};
 
 use generalized_bulletproofs::{
   Generators, BatchVerifier, PedersenCommitment, PedersenVectorCommitment,
@@ -17,7 +17,7 @@ use generalized_bulletproofs_circuit_abstraction::{Transcript, Circuit as BpCirc
 
 use ec_divisors::{DivisorCurve, ScalarDecomposition};
 use generalized_bulletproofs_ec_gadgets::{
-  CurveSpec, DiscreteLogChallenge, ChallengedGenerator, EcDlogGadgets,
+  CurveSpec, DiscreteLogChallenge, ChallengedGenerator, EcDlogGadgets as _,
 };
 
 use crate::Curves;

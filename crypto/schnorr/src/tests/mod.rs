@@ -1,4 +1,4 @@
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std_shims::prelude::*;
 
 use zeroize::Zeroizing;
@@ -6,7 +6,7 @@ use rand_core::OsRng;
 
 use dalek_ff_group::Ed25519;
 use ciphersuite::{
-  group::{ff::Field, Group},
+  group::{ff::Field as _, Group as _},
   GroupIo, WithPreferredHash,
 };
 use multiexp::BatchVerifier;

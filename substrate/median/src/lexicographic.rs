@@ -89,7 +89,7 @@ impl<V: LexicographicEncoding> LexicographicReverse<V> {
 
 #[test]
 fn lexicographic_uint() {
-  use rand_core::{RngCore, OsRng};
+  use rand_core::{RngCore as _, OsRng};
 
   // Basic sanity checks
   {
@@ -116,7 +116,7 @@ fn lexicographic_uint() {
 
 #[test]
 fn lexicographic_reverse() {
-  use rand_core::{RngCore, OsRng};
+  use rand_core::{RngCore as _, OsRng};
 
   for _ in 0 .. 100 {
     let a = OsRng.next_u64();

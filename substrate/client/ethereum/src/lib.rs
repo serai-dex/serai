@@ -4,7 +4,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::str::FromStr;
-use std_shims::{vec::Vec, io::Read};
+use std_shims::{vec::Vec, io::Read as _};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 

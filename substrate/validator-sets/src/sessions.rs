@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use sp_core::{Encode, Decode, ConstU32, sr25519::Public, bounded::BoundedVec};
+use sp_core::{Encode as _, Decode as _, ConstU32, sr25519::Public, bounded::BoundedVec};
 
 use serai_abi::{
   primitives::{

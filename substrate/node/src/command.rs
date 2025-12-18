@@ -100,7 +100,7 @@ pub fn run() -> sc_cli::Result<()> {
         unsafe_force_node_key_generation: true,
       };
 
-      cli.create_runner(&cli.run)?.run_node_until_exit(|mut config| async {
+      cli.create_runner(&cli.run)?.run_node_until_exit(async |mut config| {
         if config.role.is_authority() {
           config.state_pruning = Some(PruningMode::ArchiveAll);
         }

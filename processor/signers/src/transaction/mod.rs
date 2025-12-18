@@ -5,12 +5,12 @@ use frost::dkg::ThresholdKeys;
 
 use serai_primitives::validator_sets::Session;
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
 use messages::sign::VariantSignId;
 
 use primitives::task::ContinuallyRan;
-use scheduler::{Transaction, SignableTransaction, TransactionFor, TransactionsToSign};
+use scheduler::{Transaction as _, SignableTransaction, TransactionFor, TransactionsToSign};
 use scanner::CompletedEventualities;
 
 use frost_attempt_manager::*;

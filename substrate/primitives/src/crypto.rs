@@ -1,4 +1,4 @@
-use core::ops::Deref;
+use core::ops::Deref as _;
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -9,10 +9,10 @@ use sp_core::{ConstU32, bounded::BoundedVec};
 
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField, FromUniformBytes},
+    ff::{Field as _, PrimeField as _, FromUniformBytes},
     GroupEncoding,
   },
-  WrappedGroup, GroupCanonicalEncoding,
+  WrappedGroup, GroupCanonicalEncoding as _,
 };
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;

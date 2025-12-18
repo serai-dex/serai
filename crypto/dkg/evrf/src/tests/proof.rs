@@ -5,7 +5,7 @@ use rand_core::OsRng;
 use zeroize::Zeroizing;
 
 use ciphersuite::{
-  group::{ff::Field, Group},
+  group::{ff::Field as _, Group as _},
   WrappedGroup,
 };
 

@@ -3,14 +3,14 @@ use std::time::{Duration, SystemTime};
 
 use serai_primitives::validator_sets::{ExternalValidatorSet, KeyShares};
 
-use futures_lite::FutureExt;
+use futures_lite::FutureExt as _;
 
-use tributary_sdk::{ReadWrite, TransactionTrait, Block, Tributary, TributaryReader};
+use tributary_sdk::{ReadWrite as _, TransactionTrait, Block, Tributary, TributaryReader};
 
 use serai_db::*;
 use serai_task::ContinuallyRan;
 
-use crate::{Heartbeat, Peer, P2p};
+use crate::{Heartbeat, Peer as _, P2p};
 
 // Amount of blocks in a minute
 #[expect(clippy::as_conversions)]

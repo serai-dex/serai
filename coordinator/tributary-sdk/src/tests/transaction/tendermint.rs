@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use zeroize::Zeroizing;
-use rand::{RngCore, rngs::OsRng};
+use rand::{RngCore as _, rngs::OsRng};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;
@@ -10,13 +10,13 @@ use tendermint::{
   time::CanonicalInstant,
   round::RoundData,
   Data, commit_msg, Evidence,
-  ext::{RoundNumber, Commit, Signer as SignerTrait},
+  ext::{RoundNumber, Commit, Signer as _},
 };
 
 use serai_db::MemDb;
 
 use crate::{
-  ReadWrite,
+  ReadWrite as _,
   tendermint::{
     tx::{TendermintTx, verify_tendermint_tx},
     TendermintBlock, Signer, Validators, TendermintNetwork,

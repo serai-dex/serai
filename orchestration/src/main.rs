@@ -1,28 +1,28 @@
 // TODO: Generate randomized RPC credentials for all services
 // TODO: Generate keys for a validator and the infra
 
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std::{
   collections::{HashSet, HashMap},
   env,
   path::PathBuf,
-  io::Write,
+  io::Write as _,
   fs,
   process::{Stdio, Command},
 };
 
 use zeroize::Zeroizing;
 
-use rand_core::{RngCore, SeedableRng, OsRng};
+use rand_core::{RngCore as _, SeedableRng as _, OsRng};
 use rand_chacha::ChaCha20Rng;
 
-use transcript::{Transcript, RecommendedTranscript};
+use transcript::{Transcript as _, RecommendedTranscript};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField},
-    GroupEncoding,
+    ff::{Field as _, PrimeField},
+    GroupEncoding as _,
   },
   WrappedGroup,
 };

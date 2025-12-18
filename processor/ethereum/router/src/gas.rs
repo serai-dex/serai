@@ -3,7 +3,7 @@ use core::convert::Infallible;
 use k256::{Scalar, ProjectivePoint};
 
 use alloy_core::primitives::{Address, U256, Bytes};
-use alloy_sol_types::SolCall;
+use alloy_sol_types::SolCall as _;
 
 use revm::{
   primitives::hardfork::SpecId,
@@ -25,7 +25,7 @@ use revm::{
     evm::Evm,
     *,
   },
-  inspector::{Inspector, InspectorHandler},
+  inspector::{Inspector, InspectorHandler as _},
 };
 
 use ethereum_schnorr::{PublicKey, Signature};

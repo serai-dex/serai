@@ -26,10 +26,10 @@ use keys::{KeysStorage, Keys as _};
 #[frame_support::pallet]
 mod pallet {
   use sp_core::sr25519::Public;
-  use sp_application_crypto::RuntimePublic;
+  use sp_application_crypto::RuntimePublic as _;
 
   use frame_system::pallet_prelude::*;
-  use frame_support::{pallet_prelude::*, traits::OneSessionHandler};
+  use frame_support::{pallet_prelude::*, traits::OneSessionHandler as _};
 
   use pallet_session::ShouldEndSession;
   use pallet_babe::Pallet as Babe;

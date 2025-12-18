@@ -1,7 +1,7 @@
 use core::future::Future;
 
-use serai_db::{Get, DbTxn, Db};
-use primitives::{task::ContinuallyRan, BlockHeader};
+use serai_db::{Get, DbTxn as _, Db};
+use primitives::{task::ContinuallyRan, BlockHeader as _};
 
 use crate::ScannerFeed;
 

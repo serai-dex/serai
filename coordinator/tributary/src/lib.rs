@@ -6,7 +6,7 @@
 use core::{marker::PhantomData, future::Future};
 use std::collections::HashMap;
 
-use ciphersuite::group::GroupEncoding;
+use ciphersuite::group::GroupEncoding as _;
 use dkg::Participant;
 
 use serai_primitives::{
@@ -23,7 +23,7 @@ use tributary_sdk::{
     tx::{TendermintTx, Evidence, decode_signed_message},
     TendermintNetwork,
   },
-  Signed as TributarySigned, TransactionKind, TransactionTrait,
+  Signed as TributarySigned, TransactionKind, TransactionTrait as _,
   Transaction as TributaryTransaction, Block, TributaryReader, P2p,
 };
 

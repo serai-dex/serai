@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use alloy_core::primitives::U256;
-use alloy_sol_types::SolCall;
+use alloy_sol_types::SolCall as _;
 
 use alloy_consensus::{TxLegacy, Signed};
 

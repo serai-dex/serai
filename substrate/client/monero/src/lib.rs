@@ -4,7 +4,7 @@
 
 use core::{str::FromStr, fmt};
 
-use ciphersuite::{group::GroupEncoding, GroupIo};
+use ciphersuite::{group::GroupEncoding as _, GroupIo as _};
 use dalek_ff_group::Ed25519;
 
 use monero_ed25519::{CompressedPoint, Point};

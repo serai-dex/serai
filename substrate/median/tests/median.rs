@@ -7,7 +7,7 @@ use frame_support::{
   storage::types::{self, ValueQuery, OptionQuery},
 };
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
 macro_rules! prefix {
   ($name: ident, $prefix: expr) => {

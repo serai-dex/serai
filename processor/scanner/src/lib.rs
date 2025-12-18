@@ -7,7 +7,7 @@ use std::{io, collections::HashMap};
 
 use group::GroupEncoding;
 
-use borsh::{BorshSerialize, BorshDeserialize};
+use borsh::{BorshSerialize as _, BorshDeserialize as _};
 use serai_db::{Get, DbTxn, Db};
 
 use serai_primitives::{
@@ -43,7 +43,7 @@ pub(crate) fn sort_outputs<K: GroupEncoding, A: Address, O: ReceivedOutput<K, A>
   a: &O,
   b: &O,
 ) -> core::cmp::Ordering {
-  use core::cmp::{Ordering, Ord};
+  use core::cmp::{Ordering, Ord as _};
   let res = a.id().as_ref().cmp(b.id().as_ref());
   assert!(res != Ordering::Equal, "two outputs within a collection had the same ID");
   res

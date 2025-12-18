@@ -2,7 +2,7 @@ use alloy_core::primitives::{Address, U256};
 
 use alloy_consensus::TxLegacy;
 
-use alloy_provider::Provider;
+use alloy_provider::Provider as _;
 
 use crate::tests::*;
 

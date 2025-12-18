@@ -1,4 +1,4 @@
-use core::fmt::Write;
+use core::fmt::Write as _;
 use std::path::Path;
 
 use crate::{Network, Os, mimalloc, write_dockerfile};
