@@ -20,7 +20,7 @@ use serai_client_serai::{
     },
     Block,
   },
-  Serai, State,
+  Events, Serai, State,
 };
 
 use serai_db::*;
@@ -40,6 +40,44 @@ use delay::LatestCosignedBlockNumber;
 #[cfg(any(test, feature = "tests"))]
 /// Test helpers and fixtures.
 pub mod tests;
+
+/// Abstraction over the Serai RPC client so tests can inject custom behaviour.
+pub trait SeraiRpc: Clone + Send + Sync + 'static {
+  /// Return the latest finalized block number.
+  fn latest_finalized_block_number(&self) -> impl Send + Future<Output = Result<u64, String>>;
+
+  /// Fetch a block by its number.
+  fn block_by_number(
+    &self,
+    block: u64,
+  ) -> impl Send + Future<Output = Result<Option<Block>, String>>;
+
+  /// Fetch all events associated with the provided block hash.
+  fn events(&self, block: BlockHash) -> impl Send + Future<Output = Result<Events, String>>;
+}
+
+impl SeraiRpc for Arc<Serai> {
+  fn latest_finalized_block_number(&self) -> impl Send + Future<Output = Result<u64, String>> {
+    let serai = self.clone();
+    async move { serai.as_ref().latest_finalized_block_number().await.map_err(|e| format!("{e:?}")) }
+  }
+
+  fn block_by_number(
+    &self,
+    block: u64,
+  ) -> impl Send + Future<Output = Result<Option<Block>, String>> {
+    let serai = self.clone();
+    async move { serai.as_ref().block_by_number(block).await.map_err(|e| format!("{e:?}")) }
+  }
+
+  fn events(&self, block: BlockHash) -> impl Send + Future<Output = Result<Events, String>> {
+    let serai = self.clone();
+    async move {
+      let events = serai.as_ref().events(block).await.map_err(|e| format!("{e:?}"))?;
+      Ok(events)
+    }
+  }
+}
 
 /// A 'global session', defined as all validator sets used for cosigning at a given moment.
 ///
@@ -166,14 +204,14 @@ impl IntakeCosignError {
   /// If this error is temporal to the local view
   pub fn temporal(&self) -> bool {
     match self {
-      IntakeCosignError::NotYetIndexedBlock |
-      IntakeCosignError::StaleCosign |
-      IntakeCosignError::UnrecognizedGlobalSession |
-      IntakeCosignError::FutureGlobalSession => true,
-      IntakeCosignError::BeforeGlobalSessionStart |
-      IntakeCosignError::AfterGlobalSessionEnd |
-      IntakeCosignError::NonParticipatingNetwork |
-      IntakeCosignError::InvalidSignature => false,
+      IntakeCosignError::NotYetIndexedBlock
+      | IntakeCosignError::StaleCosign
+      | IntakeCosignError::UnrecognizedGlobalSession
+      | IntakeCosignError::FutureGlobalSession => true,
+      IntakeCosignError::BeforeGlobalSessionStart
+      | IntakeCosignError::AfterGlobalSessionEnd
+      | IntakeCosignError::NonParticipatingNetwork
+      | IntakeCosignError::InvalidSignature => false,
     }
   }
 }
@@ -181,24 +219,34 @@ impl IntakeCosignError {
 /// The interface to manage cosigning with.
 pub struct Cosigning<D: Db> {
   db: D,
+  // The task system stops a task once all its handles are dropped. Keep these alive for as long as
+  // this cosigning service should run.
+  _task_handles: Vec<TaskHandle>,
 }
 impl<D: Db> Cosigning<D> {
+  /// Create a cosigning handle using an already-initialized database.
+  ///
+  /// This does not spawn any background tasks; use `Cosigning::spawn` for the full service.
+  pub fn new(db: D) -> Self {
+    Self { db, _task_handles: vec![] }
+  }
+
   /// Spawn the tasks to intend and evaluate cosigns.
   ///
   /// The database specified must only be used with a singular instance of the Serai network, and
   /// only used once at any given time.
-  pub fn spawn<R: RequestNotableCosigns>(
+  pub fn spawn<R: RequestNotableCosigns, S: SeraiRpc>(
     db: D,
-    serai: Arc<Serai>,
+    serai: S,
     request: R,
     tasks_to_run_upon_cosigning: Vec<TaskHandle>,
   ) -> Self {
-    let (intend_task, _intend_task_handle) = Task::new();
+    let (intend_task, intend_task_handle) = Task::new();
     let (evaluator_task, evaluator_task_handle) = Task::new();
     let (delay_task, delay_task_handle) = Task::new();
     tokio::spawn(
       (intend::CosignIntendTask { db: db.clone(), serai })
-        .continually_run(intend_task, vec![evaluator_task_handle]),
+        .continually_run(intend_task, vec![evaluator_task_handle.clone()]),
     );
     tokio::spawn(
       (evaluator::CosignEvaluatorTask {
@@ -206,13 +254,13 @@ impl<D: Db> Cosigning<D> {
         request,
         last_request_for_cosigns: Instant::now(),
       })
-      .continually_run(evaluator_task, vec![delay_task_handle]),
+      .continually_run(evaluator_task, vec![delay_task_handle.clone()]),
     );
     tokio::spawn(
       (delay::CosignDelayTask { db: db.clone() })
         .continually_run(delay_task, tasks_to_run_upon_cosigning),
     );
-    Self { db }
+    Self { db, _task_handles: vec![intend_task_handle, evaluator_task_handle, delay_task_handle] }
   }
 
   /// The latest cosigned block number.

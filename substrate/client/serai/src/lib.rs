@@ -227,7 +227,23 @@ impl Serai {
   }
 }
 
+impl Default for Events {
+  fn default() -> Self {
+    Events { events: Arc::new(vec![vec![]]) }
+  }
+}
+
 impl Events {
+  /// Create an instance of Events
+  pub fn new() -> Self {
+    Events::default()
+  }
+
+  /// Create an instance of Events
+  pub fn with(events: Vec<Event>) -> Self {
+    Events { events: Arc::new(vec![events]) }
+  }
+
   /// The events within this container.
   ///
   /// This will yield the events for each transaction within the block, including the implicit

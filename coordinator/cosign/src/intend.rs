@@ -13,7 +13,7 @@ use serai_client_serai::{
       address::SeraiAddress,
       merkle::IncrementalUnbalancedMerkleTree,
     },
-    validator_sets::Event,
+    validator_sets, Event,
   },
   Serai, Events,
 };
@@ -55,15 +55,15 @@ db_channel! {
 }
 
 async fn block_has_events_justifying_a_cosign(
-  serai: &Serai,
+  serai: &impl SeraiRpc,
   block_number: u64,
 ) -> Result<(Block, Events, HasEvents), String> {
   let block = serai
     .block_by_number(block_number)
     .await
-    .map_err(|e| format!("{e:?}"))?
+    .unwrap()
     .ok_or_else(|| "couldn't get block which should've been finalized".to_string())?;
-  let events = serai.events(block.header.hash()).await.map_err(|e| format!("{e:?}"))?;
+  let events = serai.events(block.header.hash()).await?;
 
   if events.validator_sets().set_keys_events().next().is_some() {
     return Ok((block, events, HasEvents::Notable));
@@ -92,34 +92,31 @@ fn cosigning_sets(getter: &impl Get) -> Vec<(ExternalValidatorSet, Public, Amoun
 }
 
 /// A task to determine which blocks we should intend to cosign.
-pub(crate) struct CosignIntendTask<D: Db> {
+pub(crate) struct CosignIntendTask<D: Db, S: SeraiRpc> {
   pub(crate) db: D,
-  pub(crate) serai: Arc<Serai>,
+  pub(crate) serai: S,
 }
 
-impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
+impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let start_block_number = ScanCosignFrom::get(&self.db).unwrap_or(1);
-      let latest_block_number =
-        self.serai.latest_finalized_block_number().await.map_err(|e| format!("{e:?}"))?;
+      let latest_block_number = self.serai.latest_finalized_block_number().await?;
 
-      for block_number in start_block_number ..= latest_block_number {
+      for block_number in start_block_number..=latest_block_number {
         let mut txn = self.db.txn();
 
         let (block, events, mut has_events) =
-          block_has_events_justifying_a_cosign(&self.serai, block_number)
-            .await
-            .map_err(|e| format!("{e:?}"))?;
+          block_has_events_justifying_a_cosign(&self.serai, block_number).await?;
 
         let mut builds_upon =
           BuildsUpon::get(&txn).unwrap_or(IncrementalUnbalancedMerkleTree::new());
 
         // Check we are indexing a linear chain
-        if block.header.builds_upon() !=
-          builds_upon.clone().calculate(serai_client_serai::abi::BLOCK_HEADER_BRANCH_TAG)
+        if block.header.builds_upon()
+          != builds_upon.clone().calculate(serai_client_serai::abi::BLOCK_HEADER_BRANCH_TAG)
         {
           Err(format!(
             "node's block #{block_number} doesn't build upon the block #{} prior indexed",
@@ -138,53 +135,46 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         BuildsUpon::set(&mut txn, &builds_upon);
 
         // Update the stakes
-        for event in events.validator_sets().allocation_events() {
-          let Event::Allocation { validator, network, amount } = event else {
-            panic!("event from `allocation_events` wasn't `Event::Allocation`")
-          };
-          let Ok(network) = ExternalNetworkId::try_from(*network) else { continue };
-          let existing = Stakes::get(&txn, network, *validator).unwrap_or(Amount(0));
-          Stakes::set(&mut txn, network, *validator, &Amount(existing.0 + amount.0));
-        }
-        for event in events.validator_sets().deallocation_events() {
-          let Event::Deallocation { validator, network, amount, timeline: _ } = event else {
-            panic!("event from `deallocation_events` wasn't `Event::Deallocation`")
-          };
-          let Ok(network) = ExternalNetworkId::try_from(*network) else { continue };
-          let existing = Stakes::get(&txn, network, *validator).unwrap_or(Amount(0));
-          Stakes::set(&mut txn, network, *validator, &Amount(existing.0 - amount.0));
-        }
-
-        // Handle decided sets
-        for event in events.validator_sets().set_decided_events() {
-          let Event::SetDecided { set, validators } = event else {
-            panic!("event from `set_decided_events` wasn't `Event::SetDecided`")
-          };
-
-          let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
-          Validators::set(
-            &mut txn,
-            set,
-            &validators.iter().map(|(validator, _key_shares)| *validator).collect(),
-          );
-        }
-
-        // Handle declarations of the latest set
-        for event in events.validator_sets().set_keys_events() {
-          let Event::SetKeys { set, key_pair } = event else {
-            panic!("event from `set_keys_events` wasn't `Event::SetKeys`")
-          };
-          let mut stake = 0;
-          for validator in
-            Validators::take(&mut txn, *set).expect("set which wasn't decided set keys")
-          {
-            stake += Stakes::get(&txn, set.network, validator).unwrap_or(Amount(0)).0;
+        for tx_events in events.events() {
+          for event in tx_events {
+            match event {
+              Event::ValidatorSets(event) => match event {
+                validator_sets::Event::Allocation { validator, network, amount } => {
+                  let Ok(network) = ExternalNetworkId::try_from(*network) else { continue };
+                  let existing = Stakes::get(&txn, network, *validator).unwrap_or(Amount(0));
+                  Stakes::set(&mut txn, network, *validator, &Amount(existing.0 + amount.0));
+                }
+                validator_sets::Event::Deallocation { validator, network, amount, timeline: _ } => {
+                  let Ok(network) = ExternalNetworkId::try_from(*network) else { continue };
+                  let existing = Stakes::get(&txn, network, *validator).unwrap_or(Amount(0));
+                  Stakes::set(&mut txn, network, *validator, &Amount(existing.0 - amount.0));
+                }
+                validator_sets::Event::SetDecided { set, validators } => {
+                  let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
+                  Validators::set(
+                    &mut txn,
+                    set,
+                    &validators.iter().map(|(validator, _key_shares)| *validator).collect(),
+                  );
+                }
+                validator_sets::Event::SetKeys { set, key_pair } => {
+                  let mut stake = 0;
+                  for validator in
+                    Validators::take(&mut txn, *set).expect("set which wasn't decided set keys")
+                  {
+                    stake += Stakes::get(&txn, set.network, validator).unwrap_or(Amount(0)).0;
+                  }
+                  LatestSet::set(
+                    &mut txn,
+                    set.network,
+                    &Set { session: set.session, key: key_pair.0, stake: Amount(stake) },
+                  );
+                }
+                _ => continue,
+              },
+              _ => continue,
+            }
           }
-          LatestSet::set(
-            &mut txn,
-            set.network,
-            &Set { session: set.session, key: key_pair.0, stake: Amount(stake) },
-          );
         }
 
         let global_session_for_this_block = LatestGlobalSessionIntended::get(&txn);

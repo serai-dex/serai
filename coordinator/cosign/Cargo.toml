@@ -31,9 +31,15 @@ serai-db = { path = "../../common/db", version = "0.1.1" }
 serai-task = { path = "../../common/task", version = "0.1" }
 
 serai-cosign-types = { path = "./types" }
+schnorrkel = { version = "0.11", default-features = false, features = ["std"], optional = true }
+rand_core = { version = "0.6", default-features = false, features = ["std", "getrandom"], optional = true }
 
 [dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std", "getrandom"] }
+schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
+serai-substrate-tests = { path = "../../tests/substrate" }
+k256 = { version = "0.13", default-features = false, features = ["std", "ecdsa"] }
 tokio = { version = "1", default-features = false, features = ["time", "test-util"] }
 
 [features]
-tests = []
+tests = ["schnorrkel", "rand_core"]
