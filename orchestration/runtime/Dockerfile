@@ -30,12 +30,7 @@ WORKDIR /serai
 RUN cargo build --release -p serai-runtime --no-default-features
 
 # Copy the artifact to its own image which solely exists to further export it
-FROM scratch
-# Copy `busybox`, including the necessary shared libraries, from the builder for a functioning `cp`
-COPY --from=builder /lib/ld-musl-x86_64.so.1 /lib/libc.musl-x86_64.so.1 /lib/
-COPY --from=builder /bin/busybox /bin/
-ENV LD_LIBRARY_PATH=/lib/
-ENV PATH=/bin
+FROM busybox:musl
 # Copy the artifact itself
 COPY --from=builder /serai/target/release/serai_runtime.wasm /serai.wasm
 # By default, copy the artifact to `/volume`, presumably a provided volume
