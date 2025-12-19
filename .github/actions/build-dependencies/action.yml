@@ -56,14 +56,9 @@ runs:
         svm install 0.8.29
         svm use 0.8.29
 
-    - name: Remove preinstalled Docker
-      shell: bash
-      run: |
-        docker system prune -a --volumes
-        sudo apt remove -y *docker*
-        # Install uidmap which will be required for the explicitly installed Docker
-        sudo apt install -y uidmap
-      if: runner.os == 'Linux'
+    # This is a build dependency, not a test dependency, due to being used to build the runtime
+    - name: Install `docker`
+      uses: ./.github/actions/docker
 
     - name: Update system dependencies
       shell: bash
@@ -72,11 +67,4 @@ runs:
         sudo apt upgrade -y
         sudo apt autoremove -y
         sudo apt clean
-      if: runner.os == 'Linux'
-
-    - name: Install rootless Docker
-      uses: docker/setup-docker-action@e61617a16c407a86262fb923c35a616ddbe070b3 # 4.6.0
-      with:
-        rootless: true
-        set-host: true
       if: runner.os == 'Linux'
