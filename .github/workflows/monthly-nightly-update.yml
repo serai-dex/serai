@@ -14,9 +14,11 @@ jobs:
           submodules: "recursive"
 
       - name: Write nightly version
+        shell: bash
         run: echo $(date +"nightly-%Y-%m"-01) > .github/nightly-version
 
       - name: Create the commit
+        shell: bash
         run: |
           git config user.name "GitHub Actions"
           git config user.email "<>"
