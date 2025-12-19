@@ -65,14 +65,15 @@ pub fn reproducibly_builds() {
   let mut expected = None;
   for output in outputs {
     let output = output.unwrap();
-    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(output.status.success(), "{stdout}\n{}", String::from_utf8(output.stderr).unwrap());
     if expected.is_none() {
-      expected = Some(output.stdout.clone());
+      expected = Some(stdout.clone());
     }
-    assert_eq!(expected, Some(output.stdout));
+    assert_eq!(expected, Some(stdout));
   }
 
-  let result = String::from_utf8(expected.unwrap()).unwrap();
+  let result = expected.unwrap();
   let hash = result.split_whitespace().next().unwrap();
   // Check this appears to be a 32-byte hash (encoded as hex)
   assert_eq!(hash.len(), 64);
