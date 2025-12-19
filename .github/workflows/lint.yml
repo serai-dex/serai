@@ -54,7 +54,7 @@ jobs:
         run: git diff | wc -l | LC_ALL="en_US.utf8" grep -x -e "^[ ]*0"
 
   deny:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
@@ -65,7 +65,7 @@ jobs:
         run: cargo deny -L error --all-features check --hide-inclusion-graph
 
   fmt:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
@@ -100,7 +100,7 @@ jobs:
           forge fmt --check $(find . -name "*.sol")
 
   machete:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
       - name: Verify all dependencies are in use
@@ -204,7 +204,7 @@ jobs:
           check_workspace
 
   slither:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
@@ -227,7 +227,7 @@ jobs:
           slither Router.sol
 
     shellcheck:
-      runs-on: ubuntu-latest
+      runs-on: ubuntu-slim
       steps:
         - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
         - name: shellcheck
