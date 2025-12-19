@@ -12,7 +12,7 @@ use core::{
   alloc::{Layout, GlobalAlloc},
 };
 
-use zeroize::Zeroize;
+use zeroize::Zeroize as _;
 
 /// An allocator wrapper which zeroizes its memory on dealloc.
 pub struct ZeroizingAlloc<T>(pub T);

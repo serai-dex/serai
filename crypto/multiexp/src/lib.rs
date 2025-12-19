@@ -1,9 +1,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 
 use zeroize::Zeroize;
 
@@ -39,7 +41,7 @@ mod underlying {
     let bit_ref = black_box(bit_ref);
 
     let mut bit = black_box(*bit_ref);
-    #[allow(clippy::cast_lossless)]
+    #[expect(clippy::cast_lossless, clippy::as_conversions)]
     let res = black_box(bit as u8);
     bit.zeroize();
     debug_assert!((res | 1) == 1);

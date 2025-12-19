@@ -4,7 +4,7 @@ use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
 use serai_primitives::{crypto::Signature, validator_sets::Session};
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
 use messages::sign::VariantSignId;
 
@@ -22,7 +22,7 @@ use crate::{
 };
 
 // Fetches slash reports to sign and signs them.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub(crate) struct SlashReportSignerTask<D: Db, S: ScannerFeed> {
   db: D,
   _S: PhantomData<S>,

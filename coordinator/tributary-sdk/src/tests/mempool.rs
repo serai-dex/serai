@@ -1,7 +1,7 @@
 use std::{sync::Arc, collections::HashMap};
 
 use zeroize::Zeroizing;
-use rand::{RngCore, rngs::OsRng};
+use rand::{RngCore as _, rngs::OsRng};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;

@@ -39,6 +39,13 @@ pub enum ExternalNetworkId {
   Monero = 3,
 }
 
+#[expect(clippy::as_conversions)]
+impl From<ExternalNetworkId> for u8 {
+  fn from(network_id: ExternalNetworkId) -> Self {
+    network_id as u8
+  }
+}
+
 impl ExternalNetworkId {
   /// All external networks.
   pub fn all() -> impl Iterator<Item = Self> {
@@ -81,7 +88,6 @@ impl ExternalNetworkId {
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
-#[cfg_attr(feature = "non_canonical_scale_derivations", allow(clippy::cast_possible_truncation))]
 pub enum NetworkId {
   /// The Serai network.
   Serai,

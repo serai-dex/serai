@@ -3,14 +3,14 @@ use std::collections::{VecDeque, HashSet};
 use dalek_ff_group::Ristretto;
 use ciphersuite::{group::GroupEncoding, *};
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get as _, DbTxn as _, Db};
 
-use borsh::BorshDeserialize;
+use borsh::BorshDeserialize as _;
 
 use tendermint::ext::{Network, Commit};
 
 use crate::{
-  ReadWrite, ProvidedError, ProvidedTransactions, BlockError, Block, Mempool, Transaction,
+  ReadWrite as _, ProvidedError, ProvidedTransactions, BlockError, Block, Mempool, Transaction,
   transaction::{Signed, TransactionKind, TransactionError, Transaction as TransactionTrait},
 };
 
@@ -143,16 +143,18 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     order: &str,
   ) -> bool {
     let local_key = ProvidedTransactions::<D, T>::locally_provided_quantity_key(genesis, order);
-    let local = db.get(local_key).map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap()));
+    let local =
+      db.get(local_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
     let block_key =
       ProvidedTransactions::<D, T>::block_provided_quantity_key(genesis, block, order);
-    let block = db.get(block_key).map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap()));
+    let block =
+      db.get(block_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
 
     local >= block
   }
 
   pub(crate) fn tip_from_db(db: &D, genesis: [u8; 32]) -> [u8; 32] {
-    db.get(Self::tip_key(genesis)).map_or(genesis, |bytes| bytes.try_into().unwrap())
+    db.get(Self::tip_key(genesis)).map(|bytes| bytes.try_into().unwrap()).unwrap_or(genesis)
   }
 
   pub(crate) fn add_transaction<N: Network>(
@@ -176,14 +178,11 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
     self.mempool.add::<N, _>(
       |signer, order| {
-        if self.participants.contains(&signer.to_bytes()) {
-          Some(
-            db.get(Self::next_nonce_key(&self.genesis, &signer, &order))
-              .map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap())),
-          )
-        } else {
-          None
-        }
+        self.participants.contains(&signer.to_bytes()).then(|| {
+          db.get(Self::next_nonce_key(&self.genesis, &signer, &order))
+            .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+            .unwrap_or(0)
+        })
       },
       internal,
       tx,
@@ -205,18 +204,15 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     if let Some(next_nonce) = self.mempool.next_nonce_in_mempool(signer, order.to_vec()) {
       return Some(next_nonce);
     }
-    if self.participants.contains(&signer.to_bytes()) {
-      Some(
-        self
-          .db
-          .as_ref()
-          .unwrap()
-          .get(Self::next_nonce_key(&self.genesis, signer, order))
-          .map_or(0, |bytes| u32::from_le_bytes(bytes.try_into().unwrap())),
-      )
-    } else {
-      None
-    }
+    self.participants.contains(&signer.to_bytes()).then(|| {
+      self
+        .db
+        .as_ref()
+        .unwrap()
+        .get(Self::next_nonce_key(&self.genesis, signer, order))
+        .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+        .unwrap_or(0)
+    })
   }
 
   pub(crate) fn build_block<N: Network>(&mut self, schema: &N::SignatureScheme) -> Block<T> {
@@ -254,16 +250,15 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       self.tip,
       self.provided.transactions.clone(),
       &mut |signer, order| {
-        if self.participants.contains(&signer.to_bytes()) {
+        self.participants.contains(&signer.to_bytes()).then(|| {
           let key = Self::next_nonce_key(&self.genesis, signer, order);
           let next = txn
             .get(&key)
-            .map_or(0, |next_nonce| u32::from_le_bytes(next_nonce.try_into().unwrap()));
+            .map(|next_nonce| u32::from_le_bytes(next_nonce.try_into().unwrap()))
+            .unwrap_or(0);
           txn.put(key, (next + 1).to_le_bytes());
-          Some(next)
-        } else {
-          None
-        }
+          next
+        })
       },
       schema,
       &commit,

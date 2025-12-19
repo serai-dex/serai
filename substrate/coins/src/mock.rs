@@ -1,8 +1,7 @@
 //! Test environment for the Coins pallet.
+#![expect(clippy::as_conversions, clippy::same_name_method)]
 
-use borsh::BorshDeserialize;
-
-use frame_support::{sp_runtime::BuildStorage, derive_impl, construct_runtime};
+use frame_support::{sp_runtime::BuildStorage as _, derive_impl, construct_runtime};
 
 use crate::{self as coins, CoinsInstance};
 

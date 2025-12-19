@@ -13,7 +13,7 @@ pub(crate) fn strip_type_name(full_type_name: &'static str) -> String {
   }
 
   // Push back on the generic terms
-  let mut type_name = last_part_in_outer_object_name.to_string();
+  let mut type_name = last_part_in_outer_object_name.to_owned();
   for generic in by_generics {
     type_name.push('<');
     type_name.push_str(generic);

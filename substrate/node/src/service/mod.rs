@@ -1,6 +1,6 @@
 use std::{boxed::Box, sync::Arc};
 
-use futures_util::stream::StreamExt;
+use futures_util::stream::StreamExt as _;
 
 use sp_timestamp::InherentDataProvider as TimestampInherent;
 use sp_consensus_babe::{SlotDuration, inherents::InherentDataProvider as BabeInherent};
@@ -8,11 +8,11 @@ use sp_consensus_babe::{SlotDuration, inherents::InherentDataProvider as BabeInh
 use sp_io::SubstrateHostFunctions;
 use sc_executor::{sp_wasm_interface::ExtendedHostFunctions, HeapAllocStrategy, WasmExecutor};
 
-use sc_network::{Event, NetworkEventStream, NetworkBackend};
+use sc_network::{Event, NetworkEventStream as _, NetworkBackend as _};
 use sc_service::{error::Error as ServiceError, Configuration, TaskManager, TFullClient};
 
 use sc_transaction_pool_api::OffchainTransactionPoolFactory;
-use sc_client_api::BlockBackend;
+use sc_client_api::BlockBackend as _;
 
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
@@ -63,7 +63,7 @@ fn create_inherent_data_providers(
   (BabeInherent::from_timestamp_and_slot_duration(*timestamp, slot_duration), timestamp)
 }
 
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 pub fn new_partial(
   config: &mut Configuration,
 ) -> Result<
@@ -83,8 +83,8 @@ pub fn new_partial(
   config.state_pruning = Some(sc_service::PruningMode::ArchiveCanonical);
   config.blocks_pruning = sc_service::BlocksPruning::KeepAll;
 
-  config.network.node_name = "serai".to_string();
-  config.network.client_version = "0.1.0".to_string();
+  "serai".clone_into(&mut config.network.node_name);
+  "0.1.0".clone_into(&mut config.network.client_version);
   config.network.listen_addresses =
     vec!["/ip4/0.0.0.0/tcp/30333".parse().unwrap(), "/ip6/::/tcp/30333".parse().unwrap()];
 
@@ -167,6 +167,7 @@ pub fn new_partial(
     babe_config,
     grandpa_block_import,
     client.clone(),
+    #[expect(closure_returning_async_block)] // This doesn't work as an `async` closure
     move |_, ()| async move { Ok(create_inherent_data_providers(slot_duration)) },
     select_chain.clone(),
     offchain_tx_pool_factory,
@@ -253,19 +254,19 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
 
   task_manager.spawn_handle().spawn("bootnodes", "bootnodes", {
     let network = network.clone();
-    let id = config.chain_spec.id().to_string();
+    let id = config.chain_spec.id().to_owned();
 
     async move {
       // Transforms the above Multiaddrs into MultiaddrWithPeerIds
       // While the PeerIds *should* be known in advance and hardcoded, that data wasn't collected in
       // time and this fine for a testnet
-      let bootnodes = || async {
+      let bootnodes = async || {
         use libp2p::{
           core::{
             Endpoint,
             transport::{PortUse, DialOpts},
           },
-          Transport as TransportTrait,
+          Transport as _,
           tcp::tokio::Transport,
           noise::Config,
         };
@@ -306,7 +307,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
         res
       };
 
-      use sc_network::{NetworkStatusProvider, NetworkPeers};
+      use sc_network::{NetworkStatusProvider as _, NetworkPeers as _};
       loop {
         if let Ok(status) = network.status().await {
           if status.num_connected_peers < 3 {
@@ -325,9 +326,9 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
   let prometheus_registry = config.prometheus_registry().cloned();
 
   // TODO: Ensure we're considered as an authority is a validator of an external network
-  let authority_discovery = if role.is_authority() {
+  let authority_discovery = role.is_authority().then(|| {
     let (worker, service) = sc_authority_discovery::new_worker_and_service_with_config(
-      #[allow(clippy::field_reassign_with_default)]
+      #[expect(clippy::field_reassign_with_default)]
       {
         let mut worker = sc_authority_discovery::WorkerConfig::default();
         worker.publish_non_global_ips = publish_non_global_ips;
@@ -336,10 +337,11 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       },
       client.clone(),
       Arc::new(network.clone()),
-      Box::pin(network.event_stream("authority-discovery").filter_map(|e| async move {
-        match e {
-          Event::Dht(e) => Some(e),
-          _ => None,
+      Box::pin(network.event_stream("authority-discovery").filter_map(async move |e| {
+        if let Event::Dht(e) = e {
+          Some(e)
+        } else {
+          None
         }
       })),
       sc_authority_discovery::Role::PublishAndDiscover(keystore.clone()),
@@ -352,13 +354,11 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       worker.run(),
     );
 
-    Some(service)
-  } else {
-    None
-  };
+    service
+  });
 
   let rpc_builder = {
-    let id = config.chain_spec.id().to_string();
+    let id = config.chain_spec.id().to_owned();
     let client = client.clone();
     let pool = transaction_pool.clone();
 
@@ -408,6 +408,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       block_import,
       sync_oracle: sync_service.clone(),
       justification_sync_link: sync_service.clone(),
+      #[expect(closure_returning_async_block)]
       create_inherent_data_providers: move |_, ()| async move {
         Ok(create_inherent_data_providers(slot_duration))
       },
@@ -433,10 +434,10 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       grandpa::run_grandpa_voter(grandpa::GrandpaParams {
         config: grandpa::Config {
           gossip_duration: std::time::Duration::from_millis(333),
-          justification_generation_period: 512,
+          justification_generation_period: 1,
           name: Some(name),
           observer_enabled: false,
-          keystore: if role.is_authority() { Some(keystore) } else { None },
+          keystore: role.is_authority().then_some(keystore),
           local_role: role,
           telemetry: telemetry.as_ref().map(Telemetry::handle),
           protocol_name: grandpa_protocol_name,

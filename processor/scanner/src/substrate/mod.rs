@@ -23,13 +23,13 @@ pub(crate) fn queue_acknowledge_batch<S: ScannerFeed>(
   burns: Vec<OutInstructionWithBalance>,
   key_to_activate: Option<KeyFor<S>>,
 ) {
-  SubstrateDb::<S>::queue_acknowledge_batch(txn, batch, burns, key_to_activate)
+  SubstrateDb::<S>::queue_acknowledge_batch(txn, batch, burns, key_to_activate);
 }
 pub(crate) fn queue_queue_burns<S: ScannerFeed>(
   txn: &mut impl DbTxn,
   burns: Vec<OutInstructionWithBalance>,
 ) {
-  SubstrateDb::<S>::queue_queue_burns(txn, burns)
+  SubstrateDb::<S>::queue_queue_burns(txn, burns);
 }
 
 /*
@@ -37,7 +37,7 @@ pub(crate) fn queue_queue_burns<S: ScannerFeed>(
   the same Batch ourselves. This takes the `acknowledge_batch`, `queue_burns` arguments and sits on
   them until we're able to process them.
 */
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub(crate) struct SubstrateTask<D: Db, S: ScannerFeed> {
   db: D,
   _S: PhantomData<S>,

@@ -1,19 +1,17 @@
 use core::fmt::Debug;
-#[allow(unused_imports)]
-use std_shims::prelude::*;
-use std_shims::io;
+use std_shims::{prelude::*, io};
 
-use subtle::{Choice, ConstantTimeEq, ConditionallySelectable};
+use subtle::{Choice, ConstantTimeEq as _, ConditionallySelectable as _};
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
 use k256::{
-  elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint},
+  elliptic_curve::{ops::Reduce as _, sec1::ToEncodedPoint as _},
   U256, Scalar, ProjectivePoint,
 };
 
 use bitcoin::{
-  hashes::{HashEngine, Hash, sha256::Hash as Sha256},
+  hashes::{HashEngine as _, Hash as _, sha256::Hash as Sha256},
   key::XOnlyPublicKey,
 };
 
@@ -51,7 +49,7 @@ pub(crate) fn needs_negation(key: &ProjectivePoint) -> Choice {
 /// If either `R` or `A` is the point at infinity, this will panic.
 #[derive(Clone, Copy, Debug)]
 pub struct Hram;
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 impl HramTrait<Secp256k1> for Hram {
   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
     const TAG_HASH: Sha256 = Sha256::const_hash(b"BIP0340/challenge");
@@ -82,7 +80,7 @@ impl HramTrait<Secp256k1> for Hram {
 pub struct Schnorr(FrostSchnorr<Secp256k1, Hram>);
 impl Schnorr {
   /// Construct a Schnorr algorithm continuing the specified transcript.
-  #[allow(clippy::new_without_default)]
+  #[expect(clippy::new_without_default)]
   pub fn new() -> Schnorr {
     Schnorr(FrostSchnorr::ietf())
   }
@@ -106,7 +104,7 @@ impl Algorithm<Secp256k1> for Schnorr {
     rng: &mut R,
     keys: &ThresholdKeys<Secp256k1>,
   ) {
-    self.0.preprocess_addendum(rng, keys)
+    self.0.preprocess_addendum(rng, keys);
   }
 
   fn read_addendum<R: io::Read>(&self, reader: &mut R) -> io::Result<Self::Addendum> {

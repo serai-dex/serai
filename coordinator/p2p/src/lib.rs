@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::future::Future;
 use std::collections::HashMap;
@@ -10,12 +11,12 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serai_primitives::{network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet};
 
 use serai_db::Db;
-use tributary_sdk::{ReadWrite, TransactionTrait, Tributary, TributaryReader};
+use tributary_sdk::{ReadWrite as _, TransactionTrait, Tributary, TributaryReader};
 use serai_cosign::{SignedCosign, Cosigning};
 
 use tokio::sync::{mpsc, oneshot};
 
-use serai_task::{Task, ContinuallyRan};
+use serai_task::{Task, ContinuallyRan as _};
 
 /// The heartbeat task, effecting sync of Tributaries
 pub mod heartbeat;
@@ -178,7 +179,7 @@ pub async fn run<TD: Db, Tx: TransactionTrait, P: P2p>(
           let reader = reader.clone(); // This is a cheap clone
           // We spawn this on a task due to the DB reads needed
           tokio::spawn(async move {
-            handle_heartbeat(&reader, heartbeat.latest_block_hash, channel)
+            handle_heartbeat(&reader, heartbeat.latest_block_hash, channel);
           });
         }
       }

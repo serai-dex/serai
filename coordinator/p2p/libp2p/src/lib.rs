@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{future::Future, time::Duration};
 use std::{
@@ -8,7 +9,7 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
 use zeroize::Zeroizing;
 use schnorrkel::Keypair;
@@ -22,7 +23,7 @@ use serai_client_serai::{
 
 use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
 
-use serai_task::{Task, ContinuallyRan};
+use serai_task::{Task, ContinuallyRan as _};
 
 use serai_cosign::SignedCosign;
 
@@ -124,7 +125,6 @@ struct Behavior {
   gossip: gossip::Behavior,
 }
 
-#[allow(clippy::type_complexity)]
 struct Libp2pInner {
   peers: Peers,
 

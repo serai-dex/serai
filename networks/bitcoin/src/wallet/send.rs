@@ -1,6 +1,5 @@
-#[allow(unused_imports)]
-use std_shims::prelude::*;
 use std_shims::{
+  prelude::*,
   io::{self, Read},
   collections::HashMap,
 };
@@ -13,7 +12,7 @@ use k256::Scalar;
 use frost::{curve::Secp256k1, Participant, ThresholdKeys, FrostError, sign::*};
 
 use bitcoin::{
-  hashes::Hash,
+  hashes::Hash as _,
   sighash::{TapSighashType, SighashCache, Prevouts},
   absolute::LockTime,
   script::{PushBytesBuf, ScriptBuf},
@@ -200,7 +199,7 @@ impl SignableTransaction {
           PushBytesBuf::try_from(data)
             .expect("data didn't fit into PushBytes depsite being checked"),
         ),
-      })
+      });
     }
 
     let (mut weight, vbytes) = Self::calculate_weight_vbytes(tx_ins.len(), payments, None);
@@ -359,9 +358,10 @@ impl SignMachine<Transaction> for TransactionSignMachine {
     commitments: HashMap<Participant, Self::Preprocess>,
     msg: &[u8],
   ) -> Result<(TransactionSignatureMachine, Self::SignatureShare), FrostError> {
-    if !msg.is_empty() {
-      panic!("message was passed to the TransactionSignMachine when it generates its own");
-    }
+    assert!(
+      msg.is_empty(),
+      "message was passed to the TransactionSignMachine when it generates its own"
+    );
 
     let commitments = (0 .. self.sigs.len())
       .map(|c| {

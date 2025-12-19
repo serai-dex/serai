@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std_shims::{prelude::*, collections::HashMap};
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
-use rand::seq::SliceRandom;
+use rand::seq::SliceRandom as _;
 
-use ciphersuite::{group::ff::Field, WrappedGroup};
+use ciphersuite::{group::ff::Field as _, WrappedGroup};
 use embedwards25519::Embedwards25519;
 
 use dkg_recovery::recover_key;

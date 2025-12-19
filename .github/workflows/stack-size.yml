@@ -16,58 +16,131 @@ jobs:
   stack_size:
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04]
+        os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04, macos-15-intel, macos-latest]
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
-      - name: Download Monero
-        uses: ./.github/actions/monero
+      - name: Install Go
+        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # 6.1.0
+        with:
+          go-version: stable
+
+      - name: Monero Daemon Cache
+        id: cache-monerod
+        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # 4.2.4
+        with:
+          path: monerod
+          key: stack-size-monerod
+
+      - name: Download the Monero Daemon
+        if: steps.cache-monerod.outputs.cache-hit != 'true'
+        run: |
+          # We explicitly download the Linux binary as this script executes over an ELF binary
+          wget https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.4.4.tar.bz2
+          tar -xvf monero-linux-x64-v0.18.4.4.tar.bz2
+          mv $(find . -name monerod) .
 
       - name: Verify expected behavior
         shell: bash
         run: |
-          cp /usr/bin/monerod monerod
-
           STACK=$((8 * 1024 * 1024))
 
-          cp monerod monerod-chelf
-          git clone https://github.com/Gottox/chelf
-          cd chelf
-          git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
-          make
-          ./chelf -s "$STACK" ../monerod-chelf
-          cd ..
+          OS=${{ runner.os }}
+          if [ "$OS" = "Linux" ]; then
+            sudo apt update -y
+            sudo apt install -y ksh bash dash zsh busybox posh mksh yash
+            sudo ln -s "$(which busybox)" /usr/bin/ash
+            sudo ln -s "$(which busybox)" /usr/bin/hush
+            wget http://ftp.us.debian.org/debian/pool/main/g/gash/gash_0.3.1-1_amd64.deb
+            sudo apt install ./gash_0.3.1-1_amd64.deb
+            SHELLS="sh ksh bash dash zsh ash hush posh mksh lksh gash yash"
+          fi
+          if [ "$OS" = "macOS" ]; then
+            brew install binutils # `readelf`
 
+            # `binutils` is not placed within the path, so find its
+            # `readelf` bin and manually move it into our path
+            HOMEBREW_ROOT_PATH=/opt/homebrew # Apple Silicon
+            if [ $(uname -m) = "x86_64" ]; then HOMEBREW_ROOT_PATH=/usr/local; fi # Intel
+            sudo cp $(find "$HOMEBREW_ROOT_PATH" -name readelf) /usr/local/bin/
+
+            # macOS has the benefit of packaging `oksh`, `osh`, and having distinct core tools
+            # TODO: `posh` is packaged but doesn't work: https://github.com/serai-dex/serai/issues/703
+            brew install ksh93 bash dash-shell zsh mksh oksh yash oils-for-unix
+            SHELLS="sh ksh bash dash zsh mksh oksh yash osh"
+
+            # macOS also has the benefit of packaging (via MacPorts) `mrsh`,
+            # which explicitly attempts to be be exactly POSIX, without any extensions.
+            # We first have to install MacPorts, the easiest method being via source.
+            curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.11.6.tar.bz2
+            tar xf MacPorts-2.11.6.tar.bz2
+            cd MacPorts-2.11.6
+            ./configure
+            make
+            sudo make install
+            cd ..
+            PATH=$PATH:/opt/local/bin
+            sudo port -v selfupdate
+
+            # Now, we install `mrsh`
+            # TODO: https://github.com/serai-dex/serai/issues/704
+            # sudo port install mrsh
+            # SHELLS="$SHELLS mrsh"
+          fi
+
+          # Install shells available via `cargo`
+          cargo install brush-shell
+          SHELLS="$SHELLS brush"
+          # We would also test with `nsh` here if not for https://github.com/nuta/nsh/issues/49
+          # cargo install nsh
+          # SHELLS="$SHELLS nsh"
+
+          # Install shells available via `go`
+          # TODO: https://github.com/u-root/u-root/issues/3474
+          # GOBIN=/usr/local/bin go install github.com/u-root/u-root/cmds/core/gosh@latest
+          # SHELLS="$SHELLS gosh"
+
+          # Patch with `muslstack`
           cp monerod monerod-muslstack
           GOBIN=$(pwd) go install github.com/yaegashi/muslstack@d19cc5866abce3ca59dfc1666df7cc97097d0933
           ./muslstack -s "$STACK" ./monerod-muslstack
 
-          sudo apt update -y
-          sudo apt install -y ksh bash dash zsh busybox mksh posh yash
-          sudo ln -s "$(which busybox)" /usr/bin/ash
-          sudo ln -s "$(which busybox)" /usr/bin/hush
-          cargo install brush-shell
-          for shell in sh ksh bash dash zsh ash hush mksh lksh posh yash brush; do
+          # Patch with `chelf`, which only works on a Linux host (due to requiring `elf.h`)
+          # TODO: Install the header on macOS so `chelf` may be used as the source of truth
+          if [ "$OS" = "Linux" ]; then
+            cp monerod monerod-chelf
+            git clone https://github.com/Gottox/chelf
+            cd chelf
+            git checkout b2994186cea7b7d61a588fd06c1cc1ae75bcc21a
+            make
+            ./chelf -s "$STACK" ../monerod-chelf
+            cd ..
+          fi
+
+          # Run our script with all installed shells
+          for shell in $SHELLS; do
+            echo "Executing \`$shell\`"
             cp monerod monerod-idss-$shell
             ln -s "$(which $shell)" sh
             ./sh ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
             rm ./sh
           done
 
+          # Verify they all had the same result
           sha256() {
             sha256sum "$1" | cut -d' ' -f1
           }
-          CHELF=$(sha256 monerod-chelf)
-          find . -iname "monerod-*" | while read -r bin; do
+          CHELF=$(sha256 monerod-muslstack)
+          find . -name "monerod-*" | while read -r bin; do
             BIN=$(sha256 "$bin")
             if [ ! "$CHELF" = "$BIN" ]; then
-              echo "Different artifact between monerod-chelf ($CHELF) and $bin ($BIN)"
+              echo "Different artifact between \`monerod-muslstack\` ($CHELF) and \`$bin\` ($BIN)"
               exit 1
             fi
           done
 
+          # Verify the integrity of the result
           read_stack() {
             STACK_INFO=$(readelf "$1" -l | grep STACK -A1)
             MEMSZ=$(printf "%s\n" "$STACK_INFO" | tail -n1 | sed -E s/^[[:space:]]*//g | cut -f2 -d' ')
@@ -79,14 +152,14 @@ jobs:
             exit 2
           fi
 
-          UPDATED_STACK=$(read_stack monerod-chelf)
+          UPDATED_STACK=$(read_stack monerod-muslstack)
           if [ "$UPDATED_STACK" -ne "$STACK" ]; then
             echo "Updated \`PT_GNU_STACK\` ($UPDATED_STACK) wasn't 8 MB ($STACK)"
             exit 3
           fi
 
           # Only one byte should be different due to the bit pattern of 8 MB
-          BYTES_DIFFERENT=$(cmp -l monerod monerod-chelf | wc -l || true)
+          BYTES_DIFFERENT=$(cmp -l monerod monerod-muslstack | wc -l || true)
           if [ "$BYTES_DIFFERENT" -ne 1 ]; then
             echo "More than one byte was different between the two binaries"
             exit 4

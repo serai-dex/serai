@@ -7,23 +7,16 @@ use std::collections::HashMap;
 
 use alloy_core::primitives::{Address, U256};
 
-use alloy_sol_types::{SolInterface, SolEvent};
+use alloy_sol_types::{SolInterface as _, SolEvent as _};
 
-use alloy_rpc_types_eth::{Log, Filter, TransactionTrait};
+use alloy_rpc_types_eth::{Log, Filter, TransactionTrait as _};
 use alloy_transport::{TransportErrorKind, RpcError};
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider as _, RootProvider};
 
 use ethereum_primitives::LogIndex;
 
-use futures_util::stream::{StreamExt, FuturesUnordered};
+use futures_util::stream::{StreamExt as _, FuturesUnordered};
 
-#[rustfmt::skip]
-#[expect(warnings)]
-#[expect(needless_pass_by_value)]
-#[expect(missing_docs)]
-#[expect(clippy::all)]
-#[expect(clippy::ignored_unit_patterns)]
-#[expect(clippy::redundant_closure_for_method_calls)]
 mod abi {
   alloy_sol_macro::sol!("contracts/IERC20.sol");
 }
@@ -102,7 +95,7 @@ impl Erc20 {
     let transaction =
       provider.get_transaction_by_hash(transaction_hash.into()).await?.ok_or_else(|| {
         TransportErrorKind::Custom(
-          "node didn't have the transaction which emitted a log it had".to_string().into(),
+          "node didn't have the transaction which emitted a log it had".to_owned().into(),
         )
       })?;
 
@@ -116,6 +109,7 @@ impl Erc20 {
     };
 
     // Extract the top-level call's from/to/value
+    #[expect(clippy::wildcard_enum_match_arm)]
     let (from, to, value) = match call {
       IERC20Calls::transfer(transferCall { to, value }) => (transaction.inner.signer(), to, value),
       IERC20Calls::transferFrom(transferFromCall { from, to, value }) => (from, to, value),
@@ -129,14 +123,14 @@ impl Erc20 {
       // this is a non-compliant ERC20 or an error with the logs fetched. We assume ERC20
       // compliance here, making this an RPC error
       let log = log.log_decode::<Transfer>().map_err(|_| {
-        TransportErrorKind::Custom("log didn't include a valid transfer event".to_string().into())
+        TransportErrorKind::Custom("log didn't include a valid transfer event".to_owned().into())
       })?;
 
       let block_hash = log.block_hash.ok_or_else(|| {
-        TransportErrorKind::Custom("log didn't have its block hash set".to_string().into())
+        TransportErrorKind::Custom("log didn't have its block hash set".to_owned().into())
       })?;
       let log_index = log.log_index.ok_or_else(|| {
-        TransportErrorKind::Custom("log didn't have its index set".to_string().into())
+        TransportErrorKind::Custom("log didn't have its index set".to_owned().into())
       })?;
       let log = log.inner.data;
 
@@ -193,26 +187,26 @@ impl Erc20 {
         // Double check the address which emitted this log
         if log.address() != erc20 {
           Err(TransportErrorKind::Custom(
-            "node returned logs for a different address than requested".to_string().into(),
+            "node returned logs for a different address than requested".to_owned().into(),
           ))?;
         }
         // Double check the event signature for this log
         if log.topics().first() != Some(&Transfer::SIGNATURE_HASH) {
           Err(TransportErrorKind::Custom(
-            "node returned a log for a different topic than filtered to".to_string().into(),
+            "node returned a log for a different topic than filtered to".to_owned().into(),
           ))?;
         }
         // Double check the `to` topic
         if log.topics().get(2) != Some(&to.into_word()) {
           Err(TransportErrorKind::Custom(
-            "node returned a transfer for a different `to` than filtered to".to_string().into(),
+            "node returned a transfer for a different `to` than filtered to".to_owned().into(),
           ))?;
         }
 
         let tx_id = log
           .transaction_hash
           .ok_or_else(|| {
-            TransportErrorKind::Custom("log didn't specify its transaction hash".to_string().into())
+            TransportErrorKind::Custom("log didn't specify its transaction hash".to_owned().into())
           })?
           .0;
 

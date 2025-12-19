@@ -1,9 +1,9 @@
 use subtle::Choice;
-use group::{ff::PrimeField, Group};
+use group::{ff::PrimeField as _, Group as _};
 use k256::{
   elliptic_curve::{
     ops::Reduce,
-    point::{AffineCoordinates, DecompressPoint},
+    point::{AffineCoordinates as _, DecompressPoint as _},
   },
   AffinePoint, ProjectivePoint, Scalar, U256 as KU256,
 };

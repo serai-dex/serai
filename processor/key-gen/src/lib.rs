@@ -6,13 +6,13 @@ use std::{io, collections::HashMap};
 
 use zeroize::Zeroizing;
 
-use rand_core::{RngCore, SeedableRng, OsRng};
+use rand_core::{RngCore as _, SeedableRng as _, OsRng};
 use rand_chacha::ChaCha20Rng;
 
-use blake2::{Digest, Blake2s256};
-use transcript::{Transcript, RecommendedTranscript};
+use blake2::{Digest as _, Blake2s256};
+use transcript::{Transcript as _, RecommendedTranscript};
 use ciphersuite::{
-  group::{Group, GroupEncoding},
+  group::{Group as _, GroupEncoding},
   *,
 };
 use dkg::*;
@@ -163,7 +163,6 @@ pub struct KeyGen<P: KeyGenParams> {
 
 impl<P: KeyGenParams> KeyGen<P> {
   /// Create a new key generation instance.
-  #[allow(clippy::new_ret_no_self)]
   pub fn new(
     substrate_evrf_private_key: Zeroizing<
       <<Ristretto as Curves>::EmbeddedCurve as WrappedGroup>::F,
@@ -176,7 +175,7 @@ impl<P: KeyGenParams> KeyGen<P> {
   }
 
   /// Fetch the key shares for a specific session.
-  #[allow(clippy::type_complexity)]
+  #[expect(clippy::type_complexity)]
   pub fn key_shares(
     getter: &impl Get,
     session: Session,

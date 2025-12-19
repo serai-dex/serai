@@ -1,12 +1,7 @@
-use core::{ops::Deref, convert::AsRef, str::FromStr};
-use std::{sync::Arc, collections::HashSet};
+use core::{convert::AsRef, str::FromStr as _};
+use std::sync::Arc;
 
-use rand_core::{RngCore, OsRng};
-
-use sp_core::Encode;
 use sp_blockchain::{Error as BlockchainError, HeaderMetadata, HeaderBackend};
-use sp_consensus::BlockStatus;
-use sp_block_builder::BlockBuilder;
 use sp_api::ProvideRuntimeApi;
 use sc_client_api::BlockBackend;
 
@@ -67,7 +62,7 @@ pub(crate) fn module<
     + ProvideRuntimeApi<Block, Api: SeraiApi<Block>>,
 >(
   client: Arc<C>,
-) -> RpcModule<impl 'static + Send + Sync> {
+) -> Result<RpcModule<impl 'static + Send + Sync>, Box<dyn std::error::Error + Send + Sync>> {
   let mut module = RpcModule::new(client);
 
   module.register_method(
@@ -82,7 +77,7 @@ pub(crate) fn module<
       };
       Ok(session.map(|session| session.0))
     },
-  );
+  )?;
 
   module.register_method(
     "validator-sets/current_stake",
@@ -96,7 +91,7 @@ pub(crate) fn module<
       };
       Ok(stake.map(|stake| stake.0))
     },
-  );
+  )?;
 
   module.register_method("validator-sets/keys", |params, client, _ext| -> Result<_, Error> {
     let Some(block_hash) = block_hash(&**client, &params)? else {
@@ -110,7 +105,7 @@ pub(crate) fn module<
       Err(Error::Internal("couldn't fetch the keys for the requested validator set"))?
     };
     Ok(key_pair.map(|key_pair| hex::encode(borsh::to_vec(&key_pair).unwrap())))
-  });
+  })?;
 
   module.register_method(
     "validator-sets/current_validators",
@@ -126,7 +121,7 @@ pub(crate) fn module<
         validators.map(|validators| validators.iter().map(ToString::to_string).collect::<Vec<_>>()),
       )
     },
-  );
+  )?;
 
   module.register_method(
     "validator-sets/pending_slash_report",
@@ -144,7 +139,7 @@ pub(crate) fn module<
         .pending_slash_report(block_hash, network)
         .map_err(|_| Error::Internal("couldn't fetch if this network has a pending slash report"))
     },
-  );
+  )?;
 
   module.register_method(
     "validator-sets/embedded_elliptic_curve_keys",
@@ -179,7 +174,7 @@ pub(crate) fn module<
         hex::encode(borsh::to_vec(&embedded_elliptic_curve_keys).unwrap())
       }))
     },
-  );
+  )?;
 
-  module
+  Ok(module)
 }

@@ -1,22 +1,20 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{fmt::Debug, future::Future};
 use std::{sync::Arc, collections::HashMap, time::Instant};
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_client_serai::{
   abi::{
     primitives::{
-      BlockHash,
-      crypto::{Public, KeyPair},
-      network_id::ExternalNetworkId,
-      validator_sets::{Session, ExternalValidatorSet},
-      address::SeraiAddress,
+      BlockHash, crypto::Public, network_id::ExternalNetworkId,
+      validator_sets::ExternalValidatorSet,
     },
     Block,
   },

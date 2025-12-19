@@ -1,8 +1,9 @@
+use core::fmt::Write as _;
 use std::path::Path;
 
 use zeroize::Zeroizing;
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::ff::PrimeField, WrappedGroup};
+use ciphersuite::{group::ff::PrimeField as _, WrappedGroup};
 
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
@@ -17,7 +18,7 @@ pub fn serai(
   let env_vars = [("KEY", hex::encode(serai_key.to_repr()))];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {
-    env_vars_str += &format!(r#"{env_var}=${{{env_var}:="{value}"}} "#);
+    write!(&mut env_vars_str, r#"{env_var}=${{{env_var}:="{value}"}} "#).unwrap();
   }
 
   let run_serai = format!(

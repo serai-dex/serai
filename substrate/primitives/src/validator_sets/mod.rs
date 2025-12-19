@@ -3,7 +3,7 @@ use alloc::{vec, vec::Vec};
 use zeroize::Zeroize;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use ciphersuite::{group::GroupEncoding, GroupIo};
+use ciphersuite::{group::GroupEncoding as _, GroupIo};
 use dalek_ff_group::Ristretto;
 
 use sp_core::sr25519::Public;
@@ -72,7 +72,7 @@ impl ExternalValidatorSet {
 
     const DST: &[u8] = b"ValidatorSets-musig_key";
     res[0] = u8::try_from(DST.len()).unwrap();
-    #[allow(clippy::range_plus_one)]
+    #[expect(clippy::range_plus_one)]
     res[1 .. (1 + DST.len())].copy_from_slice(DST);
 
     // Check we have room to encode into `res`, using the approximate `size_of` for the max size of

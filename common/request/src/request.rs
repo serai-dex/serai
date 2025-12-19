@@ -19,11 +19,11 @@ impl Request {
       let authority = authority.as_str();
       if authority.contains('@') {
         // Decode the username and password from the URI
-        let mut userpass = authority.split('@').next().unwrap().to_string();
+        let mut userpass = authority.split('@').next().unwrap().to_owned();
 
         let mut userpass_iter = userpass.split(':');
-        let username = userpass_iter.next().unwrap().to_string();
-        let password = userpass_iter.next().map_or_else(String::new, str::to_string);
+        let username = userpass_iter.next().unwrap().to_owned();
+        let password = userpass_iter.next().map(str::to_owned).unwrap_or_else(String::new);
         zeroize::Zeroize::zeroize(&mut userpass);
 
         return Ok((username, password));
@@ -34,8 +34,8 @@ impl Request {
 
   #[cfg(feature = "basic-auth")]
   pub fn basic_auth(&mut self, username: &str, password: &str) {
-    use zeroize::Zeroize;
-    use base64ct::{Encoding, Base64};
+    use zeroize::Zeroize as _;
+    use base64ct::{Encoding as _, Base64};
 
     let mut formatted = format!("{username}:{password}");
     let mut encoded = Base64::encode_string(formatted.as_bytes());
@@ -53,7 +53,7 @@ impl Request {
     let (mut username, mut password) = self.username_password_from_uri()?;
     self.basic_auth(&username, &password);
 
-    use zeroize::Zeroize;
+    use zeroize::Zeroize as _;
     username.zeroize();
     password.zeroize();
 
@@ -62,7 +62,9 @@ impl Request {
 
   #[cfg(feature = "basic-auth")]
   pub fn with_basic_auth(&mut self) {
-    let _ = self.basic_auth_from_uri();
+    match self.basic_auth_from_uri() {
+      Ok(()) | Err(_) => {}
+    }
   }
 
   /// Set a size limit for the response.

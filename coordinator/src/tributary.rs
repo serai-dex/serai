@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
-use blake2::{digest::typenum::U32, Digest, Blake2s};
+use blake2::{digest::typenum::U32, Digest as _, Blake2s};
 use ciphersuite::*;
 use dalek_ff_group::Ristretto;
 
@@ -13,7 +13,9 @@ use serai_db::{Get, DbTxn, Db as DbTrait, create_db, db_channel};
 
 use serai_client_serai::abi::primitives::validator_sets::ExternalValidatorSet;
 
-use tributary_sdk::{TransactionKind, TransactionError, ProvidedError, TransactionTrait, Tributary};
+use tributary_sdk::{
+  TransactionKind, TransactionError, ProvidedError, TransactionTrait as _, Tributary,
+};
 
 use serai_task::{Task, TaskHandle, DoesNotError, ContinuallyRan};
 
@@ -443,11 +445,13 @@ async fn scan_on_new_block<CD: DbTrait, TD: DbTrait, P: P2p>(
     }
 
     // Have the tributary scanner run as soon as there's a new block
-    match tributary.next_block_notification().await.await {
-      Ok(()) => scan_tributary_task.run_now(),
-      // unreachable since this owns the tributary object and doesn't drop it
-      Err(_) => panic!("tributary was dropped causing notification to error"),
-    }
+    // This `expect` is unreachable since this owns the tributary object and doesn't drop it
+    tributary
+      .next_block_notification()
+      .await
+      .await
+      .expect("tributary was dropped causing notification to error");
+    scan_tributary_task.run_now();
   }
 }
 

@@ -3,13 +3,10 @@ use serai_abi::{
     address::SeraiAddress,
     network_id::{ExternalNetworkId, NetworkId},
     balance::Amount,
-    crypto::EmbeddedEllipticCurveKeys,
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet, KeyShares},
   },
   validator_sets::Event,
 };
-
-use serai_client_serai::*;
 
 #[tokio::test]
 async fn validator_sets() {
@@ -26,7 +23,7 @@ async fn validator_sets() {
           .map(str::to_owned)
           .collect(),
       )
-      .replace_env([("RUST_LOG".to_string(), "runtime=debug".to_string())].into()),
+      .replace_env([("RUST_LOG".to_owned(), "runtime=debug".to_owned())].into()),
   );
 
   test

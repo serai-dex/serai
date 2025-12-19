@@ -1,9 +1,11 @@
+#![expect(clippy::as_conversions, clippy::same_name_method, clippy::used_underscore_binding)]
+
 use core::marker::PhantomData;
 use alloc::{borrow::Cow, vec, vec::Vec};
 
 use sp_core::{Get, ConstU32, ConstU64, sr25519::Public};
 use sp_runtime::{
-  Perbill, Weight,
+  Weight,
   traits::{Header as _, Block as _},
 };
 use sp_version::RuntimeVersion;
@@ -12,7 +14,7 @@ use serai_abi::{
   primitives::{
     crypto::EmbeddedEllipticCurveKeys,
     network_id::{ExternalNetworkId, NetworkId},
-    balance::{Amount, ExternalBalance},
+    balance::Amount,
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
     address::SeraiAddress,
   },
@@ -59,7 +61,13 @@ mod runtime {
   pub type GenesisLiquidity = serai_genesis_liquidity_pallet::Pallet<Runtime>;
 
   #[runtime::pallet_index(8)]
+  pub type EconomicSecurity = serai_economic_security_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(9)]
   pub type InInstructions = serai_in_instructions_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0x80)]
+  pub type Emissions = serai_emissions_pallet::Pallet<Runtime>;
 
   #[runtime::pallet_index(0xfd)]
   #[runtime::disable_inherent]
@@ -77,17 +85,6 @@ impl serai_core_pallet::Config for Runtime {}
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint; // TODO
 }
-
-#[doc(hidden)]
-pub struct EconomicSecurity; // TODO
-impl serai_abi::economic_security::EconomicSecurity for EconomicSecurity {
-  fn achieved_economic_security(_network: ExternalNetworkId) -> bool {
-    false
-  }
-  fn sri_value(_balance: ExternalBalance) -> Amount {
-    Amount(0)
-  }
-}
 impl serai_validator_sets_pallet::Config for Runtime {
   type ShouldEndSession = Babe;
   type EconomicSecurity = EconomicSecurity;
@@ -101,6 +98,8 @@ impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
 }
 impl serai_dex_pallet::Config for Runtime {}
 impl serai_genesis_liquidity_pallet::Config for Runtime {}
+impl serai_economic_security_pallet::Config for Runtime {}
+impl serai_emissions_pallet::Config for Runtime {}
 impl serai_in_instructions_pallet::Config for Runtime {}
 
 impl pallet_timestamp::Config for Runtime {
@@ -246,6 +245,7 @@ sp_api::impl_runtime_apis! {
         ];
 
         for log in block.header().digest().logs() {
+          #[expect(clippy::wildcard_enum_match_arm)]
           match log {
             sp_runtime::DigestItem::PreRuntime(consensus, encoded)
               if *consensus == SeraiPreExecutionDigest::CONSENSUS_ID =>
@@ -334,7 +334,7 @@ sp_api::impl_runtime_apis! {
 
     // TODO: Revisit
     fn submit_report_equivocation_unsigned_extrinsic(
-      equivocation_proof: sp_consensus_babe::EquivocationProof<Header>,
+      _equivocation_proof: sp_consensus_babe::EquivocationProof<Header>,
       _: sp_consensus_babe::OpaqueKeyOwnershipProof,
     ) -> Option<()> {
       None
@@ -360,7 +360,7 @@ sp_api::impl_runtime_apis! {
 
     // TODO: Revisit
     fn submit_report_equivocation_unsigned_extrinsic(
-      equivocation_proof: sp_consensus_grandpa::EquivocationProof<
+      _equivocation_proof: sp_consensus_grandpa::EquivocationProof<
         <Block as sp_runtime::traits::Block>::Hash,
         u64,
       >,
@@ -491,10 +491,10 @@ impl serai_abi::TransactionContext for Context {
   }
 
   fn start_transaction(&self, len: usize) {
-    Core::start_transaction(len)
+    Core::start_transaction(len);
   }
   fn consume_next_nonce(&self, signer: &SeraiAddress) {
-    serai_core_pallet::Pallet::<Runtime>::consume_next_nonce(signer)
+    serai_core_pallet::Pallet::<Runtime>::consume_next_nonce(signer);
   }
   /// Have the transaction pay its SRI fee.
   fn pay_fee(
@@ -551,10 +551,10 @@ impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
 impl signals::Config for Runtime {
   type RuntimeEvent = RuntimeEvent;
   // 1 week
-  #[allow(clippy::cast_possible_truncation)]
+  #[expect(clippy::cast_possible_truncation)]
   type RetirementValidityDuration = ConstU32<{ (7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
   // 2 weeks
-  #[allow(clippy::cast_possible_truncation)]
+  #[expect(clippy::cast_possible_truncation)]
   type RetirementLockInDuration = ConstU32<{ (2 * 7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
 }
 

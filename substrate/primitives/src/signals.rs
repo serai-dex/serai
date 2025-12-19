@@ -12,7 +12,6 @@ pub type SignalId = [u8; 32];
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "non_canonical_scale_derivations",
-  allow(clippy::cast_possible_truncation),
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
 pub enum Signal {

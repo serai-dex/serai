@@ -5,13 +5,13 @@
 use core::{marker::PhantomData, future::Future};
 use std::collections::HashMap;
 
-use group::GroupEncoding;
+use group::GroupEncoding as _;
 
 use serai_primitives::{coin::ExternalCoin, balance::Amount};
 
 use serai_db::DbTxn;
 
-use primitives::{OutputType, ReceivedOutput, Payment};
+use primitives::{OutputType, ReceivedOutput as _, Payment};
 use scanner::{
   LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor,
   SchedulerUpdate, KeyScopedEventualities, Scheduler as SchedulerTrait,
@@ -27,7 +27,7 @@ pub struct EffectedReceivedOutputs<S: ScannerFeed>(pub Vec<OutputFor<S>>);
 
 /// A scheduler of transactions for networks premised on the UTXO model which support
 /// transaction chaining.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 #[derive(Clone)]
 pub struct Scheduler<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> {
   planner: P,

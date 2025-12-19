@@ -1,7 +1,7 @@
 use core::future::Future;
 use std::sync::Arc;
 
-use futures::stream::{StreamExt, FuturesOrdered};
+use futures::stream::{StreamExt as _, FuturesOrdered};
 
 use serai_client_serai::{
   abi::primitives::{
@@ -78,7 +78,7 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
               Ok(None) => {
                 panic!("iterating to latest cosigned block but couldn't get cosigned block")
               }
-              Err(serai_cosign::Faulted) => return Err("cosigning process faulted".to_string()),
+              Err(serai_cosign::Faulted) => return Err("cosigning process faulted".to_owned()),
             };
 
             let events = serai.events(block_hash).await.map_err(|e| format!("{e}"))?;

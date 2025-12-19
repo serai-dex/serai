@@ -1,12 +1,12 @@
 use core::future::Future;
 use std::{sync::Arc, collections::HashMap};
 
-use blake2::{Digest, Blake2b256};
+use blake2::{Digest as _, Blake2b256};
 
 use serai_client_serai::{
   abi::{
     primitives::{
-      network_id::{ExternalNetworkId, NetworkId},
+      network_id::ExternalNetworkId,
       balance::Amount,
       crypto::Public,
       validator_sets::{Session, ExternalValidatorSet},
@@ -62,7 +62,7 @@ async fn block_has_events_justifying_a_cosign(
     .block_by_number(block_number)
     .await
     .unwrap()
-    .ok_or_else(|| "couldn't get block which should've been finalized".to_string())?;
+    .ok_or_else(|| "couldn't get block which should've been finalized".to_owned())?;
   let events = serai.events(block.header.hash()).await?;
 
   if events.validator_sets().set_keys_events().next().is_some() {

@@ -4,7 +4,7 @@ use borsh::BorshSerialize;
 
 use serai_db::{Get, DbTxn, create_db};
 
-use primitives::{EncodableG, ReceivedOutput, Eventuality, EventualityTracker};
+use primitives::{EncodableG, ReceivedOutput, Eventuality as _, EventualityTracker};
 
 use crate::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor};
 

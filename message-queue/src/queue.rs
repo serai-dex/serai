@@ -1,4 +1,4 @@
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
 use crate::messages::*;
 

@@ -1,28 +1,28 @@
 // TODO: Generate randomized RPC credentials for all services
 // TODO: Generate keys for a validator and the infra
 
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std::{
   collections::{HashSet, HashMap},
   env,
   path::PathBuf,
-  io::Write,
+  io::Write as _,
   fs,
   process::{Stdio, Command},
 };
 
 use zeroize::Zeroizing;
 
-use rand_core::{RngCore, SeedableRng, OsRng};
+use rand_core::{RngCore as _, SeedableRng as _, OsRng};
 use rand_chacha::ChaCha20Rng;
 
-use transcript::{Transcript, RecommendedTranscript};
+use transcript::{Transcript as _, RecommendedTranscript};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField},
-    GroupEncoding,
+    ff::{Field as _, PrimeField},
+    GroupEncoding as _,
   },
   WrappedGroup,
 };
@@ -156,7 +156,7 @@ fn build_serai_service(
   (match os {
     Os::Debian => {
       r#"
-FROM rust:1.91-slim-trixie AS builder
+FROM rust:slim-trixie AS builder
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
@@ -172,7 +172,7 @@ RUN apt install -y make protobuf-compiler
     }
     Os::Alpine => {
       r#"
-FROM rust:1.91-alpine AS builder
+FROM rust:alpine AS builder
 
 COPY --from=mimalloc-alpine libmimalloc.so /usr/lib
 ENV LD_PRELOAD=libmimalloc.so
@@ -532,9 +532,7 @@ fn start(network: Network, services: HashSet<String>) {
         while !built() {
           std::thread::sleep(core::time::Duration::from_secs(60));
           ticks += 1;
-          if ticks > 6 * 60 {
-            panic!("couldn't build the runtime after 6 hours")
-          }
+          assert!(ticks < (6 * 60), "couldn't build the runtime after 6 hours");
         }
       }
     }
@@ -687,10 +685,10 @@ Commands:
       let mut services = HashSet::new();
       for arg in args {
         if arg == "ethereum-processor" {
-          services.insert("ethereum-relayer".to_string());
+          services.insert("ethereum-relayer".to_owned());
         }
         if let Some(ext_network) = arg.strip_suffix("-processor") {
-          services.insert(ext_network.to_string() + "-daemon");
+          services.insert(ext_network.to_owned() + "-daemon");
         }
         services.insert(arg);
       }

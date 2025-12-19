@@ -1,16 +1,16 @@
-use core::{ops::Deref, future::Future};
+use core::{ops::Deref as _, future::Future};
 use std::{boxed::Box, collections::HashMap};
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
-use ciphersuite::{group::GroupEncoding, *};
+use ciphersuite::{group::GroupEncoding as _, *};
 use dkg::{Participant, musig};
 use frost_schnorrkel::{
   frost::{curve::Ristretto, FrostError, sign::*},
   Schnorrkel,
 };
 
-use serai_db::{DbTxn, Db as DbTrait};
+use serai_db::{DbTxn as _, Db as DbTrait};
 
 #[rustfmt::skip]
 use serai_client_serai::abi::primitives::{validator_sets::ExternalValidatorSet, address::SeraiAddress};

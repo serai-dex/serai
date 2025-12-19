@@ -122,7 +122,7 @@ pub async fn key_gen<C: WrappedGroup>(
   // We need to wait for a finalized Substrate block as well, so this waites for up to 20 blocks
   'outer: for _ in 0 .. 20 {
     tokio::time::sleep(Duration::from_secs(6)).await;
-    if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+    if std::env::var("GITHUB_CI") == Ok("true".to_owned()) {
       tokio::time::sleep(Duration::from_secs(6)).await;
     }
 
@@ -197,7 +197,7 @@ pub async fn key_gen<C: WrappedGroup>(
 #[tokio::test]
 async fn key_gen_test() {
   new_test(
-    |mut processors: Vec<Processor>| async move {
+    async move |mut processors: Vec<Processor>| {
       // pop the last participant since genesis keygen has only 4 participants
       processors.pop().unwrap();
       assert_eq!(processors.len(), COORDINATORS);

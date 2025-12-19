@@ -1,25 +1,24 @@
-#[allow(unused_imports)]
-use std_shims::prelude::*;
 use std_shims::{
+  prelude::*,
   collections::HashMap,
   io::{self, Read, Write},
 };
 
 use k256::{
-  elliptic_curve::sec1::{Tag, ToEncodedPoint},
+  elliptic_curve::sec1::{Tag, ToEncodedPoint as _},
   Scalar, ProjectivePoint,
 };
 
 use frost::{
-  curve::{WrappedGroup, GroupIo, Secp256k1},
+  curve::{WrappedGroup, GroupIo as _, Secp256k1},
   ThresholdKeys,
 };
 
 use bitcoin::{
-  hashes::Hash,
+  hashes::Hash as _,
   key::TweakedPublicKey,
   TapTweakHash,
-  consensus::encode::{Decodable, serialize},
+  consensus::encode::{Decodable as _, serialize},
   OutPoint, ScriptBuf, TxOut, Transaction, Block,
 };
 
@@ -42,9 +41,9 @@ pub fn tweak_keys(keys: ThresholdKeys<Secp256k1>) -> ThresholdKeys<Secp256k1> {
   // https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki#cite_note-23
   let keys = {
     use k256::elliptic_curve::{
-      bigint::{Encoding, U256},
-      ops::Reduce,
-      group::GroupEncoding,
+      bigint::{Encoding as _, U256},
+      ops::Reduce as _,
+      group::GroupEncoding as _,
     };
     let tweak_hash = TapTweakHash::hash(&keys.group_key().to_bytes().as_slice()[1 ..]);
     /*

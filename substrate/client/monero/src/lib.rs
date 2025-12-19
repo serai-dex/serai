@@ -4,7 +4,7 @@
 
 use core::{str::FromStr, fmt};
 
-use ciphersuite::{group::GroupEncoding, GroupIo};
+use ciphersuite::{group::GroupEncoding as _, GroupIo as _};
 use dalek_ff_group::Ed25519;
 
 use monero_ed25519::{CompressedPoint, Point};
@@ -12,7 +12,7 @@ use monero_address::{Network, AddressType as MoneroAddressType, MoneroAddress};
 
 use serai_primitives::address::ExternalAddress;
 
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn read_G(reader: &mut impl borsh::io::Read) -> borsh::io::Result<Point> {
   // We use `Ed25519::read_G` for the strong canonicalization requirements before using
   //` monero-ed25519` for the actual values
@@ -103,7 +103,7 @@ impl TryFrom<ExternalAddress> for Address {
     let address =
       <Address as borsh::BorshDeserialize>::deserialize_reader(&mut data).map_err(|_| ())?;
     if !data.is_empty() {
-      Err(())?
+      Err(())?;
     }
     Ok(address)
   }

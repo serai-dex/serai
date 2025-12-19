@@ -190,7 +190,7 @@ pub async fn batch(
   // Verify the Batch was published to Substrate
   'outer: for _ in 0 .. 20 {
     tokio::time::sleep(Duration::from_secs(6)).await;
-    if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+    if std::env::var("GITHUB_CI") == Ok("true".to_owned()) {
       tokio::time::sleep(Duration::from_secs(6)).await;
     }
 
@@ -264,7 +264,7 @@ pub async fn batch(
 #[tokio::test]
 async fn batch_test() {
   new_test(
-    |mut processors: Vec<Processor>| async move {
+    async move |mut processors: Vec<Processor>| {
       // pop the last participant since genesis keygen has only 4 participants
       processors.pop().unwrap();
       assert_eq!(processors.len(), COORDINATORS);

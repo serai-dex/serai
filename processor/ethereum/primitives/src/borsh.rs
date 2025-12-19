@@ -1,4 +1,4 @@
-use ::borsh::{io, BorshSerialize, BorshDeserialize};
+use ::borsh::{io, BorshSerialize as _, BorshDeserialize as _};
 
 use alloy_primitives::{U256, Address};
 

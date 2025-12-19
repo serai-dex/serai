@@ -8,7 +8,7 @@ use core::{str::FromStr, fmt};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use bitcoin::{
-  hashes::{Hash as HashTrait, hash160::Hash},
+  hashes::{Hash as _, hash160::Hash},
   PubkeyHash, ScriptHash,
   network::Network,
   WitnessVersion, WitnessProgram, ScriptBuf,
@@ -130,7 +130,7 @@ impl TryFrom<ExternalAddress> for Address {
     let mut data = data.as_ref();
     let encoded = EncodedAddress::deserialize_reader(&mut data).map_err(|_| ())?;
     if !data.is_empty() {
-      Err(())?
+      Err(())?;
     }
     Ok(Address(ScriptBuf::from(encoded)))
   }

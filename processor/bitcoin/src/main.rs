@@ -8,7 +8,7 @@ static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
 
 use bitcoin_serai::rpc::Rpc as BRpc;
 
-use ::primitives::task::{Task, ContinuallyRan};
+use ::primitives::task::{Task, ContinuallyRan as _};
 
 mod primitives;
 pub(crate) use crate::primitives::*;
@@ -30,7 +30,7 @@ mod txindex;
 use txindex::TxIndexTask;
 
 pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) -> [u8; 32] {
-  use bitcoin_serai::bitcoin::hashes::Hash;
+  use bitcoin_serai::bitcoin::hashes::Hash as _;
 
   let mut res = hash.to_byte_array();
   res.reverse();

@@ -1,17 +1,19 @@
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+
 use core::{marker::PhantomData, fmt::Debug, future::Future};
 use std::{sync::Arc, io};
 
 use zeroize::Zeroizing;
 
-use borsh::BorshDeserialize;
+use borsh::BorshDeserialize as _;
 
 use ciphersuite::*;
 use dalek_ff_group::Ristretto;
 
 use futures_channel::mpsc::UnboundedReceiver;
-use futures_util::{StreamExt, SinkExt};
+use futures_util::{StreamExt as _, SinkExt as _};
 use ::tendermint::{
-  ext::{BlockNumber, Commit, Block as BlockTrait, Network},
+  ext::{BlockNumber, Commit, Block as _, Network as _},
   SignedMessageFor, SyncedBlock, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
   TendermintMachine, TendermintHandle,
 };
@@ -65,7 +67,6 @@ pub const BLOCK_SIZE_LIMIT: usize = 2_001_000;
 pub(crate) const TENDERMINT_MESSAGE: u8 = 0;
 pub(crate) const TRANSACTION_MESSAGE: u8 = 1;
 
-#[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Transaction<T: TransactionTrait> {
   Tendermint(TendermintTx),
@@ -345,7 +346,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
   /// Get a Future which will resolve once the next block has been added.
   pub async fn next_block_notification(
     &self,
-  ) -> impl Send + Sync + core::future::Future<Output = Result<(), impl Send + Sync>> {
+  ) -> impl Send + Sync + Future<Output = Result<(), impl Send + Sync + core::fmt::Debug>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     self.network.blockchain.write().await.next_block_notifications.push_back(tx);
     rx

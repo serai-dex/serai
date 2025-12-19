@@ -1,3 +1,5 @@
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+
 use core::fmt::Debug;
 
 use std::{
@@ -10,12 +12,12 @@ use borsh::{BorshSerialize, BorshDeserialize};
 
 use futures_channel::mpsc;
 use futures_util::{
-  FutureExt, StreamExt, SinkExt,
+  FutureExt as _, StreamExt as _, SinkExt as _,
   future::{self, Fuse},
 };
 use patchable_async_sleep::sleep;
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get as _, DbTxn as _, Db as _};
 
 pub mod time;
 use time::{sys_time, CanonicalInstant};
@@ -204,7 +206,7 @@ pub fn verify_tendermint_evidence<N: Network>(
       };
       // TODO: We need to be passed in the genesis time to handle this edge case
       if msg.block.0 == 0 {
-        Err(TendermintError::InvalidEvidence)?
+        Err(TendermintError::InvalidEvidence)?;
         // todo!("invalid precommit signature on first block")
       }
 
@@ -227,7 +229,7 @@ pub fn verify_tendermint_evidence<N: Network>(
 
       // verify that the commit was actually invalid
       if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig) {
-        Err(TendermintError::InvalidEvidence)?
+        Err(TendermintError::InvalidEvidence)?;
       }
     }
     Evidence::InvalidValidRound(msg) => {
@@ -235,7 +237,7 @@ pub fn verify_tendermint_evidence<N: Network>(
 
       let Data::Proposal(Some(vr), _) = &msg.data else { Err(TendermintError::InvalidEvidence)? };
       if vr.0 < msg.round.0 {
-        Err(TendermintError::InvalidEvidence)?
+        Err(TendermintError::InvalidEvidence)?;
       }
     }
   }
@@ -250,6 +252,10 @@ pub enum SlashEvent {
 
 // Struct for if various upon handlers have been triggered to ensure they don't trigger multiple
 // times.
+//
+// While these `bool`s are awkward, they can be independently triggered, meaning our alternative
+// would simply be `enum Invoked { NotYet, Invoked }`.
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 struct Upons {
   upon_prevotes: bool,
@@ -406,9 +412,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     }
     // If this commit is for a prior round, find it
     while self.block.end_time[&round].canonical() > commit.end_time {
-      if round.0 == 0 {
-        panic!("commit isn't for this machine's next block");
-      }
+      assert!(round.0 != 0, "commit isn't for this machine's next block");
       round.0 -= 1;
     }
     debug_assert_eq!(self.block.end_time[&round].canonical(), commit.end_time);
@@ -446,7 +450,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
     };
 
     // There either needs to not be a locked value or it must be equivalent
-    #[allow(clippy::map_unwrap_or)]
     if self
       .block
       .locked
@@ -481,7 +484,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
     // We don't check valid round < current round as the `message` function does
 
     // If locked is None, lockedRoundp is -1 and less than valid round
-    #[allow(clippy::map_unwrap_or)]
     let locked_clause_1 = self
       .block
       .locked
@@ -489,7 +491,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
       .map(|(locked_round, _block)| locked_round.0 <= proposal_valid_round.0)
       .unwrap_or(true);
     // The second clause is if the locked values are equivalent. If no value is locked, they aren't
-    #[allow(clippy::map_unwrap_or)]
     let locked_clause_2 = self
       .block
       .locked
@@ -704,7 +705,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         .slash(msg.sender, SlashEvent::Id(SlashReason::InvalidProposer, msg.block.0, msg.round.0))
         .await;
       Err(TendermintError::Malicious)?;
-    };
+    }
 
     // If this is a proposal, verify the block
     // If the block is invalid, drop the message, letting the timeout cover it
@@ -731,7 +732,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
             .await;
           Err(TendermintError::Malicious)?;
         }
-      };
+      }
     }
 
     // If this is a proposal, verify the valid round isn't fundamentally invalid
@@ -851,7 +852,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   /// Create a new Tendermint machine, from the specified point, with the specified block as the
   /// one to propose next. This will return a channel to send messages from the gossip layer and
   /// the machine itself. The machine should have `run` called from an asynchronous task.
-  #[allow(clippy::new_ret_no_self)]
+  #[expect(clippy::new_ret_no_self)]
   pub async fn new(
     db: N::Db,
     network: N,
@@ -1015,13 +1016,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
             Step::Prevote => {
               // Only run if it's still the step in question
               if self.block.round().step == step {
-                self.broadcast(Data::Precommit(None))
+                self.broadcast(Data::Precommit(None));
               }
             },
             Step::Precommit => {
               self.round(RoundNumber(self.block.round().number.0 + 1), None);
             }
-          };
+          }
 
           // Execute the upons now that the state has changed
           self.all_any_round_upons(self.block.round().number).await;
@@ -1073,9 +1074,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // If this is our message, and we hit an invariant, we could be slashed.
         // We only broadcast our message after running it ourselves, to ensure it doesn't error, to
         // ensure we don't get slashed on invariants.
-        if res.is_err() && our_message {
-          panic!("honest node (ourselves) had invalid behavior");
-        }
+        assert!(!(res.is_err() && our_message), "honest node (ourselves) had invalid behavior");
 
         // Save this message to a linear tape of all our messages for this block, if ours
         // TODO: Since we do this after we mark this message as sent to prevent equivocations, a

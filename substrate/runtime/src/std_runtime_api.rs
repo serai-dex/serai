@@ -1,4 +1,7 @@
+#![expect(unused_variables, clippy::used_underscore_binding)]
+
 use alloc::borrow::Cow;
+
 use serai_abi::{
   primitives::{
     crypto::{KeyPair, EmbeddedEllipticCurveKeys},
@@ -12,24 +15,26 @@ use serai_abi::{
 
 use super::*;
 
-#[sp_version::runtime_version]
-pub const VERSION: sp_version::RuntimeVersion = sp_version::RuntimeVersion {
-  spec_name: Cow::Borrowed("serai"),
-  impl_name: Cow::Borrowed("core"),
-  authoring_version: 0,
-  // Use the highest possible value so the node doesn't attempt to use this in place of the WASM
-  spec_version: 0xffffffff,
-  impl_version: 0,
-  apis: RUNTIME_API_VERSIONS,
-  transaction_version: 0,
-  system_version: 0,
-};
-
 /// A `struct` representing the runtime as necessary to define the available APIs.
-pub struct Runtime;
+// This `struct` itself is never instantiated, solely the `RuntimeApi` derived around it.
+#[expect(dead_code)]
+struct Runtime;
+
 sp_api::impl_runtime_apis! {
   impl sp_api::Core<Block> for Runtime {
     fn version() -> sp_version::RuntimeVersion {
+      #[sp_version::runtime_version]
+      pub const VERSION: sp_version::RuntimeVersion = sp_version::RuntimeVersion {
+        spec_name: Cow::Borrowed("serai"),
+        impl_name: Cow::Borrowed("core"),
+        authoring_version: 0,
+        // Use the highest possible value so the node doesn't attempt to use this over the WASM
+        spec_version: 0xff_ff_ff_ff,
+        impl_version: 0,
+        apis: RUNTIME_API_VERSIONS,
+        transaction_version: 0,
+        system_version: 0,
+      };
       VERSION
     }
     fn initialize_block(header: &Header) -> sp_runtime::ExtrinsicInclusionMode {

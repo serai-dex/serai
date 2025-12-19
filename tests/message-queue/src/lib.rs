@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rand_core::OsRng;
 
-use ciphersuite::{group::GroupEncoding, WrappedGroup};
+use ciphersuite::{group::GroupEncoding as _, WrappedGroup};
 use dalek_ff_group::Ristretto;
 
 use serai_primitives::network_id::ExternalNetworkId;
@@ -17,7 +17,7 @@ pub fn instance() -> (
   HashMap<ExternalNetworkId, MessageQueuePrivateKey>,
   TestBodySpecification,
 ) {
-  serai_docker_tests::build("message-queue".to_string());
+  serai_docker_tests::build("message-queue".to_owned());
 
   let coord_key = <Ristretto as WrappedGroup>::F::random(&mut OsRng);
   let priv_keys = ExternalNetworkId::all()
@@ -34,21 +34,21 @@ pub fn instance() -> (
   }))
   .replace_env(
     [
-      ("COORDINATOR_KEY".to_string(), hex::encode((Ristretto::generator() * coord_key).to_bytes())),
+      ("COORDINATOR_KEY".to_owned(), hex::encode((Ristretto::generator() * coord_key).to_bytes())),
       (
-        "BITCOIN_KEY".to_string(),
+        "BITCOIN_KEY".to_owned(),
         hex::encode((Ristretto::generator() * priv_keys[&ExternalNetworkId::Bitcoin]).to_bytes()),
       ),
       (
-        "ETHEREUM_KEY".to_string(),
+        "ETHEREUM_KEY".to_owned(),
         hex::encode((Ristretto::generator() * priv_keys[&ExternalNetworkId::Ethereum]).to_bytes()),
       ),
       (
-        "MONERO_KEY".to_string(),
+        "MONERO_KEY".to_owned(),
         hex::encode((Ristretto::generator() * priv_keys[&ExternalNetworkId::Monero]).to_bytes()),
       ),
-      ("DB_PATH".to_string(), "./message-queue-db".to_string()),
-      ("RUST_LOG".to_string(), "serai_message_queue=trace,".to_string()),
+      ("DB_PATH".to_owned(), "./message-queue-db".to_owned()),
+      ("RUST_LOG".to_owned(), "serai_message_queue=trace,".to_owned()),
     ]
     .into(),
   )
@@ -68,7 +68,7 @@ fn basic_functionality() {
   let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   let (coord_key, priv_keys, composition) = instance();
   test.provide_container(composition);
-  test.run(|ops| async move {
+  test.run(async move |ops| {
     tokio::time::timeout(core::time::Duration::from_secs(60), async move {
       // Sleep for a second for the message-queue to boot
       // It isn't an error to start immediately, it just silences an error

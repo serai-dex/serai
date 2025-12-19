@@ -3,7 +3,7 @@ use core::convert::Infallible;
 use k256::{Scalar, ProjectivePoint};
 
 use alloy_core::primitives::{Address, U256, Bytes};
-use alloy_sol_types::SolCall;
+use alloy_sol_types::SolCall as _;
 
 use revm::{
   primitives::hardfork::SpecId,
@@ -25,7 +25,7 @@ use revm::{
     evm::Evm,
     *,
   },
-  inspector::{Inspector, InspectorHandler},
+  inspector::{Inspector, InspectorHandler as _},
 };
 
 use ethereum_schnorr::{PublicKey, Signature};
@@ -325,7 +325,9 @@ impl Router {
           assert_eq!(gas_refunded, 0);
           gas_used
         }
-        res => panic!("estimated execute transaction failed: {res:?}"),
+        res @ (ExecutionResult::Revert { .. } | ExecutionResult::Halt { .. }) => {
+          panic!("estimated execute transaction failed: {res:?}")
+        }
       };
     gas += gas_estimator.into_inspector().unused_gas;
 
@@ -385,7 +387,6 @@ impl Router {
     coin: Coin,
     instruction: abi::OutInstruction,
   ) -> u64 {
-    #[allow(clippy::map_entry)] // clippy doesn't realize the multiple mutable borrows
     if !self.empty_execute_gas.contains_key(&coin) {
       // This can't be de-duplicated across ERC20s due to the zero bytes in the address
       let (gas, _fee) = self.execute_gas_and_fee(coin, U256::from(0), &OutInstructions(vec![]));

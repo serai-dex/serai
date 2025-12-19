@@ -1,12 +1,12 @@
 use std::sync::Arc;
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
-use group::ff::Field;
+use group::ff::Field as _;
 use k256::{Scalar, ProjectivePoint};
 
 use alloy_core::primitives::{Address, U256};
-use alloy_sol_types::{SolValue, SolCall, SolEvent};
+use alloy_sol_types::{SolValue as _, SolCall as _, SolEvent as _};
 
 use alloy_consensus::{TxLegacy, Signed};
 
@@ -14,8 +14,8 @@ use alloy_rpc_types_eth::{BlockNumberOrTag, TransactionInput, TransactionRequest
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_rpc_client::ClientBuilder;
 use alloy_provider::{
-  Provider, RootProvider,
-  ext::{DebugApi, TraceApi},
+  Provider as _, RootProvider,
+  ext::{DebugApi as _, TraceApi as _},
 };
 
 use alloy_node_bindings::{Anvil, AnvilInstance};
@@ -90,7 +90,7 @@ struct RouterState {
 }
 
 struct Test {
-  #[allow(unused)]
+  #[expect(unused)]
   anvil: AnvilInstance,
   provider: Arc<RootProvider>,
   chain_id: U256,
@@ -369,7 +369,7 @@ impl Test {
         trace.try_into_default_frame().unwrap().struct_logs.last().unwrap().refund_counter;
       // This isn't capped to 1/5th of the TX's gas usage yet that's fine as none of our tests are
       // so refund intensive
-      unused_gas += refund.unwrap_or(0)
+      unused_gas += refund.unwrap_or(0);
     }
 
     unused_gas
@@ -916,7 +916,7 @@ async fn test_gas_increases_then_decreases() {
     resolving this issue.
   */
   let out_instructions = vec![(
-    SeraiEthereumAddress::Contract(ContractDeployment::new(100240, vec![]).unwrap()),
+    SeraiEthereumAddress::Contract(ContractDeployment::new(100_240, vec![]).unwrap()),
     U256::from(1u8),
   )];
 

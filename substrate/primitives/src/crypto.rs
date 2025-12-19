@@ -1,4 +1,4 @@
-use core::ops::Deref;
+use core::ops::Deref as _;
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -9,10 +9,10 @@ use sp_core::{ConstU32, bounded::BoundedVec};
 
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField, FromUniformBytes},
+    ff::{Field as _, PrimeField as _, FromUniformBytes},
     GroupEncoding,
   },
-  WrappedGroup, GroupCanonicalEncoding,
+  WrappedGroup, GroupCanonicalEncoding as _,
 };
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
@@ -131,14 +131,14 @@ impl BorshSerialize for EmbeddedEllipticCurveKeys {
     match self {
       EmbeddedEllipticCurveKeys::Bitcoin(e, s) | EmbeddedEllipticCurveKeys::Ethereum(e, s) => {
         let mut res = [0; 1 + 32 + 33];
-        res[0] = self.network() as u8;
+        res[0] = u8::from(self.network());
         res[1 .. 33].copy_from_slice(e);
         res[33 ..].copy_from_slice(s);
         writer.write_all(&res)
       }
       EmbeddedEllipticCurveKeys::Monero(e) => {
         let mut res = [0; 1 + 32];
-        res[0] = self.network() as u8;
+        res[0] = u8::from(self.network());
         res[1 ..].copy_from_slice(e);
         writer.write_all(&res)
       }
@@ -221,7 +221,7 @@ impl SignedEmbeddedEllipticCurveKeys {
   fn transcript(&self, validator: Public) -> [u8; 64] {
     let transcript = match &self {
       Self::Bitcoin(e, s, e_sig, s_sig) => [
-        [ExternalNetworkId::Bitcoin as u8].as_slice(),
+        [u8::from(ExternalNetworkId::Bitcoin)].as_slice(),
         &validator.0,
         e,
         s,
@@ -230,7 +230,7 @@ impl SignedEmbeddedEllipticCurveKeys {
       ]
       .concat(),
       Self::Ethereum(e, s, e_sig, s_sig) => [
-        [ExternalNetworkId::Ethereum as u8].as_slice(),
+        [u8::from(ExternalNetworkId::Ethereum)].as_slice(),
         &validator.0,
         e,
         s,
@@ -239,7 +239,7 @@ impl SignedEmbeddedEllipticCurveKeys {
       ]
       .concat(),
       Self::Monero(e, e_sig) => {
-        [[ExternalNetworkId::Monero as u8].as_slice(), &validator.0, e, &e_sig[.. 32]].concat()
+        [[u8::from(ExternalNetworkId::Monero)].as_slice(), &validator.0, e, &e_sig[.. 32]].concat()
       }
     };
     sp_core::hashing::blake2_512(&transcript)
@@ -264,7 +264,7 @@ impl SignedEmbeddedEllipticCurveKeys {
           None?;
         }
       }
-    };
+    }
     match &self {
       Self::Bitcoin(_, s, _, s_sig) | Self::Ethereum(_, s, _, s_sig) => {
         let sig = SchnorrSignature::<Secq256k1>::read(&mut s_sig.as_slice()).ok()?;
@@ -424,7 +424,7 @@ impl BorshSerialize for SignedEmbeddedEllipticCurveKeys {
       SignedEmbeddedEllipticCurveKeys::Bitcoin(e, s, e_sig, s_sig) |
       SignedEmbeddedEllipticCurveKeys::Ethereum(e, s, e_sig, s_sig) => {
         let mut res = [0; 1 + 32 + 33 + 32 + 32 + 33 + 32];
-        res[0] = self.network() as u8;
+        res[0] = u8::from(self.network());
         res[1 .. 33].copy_from_slice(e);
         res[33 .. 66].copy_from_slice(s);
         res[66 .. 130].copy_from_slice(e_sig);
@@ -433,7 +433,7 @@ impl BorshSerialize for SignedEmbeddedEllipticCurveKeys {
       }
       SignedEmbeddedEllipticCurveKeys::Monero(e, e_sig) => {
         let mut res = [0; 1 + 32 + 32 + 32];
-        res[0] = self.network() as u8;
+        res[0] = u8::from(self.network());
         res[1 .. 33].copy_from_slice(e);
         res[33 ..].copy_from_slice(e_sig);
         writer.write_all(&res)

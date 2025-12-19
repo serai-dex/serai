@@ -10,7 +10,6 @@ use crate::{address::ExternalAddress, balance::ExternalBalance};
   feature = "non_canonical_scale_derivations",
   derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
 )]
-#[cfg_attr(feature = "non_canonical_scale_derivations", allow(clippy::cast_possible_truncation))]
 pub enum OutInstruction {
   /// Transfer to the specified address.
   Transfer(ExternalAddress),

@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 #[global_allocator]
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
@@ -12,7 +13,7 @@ use std::sync::Arc;
 use alloy_core::primitives::U256;
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_rpc_client::ClientBuilder;
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider as _, RootProvider};
 
 use serai_primitives::validator_sets::Session;
 
@@ -20,7 +21,7 @@ use serai_env as env;
 use serai_db::{Get, DbTxn, create_db};
 
 use ::primitives::EncodableG;
-use ::key_gen::KeyGenParams as KeyGenParamsTrait;
+use ::key_gen::KeyGenParams as _;
 
 mod primitives;
 pub(crate) use crate::primitives::*;

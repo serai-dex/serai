@@ -1,4 +1,4 @@
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 pub(crate) fn merkle(hash_args: &[[u8; 32]]) -> [u8; 32] {
   let mut hashes = Vec::with_capacity(hash_args.len());

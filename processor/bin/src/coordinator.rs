@@ -11,7 +11,7 @@ use serai_primitives::{
 
 use serai_cosign::SignedCosign;
 
-use serai_db::{Get, DbTxn, Db, create_db, db_channel};
+use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
 
 use scanner::ScannerFeed;
 
@@ -45,7 +45,7 @@ pub(crate) struct CoordinatorSend {
 }
 
 impl CoordinatorSend {
-  fn send(&mut self, msg: &messages::ProcessorMessage) {
+  fn send_internal(&mut self, msg: &messages::ProcessorMessage) {
     let _lock = SEND_LOCK.lock().unwrap();
     let mut txn = self.db.txn();
     SentCoordinatorMessages::send(&mut txn, msg);
@@ -161,7 +161,7 @@ impl Coordinator {
   }
 
   pub(crate) fn send_message(&mut self, msg: &messages::ProcessorMessage) {
-    self.send.send(msg);
+    self.send.send_internal(msg);
   }
 }
 
@@ -173,7 +173,7 @@ impl signers::Coordinator for CoordinatorSend {
     msg: messages::sign::ProcessorMessage,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
     async move {
-      self.send(&messages::ProcessorMessage::Sign(msg));
+      self.send_internal(&messages::ProcessorMessage::Sign(msg));
       Ok(())
     }
   }
@@ -183,7 +183,7 @@ impl signers::Coordinator for CoordinatorSend {
     cosign: SignedCosign,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
     async move {
-      self.send(&messages::ProcessorMessage::Coordinator(
+      self.send_internal(&messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::CosignedBlock { cosign },
       ));
       Ok(())
@@ -195,7 +195,7 @@ impl signers::Coordinator for CoordinatorSend {
     batch: SignedBatch,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
     async move {
-      self.send(&messages::ProcessorMessage::Coordinator(
+      self.send_internal(&messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::SignedBatch { batch },
       ));
       Ok(())
@@ -209,7 +209,7 @@ impl signers::Coordinator for CoordinatorSend {
     signature: Signature,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
     async move {
-      self.send(&messages::ProcessorMessage::Coordinator(
+      self.send_internal(&messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::SignedSlashReport {
           session,
           slash_report,

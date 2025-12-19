@@ -1,12 +1,12 @@
-use core::{ops::Deref, fmt::Debug};
+use core::{ops::Deref as _, fmt::Debug};
 use std::io;
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
-use blake2::{digest::typenum::U32, Digest, Blake2b};
+use blake2::{digest::typenum::U32, Digest as _, Blake2b};
 use ciphersuite::{
-  group::{Group, GroupEncoding},
+  group::{Group as _, GroupEncoding as _},
   *,
 };
 use dalek_ff_group::Ristretto;
@@ -37,7 +37,7 @@ pub enum SigningProtocolRound {
 }
 
 impl SigningProtocolRound {
-  fn nonce(&self) -> u32 {
+  fn nonce(self) -> u32 {
     match self {
       SigningProtocolRound::Preprocess => 0,
       SigningProtocolRound::Share => 1,
@@ -286,7 +286,7 @@ impl TransactionTrait for Transaction {
 
   // This is a stateless verification which we use to enforce some size limits.
   fn verify(&self) -> Result<(), TransactionError> {
-    #[allow(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
     match self {
       // Fixed-length TX
       Transaction::RemoveParticipant { .. } => {}
@@ -304,14 +304,14 @@ impl TransactionTrait for Transaction {
 
       Transaction::Sign { data, .. } => {
         if data.len() > usize::from(KeyShares::MAX_PER_SET) {
-          Err(TransactionError::InvalidContent)?
+          Err(TransactionError::InvalidContent)?;
         }
         // TODO: MAX_SIGN_LEN
       }
 
       Transaction::SlashReport { slash_points, .. } => {
         if slash_points.len() > usize::from(KeyShares::MAX_PER_SET) {
-          Err(TransactionError::InvalidContent)?
+          Err(TransactionError::InvalidContent)?;
         }
       }
     };
@@ -322,7 +322,7 @@ impl TransactionTrait for Transaction {
 impl Transaction {
   /// The topic in the database for this transaction.
   pub fn topic(&self) -> Option<Topic> {
-    #[allow(clippy::match_same_arms)] // This doesn't make semantic sense here
+    #[expect(clippy::match_same_arms)] // This doesn't make semantic sense here
     match self {
       Transaction::RemoveParticipant { participant, .. } => {
         Some(Topic::RemoveParticipant { participant: *participant })
@@ -360,7 +360,7 @@ impl Transaction {
     key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   ) {
     fn signed(tx: &mut Transaction) -> &mut Signed {
-      #[allow(clippy::match_same_arms)] // This doesn't make semantic sense here
+      #[expect(clippy::match_same_arms)] // This doesn't make semantic sense here
       match tx {
         Transaction::RemoveParticipant { ref mut signed, .. } |
         Transaction::DkgParticipation { ref mut signed, .. } |

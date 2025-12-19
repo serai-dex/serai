@@ -34,5 +34,5 @@ ADD /orchestration/{}/networks/ethereum/execution/reth/run.sh /execution_layer.s
     network.label()
   );
 
-  (DOWNLOAD_RETH.to_string(), String::new(), run_reth)
+  (DOWNLOAD_RETH.to_owned(), String::new(), run_reth)
 }

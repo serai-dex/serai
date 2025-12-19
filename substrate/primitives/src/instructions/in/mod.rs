@@ -10,15 +10,6 @@ use crate::{
 mod batch;
 pub use batch::*;
 
-/// The destination for coins.
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-pub enum Destination {
-  /// The Serai address to transfer the coins to.
-  Serai(SeraiAddress),
-  /// Burn the coins with the included `OutInstruction`.
-  Burn(OutInstruction),
-}
-
 /// An instruction on how to handle coins in.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 pub enum InInstruction {
@@ -33,10 +24,10 @@ pub enum InInstruction {
   },
   /// Transfer the coins to a Serai address, swapping some for SRI.
   TransferWithSwap {
-    /// The Serai address to transfer the coins to, after swapping some.
+    /// The Serai address to transfer the coins to.
     to: SeraiAddress,
     /// The maximum amount of coins to swap for the intended amount of SRI.
-    maximum_swap: Amount,
+    maximum_to_swap: Amount,
     /// The SRI amount to swap some of the coins for.
     sri: Amount,
   },
@@ -47,23 +38,28 @@ pub enum InInstruction {
   },
   /// Swap part of the coins to SRI and add the coins as liquidity.
   SwapAndAddLiquidity {
-    /// The owner to-be of the added liquidity.
-    owner: SeraiAddress,
-    /// The amount of SRI to add within the liquidity position.
-    sri: Amount,
-    /// The minimum amount of the coin to add as liquidity.
-    minimum_coin: Amount,
+    /// The recipient to-be of the added liquidity.
+    address: SeraiAddress,
+    /// The amount of the coin to add within the liquidity position.
+    coin: Amount,
+    /// The minimum amount of SRI to add as liquidity.
+    sri_minimum: Amount,
     /// The amount of SRI to swap to and send to the owner to-be to pay for transactions on Serai.
     sri_for_fees: Amount,
   },
   /// Swap the coins.
   Swap {
-    /// The minimum balance to receive.
-    minimum_out: Balance,
-    /// The destination to transfer the balance to.
-    ///
-    /// If `Destination::Burn`, the balance out will be burnt with the included `OutInstruction`.
-    destination: Destination,
+    /// The destination to received the coins swapped to with.
+    address: SeraiAddress,
+    /// The minimum balance to receive from the swap.
+    minimum_to_receive: Balance,
+  },
+  /// Swap the coins, burning them with the included `OutInstruction`.
+  SwapOut {
+    /// The instruction to burn the coins swapped to with.
+    instruction: OutInstruction,
+    /// The minimum balance to receive from the swap.
+    minimum_to_receive: ExternalBalance,
   },
 }
 

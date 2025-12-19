@@ -1,17 +1,17 @@
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std::{sync::Arc, io};
 
 use zeroize::Zeroizing;
 use rand::{RngCore, CryptoRng, rngs::OsRng};
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;
 use schnorr::SchnorrSignature;
 
 use ::tendermint::{
-  ext::{Network, Signer as SignerTrait, SignatureScheme, BlockNumber, RoundNumber},
+  ext::{Network, Signer as _, SignatureScheme, BlockNumber, RoundNumber},
   SignedMessageFor, DataFor, Message, SignedMessage, Data, Evidence,
 };
 

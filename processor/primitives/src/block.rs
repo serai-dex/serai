@@ -55,7 +55,7 @@ pub trait Block: Send + Sync + Sized + Clone + Debug {
   ///
   /// Returns tbe resolved Eventualities, indexed by the ID of the transactions which resolved
   /// them.
-  #[allow(clippy::type_complexity)]
+  #[expect(clippy::type_complexity)]
   fn check_for_eventuality_resolutions(
     &self,
     eventualities: &mut EventualityTracker<Self::Eventuality>,

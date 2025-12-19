@@ -1,6 +1,8 @@
+use std_shims::prelude::*;
+
 use rand_core::OsRng;
 
-use ciphersuite::GroupIo;
+use ciphersuite::GroupIo as _;
 
 use schnorr::SchnorrSignature;
 
@@ -21,7 +23,7 @@ use crate::{
 fn ed448_8032_vector() {
   let context = hex::decode("666f6f").unwrap();
 
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   let A = Ed448::read_G::<&[u8]>(
     &mut hex::decode(
       "43ba28f430cdff456ae531545f7ecd0ac834a55d9358c0372bfa0c6c".to_owned() +
@@ -44,7 +46,7 @@ fn ed448_8032_vector() {
       "00",
   )
   .unwrap();
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   let R = Ed448::read_G::<&[u8]>(&mut sig.as_ref()).unwrap();
   let s = Ed448::read_F::<&[u8]>(&mut &sig[57 ..]).unwrap();
 

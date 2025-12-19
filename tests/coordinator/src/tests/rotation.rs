@@ -55,7 +55,7 @@ async fn publish_tx(serai: &Serai, tx: &Transaction) -> [u8; 32] {
   }
 }
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 async fn set_embedded_elliptic_curve_key(
   serai: &Serai,
   curve: EmbeddedEllipticCurve,
@@ -76,7 +76,7 @@ async fn set_embedded_elliptic_curve_key(
   publish_tx(serai, &tx).await
 }
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 async fn allocate_stake(
   serai: &Serai,
   network: NetworkId,
@@ -90,7 +90,7 @@ async fn allocate_stake(
   publish_tx(serai, &tx).await
 }
 
-#[allow(dead_code)]
+#[expect(dead_code)]
 async fn deallocate_stake(
   serai: &Serai,
   network: NetworkId,
@@ -146,7 +146,7 @@ async fn most_recent_new_set_event(serai: &Serai, network: NetworkId) -> Validat
 #[tokio::test]
 async fn set_rotation_test() {
   new_test(
-    |mut processors: Vec<Processor>| async move {
+    async move |mut processors: Vec<Processor>| {
       // exclude the last processor from keygen since we will add him later
       let mut excluded = processors.pop().unwrap();
       assert_eq!(processors.len(), COORDINATORS);

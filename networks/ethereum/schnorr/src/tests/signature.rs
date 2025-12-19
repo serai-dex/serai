@@ -1,6 +1,8 @@
+use std_shims::prelude::*;
+
 use rand_core::OsRng;
 
-use group::ff::Field;
+use group::ff::Field as _;
 use k256::Scalar;
 
 use crate::Signature;

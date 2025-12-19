@@ -56,7 +56,7 @@ enum DigestTranscriptMember {
 }
 
 impl DigestTranscriptMember {
-  fn as_u8(&self) -> u8 {
+  fn as_u8(self) -> u8 {
     match self {
       DigestTranscriptMember::Name => 0,
       DigestTranscriptMember::Domain => 1,
@@ -146,7 +146,7 @@ where
       challenge.as_mut().zeroize();
     }
 
-    mark_read(self)
+    mark_read(self);
   }
 }
 

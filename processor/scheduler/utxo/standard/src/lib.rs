@@ -5,7 +5,7 @@
 use core::{marker::PhantomData, future::Future};
 use std::collections::HashMap;
 
-use group::GroupEncoding;
+use group::GroupEncoding as _;
 
 use serai_primitives::{
   coin::ExternalCoin,
@@ -14,7 +14,7 @@ use serai_primitives::{
 
 use serai_db::DbTxn;
 
-use primitives::{ReceivedOutput, Payment};
+use primitives::{ReceivedOutput as _, Payment};
 use scanner::{
   LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor,
   SchedulerUpdate, KeyScopedEventualities, Scheduler as SchedulerTrait,
@@ -26,7 +26,7 @@ mod db;
 use db::Db;
 
 /// A scheduler of transactions for networks premised on the UTXO model.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 #[derive(Clone)]
 pub struct Scheduler<S: ScannerFeed, P: TransactionPlanner<S, ()>> {
   planner: P,

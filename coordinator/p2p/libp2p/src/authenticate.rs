@@ -2,14 +2,14 @@ use core::{pin::Pin, future::Future};
 use std::io;
 
 use zeroize::Zeroizing;
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 use schnorrkel::{Keypair, PublicKey, Signature};
 
 use serai_client_serai::abi::primitives::crypto::Public;
 
-use futures_util::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures_util::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _};
 use libp2p::{
   core::upgrade::{UpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade},
   identity::{self, PeerId},

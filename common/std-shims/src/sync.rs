@@ -30,9 +30,7 @@ mod mutex_shim {
         // Take from the `Mutex` so future acquisitions will see `None` unless this is restored
         let value = mutex.take();
         // Check the prior acquisition did in fact restore the value
-        if value.is_none() {
-          panic!("locking a `spin::Mutex` held by a thread which panicked");
-        }
+        assert!(value.is_some(), "locking a `spin::Mutex` held by a thread which panicked");
         MutexGuard { mutex, value }
       }
     }
@@ -49,7 +47,7 @@ mod mutex_shim {
       }
     }
 
-    impl<'mutex, T> Drop for MutexGuard<'mutex, T> {
+    impl<T> Drop for MutexGuard<'_, T> {
       fn drop(&mut self) {
         // Restore the value
         *self.mutex = self.value.take();

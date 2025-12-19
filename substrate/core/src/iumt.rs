@@ -35,7 +35,7 @@ impl<
     T::mutate(|value| {
       let tree = value.as_mut().unwrap();
       tree.append(BRANCH_TAG, leaf);
-    })
+    });
   }
   /// Get the unbalanced merkle tree.
   ///

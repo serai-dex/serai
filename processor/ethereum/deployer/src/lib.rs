@@ -1,17 +1,18 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use std::sync::Arc;
 
 use alloy_core::primitives::{hex, Address, U256, Bytes, TxKind};
 use alloy_consensus::{Signed, TxLegacy};
 
-use alloy_sol_types::SolCall;
+use alloy_sol_types::SolCall as _;
 
 use alloy_rpc_types_eth::{TransactionInput, TransactionRequest};
 use alloy_transport::{TransportErrorKind, RpcError};
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider as _, RootProvider};
 
 #[cfg(test)]
 mod tests;

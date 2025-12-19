@@ -1,12 +1,12 @@
 use rand_core::OsRng;
 
 use subtle::Choice;
-use group::ff::{Field, PrimeField};
+use group::ff::{Field as _, PrimeField as _};
 use k256::{
   elliptic_curve::{
     FieldBytesEncoding,
     ops::Reduce,
-    point::{AffineCoordinates, DecompressPoint},
+    point::{AffineCoordinates as _, DecompressPoint as _},
   },
   AffinePoint, ProjectivePoint, Scalar, U256 as KU256,
 };

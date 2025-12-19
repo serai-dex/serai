@@ -9,7 +9,7 @@ use serai_processor_tests::{RPC_USER, RPC_PASS};
 #[cfg(test)]
 mod tests;
 
-#[allow(unused)]
+#[expect(unused)]
 #[derive(Clone, Debug)]
 pub struct Handles {
   bitcoin: (String, u32),

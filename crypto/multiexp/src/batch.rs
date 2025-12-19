@@ -4,14 +4,14 @@ use rand_core::{RngCore, CryptoRng};
 
 use zeroize::{Zeroize, Zeroizing};
 
-use ff::{Field, PrimeFieldBits};
+use ff::{Field as _, PrimeFieldBits};
 use group::Group;
 
 use crate::{multiexp, multiexp_vartime};
 
 // Flatten the contained statements to a single Vec.
 // Wrapped in Zeroizing in case any of the included statements contain private values.
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 fn flat<Id: Copy + Zeroize, G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>(
   slice: &[(Id, Vec<(G::Scalar, G)>)],
 ) -> Zeroizing<Vec<(G::Scalar, G)>> {
@@ -19,7 +19,7 @@ fn flat<Id: Copy + Zeroize, G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>
 }
 
 /// A batch verifier intended to verify a series of statements are each equivalent to zero.
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 #[derive(Clone, Zeroize)]
 pub struct BatchVerifier<Id: Copy + Zeroize, G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>(
   Zeroizing<Vec<(Id, Vec<(G::Scalar, G)>)>>,

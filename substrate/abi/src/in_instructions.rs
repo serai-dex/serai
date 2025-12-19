@@ -1,8 +1,14 @@
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{
-  BlockHash, network_id::ExternalNetworkId, validator_sets::Session, instructions::SignedBatch,
+  BlockHash, network_id::ExternalNetworkId, validator_sets::Session, address::SeraiAddress,
+  instructions::SignedBatch,
 };
+
+/// The address used for executing `InInstruction`s.
+pub fn address() -> SeraiAddress {
+  SeraiAddress::system(borsh::to_vec(b"InInstructions").unwrap())
+}
 
 /// A call to `InInstruction`s.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]

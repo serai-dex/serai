@@ -5,7 +5,7 @@ use std::{
 
 use thiserror::Error;
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 use tendermint::ext::{Network, Commit};
 
@@ -114,7 +114,7 @@ impl<T: TransactionTrait> Block<T> {
   pub(crate) fn new(parent: [u8; 32], provided: Vec<T>, mempool: Vec<Transaction<T>>) -> Self {
     let mut txs = vec![];
     for tx in provided {
-      txs.push(Transaction::Application(tx))
+      txs.push(Transaction::Application(tx));
     }
 
     let mut signed = vec![];
@@ -143,9 +143,7 @@ impl<T: TransactionTrait> Block<T> {
     let mut last = 0;
     for tx in &txs {
       let nonce = nonce(tx);
-      if nonce < last {
-        panic!("TXs in mempool weren't ordered by nonce");
-      }
+      assert!(last <= nonce, "TXs in mempool weren't ordered by nonce");
       last = nonce;
     }
 
@@ -167,7 +165,7 @@ impl<T: TransactionTrait> Block<T> {
     self.header.hash()
   }
 
-  #[allow(clippy::too_many_arguments)]
+  #[expect(clippy::too_many_arguments)]
   pub(crate) fn verify<N: Network, G: GAIN>(
     &self,
     genesis: [u8; 32],
@@ -225,8 +223,8 @@ impl<T: TransactionTrait> Block<T> {
               Err(BlockError::DistinctProvided)?;
             }
           } else if !allow_non_local_provided {
-            Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
-          };
+            Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?;
+          }
 
           Order::Provided
         }

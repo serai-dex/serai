@@ -4,7 +4,7 @@ pub use serai_abi::{
   UnsignedCall, Transaction,
 };
 
-use crate::{RpcError, Events};
+use crate::Events;
 
 /// An `Events` scoped to the in instructions module.
 #[derive(Clone)]
@@ -13,6 +13,7 @@ pub struct InInstructions(pub(super) Events);
 impl InInstructions {
   /// The events from the in instructions module.
   fn events(&self) -> impl Iterator<Item = &Event> {
+    #[expect(clippy::wildcard_enum_match_arm)]
     self.0.events().flatten().filter_map(|event| match event {
       serai_abi::Event::InInstructions(event) => Some(event),
       _ => None,

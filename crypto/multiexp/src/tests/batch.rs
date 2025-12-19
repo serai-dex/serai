@@ -1,10 +1,10 @@
-use rand_core::OsRng;
+use alloc::vec;
+
+use rand_core::{RngCore as _, OsRng};
 
 use zeroize::Zeroize;
 
-use rand_core::RngCore;
-
-use ff::{Field, PrimeFieldBits};
+use ff::{Field as _, PrimeFieldBits};
 use group::Group;
 
 use crate::BatchVerifier;

@@ -2,14 +2,14 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
 
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std_shims::{vec::Vec, collections::HashMap};
 
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
 
 use ciphersuite::{
-  group::ff::{Field, PrimeField},
+  group::ff::{Field as _, PrimeField},
   GroupIo, Id,
 };
 pub use dkg::*;
@@ -44,8 +44,8 @@ pub fn key_gen<R: RngCore + CryptoRng, C: GroupIo + Id>(
   }
 
   let group_key = C::generator() * coefficients[0].deref();
-  let mut secret_shares = HashMap::with_capacity(participants as usize);
-  let mut verification_shares = HashMap::with_capacity(participants as usize);
+  let mut secret_shares = HashMap::with_capacity(usize::from(participants));
+  let mut verification_shares = HashMap::with_capacity(usize::from(participants));
   for i in 1 ..= participants {
     let i = Participant::new(i).expect("non-zero u16 wasn't a valid Participant index");
     let secret_share = polynomial(&coefficients, i);
@@ -53,7 +53,7 @@ pub fn key_gen<R: RngCore + CryptoRng, C: GroupIo + Id>(
     verification_shares.insert(i, C::generator() * *secret_share);
   }
 
-  let mut res = HashMap::with_capacity(participants as usize);
+  let mut res = HashMap::with_capacity(usize::from(participants));
   for (i, secret_share) in secret_shares {
     let keys = ThresholdKeys::new(
       ThresholdParams::new(threshold, participants, i)?,

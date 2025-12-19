@@ -4,7 +4,7 @@ use std::{sync::Arc, collections::HashSet};
 use alloy_core::primitives::B256;
 use alloy_rpc_types_eth::{Header, BlockNumberOrTag};
 use alloy_transport::{RpcError, TransportErrorKind};
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider as _, RootProvider};
 
 use serai_primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount};
 
@@ -51,15 +51,15 @@ impl<D: Db> ScannerFeed for Rpc<D> {
         .get_block(BlockNumberOrTag::Finalized.into())
         .await?
         .ok_or_else(|| {
-          TransportErrorKind::Custom("there was no finalized block".to_string().into())
+          TransportErrorKind::Custom("there was no finalized block".to_owned().into())
         })?
         .header
         .number;
       // Error if there hasn't been a full epoch yet
       if actual_number < 32 {
         Err(TransportErrorKind::Custom(
-          "there has not been a completed epoch yet".to_string().into(),
-        ))?
+          "there has not been a completed epoch yet".to_owned().into(),
+        ))?;
       }
       // The divison by 32 returns the amount of completed epochs
       // Converting from amount of completed epochs to the latest completed epoch requires
@@ -80,7 +80,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
         .await?
         .ok_or_else(|| {
           TransportErrorKind::Custom(
-            "asked for time of a block our node doesn't have".to_string().into(),
+            "asked for time of a block our node doesn't have".to_owned().into(),
           )
         })?
         .header;
@@ -151,7 +151,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
       )
       .await?
       else {
-        Err(TransportErrorKind::Custom("router wasn't deployed on-chain yet".to_string().into()))?
+        Err(TransportErrorKind::Custom("router wasn't deployed on-chain yet".to_owned().into()))?
       };
 
       async fn sync_block(
@@ -213,7 +213,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
     match coin {
       ExternalCoin::Ether => ETHER_DUST,
       ExternalCoin::Dai => DAI_DUST,
-      _ => unreachable!(),
+      ExternalCoin::Bitcoin | ExternalCoin::Monero => unreachable!(),
     }
   }
 

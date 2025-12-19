@@ -22,7 +22,7 @@ fn main() {
   let artifacts_path = env::var("OUT_DIR").unwrap().clone() + "/serai-processor-ethereum-router";
 
   if !fs::exists(&artifacts_path).unwrap() {
-    fs::create_dir(&artifacts_path).unwrap();
+    fs::create_dir_all(&artifacts_path).unwrap();
   }
 
   build_solidity_contracts::build(
@@ -54,7 +54,7 @@ fn main() {
 
   let test_artifacts_path = artifacts_path + "/tests";
   if !fs::exists(&test_artifacts_path).unwrap() {
-    fs::create_dir(&test_artifacts_path).unwrap();
+    fs::create_dir_all(&test_artifacts_path).unwrap();
   }
 
   // Build the test contracts

@@ -1,17 +1,17 @@
-use std::sync::Arc;
+use std_shims::{prelude::*, sync::Arc};
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
-use group::ff::{Field, PrimeField};
+use group::ff::{Field as _, PrimeField as _};
 use k256::{Scalar, ProjectivePoint};
 
 use alloy_core::primitives::Address;
-use alloy_sol_types::SolCall;
+use alloy_sol_types::SolCall as _;
 
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_rpc_types_eth::{TransactionInput, TransactionRequest};
 use alloy_rpc_client::ClientBuilder;
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider as _, RootProvider};
 
 use alloy_node_bindings::{Anvil, AnvilInstance};
 
@@ -51,7 +51,7 @@ async fn setup_test() -> (AnvilInstance, Arc<RootProvider>, Address) {
           env!("OUT_DIR"),
           "/ethereum-schnorr-contract/TestSchnorr.bin-runtime"
         ))
-        .to_string(),
+        .to_owned(),
       ],
     )
     .await

@@ -4,7 +4,7 @@ use std::{
   collections::HashMap,
 };
 
-use futures_util::{FutureExt, future};
+use futures_util::{FutureExt as _, future};
 use patchable_async_sleep::sleep;
 
 use crate::{

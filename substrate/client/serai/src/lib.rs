@@ -1,16 +1,17 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use core::{ops::Deref, convert::AsRef, future::Future};
-use std::{sync::Arc, io::Read};
+use core::future::Future;
+use std::{sync::Arc, io::Read as _};
 
 use thiserror::Error;
-use core_json_traits::{JsonDeserialize, JsonStructure};
+use core_json_traits::{JsonDeserialize, JsonStructure as _};
 use core_json_derive::JsonDeserialize;
-use simple_request::{hyper, Request, TokioClient};
+use simple_request::{hyper, TokioClient};
 
-use borsh::BorshDeserialize;
+use borsh::BorshDeserialize as _;
 pub use serai_abi as abi;
 use abi::{
   primitives::{BlockHash, network_id::ExternalNetworkId},
@@ -100,7 +101,7 @@ impl Serai {
       .map_err(RpcError::ConnectionError)?;
     let mut response_vec = Vec::with_capacity(1024);
     response_reader.read_to_end(&mut response_vec).map_err(|_| {
-      RpcError::InternalError("couldn't read response from `simple-request` into `Vec`".to_string())
+      RpcError::InternalError("couldn't read response from `simple-request` into `Vec`".to_owned())
     })?;
 
     // TODO: Map `std::io::Read` into `core_json::Read` with an adapter
@@ -117,7 +118,7 @@ impl Serai {
       // TODO: https://github.com/core-json/core-json/issues/18
       Response { result: None, error: None } => Ok(Default::default()),
       Response { result: Some(_), error: Some(_) } => {
-        Err(RpcError::InvalidNode("node didn't provided both `result` and `error`".to_string()))
+        Err(RpcError::InvalidNode("node didn't provided both `result` and `error`".to_owned()))
       }
     }
   }
@@ -146,10 +147,10 @@ impl Serai {
       .map(|bin| {
         Block::deserialize(
           &mut hex::decode(&bin)
-            .map_err(|_| RpcError::InvalidNode("node returned non-hex-encoded block".to_string()))?
+            .map_err(|_| RpcError::InvalidNode("node returned non-hex-encoded block".to_owned()))?
             .as_slice(),
         )
-        .map_err(|_| RpcError::InvalidNode("node returned invalid block".to_string()))
+        .map_err(|_| RpcError::InvalidNode("node returned invalid block".to_owned()))
       })
       .transpose()
   }
@@ -190,11 +191,11 @@ impl Serai {
                 Event::deserialize(
                   &mut hex::decode(&event)
                     .map_err(|_| {
-                      RpcError::InvalidNode("node returned non-hex-encoded event".to_string())
+                      RpcError::InvalidNode("node returned non-hex-encoded event".to_owned())
                     })?
                     .as_slice(),
                 )
-                .map_err(|_| RpcError::InvalidNode("node returned invalid event".to_string()))
+                .map_err(|_| RpcError::InvalidNode("node returned invalid event".to_owned()))
               })
               .collect::<Result<Vec<_>, _>>()
           })
@@ -208,7 +209,7 @@ impl Serai {
     let block = self
       .block_by_number(self.latest_finalized_block_number().await?)
       .await?
-      .ok_or_else(|| RpcError::InvalidNode("couldn't fetch latest finalized block".to_string()))?;
+      .ok_or_else(|| RpcError::InvalidNode("couldn't fetch latest finalized block".to_owned()))?;
     Ok(State { serai: self, block: block.header.hash() })
   }
 
@@ -268,7 +269,7 @@ impl Events {
   }
 }
 
-impl<'serai> State<'serai> {
+impl State<'_> {
   async fn call<ResponseValue: Default + JsonDeserialize>(
     &self,
     method: &str,

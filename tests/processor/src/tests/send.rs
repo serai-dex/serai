@@ -21,7 +21,7 @@ use processor::networks::{Network, Bitcoin, Ethereum, Monero};
 
 use crate::{*, tests::*};
 
-#[allow(unused)]
+#[expect(unused)]
 pub(crate) async fn recv_sign_preprocesses(
   coordinators: &mut [Coordinator],
   session: Session,
@@ -65,7 +65,7 @@ pub(crate) async fn recv_sign_preprocesses(
   (id.unwrap(), preprocesses)
 }
 
-#[allow(unused)]
+#[expect(unused)]
 pub(crate) async fn sign_tx(
   coordinators: &mut [Coordinator],
   session: Session,
@@ -152,7 +152,7 @@ fn send_test() {
   for network in EXTERNAL_NETWORKS {
     let (coordinators, test) = new_test(network);
 
-    test.run(|ops| async move {
+    test.run(async move |ops| {
       tokio::time::sleep(Duration::from_secs(1)).await;
 
       let mut coordinators = coordinators

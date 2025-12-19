@@ -1,3 +1,5 @@
+#![expect(clippy::cast_possible_truncation, clippy::as_conversions)]
+
 use substrate_median::*;
 
 use frame_support::{
@@ -5,7 +7,7 @@ use frame_support::{
   storage::types::{self, ValueQuery, OptionQuery},
 };
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
 macro_rules! prefix {
   ($name: ident, $prefix: expr) => {
@@ -121,7 +123,6 @@ macro_rules! fuzz_test {
             match OsRng.next_u64() % 8 {
               // Push a freshly sampled value
               0 => {
-                #[allow(clippy::cast_possible_truncation)]
                 let push = OsRng.next_u64() as u32;
                 current_list.push(push);
                 current_list.sort();
@@ -147,7 +148,6 @@ macro_rules! fuzz_test {
               }
               // Remove a value which is not present
               3 => {
-                #[allow(clippy::cast_possible_truncation)]
                 let pop = OsRng.next_u64() as u32;
                 if current_list.contains(&pop) {
                   continue 'reselect;

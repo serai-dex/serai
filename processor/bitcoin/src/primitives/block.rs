@@ -61,7 +61,6 @@ impl<D: Db> primitives::Block for Block<D> {
     res
   }
 
-  #[allow(clippy::type_complexity)]
   fn check_for_eventuality_resolutions(
     &self,
     eventualities: &mut EventualityTracker<Self::Eventuality>,

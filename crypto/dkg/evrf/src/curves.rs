@@ -1,22 +1,20 @@
-#[allow(unused_imports)]
 use std_shims::prelude::*;
-use std_shims::vec::Vec;
 
-use rand_core::SeedableRng;
+use rand_core::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
 
 use blake2::{
   digest::{
     array::{typenum::U32, Array},
     crypto_common::KeySizeUser,
-    KeyInit, Mac,
+    KeyInit, Mac as _,
   },
   Blake2sMac,
 };
 type Blake2s256Keyed = Blake2sMac<U32>;
 
 use ciphersuite::{
-  group::{ff::FromUniformBytes, GroupEncoding},
+  group::{ff::FromUniformBytes, GroupEncoding as _},
   WrappedGroup, Id, GroupIo,
 };
 
@@ -52,7 +50,7 @@ impl<C: Curves> Generators<C> {
       let key_len = key.len().min(<C::ToweringCurve as Id>::ID.len());
       {
         let key: &mut [u8] = key.as_mut();
-        key[.. key_len].copy_from_slice(&<C::ToweringCurve as Id>::ID[.. key_len])
+        key[.. key_len].copy_from_slice(&<C::ToweringCurve as Id>::ID[.. key_len]);
       }
       key
     })

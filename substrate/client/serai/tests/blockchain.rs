@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use blake2::{Digest, Blake2b256};
+use blake2::{Digest as _, Blake2b256};
 
 use serai_abi::{
   primitives::merkle::UnbalancedMerkleTree, BLOCK_HEADER_LEAF_TAG, BLOCK_HEADER_BRANCH_TAG,
@@ -8,8 +8,6 @@ use serai_abi::{
   TRANSACTION_EVENTS_COMMITMENT_LEAF_TAG, TRANSACTION_EVENTS_COMMITMENT_BRANCH_TAG,
   EVENTS_COMMITMENT_LEAF_TAG, EVENTS_COMMITMENT_BRANCH_TAG,
 };
-
-use serai_client_serai::*;
 
 #[tokio::test]
 async fn blockchain() {
@@ -26,7 +24,7 @@ async fn blockchain() {
           .map(str::to_owned)
           .collect(),
       )
-      .replace_env([("RUST_LOG".to_string(), "runtime=debug".to_string())].into()),
+      .replace_env([("RUST_LOG".to_owned(), "runtime=debug".to_owned())].into()),
   );
 
   test
@@ -104,7 +102,7 @@ async fn blockchain() {
 
       // Check the blocks have the expected headers
       {
-        let mut last_block_number = serai.latest_finalized_block_number().await.unwrap();
+        let last_block_number = serai.latest_finalized_block_number().await.unwrap();
         let mut observed_consensus_commitments = HashSet::new();
         let mut tagged_block_hashes = vec![];
         for i in 0 ..= last_block_number {

@@ -1,10 +1,10 @@
 use std_shims::io;
 
-use sha3::{Digest, Keccak256};
+use sha3::{Digest as _, Keccak256};
 
-use group::ff::PrimeField;
+use group::ff::PrimeField as _;
 use k256::{
-  elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint},
+  elliptic_curve::{ops::Reduce, sec1::ToEncodedPoint as _},
   ProjectivePoint, Scalar, U256 as KU256,
 };
 

@@ -1,6 +1,6 @@
 use core::{marker::PhantomData, future::Future};
 
-use blake2::{digest::typenum::U32, Digest, Blake2b};
+use blake2::{digest::typenum::U32, Digest as _, Blake2b};
 
 use serai_db::{DbTxn, Db};
 
@@ -42,7 +42,7 @@ pub(crate) fn take_return_information<S: ScannerFeed>(
   Eventualities, have processed the block. This ensures we know if this block is notable, and have
   the InInstructions for it.
 */
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub(crate) struct BatchTask<D: Db, S: ScannerFeed> {
   db: D,
   _S: PhantomData<S>,

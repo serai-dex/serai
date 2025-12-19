@@ -1,6 +1,6 @@
 pub use serai_abi::coins::Event;
 
-use crate::{RpcError, Events};
+use crate::Events;
 
 /// An `Events` scoped to the coins module.
 #[derive(Clone)]
@@ -9,6 +9,7 @@ pub struct Coins(pub(super) Events);
 impl Coins {
   /// The events from the coins module.
   pub fn events(&self) -> impl Iterator<Item = &Event> {
+    #[expect(clippy::wildcard_enum_match_arm)]
     self.0.events().flatten().filter_map(|event| match event {
       serai_abi::Event::Coins(event) => Some(event),
       _ => None,

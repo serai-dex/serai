@@ -17,8 +17,8 @@ pub(crate) const DAI: Address = Address(FixedBytes(
 pub(crate) const TOKENS: [Address; 1] = [DAI];
 
 // 8 decimals, so 1_000_000_00 would be 1 ETH. This is 0.0015 ETH (5 USD if Ether is ~3300 USD).
-#[allow(clippy::inconsistent_digit_grouping)]
+#[expect(clippy::inconsistent_digit_grouping)]
 pub(crate) const ETHER_DUST: Amount = Amount(1_500_00);
 // 5 DAI
-#[allow(clippy::inconsistent_digit_grouping)]
+#[expect(clippy::inconsistent_digit_grouping)]
 pub(crate) const DAI_DUST: Amount = Amount(5_000_000_00);

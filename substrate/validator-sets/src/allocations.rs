@@ -1,4 +1,4 @@
-use sp_core::{Encode, sr25519::Public};
+use sp_core::{Encode as _, sr25519::Public};
 
 use serai_abi::primitives::{network_id::NetworkId, balance::Amount, validator_sets::KeyShares};
 
@@ -169,7 +169,7 @@ impl<Storage: AllocationsStorage> Allocations for Storage {
 
 #[test]
 fn test_reverse_lexicographic_order() {
-  use rand_core::{RngCore, OsRng};
+  use rand_core::{RngCore as _, OsRng};
 
   use sp_io::TestExternalities;
   use frame_support::{pallet_prelude::*, Identity, traits::StorageInstance};
@@ -202,7 +202,7 @@ fn test_reverse_lexicographic_order() {
     }
 
     let mut amounts_sorted = amounts.clone();
-    amounts_sorted.sort();
+    amounts_sorted.sort_unstable();
     for a in amounts {
       Map::set(a.to_be_bytes(), Some(()));
       MapReverse::set(reverse_lexicographic_order(a.to_be_bytes()), Some(()));
@@ -230,9 +230,9 @@ fn test_reverse_lexicographic_order() {
 
 #[test]
 fn test_allocations() {
-  use rand_core::{RngCore, OsRng};
+  use rand_core::{RngCore as _, OsRng};
 
-  use borsh::BorshDeserialize;
+  use borsh::BorshDeserialize as _;
 
   use sp_io::TestExternalities;
   use frame_support::{pallet_prelude::*, Identity, traits::StorageInstance};

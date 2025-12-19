@@ -3,9 +3,7 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-extern crate alloc;
-
-#[expect(clippy::cast_possible_truncation)]
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 pub mod pallet {
   use sp_core::sr25519::Public;
@@ -104,12 +102,11 @@ pub mod pallet {
         enough, panic, halting the blockchain, and retiring the current protocol.
       */
       if let Some((protocol_id, block_number)) = LockedInRetirement::<T>::get() {
-        if block_number == current_number {
-          panic!(
-            "protocol retired in favor of {}",
-            sp_core::hexdisplay::HexDisplay::from(&protocol_id)
-          );
-        }
+        assert!(
+          current_number < block_number,
+          "protocol retired in favor of {}",
+          sp_core::hexdisplay::HexDisplay::from(&protocol_id)
+        );
       }
       // Using `Weight::zero()` is fine here as this is a minute operation
       Weight::zero()
@@ -177,7 +174,7 @@ pub mod pallet {
           Core::<T>::emit_event(Event::NetworkInFavor { signal, network });
         }
       } else {
-        #[allow(clippy::collapsible_else_if)]
+        #[allow(clippy::collapsible_else_if)] // This doesn't work with `expect`
         if NetworksInFavor::<T>::take((signal, network)).is_some() {
           Core::<T>::emit_event(Event::NetworkNoLongerInFavor { signal, network });
         }
@@ -233,6 +230,11 @@ pub mod pallet {
       Self::tally_for_network(signal, with_network);
 
       Ok(())
+    }
+
+    /// Check if an external network was halted.
+    pub fn halted(network: ExternalNetworkId) -> bool {
+      Halted::<T>::contains_key(network)
     }
   }
 

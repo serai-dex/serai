@@ -1,10 +1,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
 use core::fmt::Debug;
-#[allow(unused_imports)]
-use std_shims::prelude::*;
 use std_shims::collections::HashMap;
 
 use thiserror::Error;

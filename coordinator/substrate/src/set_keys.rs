@@ -1,7 +1,7 @@
 use core::future::Future;
 use std::sync::Arc;
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
 use serai_client_serai::{
   abi::primitives::{network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet},
@@ -55,7 +55,7 @@ impl<D: Db> ContinuallyRan for SetKeysTask<D> {
           // We already checked the current session wasn't greater, and they're not equal
           assert!(current_session < Some(session.0));
           // This would mean the Serai node is resyncing and is behind where it prior was
-          Err("have a keys for a session Serai has yet to start".to_string())?;
+          Err("have a keys for a session Serai has yet to start".to_owned())?;
         }
 
         // If this session already has had its keys set, move on
@@ -67,7 +67,7 @@ impl<D: Db> ContinuallyRan for SetKeysTask<D> {
         {
           txn.commit();
           continue;
-        };
+        }
 
         match self.serai.publish_transaction(&keys).await {
           Ok(()) => {

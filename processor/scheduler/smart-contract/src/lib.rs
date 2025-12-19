@@ -5,11 +5,11 @@
 use core::{marker::PhantomData, future::Future};
 use std::collections::HashMap;
 
-use group::GroupEncoding;
+use group::GroupEncoding as _;
 
 use serai_db::{Get, DbTxn, create_db};
 
-use primitives::{ReceivedOutput, Payment};
+use primitives::{ReceivedOutput as _, Payment};
 use scanner::{
   LifetimeStage, ScannerFeed, KeyFor, AddressFor, EventualityFor, BlockFor, SchedulerUpdate,
   KeyScopedEventualities, Scheduler as SchedulerTrait,
@@ -45,7 +45,7 @@ pub trait SmartContract<S: ScannerFeed>: 'static + Send {
 }
 
 /// A scheduler for a smart contract representing the Serai processor.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 #[derive(Clone)]
 pub struct Scheduler<S: ScannerFeed, SC: Send + Sync + SmartContract<S>> {
   smart_contract: SC,

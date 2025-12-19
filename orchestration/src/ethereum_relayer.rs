@@ -1,3 +1,4 @@
+use core::fmt::Write as _;
 use std::path::Path;
 
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
@@ -13,12 +14,12 @@ pub fn ethereum_relayer(orchestration_path: &Path, network: Network) {
     );
 
   let env_vars = [
-    ("DB_PATH", "/volume/ethereum-relayer-db".to_string()),
-    ("RUST_LOG", "info,serai_ethereum_relayer=trace".to_string()),
+    ("DB_PATH", "/volume/ethereum-relayer-db".to_owned()),
+    ("RUST_LOG", "info,serai_ethereum_relayer=trace".to_owned()),
   ];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {
-    env_vars_str += &format!(r#"{env_var}=${{{env_var}:="{value}"}} "#);
+    write!(&mut env_vars_str, r#"{env_var}=${{{env_var}:="{value}"}} "#).unwrap();
   }
 
   let run_ethereum_relayer = format!(

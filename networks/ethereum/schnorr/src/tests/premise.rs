@@ -1,11 +1,14 @@
-use rand_core::{RngCore, OsRng};
+use std_shims::prelude::*;
 
-use sha3::{Digest, Keccak256};
-use group::ff::{Field, PrimeField};
+use rand_core::{RngCore as _, OsRng};
+
+use sha3::{Digest as _, Keccak256};
+use group::ff::{Field as _, PrimeField as _};
 use k256::{
-  elliptic_curve::{ops::Reduce, point::AffineCoordinates, sec1::ToEncodedPoint},
+  elliptic_curve::{ops::Reduce, point::AffineCoordinates as _, sec1::ToEncodedPoint as _},
   ecdsa::{
-    self, hazmat::SignPrimitive, signature::hazmat::PrehashVerifier, SigningKey, VerifyingKey,
+    self, hazmat::SignPrimitive as _, signature::hazmat::PrehashVerifier as _, SigningKey,
+    VerifyingKey,
   },
   U256, Scalar, ProjectivePoint,
 };
@@ -38,10 +41,7 @@ fn test_ecrecover() {
     .unwrap();
 
   // Sanity check the signature verifies
-  #[allow(clippy::unit_cmp)] // Intended to assert this wasn't changed to Result<bool>
-  {
-    assert_eq!(public.verify_prehash(&Keccak256::digest(MESSAGE), &sig).unwrap(), ());
-  }
+  assert_eq!(public.verify_prehash(&Keccak256::digest(MESSAGE), &sig).unwrap(), ());
 
   // Perform the ecrecover
   assert_eq!(

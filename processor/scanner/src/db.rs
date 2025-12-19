@@ -1,5 +1,5 @@
 use core::marker::PhantomData;
-use std::io::{self, Read, Write};
+use std::io::{self, Read as _, Write as _};
 
 use group::GroupEncoding;
 
@@ -114,7 +114,7 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     StartBlock::get(getter)
   }
   pub(crate) fn set_start_block(txn: &mut impl DbTxn, block: u64) {
-    StartBlock::set(txn, &block)
+    StartBlock::set(txn, &block);
   }
 
   fn tidy_keys(txn: &mut impl DbTxn) {

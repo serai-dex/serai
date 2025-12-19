@@ -32,5 +32,5 @@ ADD /orchestration/{}/networks/ethereum/consensus/lighthouse/run.sh /consensus_l
     network.label()
   );
 
-  (DOWNLOAD_LIGHTHOUSE.to_string(), String::new(), run_lighthouse)
+  (DOWNLOAD_LIGHTHOUSE.to_owned(), String::new(), run_lighthouse)
 }

@@ -1,6 +1,6 @@
 use zeroize::Zeroizing;
 
-use ciphersuite::{group::ff::PrimeField, WrappedGroup, GroupIo};
+use ciphersuite::{group::ff::PrimeField as _, WrappedGroup};
 use dalek_ff_group::Ed25519;
 
 use monero_wallet::{

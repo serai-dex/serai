@@ -9,8 +9,8 @@ pub(crate) mod block;
 
 pub(crate) fn x_coord_to_even_point(key: &[u8]) -> Option<<Secp256k1 as WrappedGroup>::G> {
   if key.len() != 32 {
-    None?
-  };
+    None?;
+  }
 
   // Read the x-only public key
   let key = XOnlyPublicKey::from_slice(key).ok()?;

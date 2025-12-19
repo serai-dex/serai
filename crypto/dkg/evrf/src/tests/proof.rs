@@ -5,7 +5,7 @@ use rand_core::OsRng;
 use zeroize::Zeroizing;
 
 use ciphersuite::{
-  group::{ff::Field, Group},
+  group::{ff::Field as _, Group as _},
   WrappedGroup,
 };
 
@@ -21,6 +21,7 @@ fn proof<C: Curves>() {
   let generators = insecure_test_generators(&mut OsRng, 2048).unwrap();
   let embedded_private_key =
     Zeroizing::new(<C::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng));
+  #[expect(clippy::as_conversions)]
   let ecdh_public_keys: [_; PARTICIPANTS as usize] =
     core::array::from_fn(|_| <C::EmbeddedCurve as WrappedGroup>::G::random(&mut OsRng));
   let time = Instant::now();
@@ -33,7 +34,7 @@ fn proof<C: Curves>() {
     &embedded_private_key,
   )
   .unwrap();
-  println!("Proving time: {:?}", time.elapsed());
+  std::println!("Proving time: {:?}", time.elapsed());
 
   let time = Instant::now();
   let mut verifier = Generators::batch_verifier();
@@ -49,7 +50,7 @@ fn proof<C: Curves>() {
   )
   .unwrap();
   assert!(generators.verify(verifier));
-  println!("Verifying time: {:?}", time.elapsed());
+  std::println!("Verifying time: {:?}", time.elapsed());
 }
 
 #[test]

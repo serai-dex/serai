@@ -18,7 +18,7 @@ pub fn handle(desc: &str) -> String {
 }
 
 pub fn fresh_logs_folder(first: bool, label: &str) -> String {
-  let logs_path = [std::env::current_dir().unwrap().to_str().unwrap(), ".test-logs", label]
+  let logs_path = [env::current_dir().unwrap().to_str().unwrap(), ".test-logs", label]
     .iter()
     .collect::<std::path::PathBuf>();
   if first {
@@ -29,12 +29,12 @@ pub fn fresh_logs_folder(first: bool, label: &str) -> String {
       "logs folder wasn't empty, despite removing it at the start of the run",
     );
   }
-  logs_path.to_str().unwrap().to_string()
+  logs_path.to_str().unwrap().to_owned()
 }
 
 pub fn log_options(path: String) -> LogOptions {
   LogOptions {
-    action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+    action: if env::var("GITHUB_CI") == Ok("true".to_owned()) {
       LogAction::Forward
     } else {
       LogAction::ForwardToFile { path }
@@ -249,13 +249,13 @@ pub fn build(name: String) {
     println!(
       "{}\r\n",
       String::from_utf8(res.stdout)
-        .unwrap_or_else(|_| "stdout had non-utf8 characters".to_string())
+        .unwrap_or_else(|_| "stdout had non-utf8 characters".to_owned())
     );
     println!("-- stderr --");
     println!(
       "{}\r\n",
       String::from_utf8(res.stderr)
-        .unwrap_or_else(|_| "stderr had non-utf8 characters".to_string())
+        .unwrap_or_else(|_| "stderr had non-utf8 characters".to_owned())
     );
     panic!("failed to build {name}");
   }
@@ -263,7 +263,7 @@ pub fn build(name: String) {
 
   println!("Built!");
 
-  if std::env::var("GITHUB_CI").is_ok() {
+  if env::var("GITHUB_CI").is_ok() {
     println!("In CI, so clearing cache to prevent hitting the storage limits.");
     if !Command::new("docker")
       .arg("builder")

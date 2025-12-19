@@ -2,7 +2,7 @@ use std::collections::{VecDeque, HashMap};
 
 use thiserror::Error;
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get as _, DbTxn as _, Db};
 
 use crate::transaction::{TransactionKind, TransactionError, Transaction, verify_transaction};
 
@@ -167,9 +167,7 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
         }
 
         i += 32;
-        if i >= currently_provided.len() {
-          panic!("couldn't find completed TX in currently provided");
-        }
+        assert!(i < currently_provided.len(), "couldn't find completed TX in currently provided");
       }
 
       txn.put(current_provided_key, currently_provided);

@@ -1,3 +1,5 @@
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+
 use std::sync::{Arc as StdArc, RwLock as StdRwLock};
 
 use loom::{
@@ -38,7 +40,6 @@ pub struct Serai {
 }
 
 impl Serai {
-  #[allow(clippy::new_without_default)]
   pub fn new(ticks: usize, mut queued_key: bool) -> Serai {
     let remaining_ticks = Arc::new(RwLock::new(ticks));
 

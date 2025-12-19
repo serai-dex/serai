@@ -20,10 +20,10 @@ impl<T: ThreadMode> Get for Transaction<'_, T> {
 }
 impl<T: ThreadMode> DbTxn for Transaction<'_, T> {
   fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
-    self.0.put(key, value).expect("couldn't write to RocksDB via transaction")
+    self.0.put(key, value).expect("couldn't write to RocksDB via transaction");
   }
   fn del(&mut self, key: impl AsRef<[u8]>) {
-    self.0.delete(key).expect("couldn't delete from RocksDB via transaction")
+    self.0.delete(key).expect("couldn't delete from RocksDB via transaction");
   }
   fn commit(self) {
     self.0.commit().expect("couldn't commit to RocksDB via transaction");

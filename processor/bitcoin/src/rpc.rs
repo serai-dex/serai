@@ -59,7 +59,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
           timestamps
             .push(self.rpc.get_block(&self.rpc.get_block_hash(i).await?).await?.header.time);
         }
-        timestamps.sort();
+        timestamps.sort_unstable();
         timestamps[timestamps.len() / 2]
       };
 

@@ -14,15 +14,17 @@ pub use limits::Limits;
 mod iumt;
 pub use iumt::*;
 
-#[expect(clippy::cast_possible_truncation)]
+#[expect(
+  let_underscore_drop,
+  clippy::as_conversions,
+  clippy::cast_possible_truncation,
+  clippy::semicolon_if_nothing_returned
+)]
 #[frame_support::pallet]
 pub mod pallet {
   use alloc::{vec::Vec, vec};
 
-  use frame_support::{
-    sp_runtime::traits::{Header, Block},
-    pallet_prelude::*,
-  };
+  use frame_support::pallet_prelude::*;
 
   use serai_abi::primitives::{prelude::*, merkle::IncrementalUnbalancedMerkleTree as Iumt};
 
@@ -177,7 +179,7 @@ pub mod pallet {
         match event.event.try_into() {
           Ok(Event::BeginTransaction) => result.push(vec![]),
           Ok(Event::Event(bytes)) => {
-            result.last_mut().expect("Serai event outside of a transaction").push(bytes)
+            result.last_mut().expect("Serai event outside of a transaction").push(bytes);
           }
           Err(_) => {}
         }
@@ -192,7 +194,7 @@ pub use pallet::*;
 pub struct StartOfBlock<T: Config>(PhantomData<T>);
 impl<T: Config> PreInherents for StartOfBlock<T> {
   fn pre_inherents() {
-    use frame_support::pallet_prelude::Zero;
+    use frame_support::pallet_prelude::Zero as _;
     // `Pallet::genesis` is expected to be used for the genesis block
     assert!(!frame_system::Pallet::<T>::block_number().is_zero());
 

@@ -5,7 +5,7 @@ use ciphersuite_kp256::Secp256k1;
 
 use bitcoin_serai::{
   bitcoin::{
-    hashes::Hash as HashTrait, consensus::Encodable, script::Instruction, transaction::Transaction,
+    hashes::Hash as _, consensus::Encodable as _, script::Instruction, transaction::Transaction,
   },
   wallet::ReceivedOutput as WalletOutput,
 };

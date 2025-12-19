@@ -4,7 +4,7 @@ use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
 use serai_primitives::{crypto::Signature, validator_sets::Session};
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
 use serai_cosign::{COSIGN_CONTEXT, Cosign as CosignStruct, SignedCosign};
 use messages::sign::VariantSignId;
@@ -25,7 +25,6 @@ use db::LatestCosigned;
 ///
 /// Only the latest cosign attempt is kept. We don't work on historical attempts as later cosigns
 /// supersede them.
-#[allow(non_snake_case)]
 pub(crate) struct CosignerTask<D: Db> {
   db: D,
 

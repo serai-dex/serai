@@ -1,7 +1,7 @@
 use std::io;
 
 use ciphersuite::{
-  group::{ff::PrimeField, GroupEncoding},
+  group::{ff::PrimeField as _, GroupEncoding as _},
   WrappedGroup,
 };
 use dalek_ff_group::Ed25519;

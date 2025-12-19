@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{group::GroupEncoding, *};
+use ciphersuite::{group::GroupEncoding as _, *};
 use dkg::*;
 
 use serai_primitives::validator_sets::Session;
@@ -78,7 +78,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
           .map(|key| key.to_bytes().as_ref().to_vec())
           .collect(),
       },
-    )
+    );
   }
 
   pub(crate) fn params(getter: &impl Get, session: Session) -> Option<Params<P>> {
@@ -114,7 +114,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
     session: Session,
     participations: &Participations,
   ) {
-    _db::Participations::set(txn, &session, participations)
+    _db::Participations::set(txn, &session, participations);
   }
   pub(crate) fn participations(getter: &impl Get, session: Session) -> Option<Participations> {
     _db::Participations::get(getter, &session)
@@ -137,7 +137,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
     _db::KeyShares::set(txn, &session, &keys);
   }
 
-  #[allow(clippy::type_complexity)]
+  #[expect(clippy::type_complexity)]
   pub(crate) fn key_shares(
     getter: &impl Get,
     session: Session,

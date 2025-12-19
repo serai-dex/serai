@@ -1,7 +1,8 @@
 use core::{marker::PhantomData, fmt::Debug};
-#[allow(unused_imports)]
-use std_shims::prelude::*;
-use std_shims::io::{self, Read, Write};
+use std_shims::{
+  prelude::*,
+  io::{self, Read, Write},
+};
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
@@ -92,7 +93,7 @@ pub trait Algorithm<C: Curve>: Send + Sync {
   ///
   /// This function should return a series of pairs whose products should sum to zero for a valid
   /// share. Any error raised is treated as the share being invalid.
-  #[allow(clippy::type_complexity, clippy::result_unit_err)]
+  #[expect(clippy::type_complexity, clippy::result_unit_err)]
   fn verify_share(
     &self,
     verification_share: C::G,
@@ -140,7 +141,7 @@ pub trait Hram<C: Curve>: Send + Sync + Clone {
   /// HRAm function to generate a challenge.
   ///
   /// H2 from the IETF draft, despite having a different argument set (not being pre-formatted).
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   fn hram(R: &C::G, A: &C::G, m: &[u8]) -> C::F;
 }
 

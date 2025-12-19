@@ -11,7 +11,7 @@ use serai_task::{Task, ContinuallyRan};
 
 use libp2p::PeerId;
 
-use futures_util::stream::{StreamExt, FuturesUnordered};
+use futures_util::stream::{StreamExt as _, FuturesUnordered};
 use tokio::sync::{mpsc, RwLock};
 
 use crate::peer_id_from_public;

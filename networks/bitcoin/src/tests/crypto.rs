@@ -9,7 +9,7 @@ use frost::{
 };
 
 use crate::{
-  bitcoin::hashes::{Hash as HashTrait, sha256::Hash},
+  bitcoin::hashes::{Hash as _, sha256::Hash},
   crypto::{x_only, Schnorr},
   wallet::tweak_keys,
 };
@@ -39,5 +39,5 @@ fn test_algorithm() {
       &Message::from_digest_slice(Hash::hash(MESSAGE).as_ref()).unwrap(),
       &x_only(&keys[&Participant::new(1).unwrap()].group_key()),
     )
-    .unwrap()
+    .unwrap();
 }

@@ -2,7 +2,7 @@ use core::future::Future;
 
 use serai_primitives::crypto::Signature;
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
 use primitives::task::ContinuallyRan;
 

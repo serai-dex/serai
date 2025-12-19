@@ -4,7 +4,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use core::str::FromStr;
-use std_shims::{vec::Vec, io::Read};
+use std_shims::{vec::Vec, io::Read as _};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
@@ -39,8 +39,16 @@ impl ContractDeployment {
     }
 
     // The max address length, minus the type byte, minus the size of the gas
-    const MAX_CODE_LEN: usize =
-      (ExternalAddress::MAX_LEN as usize) - (1 + core::mem::size_of::<u32>());
+    #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+    const MAX_CODE_LEN: usize = ({
+      // If this branch triggers, then `MAX_LEN` fits within a `usize`
+      // Else, `usize::MAX > u32::MAX` when `MAX_LEN` _is_ a `u32`
+      // Both conditions ensure this following `as` cast is safe
+      if core::mem::size_of::<usize>() <= core::mem::size_of::<u32>() {
+        assert!(ExternalAddress::MAX_LEN <= (usize::MAX as u32));
+      }
+      ExternalAddress::MAX_LEN as usize
+    }) - (1 + core::mem::size_of::<u32>());
     if code.len() > MAX_CODE_LEN {
       None?;
     }
@@ -129,8 +137,8 @@ impl FromStr for Address {
   fn from_str(str: &str) -> Result<Address, ()> {
     let Some(address) = str.strip_prefix("0x") else { Err(())? };
     if address.len() != 40 {
-      Err(())?
-    };
+      Err(())?;
+    }
     Ok(Address::Address(
       hex::decode(address.to_lowercase()).map_err(|_| ())?.try_into().map_err(|_| ())?,
     ))

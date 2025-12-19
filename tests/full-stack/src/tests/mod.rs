@@ -110,7 +110,7 @@ pub(crate) async fn new_test(test_body: impl TestBody) {
           .set_start_policy(StartPolicy::Strict)
           .set_handle(handle.clone())
           .set_log_options(Some(LogOptions {
-            action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+            action: if std::env::var("GITHUB_CI") == Ok("true".to_owned()) {
               LogAction::Forward
             } else {
               LogAction::ForwardToFile { path: logs_path.clone() }

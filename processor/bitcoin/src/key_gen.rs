@@ -1,4 +1,4 @@
-use ciphersuite::{group::GroupEncoding, *};
+use ciphersuite::{group::GroupEncoding as _, *};
 use dkg::{ThresholdKeys, Curves, Secp256k1};
 
 use crate::{primitives::x_coord_to_even_point, scan::scanner};

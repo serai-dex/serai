@@ -78,7 +78,6 @@ macro_rules! create_db {
         }
         // Returns a PhantomData of all generic types so if the generic was only used in the value,
         // not the keys, this doesn't have unused generic types
-        #[allow(dead_code)]
         pub(crate) fn del(
           txn: &mut impl DbTxn
           $(, $arg: $arg_type)*

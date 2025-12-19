@@ -1,10 +1,10 @@
-use core::ops::Deref;
+use core::ops::Deref as _;
 
 use zeroize::{Zeroize, Zeroizing};
 use rand_core::{RngCore, CryptoRng};
 
 use ciphersuite::{
-  group::{ff::PrimeField, Group, GroupEncoding},
+  group::{ff::PrimeField, Group as _, GroupEncoding},
   GroupIo,
 };
 

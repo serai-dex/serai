@@ -1,13 +1,14 @@
+use core::fmt::Write as _;
 use std::path::Path;
 
 use zeroize::Zeroizing;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::ff::PrimeField, WrappedGroup};
+use ciphersuite::{group::ff::PrimeField as _, WrappedGroup};
 
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
-#[allow(clippy::needless_pass_by_value)]
+#[expect(clippy::needless_pass_by_value)]
 pub fn processor(
   orchestration_path: &Path,
   network: Network,
@@ -59,21 +60,21 @@ RUN apt install -y ca-certificates
     ("MESSAGE_QUEUE_KEY", hex::encode(processor_key.to_repr())),
     ("SUBSTRATE_EVRF_KEY", hex::encode(substrate_evrf_key)),
     ("NETWORK_EVRF_KEY", hex::encode(network_evrf_key)),
-    ("NETWORK", coin.to_string()),
+    ("NETWORK", coin.to_owned()),
     ("NETWORK_RPC_LOGIN", format!("{RPC_USER}:{RPC_PASS}")),
     ("NETWORK_RPC_HOSTNAME", hostname),
     ("NETWORK_RPC_PORT", port),
-    ("DB_PATH", "/volume/processor-db".to_string()),
-    ("RUST_LOG", "info,serai_processor=debug".to_string()),
+    ("DB_PATH", "/volume/processor-db".to_owned()),
+    ("RUST_LOG", "info,serai_processor=debug".to_owned()),
   ];
   if coin == "ethereum" {
     env_vars
       .push(("ETHEREUM_RELAYER_HOSTNAME", format!("serai-{}-ethereum-relayer", network.label())));
-    env_vars.push(("ETHEREUM_RELAYER_PORT", "20830".to_string()));
+    env_vars.push(("ETHEREUM_RELAYER_PORT", "20830".to_owned()));
   }
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {
-    env_vars_str += &format!(r#"{env_var}=${{{env_var}:="{value}"}} "#);
+    write!(&mut env_vars_str, r#"{env_var}=${{{env_var}:="{value}"}} "#).unwrap();
   }
 
   let run_processor = format!(

@@ -1,32 +1,30 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
-use core::ops::Deref;
-#[allow(unused_imports)]
-use std_shims::prelude::*;
+use core::ops::Deref as _;
 use std_shims::{
-  vec::Vec,
+  prelude::*,
   io::{self, Read, Write},
   collections::{HashSet, HashMap},
 };
 
 use rand_core::{RngCore, CryptoRng};
 
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::{Zeroize as _, Zeroizing};
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField},
-    Group, GroupEncoding,
+    ff::{Field as _, PrimeField as _},
+    Group as _, GroupEncoding as _,
   },
   WrappedGroup, GroupIo,
 };
 use multiexp::multiexp_vartime;
 
 use generalized_bulletproofs::arithmetic_circuit_proof::*;
-use ec_divisors::DivisorCurve;
+use ec_divisors::DivisorCurve as _;
 
 pub use dkg::*;
 
@@ -39,6 +37,8 @@ pub use curves::*;
 mod proof;
 use proof::*;
 
+#[cfg(test)]
+extern crate std;
 #[cfg(test)]
 mod tests;
 
@@ -55,6 +55,7 @@ pub struct Participation<C: Curves> {
 impl<C: Curves> Participation<C> {
   pub fn read<R: Read>(reader: &mut R, n: u16) -> io::Result<Self> {
     // Ban <32-bit platforms, allowing us to assume `u32` -> `usize` works
+    #[expect(clippy::as_conversions)]
     const _NO_16_BIT_PLATFORMS: [(); (usize::BITS - u32::BITS) as usize] = [(); _];
 
     // TODO: Replace `len` with some calculation deterministic to the params
@@ -153,7 +154,7 @@ pub struct Dkg<C: Curves> {
   n: u16,
   evrf_public_keys: Vec<<C::EmbeddedCurve as WrappedGroup>::G>,
   verification_shares: HashMap<Participant, <C::ToweringCurve as WrappedGroup>::G>,
-  #[allow(clippy::type_complexity)]
+  #[expect(clippy::type_complexity)]
   encrypted_secret_shares: HashMap<
     Participant,
     HashMap<
@@ -199,14 +200,14 @@ impl<C: Curves> Dkg<C> {
     }
     if evrf_public_keys.iter().any(|key| bool::from(key.is_identity())) {
       Err(Error::PublicKeyWasIdentity)?;
-    };
+    }
     // This also ensures the private key is not 0, due to the prior check the identity point wasn't
     // present
     let evrf_public_key =
       <C::EmbeddedCurve as WrappedGroup>::generator() * evrf_private_key.deref();
     if !evrf_public_keys.contains(&evrf_public_key) {
       Err(Error::NotAParticipant)?;
-    };
+    }
 
     let transcript = Self::initial_transcript(context, evrf_public_keys, t);
     // Bind to the participant
@@ -241,7 +242,7 @@ impl<C: Curves> Dkg<C> {
 }
 
 /// Batch-verifiable statements to verify encrypted secret shares.
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 fn verifiable_encryption_statements<C: Curves>(
   rng: &mut (impl RngCore + CryptoRng),
   coefficients: &[<C::ToweringCurve as WrappedGroup>::G],
@@ -312,7 +313,7 @@ impl<C: Curves> Dkg<C> {
     }
     if evrf_public_keys.iter().any(|key| bool::from(key.is_identity())) {
       Err(Error::PublicKeyWasIdentity)?;
-    };
+    }
     for i in participations.keys() {
       if u16::from(*i) > n {
         Err(Error::NonExistentParticipant)?;

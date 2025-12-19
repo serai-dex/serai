@@ -66,15 +66,22 @@ impl ScannerFeed for Rpc {
         timestamps.push(parent_block.header.timestamp);
         parent = parent_block.header.previous;
       }
-      timestamps.sort();
+      timestamps.sort_unstable();
 
-      // Because there are two timestamps equidistance from the ends, Monero's epee picks the
-      // in-between value, calculated by the following formula (from the "get_mid" function)
+      /*
+        Because there are two timestamps equidistance from the ends, Monero's `epee` picks the
+        in-between value, calculated by the following formula (from the "get_mid" function).
+
+        `(a/2) + (b/2) + ((a - 2*(a/2)) + (b - 2*(b/2)))/2`
+
+        This simplifies to `(a + b) / 2`. `(a/2) + (b/2)` ensures an overflow won't occur. Then,
+        `((a - 2*(a/2)) + (b - 2*(b/2)))/2` is just a ridiculously complicated way to get the
+        average last bit, flooring towards zero if only had its last bit set.
+      */
       let n = timestamps.len() / 2;
       let a = timestamps[n - 1];
       let b = timestamps[n];
-      #[rustfmt::skip] // Enables Ctrl+F'ing for everything after the `= `
-      let res = (a/2) + (b/2) + ((a - 2*(a/2)) + (b - 2*(b/2)))/2;
+      let res = a.midpoint(b);
 
       // Monero does check that the new block's time is greater than the median, causing the median
       // to be monotonic

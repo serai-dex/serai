@@ -30,7 +30,7 @@ impl SubstrateCli for Cli {
   }
 
   fn support_url() -> String {
-    "https://github.com/serai-dex/serai/issues/new".to_string()
+    "https://github.com/serai-dex/serai/issues/new".to_owned()
   }
 
   fn copyright_start_year() -> i32 {
@@ -100,7 +100,7 @@ pub fn run() -> sc_cli::Result<()> {
         unsafe_force_node_key_generation: true,
       };
 
-      cli.create_runner(&cli.run)?.run_node_until_exit(|mut config| async {
+      cli.create_runner(&cli.run)?.run_node_until_exit(async |mut config| {
         if config.role.is_authority() {
           config.state_pruning = Some(PruningMode::ArchiveAll);
         }

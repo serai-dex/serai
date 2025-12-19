@@ -166,20 +166,20 @@ impl BorshDeserialize for Transaction {
     if len == 0 {
       let call = Call::deserialize_reader(reader)?;
       if call.is_signed() {
-        #[allow(clippy::io_other_error)]
+        #[cfg_attr(feature = "std", expect(clippy::io_other_error))]
         Err(io::Error::new(io::ErrorKind::Other, "call was signed but marked unsigned"))?;
       }
       Ok(Transaction::Unsigned { call: UnsignedCall(call) })
     } else {
       if u32::from(len) > MAX_CALLS {
-        #[allow(clippy::io_other_error)]
+        #[cfg_attr(feature = "std", expect(clippy::io_other_error))]
         Err(io::Error::new(io::ErrorKind::Other, "too many calls"))?;
       }
       let mut calls = BoundedVec::with_bounded_capacity(len.into());
       for _ in 0 .. len {
         let call = Call::deserialize_reader(reader)?;
         if !call.is_signed() {
-          #[allow(clippy::io_other_error)]
+          #[cfg_attr(feature = "std", expect(clippy::io_other_error))]
           Err(io::Error::new(io::ErrorKind::Other, "call was unsigned but included as signed"))?;
         }
         calls.try_push(call).unwrap();
@@ -238,7 +238,8 @@ mod substrate {
   use sp_runtime::{
     transaction_validity::*,
     traits::{
-      Verify, ExtrinsicLike, ExtrinsicCall, Dispatchable, ValidateUnsigned, Checkable, Applyable,
+      Verify as _, ExtrinsicLike, ExtrinsicCall, Dispatchable, ValidateUnsigned, Checkable,
+      Applyable,
     },
     Weight,
   };

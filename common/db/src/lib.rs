@@ -1,3 +1,5 @@
+#![allow(clippy::std_instead_of_core, clippy::std_instead_of_alloc)]
+
 mod create_db;
 pub use create_db::*;
 

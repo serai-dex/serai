@@ -1,9 +1,8 @@
-use std::{sync::Arc, ops::Deref, collections::HashSet};
+use std::{sync::Arc, collections::HashSet};
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
-use sp_core::Encode;
-use sp_blockchain::{Error as BlockchainError, HeaderBackend};
+use sp_blockchain::HeaderBackend;
 use sp_api::ProvideRuntimeApi;
 
 use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
@@ -23,7 +22,7 @@ pub(crate) fn module<
   authority_discovery: sc_authority_discovery::Service,
 ) -> Result<RpcModule<impl 'static + Send + Sync>, Box<dyn std::error::Error + Send + Sync>> {
   let mut module = RpcModule::new((id, client, RwLock::new(authority_discovery)));
-  module.register_async_method("p2p_validators", |params, context, _ext| async move {
+  module.register_async_method("p2p_validators", async move |params, context, _ext| {
     let network = match params.parse::<[String; 1]>() {
       Ok([network]) => network,
       Err(e) => return Err(e),

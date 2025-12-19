@@ -7,7 +7,7 @@ use frost::{dkg::ThresholdKeys, sign::PreprocessMachine};
 
 use bitcoin_serai::{
   bitcoin::{
-    consensus::{Encodable, Decodable},
+    consensus::{Encodable as _, Decodable as _},
     ScriptBuf, Transaction as BTransaction,
   },
   wallet::{

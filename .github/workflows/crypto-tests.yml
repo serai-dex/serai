@@ -17,7 +17,11 @@ on:
 
 jobs:
   test-crypto:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 

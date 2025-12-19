@@ -1,16 +1,18 @@
-use core::{ops::Deref, time::Duration};
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+
+use core::{ops::Deref as _, str::FromStr as _, time::Duration};
 use std::{sync::Arc, collections::HashMap, time::Instant};
 
-use zeroize::{Zeroize, Zeroizing};
-use rand_core::{RngCore, OsRng};
+use zeroize::{Zeroize as _, Zeroizing};
+use rand_core::{RngCore as _, OsRng};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::{
-  group::{ff::PrimeField, GroupEncoding},
+  group::{ff::PrimeField as _, GroupEncoding as _},
   *,
 };
 
-use borsh::BorshDeserialize;
+use borsh::BorshDeserialize as _;
 
 use tokio::sync::mpsc;
 
@@ -26,7 +28,7 @@ use serai_client_serai::{
 };
 use message_queue::{Service, client::MessageQueue};
 
-use serai_task::{Task, TaskHandle, ContinuallyRan};
+use serai_task::{Task, TaskHandle, ContinuallyRan as _};
 
 use serai_cosign::{Faulted, SignedCosign, Cosigning};
 use serai_coordinator_substrate::{
@@ -116,7 +118,7 @@ fn spawn_cosigning<D: serai_db::Db>(
                 // Since this had a temporal error, queue it to try again later
                 erroneous.push(cosign);
               }
-            };
+            }
           }
 
           // Save the cosigns with temporal errors to the database
@@ -327,23 +329,13 @@ async fn handle_network(
 
 #[tokio::main]
 async fn main() {
-  // Override the panic handler with one which will panic if any tokio task panics
-  {
-    let existing = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic| {
-      existing(panic);
-      const MSG: &str = "exiting the process due to a task panicking";
-      println!("{MSG}");
-      log::error!("{MSG}");
-      std::process::exit(1);
-    }));
-  }
-
   // Initialize the logger
-  if std::env::var("RUST_LOG").is_err() {
-    std::env::set_var("RUST_LOG", serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_string()));
-  }
-  env_logger::init();
+  env_logger::builder()
+    .filter_level(
+      log::LevelFilter::from_str(&serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
+        .expect("`RUST_LOG` environment variable had an invalid filter"),
+    )
+    .init();
   log::info!("starting coordinator service...");
 
   // Read the Serai key from the env
@@ -512,5 +504,5 @@ async fn main() {
   }
 
   // Run the spawned tasks ad-infinitum
-  core::future::pending().await
+  core::future::pending::<()>().await;
 }

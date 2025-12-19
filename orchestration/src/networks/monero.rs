@@ -1,3 +1,4 @@
+use core::fmt::Write as _;
 use std::path::Path;
 
 use crate::{Network, Os, mimalloc, write_dockerfile};
@@ -43,12 +44,14 @@ RUN tar -xvjf monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2 --strip-components=1
 
   if os == Os::Alpine {
     // Increase the default stack size, as Monero does heavily use its stack
-    download_monero += &format!(
+    write!(
+      &mut download_monero,
       r#"
 ADD orchestration/increase_default_stack_size.sh .
 RUN ./increase_default_stack_size.sh {monero_binary}
 "#
-    );
+    )
+    .unwrap();
   }
 
   let setup = mimalloc(os) + &download_monero;
@@ -79,7 +82,7 @@ CMD ["/run.sh"]
 }
 
 pub fn monero(orchestration_path: &Path, network: Network) {
-  monero_internal(network, Os::Alpine, orchestration_path, "monero", "monerod", "18080 18081")
+  monero_internal(network, Os::Alpine, orchestration_path, "monero", "monerod", "18080 18081");
 }
 
 pub fn monero_wallet_rpc(orchestration_path: &Path) {
@@ -90,5 +93,5 @@ pub fn monero_wallet_rpc(orchestration_path: &Path) {
     "monero-wallet-rpc",
     "monero-wallet-rpc",
     "18082",
-  )
+  );
 }
