@@ -9,55 +9,55 @@ wallet.
 
 ### Layout
 
-- `audits`: Audits for various parts of Serai.
+- `audits`: Audits and security proofs for various parts of Serai.
 
 - `spec`: The specification of the Serai protocol, both internally and as
-  networked.
+  networked. This folder is lacking and is still being expanded on.
 
-- `docs`: User-facing documentation on the Serai protocol.
+- `docs`: User-facing documentation on the Serai protocol. This folder is
+  outlined yet needs an owner to work through it.
 
 - `common`: Crates containing utilities common to a variety of areas under
   Serai, none neatly fitting under another category.
 
 - `crypto`: A series of composable cryptographic libraries built around the
   `ff`/`group` APIs, achieving a variety of tasks. These range from generic
-  infrastructure, to our IETF-compliant FROST implementation, to a DLEq proof as
-  needed for Bitcoin-Monero atomic swaps.
+  libraries for elliptic curve cryptography to our IETF-compliant FROST
+  implementation.
 
 - `networks`: Various libraries intended for usage in Serai yet also by the
   wider community. This means they will always support the functionality Serai
-  needs, yet won't disadvantage other use cases when possible.
+  needs, yet won't disadvantage other use-cases when possible.
 
-- `message-queue`: An ordered message server so services can talk to each other,
-  even when the other is offline.
+- `message-queue`: An ordered message queue so services can send messages to
+  each other, even when the other is offline. This ensures one service's
+  downtime doesn't propagate to another service's downtime, while also
+  providing a layer of isolation between services.
 
-- `processor`: A generic chain processor to process data for Serai and process
-  events from Serai, executing transactions as expected and needed.
+- `processor`: A service to index a blockchain, maintain the state for received
+   coins, and schedule/sign transactions.
 
-- `coordinator`: A service to manage processors and communicate over a P2P
+- `coordinator`: A service to oversee the processors and communicate over a P2P
   network with other validators.
 
-- `substrate`: Substrate crates used to instantiate the Serai network.
+- `substrate`: The consensus rules for the Serai blockchain, and the
+   implementation of the node itself, built around the
+   [Substrate framework](
+     https://github.com/paritytech/polkadot-sdk/tree/master/substrate
+   ).
 
-- `orchestration`: Dockerfiles and scripts to deploy a Serai node/test
-  environment.
+- `orchestration`: A binary to declare and spawn OCI containers for Serai's
+  infrastructure.
 
-- `tests`: Tests for various crates. Generally, `crate/src/tests` is used, or
-  `crate/tests`, yet any tests requiring crates' binaries are placed here.
+- `tests`: E2E tests for Serai's services, along with test utilities.
 
-### Security
-
-Serai hosts a bug bounty program via
-[Immunefi](https://immunefi.com/bounty/serai/). For in-scope critical
-vulnerabilities, we will reward whitehats with up to $30,000.
-
-Anything not in-scope should still be submitted through Immunefi, with rewards
-issued at the discretion of the Immunefi program managers.
+- `patches`: Patches for our supply-chain to minimize dependencies and ensure
+  a tighter surface.
 
 ### Links
 
 - [Website](https://serai.exchange/): https://serai.exchange/
-- [Immunefi](https://immunefi.com/bounty/serai/): https://immunefi.com/bounty/serai/
+- [Immunefi (Bug Bounty Program)](https://immunefi.com/bounty/serai/): https://immunefi.com/bounty/serai/
 - [Twitter](https://twitter.com/SeraiDEX): https://twitter.com/SeraiDEX
 - [Discord](https://discord.gg/mpEUtJR3vz): https://discord.gg/mpEUtJR3vz
 - [Matrix](https://matrix.to/#/#serai:matrix.org): https://matrix.to/#/#serai:matrix.org
