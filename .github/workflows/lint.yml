@@ -226,14 +226,14 @@ jobs:
           cd processor/ethereum/router/contracts
           slither Router.sol
 
-    shellcheck:
-      runs-on: ubuntu-slim
-      steps:
-        - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
-        - name: shellcheck
-          shell: bash
-          run: |
-            sudo apt install -y shellcheck
-            find . -name "*.sh" | while read -r script; do
-              shellcheck --enable=all --shell=sh --severity=info $script
-            done
+  shellcheck:
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+      - name: shellcheck
+        shell: bash
+        run: |
+          sudo apt install -y shellcheck
+          find . -name "*.sh" | while read -r script; do
+            shellcheck --enable=all --shell=sh --severity=info $script
+          done
