@@ -111,8 +111,6 @@ members = [
 
   "orchestration",
 
-  "mini",
-
   "tests/no-std",
 
   "tests/docker",
