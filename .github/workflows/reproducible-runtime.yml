@@ -85,7 +85,7 @@ jobs:
           # Allow the following command to fail
           set +e
           # Capture the output to `stdout.txt`
-          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture > stdout.txt
+          RUSTFLAGS="--cfg github_ci" GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture > stdout.txt
           CODE=$?
           # Print `stdout` for the CI logs, as we captured it to process it, not swallow it
           cat stdout.txt

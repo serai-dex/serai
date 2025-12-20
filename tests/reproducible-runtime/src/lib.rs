@@ -4,7 +4,17 @@ pub fn reproducibly_builds() {
 
   use rand_core::{RngCore as _, OsRng};
 
-  const RUNS: usize = 3;
+  #[expect(unexpected_cfgs)]
+  const RUNS: usize = {
+    // 3 is a sane, healthy amount of runs to ensure this isn't being randomized when built.
+    #[cfg(any(target_arch = "x86_64", not(github_ci)))]
+    let runs = 3;
+    // This test is _incredibly_ slow when the host has to be emulated, so when in the GitHub CI
+    // where this will be cross-checked against other machines, we only run it once.
+    #[cfg(all(not(target_arch = "x86_64"), github_ci))]
+    let runs = 1;
+    runs
+  };
 
   let mut images = vec![];
   for _ in 0 .. RUNS {
