@@ -26,13 +26,17 @@ fn main() {
     "-C symbol-mangling-version=v0 -C embed-bitcode=false -C linker-plugin-lto=true";
 
   let profile = env::var("PROFILE").unwrap();
+  let mut env = vec![];
   let release = profile == "release";
-  let rustflags = format!("{ONE_45491} {WASM} {REQUIRED_BY_SUBSTRATE} {SAFETY} {COMPILATION}");
-  let rustflags = if release {
-    format!("{rustflags} -C codegen-units=1 -C strip=symbols -C debug-assertions=false")
-  } else {
-    rustflags
-  };
+  let mut rustflags = format!("{ONE_45491} {WASM} {REQUIRED_BY_SUBSTRATE} {SAFETY} {COMPILATION}");
+  if release {
+    rustflags.push_str(" -C debug-assertions=false -C codegen-units=1 -C opt-level=3");
+    // Strip debug info, as we have debug builds for that
+    rustflags.push_str(" -C debuginfo=none -C strip=symbols");
+    // `incremental` is recommended to be disabled for release builds, and this should
+    // be a clean build used just once as part of the reproducible build process.
+    env.push(("CARGO_INCREMENTAL", "false"));
+  }
 
   let target_dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("target");
 
@@ -47,6 +51,9 @@ fn main() {
       .env("RUSTC", env::var("RUSTC").unwrap())
       .env("RUSTFLAGS", &rustflags)
       .env("CARGO_TARGET_DIR", &target_dir);
+    for (key, value) in &env {
+      command.env(key, value);
+    }
     command
   };
 
