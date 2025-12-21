@@ -52,9 +52,26 @@ runs:
     - name: Install solc
       shell: bash
       run: |
-        cargo +1.92 install svm-rs --version =0.5.22
-        svm install 0.8.29
-        svm use 0.8.29
+        cargo install svm-rs --version =0.5.22
+
+        solc_version() {
+          # Install the version of `solc` specified in the contracts
+          # This also checks the specified version is consistent across contracts
+          cat $(find . -name "*.sol") | grep "pragma solidity" | while read -r line; do
+            THIS_SOLC_VERSION=$(printf "%s" "$line" | cut -d'^' -f2 | cut -d';' -f1)
+            if [ "$SOLC_VERSION" = "" ]; then
+              SOLC_VERSION="$THIS_SOLC_VERSION"
+              echo $SOLC_VERSION
+            fi
+            if [ ! "$line" = "pragma solidity ^$SOLC_VERSION;" ]; then
+              echo "Inconsistent Solidity requirement in \`.sol\` files"
+              exit 1
+            fi
+          done
+        }
+
+        svm install $(solc_version)
+        svm use $(solc_version)
 
     # This is a build dependency, not a test dependency, due to being used to build the runtime
     - name: Install `docker`
@@ -68,3 +85,12 @@ runs:
         sudo apt autoremove -y
         sudo apt clean
       if: runner.os == 'Linux'
+
+    - name: Set GitHub CI Environment Variables
+      shell: bash
+      run: |
+        # These tweak the amount of iterations performed as approprtiate for GitHub's CI
+        echo 'GITHUB_CI=true' >> "$GITHUB_ENV"
+        echo RUSTFLAGS="$RUSTFLAGS --cfg github_ci" >> "$GITHUB_ENV"
+        # We always appreciate backtraces in the CI
+        echo 'RUST_BACKTRACE=1' >> "$GITHUB_ENV"

@@ -32,7 +32,7 @@ fn main() {
   if release {
     rustflags.push_str(" -C debug-assertions=false -C codegen-units=1 -C opt-level=3");
     // Strip debug info, as we have debug builds for that
-    rustflags.push_str(" -C debuginfo=none -C strip=symbols");
+    rustflags.push_str(" -C debuginfo=none -C strip=symbols -C force-unwind-tables=no");
     // `incremental` is recommended to be disabled for release builds, and this should
     // be a clean build used just once as part of the reproducible build process.
     env.push(("CARGO_INCREMENTAL", "false"));

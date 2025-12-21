@@ -14,9 +14,10 @@ other than the sections of this document which remain relevant.
 ### Dependencies
 
 Serai primarily requires Rust, presumably via [`rustup`](https://rustup.rs),
-to build its libraries. The `rust-toolchain.toml` in the root of the workspace
-is sufficient to install the necessary targets and components. Please note
-`nightly` is used for `cargo fmt` (`cargo +nightly fmt`).
+to build its libraries. The [`rust-toolchain.toml`](/rust-toolchain.toml) in
+the root of the workspace is sufficient to install the necessary targets and
+components. Please note the `nightly` channel is used for `cargo fmt`
+(`cargo +nightly fmt`).
 
 Some system packages _may_ be required, such as `git`, `curl`,
 `ca-certificates`, `libclang-dev`, and most notably `protobuf-compiler`. While
@@ -26,8 +27,8 @@ available via your system and the `ROCKSDB_LIB_DIR` environment variable is set
 (optionally along with the `SNAPPY_LIB_DIR` environment variable).
 
 Building the Ethereum smart contracts (and libraries for them) relies on an
-exact version of Solidity, currently `0.8.29`. The recommended way to install
-Solidity is via `svm-rs` as follows:
+exact version of Solidity, currently `0.8.29`. Our recommended way to install
+Solidity is via [`svm-rs`](https://docs.rs/svm-rs) as follows:
 
 ```sh
 cargo install svm-rs
@@ -75,7 +76,8 @@ configuration demonstrated in our
 ) uses [`alloy-node-bindings`](https://docs.rs/alloy-node-bindings) to spawn
 instances of
 [Anvil](https://github.com/foundry-rs/foundry/tree/master/crates/anvil), which
-requires `anvil` be present in the user's path. This can be installed as follows:
+requires `anvil` be present in the user's path. This can be installed along
+with [Foundry](https://github.com/foundry-rs/foundry) as follows:
 
 
 ```sh
@@ -87,7 +89,8 @@ foundryup
 
 Commits should be submitted via a pull request to our
 [GitHub repository](https://github.com/serai-dex/serai). Exceptionally, patch
-files may be emailed to `patches@serai.exchange`.
+files may be emailed to
+[`patches@serai.exchange`](mailto:patches@serai.exchange).
 
 Commits will be checked against our Continuous Integration, orchestrated via
 GitHub Actions and ran by GitHub's provided runners for public repositories.

@@ -1,8 +1,8 @@
 #check=skip=FromPlatformFlagConstDisallowed
 # We want to explicitly set the platform to ensure a constant host environment
 
-# rust:1.91.1-alpine as of December 4th, 2025 (GMT)
-FROM --platform=linux/amd64 rust@sha256:84f263251b0ada72c1913d82a824d47be15a607f3faf015d8bdae48db544cdf2 AS builder
+# rust:1.92.0-alpine3.23 as of December 20th, 2025 (GMT)
+FROM --platform=linux/amd64 rust@sha256:7edc8cde436939b5350f9fafbffc43f0f957b8506ad94aa8e1336f0799fa845f AS builder
 
 # Add the WASM toolchain
 RUN rustup target add wasm32v1-none

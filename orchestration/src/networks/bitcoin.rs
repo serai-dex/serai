@@ -3,33 +3,34 @@ use std::path::Path;
 use crate::{Network, Os, mimalloc, os, write_dockerfile};
 
 pub fn bitcoin(orchestration_path: &Path, network: Network) {
+  const VERSION: &str = "30.0";
+  let file = format!("bitcoin-{VERSION}-$(uname -m)-linux-gnu.tar.gz");
+  let url = format!("https://bitcoincore.org/bin/bitcoin-core-{VERSION}");
+
   #[rustfmt::skip]
-  const DOWNLOAD_BITCOIN: &str = r#"
+  let download_bitcoin = format!(r#"
 FROM alpine:latest AS bitcoin
 
-ENV BITCOIN_VERSION=30.0
-
-RUN apk --no-cache add wget git gnupg
+RUN apk --no-cache add git gnupg
 
 # Download Bitcoin
-RUN wget -4 https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz
-RUN wget -4 https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS
-RUN wget -4 https://bitcoincore.org/bin/bitcoin-core-${BITCOIN_VERSION}/SHA256SUMS.asc
+RUN wget {url}/{file}
+RUN wget {url}/SHA256SUMS
+RUN wget {url}/SHA256SUMS.asc
 
 # Verify all sigs and check for a valid signature from laanwj -- 71A3
 RUN git clone https://github.com/bitcoin-core/guix.sigs && \
   cd guix.sigs/builder-keys && \
-  find . -name '*.gpg' -exec gpg --import {} \; && \
+  find . -name '*.gpg' -exec gpg --import {{}} \; && \
   gpg --verify --status-fd 1 --verify ../../SHA256SUMS.asc ../../SHA256SUMS | grep "^\[GNUPG:\] VALIDSIG.*71A3B16735405025D447E8F274810B012346C9A6"
 
-RUN grep bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz SHA256SUMS | sha256sum -c
+RUN grep "{file}" SHA256SUMS | sha256sum -c
 
-# Prepare Image
-RUN tar xzvf bitcoin-${BITCOIN_VERSION}-$(uname -m)-linux-gnu.tar.gz
-RUN mv bitcoin-${BITCOIN_VERSION}/bin/bitcoind .
-"#;
+RUN tar -xf "{file}"
+RUN mv $(find . -name bitcoind) .
+"#);
 
-  let setup = mimalloc(Os::Alpine) + DOWNLOAD_BITCOIN;
+  let setup = mimalloc(Os::Alpine) + &download_bitcoin;
 
   let run_bitcoin = format!(
     r#"
@@ -47,9 +48,6 @@ CMD ["/run.sh"]
   let res = setup + &run;
 
   let mut bitcoin_path = orchestration_path.to_path_buf();
-  bitcoin_path.push("networks");
-  bitcoin_path.push("bitcoin");
-  bitcoin_path.push("Dockerfile");
-
+  bitcoin_path.extend(["networks", "bitcoin", "Dockerfile"]);
   write_dockerfile(bitcoin_path, &res);
 }

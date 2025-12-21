@@ -32,7 +32,7 @@ jobs:
       - name: Run Clippy
         shell: bash
         run: |
-          RUSTFLAGS="-D warnings"
+          RUSTFLAGS="$RUSTFLAGS -D warnings"
 
           # stable Rust
           cargo clippy --all-features --all-targets

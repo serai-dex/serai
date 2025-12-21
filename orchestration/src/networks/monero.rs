@@ -3,14 +3,9 @@ use std::path::Path;
 
 use crate::{Network, Os, mimalloc, write_dockerfile};
 
-fn monero_internal(
-  network: Network,
-  os: Os,
-  orchestration_path: &Path,
-  folder: &str,
-  monero_binary: &str,
-  ports: &str,
-) {
+pub fn monero(orchestration_path: &Path, network: Network) {
+  let os = Os::Alpine;
+
   const MONERO_VERSION: &str = "0.18.4.4";
 
   let arch = match std::env::consts::ARCH {
@@ -21,23 +16,25 @@ fn monero_internal(
     _ => panic!("unsupported architecture"),
   };
 
+  let file = format!("monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2");
+
   #[rustfmt::skip]
   let mut download_monero = format!(r#"
 FROM alpine:latest AS monero
 
-RUN apk --no-cache add wget gnupg
+RUN apk --no-cache add gnupg
 
 # Download Monero
-RUN wget -4 https://downloads.getmonero.org/cli/monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2
+RUN wget https://downloads.getmonero.org/cli/{file}
 
 # Verify Binary -- fingerprint from https://github.com/monero-project/monero-site/issues/1949
 ADD orchestration/{}/networks/monero/hashes-v{MONERO_VERSION}.txt .
 RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-sigs-only --receive-keys 81AC591FE9C4B65C5806AFC3F0AF4D462A0BDF92 && \
   gpg --verify hashes-v{MONERO_VERSION}.txt && \
-  grep "$(sha256sum monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2 | cut -c 1-64)" hashes-v{MONERO_VERSION}.txt
+  grep "{file}" hashes-v{MONERO_VERSION}.txt | sha256sum -c
 
 # Extract it
-RUN tar -xvjf monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2 --strip-components=1
+RUN tar -xf {file} --strip-components=1
 "#,
     network.label(),
   );
@@ -48,7 +45,7 @@ RUN tar -xvjf monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2 --strip-components=1
       &mut download_monero,
       r#"
 ADD orchestration/increase_default_stack_size.sh .
-RUN ./increase_default_stack_size.sh {monero_binary}
+RUN ./increase_default_stack_size.sh monerod
 "#
     )
     .unwrap();
@@ -58,11 +55,11 @@ RUN ./increase_default_stack_size.sh {monero_binary}
 
   let run_monero = format!(
     r#"
-COPY --from=monero --chown=monero:nogroup {monero_binary} /bin
+COPY --from=monero --chown=monero:nogroup monerod /bin
 
-EXPOSE {ports}
+EXPOSE 18080 18081
 
-ADD /orchestration/{}/networks/{folder}/run.sh /
+ADD /orchestration/{}/networks/monero/run.sh /
 CMD ["/run.sh"]
 "#,
     network.label(),
@@ -74,24 +71,6 @@ CMD ["/run.sh"]
   let res = setup + &run;
 
   let mut monero_path = orchestration_path.to_path_buf();
-  monero_path.push("networks");
-  monero_path.push(folder);
-  monero_path.push("Dockerfile");
-
+  monero_path.extend(["networks", "monero", "Dockerfile"]);
   write_dockerfile(monero_path, &res);
-}
-
-pub fn monero(orchestration_path: &Path, network: Network) {
-  monero_internal(network, Os::Alpine, orchestration_path, "monero", "monerod", "18080 18081");
-}
-
-pub fn monero_wallet_rpc(orchestration_path: &Path) {
-  monero_internal(
-    Network::Dev,
-    Os::Alpine,
-    orchestration_path,
-    "monero-wallet-rpc",
-    "monero-wallet-rpc",
-    "18082",
-  );
 }
