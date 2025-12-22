@@ -35,10 +35,13 @@ pub fn reproducibly_builds() {
   assert_eq!(path.file_name().unwrap(), "Cargo.toml");
   assert!(path.pop());
 
-  let mut commands = vec![];
-  for image in &images {
-    commands.push(
-      Command::new("docker")
+  #[expect(unexpected_cfgs)]
+  {
+    // Build the images in parallel
+    let mut commands = vec![];
+    for image in &images {
+      #[cfg_attr(not(github_ci), expect(unused_mut))]
+      let mut command = Command::new("docker")
         .current_dir(&path)
         .arg("build")
         .arg("--quiet")
@@ -48,13 +51,24 @@ pub fn reproducibly_builds() {
         .arg(image)
         .arg(".")
         .spawn()
-        .unwrap(),
-    );
+        .unwrap();
+
+      // In the GH CI, we force this to be sequential due to experiencing OOM kills on
+      // `macos-15-intel`. This doesn't take so long to run we're concerned about any time limit.
+      #[cfg(github_ci)]
+      assert!(command.wait().unwrap().success());
+
+      commands.push(command);
+    }
+
+    // Join all of the commands
+    for mut command in commands {
+      assert!(command.wait().unwrap().success());
+    }
   }
 
   let mut outputs = vec![];
-  for (image, mut command) in images.into_iter().zip(commands) {
-    assert!(command.wait().unwrap().success());
+  for image in images {
     outputs.push(
       Command::new("docker")
         .arg("run")
