@@ -329,6 +329,9 @@ mod substrate {
     fn call(&self) -> &Self {
       self
     }
+    fn into_call(self) -> Self {
+      self
+    }
   }
 
   impl<Context: TransactionContext> GetDispatchInfo for TransactionWithContext<Context> {

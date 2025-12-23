@@ -138,38 +138,39 @@ impl Block {
 mod substrate {
   use core::fmt::Debug;
 
-  use scale::{Encode, Decode, DecodeWithMemTracking};
+  use scale::{Encode, EncodeLike, Decode, DecodeAll as _, DecodeWithMemTracking};
 
-  use sp_core::H256;
+  use sp_core::{
+    serde::{self, Serialize, Deserialize},
+    H256,
+  };
   use sp_runtime::{
     generic::{DigestItem, Digest},
-    traits::{Header as HeaderTrait, HeaderProvider, Block as BlockTrait},
+    traits::{
+      Header as HeaderTrait, HeaderProvider, LazyExtrinsic, LazyBlock, Block as BlockTrait,
+    },
   };
 
   use super::*;
 
   // Add `serde` implementations which treat `self` as a `Vec<u8>`
-  impl sp_core::serde::Serialize for Transaction {
+  impl Serialize for Transaction {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-      S: sp_core::serde::Serializer,
+      S: serde::Serializer,
     {
-      <Vec<u8> as sp_core::serde::Serialize>::serialize(&self.encode(), serializer)
+      <Vec<u8> as Serialize>::serialize(&self.encode(), serializer)
     }
   }
-  impl<'de> sp_core::serde::Deserialize<'de> for Transaction {
+  impl<'de> Deserialize<'de> for Transaction {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-      D: sp_core::serde::Deserializer<'de>,
+      D: serde::Deserializer<'de>,
     {
-      use sp_core::serde::de::Error as _;
-      let bytes = <Vec<u8> as sp_core::serde::Deserialize>::deserialize(deserializer)?;
+      use serde::de::Error as _;
+      let bytes = <Vec<u8> as Deserialize>::deserialize(deserializer)?;
       let mut reader = bytes.as_slice();
-      let block = Self::decode(&mut reader).map_err(D::Error::custom)?;
-      if !reader.is_empty() {
-        Err(D::Error::custom("extraneous bytes at end"))?;
-      }
-      Ok(block)
+      Self::decode_all(&mut reader).map_err(D::Error::custom)
     }
   }
 
@@ -226,15 +227,7 @@ mod substrate {
   /// This is not considered part of the protocol proper and may be pruned in the future. It's
   /// solely considered used for consensus now.
   #[derive(
-    Clone,
-    PartialEq,
-    Eq,
-    Debug,
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    sp_runtime::Serialize,
-    sp_runtime::Deserialize,
+    Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, Serialize, Deserialize,
   )]
   pub struct ConsensusV1 {
     /// The hash of the immediately preceding block.
@@ -251,15 +244,7 @@ mod substrate {
 
   /// A V1 header for a block, as needed by Substrate.
   #[derive(
-    Clone,
-    PartialEq,
-    Eq,
-    Debug,
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    sp_runtime::Serialize,
-    sp_runtime::Deserialize,
+    Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, Serialize, Deserialize,
   )]
   pub struct SubstrateHeaderV1 {
     number: u64,
@@ -268,15 +253,7 @@ mod substrate {
 
   /// A header for a block, as needed by Substrate.
   #[derive(
-    Clone,
-    PartialEq,
-    Eq,
-    Debug,
-    Encode,
-    Decode,
-    DecodeWithMemTracking,
-    sp_runtime::Serialize,
-    sp_runtime::Deserialize,
+    Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, Serialize, Deserialize,
   )]
   pub enum SubstrateHeader {
     /// A version 1 header.
@@ -345,27 +322,23 @@ mod substrate {
     }
   }
 
-  impl sp_core::serde::Serialize for SubstrateBlock {
+  impl Serialize for SubstrateBlock {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-      S: sp_core::serde::Serializer,
+      S: serde::Serializer,
     {
-      <Vec<u8> as sp_core::serde::Serialize>::serialize(&self.encode(), serializer)
+      <Vec<u8> as Serialize>::serialize(&self.encode(), serializer)
     }
   }
-  impl<'de> sp_core::serde::Deserialize<'de> for SubstrateBlock {
+  impl<'de> Deserialize<'de> for SubstrateBlock {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-      D: sp_core::serde::Deserializer<'de>,
+      D: serde::Deserializer<'de>,
     {
-      use sp_core::serde::de::Error as _;
-      let bytes = <Vec<u8> as sp_core::serde::Deserialize>::deserialize(deserializer)?;
+      use serde::de::Error as _;
+      let bytes = <Vec<u8> as Deserialize>::deserialize(deserializer)?;
       let mut reader = bytes.as_slice();
-      let block = Self::decode(&mut reader).map_err(D::Error::custom)?;
-      if !reader.is_empty() {
-        Err(D::Error::custom("extraneous bytes at end"))?;
-      }
-      Ok(block)
+      Self::decode_all(&mut reader).map_err(D::Error::custom)
     }
   }
 
@@ -464,10 +437,55 @@ mod substrate {
     type HeaderT = SubstrateHeader;
   }
 
+  // These `trait` implementations are required to implement `Block for SubstrateBlock`
+  impl LazyExtrinsic for Transaction {
+    fn decode_unprefixed(mut data: &[u8]) -> Result<Self, scale::Error> {
+      Transaction::decode_all(&mut data)
+    }
+  }
+  #[expect(clippy::from_over_into)] // We don't want this and solely have this to satisfy Substrate
+  impl Into<sp_runtime::OpaqueExtrinsic> for Transaction {
+    fn into(self) -> sp_runtime::OpaqueExtrinsic {
+      sp_runtime::OpaqueExtrinsic::from_blob(self.encode())
+    }
+  }
+
+  /// A block type which satisfies the [`LazyBlock`] trait.
+  ///
+  /// We stub this for now, forgoing the optimization enabled by this being a distinct type in
+  /// favor of the simplicity.
+  #[derive(Debug, Encode, Decode)]
+  pub struct LazySubstrateBlock(SubstrateBlock);
+
+  #[expect(clippy::from_over_into)]
+  impl Into<LazySubstrateBlock> for SubstrateBlock {
+    fn into(self) -> LazySubstrateBlock {
+      LazySubstrateBlock(self)
+    }
+  }
+
+  impl EncodeLike<SubstrateBlock> for LazySubstrateBlock {}
+  impl EncodeLike<LazySubstrateBlock> for SubstrateBlock {}
+
+  impl LazyBlock for LazySubstrateBlock {
+    type Extrinsic = Transaction;
+    type Header = SubstrateHeader;
+    fn header(&self) -> &Self::Header {
+      &self.0.header
+    }
+    fn header_mut(&mut self) -> &mut Self::Header {
+      &mut self.0.header
+    }
+    fn extrinsics(&self) -> impl Iterator<Item = Result<Self::Extrinsic, scale::Error>> {
+      self.0.transactions.iter().cloned().map(Ok)
+    }
+  }
+
   impl BlockTrait for SubstrateBlock {
     type Extrinsic = Transaction;
     type Header = SubstrateHeader;
     type Hash = H256;
+    type LazyBlock = LazySubstrateBlock;
     fn header(&self) -> &Self::Header {
       &self.header
     }
@@ -479,13 +497,6 @@ mod substrate {
     }
     fn new(header: Self::Header, transactions: Vec<Self::Extrinsic>) -> Self {
       Self { header, transactions }
-    }
-    fn encode_from(header: &Self::Header, transactions: &[Self::Extrinsic]) -> Vec<u8> {
-      let header = header.encode();
-      let transactions = transactions.encode();
-      let mut block = header;
-      block.extend(transactions);
-      block
     }
     fn hash(&self) -> Self::Hash {
       self.header.hash()
