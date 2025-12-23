@@ -24,7 +24,19 @@ pub use policy::*;
 /// The store for a median.
 ///
 /// `KeyPrefix` is accepted so a single set of storage values may be used to back multiple medians.
-/// For all `StorageDoubleMap`s however, the hasher of the second key MUST be the identity hasher.
+/// For all `(Iterable)StorageDoubleMap`s however, the hasher of the second key MUST be the
+/// identity hasher. This is due to relying on the ordering of the keys to achieve iteration
+/// through elements of the list of values for which the median is taken.
+///
+/// With a radix trie, the storage hasher is intended to limit the ability of an adversary to
+/// create complex layouts which have increased costs to read/write/prove. With a proper choice of
+/// hasher, while an adversary may be able to write to certain keys in an attempt to add additional
+/// layers to the trie (decreasing performance), they'd have to continually perform hashes and find
+/// partial collisions (a task which becomes more and more difficult as the adversary attempts to
+/// add more and more additional layers). The requirement of the identity hasher here does nullify
+/// that protection. Accordingly, when deploying a median, the values inserted must either be
+/// infeasible to manipulate or the length of their encodings must be sufficiently small that even
+/// if an attacker created the most complex layout possible, it'd still be of tolerable complexity.
 ///
 /// For all storage values present, they MUST be considered opaque to the caller and left
 /// undisturbed. No assumptions may be made about their internal representation nor usage.
