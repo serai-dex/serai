@@ -121,9 +121,9 @@ impl KeyShares {
   /// One key share.
   pub const ONE: KeyShares = KeyShares(1);
   /// The maximum amount of key shares per set.
-  pub const MAX_PER_SET: u16 = 150;
+  pub const MAX_PER_SET: u16 = 127;
   /// The maximum amount of key shares per set, represented as a `u32`.
-  pub const MAX_PER_SET_U32: u32 = 150;
+  pub const MAX_PER_SET_U32: u32 = 127;
 
   /// Create key shares from a `u16`.
   ///
