@@ -46,6 +46,9 @@ macro_rules! batch_struct {
       /// The hash of the external network's block which produced this `Batch`.
       external_network_block_hash: BlockHash,
       /// The instructions to execute.
+      // We could bound this, as we can calculate a bound from the size limit, but we want the
+      // length prefix to be four bytes now to be mindful of future scaling changes which may
+      // require such a large prefix: https://github.com/serai-dex/serai/issues/715
       instructions: Vec<InInstructionWithBalance>,
     }
   }
