@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{
+  BitVec,
   crypto::{EmbeddedEllipticCurveKeys, SignedEmbeddedEllipticCurveKeys, KeyPair, Signature},
   address::SeraiAddress,
   balance::Amount,
@@ -20,12 +21,7 @@ pub enum Call {
     /// The keys being set.
     key_pair: KeyPair,
     /// The participants in the validator set who signed off on these keys.
-    // TODO: Bound
-    #[borsh(
-      serialize_with = "serai_primitives::sp_borsh::borsh_serialize_bitvec",
-      deserialize_with = "serai_primitives::sp_borsh::borsh_deserialize_bitvec"
-    )]
-    signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
+    signature_participants: BitVec<{ KeyShares::MAX_PER_SET_U64 }>,
     /// The signature confirming these keys are valid.
     signature: Signature,
   },

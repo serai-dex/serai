@@ -9,12 +9,6 @@ use crate::network_id::{ExternalNetworkId, NetworkId};
 /// This type serializes to a subset of `Coin`.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[borsh(use_discriminant = true)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
-#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
 pub enum ExternalCoin {
   /// Bitcoin, from the Bitcoin network.
   Bitcoin = 1,
@@ -24,6 +18,14 @@ pub enum ExternalCoin {
   Dai = 3,
   /// Monero, from the Monero network.
   Monero = 4,
+}
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(ExternalCoin);
+#[cfg(feature = "scale")]
+impl scale::MaxEncodedLen for ExternalCoin {
+  fn max_encoded_len() -> usize {
+    1
+  }
 }
 
 impl ExternalCoin {
@@ -36,12 +38,6 @@ impl ExternalCoin {
 
 /// The type used to identify coins.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
-#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
 pub enum Coin {
   /// The Serai coin.
   Serai,
@@ -66,6 +62,15 @@ impl BorshDeserialize for Coin {
       0 => Ok(Self::Serai),
       _ => ExternalCoin::deserialize_reader(&mut kind.as_slice()).map(Into::into),
     }
+  }
+}
+
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(Coin);
+#[cfg(feature = "scale")]
+impl scale::MaxEncodedLen for Coin {
+  fn max_encoded_len() -> usize {
+    1
   }
 }
 

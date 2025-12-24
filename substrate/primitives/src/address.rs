@@ -24,17 +24,19 @@ const HUMAN_READABLE_PART: bech32::Hrp = bech32::Hrp::parse_unchecked("sri");
 
 /// The address for an account on Serai.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
+#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct SeraiAddress(pub [u8; 32]);
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(SeraiAddress);
 
-// These share encodings as 32-byte arrays
-#[cfg(feature = "non_canonical_scale_derivations")]
+#[cfg(feature = "scale")]
 impl scale::EncodeLike<Public> for SeraiAddress {}
-#[cfg(feature = "non_canonical_scale_derivations")]
+#[cfg(feature = "scale")]
 impl scale::EncodeLike<Public> for &SeraiAddress {}
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<SeraiAddress> for Public {}
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<SeraiAddress> for &Public {}
 
 impl SeraiAddress {
   /// Generate an address for use by the system.
@@ -126,10 +128,6 @@ impl core::str::FromStr for SeraiAddress {
 
 /// An address for an external network.
 #[derive(Clone, PartialEq, Eq, Debug, borsh::BorshSerialize, borsh::BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
 pub struct ExternalAddress(
   #[borsh(
     serialize_with = "crate::borsh_serialize_bounded_vec",
@@ -137,6 +135,8 @@ pub struct ExternalAddress(
   )]
   BoundedVec<u8, ConstU32<{ ExternalAddress::MAX_LEN }>>,
 );
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(ExternalAddress);
 
 impl ExternalAddress {
   /// The maximum length for an `ExternalAddress`.

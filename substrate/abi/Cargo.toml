@@ -12,9 +12,6 @@ rust-version = "1.85"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[package.metadata.cargo-machete]
-ignored = ["serde"]
-
 [lints]
 workspace = true
 
@@ -24,7 +21,6 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 bitvec = { version = "1", default-features = false, features = ["alloc"] }
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
-serde = { version = "1", default-features = false, features = ["derive"], optional = true }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
 sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["serde"], optional = true }
 frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
@@ -38,13 +34,12 @@ std = [
   "bitvec/std",
   "sp-core/std",
 
-  "serde?/std",
   "scale?/std",
   "sp-runtime?/std",
   "frame-support?/std",
 
   "serai-primitives/std",
 ]
-substrate = ["serde", "scale", "sp-runtime", "frame-support", "serai-primitives/serde", "serai-primitives/non_canonical_scale_derivations"]
+substrate = ["scale", "sp-runtime", "frame-support", "serai-primitives/scale"]
 try-runtime = ["sp-runtime/try-runtime"]
 default = ["std"]

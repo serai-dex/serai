@@ -13,13 +13,10 @@ pub type AmountRepr = u64;
 #[rustfmt::skip] // Prevent rustfmt from expanding the following derive into a 10-line monstrosity
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Debug)]
 #[derive(Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
-#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
+#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct Amount(pub AmountRepr);
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(Amount);
 
 impl Add for Amount {
   type Output = Option<Amount>;
@@ -44,18 +41,15 @@ impl Mul for Amount {
 
 /// An ExternalCoin and an Amount, forming a balance for an external coin.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
-#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
+#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct ExternalBalance {
   /// The coin this is a balance for.
   pub coin: ExternalCoin,
   /// The amount of this balance.
   pub amount: Amount,
 }
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(ExternalBalance);
 
 impl Add<Amount> for ExternalBalance {
   type Output = Option<ExternalBalance>;
@@ -80,18 +74,15 @@ impl Mul<Amount> for ExternalBalance {
 
 /// A Coin and an Amount, forming a balance for a coin.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
-#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
+#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct Balance {
   /// The coin this is a balance for.
   pub coin: Coin,
   /// The amount of this balance.
   pub amount: Amount,
 }
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(Balance);
 
 impl Add<Amount> for Balance {
   type Output = Option<Balance>;

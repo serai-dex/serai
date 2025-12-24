@@ -248,20 +248,7 @@ mod substrate {
 
   use super::*;
 
-  impl Encode for Transaction {
-    fn encode(&self) -> Vec<u8> {
-      borsh::to_vec(self).unwrap()
-    }
-  }
-  impl Decode for Transaction {
-    fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
-      serai_primitives::read_scale_as_borsh(input)
-    }
-  }
-
-  // Clean `Transaction` tracks its memory during decoding, as `read_scale_as_borsh` does call
-  // `Input::on_before_alloc_mem`
-  impl scale::DecodeWithMemTracking for Transaction {}
+  serai_primitives::borsh_as_scale!(Transaction);
 
   /// The context which transactions are executed in.
   pub trait TransactionContext: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {

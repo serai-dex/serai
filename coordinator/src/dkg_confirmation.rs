@@ -393,7 +393,9 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                     &mut txn,
                     self.set.set,
                     key_pair.clone(),
-                    signature_participants,
+                    signature_participants
+                      .try_into()
+                      .expect("created signature with more participants than allowed"),
                     signature.into(),
                   );
                   txn.commit();

@@ -2,11 +2,6 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
-// `parity-scale-codec` generates these
-#![cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  expect(clippy::as_conversions, clippy::cast_possible_truncation)
-)]
 
 use core::fmt;
 extern crate alloc;
@@ -14,9 +9,10 @@ extern crate alloc;
 use zeroize::Zeroize;
 use ::borsh::{BorshSerialize, BorshDeserialize};
 
-/// Wrappers to implement Borsh on non-Borsh-implementing types.
+/// Utilities to implement and bind Borsh into Substrate's expectations.
 #[doc(hidden)]
 pub mod sp_borsh;
+pub use sp_borsh::BitVec;
 pub(crate) use sp_borsh::*;
 
 /// Constants within the Serai protocol.
@@ -76,10 +72,19 @@ impl From<u64> for BlockNumber {
   hash it into a 32-byte hash or truncate it.
 */
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(feature = "non_canonical_scale_derivations", derive(scale::Encode, scale::Decode))]
-#[cfg_attr(feature = "serde", derive(sp_core::serde::Serialize, sp_core::serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(crate = "sp_core::serde"))]
 pub struct BlockHash(pub [u8; 32]);
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(BlockHash);
+
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<sp_core::H256> for BlockHash {}
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<sp_core::H256> for &BlockHash {}
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<BlockHash> for sp_core::H256 {}
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<BlockHash> for &sp_core::H256 {}
+
 impl From<[u8; 32]> for BlockHash {
   fn from(hash: [u8; 32]) -> BlockHash {
     BlockHash(hash)
@@ -100,12 +105,6 @@ impl fmt::Display for BlockHash {
   }
 }
 
-// These share encodings as 32-byte arrays
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::EncodeLike<sp_core::H256> for BlockHash {}
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::EncodeLike<sp_core::H256> for &BlockHash {}
-
 #[doc(hidden)]
 pub mod prelude {
   pub use crate::{BlockNumber, BlockHash};
@@ -116,40 +115,4 @@ pub mod prelude {
   pub use crate::network_id::*;
   pub use crate::validator_sets::*;
   pub use crate::instructions::*;
-}
-
-#[doc(hidden)]
-#[cfg(feature = "non_canonical_scale_derivations")]
-pub fn read_scale_as_borsh<T: borsh::BorshDeserialize, I: scale::Input>(
-  input: &mut I,
-) -> Result<T, scale::Error> {
-  struct ScaleRead<'a, I: scale::Input>(&'a mut I, Option<scale::Error>);
-  impl<I: scale::Input> borsh::io::Read for ScaleRead<'_, I> {
-    fn read(&mut self, buf: &mut [u8]) -> borsh::io::Result<usize> {
-      let remaining_len = self.0.remaining_len().map_err(|err| {
-        self.1 = Some(err);
-        #[cfg_attr(feature = "std", expect(clippy::io_other_error))]
-        borsh::io::Error::new(borsh::io::ErrorKind::Other, "")
-      })?;
-      // If we're still calling `read`, we try to read at least one more byte
-      let to_read = buf.len().min(remaining_len.unwrap_or(1));
-      // This may not be _allocated_ making this over-zealous, but it's the best we can do
-      self.0.on_before_alloc_mem(to_read).map_err(|err| {
-        self.1 = Some(err);
-        #[cfg_attr(feature = "std", expect(clippy::io_other_error))]
-        borsh::io::Error::new(borsh::io::ErrorKind::Other, "")
-      })?;
-      self.0.read(&mut buf[.. to_read]).map_err(|err| {
-        self.1 = Some(err);
-        #[cfg_attr(feature = "std", expect(clippy::io_other_error))]
-        borsh::io::Error::new(borsh::io::ErrorKind::Other, "")
-      })?;
-      Ok(to_read)
-    }
-  }
-  let mut input = ScaleRead(input, None);
-  match T::deserialize_reader(&mut input) {
-    Ok(res) => Ok(res),
-    Err(_) => Err(input.1.unwrap()),
-  }
 }

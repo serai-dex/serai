@@ -4,9 +4,10 @@ use borsh::BorshDeserialize as _;
 
 pub use serai_abi::{
   primitives::{
+    BitVec,
     crypto::{Signature, KeyPair, EmbeddedEllipticCurveKeys},
     network_id::{ExternalNetworkId, NetworkId},
-    validator_sets::{Session, ExternalValidatorSet, SlashReport},
+    validator_sets::{Session, ExternalValidatorSet, KeyShares, SlashReport},
     balance::Amount,
     address::SeraiAddress,
   },
@@ -83,7 +84,7 @@ impl ValidatorSets {
   pub fn set_keys(
     network: ExternalNetworkId,
     key_pair: KeyPair,
-    signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
+    signature_participants: BitVec<{ KeyShares::MAX_PER_SET_U64 }>,
     signature: Signature,
   ) -> Transaction {
     Transaction::Unsigned {

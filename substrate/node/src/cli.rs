@@ -11,18 +11,6 @@ pub struct Cli {
 
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
-  // Validate blocks
-  CheckBlock(sc_cli::CheckBlockCmd),
-
-  // Export blocks
-  ExportBlocks(sc_cli::ExportBlocksCmd),
-
-  // Export the state of a given block into a chain spec
-  ExportState(sc_cli::ExportStateCmd),
-
-  // Import blocks
-  ImportBlocks(sc_cli::ImportBlocksCmd),
-
   // Remove the entire chain
   PurgeChain(sc_cli::PurgeChainCmd),
 

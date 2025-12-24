@@ -37,6 +37,7 @@ mod pallet {
 
   use serai_abi::{
     primitives::{
+      BitVec,
       crypto::{
         EmbeddedEllipticCurveKeys as EmbeddedEllipticCurveKeysStruct,
         SignedEmbeddedEllipticCurveKeys, ExternalKey, KeyPair, Signature,
@@ -469,7 +470,7 @@ mod pallet {
       origin: OriginFor<T>,
       network: ExternalNetworkId,
       key_pair: KeyPair,
-      signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
+      signature_participants: BitVec<{ KeySharesStruct::MAX_PER_SET_U64 }>,
       signature: Signature,
     ) -> DispatchResult {
       ensure_none(origin)?;

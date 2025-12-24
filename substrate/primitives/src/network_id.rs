@@ -8,16 +8,14 @@ use crate::coin::{ExternalCoin, Coin};
 #[rustfmt::skip]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
 #[derive(BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
 pub enum EmbeddedEllipticCurve {
   /// The Embedwards25519 curve, defined over (embedded into) Ed25519's/Ristretto's scalar field.
   Embedwards25519,
   /// The secq256k1 curve, forming a cycle with secp256k1.
   Secq256k1,
 }
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(EmbeddedEllipticCurve);
 
 /// The type used to identify external networks.
 ///
@@ -26,10 +24,6 @@ pub enum EmbeddedEllipticCurve {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
 #[derive(BorshSerialize, BorshDeserialize)]
 #[borsh(use_discriminant = true)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
 pub enum ExternalNetworkId {
   /// The Bitcoin network.
   Bitcoin = 1,
@@ -37,6 +31,14 @@ pub enum ExternalNetworkId {
   Ethereum = 2,
   /// The Monero network.
   Monero = 3,
+}
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(ExternalNetworkId);
+#[cfg(feature = "scale")]
+impl scale::MaxEncodedLen for ExternalNetworkId {
+  fn max_encoded_len() -> usize {
+    1
+  }
 }
 
 #[expect(clippy::as_conversions)]
@@ -84,10 +86,6 @@ impl ExternalNetworkId {
 
 /// The type used to identify networks.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
 pub enum NetworkId {
   /// The Serai network.
   Serai,
@@ -112,6 +110,15 @@ impl BorshDeserialize for NetworkId {
       0 => Ok(Self::Serai),
       _ => ExternalNetworkId::deserialize_reader(&mut kind.as_slice()).map(Into::into),
     }
+  }
+}
+
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(NetworkId);
+#[cfg(feature = "scale")]
+impl scale::MaxEncodedLen for NetworkId {
+  fn max_encoded_len() -> usize {
+    1
   }
 }
 

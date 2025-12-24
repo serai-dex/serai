@@ -58,6 +58,4 @@ std = [
 
   "bech32/std"
 ]
-serde = []
-non_canonical_scale_derivations = ["scale"]
 default = ["std"]

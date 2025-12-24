@@ -10,10 +10,7 @@ pub type SignalId = [u8; 32];
 
 /// A signal.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
+#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub enum Signal {
   /// A signal to retire the current protocol.
   Retire {
@@ -23,13 +20,12 @@ pub enum Signal {
   /// A signal to halt an external network.
   Halt(ExternalNetworkId),
 }
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(Signal);
 
 /// A retirement signal, registered on chain.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
+#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct RegisteredRetirementSignal {
   /// The protocol to retire in favor of.
   pub in_favor_of: ProtocolId,
@@ -38,6 +34,8 @@ pub struct RegisteredRetirementSignal {
   /// The block number this was registered at.
   pub registered_at: u64,
 }
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(RegisteredRetirementSignal);
 
 impl RegisteredRetirementSignal {
   /// The ID of this signal.

@@ -1,8 +1,11 @@
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{
-  BlockHash, network_id::ExternalNetworkId, validator_sets::Session, address::SeraiAddress,
-  instructions::SignedBatch,
+  BitVec, BlockHash,
+  network_id::ExternalNetworkId,
+  validator_sets::Session,
+  address::SeraiAddress,
+  instructions::{Batch, SignedBatch},
 };
 
 /// The address used for executing `InInstruction`s.
@@ -44,10 +47,8 @@ pub enum Event {
     /// The hash of the `InInstruction`s within this batch.
     in_instructions_hash: [u8; 32],
     /// The results of each `InInstruction` within the batch.
-    #[borsh(
-      serialize_with = "serai_primitives::sp_borsh::borsh_serialize_bitvec",
-      deserialize_with = "serai_primitives::sp_borsh::borsh_deserialize_bitvec"
-    )]
-    in_instruction_results: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
+    // We are able to assume each `InInstruction` takes at least one byte to encode, setting a
+    // maximum amount of `InInstruction`s as the maximum size of the `Batch`.
+    in_instruction_results: BitVec<{ Batch::MAX_SIZE as u64 }>,
   },
 }

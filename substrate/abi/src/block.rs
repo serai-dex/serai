@@ -141,7 +141,7 @@ mod substrate {
   use scale::{Encode, EncodeLike, Decode, DecodeAll as _, DecodeWithMemTracking};
 
   use sp_core::{
-    serde::{self, Serialize, Deserialize},
+    serde::{Serialize, Serializer, Deserialize},
     H256,
   };
   use sp_runtime::{
@@ -152,27 +152,6 @@ mod substrate {
   };
 
   use super::*;
-
-  // Add `serde` implementations which treat `self` as a `Vec<u8>`
-  impl Serialize for Transaction {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-      S: serde::Serializer,
-    {
-      <Vec<u8> as Serialize>::serialize(&self.encode(), serializer)
-    }
-  }
-  impl<'de> Deserialize<'de> for Transaction {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-      D: serde::Deserializer<'de>,
-    {
-      use serde::de::Error as _;
-      let bytes = <Vec<u8> as Deserialize>::deserialize(deserializer)?;
-      let mut reader = bytes.as_slice();
-      Self::decode_all(&mut reader).map_err(D::Error::custom)
-    }
-  }
 
   /// The digest for all of the Serai-specific header fields added before execution of the block.
   #[derive(Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
@@ -229,6 +208,7 @@ mod substrate {
   #[derive(
     Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, Serialize, Deserialize,
   )]
+  #[serde(crate = "sp_core::serde")]
   pub struct ConsensusV1 {
     /// The hash of the immediately preceding block.
     parent_hash: H256,
@@ -246,6 +226,7 @@ mod substrate {
   #[derive(
     Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, Serialize, Deserialize,
   )]
+  #[serde(crate = "sp_core::serde")]
   pub struct SubstrateHeaderV1 {
     number: u64,
     consensus: ConsensusV1,
@@ -255,6 +236,7 @@ mod substrate {
   #[derive(
     Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, Serialize, Deserialize,
   )]
+  #[serde(crate = "sp_core::serde")]
   pub enum SubstrateHeader {
     /// A version 1 header.
     V1(SubstrateHeaderV1),
@@ -322,23 +304,24 @@ mod substrate {
     }
   }
 
-  impl Serialize for SubstrateBlock {
+  /*
+    `Block` and `Block::Extrinsic` must implement `MaybeSerialize` so we implement a
+    `serde::Serialize` which treats `self` as an opaque `Vec<u8>`.
+  */
+  impl Serialize for Transaction {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-      S: serde::Serializer,
+      S: Serializer,
     {
       <Vec<u8> as Serialize>::serialize(&self.encode(), serializer)
     }
   }
-  impl<'de> Deserialize<'de> for SubstrateBlock {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+  impl Serialize for SubstrateBlock {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-      D: serde::Deserializer<'de>,
+      S: Serializer,
     {
-      use serde::de::Error as _;
-      let bytes = <Vec<u8> as Deserialize>::deserialize(deserializer)?;
-      let mut reader = bytes.as_slice();
-      Self::decode_all(&mut reader).map_err(D::Error::custom)
+      <Vec<u8> as Serialize>::serialize(&self.encode(), serializer)
     }
   }
 

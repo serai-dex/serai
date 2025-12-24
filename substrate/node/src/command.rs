@@ -51,28 +51,6 @@ pub fn run() -> sc_cli::Result<()> {
   let mut cli = Cli::from_args();
 
   match &cli.subcommand {
-    Some(Subcommand::CheckBlock(cmd)) => cli.create_runner(cmd)?.async_run(|mut config| {
-      let PartialComponents { client, task_manager, import_queue, .. } =
-        service::new_partial(&mut config)?.0;
-      Ok((cmd.run(client, import_queue), task_manager))
-    }),
-
-    Some(Subcommand::ExportBlocks(cmd)) => cli.create_runner(cmd)?.async_run(|mut config| {
-      let PartialComponents { client, task_manager, .. } = service::new_partial(&mut config)?.0;
-      Ok((cmd.run(client, config.database), task_manager))
-    }),
-
-    Some(Subcommand::ExportState(cmd)) => cli.create_runner(cmd)?.async_run(|mut config| {
-      let PartialComponents { client, task_manager, .. } = service::new_partial(&mut config)?.0;
-      Ok((cmd.run(client, config.chain_spec), task_manager))
-    }),
-
-    Some(Subcommand::ImportBlocks(cmd)) => cli.create_runner(cmd)?.async_run(|mut config| {
-      let PartialComponents { client, task_manager, import_queue, .. } =
-        service::new_partial(&mut config)?.0;
-      Ok((cmd.run(client, import_queue), task_manager))
-    }),
-
     Some(Subcommand::PurgeChain(cmd)) => {
       cli.create_runner(cmd)?.sync_run(|config| cmd.run(config.database))
     }

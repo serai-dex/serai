@@ -21,10 +21,6 @@ fn downtime_per_slash_point(validators: NonZero<u16>) -> Duration {
 
 /// A slash for a validator.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
 pub enum Slash {
   /// The slash points accumulated by this validator.
   ///
@@ -37,6 +33,8 @@ pub enum Slash {
   /// not be used for liveness failures. The validator will be penalized all allocated stake.
   Fatal,
 }
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(Slash);
 
 impl Slash {
   /// Calculate the penalty which should be applied to the validator.
@@ -203,10 +201,6 @@ impl Slash {
 
 /// A report of all slashes incurred for a `ValidatorSet`.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
 pub struct SlashReport(
   #[borsh(
     serialize_with = "crate::borsh_serialize_bounded_vec",
@@ -214,6 +208,8 @@ pub struct SlashReport(
   )]
   pub BoundedVec<Slash, ConstU32<{ KeyShares::MAX_PER_SET_U32 }>>,
 );
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(SlashReport);
 
 /// An error when converting from a `Vec`.
 #[derive(Debug)]
