@@ -9,11 +9,11 @@ FROM alpine:latest AS lighthouse
 
 ENV LIGHTHOUSE_VERSION=5.1.3
 
-RUN apk --no-cache add wget git gnupg
+RUN apk --no-cache add git gnupg
 
 # Download lighthouse
-RUN wget -4 https://github.com/sigp/lighthouse/releases/download/v${LIGHTHOUSE_VERSION}/lighthouse-v${LIGHTHOUSE_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz
-RUN wget -4 https://github.com/sigp/lighthouse/releases/download/v${LIGHTHOUSE_VERSION}/lighthouse-v${LIGHTHOUSE_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz.asc
+RUN wget https://github.com/sigp/lighthouse/releases/download/v${LIGHTHOUSE_VERSION}/lighthouse-v${LIGHTHOUSE_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz
+RUN wget https://github.com/sigp/lighthouse/releases/download/v${LIGHTHOUSE_VERSION}/lighthouse-v${LIGHTHOUSE_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz.asc
 
 # Verify the signature
 gpg --keyserver keyserver.ubuntu.com --recv-keys 15E66D941F697E28F49381F426416DC3F30674B0

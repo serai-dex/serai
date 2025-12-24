@@ -6,7 +6,7 @@ use alloc::{borrow::Cow, vec, vec::Vec};
 use sp_core::{Get, ConstU32, ConstU64, sr25519::Public};
 use sp_runtime::{
   Weight,
-  traits::{Header as _, Block as _},
+  traits::{Header as _, LazyBlock as _},
 };
 use sp_version::RuntimeVersion;
 
@@ -18,7 +18,7 @@ use serai_abi::{
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
     address::SeraiAddress,
   },
-  SubstrateHeader as Header, SubstrateBlock as Block,
+  SubstrateHeader as Header, SubstrateBlock as Block, LazySubstrateBlock as LazyBlock,
 };
 
 use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance};
@@ -204,7 +204,7 @@ sp_api::impl_runtime_apis! {
     fn initialize_block(header: &Header) -> sp_runtime::ExtrinsicInclusionMode {
       Executive::initialize_block(header)
     }
-    fn execute_block(block: Block) {
+    fn execute_block(block: LazyBlock) {
       Executive::execute_block(block);
     }
   }
@@ -227,7 +227,7 @@ sp_api::impl_runtime_apis! {
     }
 
     fn check_inherents(
-      block: Block,
+      block: LazyBlock,
       data: sp_inherents::InherentData,
     ) -> sp_inherents::CheckInherentsResult {
       let mut result = data.check_extrinsics(&block);

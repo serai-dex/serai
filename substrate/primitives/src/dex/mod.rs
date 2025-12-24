@@ -1,9 +1,9 @@
-use alloc::{vec, vec::Vec};
-
 use crate::{
   coin::{ExternalCoin, Coin},
   balance::Amount,
 };
+
+mod routing;
 
 /// An error incurred with the DEX.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -32,41 +32,6 @@ pub enum Premise {
 }
 
 impl Premise {
-  /// Establish the premise of a swap.
-  ///
-  /// This will return `None` if not exactly one coin is `Coin::Serai`.
-  pub fn establish(coin_in: Coin, coin_out: Coin) -> Option<Self> {
-    if !((coin_in == Coin::Serai) ^ (coin_out == Coin::Serai)) {
-      None?;
-    }
-
-    Some(match coin_in {
-      Coin::Serai => match coin_out {
-        Coin::Serai => unreachable!("prior checked exactly one was `Coin::Serai`"),
-        Coin::External(coin) => Premise::FromSerai { to: coin },
-      },
-      Coin::External(coin) => Premise::ToSerai { from: coin },
-    })
-  }
-
-  /// Establish the route for a swap.
-  ///
-  /// This will return `None` if the coin from is the coin to.
-  pub fn route(coin_in: Coin, coin_out: Coin) -> Option<Vec<Self>> {
-    if coin_in == coin_out {
-      None?;
-    }
-    Some(if (coin_in == Coin::Serai) ^ (coin_out == Coin::Serai) {
-      vec![Self::establish(coin_in, coin_out).expect("sri ^ sri")]
-    } else {
-      // Since they aren't both `Coin::Serai`, and not just one is, neither are
-      vec![
-        Self::establish(coin_in, Coin::Serai).expect("sri ^ sri #1"),
-        Self::establish(Coin::Serai, coin_out).expect("sri ^ sri #2"),
-      ]
-    })
-  }
-
   /// Fetch the coin _in_ for the swap.
   pub fn r#in(self) -> Coin {
     match self {
@@ -180,5 +145,56 @@ impl Premise {
     self.validate(reserves, amount_in, amount_out)?;
 
     Ok(amount_in)
+  }
+}
+
+#[test]
+fn reserves() {
+  // Ensure `Reserves::product` does not panic
+  let _ = Reserves::product(0, 0);
+  let _ = Reserves::product(u64::MAX, u64::MAX);
+
+  // Test `Reserves::as_in_out`
+  assert_eq!(
+    (Reserves { sri: Amount(1), external_coin: Amount(2) })
+      .as_in_out(Premise::establish(Coin::Serai, Coin::from(ExternalCoin::Bitcoin)).unwrap()),
+    (1, 2)
+  );
+  assert_eq!(
+    (Reserves { sri: Amount(1), external_coin: Amount(2) })
+      .as_in_out(Premise::establish(Coin::from(ExternalCoin::Bitcoin), Coin::Serai).unwrap()),
+    (2, 1)
+  );
+}
+
+#[test]
+fn quote_sanity() {
+  let reserves = Reserves { sri: Amount(100_000), external_coin: Amount(10_000) };
+
+  let sri_in = Premise::establish(Coin::Serai, Coin::from(ExternalCoin::Bitcoin)).unwrap();
+  assert!(sri_in.quote_for_in(reserves, Amount(10_000)).unwrap() < Amount(1_000));
+  assert!(sri_in.quote_for_out(reserves, Amount(1_000)).unwrap() > Amount(10_000));
+
+  let sri_out = Premise::establish(Coin::from(ExternalCoin::Bitcoin), Coin::Serai).unwrap();
+  assert!(sri_out.quote_for_in(reserves, Amount(1_000)).unwrap() < Amount(10_000));
+  assert!(sri_out.quote_for_out(reserves, Amount(10_000)).unwrap() > Amount(1_000));
+}
+
+#[test]
+fn quote_does_not_panic() {
+  use rand_core::{RngCore as _, OsRng};
+
+  // Fuzz test random values to see if a panic occurs
+  for _ in 0 .. 100_000 {
+    let reserves =
+      Reserves { sri: Amount(OsRng.next_u64()), external_coin: Amount(OsRng.next_u64()) };
+
+    let sri_in = Premise::establish(Coin::Serai, Coin::from(ExternalCoin::Bitcoin)).unwrap();
+    let _ = sri_in.quote_for_in(reserves, Amount(OsRng.next_u64()));
+    let _ = sri_in.quote_for_out(reserves, Amount(OsRng.next_u64()));
+
+    let sri_out = Premise::establish(Coin::from(ExternalCoin::Bitcoin), Coin::Serai).unwrap();
+    let _ = sri_out.quote_for_in(reserves, Amount(OsRng.next_u64()));
+    let _ = sri_out.quote_for_out(reserves, Amount(OsRng.next_u64()));
   }
 }

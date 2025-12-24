@@ -1,0 +1,124 @@
+name: docker
+description: Installs `docker` for Serai
+
+runs:
+  using: "composite"
+  steps:
+    - name: Remove preinstalled Docker
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        docker system prune --all --force
+
+        sudo apt remove -y *docker*
+
+        # Install `uidmap`, required for the explicitly-installed rootless Docker
+        sudo apt install -y uidmap
+
+    - name: Install rootless Docker (Linux)
+      uses: docker/setup-docker-action@e61617a16c407a86262fb923c35a616ddbe070b3 # 4.6.0
+      if: runner.os == 'Linux'
+      with:
+        rootless: true
+        set-host: true
+        # https://github.com/moby/moby/issues/45014
+        daemon-config: |
+          {
+            "exec-opts": ["native.cgroupdriver=cgroupfs"]
+          }
+
+    - name: Remove preinstalled Docker
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        # Docker isn't pre-installed on macOS images, so we solely have to confirm it isn't
+        if [ $(command -v docker; printf $?) -eq 0 ]; then
+          echo "\`docker`` was pre-installed"
+          exit 1
+        fi
+
+    - name: Install Docker (macOS)
+      uses: docker/setup-docker-action@e61617a16c407a86262fb923c35a616ddbe070b3 # 4.6.0
+      if: runner.os == 'macOS'
+      env:
+        # m1 chips, as seen in the GitHub CI, don't support nested hardware virtualization.
+        #
+        # We need `-machine virt` to stop Lima from providing `accel=hvf`due to this
+        # [QEMU issue](https://gitlab.com/qemu-project/qemu/-/issues/2981).
+        #
+        # We also need `-cpu *` to stop Lima from providing `-cpu host` as:
+        # 1) `-cpu host` requires `kvm` or `hvf` (which we don't have)
+        # 2) `-cpu host` implies `host-phys-bits=on` which is borked in this environment
+        # From which CPU to actually emulate, we choose what will be the most performant.
+        #
+        # We accomplish both of these goals with the methodology from
+        # [this comment](https://github.com/lima-vm/lima/pull/3173#issuecomment-2623130310).
+        QEMU_SYSTEM_AARCH64: "qemu-system-aarch64 -machine virt -cpu max,pmu=off,sve=on,sve128=on,sme=off,pauth=off"
+      with:
+        set-host: true
+
+    - name: Remove preinstalled Docker
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        docker system prune --all --force
+
+        # GitHub uses an install script from Microsoft, so we run the complimentary uninstall script
+        Invoke-WebRequest https://raw.githubusercontent.com/microsoft/Windows-Containers/Main/helpful_tools/Install-DockerCE/uninstall-docker-ce.ps1 -OutFile .\uninstall-docker-ce.ps1
+        & .\uninstall-docker-ce.ps1 -Force
+
+        # These are defined/installed by the GitHub runner image definition
+        # GitHub also adds Docker Compose, but to Docker's directory, causing it to be removed when Docker is
+        Remove-Item -LiteralPath C:\Windows\SysWOW64\docker.exe -Force
+        Remove-Item -LiteralPath C:\Windows\System32\docker-credential-wincred.exe -Force
+
+    # The preinstalled Docker, and Docker from `setup-docker-action`, do not allow running Linux
+    # containers. We manually install `podman` to workaround this. Alternatively, we could install
+    # 'Docker Desktop' and run `docker desktop engine use linux`, but `docker desktop` is a
+    # pseudo-enterprise product and it isn't worth installing/configuring it compared to installing
+    # a more direct solution which behaves as a drop-in replacement to the degree we need it_.
+    - name: Install Podman (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      run: |
+        Invoke-WebRequest https://github.com/containers/podman/releases/download/v5.7.1/podman-installer-windows-amd64.msi -OutFile podman.msi
+        Start-Process -Wait -PassThru 'msiexec' -ArgumentList "/package podman.msi /quiet /log podman-msi.log MACHINE_PROVIDER=wsl ALLUSERS=1"
+        Get-Content podman-msi.log
+
+        $env:PATH += ';C:\Program Files\Podman'
+
+        # Start Podman
+        podman machine init
+        podman machine start
+
+        # Claim `podman` is `docker`, as we expect `docker`
+        # Installing to `System32` is gross, but functional and where `docker.exe` was pre-installed
+        New-Item -ItemType SymbolicLink -Path 'C:\Windows\System32\docker.exe' -Target (Get-Command podman).Path
+
+    # When cross-compiling to a target architecture, the host still impacts the result. For our
+    # runtime, a WASM blob which should be exactly reproducible, we fix the builder to x86-64
+    # accordingly. This requires we be able to run a x86-64 userspace.
+    - name: Install x64 Qemu for non-x64 Docker
+      if: runner.arch != 'X64'
+      uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # 3.7.0
+      with:
+        platforms: amd64
+
+    # This isn't strictly required. ARM macOS performs very slowly and `buildx` is notably faster.
+    - name: Install `buildx`
+      if: (runner.os == 'macOS') && (runner.arch == 'ARM64')
+      uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # 3.12.0
+      with:
+        # This is Docker's default, but `setup-buildx-action` defaults to `docker-container`
+        # (for _some_ reason) which means built images won't be loaded into Docker (`--load`) by
+        # default. We want that behavior.
+        driver: docker
+        # We do want this to install over `build` for the drop-in performance gains
+        install: true
+
+    # This ensures we have a consistent clean build, there aren't any issues from any version of
+    # `docker` we removed before installing our current version, and checks that `docker` was in
+    # fact installed and can be successfully called.
+    - name: Ensure there's no Docker cache
+      shell: bash
+      run: docker system prune --all --force

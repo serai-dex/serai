@@ -5,8 +5,6 @@ use rand_core::{RngCore, CryptoRng};
 use zeroize::{Zeroize, Zeroizing};
 use borsh::{io, BorshSerialize, BorshDeserialize};
 
-use sp_core::{ConstU32, bounded::BoundedVec};
-
 use ciphersuite::{
   group::{
     ff::{Field as _, PrimeField as _, FromUniformBytes},
@@ -18,85 +16,7 @@ use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 use schnorr_signatures::SchnorrSignature;
 
-use crate::network_id::ExternalNetworkId;
-
-/// A Ristretto public key.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
-pub struct Public(pub [u8; 32]);
-impl From<sp_core::sr25519::Public> for Public {
-  fn from(public: sp_core::sr25519::Public) -> Self {
-    Self(public.0)
-  }
-}
-impl From<Public> for sp_core::sr25519::Public {
-  fn from(public: Public) -> Self {
-    Self::from_raw(public.0)
-  }
-}
-
-/// A sr25519 signature.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
-pub struct Signature(pub [u8; 64]);
-impl From<schnorrkel::Signature> for Signature {
-  fn from(signature: schnorrkel::Signature) -> Self {
-    Self(signature.to_bytes())
-  }
-}
-impl From<sp_core::sr25519::Signature> for Signature {
-  fn from(signature: sp_core::sr25519::Signature) -> Self {
-    Self(signature.0)
-  }
-}
-impl From<Signature> for sp_core::sr25519::Signature {
-  fn from(signature: Signature) -> Self {
-    Self::from_raw(signature.0)
-  }
-}
-
-/// A key for an external network.
-#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
-pub struct ExternalKey(
-  #[borsh(
-    serialize_with = "crate::borsh_serialize_bounded_vec",
-    deserialize_with = "crate::borsh_deserialize_bounded_vec"
-  )]
-  pub BoundedVec<u8, ConstU32<{ ExternalKey::MAX_LEN }>>,
-);
-
-impl AsRef<[u8]> for ExternalKey {
-  fn as_ref(&self) -> &[u8] {
-    self.0.as_ref()
-  }
-}
-
-impl Zeroize for ExternalKey {
-  fn zeroize(&mut self) {
-    self.0.as_mut().zeroize();
-  }
-}
-
-impl ExternalKey {
-  /// The maximum length for an external key.
-  /*
-    This support keys up to 96 bytes (such as BLS12-381 G2, which is the largest elliptic-curve
-    group element we might reasonably use as a key). This can always be increased if we need to
-    adopt a different cryptosystem (one where verification keys are multiple group elements, or
-    where group elements do exceed 96 bytes, such as RSA).
-  */
-  pub const MAX_LEN: u32 = 96;
-}
+use crate::{network_id::ExternalNetworkId, crypto::Public};
 
 /// Key(s) on embedded elliptic curve(s).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
@@ -164,28 +84,15 @@ impl BorshDeserialize for EmbeddedEllipticCurveKeys {
   }
 }
 
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::Encode for EmbeddedEllipticCurveKeys {
-  fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
-    f(&borsh::to_vec(self).unwrap())
-  }
-}
-#[cfg(feature = "non_canonical_scale_derivations")]
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(EmbeddedEllipticCurveKeys);
+
+#[cfg(feature = "scale")]
 impl scale::MaxEncodedLen for EmbeddedEllipticCurveKeys {
   fn max_encoded_len() -> usize {
     1 + 32 + 33
   }
 }
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::EncodeLike<EmbeddedEllipticCurveKeys> for EmbeddedEllipticCurveKeys {}
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::Decode for EmbeddedEllipticCurveKeys {
-  fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
-    crate::read_scale_as_borsh(input)
-  }
-}
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::DecodeWithMemTracking for EmbeddedEllipticCurveKeys {}
 
 /// Key(s) on embedded elliptic curve(s) with the required proofs of knowledge.
 #[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
@@ -472,30 +379,5 @@ impl BorshDeserialize for SignedEmbeddedEllipticCurveKeys {
   }
 }
 
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::Encode for SignedEmbeddedEllipticCurveKeys {
-  fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
-    f(&borsh::to_vec(self).unwrap())
-  }
-}
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::EncodeLike<SignedEmbeddedEllipticCurveKeys> for SignedEmbeddedEllipticCurveKeys {}
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::Decode for SignedEmbeddedEllipticCurveKeys {
-  fn decode<I: scale::Input>(input: &mut I) -> Result<Self, scale::Error> {
-    crate::read_scale_as_borsh(input)
-  }
-}
-#[cfg(feature = "non_canonical_scale_derivations")]
-impl scale::DecodeWithMemTracking for SignedEmbeddedEllipticCurveKeys {}
-
-/// The key pair for a validator set.
-///
-/// This is their Ristretto key, used for publishing data onto Serai, and their key on the external
-/// network.
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
-pub struct KeyPair(pub Public, pub ExternalKey);
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(SignedEmbeddedEllipticCurveKeys);

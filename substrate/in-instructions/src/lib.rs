@@ -211,7 +211,9 @@ mod pallet {
         id: batch.id(),
         external_network_block_hash: batch.external_network_block_hash(),
         in_instructions_hash: sp_core::blake2_256(&borsh::to_vec(batch.instructions()).unwrap()),
-        in_instruction_results,
+        in_instruction_results: in_instruction_results
+          .try_into()
+          .expect("`Batch` had more instructions than allowed results"),
       });
 
       Ok(())

@@ -18,38 +18,37 @@ mod slashes;
 pub use slashes::*;
 
 /// The type used to identify a specific session of validators.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
+#[rustfmt::skip]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct Session(pub u32);
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(Session);
 
 /// The type used to identify a specific set of validators for an external network.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
+#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct ExternalValidatorSet {
   /// The network this set of validators are for.
   pub network: ExternalNetworkId,
   /// Which session this set of validators is occuring during.
   pub session: Session,
 }
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(ExternalValidatorSet);
 
 /// The type used to identify a specific set of validators.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
+#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct ValidatorSet {
   /// The network this set of validators are for.
   pub network: NetworkId,
   /// Which session this set of validators is occuring during.
   pub session: Session,
 }
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(ValidatorSet);
 
 impl From<ExternalValidatorSet> for ValidatorSet {
   fn from(set: ExternalValidatorSet) -> Self {
@@ -109,11 +108,10 @@ impl ExternalValidatorSet {
 
 /// The representation for an amount of key shares.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen)
-)]
+#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct KeyShares(pub u16);
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(KeyShares);
 
 impl KeyShares {
   /// Zero key shares.
@@ -121,9 +119,11 @@ impl KeyShares {
   /// One key share.
   pub const ONE: KeyShares = KeyShares(1);
   /// The maximum amount of key shares per set.
-  pub const MAX_PER_SET: u16 = 150;
+  pub const MAX_PER_SET: u16 = 127;
   /// The maximum amount of key shares per set, represented as a `u32`.
-  pub const MAX_PER_SET_U32: u32 = 150;
+  pub const MAX_PER_SET_U32: u32 = 127;
+  /// The maximum amount of key shares per set, represented as a `u64`.
+  pub const MAX_PER_SET_U64: u64 = 127;
 
   /// Create key shares from a `u16`.
   ///

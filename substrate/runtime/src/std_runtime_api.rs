@@ -10,7 +10,7 @@ use serai_abi::{
     balance::Amount,
     address::SeraiAddress,
   },
-  SubstrateHeader as Header, SubstrateBlock as Block,
+  SubstrateHeader as Header, SubstrateBlock as Block, LazySubstrateBlock as LazyBlock,
 };
 
 use super::*;
@@ -40,7 +40,7 @@ sp_api::impl_runtime_apis! {
     fn initialize_block(header: &Header) -> sp_runtime::ExtrinsicInclusionMode {
       unimplemented!("runtime is only implemented when WASM")
     }
-    fn execute_block(block: Block) {
+    fn execute_block(block: LazyBlock) {
       unimplemented!("runtime is only implemented when WASM")
     }
   }
@@ -63,7 +63,7 @@ sp_api::impl_runtime_apis! {
     }
 
     fn check_inherents(
-      block: Block,
+      block: LazyBlock,
       data: sp_inherents::InherentData,
     ) -> sp_inherents::CheckInherentsResult {
       unimplemented!("runtime is only implemented when WASM")

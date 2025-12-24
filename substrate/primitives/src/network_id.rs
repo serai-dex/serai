@@ -6,18 +6,16 @@ use crate::coin::{ExternalCoin, Coin};
 
 /// Identifier for an embedded elliptic curve.
 #[rustfmt::skip]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 #[derive(BorshSerialize, BorshDeserialize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
 pub enum EmbeddedEllipticCurve {
   /// The Embedwards25519 curve, defined over (embedded into) Ed25519's/Ristretto's scalar field.
   Embedwards25519,
   /// The secq256k1 curve, forming a cycle with secp256k1.
   Secq256k1,
 }
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(EmbeddedEllipticCurve);
 
 /// The type used to identify external networks.
 ///
@@ -26,10 +24,6 @@ pub enum EmbeddedEllipticCurve {
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
 #[derive(BorshSerialize, BorshDeserialize)]
 #[borsh(use_discriminant = true)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
 pub enum ExternalNetworkId {
   /// The Bitcoin network.
   Bitcoin = 1,
@@ -38,6 +32,16 @@ pub enum ExternalNetworkId {
   /// The Monero network.
   Monero = 3,
 }
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(ExternalNetworkId);
+#[cfg(feature = "scale")]
+impl scale::MaxEncodedLen for ExternalNetworkId {
+  fn max_encoded_len() -> usize {
+    1
+  }
+}
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<NetworkId> for ExternalNetworkId {}
 
 #[expect(clippy::as_conversions)]
 impl From<ExternalNetworkId> for u8 {
@@ -84,10 +88,6 @@ impl ExternalNetworkId {
 
 /// The type used to identify networks.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
-#[cfg_attr(
-  feature = "non_canonical_scale_derivations",
-  derive(scale::Encode, scale::Decode, scale::MaxEncodedLen, scale::DecodeWithMemTracking)
-)]
 pub enum NetworkId {
   /// The Serai network.
   Serai,
@@ -112,6 +112,15 @@ impl BorshDeserialize for NetworkId {
       0 => Ok(Self::Serai),
       _ => ExternalNetworkId::deserialize_reader(&mut kind.as_slice()).map(Into::into),
     }
+  }
+}
+
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(NetworkId);
+#[cfg(feature = "scale")]
+impl scale::MaxEncodedLen for NetworkId {
+  fn max_encoded_len() -> usize {
+    1
   }
 }
 
@@ -145,5 +154,75 @@ impl TryFrom<NetworkId> for ExternalNetworkId {
       NetworkId::Serai => Err(())?,
       NetworkId::External(ext) => Ok(ext),
     }
+  }
+}
+
+#[test]
+fn external_network_id() {
+  use std::collections::HashSet;
+
+  for network_id in ExternalNetworkId::all() {
+    assert_eq!(ExternalNetworkId::try_from(NetworkId::External(network_id)).unwrap(), network_id);
+    assert_eq!(
+      network_id.coins().map(Coin::from).collect::<HashSet<_>>(),
+      NetworkId::External(network_id).coins().collect::<HashSet<_>>()
+    );
+
+    assert_eq!(
+      ExternalNetworkId::deserialize_reader(&mut borsh::to_vec(&network_id).unwrap().as_slice())
+        .unwrap(),
+      network_id
+    );
+    assert_eq!(
+      borsh::to_vec(&NetworkId::External(network_id)).unwrap(),
+      borsh::to_vec(&network_id).unwrap()
+    );
+
+    #[cfg(feature = "scale")]
+    {
+      use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+      assert_eq!(network_id.encode(), borsh::to_vec(&network_id).unwrap());
+      assert!(network_id.encode().len() <= NetworkId::max_encoded_len());
+      assert_eq!(
+        ExternalNetworkId::decode_all(&mut network_id.encode().as_slice()).unwrap(),
+        network_id
+      );
+      assert_eq!(NetworkId::External(network_id).encode(), network_id.encode());
+    }
+  }
+}
+
+#[test]
+fn network_id() {
+  use std::collections::HashSet;
+
+  ExternalNetworkId::try_from(NetworkId::Serai).unwrap_err();
+
+  for network_id in NetworkId::all() {
+    for coin in network_id.coins() {
+      assert_eq!(coin.network(), network_id);
+    }
+
+    assert_eq!(
+      NetworkId::deserialize_reader(&mut borsh::to_vec(&network_id).unwrap().as_slice()).unwrap(),
+      network_id
+    );
+
+    #[cfg(feature = "scale")]
+    {
+      use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+      assert_eq!(network_id.encode(), borsh::to_vec(&network_id).unwrap());
+      assert!(network_id.encode().len() <= NetworkId::max_encoded_len());
+      assert_eq!(NetworkId::decode_all(&mut network_id.encode().as_slice()).unwrap(), network_id);
+    }
+  }
+
+  {
+    let mut all_network_ids = NetworkId::all().collect::<HashSet<_>>();
+    assert!(all_network_ids.remove(&NetworkId::Serai));
+    assert_eq!(
+      all_network_ids,
+      ExternalNetworkId::all().map(NetworkId::from).collect::<HashSet<_>>()
+    );
   }
 }

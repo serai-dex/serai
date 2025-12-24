@@ -33,4 +33,4 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run message-queue Docker tests
-        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p serai-message-queue-tests
+        run: cargo test --all-features -p serai-message-queue-tests

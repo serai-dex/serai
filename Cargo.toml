@@ -103,8 +103,6 @@ members = [
 
   "orchestration",
 
-  "mini",
-
   "tests/no-std",
 
   "tests/docker",
@@ -219,9 +217,6 @@ thiserror = { path = "patches/thiserror" }
 option-ext = { path = "patches/option-ext" }
 directories-next = { path = "patches/directories-next" }
 
-# Patch from a fork back to upstream
-parity-bip39 = { path = "patches/parity-bip39" }
-
 # Patch to include `FromUniformBytes<64>` over `Scalar`
 k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
 p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
@@ -243,7 +238,7 @@ single_use_lifetimes = "warn"
 trivial_casts = "warn"
 unit_bindings = "warn"
 unsafe_attr_outside_unsafe = "warn"
-# unused_crate_dependencies = "warn" # TODO: Enable, replacing `machete`
+# unused_crate_dependencies = "warn" # TODO: Enable
 unused_extern_crates = "warn"
 unused_import_braces = "warn"
 unused_lifetimes = "warn"

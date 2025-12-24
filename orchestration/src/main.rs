@@ -203,7 +203,6 @@ ADD coordinator /serai/coordinator
 ADD substrate /serai/substrate
 ADD orchestration/Cargo.toml /serai/orchestration/Cargo.toml
 ADD orchestration/src /serai/orchestration/src
-ADD mini /serai/mini
 ADD tests /serai/tests
 ADD Cargo.toml /serai
 ADD Cargo.lock /serai
@@ -352,9 +351,6 @@ fn dockerfiles(network: Network) {
   bitcoin(&orchestration_path, network);
   ethereum(&orchestration_path, network);
   monero(&orchestration_path, network);
-  if network == Network::Dev {
-    monero_wallet_rpc(&orchestration_path);
-  }
 
   let mut infrastructure_keys = infrastructure_keys(network);
   let coordinator_key = infrastructure_keys.remove("coordinator").unwrap();
@@ -460,7 +456,6 @@ fn start(network: Network, services: HashSet<String>) {
       "bitcoin-processor" => "bitcoin-processor",
       "monero-daemon" => "monero",
       "monero-processor" => "monero-processor",
-      "monero-wallet-rpc" => "monero-wallet-rpc",
       _ => panic!("starting unrecognized service"),
     };
 
@@ -499,11 +494,11 @@ fn start(network: Network, services: HashSet<String>) {
         if !Command::new("docker")
           .current_dir(&repo_path)
           .arg("build")
-          .arg("-f")
-          .arg("orchestration/runtime/Dockerfile")
-          .arg(".")
-          .arg("-t")
+          .arg("--no-cache")
+          .arg("--file=./orchestration/runtime/Dockerfile")
+          .arg("--tag")
           .arg(format!("serai-{}-runtime-img", network.label()))
+          .arg(".")
           .spawn()
           .unwrap()
           .wait()
@@ -520,6 +515,8 @@ fn start(network: Network, services: HashSet<String>) {
           Command::new("docker").arg("rm").arg("-f").arg(&container_name).spawn().unwrap().wait();
         let _ = Command::new("docker")
           .arg("run")
+          .arg("--pull")
+          .arg("never")
           .arg("--name")
           .arg(container_name)
           .arg("--volume")
@@ -591,11 +588,6 @@ fn start(network: Network, services: HashSet<String>) {
             command
           }
         }
-        "monero-wallet-rpc" => {
-          assert_eq!(network, Network::Dev, "monero-wallet-rpc is only for dev");
-          // Expose the RPC for tests
-          command.arg("-p").arg("18082:18082")
-        }
         "coordinator" => {
           if network == Network::Dev {
             command
@@ -654,7 +646,6 @@ Commands:
     - `ethereum-relayer`
     - `monero-daemon`
     - `monero-processor`
-    - `monero-wallet-rpc` (if "dev")
 
     are valid services.
 

@@ -35,6 +35,7 @@ jobs:
 
       - name: Download the Monero Daemon
         if: steps.cache-monerod.outputs.cache-hit != 'true'
+        shell: bash
         run: |
           # We explicitly download the Linux binary as this script executes over an ELF binary
           wget https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.4.4.tar.bz2

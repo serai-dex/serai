@@ -26,14 +26,32 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Install nightly rust
+        shell: bash
         run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32v1-none -c clippy
 
       - name: Run Clippy
+        shell: bash
         run: |
-          cargo clippy --all-features --all-targets -- -D warnings
-          cargo +${{ steps.nightly.outputs.version }} clippy --all-features --all-targets -- -D warnings
+          RUSTFLAGS="$RUSTFLAGS -D warnings"
+
+          # stable Rust
+          cargo clippy --all-features --all-targets
           # Explicitly run `clippy` on the WASM-targeting `serai-runtime`
-          RUSTFLAGS="--cfg substrate_runtime" cargo +${{ steps.nightly.outputs.version }} clippy --target wasm32v1-none --no-default-features --features "try-runtime,runtime-benchmarks" -p serai-runtime -- -D warnings
+          RUSTFLAGS="$RUSTFLAGS --cfg substrate_runtime" cargo clippy --target wasm32v1-none --no-default-features --features "try-runtime,runtime-benchmarks" -p serai-runtime
+          # Check a few variations of `serai-primitives`, `serai-abi`
+          cargo clippy --no-default-features --all-targets -p serai-primitives
+          cargo clippy --all-targets -p serai-primitives
+          cargo clippy --no-default-features --all-targets -p serai-abi
+          cargo clippy --all-targets -p serai-abi
+
+          # nightly Rust
+          NIGHTLY="${{ steps.nightly.outputs.version }}"
+          cargo +$NIGHTLY clippy --all-features --all-targets
+          RUSTFLAGS="$RUSTFLAGS --cfg substrate_runtime" cargo +$NIGHTLY clippy --target wasm32v1-none --no-default-features --features "try-runtime,runtime-benchmarks" -p serai-runtime
+          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-primitives
+          cargo +$NIGHTLY clippy --all-targets -p serai-primitives
+          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-abi
+          cargo +$NIGHTLY clippy --all-targets -p serai-abi
 
       # Also verify the lockfile isn't dirty
       # This happens when someone edits a Cargo.toml yet doesn't do anything
@@ -45,7 +63,7 @@ jobs:
         run: git diff | wc -l | LC_ALL="en_US.utf8" grep -x -e "^[ ]*0"
 
   deny:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
@@ -56,7 +74,7 @@ jobs:
         run: cargo deny -L error --all-features check --hide-inclusion-graph
 
   fmt:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
@@ -66,9 +84,11 @@ jobs:
         run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
 
       - name: Install nightly rust
+        shell: bash
         run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -c rustfmt
 
       - name: Run rustfmt
+        shell: bash
         run: cargo +${{ steps.nightly.outputs.version }} fmt -- --check
 
       - name: Install Foundry
@@ -78,10 +98,18 @@ jobs:
           cache: false
 
       - name: Run forge fmt
-        run: FOUNDRY_FMT_SORT_INPUTS=false FOUNDRY_FMT_LINE_LENGTH=100 FOUNDRY_FMT_TAB_WIDTH=2 FOUNDRY_FMT_BRACKET_SPACING=true FOUNDRY_FMT_INT_TYPES=preserve forge fmt --check $(find . -name "*.sol")
+        shell: bash
+        run: |
+          FOUNDRY_FMT_SORT_INPUTS=false
+          FOUNDRY_FMT_LINE_LENGTH=100
+          FOUNDRY_FMT_TAB_WIDTH=2
+          FOUNDRY_FMT_BRACKET_SPACING=true
+          FOUNDRY_FMT_INT_TYPES=preserve
+
+          forge fmt --check $(find . -name "*.sol")
 
   machete:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
       - name: Verify all dependencies are in use
@@ -185,7 +213,7 @@ jobs:
           check_workspace
 
   slither:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
@@ -193,6 +221,7 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Slither
+        shell: bash
         run: |
           python3 -m pip install slither-analyzer==0.11.3
 
@@ -206,13 +235,14 @@ jobs:
           cd processor/ethereum/router/contracts
           slither Router.sol
 
-    shellcheck:
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
-        - name: shellcheck
-          run: |
-            sudo apt install -y shellcheck
-            find . -name "*.sh" | while read -r script; do
-              shellcheck --enable=all --shell=sh --severity=info $script
-            done
+  shellcheck:
+    runs-on: ubuntu-slim
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+      - name: shellcheck
+        shell: bash
+        run: |
+          sudo apt install -y shellcheck
+          find . -name "*.sh" | while read -r script; do
+            shellcheck --enable=all --shell=sh --severity=info $script
+          done

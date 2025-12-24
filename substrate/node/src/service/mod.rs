@@ -390,6 +390,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
     tx_handler_controller,
     sync_service: sync_service.clone(),
     telemetry: telemetry.as_mut(),
+    tracing_execute_block: None,
   })?;
 
   if let sc_service::config::Role::Authority = &role {

@@ -43,7 +43,7 @@ concurrency:
 jobs:
   # Build job
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     steps:
       - name: Checkout
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
@@ -57,6 +57,7 @@ jobs:
         id: pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # 5.0.0
       - name: Build with Jekyll
+        shell: bash
         run: cd ${{ github.workspace }}/docs && bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
         env:
           JEKYLL_ENV: production
@@ -68,6 +69,7 @@ jobs:
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
       - name: Buld Rust docs
+        shell: bash
         run: |
           rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32v1-none -c rust-docs
           RUSTDOCFLAGS="--cfg docsrs" cargo +${{ steps.nightly.outputs.version }} doc --workspace --no-deps --all-features
@@ -83,7 +85,7 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     needs: build
     steps:
       - name: Deploy to GitHub Pages

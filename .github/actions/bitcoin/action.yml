@@ -31,7 +31,7 @@ runs:
     - name: Extract the Bitcoin Daemon
       shell: bash
       run: |
-        tar xzvf bitcoin.tar.gz
+        tar -xf bitcoin.tar.gz
         cd bitcoin-${{ inputs.version }}
         sudo mv bin/* /bin && sudo mv lib/* /lib
 

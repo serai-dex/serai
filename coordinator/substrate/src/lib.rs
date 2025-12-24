@@ -11,8 +11,9 @@ use dkg::Participant;
 
 use serai_client_serai::abi::{
   primitives::{
+    BitVec,
     network_id::ExternalNetworkId,
-    validator_sets::{Session, ExternalValidatorSet, SlashReport},
+    validator_sets::{Session, ExternalValidatorSet, KeyShares, SlashReport},
     crypto::{Signature, KeyPair},
     address::SeraiAddress,
     instructions::SignedBatch,
@@ -167,7 +168,7 @@ impl Keys {
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
     key_pair: KeyPair,
-    signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
+    signature_participants: BitVec<{ KeyShares::MAX_PER_SET_U64 }>,
     signature: Signature,
   ) {
     // If we have a more recent pair of keys, don't write this historic one

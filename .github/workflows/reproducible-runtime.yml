@@ -24,8 +24,53 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  # Do one run to determine what the hash of the runtime _should_ be
+  # Any host is valid for this as they _should_ all give the same result
+  source_of_truth:
     runs-on: ubuntu-latest
+    outputs:
+      hash: ${{ steps.build.outputs.hash }}
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Run Reproducible Runtime tests on the Source of Truth
+        id: build
+        shell: bash
+        run: |
+          # Allow the following command to fail
+          set +e
+          # Capture the output to `stdout.txt`
+          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture > stdout.txt
+          CODE=$?
+          # Print `stdout` for the CI logs, as we captured it to process it, not swallow it
+          cat stdout.txt
+          # Check the exit code from `cargo`
+          if [ $CODE -ne 0 ]; then
+            exit $CODE
+          fi
+          # Restore `set -e`
+          set -e
+
+          HASH="$(grep -F 'Hash: ' stdout.txt | cut -d' ' -f2)"
+
+          if [ $(printf "%s" "$HASH" | wc -c) -ne 64 ]; then
+            echo "Hash not found in output of the \`reproducible-runtime\` test"
+            exit 1
+          fi
+
+          printf 'hash=%s\n' "$HASH" >> "$GITHUB_OUTPUT"
+
+  # Run (mostly) the same job, but for _all_ of the hosts we want to test this with
+  build:
+    strategy:
+      matrix:
+        os: [macos-15-intel, windows-latest]
+    runs-on: ${{ matrix.os }}
+    needs: source_of_truth
+
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
@@ -33,4 +78,33 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run Reproducible Runtime tests
-        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture
+        env:
+          source_of_truth: ${{ needs.source_of_truth.outputs.hash }}
+        shell: bash
+        run: |
+          # Allow the following command to fail
+          set +e
+          # Capture the output to `stdout.txt`
+          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture > stdout.txt
+          CODE=$?
+          # Print `stdout` for the CI logs, as we captured it to process it, not swallow it
+          cat stdout.txt
+          # Check the exit code from `cargo`
+          if [ $CODE -ne 0 ]; then
+            exit $CODE
+          fi
+          # Restore `set -e`
+          set -e
+
+          HASH="$(grep -F 'Hash: ' stdout.txt | cut -d' ' -f2)"
+
+          if [ $(printf "%s" "$HASH" | wc -c) -ne 64 ]; then
+            echo "Hash not found in output of the \`reproducible-runtime\` test"
+            exit 1
+          fi
+
+          # Check this agreed with our source of truth
+          if [ ! "$HASH" = "$source_of_truth" ]; then
+            echo "$HASH is different from $source_of_truth"
+            exit 2
+          fi
