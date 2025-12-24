@@ -24,6 +24,8 @@ impl Default for UnbalancedMerkleTree {
 
 impl UnbalancedMerkleTree {
   /// An empty Merkle tree.
+  ///
+  /// This assumes no known preimage for `[0; 32]`.
   pub const EMPTY: Self = Self { root: [0; 32] };
 
   /// If this tree is empty of leaves.
@@ -44,7 +46,7 @@ impl UnbalancedMerkleTree {
   /// leaves, and vice-versa, the hashes present in the list MUST never have preimages whose first
   /// byte may be the specified tag byte.
   ///
-  /// This method performs intermediary allocations necessary to calculate the root.
+  /// This method performs intermediary allocations to calculate the root.
   pub fn new(tag: u8, leaves: Vec<[u8; 32]>) -> Self {
     if leaves.is_empty() {
       return Self::EMPTY;
