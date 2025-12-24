@@ -171,7 +171,7 @@ fn serialize() {
         );
 
         #[cfg(feature = "scale")]
-        use scale::{Encode, DecodeAll};
+        use scale::{Encode as _, DecodeAll as _};
         #[cfg(feature = "scale")]
         assert_eq!(
           BitVec::<$bound>::decode_all(&mut borsh::to_vec(&vec).unwrap().as_slice()).unwrap(),

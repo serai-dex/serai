@@ -1,11 +1,13 @@
 use core::convert::AsRef;
-use alloc::vec::Vec;
 
 use zeroize::Zeroize;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use sp_core::{sr25519::Public, ConstU32, bounded::BoundedVec};
+use sp_core::sr25519::Public;
+
+mod external;
+pub use external::*;
 
 /*
   We only use a single HRP across all networks. This follows Serai's general practice. Addresses
@@ -87,14 +89,15 @@ impl core::fmt::Display for SeraiAddress {
         unreachable!("32 bytes exceeded bech32 length limit?")
       }
       Err(bech32::EncodeError::Fmt(e)) => Err(e),
-      // bech32::EncodeError is non-exhaustive
+      // [`bech32::EncodeError`] is non-exhaustive
       Err(_) => Err(core::fmt::Error),
     }
   }
 }
 
-/// An error from decoding an address.
-pub enum DecodeError {
+/// An error from an address.
+#[derive(Debug)]
+pub enum AddressError {
   /// The Bech32m encoding was invalid.
   InvalidBech32m,
   /// The Bech32m Human-Readable Part was distinct.
@@ -104,72 +107,69 @@ pub enum DecodeError {
 }
 
 impl core::str::FromStr for SeraiAddress {
-  type Err = DecodeError;
+  type Err = AddressError;
   fn from_str(s: &str) -> Result<Self, Self::Err> {
-    // We drop bech32's error to remain opaque to the implementation
+    // We drop `bech32`'s error to remain opaque to the implementation
     let decoded = bech32::primitives::decode::CheckedHrpstring::new::<bech32::Bech32m>(s)
-      .map_err(|_| DecodeError::InvalidBech32m)?;
+      .map_err(|_| AddressError::InvalidBech32m)?;
     if decoded.hrp() != HUMAN_READABLE_PART {
-      Err(DecodeError::DistinctHrp)?;
+      Err(AddressError::DistinctHrp)?;
     }
 
     let mut res = Self([0; 32]);
     let mut iter = decoded.byte_iter();
     for i in 0 .. 32 {
-      let Some(byte) = iter.next() else { Err(DecodeError::InvalidLength)? };
+      let Some(byte) = iter.next() else { Err(AddressError::InvalidLength)? };
       res.0[i] = byte;
     }
     if iter.next().is_some() {
-      Err(DecodeError::InvalidLength)?;
+      Err(AddressError::InvalidLength)?;
     }
     Ok(res)
   }
 }
 
-/// An address for an external network.
-#[derive(Clone, PartialEq, Eq, Debug, borsh::BorshSerialize, borsh::BorshDeserialize)]
-pub struct ExternalAddress(
-  #[borsh(
-    serialize_with = "crate::borsh_serialize_bounded_vec",
-    deserialize_with = "crate::borsh_deserialize_bounded_vec"
-  )]
-  BoundedVec<u8, ConstU32<{ ExternalAddress::MAX_LEN }>>,
-);
-#[cfg(feature = "scale")]
-crate::borsh_as_scale!(ExternalAddress);
+#[test]
+fn address() {
+  use core::str::FromStr as _;
+  use rand_core::{RngCore as _, OsRng};
 
-impl ExternalAddress {
-  /// The maximum length for an `ExternalAddress`.
-  pub const MAX_LEN: u32 = 512;
-}
+  // Check the HRP is valid
+  bech32::Hrp::parse(HUMAN_READABLE_PART.as_str()).unwrap();
 
-/// An error when converting from a `Vec`.
-#[derive(Debug)]
-pub enum FromVecError {
-  /// The source `Vec` was too long to be converted.
-  TooLong,
-}
-
-impl TryFrom<Vec<u8>> for ExternalAddress {
-  type Error = FromVecError;
-  fn try_from(vec: Vec<u8>) -> Result<Self, Self::Error> {
-    vec.try_into().map(ExternalAddress).map_err(|_| FromVecError::TooLong)
+  // Fuzz valid address
+  for _ in 0 .. 100 {
+    let mut address = [0; 32];
+    OsRng.fill_bytes(&mut address);
+    let encoding = bech32::encode::<bech32::Bech32m>(HUMAN_READABLE_PART, &address).unwrap();
+    let address = SeraiAddress(address);
+    assert_eq!(address.to_string(), encoding);
+    assert_eq!(SeraiAddress::from_str(&encoding).unwrap(), address);
+    assert_eq!(&encoding.as_bytes()[.. 4], b"sri1");
   }
-}
-impl From<ExternalAddress> for Vec<u8> {
-  fn from(ext: ExternalAddress) -> Vec<u8> {
-    ext.0.into_inner()
-  }
-}
 
-impl AsRef<[u8]> for ExternalAddress {
-  fn as_ref(&self) -> &[u8] {
-    self.0.as_ref()
-  }
-}
+  // Test a distinct HRP
+  assert!(matches!(
+    SeraiAddress::from_str(
+      &bech32::encode::<bech32::Bech32m>(bech32::Hrp::parse("dif").unwrap(), &[0; 32]).unwrap()
+    )
+    .unwrap_err(),
+    AddressError::DistinctHrp
+  ));
 
-impl zeroize::Zeroize for ExternalAddress {
-  fn zeroize(&mut self) {
-    self.0.as_mut().zeroize();
-  }
+  // Test a distinct length
+  assert!(matches!(
+    SeraiAddress::from_str(
+      &bech32::encode::<bech32::Bech32m>(HUMAN_READABLE_PART, &[0; 31]).unwrap()
+    )
+    .unwrap_err(),
+    AddressError::InvalidLength
+  ));
+  assert!(matches!(
+    SeraiAddress::from_str(
+      &bech32::encode::<bech32::Bech32m>(HUMAN_READABLE_PART, &[0; 33]).unwrap()
+    )
+    .unwrap_err(),
+    AddressError::InvalidLength
+  ));
 }

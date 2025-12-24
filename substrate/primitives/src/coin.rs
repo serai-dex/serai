@@ -27,6 +27,8 @@ impl scale::MaxEncodedLen for ExternalCoin {
     1
   }
 }
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<Coin> for ExternalCoin {}
 
 impl ExternalCoin {
   /// All external coins.
@@ -116,7 +118,7 @@ impl ExternalCoin {
   /// interpreted as `0.0001` (in human units, in atomic units, 19999 will be interpreted as 1).
   pub fn decimals(&self) -> u32 {
     match self {
-      // Ether and DAI have 18 decimals, yet we only track 8 in order to fit them within u64s
+      // Ether and DAI have 18 decimals, yet we only track 8 in order to fit them within `u64`s
       ExternalCoin::Bitcoin | ExternalCoin::Ether | ExternalCoin::Dai => 8,
       ExternalCoin::Monero => 12,
     }
@@ -143,5 +145,57 @@ impl Coin {
       Coin::Serai => 9,
       Coin::External(c) => c.decimals(),
     }
+  }
+}
+
+#[test]
+fn external_coin() {
+  for coin in ExternalCoin::all() {
+    assert_eq!(ExternalCoin::try_from(Coin::External(coin)).unwrap(), coin);
+    assert_eq!(NetworkId::from(coin.network()), Coin::External(coin).network());
+    assert_eq!(coin.decimals(), Coin::External(coin).decimals());
+
+    assert_eq!(
+      ExternalCoin::deserialize_reader(&mut borsh::to_vec(&coin).unwrap().as_slice()).unwrap(),
+      coin
+    );
+    assert_eq!(borsh::to_vec(&Coin::External(coin)).unwrap(), borsh::to_vec(&coin).unwrap());
+
+    #[cfg(feature = "scale")]
+    {
+      use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+      assert_eq!(coin.encode(), borsh::to_vec(&coin).unwrap());
+      assert!(coin.encode().len() <= Coin::max_encoded_len());
+      assert_eq!(ExternalCoin::decode_all(&mut coin.encode().as_slice()).unwrap(), coin);
+      assert_eq!(Coin::External(coin).encode(), coin.encode());
+    }
+  }
+}
+
+#[test]
+fn coin() {
+  use std::collections::HashSet;
+
+  ExternalCoin::try_from(Coin::Serai).unwrap_err();
+
+  for coin in Coin::all() {
+    assert_eq!(
+      Coin::deserialize_reader(&mut borsh::to_vec(&coin).unwrap().as_slice()).unwrap(),
+      coin
+    );
+
+    #[cfg(feature = "scale")]
+    {
+      use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+      assert_eq!(coin.encode(), borsh::to_vec(&coin).unwrap());
+      assert!(coin.encode().len() <= Coin::max_encoded_len());
+      assert_eq!(Coin::decode_all(&mut coin.encode().as_slice()).unwrap(), coin);
+    }
+  }
+
+  {
+    let mut all_coins = Coin::all().collect::<HashSet<_>>();
+    assert!(all_coins.remove(&Coin::Serai));
+    assert_eq!(all_coins, ExternalCoin::all().map(Coin::from).collect::<HashSet<_>>());
   }
 }
