@@ -32,7 +32,21 @@ impl Test {
 #[tokio::test]
 async fn delay_task_returns_false_with_no_messages() {
   let mut task = Test::new().into_delay_task();
-  Test::assert_task_made_progress(&mut task, false).await;
+  Test::assert_task_run_and_check_progress(&mut task, false).await;
+}
+
+#[tokio::test]
+async fn delay_task_returns_false_with_genesis_block() {
+  let mut test = Test::new();
+
+  {
+    let mut txn = test.db.txn();
+    CosignedBlocks::send(&mut txn, &(0u64, now_timestamp()));
+    txn.commit();
+  }
+
+  let mut task = test.into_delay_task();
+  Test::assert_task_run_and_check_progress(&mut task, false).await;
 }
 
 #[tokio::test]
@@ -41,14 +55,14 @@ async fn delay_task_updates_latest_cosigned_block_number() {
 
   {
     let mut txn = test.db.txn();
-    CosignedBlocks::send(&mut txn, &(2u64, now_timestamp()));
+    CosignedBlocks::send(&mut txn, &(1u64, now_timestamp()));
     txn.commit();
   }
 
   let mut task = test.into_delay_task();
-  Test::assert_task_made_progress(&mut task, true).await;
+  Test::assert_task_run_and_check_progress(&mut task, true).await;
 
-  test.assert_task_iteration(Some(2u64));
+  test.assert_task_iteration(Some(1u64));
 }
 
 #[tokio::test]
@@ -65,7 +79,7 @@ async fn delay_task_drains_multiple_messages_in_one_iteration() {
   }
 
   let mut task = test.into_delay_task();
-  Test::assert_task_made_progress(&mut task, true).await;
+  Test::assert_task_run_and_check_progress(&mut task, true).await;
 
   test.assert_task_iteration(Some(3u64));
 }
@@ -90,7 +104,7 @@ async fn delay_task_does_not_regress_and_skips_wait_for_stale_messages() {
   }
 
   let mut task = test.into_delay_task();
-  Test::assert_task_made_progress(&mut task, true).await;
+  Test::assert_task_run_and_check_progress(&mut task, true).await;
 
   // Queue order: 1, 2, 4, 3
   // Block 1 processed (1 > 0), Block 2 processed (2 > 1),
@@ -98,7 +112,7 @@ async fn delay_task_does_not_regress_and_skips_wait_for_stale_messages() {
   test.assert_task_iteration(Some(4u64));
 }
 
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test]
 async fn delay_task_does_not_ack_before_acknowledgement_delay() {
   let mut test = Test::new();
   let now = now_timestamp();
@@ -122,8 +136,8 @@ async fn delay_task_does_not_ack_before_acknowledgement_delay() {
 
   // Wait for the task to complete
   let result = handle.await.unwrap();
-
   assert_eq!(result, true);
+
   test.assert_task_iteration(Some(1u64));
 }
 
@@ -141,7 +155,7 @@ async fn delay_task_with_zero_timestamp_processes_immediately() {
   // This should complete immediately without sleeping
   // Since now > 0 + ACKNOWLEDGEMENT_DELAY,
   // time_valid < now (already valid), so no sleep occurs
-  Test::assert_task_made_progress(&mut task, true).await;
+  Test::assert_task_run_and_check_progress(&mut task, true).await;
 
   test.assert_task_iteration(Some(1u64));
 }
@@ -206,7 +220,7 @@ async fn delay_task_increasing_blocks_with_increasing_timestamps() {
   }
 
   let mut task = test.into_delay_task();
-  Test::assert_task_made_progress(&mut task, true).await;
+  Test::assert_task_run_and_check_progress(&mut task, true).await;
 
   test.assert_task_iteration(Some(3u64));
 }
@@ -227,7 +241,7 @@ async fn delay_task_increasing_blocks_with_decreasing_timestamps() {
   }
 
   let mut task = test.into_delay_task();
-  Test::assert_task_made_progress(&mut task, true).await;
+  Test::assert_task_run_and_check_progress(&mut task, true).await;
 
   // All blocks should still be processed in order, ending with block 3
   // Even though block 3 has an earlier timestamp, it processes after block 1 and 2

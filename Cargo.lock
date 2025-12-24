@@ -8265,10 +8265,14 @@ version = "0.1.0"
 dependencies = [
  "blake2 0.11.0-rc.3",
  "borsh",
+ "k256",
  "log",
+ "rand_core 0.6.4",
+ "schnorrkel",
  "serai-client-serai",
  "serai-cosign-types",
  "serai-db",
+ "serai-substrate-tests",
  "serai-task",
  "tokio",
 ]

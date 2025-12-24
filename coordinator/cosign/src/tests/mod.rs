@@ -1,29 +1,20 @@
 #[cfg(test)]
-mod delay;
-
-#[cfg(test)]
 mod intend;
 
+#[cfg(test)]
+mod delay;
+
 use blake2::{Digest, Blake2b256};
+use serai_task::ContinuallyRan;
 use core::future::Future;
 use std::{
   collections::{HashMap, HashSet},
-  sync::{
-    atomic::{AtomicBool, AtomicUsize, Ordering},
-    Arc, OnceLock,
-  },
 };
-
-use rand_core::{OsRng, RngCore};
-
-use schnorrkel::{ExpansionMode, Keypair, MiniSecretKey};
 
 use serai_client_serai::{
   abi::{
     primitives::{
-      crypto::Public,
       merkle::{IncrementalUnbalancedMerkleTree, UnbalancedMerkleTree},
-      network_id::ExternalNetworkId,
       BlockHash,
     },
     Block, Event, Header, HeaderV1, BLOCK_HEADER_BRANCH_TAG, BLOCK_HEADER_LEAF_TAG,
@@ -32,58 +23,15 @@ use serai_client_serai::{
 };
 
 use crate::{
-  SeraiRpc,
-  intend::{CosignIntendTask},
-  COSIGN_CONTEXT, Cosign, SignedCosign,
+  COSIGN_CONTEXT, Cosign, SeraiRpc, SignedCosign, delay::CosignDelayTask, intend::CosignIntendTask,
 };
 use serai_db::MemDb;
 
-struct TestLogger;
-
-static LOG_ENABLED: AtomicBool = AtomicBool::new(true);
-
-impl log::Log for TestLogger {
-  fn enabled(&self, _metadata: &log::Metadata<'_>) -> bool {
-    LOG_ENABLED.load(Ordering::Relaxed)
-  }
-
-  fn log(&self, _record: &log::Record<'_>) {}
-
-  fn flush(&self) {}
-}
-
-fn init_logger() {
-  static LOGGER: TestLogger = TestLogger;
-  static INIT: OnceLock<()> = OnceLock::new();
-  INIT.get_or_init(|| {
-    let _ = log::set_logger(&LOGGER);
-    log::set_max_level(log::LevelFilter::Trace);
-  });
-}
-
-pub(crate) fn cosign_fixture(seed: [u8; 32], cosigner: ExternalNetworkId) -> Cosign {
-  let block_number = u64::from_le_bytes(seed[..8].try_into().unwrap());
-  let block_hash = seed.map(|b| b ^ 0xAA);
-
-  Cosign { global_session: seed, block_number, block_hash: BlockHash(block_hash), cosigner }
-}
-
-pub(crate) fn keypair_from_seed(seed: [u8; 32]) -> Keypair {
-  MiniSecretKey::from_bytes(&seed)
-    .expect("test seeds should always create a keypair")
-    .expand_to_keypair(ExpansionMode::Uniform)
-}
-
 pub(crate) fn sr25519_fixture() -> schnorrkel::Keypair {
-  let mut seed = [0u8; 32];
-
-  loop {
-    OsRng.fill_bytes(&mut seed);
-    if let Ok(mini) = schnorrkel::MiniSecretKey::from_bytes(&seed) {
-      let keypair = mini.expand_to_keypair(schnorrkel::ExpansionMode::Ed25519);
-      break keypair;
-    }
-  }
+  // Use a fixed seed to ensure deterministic keypairs across test calls.
+  let seed = [42u8; 32];
+  let mini = schnorrkel::MiniSecretKey::from_bytes(&seed).expect("fixed seed should be valid");
+  mini.expand_to_keypair(schnorrkel::ExpansionMode::Ed25519)
 }
 
 pub(crate) fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosign {
@@ -91,21 +39,10 @@ pub(crate) fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> Sign
   SignedCosign { cosign, signature: sig.to_bytes() }
 }
 
-pub(crate) fn signed_cosign_fixture(
-  seed: [u8; 32],
-  cosigner: ExternalNetworkId,
-) -> (SignedCosign, Public) {
-  let cosign = cosign_fixture(seed, cosigner);
-  let keypair = keypair_from_seed(seed.map(|b| b ^ 0x55));
-  let signature = keypair.sign_simple(COSIGN_CONTEXT, &cosign.signature_message());
-
-  (SignedCosign { cosign, signature: signature.to_bytes() }, Public(keypair.public.to_bytes()))
-}
-
 #[derive(Clone)]
 pub(crate) struct Serai {
-  pub(crate) block_by_number_error: Option<String>,
-  pub(crate) events_error: Option<String>,
+  pub(crate) block_by_number_error: HashMap<u64, String>,
+  pub(crate) events_error: HashMap<BlockHash, String>,
   pub(crate) blocks_by_number: HashMap<u64, Block>,
   pub(crate) events_by_hash: HashMap<BlockHash, Events>,
   pub(crate) builds_upon: IncrementalUnbalancedMerkleTree,
@@ -115,8 +52,8 @@ pub(crate) struct Serai {
 impl Default for Serai {
   fn default() -> Self {
     Self {
-      block_by_number_error: None,
-      events_error: None,
+      block_by_number_error: HashMap::new(),
+      events_error: HashMap::new(),
       blocks_by_number: HashMap::new(),
       events_by_hash: HashMap::new(),
       builds_upon: IncrementalUnbalancedMerkleTree::new(),
@@ -132,6 +69,14 @@ impl Serai {
 
   pub(crate) fn set_block_not_found(&mut self, block_number: u64) {
     self.missing_blocks.insert(block_number);
+  }
+
+  pub(crate) fn set_block_error(&mut self, block_number: u64, error: &str) {
+    self.block_by_number_error.insert(block_number, error.to_string());
+  }
+
+  pub(crate) fn set_events_error(&mut self, block_hash: BlockHash, error: &str) {
+    self.events_error.insert(block_hash, error.to_string());
   }
 
   pub(crate) fn make_block(&mut self, number: u64) -> BlockHash {
@@ -156,23 +101,17 @@ impl Serai {
         .into(),
     );
 
-    if number > 0u64 {
-      self.blocks_by_number.insert(number, block);
-    }
+    self.blocks_by_number.insert(number, block);
 
     block_hash
   }
 
-  pub(crate) fn new_events(&mut self, block_hash: BlockHash) {
+  pub(crate) fn initialize_empty_events(&mut self, block_hash: BlockHash) {
     self.events_by_hash = HashMap::from([(block_hash, Events::new())]);
   }
 
   pub(crate) fn set_events(&mut self, block_hash: BlockHash, events: Vec<Event>) {
     self.events_by_hash.insert(block_hash, Events::with(events));
-  }
-
-  pub(crate) fn builds_upon(&self) -> &IncrementalUnbalancedMerkleTree {
-    &self.builds_upon
   }
 }
 
@@ -186,7 +125,7 @@ impl SeraiRpc for Serai {
     &self,
     block: u64,
   ) -> impl Send + Future<Output = Result<Option<Block>, String>> {
-    let err = self.block_by_number_error.clone();
+    let err = self.block_by_number_error.get(&block).cloned();
     let block_entry = self.blocks_by_number.get(&block).cloned();
     let is_missing = self.missing_blocks.contains(&block);
 
@@ -202,7 +141,7 @@ impl SeraiRpc for Serai {
   }
 
   fn events(&self, block: BlockHash) -> impl Send + Future<Output = Result<Events, String>> {
-    let err = self.events_error.clone();
+    let err = self.events_error.get(&block).cloned();
     let events = self.events_by_hash.get(&block).cloned().unwrap_or_default();
     async move {
       if let Some(e) = err {
@@ -213,27 +152,45 @@ impl SeraiRpc for Serai {
   }
 }
 
-pub(crate) struct TestEnvironment {
+pub(crate) struct Test {
   pub(crate) serai: Serai,
   pub(crate) db: MemDb,
 }
 
-impl Default for TestEnvironment {
+impl Default for Test {
   fn default() -> Self {
     Self { serai: Serai::new(), db: MemDb::new() }
   }
 }
 
-impl TestEnvironment {
+impl Test {
   pub(crate) fn new() -> Self {
     Self::default()
   }
 
+  #[allow(dead_code)]
   pub(crate) fn from_serai(serai: Serai) -> Self {
     Self { serai, db: MemDb::new() }
   }
 
-  pub(crate) fn into_task(&self) -> CosignIntendTask<MemDb, Serai> {
+  fn into_intend_task(&self) -> CosignIntendTask<MemDb, Serai> {
     CosignIntendTask { db: self.db.clone(), serai: self.serai.clone() }
+  }
+
+  fn into_delay_task(&self) -> CosignDelayTask<MemDb> {
+    CosignDelayTask { db: self.db.clone() }
+  }
+
+  pub(crate) async fn assert_task_run_and_check_progress(
+    task: &mut impl ContinuallyRan,
+    made_progress: bool,
+  ) {
+    assert_eq!(task.run_iteration().await.unwrap(), made_progress);
+  }
+
+  pub(crate) async fn assert_task_failed(task: &mut impl ContinuallyRan, error: &str) {
+    let err = task.run_iteration().await.unwrap_err();
+    let err_str = format!("{err:?}");
+    assert!(err_str.contains(error), "{err_str}");
   }
 }
