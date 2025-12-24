@@ -56,7 +56,9 @@ pub mod merkle;
 /// A block's number is its zero-indexed position on the list of blocks which form a blockchain.
 /// For non-linear structures, this would presumably be the zero-indexed position within some
 /// topological order.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[rustfmt::skip]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Zeroize, BorshSerialize, BorshDeserialize)]
 pub struct BlockNumber(pub u64);
 impl From<u64> for BlockNumber {
   fn from(number: u64) -> BlockNumber {
@@ -71,7 +73,7 @@ impl From<u64> for BlockNumber {
   level so this is fine for our use-case. If we do ever see a 64-byte block hash, we can simply
   hash it into a 32-byte hash or truncate it.
 */
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 pub struct BlockHash(pub [u8; 32]);
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(BlockHash);

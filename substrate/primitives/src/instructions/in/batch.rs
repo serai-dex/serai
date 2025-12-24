@@ -168,12 +168,6 @@ pub struct SignedBatch {
 }
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(SignedBatch);
-#[cfg(feature = "scale")]
-impl scale::MaxEncodedLen for SignedBatch {
-  fn max_encoded_len() -> usize {
-    Batch::MAX_SIZE + 64
-  }
-}
 
 impl Zeroize for SignedBatch {
   fn zeroize(&mut self) {

@@ -13,7 +13,7 @@ pub type AmountRepr = u64;
 ///
 /// All arithmetic with this type is checked, forcing the caller to consider (under/over)flow.
 #[rustfmt::skip] // Prevent rustfmt from expanding the following `derive`s into a monstrosity
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 #[derive(Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct Amount(pub AmountRepr);
@@ -50,7 +50,6 @@ impl Mul for Amount {
 
 /// An [`ExternalCoin`] and an [`Amount`], forming a balance for an external coin.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct ExternalBalance {
   /// The coin this is a balance for.
   pub coin: ExternalCoin,
@@ -85,7 +84,6 @@ impl Mul<Amount> for ExternalBalance {
 
 /// A [`Coin`] and an [`Amount`], forming a balance for a coin.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct Balance {
   /// The coin this is a balance for.
   pub coin: Coin,
@@ -158,9 +156,8 @@ fn external_balance() {
 
     #[cfg(feature = "scale")]
     {
-      use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+      use scale::{Encode as _, DecodeAll as _};
       assert_eq!(balance.encode(), borsh::to_vec(&balance).unwrap());
-      assert!(balance.encode().len() <= ExternalBalance::max_encoded_len());
       assert_eq!(ExternalBalance::decode_all(&mut balance.encode().as_slice()).unwrap(), balance);
       assert_eq!(Balance::from(balance).encode(), balance.encode());
     }
@@ -182,9 +179,8 @@ fn balance() {
 
     #[cfg(feature = "scale")]
     {
-      use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+      use scale::{Encode as _, DecodeAll as _};
       assert_eq!(balance.encode(), borsh::to_vec(&balance).unwrap());
-      assert!(balance.encode().len() <= Balance::max_encoded_len());
       assert_eq!(Balance::decode_all(&mut balance.encode().as_slice()).unwrap(), balance);
     }
   }

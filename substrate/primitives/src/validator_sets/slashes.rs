@@ -33,8 +33,6 @@ pub enum Slash {
   /// not be used for liveness failures. The validator will be penalized all allocated stake.
   Fatal,
 }
-#[cfg(feature = "scale")]
-crate::borsh_as_scale!(Slash);
 
 impl Slash {
   /// Calculate the penalty which should be applied to the validator.

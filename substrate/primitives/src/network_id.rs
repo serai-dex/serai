@@ -6,7 +6,7 @@ use crate::coin::{ExternalCoin, Coin};
 
 /// Identifier for an embedded elliptic curve.
 #[rustfmt::skip]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 #[derive(BorshSerialize, BorshDeserialize)]
 pub enum EmbeddedEllipticCurve {
   /// The Embedwards25519 curve, defined over (embedded into) Ed25519's/Ristretto's scalar field.

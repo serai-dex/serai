@@ -18,7 +18,9 @@ mod slashes;
 pub use slashes::*;
 
 /// The type used to identify a specific session of validators.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[rustfmt::skip]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct Session(pub u32);
 #[cfg(feature = "scale")]

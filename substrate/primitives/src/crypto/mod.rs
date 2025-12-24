@@ -30,7 +30,6 @@ impl From<Public> for sp_core::sr25519::Public {
 ///
 /// This is approximate to [`sp_core::sr25519::Signature`] but implements the APIs from `borsh`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct Signature(pub [u8; 64]);
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(Signature);
