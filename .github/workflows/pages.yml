@@ -72,7 +72,8 @@ jobs:
         shell: bash
         run: |
           rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal --component rust-docs --component rust-src
-          RUSTDOCFLAGS="--cfg docsrs" cargo +${{ steps.nightly.outputs.version }} doc --workspace --no-deps --all-features
+          # TODO: This uses an explicitly old version of `+nightly` due to `doc_auto_cfg`'s removal (https://github.com/rust-lang/rust/pull/138907)
+          RUSTDOCFLAGS="--cfg docsrs -Z unstable-options --document-hidden-items" cargo +nightly-2025-09-01 doc --workspace --all-features --document-private-items
           mv target/doc docs/_site/rust
 
       - name: Upload artifact
