@@ -1,0 +1,18 @@
+[package]
+name = "dtoa"
+version = "1.99.99"
+description = "Patches to `zmij`"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/zmij"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+zmij = { version = "1", default-features = false }
