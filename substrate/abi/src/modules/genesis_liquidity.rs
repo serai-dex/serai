@@ -10,7 +10,7 @@ pub fn address(coin: ExternalCoin) -> SeraiAddress {
   SeraiAddress::system(borsh::to_vec(&(b"GenesisLiquidity", coin)).unwrap())
 }
 
-/// A call to the genesis liquidity.
+/// A call to the genesis liquidity module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {
   /// Oraclize the values of the coins available on genesis, relative to BTC.
@@ -45,7 +45,7 @@ impl Call {
   }
 }
 
-/// An event from the genesis liquidity.
+/// An event from the genesis liquidity module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
   /// Genesis liquidity added.

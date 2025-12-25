@@ -5,7 +5,7 @@ use serai_primitives::{
   balance::{Amount, ExternalBalance},
 };
 
-/// An event from economic security.
+/// An event from the economic security module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
   /// Economic security was achieved for a network's validator set.
