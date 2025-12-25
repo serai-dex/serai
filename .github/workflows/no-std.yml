@@ -37,7 +37,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y gcc-riscv64-unknown-elf gcc-multilib
-          rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal --component rust-src --target riscv32imac-unknown-none-elf
+          rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal --component rust-src
 
       - name: Verify no-std builds
         run: |
