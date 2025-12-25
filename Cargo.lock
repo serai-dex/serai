@@ -8899,9 +8899,12 @@ dependencies = [
 name = "serai-signals-pallet"
 version = "0.1.0"
 dependencies = [
+ "borsh",
  "frame-support",
  "frame-system",
+ "pallet-babe",
  "parity-scale-codec",
+ "rand_core 0.6.4",
  "serai-abi",
  "serai-core-pallet",
  "serai-validator-sets-pallet",

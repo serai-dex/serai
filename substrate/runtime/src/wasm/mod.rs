@@ -12,6 +12,7 @@ use sp_version::RuntimeVersion;
 
 use serai_abi::{
   primitives::{
+    constants::*,
     crypto::EmbeddedEllipticCurveKeys,
     network_id::{ExternalNetworkId, NetworkId},
     balance::Amount,
@@ -90,8 +91,7 @@ impl serai_validator_sets_pallet::Config for Runtime {
   type EconomicSecurity = EconomicSecurity;
 }
 impl serai_signals_pallet::Config for Runtime {
-  type RetirementValidityDuration = ConstU64<0>; // TODO
-  type RetirementLockInDuration = ConstU64<1>; // TODO
+  type RetirementLockInDurationInSlots = ConstU64<{ RETIREMENT_LOCK_IN_DURATION_IN_SLOTS }>;
 }
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
@@ -105,8 +105,7 @@ impl serai_in_instructions_pallet::Config for Runtime {}
 impl pallet_timestamp::Config for Runtime {
   type Moment = u64;
   type OnTimestampSet = Babe;
-  // TODO
-  type MinimumPeriod = ConstU64<{ (6 * 1000) / 2 }>;
+  type MinimumPeriod = ConstU64<{ (TARGET_BLOCK_TIME.as_millis() / 2) as u64 }>;
   type WeightInfo = ();
 }
 
@@ -128,10 +127,9 @@ impl pallet_session::Config for Runtime {
 type MaxAuthorities =
   ConstU32<{ serai_abi::primitives::validator_sets::KeyShares::MAX_PER_SET_U32 }>;
 impl pallet_babe::Config for Runtime {
-  // TODO
-  type EpochDuration = ConstU64<{ (7 * 24 * 60 * 60 * 1000) / (6 * 1000) }>;
+  type EpochDuration = ConstU64<{ SESSION_LENGTH_IN_SLOTS }>;
 
-  type ExpectedBlockTime = ConstU64<{ 6 * 1000 }>; // TODO
+  type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME.as_millis() as u64 }>;
   type EpochChangeTrigger = pallet_babe::ExternalTrigger;
 
   type WeightInfo = ();
@@ -546,16 +544,6 @@ impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
   fn convert(key: PublicKey) -> Option<PublicKey> {
     Some(key)
   }
-}
-
-impl signals::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-  // 1 week
-  #[expect(clippy::cast_possible_truncation)]
-  type RetirementValidityDuration = ConstU32<{ (7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
-  // 2 weeks
-  #[expect(clippy::cast_possible_truncation)]
-  type RetirementLockInDuration = ConstU32<{ (2 * 7 * 24 * 60 * 60) / (TARGET_BLOCK_TIME as u32) }>;
 }
 
 impl emissions::Config for Runtime {
