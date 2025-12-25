@@ -46,10 +46,11 @@ impl ExternalKey {
 
 #[test]
 fn external_key() {
+  use alloc::vec;
   use rand_core::{RngCore as _, OsRng};
 
   #[cfg(feature = "scale")]
-  use scale::{Encode as _, MaxEncodedLen as _};
+  use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
 
   // Check `max_encoded_len` is correctly defined
   #[cfg(feature = "scale")]
@@ -65,25 +66,26 @@ fn external_key() {
   );
 
   // Fuzz test various `ExternalKey`s
-  for _ in 0 .. 100 {
-    let mut vec =
-      vec![0; usize::try_from(OsRng.next_u64() % u64::from(ExternalKey::MAX_LEN)).unwrap()];
+  for i in 0 ..= ExternalKey::MAX_LEN {
+    let mut vec = vec![0; usize::try_from(i).unwrap()];
     OsRng.fill_bytes(&mut vec);
-    let address = ExternalKey(vec.try_into().unwrap());
+    let external_key = ExternalKey(vec.try_into().unwrap());
 
     assert_eq!(
-      ExternalKey::deserialize_reader(&mut borsh::to_vec(&address).unwrap().as_slice()).unwrap(),
-      address
+      ExternalKey::deserialize_reader(&mut borsh::to_vec(&external_key).unwrap().as_slice())
+        .unwrap(),
+      external_key
     );
 
     #[cfg(feature = "scale")]
-    use scale::{Encode as _, DecodeAll as _};
-    #[cfg(feature = "scale")]
     assert_eq!(
-      ExternalKey::decode_all(&mut borsh::to_vec(&address).unwrap().as_slice()).unwrap(),
-      address
+      ExternalKey::decode_all(&mut borsh::to_vec(&external_key).unwrap().as_slice()).unwrap(),
+      external_key
     );
     #[cfg(feature = "scale")]
-    assert_eq!(ExternalKey::deserialize_reader(&mut address.encode().as_slice()).unwrap(), address);
+    assert_eq!(
+      ExternalKey::deserialize_reader(&mut external_key.encode().as_slice()).unwrap(),
+      external_key
+    );
   }
 }

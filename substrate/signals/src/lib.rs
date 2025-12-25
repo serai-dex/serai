@@ -133,12 +133,14 @@ pub mod pallet {
       */
 
       let mut needed_favor = {
-        let current = VsPallet::<T>::key_shares(current_set)
-          .expect("current validator set without key shares set")
-          .0;
-        let latest = VsPallet::<T>::key_shares(latest_set)
-          .expect("latest validator set without key shares set")
-          .0;
+        let current = u16::from(
+          VsPallet::<T>::key_shares(current_set)
+            .expect("current validator set without key shares set"),
+        );
+        let latest = u16::from(
+          VsPallet::<T>::key_shares(latest_set)
+            .expect("latest validator set without key shares set"),
+        );
         current.max(latest)
       };
       for (validator, ()) in Favors::<T>::iter_prefix((signal, network)) {
@@ -154,7 +156,7 @@ pub mod pallet {
             .unwrap_or(KeyShares::ZERO);
           let latest = VsPallet::<T>::key_shares_possessed_by_validator(latest_set, validator)
             .unwrap_or(KeyShares::ZERO);
-          current.0.min(latest.0)
+          u16::from(current).min(u16::from(latest))
         };
 
         let Some(still_needed_favor) = needed_favor.checked_sub(key_shares) else {

@@ -47,11 +47,12 @@ mod pallet {
       balance::*,
       validator_sets::{
         Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct, SlashReport,
+        DeallocationTimeline,
       },
       address::SeraiAddress,
     },
     economic_security::EconomicSecurity,
-    validator_sets::{DeallocationTimeline, Event},
+    validator_sets::Event,
   };
 
   use serai_core_pallet::Pallet as Core;
@@ -615,14 +616,14 @@ mod pallet {
           for ((participant, shares), in_use) in
             participants.into_iter().zip(signature_participants)
           {
-            all_key_shares += shares.0;
+            all_key_shares += u16::from(shares);
 
             if !in_use {
               continue;
             }
 
             signers.push(participant);
-            signing_key_shares += shares.0;
+            signing_key_shares += u16::from(shares);
           }
 
           // Check enough validators participated

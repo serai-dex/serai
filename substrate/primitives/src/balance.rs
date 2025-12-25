@@ -137,6 +137,23 @@ fn amount() {
   assert!(Amount(0) != Amount(1));
   assert!(Amount(0) < Amount(1));
   assert!(Amount(1) > Amount(0));
+
+  use rand_core::{RngCore as _, OsRng};
+
+  let amount = Amount(OsRng.next_u64());
+
+  assert_eq!(
+    Amount::deserialize_reader(&mut borsh::to_vec(&amount).unwrap().as_slice()).unwrap(),
+    amount
+  );
+
+  #[cfg(feature = "scale")]
+  {
+    use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+    assert_eq!(amount.encode(), borsh::to_vec(&amount).unwrap());
+    assert_eq!(Amount::decode_all(&mut amount.encode().as_slice()).unwrap(), amount);
+    assert_eq!(Amount(u64::MAX).encode().len(), Amount::max_encoded_len());
+  }
 }
 
 #[test]

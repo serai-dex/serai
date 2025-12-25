@@ -11,8 +11,10 @@ use sp_core::sr25519::Public;
 use crate::{
   crypto::KeyPair,
   network_id::{ExternalNetworkId, NetworkId},
-  balance::Amount,
 };
+
+mod key_shares;
+pub use key_shares::*;
 
 mod slashes;
 pub use slashes::*;
@@ -37,6 +39,8 @@ pub struct ExternalValidatorSet {
 }
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(ExternalValidatorSet);
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<ValidatorSet> for ExternalValidatorSet {}
 
 /// The type used to identify a specific set of validators.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
@@ -67,22 +71,7 @@ impl TryFrom<ValidatorSet> for ExternalValidatorSet {
 impl ExternalValidatorSet {
   /// The MuSig context for this validator set.
   pub fn musig_context(&self) -> [u8; 32] {
-    let mut res = [0; 32];
-
-    const DST: &[u8] = b"ValidatorSets-musig_key";
-    res[0] = u8::try_from(DST.len()).unwrap();
-    #[expect(clippy::range_plus_one)]
-    res[1 .. (1 + DST.len())].copy_from_slice(DST);
-
-    // Check we have room to encode into `res`, using the approximate `size_of` for the max size of
-    // the serialization
-    const _ASSERT_MORE_BYTES_THAN_SIZE: [();
-      32 - (1 + DST.len()) - core::mem::size_of::<ExternalValidatorSet>()] = [(); _];
-
-    let encoded = borsh::to_vec(&self).unwrap();
-    res[(1 + DST.len()) .. (1 + DST.len() + encoded.len())].copy_from_slice(&encoded);
-
-    res
+    sp_core::blake2_256(&borsh::to_vec(&(b"ValidatorSets-musig_key", self)).unwrap())
   }
 
   /// The MuSig public key for a validator set.
@@ -106,87 +95,109 @@ impl ExternalValidatorSet {
   }
 }
 
-/// The representation for an amount of key shares.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
-pub struct KeyShares(pub u16);
-#[cfg(feature = "scale")]
-crate::borsh_as_scale!(KeyShares);
+/// The timeline for a deallocation.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+pub enum DeallocationTimeline {
+  /// The deallocation is available immediately.
+  Immediate,
+  /// The dealocation was delayed.
+  Delayed {
+    /// The session the deallocation unlocks at and can be claimed.
+    unlocks_at: Session,
+  },
+}
 
-impl KeyShares {
-  /// Zero key shares.
-  pub const ZERO: KeyShares = KeyShares(0);
-  /// One key share.
-  pub const ONE: KeyShares = KeyShares(1);
-  /// The maximum amount of key shares per set.
-  pub const MAX_PER_SET: u16 = 127;
-  /// The maximum amount of key shares per set, represented as a `u32`.
-  pub const MAX_PER_SET_U32: u32 = 127;
-  /// The maximum amount of key shares per set, represented as a `u64`.
-  pub const MAX_PER_SET_U64: u64 = 127;
+#[test]
+fn session() {
+  assert_eq!(Session(0), Session(0));
+  assert!(Session(0) != Session(1));
+  assert!(Session(0) < Session(1));
+  assert!(Session(1) > Session(0));
 
-  /// Create key shares from a `u16`.
-  ///
-  /// This will saturate the value if the `u16` exceeds the maximum amount of key shares.
-  pub fn saturating_from(key_shares: u16) -> KeyShares {
-    KeyShares(key_shares.min(Self::MAX_PER_SET))
-  }
+  use rand_core::{RngCore as _, OsRng};
 
-  /// Create key shares from an allocation.
-  ///
-  /// Presumably panics if `allocation_per_key_share` is zero.
-  pub fn from_allocation(allocation: Amount, allocation_per_key_share: Amount) -> Self {
-    Self::saturating_from(
-      u16::try_from(allocation.0 / allocation_per_key_share.0).unwrap_or(u16::MAX),
-    )
-  }
+  #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+  let session = Session(OsRng.next_u64() as u32);
 
-  /// For a set of validators whose key shares may exceed the maximum, reduce until they are less
-  /// than or equal to the maximum.
-  ///
-  /// Returns the new amount of validators with a non-zero amount of key shares.
-  ///
-  /// This runs in time linear to the exceeded key shares and may panic if:
-  ///   - The total amount of key shares exceeds `u16::MAX`.
-  ///   - The list of validators is absurdly long
-  ///   - The list of validators includes validators without key shares
-  ///
-  /// Reduction occurs by reducing each validator in a reverse round-robin. This means the
-  /// validators with the least key shares are evicted first.
-  #[must_use]
-  pub fn amortize_excess(validators: &mut [(Public, KeyShares)]) -> usize {
-    let total_key_shares = validators.iter().map(|(_key, shares)| shares.0).sum::<u16>();
-    let mut actual_len = validators.len();
-    let mut offset = 1;
-    for _ in 0 .. usize::from(total_key_shares.saturating_sub(Self::MAX_PER_SET)) {
-      // If the offset exceeds the new length, reset it
-      if offset > actual_len {
-        offset = 1;
-      }
+  assert_eq!(
+    Session::deserialize_reader(&mut borsh::to_vec(&session).unwrap().as_slice()).unwrap(),
+    session
+  );
 
-      // Take one key share from this validator
-      let index = actual_len - offset;
-      validators[index].1 .0 -= 1;
-      // If they now have zero key shares, shrink the length and continue
-      if validators[index].1 .0 == 0 {
-        actual_len -= 1;
-        continue;
-      }
-
-      // Increment the offset to take from the next validator on the next iteration
-      offset += 1;
-    }
-    actual_len
+  #[cfg(feature = "scale")]
+  {
+    use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+    assert_eq!(session.encode(), borsh::to_vec(&session).unwrap());
+    assert_eq!(Session::decode_all(&mut session.encode().as_slice()).unwrap(), session);
+    assert_eq!(Session(u32::MAX).encode().len(), Session::max_encoded_len());
   }
 }
 
-impl TryFrom<u16> for KeyShares {
-  type Error = ();
-  fn try_from(value: u16) -> Result<Self, ()> {
-    if value > Self::MAX_PER_SET {
-      Err(())
-    } else {
-      Ok(Self(value))
+#[test]
+fn external_validator_set() {
+  use rand_core::{RngCore as _, OsRng};
+
+  for network in ExternalNetworkId::all() {
+    #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+    let session = Session(OsRng.next_u64() as u32);
+    let validator_set = ExternalValidatorSet { network, session };
+    assert_eq!(
+      ExternalValidatorSet::try_from(ValidatorSet::from(validator_set)).unwrap(),
+      validator_set
+    );
+
+    assert_eq!(
+      ExternalValidatorSet::deserialize_reader(
+        &mut borsh::to_vec(&validator_set).unwrap().as_slice()
+      )
+      .unwrap(),
+      validator_set
+    );
+
+    #[cfg(feature = "scale")]
+    {
+      use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+      assert_eq!(validator_set.encode(), borsh::to_vec(&validator_set).unwrap());
+      assert_eq!(
+        ExternalValidatorSet::decode_all(&mut validator_set.encode().as_slice()).unwrap(),
+        validator_set
+      );
+      assert_eq!(ValidatorSet::from(validator_set).encode(), validator_set.encode());
+      assert_eq!(
+        (ExternalValidatorSet { network, session: Session(u32::MAX) }).encode().len(),
+        ExternalValidatorSet::max_encoded_len()
+      );
+    }
+  }
+}
+
+#[test]
+fn validator_set() {
+  use rand_core::{RngCore as _, OsRng};
+
+  for network in NetworkId::all() {
+    #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+    let session = Session(OsRng.next_u64() as u32);
+    let validator_set = ValidatorSet { network, session };
+
+    assert_eq!(
+      ValidatorSet::deserialize_reader(&mut borsh::to_vec(&validator_set).unwrap().as_slice())
+        .unwrap(),
+      validator_set
+    );
+
+    #[cfg(feature = "scale")]
+    {
+      use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+      assert_eq!(validator_set.encode(), borsh::to_vec(&validator_set).unwrap());
+      assert_eq!(
+        ValidatorSet::decode_all(&mut validator_set.encode().as_slice()).unwrap(),
+        validator_set
+      );
+      assert_eq!(
+        (ValidatorSet { network, session: Session(u32::MAX) }).encode().len(),
+        ValidatorSet::max_encoded_len()
+      );
     }
   }
 }

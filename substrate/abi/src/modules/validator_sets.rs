@@ -11,7 +11,7 @@ use serai_primitives::{
   validator_sets::*,
 };
 
-/// A call to the validator sets.
+/// A call to the validator sets module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {
   /// Set the keys for a validator set.
@@ -75,19 +75,7 @@ impl Call {
   }
 }
 
-/// The timeline for a deallocation.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
-pub enum DeallocationTimeline {
-  /// The deallocation is available immediately.
-  Immediate,
-  /// The dealocation was delayed.
-  Delayed {
-    /// The session the deallocation unlocks at and can be claimed.
-    unlocks_at: Session,
-  },
-}
-
-/// An event from the validator sets.
+/// An event from the validator sets module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
   /// A new validator set was decided.

@@ -53,6 +53,8 @@ pub enum Event {
 
 #[test]
 fn in_instruction_results_bound() {
+  use alloc::vec;
+
   /*
     We picked a bound high enough the `in_instruction_results` vector will have the same
     length-prefix length as the `instructions` vector within the `Batch`, ensuring they have

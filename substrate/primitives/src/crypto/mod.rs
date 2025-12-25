@@ -15,6 +15,7 @@ pub use embedded_elliptic_curve_keys::*;
 pub struct Public(pub [u8; 32]);
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(Public);
+
 impl From<sp_core::sr25519::Public> for Public {
   fn from(public: sp_core::sr25519::Public) -> Self {
     Self(public.0)
@@ -26,6 +27,11 @@ impl From<Public> for sp_core::sr25519::Public {
   }
 }
 
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<sp_core::sr25519::Public> for Public {}
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<Public> for sp_core::sr25519::Public {}
+
 /// A sr25519 signature.
 ///
 /// This is approximate to [`sp_core::sr25519::Signature`] but implements the APIs from `borsh`.
@@ -33,11 +39,13 @@ impl From<Public> for sp_core::sr25519::Public {
 pub struct Signature(pub [u8; 64]);
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(Signature);
+
 impl From<schnorrkel::Signature> for Signature {
   fn from(signature: schnorrkel::Signature) -> Self {
     Self(signature.to_bytes())
   }
 }
+
 impl From<sp_core::sr25519::Signature> for Signature {
   fn from(signature: sp_core::sr25519::Signature) -> Self {
     Self(signature.0)
@@ -49,6 +57,11 @@ impl From<Signature> for sp_core::sr25519::Signature {
   }
 }
 
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<sp_core::sr25519::Signature> for Signature {}
+#[cfg(feature = "scale")]
+impl scale::EncodeLike<Signature> for sp_core::sr25519::Signature {}
+
 /// The key pair for a validator set.
 ///
 /// This is their Ristretto key, used for publishing data onto Serai, and their key on the external
@@ -58,3 +71,101 @@ impl From<Signature> for sp_core::sr25519::Signature {
 pub struct KeyPair(pub Public, pub ExternalKey);
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(KeyPair);
+
+#[test]
+fn public() {
+  use rand_core::{RngCore as _, OsRng};
+
+  let mut public = [0; 32];
+  OsRng.fill_bytes(&mut public);
+  let public = Public(public);
+
+  assert_eq!(
+    Public::deserialize_reader(&mut borsh::to_vec(&public).unwrap().as_slice()).unwrap(),
+    public
+  );
+
+  #[cfg(feature = "scale")]
+  {
+    use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+    assert_eq!(borsh::to_vec(&public).unwrap(), public.encode());
+    assert_eq!(Public::decode_all(&mut public.encode().as_slice()).unwrap(), public);
+    assert_eq!(public.encode().len(), Public::max_encoded_len());
+    assert_eq!(sp_core::sr25519::Public::from(public).encode(), public.encode());
+  }
+}
+
+#[test]
+fn signature() {
+  use rand_core::{RngCore as _, OsRng};
+
+  let mut signature = [0; 64];
+  OsRng.fill_bytes(&mut signature);
+  let signature = Signature(signature);
+
+  assert_eq!(
+    Signature::deserialize_reader(&mut borsh::to_vec(&signature).unwrap().as_slice()).unwrap(),
+    signature
+  );
+
+  #[cfg(feature = "scale")]
+  {
+    use scale::{Encode as _, DecodeAll as _};
+    assert_eq!(borsh::to_vec(&signature).unwrap(), signature.encode());
+    assert_eq!(Signature::decode_all(&mut signature.encode().as_slice()).unwrap(), signature);
+    assert_eq!(sp_core::sr25519::Signature::from(signature).encode(), signature.encode());
+  }
+}
+
+#[test]
+fn key_pair() {
+  use alloc::vec;
+  use rand_core::{RngCore as _, OsRng};
+
+  #[cfg(feature = "scale")]
+  use scale::{Encode as _, MaxEncodedLen as _};
+
+  // Check `max_encoded_len` is correctly defined
+  #[cfg(feature = "scale")]
+  assert_eq!(
+    KeyPair::max_encoded_len(),
+    KeyPair(
+      Public([0; 32]),
+      ExternalKey({
+        let mut vec = sp_core::bounded::BoundedVec::new();
+        while vec.try_push(0).is_ok() {}
+        vec
+      })
+    )
+    .encode()
+    .len()
+  );
+
+  // Fuzz test various `KeyPair`s
+  for _ in 0 .. 100 {
+    let key_pair = {
+      let mut public = Public([0; 32]);
+      OsRng.fill_bytes(&mut public.0);
+      let mut vec =
+        vec![0; usize::try_from(OsRng.next_u64() % u64::from(ExternalKey::MAX_LEN)).unwrap()];
+      OsRng.fill_bytes(&mut vec);
+      let external_key = ExternalKey(vec.try_into().unwrap());
+      KeyPair(public, external_key)
+    };
+
+    assert_eq!(
+      KeyPair::deserialize_reader(&mut borsh::to_vec(&key_pair).unwrap().as_slice()).unwrap(),
+      key_pair
+    );
+
+    #[cfg(feature = "scale")]
+    use scale::{Encode as _, DecodeAll as _};
+    #[cfg(feature = "scale")]
+    assert_eq!(
+      KeyPair::decode_all(&mut borsh::to_vec(&key_pair).unwrap().as_slice()).unwrap(),
+      key_pair
+    );
+    #[cfg(feature = "scale")]
+    assert_eq!(KeyPair::deserialize_reader(&mut key_pair.encode().as_slice()).unwrap(), key_pair);
+  }
+}

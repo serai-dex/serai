@@ -121,8 +121,9 @@ fn try_from() {
 
 #[test]
 fn serialize() {
-  use rand_core::{RngCore as _, OsRng};
+  use alloc::vec;
   use bitvec::{order::Lsb0, bitvec};
+  use rand_core::{RngCore as _, OsRng};
 
   macro_rules! explicit_test {
     ($bound: literal, $value: expr, $expected_encoding: expr) => {

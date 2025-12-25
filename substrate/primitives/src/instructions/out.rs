@@ -24,6 +24,7 @@ crate::borsh_as_scale!(OutInstructionWithBalance);
 
 #[test]
 fn serialize() {
+  use alloc::vec;
   use rand_core::{RngCore as _, OsRng};
 
   use crate::{coin::ExternalCoin, balance::Amount};

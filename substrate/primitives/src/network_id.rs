@@ -2,20 +2,10 @@ use zeroize::Zeroize;
 
 use borsh::{io, BorshSerialize, BorshDeserialize};
 
-use crate::coin::{ExternalCoin, Coin};
-
-/// Identifier for an embedded elliptic curve.
-#[rustfmt::skip]
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
-#[derive(BorshSerialize, BorshDeserialize)]
-pub enum EmbeddedEllipticCurve {
-  /// The Embedwards25519 curve, defined over (embedded into) Ed25519's/Ristretto's scalar field.
-  Embedwards25519,
-  /// The secq256k1 curve, forming a cycle with secp256k1.
-  Secq256k1,
-}
-#[cfg(feature = "scale")]
-crate::borsh_as_scale!(EmbeddedEllipticCurve);
+use crate::{
+  coin::{ExternalCoin, Coin},
+  crypto::EmbeddedEllipticCurve,
+};
 
 /// The type used to identify external networks.
 ///

@@ -160,8 +160,10 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
 
           // We only coordinate over external networks
           let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
-          let validators =
-            validators.iter().map(|(validator, weight)| (*validator, weight.0)).collect::<Vec<_>>();
+          let validators = validators
+            .iter()
+            .map(|(validator, weight)| (*validator, u16::from(*weight)))
+            .collect::<Vec<_>>();
 
           let in_set = validators.iter().any(|(validator, _)| *validator == self.validator);
           if in_set {
