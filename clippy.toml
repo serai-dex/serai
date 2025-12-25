@@ -1,5 +1,7 @@
 disallowed-methods = [
   "Option::map_or",
   "Option::map_or_else",
+  # TODO: https://github.com/recmo/uint/issues/550
+  "ruint::algorithms::div::reciprocal_mg10",
 ]
 allow-one-hash-in-raw-strings = true

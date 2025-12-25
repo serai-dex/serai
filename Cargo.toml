@@ -127,6 +127,16 @@ overflow-checks = true
 [profile.bench]
 overflow-checks = true
 
+# TODO: https://github.com/recmo/uint/issues/550
+[profile.dev.package.ruint]
+debug-assertions = true
+[profile.release.package.ruint]
+debug-assertions = true
+[profile.test.package.ruint]
+debug-assertions = true
+[profile.bench.package.ruint]
+debug-assertions = true
+
 [profile.dev.package]
 # Always compile Monero (and a variety of dependencies) with optimizations due
 # to the extensive operations required for Bulletproofs
