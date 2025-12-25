@@ -207,6 +207,7 @@ home = { path = "patches/home" }
 
 # Updates to the latest version
 darling = { path = "patches/darling" }
+ryu = { path = "patches/ryu" }
 thiserror = { path = "patches/thiserror" }
 
 # directories-next was created because directories was unmaintained
