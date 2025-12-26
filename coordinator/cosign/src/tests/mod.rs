@@ -22,9 +22,7 @@ use serai_client_serai::{
   Events,
 };
 
-use crate::{
-  COSIGN_CONTEXT, Cosign, SeraiRpc, SignedCosign, delay::CosignDelayTask, intend::CosignIntendTask,
-};
+use crate::{COSIGN_CONTEXT, Cosign, SeraiRpc, SignedCosign};
 use serai_db::MemDb;
 
 pub(crate) fn sr25519_fixture() -> schnorrkel::Keypair {
@@ -171,14 +169,6 @@ impl Test {
   #[allow(dead_code)]
   pub(crate) fn from_serai(serai: Serai) -> Self {
     Self { serai, db: MemDb::new() }
-  }
-
-  fn into_intend_task(&self) -> CosignIntendTask<MemDb, Serai> {
-    CosignIntendTask { db: self.db.clone(), serai: self.serai.clone() }
-  }
-
-  fn into_delay_task(&self) -> CosignDelayTask<MemDb> {
-    CosignDelayTask { db: self.db.clone() }
   }
 
   pub(crate) async fn assert_task_run_and_check_progress(

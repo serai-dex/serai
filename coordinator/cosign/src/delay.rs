@@ -34,29 +34,34 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let mut made_progress = false;
+
       loop {
         let mut txn = self.db.txn();
+        // Every loop iteration consumes a CosignedBlocks queue message
         let cosigned_block = CosignedBlocks::try_recv(&mut txn);
-        txn.commit();
 
         let Some((block_number, time_evaluated)) = cosigned_block else {
+          txn.commit();
+          // Stop when no blocks in queue
           break;
         };
 
         if block_number == 0u64 {
-          return Ok(false);
+          txn.commit();
+          continue;
         }
 
         // If we've already acknowledged a later block, consume and skip (don't wait).
-        let already_cosigned = LatestCosignedBlockNumber::get(&self.db).unwrap_or(0);
+        let already_cosigned = LatestCosignedBlockNumber::get(&txn).unwrap_or(0);
         if block_number <= already_cosigned {
-          made_progress = true;
+          txn.commit();
           continue;
         }
 
         // Calculate when we should mark it as valid, checking for overflow to avoid panic
         let time_evaluated_duration = Duration::from_secs(time_evaluated);
         let Some(time_valid) = time_evaluated_duration.checked_add(ACKNOWLEDGEMENT_DELAY) else {
+          txn.commit();
           return Err(format!(
             "time_evaluated ({time_evaluated}) would overflow when adding ACKNOWLEDGEMENT_DELAY"
           ));
@@ -66,15 +71,13 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         // If the time valid is greater than the current time,
         // sleep until the time valid is reached
         if time_valid > now {
-          // Sleep until then (no transaction held during sleep)
+          // Sleep until then (no db transaction held during sleep)
           tokio::time::sleep(time_valid.saturating_sub(now)).await;
         }
 
-        // Atomically consume the message AND update the cosigned block number
-        let mut txn = self.db.txn();
         LatestCosignedBlockNumber::set(&mut txn, &block_number);
-        txn.commit();
 
+        txn.commit();
         made_progress = true;
       }
 

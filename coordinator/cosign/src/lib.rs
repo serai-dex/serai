@@ -4,7 +4,9 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{fmt::Debug, future::Future};
-use std::{collections::HashMap, time::Instant};
+use std::{collections::HashMap, sync::Arc, time::Instant};
+
+use serai_client_serai::Serai;
 
 use blake2::{Digest as _, Blake2s256};
 
