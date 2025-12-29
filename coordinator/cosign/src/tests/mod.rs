@@ -23,7 +23,6 @@ use serai_client_serai::{
 };
 
 use crate::{COSIGN_CONTEXT, Cosign, SeraiRpc, SignedCosign};
-use serai_db::MemDb;
 
 pub(crate) fn sr25519_fixture() -> schnorrkel::Keypair {
   // Use a fixed seed to ensure deterministic keypairs across test calls.
@@ -150,27 +149,9 @@ impl SeraiRpc for Serai {
   }
 }
 
-pub(crate) struct Test {
-  pub(crate) serai: Serai,
-  pub(crate) db: MemDb,
-}
-
-impl Default for Test {
-  fn default() -> Self {
-    Self { serai: Serai::new(), db: MemDb::new() }
-  }
-}
+pub(crate) struct Test;
 
 impl Test {
-  pub(crate) fn new() -> Self {
-    Self::default()
-  }
-
-  #[allow(dead_code)]
-  pub(crate) fn from_serai(serai: Serai) -> Self {
-    Self { serai, db: MemDb::new() }
-  }
-
   pub(crate) async fn assert_task_run_and_check_progress(
     task: &mut impl ContinuallyRan,
     made_progress: bool,
@@ -183,4 +164,8 @@ impl Test {
     let err_str = format!("{err:?}");
     assert!(err_str.contains(error), "{err_str}");
   }
+}
+
+pub(crate) trait IntoTask {
+  fn into_task(&self) -> impl ContinuallyRan + 'static;
 }
