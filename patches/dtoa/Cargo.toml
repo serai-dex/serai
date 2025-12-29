@@ -1,5 +1,5 @@
 [package]
-name = "ryu"
+name = "dtoa"
 version = "1.99.99"
 description = "Patches to `zmij`"
 license = "MIT"
