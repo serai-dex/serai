@@ -9,7 +9,6 @@ use sp_runtime::{
   },
   Weight,
 };
-#[rustfmt::skip]
 use frame_support::dispatch::{DispatchClass, Pays, DispatchInfo, GetDispatchInfo, PostDispatchInfo};
 
 use super::*;
@@ -42,7 +41,7 @@ pub trait TransactionContext: 'static + Send + Sync + Clone + PartialEq + Eq + D
   fn current_time(&self) -> u64;
   /// Get the next nonce for an account.
   fn next_nonce(&self, signer: &SeraiAddress) -> u32;
-  /// If the signer can pay the SRI fee.
+  /// If the signer can pay the fee, denominated in SRI.
   fn can_pay_fee(&self, signer: &SeraiAddress, fee: Amount)
     -> Result<(), TransactionValidityError>;
 
@@ -50,7 +49,7 @@ pub trait TransactionContext: 'static + Send + Sync + Clone + PartialEq + Eq + D
   fn start_transaction(&self, len: usize);
   /// Consume the next nonce for an account.
   ///
-  /// This MUST NOT be called if the next nonce is `u32::MAX`. The caller MAY panic in that case.
+  /// This MUST NOT be called if the next nonce is `u32::MAX`. The function MAY panic in that case.
   fn consume_next_nonce(&self, signer: &SeraiAddress);
   /// Have the transaction pay its SRI fee.
   fn pay_fee(&self, signer: &SeraiAddress, fee: Amount) -> Result<(), TransactionValidityError>;
@@ -116,7 +115,7 @@ impl<Context: TransactionContext> Checkable<Context> for Transaction {
         contextualized_signature: ContextualizedSignature { explicit_context, signature },
       } => {
         if !sp_core::sr25519::Signature::from(*signature).verify(
-          Transaction::signature_message(calls, &Context::implicit_context(), explicit_context)
+          Transaction::signature_message(&Context::implicit_context(), calls, explicit_context)
             .as_slice(),
           &sp_core::sr25519::Public::from(explicit_context.signer),
         ) {
@@ -133,8 +132,8 @@ impl<Context: TransactionContext> Checkable<Context> for Transaction {
     self,
     c: &Context,
   ) -> Result<Self::Checked, TransactionValidityError> {
-    // This satisfies the API, not necessarily the intent, yet this fn is only intended to be used
-    // within tests. Accordingly, it's fine to be stricter than necessarily
+    // This satisfies the API, not necessarily the intent, yet this function is only intended to
+    // be used within tests. Accordingly, it should be fine to be stricter than necessary.
     self.check(c)
   }
 }

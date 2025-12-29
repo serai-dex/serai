@@ -64,7 +64,7 @@ impl SeraiExecutionDigest {
 /// The consensus data for a V1 header.
 ///
 /// This is not considered part of the protocol proper and may be pruned in the future. It's
-/// solely considered used for consensus now.
+/// solely considered used for consensus currently.
 #[derive(
   Clone, PartialEq, Eq, Debug, Encode, Decode, DecodeWithMemTracking, Serialize, Deserialize,
 )]
@@ -103,6 +103,7 @@ pub enum SubstrateHeader {
 }
 
 impl From<&SubstrateHeader> for Header {
+  /// If any fields are missing, default values will be stubbed.
   fn from(header: &SubstrateHeader) -> Self {
     match header {
       SubstrateHeader::V1(header) => {

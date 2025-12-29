@@ -138,3 +138,34 @@ impl Block {
   /// This is not enforced upon deserialization. The caller MUST be careful accordingly.
   pub const SIZE_LIMIT: usize = 512 * 1024;
 }
+
+#[test]
+fn header_size() {
+  assert_eq!(
+    borsh::to_vec(&HeaderV1 {
+      number: u64::MAX,
+      builds_upon: UnbalancedMerkleTree { root: [0xff; 32] },
+      unix_time_in_millis: u64::MAX,
+      transactions_commitment: UnbalancedMerkleTree { root: [0xff; 32] },
+      events_commitment: UnbalancedMerkleTree { root: [0xff; 32] },
+      consensus_commitment: [0xff; 32]
+    })
+    .unwrap()
+    .len(),
+    HeaderV1::SIZE
+  );
+
+  assert_eq!(
+    borsh::to_vec(&HeaderV1 {
+      number: 0,
+      builds_upon: UnbalancedMerkleTree { root: [0; 32] },
+      unix_time_in_millis: 0,
+      transactions_commitment: UnbalancedMerkleTree { root: [0; 32] },
+      events_commitment: UnbalancedMerkleTree { root: [0; 32] },
+      consensus_commitment: [0; 32]
+    })
+    .unwrap()
+    .len(),
+    HeaderV1::SIZE
+  );
+}
