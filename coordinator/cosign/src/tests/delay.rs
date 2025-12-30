@@ -24,14 +24,10 @@ impl Default for DelayTest {
   }
 }
 
-impl DelayTest {
-  pub(crate) fn new() -> Self {
-    Self::default()
-  }
-}
-
 impl IntoTask for DelayTest {
-  fn into_task(&self) -> impl ContinuallyRan + 'static {
+  type Task = CosignDelayTask<MemDb>;
+
+  fn into_task(&self) -> Self::Task {
     CosignDelayTask { db: self.db.clone() }
   }
 }
@@ -50,9 +46,9 @@ impl DelayTest {
   }
 
   // Assert everything that changed or should have changed after a task iteration run
-  fn assert_task_iteration_completes_with(&self, latest_cosigned_block_number: Option<u64>) {
+  fn assert_task_iteration_completes_with(&self, latest_cosigned_block_number: u64) {
     // Assert LatestCosignedBlockNumber db points to latest block number after task run
-    self.assert_latest_cosigned_block_number_is_expected(latest_cosigned_block_number);
+    self.assert_latest_cosigned_block_number_is_expected(Some(latest_cosigned_block_number));
     // Assert CosignedBlocks queue items have been consumed after task run
     self.assert_queue_is_empty();
   }
@@ -71,7 +67,7 @@ impl DelayTest {
 
 #[tokio::test]
 async fn delay_task_returns_false_with_no_messages() {
-  let test = DelayTest::new();
+  let test = DelayTest::default();
   let mut task = test.into_task();
   Test::assert_task_run_and_check_progress(&mut task, false).await;
   test.assert_task_iteration_db_is_clear();
@@ -79,7 +75,7 @@ async fn delay_task_returns_false_with_no_messages() {
 
 #[tokio::test]
 async fn delay_task_returns_false_with_genesis_block() {
-  let mut test = DelayTest::new();
+  let mut test = DelayTest::default();
 
   {
     let mut txn = test.db.txn();
@@ -98,7 +94,7 @@ async fn delay_task_returns_false_with_genesis_block() {
 
 #[tokio::test]
 async fn delay_task_updates_latest_cosigned_block_number() {
-  let mut test = DelayTest::new();
+  let mut test = DelayTest::default();
 
   {
     let mut txn = test.db.txn();
@@ -113,15 +109,17 @@ async fn delay_task_updates_latest_cosigned_block_number() {
 
   let mut task = test.into_task();
 
+  // returns made_progress as true
   Test::assert_task_run_and_check_progress(&mut task, true).await;
-  test.assert_task_iteration_completes_with(Some(2u64));
+  // confirmed the last block as 2
+  test.assert_task_iteration_completes_with(2u64);
 
-  let mut test = DelayTest::new();
+  let mut test = DelayTest::default();
 
   {
     let mut txn = test.db.txn();
     // timestamps out of order
-    // nothing unusual happens, the task follow block numbers
+    // nothing unusual happens, the task stil follows block numbers
     let now = now_secs();
     CosignedBlocks::send(&mut txn, &(3u64, now));
     CosignedBlocks::send(&mut txn, &(4u64, now - 1));
@@ -131,15 +129,15 @@ async fn delay_task_updates_latest_cosigned_block_number() {
 
   let mut task = test.into_task();
   Test::assert_task_run_and_check_progress(&mut task, true).await;
-  test.assert_task_iteration_completes_with(Some(5u64));
+  test.assert_task_iteration_completes_with(5u64);
 
   // Test with increasing timestamps (all in the past, so they process immediately)
-  let mut test = DelayTest::new();
+  let mut test = DelayTest::default();
 
   {
     let mut txn = test.db.txn();
     // timestamps increasing in order
-    // nothing unusual happens, the task follow block numbers
+    // nothing unusual happens, the task stil follows block numbers
     let now = now_secs();
     CosignedBlocks::send(&mut txn, &(6u64, now));
     CosignedBlocks::send(&mut txn, &(7u64, now + 1));
@@ -149,12 +147,12 @@ async fn delay_task_updates_latest_cosigned_block_number() {
 
   let mut task = test.into_task();
   Test::assert_task_run_and_check_progress(&mut task, true).await;
-  test.assert_task_iteration_completes_with(Some(8u64));
+  test.assert_task_iteration_completes_with(8u64);
 }
 
 #[tokio::test]
 async fn delay_task_does_not_regress_and_skips_if_not_a_later_block() {
-  let mut test = DelayTest::new();
+  let mut test = DelayTest::default();
 
   {
     let mut txn = test.db.txn();
@@ -164,10 +162,12 @@ async fn delay_task_does_not_regress_and_skips_if_not_a_later_block() {
     // Sent out of order below
     CosignedBlocks::send(&mut txn, &(4u64, now_secs()));
     CosignedBlocks::send(&mut txn, &(3u64, now_secs()));
+
     txn.commit();
   }
 
   let mut task = test.into_task();
+  // returns made_progress as true
   Test::assert_task_run_and_check_progress(&mut task, true).await;
 
   // Queue order: 1, 2, 4, 3
@@ -175,7 +175,7 @@ async fn delay_task_does_not_regress_and_skips_if_not_a_later_block() {
 
   // This is unlikely to actually happen in practice but it needs to be tested that it does what it is
   // meant to do, which is that if we've already acknowledged a later block, consume and skip
-  test.assert_task_iteration_completes_with(Some(4u64));
+  test.assert_task_iteration_completes_with(4u64);
 
   {
     let mut txn = test.db.txn();
@@ -189,7 +189,7 @@ async fn delay_task_does_not_regress_and_skips_if_not_a_later_block() {
   // No progress was made since the same block number was skipped,
   // made_progress returns false
   Test::assert_task_run_and_check_progress(&mut task, false).await;
-  test.assert_task_iteration_completes_with(Some(4u64));
+  test.assert_task_iteration_completes_with(4u64);
 
   {
     let mut txn = test.db.txn();
@@ -204,12 +204,13 @@ async fn delay_task_does_not_regress_and_skips_if_not_a_later_block() {
   // Had a duplicate, but made 1 block worth of progress
   // made_progress returns true
   Test::assert_task_run_and_check_progress(&mut task, true).await;
-  test.assert_task_iteration_completes_with(Some(5u64));
+  // confirmed the last block as 5
+  test.assert_task_iteration_completes_with(5u64);
 }
 
 #[tokio::test]
 async fn delay_task_does_not_ack_before_acknowledgement_delay() {
-  let mut test = DelayTest::new();
+  let mut test = DelayTest::default();
 
   {
     let mut txn = test.db.txn();
@@ -220,29 +221,26 @@ async fn delay_task_does_not_ack_before_acknowledgement_delay() {
   let mut task = test.into_task();
   let handle = tokio::spawn(async move { task.run_iteration().await.unwrap() });
 
-  // Give the task a moment to start and reach the sleep
-  tokio::time::sleep(Duration::from_millis(50)).await;
-
-  // Still nothing is returned
+  // nothing is returned
   test.assert_latest_cosigned_block_number_is_expected(None);
 
   // Sleep for most of (but not all) the acknowledgement delay
   tokio::time::sleep(ACKNOWLEDGEMENT_DELAY - Duration::from_secs(1)).await;
 
-  // Still nothing is returned
+  // still nothing is returned
   test.assert_latest_cosigned_block_number_is_expected(None);
 
-  // Wait for the task to actually complete
+  // wait for the task to actually complete
   let result = handle.await.unwrap();
   assert_eq!(result, true);
 
-  // Now has a result
-  test.assert_task_iteration_completes_with(Some(1u64));
+  // Now confirmed the last block as 1
+  test.assert_task_iteration_completes_with(1u64);
 }
 
 #[tokio::test]
 async fn delay_task_with_zero_timestamp_processes_immediately() {
-  let mut test = DelayTest::new();
+  let mut test = DelayTest::default();
 
   {
     let mut txn = test.db.txn();
@@ -257,12 +255,12 @@ async fn delay_task_with_zero_timestamp_processes_immediately() {
   // and since the ACK time is considered to be passed, there is no sleep time to do
   Test::assert_task_run_and_check_progress(&mut task, true).await;
 
-  test.assert_task_iteration_completes_with(Some(1u64));
+  test.assert_task_iteration_completes_with(1u64);
 }
 
 #[tokio::test]
 async fn delay_task_with_max_timestamp_returns_error() {
-  let mut test = DelayTest::new();
+  let mut test = DelayTest::default();
 
   {
     let mut txn = test.db.txn();
@@ -277,7 +275,7 @@ async fn delay_task_with_max_timestamp_returns_error() {
 
   // When timestamp is u64::MAX, adding ACKNOWLEDGEMENT_DELAY would overflow
   // The task should return an error instead of panicking
-  Test::assert_task_failed(&mut task, "overflow").await;
+  Test::assert_task_failed_with(&mut task, "overflow").await;
 
   // since returned an error 3u64 should still be in queue
   test.assert_task_iteration_fails(Some(1u64));
@@ -287,7 +285,7 @@ async fn delay_task_with_max_timestamp_returns_error() {
 async fn delay_task_with_far_future_timestamp_hangs() {
   // A timestamp far in the future (but not MAX to avoid overflow)
   // will cause the task to sleep for an extremely long time
-  let mut test = DelayTest::new();
+  let mut test = DelayTest::default();
 
   {
     let mut txn = test.db.txn();
@@ -311,6 +309,6 @@ async fn delay_task_with_far_future_timestamp_hangs() {
 
   assert!(result.is_err(), "Expected timeout, but task completed");
 
-  // since had a forced time out 3u64 should still be in queue
+  // since had a forced timeout 3u64 should still be in queue
   test.assert_task_iteration_fails(Some(1u64));
 }

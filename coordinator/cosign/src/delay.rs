@@ -2,7 +2,7 @@ use core::future::Future;
 use std::time::{Duration, SystemTime};
 
 use serai_db::*;
-use serai_task::{DoesNotError, ContinuallyRan};
+use serai_task::ContinuallyRan;
 
 use crate::evaluator::CosignedBlocks;
 
@@ -37,7 +37,7 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
 
       loop {
         let mut txn = self.db.txn();
-        // Every loop iteration consumes a CosignedBlocks queue message
+        // Every loop iteration consumes a CosignedBlocks queue message, if successful
         let cosigned_block = CosignedBlocks::try_recv(&mut txn);
 
         let Some((block_number, time_evaluated)) = cosigned_block else {
@@ -69,10 +69,10 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         };
         let now = now_timestamp();
 
-        // If the time valid is greater than the current time,
-        // sleep until the time valid is reached
+        // If the time valid is greater than the current time, sleep until the time valid is reached
         if time_valid > now {
-          // Sleep until then
+          // db txn being held and not committed until sleep completed
+          // if a timeout occurs, this block will be restarted on the next iteration
           tokio::time::sleep(time_valid.saturating_sub(now)).await;
         }
 
