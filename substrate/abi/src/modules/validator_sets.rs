@@ -11,6 +11,8 @@ use serai_primitives::{
   validator_sets::*,
 };
 
+pub use serai_primitives::validator_sets::DeallocationTimeline;
+
 /// A call to the validator sets module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {

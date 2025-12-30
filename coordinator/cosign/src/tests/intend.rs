@@ -46,7 +46,7 @@ fn set_keys_event(set: ExternalValidatorSet) -> Event {
 fn set_decided_event(set: ValidatorSet, validator: SeraiAddress) -> Event {
   Event::ValidatorSets(validator_sets::Event::SetDecided {
     set,
-    validators: vec![(validator, KeyShares(1))],
+    validators: vec![(validator, KeyShares::ONE)],
   })
 }
 
