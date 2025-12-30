@@ -13,9 +13,8 @@ use serai_client_serai::{
       address::SeraiAddress,
       merkle::IncrementalUnbalancedMerkleTree,
     },
-    validator_sets, Event,
+    validator_sets, coins, Event,
   },
-  Events,
 };
 
 use serai_db::*;
@@ -54,31 +53,6 @@ db_channel! {
   }
 }
 
-async fn block_has_events_justifying_a_cosign(
-  serai: &impl SeraiRpc,
-  block_number: u64,
-) -> Result<(Block, Events, HasEvents), String> {
-  let block = match serai.block_by_number(block_number).await {
-    Ok(Some(block)) => block,
-    Ok(None) => return Err("couldn't get block which should've been finalized".to_owned()),
-    Err(e) => return Err(format!("RPC error fetching block #{block_number}: {e}")),
-  };
-  let events = match serai.events(block.header.hash()).await {
-    Ok(events) => events,
-    Err(e) => return Err(format!("RPC error fetching events for block #{block_number}: {e}")),
-  };
-
-  if events.validator_sets().set_keys_events().next().is_some() {
-    return Ok((block, events, HasEvents::Notable));
-  }
-
-  if events.coins().burn_with_instruction_events().next().is_some() {
-    return Ok((block, events, HasEvents::NonNotable));
-  }
-
-  Ok((block, events, HasEvents::No))
-}
-
 // Fetch the `ExternalValidatorSet`s, and their associated keys, used for cosigning as of this
 // block.
 fn cosigning_sets(getter: &impl Get) -> Vec<(ExternalValidatorSet, Public, Amount)> {
@@ -106,10 +80,11 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let start_block_number = ScanCosignFrom::get(&self.db).unwrap_or(1);
-      let latest_block_number = match self.serai.latest_finalized_block_number().await {
-        Ok(n) => n,
-        Err(e) => return Err(format!("RPC error fetching latest finalized block number: {e}")),
-      };
+      let latest_block_number = self
+        .serai
+        .latest_finalized_block_number()
+        .await
+        .map_err(|e| format!("RPC error fetching latest finalized block number: {e}"))?;
 
       if latest_block_number < start_block_number {
         return Ok(false);
@@ -118,8 +93,20 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
       for block_number in start_block_number..=latest_block_number {
         let mut txn = self.db.txn();
 
-        let (block, events, mut has_events) =
-          block_has_events_justifying_a_cosign(&self.serai, block_number).await?;
+        let block = self
+          .serai
+          .block_by_number(block_number)
+          .await
+          .map_err(|e| format!("RPC error fetching block #{block_number}: {e}"))?
+          .ok_or_else(|| "couldn't get block which should've been finalized".to_owned())?;
+
+        let events = self
+          .serai
+          .events(block.header.hash())
+          .await
+          .map_err(|e| format!("RPC error fetching events for block #{block_number}: {e}"))?;
+
+        let mut has_events = HasEvents::No;
 
         let mut builds_upon =
           BuildsUpon::get(&txn).unwrap_or(IncrementalUnbalancedMerkleTree::new());
@@ -154,17 +141,27 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
                 validator_sets::Event::Allocation { validator, network, amount } => {
                   let Ok(network) = ExternalNetworkId::try_from(*network) else { continue };
                   let existing = Stakes::get(&txn, network, *validator).unwrap_or(Amount(0));
-                  Stakes::set(&mut txn, network, *validator, &Amount(existing.0 + amount.0));
+                  let new_stake = existing.0.checked_add(amount.0).ok_or_else(|| {
+                    format!(
+                      "stake overflow for validator {:?} on network {:?}: {} + {}",
+                      validator, network, existing.0, amount.0
+                    )
+                  })?;
+                  Stakes::set(&mut txn, network, *validator, &Amount(new_stake));
                 }
                 validator_sets::Event::Deallocation { validator, network, amount, timeline: _ } => {
                   let Ok(network) = ExternalNetworkId::try_from(*network) else { continue };
-                  let existing = Stakes::get(&txn, network, *validator).unwrap_or(Amount(0));
-                  Stakes::set(
-                    &mut txn,
-                    network,
-                    *validator,
-                    &Amount(existing.0.saturating_sub(amount.0)),
-                  );
+
+                  let existing_stake = Stakes::get(&txn, network, *validator)
+                    .ok_or_else(|| format!("unable to deallocate with no prior existing stake"))?;
+
+                  let new_stake = existing_stake.0.checked_sub(amount.0).ok_or_else(|| {
+                    format!(
+                      "stake underflow for validator {:?} on network {:?}: {} - {}",
+                      validator, network, existing_stake.0, amount.0
+                    )
+                  })?;
+                  Stakes::set(&mut txn, network, *validator, &Amount(new_stake));
                 }
                 validator_sets::Event::SetDecided { set, validators } => {
                   let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
@@ -175,10 +172,13 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
                   );
                 }
                 validator_sets::Event::SetKeys { set, key_pair } => {
+                  has_events = HasEvents::Notable;
+
+                  let validators = Validators::take(&mut txn, *set)
+                    .ok_or_else(|| "set which wasn't decided set keys".to_string())?;
+
                   let mut stake = 0;
-                  for validator in
-                    Validators::take(&mut txn, *set).expect("set which wasn't decided set keys")
-                  {
+                  for validator in validators {
                     stake += Stakes::get(&txn, set.network, validator).unwrap_or(Amount(0)).0;
                   }
                   LatestSet::set(
@@ -186,6 +186,12 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
                     set.network,
                     &Set { session: set.session, key: key_pair.0, stake: Amount(stake) },
                   );
+                }
+                _ => continue,
+              },
+              Event::Coins(event) => match event {
+                coins::Event::BurnWithInstruction { .. } => {
+                  has_events = HasEvents::NonNotable;
                 }
                 _ => continue,
               },
@@ -212,7 +218,9 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
             sets.push(set);
             keys.insert(set.network, key);
             stakes.insert(set.network, stake.0);
-            total_stake = total_stake.saturating_add(stake.0);
+            total_stake = total_stake
+              .checked_add(stake.0)
+              .ok_or_else(|| format!("total stake overflow: {} + {}", total_stake, stake.0))?;
           }
           if total_stake == 0 {
             // commit only per block finished otherwise reset progress
@@ -248,13 +256,19 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
           HasEvents::Notable | HasEvents::NonNotable => {
             let global_session_for_this_block = global_session_for_this_block
               .expect("global session for this block was None but still attempting to cosign it");
-            let global_session_info = GlobalSessions::get(&txn, global_session_for_this_block)
-              .expect("last global session intended wasn't saved to the database");
+            let global_session_info =
+              GlobalSessions::get(&txn, global_session_for_this_block).ok_or_else(|| {
+                format!(
+                  "global session {:?} intended for block #{block_number} wasn't saved to the database",
+                  global_session_for_this_block
+                )
+              })?;
 
             // Tell each set of their expectation to cosign this block
             for set in global_session_info.sets {
               #[cfg(not(coverage))]
               log::debug!("{set:?} will be cosigning block #{block_number}");
+
               IntendedCosigns::send(
                 &mut txn,
                 set,
@@ -276,6 +290,8 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
         ScanCosignFrom::set(&mut txn, &(block_number + 1));
 
         // All-or-nothing, commit only per block finished otherwise reset progress
+        // avoids partially adding db entries without committing the full expected db additions
+        // i.e. saving a SubstrateBlockHash initially but later failing mid-way
         txn.commit();
       }
 

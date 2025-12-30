@@ -9,6 +9,9 @@ use crate::{
   intend::{GlobalSessionsChannel, BlockEventData, BlockEvents},
 };
 
+pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(60);
+const COSIGN_COMMIT_THRESHOLD: u64 = 83;
+
 create_db!(
   SubstrateCosignEvaluator {
     // The global session currently being evaluated.
@@ -35,13 +38,16 @@ db_channel!(
 fn currently_evaluated_global_session_strict(
   txn: &mut impl DbTxn,
   block_number: u64,
-) -> ([u8; 32], GlobalSession) {
+) -> Result<([u8; 32], GlobalSession), String> {
   let mut res = {
     let existing = match CurrentlyEvaluatedGlobalSession::get(txn) {
       Some(existing) => existing,
       None => {
-        let first = GlobalSessionsChannel::try_recv(txn)
-          .expect("fetching latest global session yet none declared");
+        let first = GlobalSessionsChannel::try_recv(txn).ok_or_else(|| {
+          format!(
+            "fetching global session for block #{block_number} but none declared in channel yet"
+          )
+        })?;
         CurrentlyEvaluatedGlobalSession::set(txn, &first);
         first
       }
@@ -66,11 +72,26 @@ fn currently_evaluated_global_session_strict(
     }
   }
 
-  res
+  Ok(res)
 }
 
 pub(crate) fn currently_evaluated_global_session(getter: &impl Get) -> Option<[u8; 32]> {
   CurrentlyEvaluatedGlobalSession::get(getter).map(|(id, _info)| id)
+}
+
+fn should_request_cosigns(last_request_for_cosigns: &mut Instant) -> bool {
+  if Instant::now() < (*last_request_for_cosigns + REQUEST_COSIGNS_SPACING) {
+    return false;
+  }
+
+  *last_request_for_cosigns = Instant::now();
+
+  true
+}
+
+// Calculate the minimum threshold required for cosigning
+fn cosign_threshold(total_stake: u64) -> u64 {
+  ((total_stake * COSIGN_COMMIT_THRESHOLD) / 100) + 1
 }
 
 /// A task to determine if a block has been cosigned and we should handle it.
@@ -84,49 +105,53 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
-    let should_request_cosigns = |last_request_for_cosigns: &mut Instant| {
-      const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(60);
-      if Instant::now() < (*last_request_for_cosigns + REQUEST_COSIGNS_SPACING) {
-        return false;
-      }
-      *last_request_for_cosigns = Instant::now();
-      true
-    };
-
     async move {
       let mut known_cosign = None;
       let mut made_progress = false;
       loop {
         let mut txn = self.db.txn();
-        let Some(BlockEventData { block_number, has_events }) = BlockEvents::try_recv(&mut txn)
-        else {
+        let events = BlockEvents::try_recv(&mut txn);
+
+        let Some(BlockEventData { block_number, has_events }) = events else {
+          // no block_events from BlockEvents channel, nothing to commit
+          drop(txn);
           break;
         };
 
+        if block_number == 0 {
+          // clear BlockEvents queue and continue to next
+          txn.commit();
+          continue;
+        }
+
         // Fetch the global session information
         let (global_session, global_session_info) =
-          currently_evaluated_global_session_strict(&mut txn, block_number);
+          currently_evaluated_global_session_strict(&mut txn, block_number)?;
 
         match has_events {
           // Because this had notable events, we require an explicit cosign for this block by a
           // supermajority of the prior block's validator sets
           HasEvents::Notable => {
-            let mut weight_cosigned = 0;
+            let mut weight_cosigned = 0u64;
+
             for set in global_session_info.sets {
               // Check if we have the cosign from this set
               if NetworksLatestCosignedBlock::get(&txn, global_session, set.network)
-                .map(|signed_cosign| signed_cosign.cosign.block_number) ==
-                Some(block_number)
+                .map(|signed_cosign| signed_cosign.cosign.block_number)
+                == Some(block_number)
               {
-                // Since have this cosign, add the set's weight to the weight which has cosigned
-                weight_cosigned +=
-                  global_session_info.stakes.get(&set.network).ok_or_else(|| {
-                    "ValidatorSet in global session yet didn't have its stake".to_owned()
-                  })?;
+                // Since we have this cosign, add the set's weight to the weight which has cosigned
+                let stake = global_session_info.stakes.get(&set.network).ok_or_else(|| {
+                  "ValidatorSet in global session yet didn't have its stake".to_owned()
+                })?;
+
+                weight_cosigned = weight_cosigned
+                  .checked_add(*stake)
+                  .ok_or_else(|| "weight_cosigned overflow".to_owned())?;
               }
             }
             // Check if the sum weight doesn't cross the required threshold
-            if weight_cosigned < (((global_session_info.total_stake * 83) / 100) + 1) {
+            if weight_cosigned < cosign_threshold(global_session_info.total_stake) {
               // Request the necessary cosigns over the network
               if should_request_cosigns(&mut self.last_request_for_cosigns) {
                 self
@@ -135,12 +160,16 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                   .await
                   .map_err(|e| format!("{e:?}"))?;
               }
+
+              // clear BlockEvents queue and continue to next
+              txn.commit();
               // We return an error so the delay before this task is run again increases
               return Err(format!(
                 "notable block (#{block_number}) wasn't yet cosigned. this should resolve shortly",
               ));
             }
 
+            #[cfg(not(coverage))]
             log::info!("marking notable block #{block_number} as cosigned");
           }
           // Since this block didn't have any notable events, we simply require a cosign for this
@@ -163,8 +192,9 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                 is during the latest global session we've evaluated the start of.
               */
 
-              let mut weight_cosigned = 0;
+              let mut weight_cosigned = 0u64;
               let mut lowest_common_block: Option<u64> = None;
+
               for set in global_session_info.sets {
                 // Check if this set cosigned this block or not
                 let Some(cosign) =
@@ -172,11 +202,14 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                 else {
                   continue;
                 };
+
                 if cosign.cosign.block_number >= block_number {
-                  weight_cosigned +=
-                    global_session_info.stakes.get(&set.network).ok_or_else(|| {
-                      "ValidatorSet in global session yet didn't have its stake".to_owned()
-                    })?;
+                  let stake = global_session_info.stakes.get(&set.network).ok_or_else(|| {
+                    "ValidatorSet in global session yet didn't have its stake".to_owned()
+                  })?;
+                  weight_cosigned = weight_cosigned
+                    .checked_add(*stake)
+                    .ok_or_else(|| "weight_cosigned overflow".to_owned())?;
                 }
 
                 // Update the lowest block common to all of these cosigns
@@ -186,7 +219,7 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
               }
 
               // Check if the sum weight doesn't cross the required threshold
-              if weight_cosigned < (((global_session_info.total_stake * 83) / 100) + 1) {
+              if weight_cosigned < cosign_threshold(global_session_info.total_stake) {
                 // Request the superseding notable cosigns over the network
                 // If this session hasn't yet produced notable cosigns, then we presume we'll see
                 // the desired non-notable cosigns as part of normal operations, without needing to
@@ -198,6 +231,9 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                     .await
                     .map_err(|e| format!("{e:?}"))?;
                 }
+
+                // clear BlockEvents queue and continue to next
+                txn.commit();
                 // We return an error so the delay before this task is run again increases
                 return Err(format!(
                   "block (#{block_number}) wasn't yet cosigned. this should resolve shortly",
@@ -213,6 +249,7 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
               known_cosign = lowest_common_block;
             }
 
+            #[cfg(not(coverage))]
             log::debug!("marking non-notable block #{block_number} as cosigned");
           }
           // If this block has no events necessitating cosigning, we can immediately consider the
@@ -231,8 +268,10 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
               .as_secs(),
           ),
         );
+
         txn.commit();
 
+        #[cfg(not(coverage))]
         if (block_number % 500) == 0 {
           log::info!("marking block #{block_number} as cosigned");
         }
