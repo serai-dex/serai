@@ -61,12 +61,12 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
 
         // Calculate when we should mark it as valid, checking for overflow to avoid panic
         let time_evaluated_duration = Duration::from_secs(time_evaluated);
-        let Some(time_valid) = time_evaluated_duration.checked_add(ACKNOWLEDGEMENT_DELAY) else {
-          txn.commit();
-          return Err(format!(
-            "time_evaluated ({time_evaluated}) would overflow when adding ACKNOWLEDGEMENT_DELAY"
-          ));
-        };
+        let time_valid =
+          time_evaluated_duration.checked_add(ACKNOWLEDGEMENT_DELAY).ok_or_else(|| {
+            format!(
+              "time_evaluated ({time_evaluated}) would overflow when adding ACKNOWLEDGEMENT_DELAY",
+            )
+          })?;
         let now = now_timestamp();
 
         // If the time valid is greater than the current time, sleep until the time valid is reached

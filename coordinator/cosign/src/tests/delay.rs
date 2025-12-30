@@ -275,7 +275,7 @@ async fn delay_task_with_max_timestamp_returns_error() {
 
   // When timestamp is u64::MAX, adding ACKNOWLEDGEMENT_DELAY would overflow
   // The task should return an error instead of panicking
-  Test::assert_task_failed_with(&mut task, "overflow").await;
+  Test::assert_task_run_and_failed_with(&mut task, "overflow").await;
 
   // since returned an error 3u64 should still be in queue
   test.assert_task_iteration_fails(Some(1u64));
