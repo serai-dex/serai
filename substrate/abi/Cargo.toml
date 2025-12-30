@@ -27,6 +27,9 @@ frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", defau
 
 serai-primitives = { path = "../primitives", version = "0.1", default-features = false }
 
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
 [features]
 std = [
   "borsh/std",

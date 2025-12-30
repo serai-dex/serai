@@ -132,6 +132,7 @@ impl core::str::FromStr for SeraiAddress {
 #[test]
 fn address() {
   use core::str::FromStr as _;
+  use alloc::string::ToString as _;
   use rand_core::{RngCore as _, OsRng};
 
   // Check the HRP is valid

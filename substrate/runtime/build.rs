@@ -85,10 +85,17 @@ fn main() {
     .arg("wasm32v1-none")
     .arg("--crate-type")
     .arg("cdylib")
-    .arg("--no-default-features");
+    .arg("--no-default-features")
+    // This is necessary to use `-Z build-std` on stable
+    // TODO: Remove with the accomplishment of
+    // https://github.com/rust-lang/rust-project-goals/issues/274
+    .env("RUSTC_BOOTSTRAP", "1")
+    // `build-std` for performance reasons and to ensure all our flags/configuration is respected
+    .arg("-Zbuild-std=core,alloc");
   if release {
     command.arg("--release");
   }
+
   assert!(command.status().unwrap().success());
 
   // Place the resulting WASM blob into the parent `target` directory

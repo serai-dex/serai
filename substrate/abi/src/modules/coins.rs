@@ -4,7 +4,7 @@ use serai_primitives::{
   address::SeraiAddress, balance::Balance, instructions::OutInstructionWithBalance,
 };
 
-/// A call to coins.
+/// A call to the coins module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {
   /// Transfer these coins to the specified address.
@@ -34,7 +34,7 @@ impl Call {
   }
 }
 
-/// An event from the system.
+/// An event from the coins module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
   /// The specified coins were minted.

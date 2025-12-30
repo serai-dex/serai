@@ -57,12 +57,12 @@ impl Zeroize for ExternalAddress {
 
 #[test]
 fn serialize() {
+  use alloc::vec;
   use rand_core::{RngCore as _, OsRng};
 
   // Fuzz test various `ExternalAddress`s
-  for _ in 0 .. 100 {
-    let mut vec =
-      vec![0; usize::try_from(OsRng.next_u64() % u64::from(ExternalAddress::MAX_LEN)).unwrap()];
+  for i in 0 .. usize::try_from(ExternalAddress::MAX_LEN).unwrap() {
+    let mut vec = vec![0; i];
     OsRng.fill_bytes(&mut vec);
     let address = ExternalAddress::try_from(vec)
       .expect("`Vec` whose length was less than bound couldn't convert into `ExternalAddress`");

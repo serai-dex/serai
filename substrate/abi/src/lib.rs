@@ -1,7 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 #![expect(non_camel_case_types)]
 // `parity-scale-codec` generates these
 #![cfg_attr(
@@ -14,6 +14,8 @@
 )]
 
 extern crate alloc;
+#[cfg(any(feature = "std", test))]
+extern crate std;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 

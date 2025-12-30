@@ -147,6 +147,7 @@ impl IncrementalUnbalancedMerkleTree {
 #[cfg(feature = "std")]
 #[test]
 fn unbalanced_merkle_tree() {
+  use alloc::vec;
   use rand_core::{RngCore as _, OsRng};
 
   let tag = u8::try_from(OsRng.next_u64() % u64::from(u8::MAX)).unwrap();

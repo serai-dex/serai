@@ -19,26 +19,33 @@ ignored = ["scale"]
 workspace = true
 
 [dependencies]
+borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+pallet-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
 
 serai-core-pallet = { path = "../core", default-features = false }
 serai-validator-sets-pallet = { path = "../validator-sets", default-features = false }
 
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
 [features]
 std = [
+  "borsh/std",
   "scale/std",
 
   "sp-core/std",
 
-  "frame-system/std",
   "frame-support/std",
+  "frame-system/std",
+  "pallet-babe/std",
 
   "serai-abi/std",
 
@@ -49,6 +56,7 @@ std = [
 runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
+  "pallet-babe/runtime-benchmarks",
 
   "serai-core-pallet/runtime-benchmarks",
   "serai-validator-sets-pallet/runtime-benchmarks",
@@ -57,6 +65,7 @@ runtime-benchmarks = [
 try-runtime = [
   "frame-system/try-runtime",
   "frame-support/try-runtime",
+  "pallet-babe/try-runtime",
 
   "serai-abi/try-runtime",
 

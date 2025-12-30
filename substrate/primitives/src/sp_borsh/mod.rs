@@ -4,12 +4,12 @@ pub use bounded_vec::*;
 mod bitvec;
 pub use bitvec::*;
 
-/// Implement [`parity_scale_codec`] `trait`s, with the implementations deferring to [`borsh`].
+/// Implement [`scale`] `trait`s, with the implementations deferring to [`borsh`].
 ///
-/// This macro assumes [`parity_scale_codec`] is available as `scale`.
+/// This macro assumes [`scale`] (`parity-scale-codec`) is available as `scale`.
 ///
-/// These implementations assume [`BorshSerialize::serialize`] is only fallible if the writer is
-/// fallible.
+/// These implementations assume [`borsh::BorshSerialize::serialize`] is only fallible if the
+/// writer is fallible.
 // Each derivation defines new wrapper IO, which presumably non-trivially increases compile-time
 // compared to if we had a single implementation that was referred to. Ideally, this'd be improved.
 #[doc(hidden)]

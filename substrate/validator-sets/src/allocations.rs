@@ -157,7 +157,7 @@ impl<Storage: AllocationsStorage> Allocations for Storage {
   fn expected_key_shares(network: NetworkId, allocation_per_key_share: Amount) -> KeyShares {
     let mut total_key_shares = 0;
     for (_, amount) in Self::iter_allocations(network, allocation_per_key_share) {
-      total_key_shares += KeyShares::from_allocation(amount, allocation_per_key_share).0;
+      total_key_shares += u16::from(KeyShares::from_allocation(amount, allocation_per_key_share));
 
       if total_key_shares >= KeyShares::MAX_PER_SET {
         break;

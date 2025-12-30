@@ -54,6 +54,7 @@ pub fn borsh_deserialize_bounded_vec<R: Read, T: BorshDeserialize, const BOUND: 
   Ok(vec.try_into().map_err(|_| ()).unwrap())
 }
 
+#[cfg(feature = "scale")]
 #[test]
 #[expect(clippy::as_conversions, clippy::cast_lossless)]
 fn max_encoded_len() {
@@ -80,6 +81,7 @@ fn max_encoded_len() {
 
 #[test]
 fn serialize() {
+  use alloc::vec;
   use rand_core::{RngCore as _, OsRng};
 
   // Test writing a vector with a bound of 0

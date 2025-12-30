@@ -7,9 +7,10 @@ use serai_abi::{
     balance::Amount,
     validator_sets::{
       KeyShares as KeySharesStruct, Session, ExternalValidatorSet, ValidatorSet, SlashReport,
+      DeallocationTimeline,
     },
   },
-  validator_sets::{DeallocationTimeline, Event},
+  validator_sets::Event,
 };
 
 use frame_support::storage::{StorageValue, StorageMap, StorageDoubleMap, StoragePrefixedMap};
@@ -282,7 +283,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       for (validator, amount) in Self::iter_allocations(network, allocation_per_key_share) {
         let key_shares = KeySharesStruct::from_allocation(amount, allocation_per_key_share);
         selected_validators.push((validator, key_shares));
-        total_key_shares += key_shares.0;
+        total_key_shares += u16::from(key_shares);
         if total_key_shares >= KeySharesStruct::MAX_PER_SET {
           break;
         }
@@ -305,7 +306,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       total_key_shares += genesis_validator_key_shares;
       while total_key_shares > KeySharesStruct::MAX_PER_SET {
         let (_key, key_shares) = selected_validators.pop().unwrap();
-        total_key_shares -= key_shares.0;
+        total_key_shares -= u16::from(key_shares);
       }
       selected_validators.append(&mut genesis_validators);
     }
@@ -433,7 +434,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
         KeySharesStruct::from_allocation(new_allocation, allocation_per_key_share);
 
       // If this would guarantee this validator will be a single point of failure, error
-      if ((3 * new_key_shares.0) + 1) > KeySharesStruct::MAX_PER_SET {
+      if ((3 * u16::from(new_key_shares)) + 1) > KeySharesStruct::MAX_PER_SET {
         Err(AllocationError::IntroducesSinglePointOfFailure)?;
       }
 
@@ -451,7 +452,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
         {
           let (_key, amount) = top_validator;
           let key_shares = KeySharesStruct::from_allocation(amount, allocation_per_key_share);
-          key_shares.0 <= (expected_key_shares.0 / 3)
+          u16::from(key_shares) <= (u16::from(expected_key_shares) / 3)
         } else {
           false
         };
@@ -461,10 +462,11 @@ impl<Storage: SessionsStorage> Sessions for Storage {
             KeySharesStruct::from_allocation(old_allocation, allocation_per_key_share);
           // Update the amount of expected key shares per the key shares added
           let expected_key_shares = KeySharesStruct::saturating_from(
-            expected_key_shares.0 + (new_key_shares.0 - old_key_shares.0),
+            u16::from(expected_key_shares) +
+              (u16::from(new_key_shares) - u16::from(old_key_shares)),
           );
           // If the new key shares exceeds the fault tolerance, don't allow the allocation
-          if new_key_shares.0 > (expected_key_shares.0 / 3) {
+          if u16::from(new_key_shares) > (u16::from(expected_key_shares) / 3) {
             Err(AllocationError::IntroducesSinglePointOfFailure)?;
           }
         }

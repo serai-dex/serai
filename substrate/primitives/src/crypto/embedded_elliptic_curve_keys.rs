@@ -7,16 +7,27 @@ use borsh::{io, BorshSerialize, BorshDeserialize};
 
 use ciphersuite::{
   group::{
-    ff::{Field as _, PrimeField as _, FromUniformBytes},
+    ff::{Field as _, PrimeField, FromUniformBytes},
     GroupEncoding,
   },
-  WrappedGroup, GroupCanonicalEncoding as _,
+  WrappedGroup, GroupCanonicalEncoding,
 };
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 use schnorr_signatures::SchnorrSignature;
 
 use crate::{network_id::ExternalNetworkId, crypto::Public};
+
+/// Identifier for an embedded elliptic curve.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+pub enum EmbeddedEllipticCurve {
+  /// The Embedwards25519 curve, defined over (embedded into) Ed25519's/Ristretto's scalar field.
+  Embedwards25519,
+  /// The secq256k1 curve, forming a cycle with secp256k1.
+  Secq256k1,
+}
+#[cfg(feature = "scale")]
+crate::borsh_as_scale!(EmbeddedEllipticCurve);
 
 /// Key(s) on embedded elliptic curve(s).
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
@@ -50,17 +61,13 @@ impl BorshSerialize for EmbeddedEllipticCurveKeys {
   fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     match self {
       EmbeddedEllipticCurveKeys::Bitcoin(e, s) | EmbeddedEllipticCurveKeys::Ethereum(e, s) => {
-        let mut res = [0; 1 + 32 + 33];
-        res[0] = u8::from(self.network());
-        res[1 .. 33].copy_from_slice(e);
-        res[33 ..].copy_from_slice(s);
-        writer.write_all(&res)
+        writer.write_all(&[u8::from(self.network())])?;
+        writer.write_all(e)?;
+        writer.write_all(s)
       }
       EmbeddedEllipticCurveKeys::Monero(e) => {
-        let mut res = [0; 1 + 32];
-        res[0] = u8::from(self.network());
-        res[1 ..].copy_from_slice(e);
-        writer.write_all(&res)
+        writer.write_all(&[u8::from(self.network())])?;
+        writer.write_all(e)
       }
     }
   }
@@ -126,29 +133,30 @@ impl SignedEmbeddedEllipticCurveKeys {
   }
 
   fn transcript(&self, validator: Public) -> [u8; 64] {
-    let transcript = match &self {
-      Self::Bitcoin(e, s, e_sig, s_sig) => [
-        [u8::from(ExternalNetworkId::Bitcoin)].as_slice(),
-        &validator.0,
-        e,
-        s,
-        &e_sig[.. 32],
-        &s_sig[.. 33],
-      ]
-      .concat(),
-      Self::Ethereum(e, s, e_sig, s_sig) => [
-        [u8::from(ExternalNetworkId::Ethereum)].as_slice(),
-        &validator.0,
-        e,
-        s,
-        &e_sig[.. 32],
-        &s_sig[.. 33],
-      ]
-      .concat(),
-      Self::Monero(e, e_sig) => {
-        [[u8::from(ExternalNetworkId::Monero)].as_slice(), &validator.0, e, &e_sig[.. 32]].concat()
-      }
-    };
+    let embedwards25519_nonce_commitment_len =
+      <<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr::default().as_slice().len();
+    let secq256k1_nonce_commitment_len =
+      <<Secq256k1 as WrappedGroup>::G as GroupEncoding>::Repr::default().as_slice().len();
+
+    // `H(A || m || R)` where `m` is the serialization of the corresponding
+    // `EmbeddedEllipticCurveKeys` and `R` is the nonce commitments from each signature present.
+    let mut transcript = validator.0.as_slice().to_vec();
+    transcript.push(u8::from(self.network()));
+    transcript.extend(
+      (match &self {
+        Self::Bitcoin(e, s, e_sig, s_sig) | Self::Ethereum(e, s, e_sig, s_sig) => [
+          e.as_slice(),
+          s.as_ref(),
+          &e_sig[.. embedwards25519_nonce_commitment_len],
+          &s_sig[.. secq256k1_nonce_commitment_len],
+        ]
+        .into_iter(),
+        Self::Monero(e, e_sig) => {
+          [e.as_slice(), &[], &e_sig[.. embedwards25519_nonce_commitment_len], &[]].into_iter()
+        }
+      })
+      .flat_map(<[_]>::iter),
+    );
     sp_core::hashing::blake2_512(&transcript)
   }
 
@@ -156,7 +164,7 @@ impl SignedEmbeddedEllipticCurveKeys {
   pub fn verify(self, validator: Public) -> Option<EmbeddedEllipticCurveKeys> {
     let challenge = self.transcript(validator);
 
-    // Verify the Schnorr signatures
+    // Verify the Schnorr signatures for Embedwards25519
     match &self {
       Self::Bitcoin(e, _, e_sig, _) | Self::Ethereum(e, _, e_sig, _) | Self::Monero(e, e_sig) => {
         let sig = SchnorrSignature::<Embedwards25519>::read(&mut e_sig.as_slice()).ok()?;
@@ -172,6 +180,8 @@ impl SignedEmbeddedEllipticCurveKeys {
         }
       }
     }
+
+    // Verify the Schnorr signatures for Secq256k1
     match &self {
       Self::Bitcoin(_, s, _, s_sig) | Self::Ethereum(_, s, _, s_sig) => {
         let sig = SchnorrSignature::<Secq256k1>::read(&mut s_sig.as_slice()).ok()?;
@@ -193,6 +203,42 @@ impl SignedEmbeddedEllipticCurveKeys {
     })
   }
 
+  fn commit<G: WrappedGroup>(
+    rng: &mut (impl RngCore + CryptoRng),
+    key: &Zeroizing<G::F>,
+    sig: &mut [u8],
+  ) -> (<G::G as GroupEncoding>::Repr, Zeroizing<G::F>) {
+    let public_key = (G::generator() * key.deref()).to_bytes();
+    let nonce = Zeroizing::new(G::F::random(rng));
+    let nonce_commitment = G::generator() * nonce.deref();
+
+    let nonce_commitment_len = <G::G as GroupEncoding>::Repr::default().as_ref().len();
+    let response_len = <G::F as PrimeField>::Repr::default().as_ref().len();
+    debug_assert_eq!(sig.len(), nonce_commitment_len + response_len);
+    sig[.. nonce_commitment_len].copy_from_slice(nonce_commitment.to_bytes().as_ref());
+
+    (public_key, nonce)
+  }
+
+  fn sign<G: GroupCanonicalEncoding<F: FromUniformBytes<64>>>(
+    key: &Zeroizing<G::F>,
+    nonce: Zeroizing<G::F>,
+    challenge: &[u8; 64],
+    signature: &mut [u8],
+  ) {
+    let sig = SchnorrSignature::<G>::sign(
+      key,
+      nonce,
+      <G::F as FromUniformBytes<_>>::from_uniform_bytes(challenge),
+    );
+
+    let nonce_commitment_len = <G::G as GroupEncoding>::Repr::default().as_ref().len();
+    let response_len = <G::F as PrimeField>::Repr::default().as_ref().len();
+    debug_assert_eq!(signature.len(), nonce_commitment_len + response_len);
+    debug_assert_eq!(&signature[.. nonce_commitment_len], sig.R.to_bytes().as_ref());
+    signature[nonce_commitment_len ..].copy_from_slice(sig.s.to_repr().as_ref());
+  }
+
   #[doc(hidden)]
   pub fn bitcoin(
     rng: &mut (impl RngCore + CryptoRng),
@@ -200,46 +246,18 @@ impl SignedEmbeddedEllipticCurveKeys {
     embedwards25519: &Zeroizing<<Embedwards25519 as WrappedGroup>::F>,
     secq256k1: &Zeroizing<<Secq256k1 as WrappedGroup>::F>,
   ) -> Self {
-    let em_public_key =
-      (<Embedwards25519 as WrappedGroup>::generator() * embedwards25519.deref()).to_bytes();
-    let em_nonce = Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut *rng));
-    let em_nonce_commitment = <Embedwards25519 as WrappedGroup>::generator() * em_nonce.deref();
     let mut em_sig = [0; 64];
-    em_sig[.. 32].copy_from_slice(em_nonce_commitment.to_bytes().as_ref());
-
-    let secq_public_key = (<Secq256k1 as WrappedGroup>::generator() * secq256k1.deref()).to_bytes();
-    let secq_nonce = Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut *rng));
-    let secq_nonce_commitment = <Secq256k1 as WrappedGroup>::generator() * secq_nonce.deref();
+    let (em_public_key, em_nonce) =
+      Self::commit::<Embedwards25519>(rng, embedwards25519, &mut em_sig);
     let mut secq_sig = [0; 65];
-    secq_sig[.. 33].copy_from_slice(secq_nonce_commitment.to_bytes().as_ref());
+    let (secq_public_key, secq_nonce) = Self::commit::<Secq256k1>(rng, secq256k1, &mut secq_sig);
 
     let challenge =
       SignedEmbeddedEllipticCurveKeys::Bitcoin(em_public_key, secq_public_key, em_sig, secq_sig)
         .transcript(validator);
 
-    em_sig[32 ..].copy_from_slice(
-      SchnorrSignature::<Embedwards25519>::sign(
-        embedwards25519,
-        em_nonce,
-        <<Embedwards25519 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(
-          &challenge,
-        ),
-      )
-      .s
-      .to_repr()
-      .as_ref(),
-    );
-
-    secq_sig[33 ..].copy_from_slice(
-      SchnorrSignature::<Secq256k1>::sign(
-        secq256k1,
-        secq_nonce,
-        <<Secq256k1 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(&challenge),
-      )
-      .s
-      .to_repr()
-      .as_ref(),
-    );
+    Self::sign::<Embedwards25519>(embedwards25519, em_nonce, &challenge, &mut em_sig);
+    Self::sign::<Secq256k1>(secq256k1, secq_nonce, &challenge, &mut secq_sig);
 
     SignedEmbeddedEllipticCurveKeys::Bitcoin(em_public_key, secq_public_key, em_sig, secq_sig)
   }
@@ -251,46 +269,18 @@ impl SignedEmbeddedEllipticCurveKeys {
     embedwards25519: &Zeroizing<<Embedwards25519 as WrappedGroup>::F>,
     secq256k1: &Zeroizing<<Secq256k1 as WrappedGroup>::F>,
   ) -> Self {
-    let em_public_key =
-      (<Embedwards25519 as WrappedGroup>::generator() * embedwards25519.deref()).to_bytes();
-    let em_nonce = Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut *rng));
-    let em_nonce_commitment = <Embedwards25519 as WrappedGroup>::generator() * em_nonce.deref();
     let mut em_sig = [0; 64];
-    em_sig[.. 32].copy_from_slice(em_nonce_commitment.to_bytes().as_ref());
-
-    let secq_public_key = (<Secq256k1 as WrappedGroup>::generator() * secq256k1.deref()).to_bytes();
-    let secq_nonce = Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut *rng));
-    let secq_nonce_commitment = <Secq256k1 as WrappedGroup>::generator() * secq_nonce.deref();
+    let (em_public_key, em_nonce) =
+      Self::commit::<Embedwards25519>(rng, embedwards25519, &mut em_sig);
     let mut secq_sig = [0; 65];
-    secq_sig[.. 33].copy_from_slice(secq_nonce_commitment.to_bytes().as_ref());
+    let (secq_public_key, secq_nonce) = Self::commit::<Secq256k1>(rng, secq256k1, &mut secq_sig);
 
     let challenge =
       SignedEmbeddedEllipticCurveKeys::Ethereum(em_public_key, secq_public_key, em_sig, secq_sig)
         .transcript(validator);
 
-    em_sig[32 ..].copy_from_slice(
-      SchnorrSignature::<Embedwards25519>::sign(
-        embedwards25519,
-        em_nonce,
-        <<Embedwards25519 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(
-          &challenge,
-        ),
-      )
-      .s
-      .to_repr()
-      .as_ref(),
-    );
-
-    secq_sig[33 ..].copy_from_slice(
-      SchnorrSignature::<Secq256k1>::sign(
-        secq256k1,
-        secq_nonce,
-        <<Secq256k1 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(&challenge),
-      )
-      .s
-      .to_repr()
-      .as_ref(),
-    );
+    Self::sign::<Embedwards25519>(embedwards25519, em_nonce, &challenge, &mut em_sig);
+    Self::sign::<Secq256k1>(secq256k1, secq_nonce, &challenge, &mut secq_sig);
 
     SignedEmbeddedEllipticCurveKeys::Ethereum(em_public_key, secq_public_key, em_sig, secq_sig)
   }
@@ -301,26 +291,15 @@ impl SignedEmbeddedEllipticCurveKeys {
     validator: Public,
     embedwards25519: &Zeroizing<<Embedwards25519 as WrappedGroup>::F>,
   ) -> Self {
-    let em_public_key =
-      (<Embedwards25519 as WrappedGroup>::generator() * embedwards25519.deref()).to_bytes();
-    let em_nonce = Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut *rng));
-    let em_nonce_commitment = <Embedwards25519 as WrappedGroup>::generator() * em_nonce.deref();
     let mut em_sig = [0; 64];
-    em_sig[.. 32].copy_from_slice(em_nonce_commitment.to_bytes().as_ref());
+    let (em_public_key, em_nonce) =
+      Self::commit::<Embedwards25519>(rng, embedwards25519, &mut em_sig);
+
     let challenge =
       SignedEmbeddedEllipticCurveKeys::Monero(em_public_key, em_sig).transcript(validator);
-    em_sig[32 ..].copy_from_slice(
-      SchnorrSignature::<Embedwards25519>::sign(
-        embedwards25519,
-        em_nonce,
-        <<Embedwards25519 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(
-          &challenge,
-        ),
-      )
-      .s
-      .to_repr()
-      .as_ref(),
-    );
+
+    Self::sign::<Embedwards25519>(embedwards25519, em_nonce, &challenge, &mut em_sig);
+
     SignedEmbeddedEllipticCurveKeys::Monero(em_public_key, em_sig)
   }
 }
@@ -330,20 +309,16 @@ impl BorshSerialize for SignedEmbeddedEllipticCurveKeys {
     match self {
       SignedEmbeddedEllipticCurveKeys::Bitcoin(e, s, e_sig, s_sig) |
       SignedEmbeddedEllipticCurveKeys::Ethereum(e, s, e_sig, s_sig) => {
-        let mut res = [0; 1 + 32 + 33 + 32 + 32 + 33 + 32];
-        res[0] = u8::from(self.network());
-        res[1 .. 33].copy_from_slice(e);
-        res[33 .. 66].copy_from_slice(s);
-        res[66 .. 130].copy_from_slice(e_sig);
-        res[130 ..].copy_from_slice(s_sig);
-        writer.write_all(&res)
+        writer.write_all(&[u8::from(self.network())])?;
+        writer.write_all(e)?;
+        writer.write_all(s)?;
+        writer.write_all(e_sig)?;
+        writer.write_all(s_sig)
       }
       SignedEmbeddedEllipticCurveKeys::Monero(e, e_sig) => {
-        let mut res = [0; 1 + 32 + 32 + 32];
-        res[0] = u8::from(self.network());
-        res[1 .. 33].copy_from_slice(e);
-        res[33 ..].copy_from_slice(e_sig);
-        writer.write_all(&res)
+        writer.write_all(&[u8::from(self.network())])?;
+        writer.write_all(e)?;
+        writer.write_all(e_sig)
       }
     }
   }
@@ -381,3 +356,208 @@ impl BorshDeserialize for SignedEmbeddedEllipticCurveKeys {
 
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(SignedEmbeddedEllipticCurveKeys);
+
+#[test]
+fn serialize() {
+  use rand_core::{RngCore as _, OsRng};
+
+  let mut embedwards25519 = [0; 32];
+  OsRng.fill_bytes(&mut embedwards25519);
+  let mut embedwards25519_sig = [0; 64];
+  OsRng.fill_bytes(&mut embedwards25519_sig);
+  let mut secq256k1 = <<Secq256k1 as WrappedGroup>::G as GroupEncoding>::Repr::default();
+  OsRng.fill_bytes(secq256k1.as_mut());
+  let mut secq256k1_sig = [0; 65];
+  OsRng.fill_bytes(&mut secq256k1_sig);
+
+  for (network, embedded_elliptic_curve_keys, signed_embedded_elliptic_curve_keys) in [
+    (
+      ExternalNetworkId::Bitcoin,
+      EmbeddedEllipticCurveKeys::Bitcoin(embedwards25519, secq256k1),
+      SignedEmbeddedEllipticCurveKeys::Bitcoin(
+        embedwards25519,
+        secq256k1,
+        embedwards25519_sig,
+        secq256k1_sig,
+      ),
+    ),
+    (
+      ExternalNetworkId::Ethereum,
+      EmbeddedEllipticCurveKeys::Ethereum(embedwards25519, secq256k1),
+      SignedEmbeddedEllipticCurveKeys::Ethereum(
+        embedwards25519,
+        secq256k1,
+        embedwards25519_sig,
+        secq256k1_sig,
+      ),
+    ),
+    (
+      ExternalNetworkId::Monero,
+      EmbeddedEllipticCurveKeys::Monero(embedwards25519),
+      SignedEmbeddedEllipticCurveKeys::Monero(embedwards25519, embedwards25519_sig),
+    ),
+  ] {
+    assert_eq!(embedded_elliptic_curve_keys.network(), network);
+    assert_eq!(signed_embedded_elliptic_curve_keys.network(), network);
+
+    assert_eq!(
+      EmbeddedEllipticCurveKeys::deserialize_reader(
+        &mut borsh::to_vec(&embedded_elliptic_curve_keys).unwrap().as_slice()
+      )
+      .unwrap(),
+      embedded_elliptic_curve_keys,
+    );
+
+    assert_eq!(
+      SignedEmbeddedEllipticCurveKeys::deserialize_reader(
+        &mut borsh::to_vec(&signed_embedded_elliptic_curve_keys).unwrap().as_slice()
+      )
+      .unwrap(),
+      signed_embedded_elliptic_curve_keys,
+    );
+
+    #[cfg(feature = "scale")]
+    {
+      use scale::{Encode as _, DecodeAll as _, MaxEncodedLen as _};
+
+      assert_eq!(
+        borsh::to_vec(&embedded_elliptic_curve_keys).unwrap(),
+        embedded_elliptic_curve_keys.encode()
+      );
+      assert_eq!(
+        EmbeddedEllipticCurveKeys::decode_all(
+          &mut embedded_elliptic_curve_keys.encode().as_slice()
+        )
+        .unwrap(),
+        embedded_elliptic_curve_keys
+      );
+      assert!(
+        embedded_elliptic_curve_keys.encode().len() <= EmbeddedEllipticCurveKeys::max_encoded_len()
+      );
+
+      assert_eq!(
+        borsh::to_vec(&signed_embedded_elliptic_curve_keys).unwrap(),
+        signed_embedded_elliptic_curve_keys.encode()
+      );
+      assert_eq!(
+        SignedEmbeddedEllipticCurveKeys::decode_all(
+          &mut signed_embedded_elliptic_curve_keys.encode().as_slice()
+        )
+        .unwrap(),
+        signed_embedded_elliptic_curve_keys
+      );
+
+      // The encoding of `EmbeddedEllipticCurveKeys` should equal the
+      // first segment of a corresponding `SignedEmbeddedEllipticCurveKeys`
+      let embedded_elliptic_curve_keys = borsh::to_vec(&embedded_elliptic_curve_keys).unwrap();
+      assert_eq!(
+        &borsh::to_vec(&signed_embedded_elliptic_curve_keys).unwrap()
+          [.. embedded_elliptic_curve_keys.len()],
+        &embedded_elliptic_curve_keys
+      );
+    }
+
+    // Check the format of `transcript`
+    {
+      let mut validator = [0; 32];
+      OsRng.fill_bytes(&mut validator);
+      let validator = Public(validator);
+
+      // `A || m`
+      let mut transcript = borsh::to_vec(&(validator, embedded_elliptic_curve_keys)).unwrap();
+      // `R`
+      let mut wrote_nonce = false;
+      for embedded_elliptic_curve in network.embedded_elliptic_curves() {
+        wrote_nonce = true;
+        match embedded_elliptic_curve {
+          EmbeddedEllipticCurve::Embedwards25519 => transcript.extend(&embedwards25519_sig[.. 32]),
+          EmbeddedEllipticCurve::Secq256k1 => transcript.extend(&secq256k1_sig[.. 33]),
+        }
+      }
+      assert!(wrote_nonce);
+      assert_eq!(
+        sp_core::blake2_512(&transcript),
+        signed_embedded_elliptic_curve_keys.transcript(validator)
+      );
+    }
+  }
+}
+
+#[test]
+fn sign_and_verify() {
+  use rand_core::OsRng;
+
+  let mut validator = [0; 32];
+  OsRng.fill_bytes(&mut validator);
+
+  let mut other_validator = validator;
+  other_validator[0] ^= 1;
+
+  let validator = Public(validator);
+  let other_validator = Public(other_validator);
+
+  let embedwards25519 = Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng));
+  let embedwards25519_pub = (Embedwards25519::generator() * *embedwards25519).to_bytes();
+  let secq256k1 = Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut OsRng));
+  let secq256k1_pub = (Secq256k1::generator() * *secq256k1).to_bytes();
+
+  let verify = |signed: SignedEmbeddedEllipticCurveKeys, expected| {
+    assert_eq!(signed.clone().verify(validator).unwrap(), expected);
+
+    // Test a distinct validator causes verification to fail
+    assert!(signed.clone().verify(other_validator).is_none());
+
+    // Test changing a single byte in the serialization causes verification to fail
+    let serialization = borsh::to_vec(&signed).unwrap();
+    'byte_index: for i in 0 .. serialization.len() {
+      let mut serialization = serialization.clone();
+      let original_byte = serialization[i];
+
+      // Try to randomize a byte this many times before giving up
+      let mut byte_candidates = 128 * 256;
+      let signed = loop {
+        // Choose a new byte which wasn't the original byte
+        serialization[i] = loop {
+          #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+          let candidate = OsRng.next_u64() as u8;
+          if candidate != original_byte {
+            break candidate;
+          }
+        };
+        // If this deserializes, break out of the loop and try verification
+        if let Ok(signed) =
+          SignedEmbeddedEllipticCurveKeys::deserialize_reader(&mut serialization.as_slice())
+        {
+          break signed;
+        }
+
+        byte_candidates -= 1;
+        // The network with the shortest `SignedEmbeddedEllipticCurveKeys` will fail to deserialize
+        // as any other network if it is the sole network with such a short instance. We allow
+        // re-randomizing the network (the very first byte) to fail for this specific edge case.
+        if byte_candidates == 0 {
+          assert_eq!(i, 0);
+          continue 'byte_index;
+        }
+      };
+
+      // Make sure this malleation fails to verify
+      assert!(signed.verify(validator).is_none());
+    }
+  };
+
+  verify(
+    SignedEmbeddedEllipticCurveKeys::bitcoin(&mut OsRng, validator, &embedwards25519, &secq256k1),
+    EmbeddedEllipticCurveKeys::Bitcoin(embedwards25519_pub, secq256k1_pub),
+  );
+
+  verify(
+    SignedEmbeddedEllipticCurveKeys::ethereum(&mut OsRng, validator, &embedwards25519, &secq256k1),
+    EmbeddedEllipticCurveKeys::Ethereum(embedwards25519_pub, secq256k1_pub),
+  );
+
+  verify(
+    SignedEmbeddedEllipticCurveKeys::monero(&mut OsRng, validator, &embedwards25519),
+    EmbeddedEllipticCurveKeys::Monero(embedwards25519_pub),
+  );
+}

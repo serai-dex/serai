@@ -6,7 +6,7 @@ use serai_primitives::{
   signals::Signal,
 };
 
-/// A call to signals.
+/// A call to the signals module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Call {
   /// Register a retirement signal.
@@ -64,7 +64,7 @@ impl Call {
   }
 }
 
-/// An event from signals.
+/// An event from the signals module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
   /// A retirement signal has been registered.

@@ -116,6 +116,7 @@ fn test_read() {
 #[test]
 #[expect(clippy::cast_possible_truncation)]
 fn test_write() {
+  use alloc::vec;
   use rand_core::{RngCore as _, OsRng};
 
   macro_rules! test {

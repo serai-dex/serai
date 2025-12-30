@@ -27,7 +27,7 @@ jobs:
 
       - name: Install nightly rust
         shell: bash
-        run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -t wasm32v1-none -c clippy
+        run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal --component clippy --component rust-src
 
       - name: Run Clippy
         shell: bash
@@ -37,7 +37,7 @@ jobs:
           # stable Rust
           cargo clippy --all-features --all-targets
           # Explicitly run `clippy` on the WASM-targeting `serai-runtime`
-          RUSTFLAGS="$RUSTFLAGS --cfg substrate_runtime" cargo clippy --target wasm32v1-none --no-default-features --features "try-runtime,runtime-benchmarks" -p serai-runtime
+          RUSTFLAGS="$RUSTFLAGS --cfg substrate_runtime" RUSTC_BOOTSTRAP=1 cargo clippy --target wasm32v1-none -Zbuild-std=core,alloc --no-default-features --features "try-runtime,runtime-benchmarks" -p serai-runtime
           # Check a few variations of `serai-primitives`, `serai-abi`
           cargo clippy --no-default-features --all-targets -p serai-primitives
           cargo clippy --all-targets -p serai-primitives
@@ -47,7 +47,7 @@ jobs:
           # nightly Rust
           NIGHTLY="${{ steps.nightly.outputs.version }}"
           cargo +$NIGHTLY clippy --all-features --all-targets
-          RUSTFLAGS="$RUSTFLAGS --cfg substrate_runtime" cargo +$NIGHTLY clippy --target wasm32v1-none --no-default-features --features "try-runtime,runtime-benchmarks" -p serai-runtime
+          RUSTFLAGS="$RUSTFLAGS --cfg substrate_runtime" cargo +$NIGHTLY clippy --target wasm32v1-none -Zbuild-std=core,alloc --no-default-features --features "try-runtime,runtime-benchmarks" -p serai-runtime
           cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-primitives
           cargo +$NIGHTLY clippy --all-targets -p serai-primitives
           cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-abi
@@ -85,7 +85,7 @@ jobs:
 
       - name: Install nightly rust
         shell: bash
-        run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal -c rustfmt
+        run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal --component rustfmt
 
       - name: Run rustfmt
         shell: bash

@@ -1,11 +1,12 @@
-#check=skip=FromPlatformFlagConstDisallowed
+# syntax=docker/dockerfile:1
+# check=skip=FromPlatformFlagConstDisallowed;error=true
 # We want to explicitly set the platform to ensure a constant host environment
 
 # rust:1.92.0-alpine3.23 as of December 20th, 2025 (GMT)
 FROM --platform=linux/amd64 rust@sha256:7edc8cde436939b5350f9fafbffc43f0f957b8506ad94aa8e1336f0799fa845f AS builder
 
-# Add the WASM toolchain
-RUN rustup target add wasm32v1-none
+# Add Rust's source, as necessary to `build-std` as we do for the WASM
+RUN rustup component add rust-src
 
 # Add files for build
 ADD patches /serai/patches

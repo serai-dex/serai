@@ -3,6 +3,8 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
+mod registered_retirement_signal;
+
 #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 pub mod pallet {
@@ -20,17 +22,17 @@ pub mod pallet {
   use serai_validator_sets_pallet::{Config as VsConfig, Pallet as VsPallet};
   use serai_core_pallet::{Config as CoreConfig, Pallet as Core};
 
+  use super::registered_retirement_signal::*;
+
   #[pallet::config]
   pub trait Config:
-    frame_system::Config<AccountId = Public, Block = SubstrateBlock> + VsConfig + CoreConfig
+    frame_system::Config<AccountId = Public, Block = SubstrateBlock>
+    + pallet_babe::Config
+    + CoreConfig
+    + VsConfig
   {
-    /// How long a candidate retirement signal is valid for.
-    ///
-    /// This MUST be equal to the rate at which new sets are attempted.
-    // TODO: Fetch from `validator_sets::Config`.
-    type RetirementValidityDuration: Get<u64>;
-    /// How long a retirement signal is locked-in for before retirement..
-    type RetirementLockInDuration: Get<u64>;
+    /// How long a retirement signal is locked-in for before retirement.
+    type RetirementLockInDurationInSlots: Get<u64>;
   }
 
   #[pallet::genesis_config]
@@ -47,12 +49,12 @@ pub mod pallet {
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
       /*
-        Assert the validity duration is less than the lock-in duration.
+        Assert the duration for which signals are valid is less than the lock-in duration.
 
         This way, while the the signal is locked-in, any/all other candidate retirement signals
         will expire.
       */
-      assert!(T::RetirementValidityDuration::get() < T::RetirementLockInDuration::get());
+      assert!(T::EpochDuration::get() < T::RetirementLockInDurationInSlots::get());
     }
   }
 
@@ -96,14 +98,14 @@ pub mod pallet {
 
   #[pallet::hooks]
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
-    fn on_initialize(current_number: BlockNumberFor<T>) -> Weight {
+    fn on_initialize(_current_number: BlockNumberFor<T>) -> Weight {
       /*
         If this is the block at which a locked-in retirement signal has been locked-in for long
         enough, panic, halting the blockchain, and retiring the current protocol.
       */
-      if let Some((protocol_id, block_number)) = LockedInRetirement::<T>::get() {
+      if let Some((protocol_id, end_slot)) = LockedInRetirement::<T>::get() {
         assert!(
-          current_number < block_number,
+          (*pallet_babe::Pallet::<T>::current_slot()) < end_slot,
           "protocol retired in favor of {}",
           sp_core::hexdisplay::HexDisplay::from(&protocol_id)
         );
@@ -133,12 +135,14 @@ pub mod pallet {
       */
 
       let mut needed_favor = {
-        let current = VsPallet::<T>::key_shares(current_set)
-          .expect("current validator set without key shares set")
-          .0;
-        let latest = VsPallet::<T>::key_shares(latest_set)
-          .expect("latest validator set without key shares set")
-          .0;
+        let current = u16::from(
+          VsPallet::<T>::key_shares(current_set)
+            .expect("current validator set without key shares set"),
+        );
+        let latest = u16::from(
+          VsPallet::<T>::key_shares(latest_set)
+            .expect("latest validator set without key shares set"),
+        );
         current.max(latest)
       };
       for (validator, ()) in Favors::<T>::iter_prefix((signal, network)) {
@@ -154,7 +158,7 @@ pub mod pallet {
             .unwrap_or(KeyShares::ZERO);
           let latest = VsPallet::<T>::key_shares_possessed_by_validator(latest_set, validator)
             .unwrap_or(KeyShares::ZERO);
-          current.0.min(latest.0)
+          u16::from(current).min(u16::from(latest))
         };
 
         let Some(still_needed_favor) = needed_favor.checked_sub(key_shares) else {
@@ -284,9 +288,9 @@ pub mod pallet {
       */
       let registrant = SeraiAddress::from(validator);
       let signal = RegisteredRetirementSignal {
-        in_favor_of,
         registrant,
-        registered_at: frame_system::Pallet::<T>::block_number(),
+        in_favor_of,
+        registered_at: *pallet_babe::Pallet::<T>::current_slot(),
       };
       let signal_id = signal.id();
 
@@ -326,8 +330,7 @@ pub mod pallet {
         This lets a post-lock-in discovered fault be prevented from going live without intervention
         by a supermajority of validators.
       */
-      if LockedInRetirement::<T>::get().map(|(signal, _block_number)| signal) ==
-        Some(retirement_signal)
+      if LockedInRetirement::<T>::get().map(|(signal, _end_slot)| signal) == Some(retirement_signal)
       {
         LockedInRetirement::<T>::kill();
       }
@@ -362,8 +365,8 @@ pub mod pallet {
           };
 
           // Check the signal isn't out of date, and its tallies with it.
-          if (registered_signal.registered_at + T::RetirementValidityDuration::get()) <
-            frame_system::Pallet::<T>::block_number()
+          if (registered_signal.registered_at + T::EpochDuration::get()) <
+            (*pallet_babe::Pallet::<T>::current_slot())
           {
             Err::<(), _>(Error::<T>::ExpiredRetirementSignal)?;
           }
@@ -390,7 +393,8 @@ pub mod pallet {
           Signal::Retire { signal_id } => {
             LockedInRetirement::<T>::set(Some((
               signal_id,
-              frame_system::Pallet::<T>::block_number() + T::RetirementLockInDuration::get(),
+              (*pallet_babe::Pallet::<T>::current_slot()) +
+                T::RetirementLockInDurationInSlots::get(),
             )));
             Core::<T>::emit_event(Event::RetirementSignalLockedIn { signal: signal_id });
           }
