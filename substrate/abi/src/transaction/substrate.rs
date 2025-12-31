@@ -11,6 +11,8 @@ use sp_runtime::{
 };
 use frame_support::dispatch::{DispatchClass, Pays, DispatchInfo, GetDispatchInfo, PostDispatchInfo};
 
+use serai_primitives::crypto::Signature;
+
 use super::*;
 
 serai_primitives::borsh_as_scale!(Transaction);
@@ -114,12 +116,18 @@ impl<Context: TransactionContext> Checkable<Context> for Transaction {
         calls,
         contextualized_signature: ContextualizedSignature { explicit_context, signature },
       } => {
-        if !sp_core::sr25519::Signature::from(*signature).verify(
-          Transaction::signature_message(&Context::implicit_context(), calls, explicit_context)
-            .as_slice(),
-          &sp_core::sr25519::Public::from(explicit_context.signer),
-        ) {
-          Err(InvalidTransaction::BadProof)?;
+        match signature {
+          Signature::Ristretto(signature) => {
+            // We interpret the address directly as a Ristretto group element
+            let verification_key = sp_core::sr25519::Public::from(explicit_context.signer);
+            if !sp_core::sr25519::Signature::from(*signature).verify(
+              Transaction::signature_message(&Context::implicit_context(), calls, explicit_context)
+                .as_slice(),
+              &verification_key,
+            ) {
+              Err(InvalidTransaction::BadProof)?;
+            }
+          }
         }
       }
     }

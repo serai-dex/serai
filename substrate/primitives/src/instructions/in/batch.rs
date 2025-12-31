@@ -167,6 +167,11 @@ pub struct SignedBatch {
   /// The signed batch.
   pub batch: Batch,
   /// The signature.
+  ///
+  /// This is defined as a `Signature`. This may change in the future, as while `Signature` may be
+  /// the type used to sign transactions, this signature must support efficient proving by a
+  /// multi-party protocol. While currently, both concepts can be fulfilled by `RistrettoSignature`
+  /// (as versioned by `Signature`), in the future, potential upgrades may diverge.
   pub signature: Signature,
 }
 #[cfg(feature = "scale")]
@@ -175,7 +180,11 @@ crate::borsh_as_scale!(SignedBatch);
 impl Zeroize for SignedBatch {
   fn zeroize(&mut self) {
     self.batch.zeroize();
-    self.signature.0.as_mut().zeroize();
+    match self.signature {
+      Signature::Ristretto(ref mut signature) => {
+        signature.0.as_mut().zeroize();
+      }
+    }
   }
 }
 
@@ -184,7 +193,7 @@ impl Zeroize for SignedBatch {
 fn batch() {
   use rand_core::{RngCore as _, OsRng};
 
-  use crate::prelude::*;
+  use crate::{prelude::*, crypto::RistrettoSignature};
 
   let coins = Coin::all().collect::<Vec<_>>();
   let external_coins = ExternalCoin::all().collect::<Vec<_>>();
@@ -278,7 +287,7 @@ fn batch() {
 
       let mut signature = [0; 64];
       OsRng.fill_bytes(&mut signature);
-      let signature = Signature(signature);
+      let signature = Signature::Ristretto(RistrettoSignature(signature));
 
       let signed_batch = SignedBatch { batch: batch.clone(), signature };
       assert_eq!(

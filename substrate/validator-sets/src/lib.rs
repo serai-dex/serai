@@ -635,8 +635,15 @@ mod pallet {
           }
 
           // Verify the signature with the MuSig key of the signers
-          if !set.musig_key(&signers).verify(&set.set_keys_message(key_pair), &signature.0.into()) {
-            Err(InvalidTransaction::BadProof)?;
+          match signature {
+            Signature::Ristretto(signature) => {
+              if !set
+                .musig_key(&signers)
+                .verify(&set.set_keys_message(key_pair), &signature.0.into())
+              {
+                Err(InvalidTransaction::BadProof)?;
+              }
+            }
           }
 
           ValidTransaction::with_tag_prefix("ValidatorSets")
@@ -652,8 +659,12 @@ mod pallet {
             Err(InvalidTransaction::Stale)?
           };
 
-          if !key.verify(&slashes.report_slashes_message(), &signature.0.into()) {
-            Err(InvalidTransaction::BadProof)?;
+          match signature {
+            Signature::Ristretto(signature) => {
+              if !key.verify(&slashes.report_slashes_message(), &signature.0.into()) {
+                Err(InvalidTransaction::BadProof)?;
+              }
+            }
           }
 
           ValidTransaction::with_tag_prefix("ValidatorSets")

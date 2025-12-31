@@ -14,7 +14,7 @@ mod pallet {
   use frame_support::pallet_prelude::*;
 
   use serai_abi::{
-    primitives::{prelude::*, crypto::Signature, genesis_liquidity::GenesisValues},
+    primitives::{prelude::*, crypto::RistrettoSignature, genesis_liquidity::GenesisValues},
     genesis_liquidity::Event,
   };
 
@@ -65,7 +65,7 @@ mod pallet {
     pub fn oraclize_values(
       origin: OriginFor<T>,
       values: GenesisValues,
-      signature: Signature,
+      signature: RistrettoSignature,
     ) -> DispatchResult {
       ensure_none(origin)?;
       todo!("TODO {values:?} {signature:?}")

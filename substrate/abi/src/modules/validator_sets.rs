@@ -23,6 +23,12 @@ pub enum Call {
     /// The participants in the validator set who signed off on these keys.
     signature_participants: BitVec<{ KeyShares::MAX_PER_SET_U64 }>,
     /// The signature confirming these keys are valid.
+    ///
+    /// This is defined as a `Signature`. This may change in the future, as while `Signature` may
+    /// be the type used to sign transactions, this signature must support verification for a
+    /// non-interactive aggregate key of the participating validators. While currently, both
+    /// concepts can be fulfilled by `RistrettoSignature` (as versioned by `Signature`), in the
+    /// future, potential upgrades may diverge.
     signature: Signature,
   },
   /// Report a validator set's slashes onto Serai.
@@ -32,6 +38,12 @@ pub enum Call {
     /// The slashes they're reporting.
     slashes: SlashReport,
     /// The signature confirming the validity of this slash report.
+    ///
+    /// This is defined as a `Signature`. This may change in the future, as while `Signature` may
+    /// be the type used to sign transactions, this signature must support efficient proving by a
+    /// multi-party protocol. While currently, both concepts can be fulfilled by
+    /// `RistrettoSignature` (as versioned by `Signature`), in the future, potential upgrades may
+    /// diverge.
     signature: Signature,
   },
   /// Set a validator's keys on embedded elliptic curves for a specific network.

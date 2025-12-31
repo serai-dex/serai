@@ -1,7 +1,7 @@
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{
-  crypto::Signature, address::SeraiAddress, coin::ExternalCoin, balance::ExternalBalance,
+  crypto::RistrettoSignature, address::SeraiAddress, coin::ExternalCoin, balance::ExternalBalance,
   genesis_liquidity::GenesisValues,
 };
 
@@ -20,7 +20,10 @@ pub enum Call {
     /// The values of the non-Bitcoin external coins.
     values: GenesisValues,
     /// The signature by the genesis validators for these values.
-    signature: Signature,
+    ///
+    /// This is limited to `RistrettoSignature`, instead of using `Signature`, as it does not need
+    /// to be versioned. This call will happen once as the network initializes, and never again.
+    signature: RistrettoSignature,
   },
   /// Transfer genesis liquidity.
   transfer_genesis_liquidity {

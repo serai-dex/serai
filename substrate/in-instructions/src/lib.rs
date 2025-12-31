@@ -16,7 +16,10 @@ mod pallet {
   use frame_support::{pallet_prelude::*, dispatch::RawOrigin};
   use frame_system::pallet_prelude::*;
 
-  use serai_abi::{primitives::prelude::*, in_instructions::Event};
+  use serai_abi::{
+    primitives::{prelude::*, crypto::Signature},
+    in_instructions::Event,
+  };
 
   use serai_core_pallet::Pallet as Core;
   type Coins<T> = serai_coins_pallet::Pallet<T, serai_coins_pallet::CoinsInstance>;
@@ -250,7 +253,9 @@ mod pallet {
           else {
             return false;
           };
-          key.verify(&message, &batch.signature.into())
+          match batch.signature {
+            Signature::Ristretto(signature) => key.verify(&message, &signature.into()),
+          }
         };
         let Some(current_session) =
           serai_validator_sets_pallet::Pallet::<T>::current_session(NetworkId::from(network))

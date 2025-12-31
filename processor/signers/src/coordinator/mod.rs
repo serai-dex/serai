@@ -1,7 +1,5 @@
 use core::future::Future;
 
-use serai_primitives::crypto::Signature;
-
 use serai_db::{DbTxn as _, Db};
 
 use primitives::task::ContinuallyRan;
@@ -119,7 +117,7 @@ impl<D: Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
 
             self
               .coordinator
-              .publish_slash_report_signature(session, slash_report, Signature(signature))
+              .publish_slash_report_signature(session, slash_report, signature)
               .await
               .map_err(|e| {
                 format!("couldn't send slash report signature to the coordinator: {e:?}")
