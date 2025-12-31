@@ -1,6 +1,3 @@
-/// Call/Event for the system.
-pub mod system;
-
 /// Call/Event for coins.
 pub mod coins;
 
