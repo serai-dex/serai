@@ -140,6 +140,45 @@ impl Block {
 }
 
 #[test]
+fn header_getters() {
+  use rand_core::{RngCore as _, OsRng};
+
+  let number = OsRng.next_u64();
+
+  let mut builds_upon = [0; 32];
+  OsRng.fill_bytes(&mut builds_upon);
+  let builds_upon = UnbalancedMerkleTree { root: builds_upon };
+
+  let unix_time_in_millis = OsRng.next_u64();
+
+  let mut transactions_commitment = [0; 32];
+  OsRng.fill_bytes(&mut transactions_commitment);
+  let transactions_commitment = UnbalancedMerkleTree { root: transactions_commitment };
+
+  let mut events_commitment = [0; 32];
+  OsRng.fill_bytes(&mut events_commitment);
+  let events_commitment = UnbalancedMerkleTree { root: events_commitment };
+
+  let mut consensus_commitment = [0; 32];
+  OsRng.fill_bytes(&mut consensus_commitment);
+
+  let header = Header::V1(HeaderV1 {
+    number,
+    builds_upon,
+    unix_time_in_millis,
+    transactions_commitment,
+    events_commitment,
+    consensus_commitment,
+  });
+
+  assert_eq!(header.number(), number);
+  assert_eq!(header.builds_upon(), builds_upon);
+  assert_eq!(header.unix_time_in_millis(), unix_time_in_millis);
+  assert_eq!(header.transactions_commitment(), transactions_commitment);
+  assert_eq!(header.events_commitment(), events_commitment);
+}
+
+#[test]
 fn header_size() {
   assert_eq!(
     borsh::to_vec(&HeaderV1 {
@@ -158,10 +197,10 @@ fn header_size() {
   assert_eq!(
     borsh::to_vec(&HeaderV1 {
       number: 0,
-      builds_upon: UnbalancedMerkleTree { root: [0; 32] },
+      builds_upon: UnbalancedMerkleTree::EMPTY,
       unix_time_in_millis: 0,
-      transactions_commitment: UnbalancedMerkleTree { root: [0; 32] },
-      events_commitment: UnbalancedMerkleTree { root: [0; 32] },
+      transactions_commitment: UnbalancedMerkleTree::EMPTY,
+      events_commitment: UnbalancedMerkleTree::EMPTY,
       consensus_commitment: [0; 32]
     })
     .unwrap()

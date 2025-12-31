@@ -14,7 +14,7 @@ use sp_runtime::{
 use super::*;
 
 /// The digest for all of the Serai-specific header fields added before execution of the block.
-#[derive(Clone, Copy, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct SeraiPreExecutionDigest {
   /// The UNIX time in milliseconds this block was created at.
   pub unix_time_in_millis: u64,
@@ -344,5 +344,209 @@ impl BlockTrait for SubstrateBlock {
   }
   fn hash(&self) -> Self::Hash {
     self.header.hash()
+  }
+}
+
+#[test]
+fn find_serai_pre_execution_digest() {
+  use alloc::vec;
+  use rand_core::{RngCore as _, OsRng};
+
+  let mut digest = Digest { logs: vec![] };
+  let push = |digest: &mut Digest| {
+    for _ in 0 .. (OsRng.next_u64() % 8) {
+      digest.push(if (OsRng.next_u64() & 1) == 1 {
+        let mut bytes = vec![0; (OsRng.next_u64() % 512) as usize];
+        OsRng.fill_bytes(&mut bytes);
+        DigestItem::Other(bytes)
+      } else {
+        let mut consensus_id = [0; 4];
+        OsRng.fill_bytes(&mut consensus_id);
+        let mut bytes = vec![0; (OsRng.next_u64() % 512) as usize];
+        OsRng.fill_bytes(&mut bytes);
+        DigestItem::PreRuntime(consensus_id, bytes)
+      });
+    }
+  };
+  push(&mut digest);
+  let serai_pre_execution_digest =
+    SeraiPreExecutionDigest { unix_time_in_millis: OsRng.next_u64() };
+  digest.push(DigestItem::PreRuntime(
+    SeraiPreExecutionDigest::CONSENSUS_ID,
+    borsh::to_vec(&serai_pre_execution_digest).unwrap(),
+  ));
+  push(&mut digest);
+  assert_eq!(SeraiPreExecutionDigest::find(&digest), serai_pre_execution_digest);
+}
+
+#[test]
+fn header_from_substrate_header() {
+  use alloc::vec;
+  use rand_core::{RngCore as _, OsRng};
+
+  let unix_time_in_millis = OsRng.next_u64();
+
+  let serai_pre_execution_digest = DigestItem::PreRuntime(
+    SeraiPreExecutionDigest::CONSENSUS_ID,
+    borsh::to_vec(&SeraiPreExecutionDigest { unix_time_in_millis }).unwrap(),
+  );
+
+  let mut builds_upon = [0; 32];
+  OsRng.fill_bytes(&mut builds_upon);
+  let builds_upon = UnbalancedMerkleTree { root: builds_upon };
+
+  let mut transactions_commitment = [0; 32];
+  OsRng.fill_bytes(&mut transactions_commitment);
+  let transactions_commitment = UnbalancedMerkleTree { root: transactions_commitment };
+
+  let mut events_commitment = [0; 32];
+  OsRng.fill_bytes(&mut events_commitment);
+  let events_commitment = UnbalancedMerkleTree { root: events_commitment };
+
+  let serai_execution_digest = DigestItem::Consensus(
+    SeraiExecutionDigest::CONSENSUS_ID,
+    borsh::to_vec(&SeraiExecutionDigest {
+      builds_upon,
+      transactions_commitment,
+      events_commitment,
+    })
+    .unwrap(),
+  );
+
+  let substrate_header = |logs| {
+    let substrate_header =
+      SubstrateHeader::new(0, [0; 32].into(), [0; 32].into(), [0; 32].into(), Digest { logs });
+    let consensus_commitment = match &substrate_header {
+      SubstrateHeader::V1(substrate_header) => {
+        sp_core::blake2_256(&substrate_header.consensus.encode())
+      }
+    };
+    (Header::from(&substrate_header), consensus_commitment)
+  };
+
+  // Without any digests
+  {
+    let (substrate_header, consensus_commitment) = substrate_header(vec![]);
+    assert_eq!(
+      substrate_header,
+      Header::V1(HeaderV1 {
+        number: 0,
+        builds_upon: UnbalancedMerkleTree::EMPTY,
+        unix_time_in_millis: 0,
+        transactions_commitment: UnbalancedMerkleTree::EMPTY,
+        events_commitment: UnbalancedMerkleTree::EMPTY,
+        consensus_commitment,
+      })
+    );
+  }
+
+  // With solely `SeraiPreExecutionDigest`
+  {
+    let (substrate_header, consensus_commitment) =
+      substrate_header(vec![serai_pre_execution_digest.clone()]);
+    assert_eq!(
+      substrate_header,
+      Header::V1(HeaderV1 {
+        number: 0,
+        builds_upon: UnbalancedMerkleTree::EMPTY,
+        unix_time_in_millis,
+        transactions_commitment: UnbalancedMerkleTree::EMPTY,
+        events_commitment: UnbalancedMerkleTree::EMPTY,
+        consensus_commitment,
+      })
+    );
+  }
+
+  // With solely `SeraiExecutionDigest`
+  {
+    let (substrate_header, consensus_commitment) =
+      substrate_header(vec![serai_execution_digest.clone()]);
+    assert_eq!(
+      substrate_header,
+      Header::V1(HeaderV1 {
+        number: 0,
+        builds_upon,
+        unix_time_in_millis: 0,
+        transactions_commitment,
+        events_commitment,
+        consensus_commitment,
+      })
+    );
+  }
+
+  // With both digests
+  {
+    let (substrate_header, consensus_commitment) =
+      substrate_header(vec![serai_pre_execution_digest, serai_execution_digest]);
+    assert_eq!(
+      substrate_header,
+      Header::V1(HeaderV1 {
+        number: 0,
+        builds_upon,
+        unix_time_in_millis,
+        transactions_commitment,
+        events_commitment,
+        consensus_commitment,
+      })
+    );
+  }
+}
+
+#[test]
+fn header_trait() {
+  use alloc::vec;
+  use rand_core::{RngCore as _, OsRng};
+
+  let mut header = SubstrateHeader::new(
+    0,
+    [0; 32].into(),
+    [0; 32].into(),
+    [0; 32].into(),
+    Digest { logs: vec![] },
+  );
+  for _ in 0 .. 2 {
+    {
+      let number = OsRng.next_u64();
+      header.set_number(number);
+      assert_eq!(*header.number(), number);
+    }
+
+    {
+      let mut extrinsics_root = [0; 32];
+      OsRng.fill_bytes(&mut extrinsics_root);
+      let extrinsics_root = extrinsics_root.into();
+      header.set_extrinsics_root(extrinsics_root);
+      assert_eq!(*header.extrinsics_root(), extrinsics_root);
+    }
+
+    {
+      let mut state_root = [0; 32];
+      OsRng.fill_bytes(&mut state_root);
+      let state_root = state_root.into();
+      header.set_state_root(state_root);
+      assert_eq!(*header.state_root(), state_root);
+    }
+
+    {
+      let mut parent_hash = [0; 32];
+      OsRng.fill_bytes(&mut parent_hash);
+      let parent_hash = parent_hash.into();
+      header.set_parent_hash(parent_hash);
+      assert_eq!(*header.parent_hash(), parent_hash);
+    }
+
+    {
+      let mut digest = header.digest().clone();
+      let mut bytes = vec![0; (OsRng.next_u64() % 512) as usize];
+      OsRng.fill_bytes(&mut bytes);
+      let digest_item = DigestItem::Other(bytes);
+
+      digest.push(digest_item.clone());
+      header.digest_mut().push(digest_item);
+
+      assert_eq!(&digest, header.digest());
+    }
+
+    assert_eq!(Header::from(&header).hash(), header.hash().into());
   }
 }
