@@ -1,19 +1,7 @@
-use borsh::{BorshSerialize, BorshDeserialize};
-
 use serai_primitives::{
   network_id::ExternalNetworkId,
   balance::{Amount, ExternalBalance},
 };
-
-/// An event from the economic security module.
-#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
-pub enum Event {
-  /// Economic security was achieved for a network's validator set.
-  EconomicSecurityAchieved {
-    /// The network whose validator set achieved economic security.
-    network: ExternalNetworkId,
-  },
-}
 
 /// A trait representing access to the information on economic security.
 pub trait EconomicSecurity {

@@ -45,10 +45,8 @@ pub enum Call {
   Dex(dex::Call) = 3,
   /// The call for genesis liquidity.
   GenesisLiquidity(genesis_liquidity::Call) = 4,
-  // The call for economic security.
-  // EconomicSecurity = 5,
   /// The call for `InInstruction`s.
-  InInstructions(in_instructions::Call) = 6,
+  InInstructions(in_instructions::Call) = 5,
 }
 
 impl From<coins::Call> for Call {
@@ -110,10 +108,8 @@ pub enum Event {
   Dex(dex::Event) = 3,
   /// The event for genesis liquidity.
   GenesisLiquidity(genesis_liquidity::Event) = 4,
-  /// The event for economic security.
-  EconomicSecurity(economic_security::Event) = 5,
   /// The event for `InInstruction`s.
-  InInstructions(in_instructions::Event) = 6,
+  InInstructions(in_instructions::Event) = 5,
 }
 
 impl From<coins::Event> for Event {
@@ -139,11 +135,6 @@ impl From<dex::Event> for Event {
 impl From<genesis_liquidity::Event> for Event {
   fn from(event: genesis_liquidity::Event) -> Self {
     Self::GenesisLiquidity(event)
-  }
-}
-impl From<economic_security::Event> for Event {
-  fn from(event: economic_security::Event) -> Self {
-    Self::EconomicSecurity(event)
   }
 }
 impl From<in_instructions::Event> for Event {

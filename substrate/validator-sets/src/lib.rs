@@ -279,11 +279,11 @@ mod pallet {
       match network {
         // For Serai, we include the genesis validators as long as any other set does
         NetworkId::Serai => {
-          ExternalNetworkId::all().all(T::EconomicSecurity::achieved_economic_security)
+          !ExternalNetworkId::all().all(T::EconomicSecurity::achieved_economic_security)
         }
         // For the other networks, we include the genesis validators if they have yet to achieve
         // economic security
-        NetworkId::External(network) => T::EconomicSecurity::achieved_economic_security(network),
+        NetworkId::External(network) => !T::EconomicSecurity::achieved_economic_security(network),
       }
     }
 
