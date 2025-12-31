@@ -1,4 +1,4 @@
-use core::fmt::Debug;
+use core::{fmt::Debug, time::Duration};
 use alloc::vec;
 
 use scale::{Encode, Decode};
@@ -16,6 +16,28 @@ use serai_primitives::crypto::Signature;
 use super::*;
 
 serai_primitives::borsh_as_scale!(Transaction);
+
+// Implement `ExtrinsicLike` for `Transaction`.
+//
+// This is required for `sp_runtime::traits::Block` and for `Transaction: ExtrinsicCall`.
+impl ExtrinsicLike for Transaction {
+  fn is_bare(&self) -> bool {
+    matches!(self, Transaction::Unsigned { .. })
+  }
+}
+
+// Implement `ExtrinsicCall` for `Transaction`.
+//
+// This is required by `frame_support::construct_runtime`.
+impl ExtrinsicCall for Transaction {
+  type Call = Self;
+  fn call(&self) -> &Self {
+    self
+  }
+  fn into_call(self) -> Self {
+    self
+  }
+}
 
 /// The context which transactions are executed in.
 pub trait TransactionContext: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
@@ -61,30 +83,15 @@ pub trait TransactionContext: 'static + Send + Sync + Clone + PartialEq + Eq + D
 
 /// A transaction with the context necessary to evaluate it within Substrate.
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-pub struct TransactionWithContext<Context: TransactionContext>(Transaction, #[codec(skip)] Context);
-
-impl ExtrinsicLike for Transaction {
-  fn is_signed(&self) -> Option<bool> {
-    Some(matches!(self, Transaction::Signed { .. }))
-  }
-  fn is_bare(&self) -> bool {
-    matches!(self, Transaction::Unsigned { .. })
-  }
-}
-
-impl ExtrinsicCall for Transaction {
-  type Call = Self;
-  fn call(&self) -> &Self {
-    self
-  }
-  fn into_call(self) -> Self {
-    self
-  }
+pub struct TransactionWithContext<Context: TransactionContext> {
+  transaction: Transaction,
+  #[codec(skip)]
+  context: Context,
 }
 
 impl<Context: TransactionContext> GetDispatchInfo for TransactionWithContext<Context> {
   fn get_dispatch_info(&self) -> DispatchInfo {
-    match &self.0 {
+    match &self.transaction {
       Transaction::Unsigned { call } => DispatchInfo {
         call_weight: Context::RuntimeCall::from(call.0.clone()).get_dispatch_info().call_weight,
         extension_weight: Weight::zero(),
@@ -106,6 +113,7 @@ impl<Context: TransactionContext> GetDispatchInfo for TransactionWithContext<Con
   }
 }
 
+// Next, we implement all of the `trait`s necessary for `frame_executive`.
 impl<Context: TransactionContext> Checkable<Context> for Transaction {
   type Checked = TransactionWithContext<Context>;
 
@@ -132,17 +140,15 @@ impl<Context: TransactionContext> Checkable<Context> for Transaction {
       }
     }
 
-    Ok(TransactionWithContext(self, context.clone()))
+    Ok(TransactionWithContext { transaction: self, context: context.clone() })
   }
 
   #[cfg(feature = "try-runtime")]
   fn unchecked_into_checked_i_know_what_i_am_doing(
     self,
-    c: &Context,
+    context: &Context,
   ) -> Result<Self::Checked, TransactionValidityError> {
-    // This satisfies the API, not necessarily the intent, yet this function is only intended to
-    // be used within tests. Accordingly, it should be fine to be stricter than necessary.
-    self.check(c)
+    Ok(TransactionWithContext { transaction: self, context: context.clone() })
   }
 }
 
@@ -153,42 +159,36 @@ impl<Context: TransactionContext> TransactionWithContext<Context> {
     source: TransactionSource,
     mempool_priority_if_signed: u64,
   ) -> TransactionValidity {
-    if self.1.current_block_size().saturating_add(len) > crate::Block::SIZE_LIMIT {
+    // Check the block size is respected
+    if self.context.current_block_size().saturating_add(len) > crate::Block::SIZE_LIMIT {
       Err(TransactionValidityError::Invalid(InvalidTransaction::ExhaustsResources))?;
     }
 
-    match &self.0 {
+    match &self.transaction {
       Transaction::Unsigned { call } => {
-        let ValidTransaction { priority: _, requires, provides, longevity: _, propagate: _ } =
-          V::validate_unsigned(source, &Context::RuntimeCall::from(call.0.clone()))?;
-        Ok(ValidTransaction {
-          // We should always try to include unsigned transactions prior to signed
-          priority: u64::MAX,
-          requires,
-          provides,
-          // This is valid until included
-          longevity: u64::MAX,
-          // Ensure this is propagated
-          propagate: true,
-        })
+        V::validate_unsigned(source, &Context::RuntimeCall::from(call.0.clone()))
       }
       Transaction::Signed { calls: _, contextualized_signature } => {
         let ExplicitContext { historic_block, include_by, signer, nonce, fee: _ } =
           &contextualized_signature.explicit_context;
-        if !self.1.block_is_present_in_blockchain(historic_block) {
+        if !self.context.block_is_present_in_blockchain(historic_block) {
           // We don't know if this is a block from a fundamentally distinct blockchain or a
           // continuation of this blockchain we have yet to sync (which would be `Future`)
           Err(TransactionValidityError::Unknown(UnknownTransaction::CannotLookup))?;
         }
         if let Some(include_by) = *include_by {
-          if self.1.current_time() >= u64::from(include_by) {
+          if self.context.current_time() >= u64::from(include_by) {
             // Since this transaction has a time bound which has passed, error
             Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
           }
         }
 
+        let tag_for_nonce = |nonce| borsh::to_vec(&(signer, nonce)).unwrap();
+        let mut requires = vec![];
         {
-          let next_nonce = self.1.next_nonce(signer);
+          let next_nonce = self.context.next_nonce(signer);
+          // `consume_next_nonce` is allowed to panic if we attempt to consume this nonce, so we
+          // invalidate the account at this point (which should be impractical anyways)
           if next_nonce == u32::MAX {
             Err(TransactionValidityError::Invalid(InvalidTransaction::BadSigner))?;
           }
@@ -197,25 +197,25 @@ impl<Context: TransactionContext> TransactionWithContext<Context> {
               Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?
             }
             core::cmp::Ordering::Equal => {}
-            core::cmp::Ordering::Greater => {
-              Err(TransactionValidityError::Invalid(InvalidTransaction::Future))?
-            }
+            // Because this is greater than the on-chain nonce, add a requirement of the prior
+            // nonce
+            core::cmp::Ordering::Greater => requires.push(tag_for_nonce(*nonce - 1)),
           }
         }
+        let provides = vec![tag_for_nonce(*nonce)];
 
-        let requires = if let Some(prior_nonce) = nonce.checked_sub(1) {
-          vec![borsh::to_vec(&(signer, prior_nonce)).unwrap()]
-        } else {
-          vec![]
-        };
-        let provides = vec![borsh::to_vec(&(signer, nonce)).unwrap()];
         Ok(ValidTransaction {
           priority: mempool_priority_if_signed,
           requires,
           provides,
-          // This revalidates the transaction every block. This is required due to this being
-          // denominated in blocks, and our transaction expiration being denominated in seconds.
-          longevity: 1,
+          longevity: if include_by.is_some() {
+            // This revalidates the transaction every block. This is required due to this being
+            // denominated in blocks, and our transaction expiration being denominated in seconds
+            1
+          } else {
+            Duration::from_mins(10).as_secs() /
+              serai_primitives::constants::TARGET_BLOCK_TIME.as_secs()
+          },
           propagate: true,
         })
       }
@@ -232,7 +232,7 @@ impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> 
     info: &DispatchInfo,
     len: usize,
   ) -> TransactionValidity {
-    let mempool_priority_if_signed = match &self.0 {
+    let mempool_priority_if_signed = match &self.transaction {
       Transaction::Unsigned { .. } => {
         // Since this is the priority if signed, and this isn't signed, we return 0
         0
@@ -242,10 +242,9 @@ impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> 
         contextualized_signature:
           ContextualizedSignature { explicit_context: ExplicitContext { signer, fee, .. }, .. },
       } => {
-        self.1.can_pay_fee(signer, *fee)?;
+        self.context.can_pay_fee(signer, *fee)?;
 
         // Prioritize transactions by their fees
-        // TODO: Re-evaluate this
         {
           let fee = fee.0;
           Weight::from_all(fee).checked_div_per_component(&info.call_weight).unwrap_or(0)
@@ -257,18 +256,31 @@ impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> 
 
   fn apply<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
     self,
-    _info: &DispatchInfo,
+    info: &DispatchInfo,
     len: usize,
   ) -> sp_runtime::ApplyExtrinsicResultWithInfo<PostDispatchInfo> {
-    // We use 0 for the mempool priority, as this is no longer in the mempool so it's irrelevant
-    self.validate_except_fee::<V>(len, TransactionSource::InBlock, 0)?;
+    /*
+      While the sane assumption would be this is only called after `Applyable::validate`, meaning
+      we don't have to perform validation again here, that isn't strictly guaranteed. We
+      explicitly perform validation again here to be sure.
+
+      We could cache the validation in a boolean, to ensure it doesn't occur twice, but that
+      assumes the environment when cached is the environment now, which isn't sane to guarantee.
+
+      We use `0` for the mempool priority, as this is no longer in the mempool so it's irrelevant.
+    */
+    let validation_info = self.validate_except_fee::<V>(len, TransactionSource::InBlock, 0)?;
+    // We also have to apply the additional check no requirements are outstanding
+    if !validation_info.requires.is_empty() {
+      Err(TransactionValidityError::Invalid(InvalidTransaction::Future))?;
+    }
 
     // Start the transaction
-    self.1.start_transaction(len);
+    self.context.start_transaction(len);
 
-    let transaction_hash = self.0.hash();
+    let transaction_hash = self.transaction.hash();
 
-    let res = match self.0 {
+    let res = match self.transaction {
       Transaction::Unsigned { call } => {
         let call = Context::RuntimeCall::from(call.0);
         V::pre_dispatch(&call)?;
@@ -284,40 +296,48 @@ impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> 
           ContextualizedSignature { explicit_context: ExplicitContext { signer, fee, .. }, .. },
       } => {
         // Consume the signer's next nonce
-        self.1.consume_next_nonce(&signer);
+        self.context.consume_next_nonce(&signer);
         // Pay the fee
-        self.1.pay_fee(&signer, fee)?;
+        self.context.pay_fee(&signer, fee)?;
 
+        /*
+          The `actual_weight` is compared to the total weight from the `DispatchInfo`, not the call
+          weight alone. Accordingly, we need to include the base weight for a signed transaction
+          here.
+        */
+        let mut actual_weight = Context::SIGNED_WEIGHT;
         let _res = frame_support::storage::transactional::with_storage_layer(|| {
           for call in calls.0 {
             let call = Context::RuntimeCall::from(call);
+            actual_weight += call.get_dispatch_info().call_weight;
             match call.dispatch(Some(signer).into()) {
               Ok(_res) => {}
               // Because this call errored, don't continue and revert all prior calls
               Err(e) => return Err(e),
             }
           }
+          debug_assert_eq!(actual_weight, info.total_weight());
           Ok(())
         });
 
-        // We don't care if the individual calls succeeded or failed.
-        // The transaction was valid for inclusion and the fee was paid.
-        // Either the calls passed, as desired, or they failed and the storage was reverted.
+        /*
+          Regardless of if the individual calls succeeded or failed, we want to note this
+          transaction itself was valid, having been properly signed and paid its fee.
+        */
         Ok(Ok(PostDispatchInfo {
-          // `None` stands for the worst case, which is what we want
-          actual_weight: None,
-          // Signed transactions always pay their fee
-          // TODO: Do we want to handle this so we can not charge fees on removing genesis
-          // liquidity?
+          actual_weight: Some(actual_weight),
+          /*
+            Because this transaction was queued for inclusion, it should pay its fee.
+            Additionally, this must be `Pays::Yes`, because we already deducted the fee
+            (with no mechanism to refund it).
+          */
           pays_fee: Pays::Yes,
         }))
       }
     };
 
-    // TODO: TransactionSuccess/TransactionFailure event?
-
     // End the transaction
-    self.1.end_transaction(transaction_hash);
+    self.context.end_transaction(transaction_hash);
 
     res
   }
