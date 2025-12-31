@@ -18,26 +18,56 @@ pub fn monero(orchestration_path: &Path, network: Network) {
 
   let file = format!("monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2");
 
+  // Fingerprint from https://github.com/monero-project/monero-site/issues/1949
+  const FINGERPRINT: &str = "81AC591FE9C4B65C5806AFC3F0AF4D462A0BDF92";
+
   #[rustfmt::skip]
   let mut download_monero = format!(r#"
-FROM alpine:latest AS monero
-
-RUN apk --no-cache add gnupg
+FROM alpine:latest AS download
 
 # Download Monero
 RUN wget https://downloads.getmonero.org/cli/{file}
 
-# Verify Binary -- fingerprint from https://github.com/monero-project/monero-site/issues/1949
-ADD orchestration/{}/networks/monero/hashes-v{MONERO_VERSION}.txt .
-RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-sigs-only --receive-keys 81AC591FE9C4B65C5806AFC3F0AF4D462A0BDF92 && \
-  gpg --verify hashes-v{MONERO_VERSION}.txt && \
-  grep "{file}" hashes-v{MONERO_VERSION}.txt | sha256sum -c
-
-# Extract it
+# Extract Monero
 RUN tar -xf {file} --strip-components=1
-"#,
-    network.label(),
-  );
+
+# Download the binary's hashes
+RUN wget https://raw.githubusercontent.com/monero-project/monero-site/73084c47b2ef05c6abc12755839e993baf87755b/downloads/hashes.txt -O SHA256SUMS
+
+# Verify the integrity of `monero-*.tar.bz2` with regards to the `SHA256SUMS` file
+FROM alpine:latest AS sha256sum
+COPY --from=download *.tar.bz2 SHA256SUMS /
+RUN grep "{file}" SHA256SUMS | sha256sum -c
+RUN touch /tmp/done
+
+# Verify `SHA256SUMS` with GnuPG
+FROM alpine:latest AS gnupg
+RUN apk --no-cache add gnupg
+RUN mkdir ~/.gnupg # Prevent the default config of `use-keyboxd`
+COPY --from=download SHA256SUMS /
+RUN gpg --keyserver hkps://keyserver.ubuntu.com --keyserver-options no-self-sigs-only --receive-keys {FINGERPRINT}
+RUN gpg --verify SHA256SUMS
+RUN touch /tmp/done
+
+# Verify `SHA256SUMS` with Sequoia PGP
+FROM alpine:latest AS sequoia
+RUN apk --no-cache add sequoia-sq
+COPY --from=download SHA256SUMS /
+RUN sq network keyserver search --server hkps://keyserver.ubuntu.com {FINGERPRINT}
+RUN sq pki link add --cert {FINGERPRINT} --all
+RUN sq verify --message SHA256SUMS
+RUN touch /tmp/done
+
+FROM alpine:latest AS monero
+
+# Require successful executions of the verification steps
+COPY --from=sha256sum /tmp/done /tmp/done
+COPY --from=gnupg /tmp/done /tmp/done
+COPY --from=sequoia /tmp/done /tmp/done
+RUN rm /tmp/done
+
+COPY --from=download monerod .
+"#);
 
   if os == Os::Alpine {
     // Increase the default stack size, as Monero does heavily use its stack
