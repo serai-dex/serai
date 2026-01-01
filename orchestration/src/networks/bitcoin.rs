@@ -28,12 +28,6 @@ RUN git clone --depth 1 https://github.com/bitcoin-core/guix.sigs
 RUN cp guix.sigs/{VERSION}/laanwj/all.SHA256SUMS SHA256SUMS
 RUN cp guix.sigs/{VERSION}/laanwj/all.SHA256SUMS.asc SHA256SUMS.asc
 
-# Verify the integrity of `bitcoin-*.tar.gz` with regards to the `SHA256SUMS` file
-FROM alpine:latest AS sha256sum
-COPY --from=download *.tar.gz SHA256SUMS /
-RUN grep "{file}" SHA256SUMS | sha256sum -c
-RUN touch /tmp/done
-
 # Verify `SHA256SUMS` with GnuPG
 FROM alpine:latest AS gnupg
 RUN apk --no-cache add gnupg
@@ -50,6 +44,16 @@ COPY --from=download SHA256SUMS SHA256SUMS.asc /
 RUN sq network keyserver search --server hkps://keyserver.ubuntu.com {FINGERPRINT}
 RUN sq pki link add --cert {FINGERPRINT} --all
 RUN sq verify --signature-file SHA256SUMS.asc SHA256SUMS
+RUN touch /tmp/done
+
+# Verify the integrity of `bitcoin-*.tar.gz` with regards to the `SHA256SUMS` file
+FROM alpine:latest AS sha256sum
+COPY --from=download *.tar.gz SHA256SUMS /
+# Parse to just the hash for the one file we downloaded
+RUN echo $(grep "{file}" SHA256SUMS) > SHA256SUMS
+# Ensure we successfully grabbed the line in question
+RUN if [ $(wc -l SHA256SUMS) -ne 1 ]; then exit 1; fi
+RUN cat SHA256SUMS | sha256sum -c
 RUN touch /tmp/done
 "#);
 

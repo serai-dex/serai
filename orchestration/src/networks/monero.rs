@@ -34,20 +34,13 @@ RUN tar -xf {file} --strip-components=1
 # Download the binary's hashes
 RUN wget https://raw.githubusercontent.com/monero-project/monero-site/73084c47b2ef05c6abc12755839e993baf87755b/downloads/hashes.txt -O SHA256SUMS
 
-# Verify the integrity of `monero-*.tar.bz2` with regards to the `SHA256SUMS` file
-FROM alpine:latest AS sha256sum
-COPY --from=download *.tar.bz2 SHA256SUMS /
-RUN grep "{file}" SHA256SUMS | sha256sum -c
-RUN touch /tmp/done
-
 # Verify `SHA256SUMS` with GnuPG
 FROM alpine:latest AS gnupg
 RUN apk --no-cache add gnupg
 RUN mkdir ~/.gnupg # Prevent the default config of `use-keyboxd`
 COPY --from=download SHA256SUMS /
 RUN gpg --keyserver hkps://keyserver.ubuntu.com --keyserver-options no-self-sigs-only --receive-keys {FINGERPRINT}
-RUN gpg --verify SHA256SUMS
-RUN touch /tmp/done
+RUN gpg --decrypt SHA256SUMS > SHA256SUMS.gpg
 
 # Verify `SHA256SUMS` with Sequoia PGP
 FROM alpine:latest AS sequoia
@@ -55,15 +48,30 @@ RUN apk --no-cache add sequoia-sq
 COPY --from=download SHA256SUMS /
 RUN sq network keyserver search --server hkps://keyserver.ubuntu.com {FINGERPRINT}
 RUN sq pki link add --cert {FINGERPRINT} --all
-RUN sq verify --message SHA256SUMS
+RUN sq verify --message SHA256SUMS --output SHA256SUMS.sq
+
+# Verify the integrity of `monero-*.tar.bz2` with regards to the `SHA256SUMS` file
+FROM alpine:latest AS sha256sum
+COPY --from=download *.tar.bz2 /
+COPY --from=gnupg SHA256SUMS.gpg /
+COPY --from=sequoia SHA256SUMS.sq /
+
+# Make sure GnuPG and Sequoia agree on the contents of `SHA256SUMS`
+RUN printf "\n" >> SHA256SUMS.sq
+RUN cmp SHA256SUMS.gpg SHA256SUMS.sq
+
+# Parse to just the hash for the one file we downloaded
+RUN grep "{file}" SHA256SUMS.sq > SHA256SUMS
+# Ensure we successfully grabbed the line in question
+RUN if [ $(wc -l SHA256SUMS) -ne 1 ]; then exit 1; fi
+
+RUN cat SHA256SUMS | sha256sum -c
 RUN touch /tmp/done
 
 FROM alpine:latest AS monero
 
 # Require successful executions of the verification steps
 COPY --from=sha256sum /tmp/done /tmp/done
-COPY --from=gnupg /tmp/done /tmp/done
-COPY --from=sequoia /tmp/done /tmp/done
 RUN rm /tmp/done
 
 COPY --from=download monerod .
