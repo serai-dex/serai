@@ -9,6 +9,13 @@ pub use embedded_elliptic_curve_keys::*;
 
 /// A Ristretto public key.
 ///
+/// This does not validate the 32-byte blob is actually a valid public key. It solely associates
+/// the idea this 32-byte blob will be used as a public key.
+///
+/// This is currently used somewhat-interchangeably with [`SeraiAddress`] as they have an identical
+/// wire format. This is not exactly correct however as some accounts may not have a Ristretto key
+/// associated.
+///
 /// This is approximate to [`sp_core::sr25519::Public`] but implements the APIs from `borsh`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
@@ -32,35 +39,67 @@ impl scale::EncodeLike<sp_core::sr25519::Public> for Public {}
 #[cfg(feature = "scale")]
 impl scale::EncodeLike<Public> for sp_core::sr25519::Public {}
 
-/// A sr25519 signature.
+/// A Ristretto (sr25519) signature.
+///
+/// This does not validate the 64-byte blob is actually a valid signature (even syntactically). It
+/// solely associates the idea this 64-byte blob will be used as a signature.
 ///
 /// This is approximate to [`sp_core::sr25519::Signature`] but implements the APIs from `borsh`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-pub struct Signature(pub [u8; 64]);
+pub struct RistrettoSignature(pub [u8; 64]);
 #[cfg(feature = "scale")]
-crate::borsh_as_scale!(Signature);
+crate::borsh_as_scale!(RistrettoSignature);
 
-impl From<schnorrkel::Signature> for Signature {
+impl From<schnorrkel::Signature> for RistrettoSignature {
   fn from(signature: schnorrkel::Signature) -> Self {
     Self(signature.to_bytes())
   }
 }
 
-impl From<sp_core::sr25519::Signature> for Signature {
+impl From<sp_core::sr25519::Signature> for RistrettoSignature {
   fn from(signature: sp_core::sr25519::Signature) -> Self {
     Self(signature.0)
   }
 }
-impl From<Signature> for sp_core::sr25519::Signature {
-  fn from(signature: Signature) -> Self {
+impl From<RistrettoSignature> for sp_core::sr25519::Signature {
+  fn from(signature: RistrettoSignature) -> Self {
     Self::from_raw(signature.0)
   }
 }
 
 #[cfg(feature = "scale")]
-impl scale::EncodeLike<sp_core::sr25519::Signature> for Signature {}
+impl scale::EncodeLike<sp_core::sr25519::Signature> for RistrettoSignature {}
 #[cfg(feature = "scale")]
-impl scale::EncodeLike<Signature> for sp_core::sr25519::Signature {}
+impl scale::EncodeLike<RistrettoSignature> for sp_core::sr25519::Signature {}
+
+/// A general-purpose signature within the Serai protocol.
+///
+/// This is variadic in order to support distinct signature algorithms in the future without
+/// having to break the wire format.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+pub enum Signature {
+  /// A Ristretto (sr25519) signature.
+  Ristretto(RistrettoSignature),
+}
+crate::borsh_as_scale!(Signature);
+
+impl From<schnorrkel::Signature> for Signature {
+  fn from(signature: schnorrkel::Signature) -> Self {
+    Self::Ristretto(signature.into())
+  }
+}
+
+impl From<sp_core::sr25519::Signature> for Signature {
+  fn from(signature: sp_core::sr25519::Signature) -> Self {
+    Self::Ristretto(signature.into())
+  }
+}
+
+impl From<RistrettoSignature> for Signature {
+  fn from(signature: RistrettoSignature) -> Self {
+    Self::Ristretto(signature)
+  }
+}
 
 /// The key pair for a validator set.
 ///
@@ -101,10 +140,11 @@ fn signature() {
 
   let mut signature = [0; 64];
   OsRng.fill_bytes(&mut signature);
-  let signature = Signature(signature);
+  let signature = RistrettoSignature(signature);
 
   assert_eq!(
-    Signature::deserialize_reader(&mut borsh::to_vec(&signature).unwrap().as_slice()).unwrap(),
+    RistrettoSignature::deserialize_reader(&mut borsh::to_vec(&signature).unwrap().as_slice())
+      .unwrap(),
     signature
   );
 
@@ -112,8 +152,26 @@ fn signature() {
   {
     use scale::{Encode as _, DecodeAll as _};
     assert_eq!(borsh::to_vec(&signature).unwrap(), signature.encode());
-    assert_eq!(Signature::decode_all(&mut signature.encode().as_slice()).unwrap(), signature);
+    assert_eq!(
+      RistrettoSignature::decode_all(&mut signature.encode().as_slice()).unwrap(),
+      signature
+    );
     assert_eq!(sp_core::sr25519::Signature::from(signature).encode(), signature.encode());
+  }
+
+  {
+    let signature = Signature::Ristretto(signature);
+    assert_eq!(
+      Signature::deserialize_reader(&mut borsh::to_vec(&signature).unwrap().as_slice()).unwrap(),
+      signature
+    );
+
+    #[cfg(feature = "scale")]
+    {
+      use scale::{Encode as _, DecodeAll as _};
+      assert_eq!(borsh::to_vec(&signature).unwrap(), signature.encode());
+      assert_eq!(Signature::decode_all(&mut signature.encode().as_slice()).unwrap(), signature);
+    }
   }
 }
 

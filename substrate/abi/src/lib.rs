@@ -35,22 +35,18 @@ pub use block::*;
 #[borsh(use_discriminant = true)]
 #[repr(u8)]
 pub enum Call {
-  // The call for the system.
-  // System(system::Call) = 0,
   /// The call for coins.
-  Coins(coins::Call) = 1,
+  Coins(coins::Call) = 0,
   /// The call for validator sets.
-  ValidatorSets(validator_sets::Call) = 2,
+  ValidatorSets(validator_sets::Call) = 1,
   /// The call for signals.
-  Signals(signals::Call) = 3,
+  Signals(signals::Call) = 2,
   /// The call for the DEX.
-  Dex(dex::Call) = 4,
+  Dex(dex::Call) = 3,
   /// The call for genesis liquidity.
-  GenesisLiquidity(genesis_liquidity::Call) = 5,
-  // The call for economic security.
-  // EconomicSecurity = 6,
+  GenesisLiquidity(genesis_liquidity::Call) = 4,
   /// The call for `InInstruction`s.
-  InInstructions(in_instructions::Call) = 7,
+  InInstructions(in_instructions::Call) = 5,
 }
 
 impl From<coins::Call> for Call {
@@ -102,29 +98,20 @@ impl Call {
 #[borsh(use_discriminant = true)]
 #[repr(u8)]
 pub enum Event {
-  /// The event for the system.
-  System(system::Event) = 0,
   /// The event for coins.
-  Coins(coins::Event) = 1,
+  Coins(coins::Event) = 0,
   /// The event for validator sets.
-  ValidatorSets(validator_sets::Event) = 2,
+  ValidatorSets(validator_sets::Event) = 1,
   /// The event for signals.
-  Signals(signals::Event) = 3,
+  Signals(signals::Event) = 2,
   /// The event for the DEX.
-  Dex(dex::Event) = 4,
+  Dex(dex::Event) = 3,
   /// The event for genesis liquidity.
-  GenesisLiquidity(genesis_liquidity::Event) = 5,
-  /// The event for economic security.
-  EconomicSecurity(economic_security::Event) = 6,
+  GenesisLiquidity(genesis_liquidity::Event) = 4,
   /// The event for `InInstruction`s.
-  InInstructions(in_instructions::Event) = 7,
+  InInstructions(in_instructions::Event) = 5,
 }
 
-impl From<system::Event> for Event {
-  fn from(event: system::Event) -> Self {
-    Self::System(event)
-  }
-}
 impl From<coins::Event> for Event {
   fn from(event: coins::Event) -> Self {
     Self::Coins(event)
@@ -148,11 +135,6 @@ impl From<dex::Event> for Event {
 impl From<genesis_liquidity::Event> for Event {
   fn from(event: genesis_liquidity::Event) -> Self {
     Self::GenesisLiquidity(event)
-  }
-}
-impl From<economic_security::Event> for Event {
-  fn from(event: economic_security::Event) -> Self {
-    Self::EconomicSecurity(event)
   }
 }
 impl From<in_instructions::Event> for Event {

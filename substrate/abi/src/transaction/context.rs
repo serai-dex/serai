@@ -49,6 +49,7 @@ pub struct ContextualizedSignature {
 
 #[test]
 fn serialize() {
+  use serai_primitives::crypto::RistrettoSignature;
   use rand_core::{RngCore as _, OsRng};
 
   for _ in 0 .. 100 {
@@ -97,7 +98,7 @@ fn serialize() {
 
     let mut signature = [0; 64];
     OsRng.fill_bytes(&mut signature);
-    let signature = Signature(signature);
+    let signature = Signature::Ristretto(RistrettoSignature(signature));
 
     let signature = ContextualizedSignature { explicit_context: context, signature };
     assert_eq!(

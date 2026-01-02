@@ -2,7 +2,7 @@ use core::{marker::PhantomData, future::Future};
 
 use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
-use serai_primitives::{crypto::Signature, validator_sets::Session};
+use serai_primitives::validator_sets::Session;
 
 use serai_db::{DbTxn as _, Db};
 
@@ -104,11 +104,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SlashReportSignerTask<D, S> {
             // Drain the channel
             let slash_report = SlashReport::try_recv(&mut txn, self.session).unwrap();
             // Send the signature
-            SignedSlashReport::send(
-              &mut txn,
-              self.session,
-              &(slash_report, Signature::from(signature).0),
-            );
+            SignedSlashReport::send(&mut txn, self.session, &(slash_report, signature.into()));
           }
         }
 

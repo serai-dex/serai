@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 use serai_client_serai::{
   abi::primitives::{
     BlockHash,
-    crypto::{Public, Signature, ExternalKey, KeyPair},
+    crypto::{Public, ExternalKey, KeyPair},
     network_id::ExternalNetworkId,
     validator_sets::ExternalValidatorSet,
     address::SeraiAddress,
@@ -291,7 +291,7 @@ async fn handle_network(
             &mut txn,
             ExternalValidatorSet { network, session },
             slash_report,
-            Signature(signature),
+            signature,
           );
         }
       },

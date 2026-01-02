@@ -1,4 +1,7 @@
-use serai_primitives::validator_sets::{Session, SlashReport as SlashReportStruct};
+use serai_primitives::{
+  crypto::Signature,
+  validator_sets::{Session, SlashReport as SlashReportStruct},
+};
 
 use serai_db::{Get, DbTxn, create_db, db_channel};
 
@@ -22,7 +25,7 @@ db_channel! {
     Cosign: (session: Session) -> SignedCosign,
 
     SlashReport: (session: Session) -> SlashReportStruct,
-    SignedSlashReport: (session: Session) -> (SlashReportStruct, [u8; 64]),
+    SignedSlashReport: (session: Session) -> (SlashReportStruct, Signature),
 
     /*
       TODO: Most of these are pointless? We drop all active signing sessions on reboot. It's

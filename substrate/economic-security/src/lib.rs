@@ -2,16 +2,10 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
-#[expect(
-  let_underscore_drop,
-  clippy::cast_possible_truncation,
-  clippy::semicolon_if_nothing_returned
-)]
+#[expect(let_underscore_drop, clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 mod pallet {
-  use serai_abi::{primitives::prelude::*, economic_security::Event};
-
-  use serai_core_pallet::Pallet as Core;
+  use serai_abi::primitives::prelude::*;
 
   /// The configuration of this pallet.
   #[pallet::config]
@@ -31,13 +25,6 @@ mod pallet {
   /// The Pallet struct.
   #[pallet::pallet]
   pub struct Pallet<T>(_);
-
-  impl<T: Config> Pallet<T> {
-    #[expect(unused)]
-    fn emit_event(event: Event) {
-      Core::<T>::emit_event(event)
-    }
-  }
 
   // TODO
   impl<T: Config> serai_abi::economic_security::EconomicSecurity for Pallet<T> {

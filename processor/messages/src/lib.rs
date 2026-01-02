@@ -7,7 +7,7 @@ use dkg::Participant;
 
 use serai_primitives::{
   BlockHash,
-  crypto::KeyPair,
+  crypto::{KeyPair, Signature},
   validator_sets::{Session, SlashReport},
   instructions::{SignedBatch, OutInstructionWithBalance},
 };
@@ -266,7 +266,7 @@ pub mod coordinator {
   pub enum ProcessorMessage {
     CosignedBlock { cosign: SignedCosign },
     SignedBatch { batch: SignedBatch },
-    SignedSlashReport { session: Session, slash_report: SlashReport, signature: [u8; 64] },
+    SignedSlashReport { session: Session, slash_report: SlashReport, signature: Signature },
   }
 }
 

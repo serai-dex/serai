@@ -213,7 +213,7 @@ impl signers::Coordinator for CoordinatorSend {
         messages::coordinator::ProcessorMessage::SignedSlashReport {
           session,
           slash_report,
-          signature: signature.0,
+          signature,
         },
       ));
       Ok(())

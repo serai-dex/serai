@@ -1,6 +1,3 @@
-/// Call/Event for the system.
-pub mod system;
-
 /// Call/Event for coins.
 pub mod coins;
 
@@ -14,7 +11,8 @@ pub mod dex;
 
 /// Call/Event for genesis liquidity.
 pub mod genesis_liquidity;
-/// Event for economic security.
+
+/// Trait for economic security.
 pub mod economic_security;
 
 /// Call/Event for `InInstruction`s.

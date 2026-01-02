@@ -279,11 +279,11 @@ mod pallet {
       match network {
         // For Serai, we include the genesis validators as long as any other set does
         NetworkId::Serai => {
-          ExternalNetworkId::all().all(T::EconomicSecurity::achieved_economic_security)
+          !ExternalNetworkId::all().all(T::EconomicSecurity::achieved_economic_security)
         }
         // For the other networks, we include the genesis validators if they have yet to achieve
         // economic security
-        NetworkId::External(network) => T::EconomicSecurity::achieved_economic_security(network),
+        NetworkId::External(network) => !T::EconomicSecurity::achieved_economic_security(network),
       }
     }
 
@@ -635,8 +635,15 @@ mod pallet {
           }
 
           // Verify the signature with the MuSig key of the signers
-          if !set.musig_key(&signers).verify(&set.set_keys_message(key_pair), &signature.0.into()) {
-            Err(InvalidTransaction::BadProof)?;
+          match signature {
+            Signature::Ristretto(signature) => {
+              if !set
+                .musig_key(&signers)
+                .verify(&set.set_keys_message(key_pair), &signature.0.into())
+              {
+                Err(InvalidTransaction::BadProof)?;
+              }
+            }
           }
 
           ValidTransaction::with_tag_prefix("ValidatorSets")
@@ -652,8 +659,12 @@ mod pallet {
             Err(InvalidTransaction::Stale)?
           };
 
-          if !key.verify(&slashes.report_slashes_message(), &signature.0.into()) {
-            Err(InvalidTransaction::BadProof)?;
+          match signature {
+            Signature::Ristretto(signature) => {
+              if !key.verify(&slashes.report_slashes_message(), &signature.0.into()) {
+                Err(InvalidTransaction::BadProof)?;
+              }
+            }
           }
 
           ValidTransaction::with_tag_prefix("ValidatorSets")

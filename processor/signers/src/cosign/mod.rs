@@ -2,7 +2,7 @@ use core::future::Future;
 
 use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
-use serai_primitives::{crypto::Signature, validator_sets::Session};
+use serai_primitives::{crypto::RistrettoSignature, validator_sets::Session};
 
 use serai_db::{DbTxn as _, Db};
 
@@ -121,7 +121,7 @@ impl<D: Db> ContinuallyRan for CosignerTask<D> {
 
             let cosign = self.current_cosign.take().unwrap();
             LatestCosigned::set(&mut txn, self.session, &cosign.block_number);
-            let cosign = SignedCosign { cosign, signature: Signature::from(signature).0 };
+            let cosign = SignedCosign { cosign, signature: RistrettoSignature::from(signature).0 };
             // Send the cosign
             Cosign::send(&mut txn, self.session, &cosign);
           }

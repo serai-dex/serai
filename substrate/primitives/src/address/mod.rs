@@ -25,6 +25,9 @@ pub use external::*;
 const HUMAN_READABLE_PART: bech32::Hrp = bech32::Hrp::parse_unchecked("sri");
 
 /// The address for an account on Serai.
+///
+/// The 32-byte blob within it is used as an identifier for the account and when verifying
+/// signatures, a commitment to the signing key for the account.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct SeraiAddress(pub [u8; 32]);

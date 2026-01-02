@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use borsh::{io, BorshSerialize, BorshDeserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
-use serai_primitives::{BlockHash, address::SeraiAddress, crypto::Signature, balance::Amount};
+use serai_primitives::{BlockHash, address::SeraiAddress, balance::Amount};
 use crate::Call;
 
 mod context;
@@ -190,16 +190,12 @@ impl Transaction {
       } => {
         // We explicitly don't commit to the signature, allowing improving their representation in
         // the future (e.g. with half-aggregation of Schnorr signatures).
-        //
-        // The usage of `core::mem::size_of` for the length of the serialization is fine here as
-        // this type is defined as a byte array. While theoretically, this could change in the
-        // future, a test ensures this method is accurate.
+        let signature_serialized_len = borsh::object_length(signature).unwrap();
         debug_assert_eq!(
-          &serialization[(serialization.len() - core::mem::size_of::<Signature>()) ..],
+          &serialization[(serialization.len() - signature_serialized_len) ..],
           &borsh::to_vec(signature).unwrap()
         );
-        serialization =
-          &serialization[.. (serialization.len() - core::mem::size_of::<Signature>())];
+        serialization = &serialization[.. (serialization.len() - signature_serialized_len)];
       }
     }
     sp_core::blake2_256(serialization)
@@ -210,7 +206,10 @@ impl Transaction {
 fn serialize() {
   use alloc::vec;
   use rand_core::{RngCore as _, OsRng};
-  use serai_primitives::balance::Balance;
+  use serai_primitives::{
+    balance::Balance,
+    crypto::{RistrettoSignature, Signature},
+  };
 
   let unsigned_call = {
     let values = serai_primitives::genesis_liquidity::GenesisValues {
@@ -220,7 +219,7 @@ fn serialize() {
     };
     let mut signature = [0; 64];
     OsRng.fill_bytes(&mut signature);
-    let signature = Signature(signature);
+    let signature = RistrettoSignature(signature);
     Call::from(crate::genesis_liquidity::Call::oraclize_values { values, signature })
   };
 
@@ -259,7 +258,7 @@ fn serialize() {
   let contextualized_signature = {
     let mut signature = [0; 64];
     OsRng.fill_bytes(&mut signature);
-    let signature = Signature(signature);
+    let signature = Signature::Ristretto(RistrettoSignature(signature));
 
     ContextualizedSignature { explicit_context: explicit_context.clone(), signature }
   };
