@@ -22,7 +22,7 @@ use serai_client_serai::{
       network_id::{ExternalNetworkId, NetworkId},
       validator_sets::{ExternalValidatorSet, KeyShares, Session, ValidatorSet},
     },
-    system, validator_sets,
+    signals, validator_sets,
   },
 };
 
@@ -39,15 +39,12 @@ use crate::{
 fn set_keys_event(set: ExternalValidatorSet) -> Event {
   Event::ValidatorSets(validator_sets::Event::SetKeys {
     set,
-    key_pair: KeyPair(Public([0x01; 32]), ExternalKey(vec![0x02; 32].try_into().unwrap())),
+    key_pair: KeyPair(Public([0xff; 32]), ExternalKey(vec![0xff; 32].try_into().unwrap())),
   })
 }
 
-fn set_decided_event(set: ValidatorSet, validator: SeraiAddress) -> Event {
-  Event::ValidatorSets(validator_sets::Event::SetDecided {
-    set,
-    validators: vec![(validator, KeyShares::ONE)],
-  })
+fn set_decided_event(set: ValidatorSet, validators: Vec<(SeraiAddress, KeyShares)>) -> Event {
+  Event::ValidatorSets(validator_sets::Event::SetDecided { set, validators })
 }
 
 fn allocation_event(validator: SeraiAddress, network: NetworkId, amount: u64) -> Event {
@@ -114,10 +111,6 @@ impl Default for Serai {
 }
 
 impl Serai {
-  pub(crate) fn new() -> Self {
-    Self::default()
-  }
-
   pub(crate) fn set_latest_finalized_error(&mut self, error: &str) {
     self.latest_finalized_error = Some(error.to_string());
   }
@@ -218,7 +211,7 @@ pub(crate) struct IntendTest {
 
 impl Default for IntendTest {
   fn default() -> Self {
-    Self { serai: Serai::new(), db: MemDb::new() }
+    Self { serai: Serai::default(), db: MemDb::default() }
   }
 }
 
@@ -587,15 +580,15 @@ impl IntendTest {
 }
 
 #[tokio::test]
-async fn intend_returns_false_with_no_blocks() {
+async fn intend_task_returns_false_with_no_blocks() {
   let test = IntendTest::default();
   let mut task = test.into_task();
-  Test::assert_task_run_and_check_progress(&mut task, false).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, false).await;
   test.assert_global_db_is_clear();
 }
 
 #[tokio::test]
-async fn intend_returns_false_with_genesis_block() {
+async fn intend_task_returns_false_with_genesis_block() {
   let mut test = IntendTest::default();
 
   test.serai.make_block(0);
@@ -605,12 +598,12 @@ async fn intend_returns_false_with_genesis_block() {
   // In intend.rs let start_block_number = ScanCosignFrom::get(&self.db).unwrap_or(1);
   // will always default to the 1st block, and without a greater serai.latest_finalized_block_number()
   // there will nothing to iterate, returning false as in "did not progress"
-  Test::assert_task_run_and_check_progress(&mut task, false).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, false).await;
   test.assert_global_db_is_clear_after_block(0u64);
 }
 
 #[tokio::test]
-async fn intend_returns_true_with_linear_blocks() {
+async fn intend_task_returns_true_with_linear_blocks() {
   let mut test = IntendTest::default();
 
   test.serai.make_block(1);
@@ -619,12 +612,12 @@ async fn intend_returns_true_with_linear_blocks() {
 
   let mut task = test.into_task();
 
-  Test::assert_task_run_and_check_progress(&mut task, true).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
   test.assert_task_iterations_with_no_events_ran(1, 3);
 }
 
 #[tokio::test]
-async fn intend_errors_if_chain_is_not_linear() {
+async fn intend_task_errors_if_chain_is_not_linear() {
   let mut test = IntendTest::default();
 
   test.serai.make_block(1);
@@ -652,13 +645,13 @@ async fn intend_errors_if_chain_is_not_linear() {
   let mut task = test.into_task();
 
   // Re-run the task, block 2 properly builds upon block 1
-  Test::assert_task_run_and_check_progress(&mut task, true).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
   // block 1 was already asserted and cleared from queue, assert only block 2 now
   test.assert_task_iteration_per_block_with_no_events_ran(2);
 }
 
 #[tokio::test]
-async fn intend_errors_if_block_not_found() {
+async fn intend_task_errors_if_block_not_found() {
   let mut test = IntendTest::default();
 
   test.serai.make_block(1);
@@ -684,12 +677,12 @@ async fn intend_errors_if_block_not_found() {
   let mut task = test.into_task();
 
   // Re-run the task, block 2 now fetched and processed
-  Test::assert_task_run_and_check_progress(&mut task, true).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
   test.assert_task_iteration_per_block_with_no_events_ran(2);
 }
 
 #[tokio::test]
-async fn intend_handles_rpc_error_on_block_fetch() {
+async fn intend_task_handles_rpc_error_on_block_fetch() {
   let mut test = IntendTest::default();
 
   test.serai.make_block(1);
@@ -711,12 +704,12 @@ async fn intend_handles_rpc_error_on_block_fetch() {
   let mut task = test.into_task();
 
   // Re-run the task, block 2 now fetched and processed
-  Test::assert_task_run_and_check_progress(&mut task, true).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
   test.assert_task_iteration_per_block_with_no_events_ran(2);
 }
 
 #[tokio::test]
-async fn intend_handles_rpc_error_on_events_fetch() {
+async fn intend_task_handles_rpc_error_on_events_fetch() {
   let mut test = IntendTest::default();
 
   test.serai.make_block(1);
@@ -738,12 +731,12 @@ async fn intend_handles_rpc_error_on_events_fetch() {
   let mut task = test.into_task();
 
   // Re-run the task, block 2 now fetched and processed
-  Test::assert_task_run_and_check_progress(&mut task, true).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
   test.assert_task_iteration_per_block_with_no_events_ran(2);
 }
 
 #[tokio::test]
-async fn intend_handles_rpc_error_on_latest_finalized() {
+async fn intend_task_handles_rpc_error_on_latest_finalized() {
   let mut test = IntendTest::default();
 
   test.serai.make_block(1);
@@ -756,12 +749,12 @@ async fn intend_handles_rpc_error_on_latest_finalized() {
 
   let mut task = test.into_task();
 
-  Test::assert_task_run_and_check_progress(&mut task, true).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
   test.assert_task_iteration_per_block_with_no_events_ran(1);
 }
 
 #[tokio::test]
-async fn intend_handles_allocation_events() {
+async fn intend_task_handles_allocation_events() {
   let mut test = IntendTest::default();
 
   let validator1 = SeraiAddress([0x01; 32]);
@@ -783,7 +776,7 @@ async fn intend_handles_allocation_events() {
   test.serai.set_events(block2_hash, events_from_allocations(&allocations_block2));
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_check_progress(&mut task, true).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
 
   let all_allocations: Vec<_> =
     allocations_block1.iter().chain(allocations_block2.iter()).copied().collect();
@@ -796,7 +789,7 @@ async fn intend_handles_allocation_events() {
 }
 
 #[tokio::test]
-async fn intend_handles_allocation_events_overflow() {
+async fn intend_task_handles_allocation_events_overflow() {
   let mut test = IntendTest::default();
 
   let validator = SeraiAddress([0x01; 32]);
@@ -828,34 +821,15 @@ async fn intend_handles_allocation_events_overflow() {
 }
 
 #[tokio::test]
-async fn intend_handles_allocation_events_ignore_serai_network() {
+async fn intend_task_handles_deallocation_without_prior_allocation() {
   let mut test = IntendTest::default();
 
   let validator = SeraiAddress([0x01; 32]);
 
-  let block1_hash = test.serai.make_block(1);
-  // Block 1: Allocation with NetworkId::Serai
-  test.serai.set_events(block1_hash, vec![allocation_event(validator, NetworkId::Serai, 100)]);
-
-  let mut task = test.into_task();
-  Test::assert_task_run_and_check_progress(&mut task, true).await;
-
-  // Verify no stakes were recorded for Serai network (allocations were ignored)
-  // Stakes::get only works with ExternalNetworkId, so we can't directly check Serai
-  // But we can verify the blocks were processed with no notable events
-  test.assert_task_iteration_per_block_with_no_events_ran(1);
-}
-
-#[tokio::test]
-async fn intend_handles_deallocation_without_prior_allocation() {
-  let mut test = IntendTest::default();
-
-  let validator = SeraiAddress([0x01; 32]);
-
-  // Block 1: Deallocate without any prior allocation should error
   let block1_hash = test.serai.make_block(1);
   test.serai.set_events(
     block1_hash,
+    // Deallocate without any prior allocation should error
     vec![deallocation_event(validator, NetworkId::External(ExternalNetworkId::Bitcoin), 100)],
   );
 
@@ -867,7 +841,7 @@ async fn intend_handles_deallocation_without_prior_allocation() {
 }
 
 #[tokio::test]
-async fn intend_handles_deallocation_event() {
+async fn intend_task_handles_deallocation_event() {
   let mut test = IntendTest::default();
 
   let validator = SeraiAddress([0x01; 32]);
@@ -881,29 +855,16 @@ async fn intend_handles_deallocation_event() {
     ],
   );
 
-  // Capture builds_upon after block 1
-  let builds_upon_after_block_1 = test.serai.builds_upon.clone();
-
-  let block2_hash = test.serai.make_block(2);
-  test.serai.set_events(
-    block2_hash,
-    vec![
-      // Deallocate more than remaining (70 left, deallocating 100) should cause underflow error
-      deallocation_event(validator, NetworkId::External(ExternalNetworkId::Bitcoin), 100),
-    ],
-  );
-
   // Create task after all blocks are set up
   let mut task = test.into_task();
-  Test::assert_task_run_and_failed_with(&mut task, "stake underflow").await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
 
-  // Verify block 1 was processed successfully before the error on block 2
   test.assert_stakes_is_expected(ExternalNetworkId::Bitcoin, validator, Some(Amount(70)));
-  test.assert_task_iterations_with_no_events_failed_at(2, &builds_upon_after_block_1);
+  test.assert_task_iteration_per_block_with_no_events_ran(1);
 }
 
 #[tokio::test]
-async fn intend_handles_deallocation_underflow_error() {
+async fn intend_task_handles_deallocation_underflow_error() {
   let mut test = IntendTest::default();
 
   let validator = SeraiAddress([0x01; 32]);
@@ -924,16 +885,513 @@ async fn intend_handles_deallocation_underflow_error() {
 }
 
 #[tokio::test]
-async fn intend_handles_deallocation_events_ignore_serai_network() {
+async fn intend_task_handles_set_decided_event_with_empty_validators() {
+  let mut test = IntendTest::default();
+
+  let set0 = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
+  let vset0 =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(0) };
+
+  let block1_hash = test.serai.make_block(1);
+  test.serai.set_events(block1_hash, vec![set_decided_event(vset0, vec![])]);
+
+  let mut task = test.into_task();
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+
+  // Verify that an empty validators vec results in no validators being stored
+  test.assert_validators_is_expected(set0, None);
+
+  // SetDecided is a HasEvents::No type
+  test.assert_task_iteration_per_block_with_no_events_ran(1);
+}
+
+#[tokio::test]
+async fn intend_task_handles_set_decided_event() {
+  let mut test = IntendTest::default();
+
+  let validator1 = SeraiAddress([0x01; 32]);
+  let validator2 = SeraiAddress([0x02; 32]);
+  let validator3 = SeraiAddress([0x03; 32]);
+
+  let set0_btc = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
+  let vset0_btc =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(0) };
+  let set0_eth = ExternalValidatorSet { network: ExternalNetworkId::Ethereum, session: Session(0) };
+  let vset0_eth =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Ethereum), session: Session(0) };
+
+  // Block 1: SetDecided for Bitcoin
+  let block1_hash = test.serai.make_block(1);
+  test.serai.set_events(
+    block1_hash,
+    vec![set_decided_event(
+      vset0_btc,
+      vec![
+        (validator1, KeyShares::ONE),
+        (validator2, KeyShares::try_from(2).unwrap()),
+        (validator3, KeyShares::try_from(3).unwrap()),
+      ],
+    )],
+  );
+
+  // Block 2: SetDecided for Ethereum with different validators
+  let block2_hash = test.serai.make_block(2);
+  test.serai.set_events(
+    block2_hash,
+    vec![set_decided_event(
+      vset0_eth,
+      vec![
+        (validator1, KeyShares::try_from(2).unwrap()),
+        (validator2, KeyShares::try_from(3).unwrap()),
+      ],
+    )],
+  );
+
+  let mut task = test.into_task();
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+
+  // Verify validators are stored for each set
+  test.assert_validators_is_expected(set0_btc, Some(vec![validator1, validator2, validator3]));
+  test.assert_validators_is_expected(set0_eth, Some(vec![validator1, validator2]));
+
+  // SetDecided is a HasEvents::No type, not HasEvents::Notable neither HasEvents::NonNotable
+  test.assert_task_iterations_with_no_events_ran(1, 2);
+}
+
+#[tokio::test]
+async fn intend_task_handles_set_keys_without_set_decided() {
+  let mut test = IntendTest::default();
+
+  let set0 = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
+
+  // Block 1: SetKeys without prior SetDecided should error
+  let block1_hash = test.serai.make_block(1);
+  test.serai.set_events(block1_hash, vec![set_keys_event(set0)]);
+
+  let mut task = test.into_task();
+  Test::assert_task_run_and_failed_with(&mut task, "set which wasn't decided set keys").await;
+
+  // No state should be recorded since the operation failed
+  test.assert_global_db_is_clear_after_block(1);
+}
+
+#[tokio::test]
+async fn intend_task_handles_set_keys_event() {
+  let mut test = IntendTest::default();
+
+  let validator1 = SeraiAddress([0x01; 32]);
+  let validator2 = SeraiAddress([0x02; 32]);
+
+  let set0 = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
+  let vset0 =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(0) };
+  let set1 = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(1) };
+  let vset1 =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(1) };
+
+  // Block 1: First SetKeys (creates session 0)
+  let block1_hash = test.serai.make_block(1);
+  test.serai.set_events(
+    block1_hash,
+    vec![
+      allocation_event(validator1, NetworkId::External(ExternalNetworkId::Bitcoin), 100),
+      allocation_event(validator2, NetworkId::External(ExternalNetworkId::Bitcoin), 200),
+      set_decided_event(
+        vset0,
+        vec![(validator1, KeyShares::ONE), (validator2, KeyShares::try_from(2).unwrap())],
+      ),
+      set_keys_event(set0),
+    ],
+  );
+
+  // Block 2: Second SetKeys (creates session 1)
+  let block2_hash = test.serai.make_block(2);
+  test.serai.set_events(
+    block2_hash,
+    vec![
+      set_decided_event(
+        vset1,
+        vec![(validator1, KeyShares::try_from(2).unwrap()), (validator2, KeyShares::ONE)],
+      ),
+      set_keys_event(set1),
+    ],
+  );
+
+  let mut task = test.into_task();
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+
+  let expected_set = Set { session: Session(1), key: Public([0xff; 32]), stake: Amount(300) };
+  test.assert_latest_set_is_expected(ExternalNetworkId::Bitcoin, Some(&expected_set));
+
+  test.assert_validators_is_expected(set0, None);
+  test.assert_validators_is_expected(set1, None);
+
+  // Block 1: First notable block (no prior session) -> HasEvents::No
+  let (session0_id, _) = test.assert_task_iteration_per_block_with_notable_events_ran(1, None);
+
+  // Block 2: Second notable block (prior session exists) -> HasEvents::Notable
+  test.assert_task_iteration_per_block_with_notable_events_ran(2, Some(session0_id));
+
+  test.assert_scan_cosign_from_is_expected(3);
+}
+
+#[tokio::test]
+async fn intend_task_handles_set_keys_event_error_if_notable_block_has_no_stake() {
+  let mut test = IntendTest::default();
+
+  let validator1 = SeraiAddress([0x01; 32]);
+  let validator2 = SeraiAddress([0x02; 32]);
+
+  let set0 = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
+  let vset0 =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(0) };
+  let set1 = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(1) };
+  let vset1 =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(1) };
+
+  // Block 1: Normal notable block with allocations
+  let block1_hash = test.serai.make_block(1);
+  test.serai.set_events(
+    block1_hash,
+    vec![
+      allocation_event(validator1, NetworkId::External(ExternalNetworkId::Bitcoin), 100),
+      set_decided_event(vset0, vec![(validator1, KeyShares::ONE)]),
+      set_keys_event(set0),
+    ],
+  );
+
+  // Block 2: SetDecided and SetKeys for new session with validator2 who has no allocations -> 0 stake
+  let block2_hash = test.serai.make_block(2);
+  test.serai.set_events(
+    block2_hash,
+    vec![set_decided_event(vset1, vec![(validator2, KeyShares::ONE)]), set_keys_event(set1)],
+  );
+
+  let mut task = test.into_task();
+  Test::assert_task_run_and_failed_with(&mut task, "had 0 stake").await;
+}
+
+#[tokio::test]
+async fn intend_task_handles_notable_event_errors_with_total_stake_overflow() {
+  let mut test = IntendTest::default();
+
+  let validator1 = SeraiAddress([0x01; 32]);
+  let validator2 = SeraiAddress([0x02; 32]);
+
+  let set0_btc = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
+  let vset0_btc =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(0) };
+  let set0_eth = ExternalValidatorSet { network: ExternalNetworkId::Ethereum, session: Session(0) };
+  let vset0_eth =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Ethereum), session: Session(0) };
+
+  // Block 1: Allocate near-max stake to validator1 on Bitcoin
+  let block1_hash = test.serai.make_block(1);
+  test.serai.set_events(
+    block1_hash,
+    vec![
+      allocation_event(
+        validator1,
+        NetworkId::External(ExternalNetworkId::Bitcoin),
+        u64::MAX - 1000,
+      ),
+      set_decided_event(vset0_btc, vec![(validator1, KeyShares::ONE)]),
+      set_keys_event(set0_btc),
+    ],
+  );
+
+  // Capture builds_upon after block 1
+  let builds_upon_after_block_1 = test.serai.builds_upon.clone();
+
+  // Block 2: Allocate more stake on Ethereum - this should cause total_stake overflow
+  let block2_hash = test.serai.make_block(2);
+  test.serai.set_events(
+    block2_hash,
+    vec![
+      allocation_event(validator2, NetworkId::External(ExternalNetworkId::Ethereum), 2000),
+      set_decided_event(vset0_eth, vec![(validator2, KeyShares::ONE)]),
+      set_keys_event(set0_eth),
+    ],
+  );
+
+  let mut task = test.into_task();
+
+  // Run should fail on block 2 due to total_stake overflow (after successfully processing block 1)
+  Test::assert_task_run_and_failed_with(&mut task, "total stake overflow").await;
+
+  // Verify block 1 was processed successfully before the error on block 2
+  test.assert_stakes_is_expected(
+    ExternalNetworkId::Bitcoin,
+    validator1,
+    Some(Amount(u64::MAX - 1000)),
+  );
+  test.assert_latest_set_is_expected(
+    ExternalNetworkId::Bitcoin,
+    Some(&Set { session: Session(0), key: Public([0xff; 32]), stake: Amount(u64::MAX - 1000) }),
+  );
+  test.assert_task_iterations_with_no_events_failed_at(2, &builds_upon_after_block_1);
+}
+
+#[tokio::test]
+async fn intend_task_handles_burn_with_instruction_events() {
+  let mut test = IntendTest::default();
+
+  let validator1 = SeraiAddress([0x01; 32]);
+  let validator2 = SeraiAddress([0x02; 32]);
+
+  let set0 = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
+  let vset0 =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(0) };
+
+  // Block 1: Create a session (first notable block, treated as No because no prior session)
+  let allocations_block1 =
+    [(validator1, ExternalNetworkId::Bitcoin, 100), (validator2, ExternalNetworkId::Bitcoin, 200)];
+  let block1_hash = test.serai.make_block(1);
+  let mut events = events_from_allocations(&allocations_block1);
+  events.push(set_decided_event(
+    vset0,
+    vec![(validator1, KeyShares::ONE), (validator2, KeyShares::try_from(2).unwrap())],
+  ));
+  events.push(set_keys_event(set0));
+  test.serai.set_events(block1_hash, events);
+
+  // Block 2: Burn event makes block NonNotable (with additional allocations)
+  let allocations_block2 = [(validator1, ExternalNetworkId::Bitcoin, 50)];
+  let block2_hash = test.serai.make_block(2);
+  let mut events2 = events_from_allocations(&allocations_block2);
+  events2.push(burn_with_instruction_event(validator1));
+  test.serai.set_events(block2_hash, events2);
+
+  let mut task = test.into_task();
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+
+  test.assert_stakes_is_expected(ExternalNetworkId::Bitcoin, validator1, Some(Amount(150)));
+  test.assert_stakes_is_expected(ExternalNetworkId::Bitcoin, validator2, Some(Amount(200)));
+
+  // Block 1: First notable block (no prior session, treated as No)
+  test.assert_task_iteration_per_block(1);
+  test
+    .assert_block_events_is_expected(BlockEventData { block_number: 1, has_events: HasEvents::No });
+
+  // Block 2: NonNotable (has burn event, session exists from block 1)
+  test.assert_task_iteration_per_block_with_non_notable_events_ran(2);
+}
+
+#[tokio::test]
+async fn intend_task_handles_ignore_non_validator_sets_events() {
+  let mut test = IntendTest::default();
+
+  let vset0 =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(0) };
+  let vset1 =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Ethereum), session: Session(0) };
+
+  // Block 1: Signals event (outer _ => continue) and AcceptedHandover (inner _ => continue)
+  let block1_hash = test.serai.make_block(1);
+  test.serai.set_events(
+    block1_hash,
+    vec![
+      Event::Signals(signals::Event::NetworkHalted { network: ExternalNetworkId::Bitcoin }),
+      Event::ValidatorSets(validator_sets::Event::AcceptedHandover { set: vset0 }),
+    ],
+  );
+
+  // Block 2: More ignored events on different network
+  let block2_hash = test.serai.make_block(2);
+  test.serai.set_events(
+    block2_hash,
+    vec![
+      Event::Signals(signals::Event::NetworkHalted { network: ExternalNetworkId::Ethereum }),
+      Event::ValidatorSets(validator_sets::Event::AcceptedHandover { set: vset1 }),
+    ],
+  );
+
+  let mut task = test.into_task();
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+
+  // Both blocks have only ignored events -> HasEvents::No
+  test.assert_task_iterations_with_no_events_ran(1, 2);
+}
+
+#[tokio::test]
+async fn intend_task_handles_ignore_non_burn_with_instruction_coins_events() {
   let mut test = IntendTest::default();
 
   let validator = SeraiAddress([0x01; 32]);
 
+  // Block 1: Mint and Transfer events (should be ignored)
   let block1_hash = test.serai.make_block(1);
-  test.serai.set_events(block1_hash, vec![deallocation_event(validator, NetworkId::Serai, 100)]);
+  test.serai.set_events(
+    block1_hash,
+    vec![
+      Event::Coins(coins::Event::Mint {
+        to: validator,
+        coins: Balance { coin: Coin::External(ExternalCoin::Bitcoin), amount: Amount(100) },
+      }),
+      Event::Coins(coins::Event::Transfer {
+        from: validator,
+        to: SeraiAddress([0x02; 32]),
+        coins: Balance { coin: Coin::External(ExternalCoin::Bitcoin), amount: Amount(50) },
+      }),
+    ],
+  );
+
+  // Block 2: Burn event (not BurnWithInstruction, should be ignored)
+  let block2_hash = test.serai.make_block(2);
+  test.serai.set_events(
+    block2_hash,
+    vec![Event::Coins(coins::Event::Burn {
+      from: validator,
+      coins: Balance { coin: Coin::External(ExternalCoin::Bitcoin), amount: Amount(50) },
+    })],
+  );
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_check_progress(&mut task, true).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
 
-  test.assert_task_iteration_per_block_with_no_events_ran(1);
+  // All Coins events except BurnWithInstruction are ignored -> HasEvents::No
+  test.assert_task_iterations_with_no_events_ran(1, 2);
+}
+
+#[tokio::test]
+async fn intend_task_handles_ignores_serai_network_events() {
+  let mut test = IntendTest::default();
+
+  let validator = SeraiAddress([0x01; 32]);
+
+  let vset_serai = ValidatorSet { network: NetworkId::Serai, session: Session(0) };
+
+  let block1_hash = test.serai.make_block(1);
+  test.serai.set_events(
+    block1_hash,
+    vec![
+      allocation_event(validator, NetworkId::Serai, 100),
+      // Can even try a greater deallocation amount, both will be ignored anyway
+      deallocation_event(validator, NetworkId::Serai, 150),
+    ],
+  );
+
+  let block2_hash = test.serai.make_block(2);
+  test.serai.set_events(
+    block2_hash,
+    vec![set_decided_event(vset_serai, vec![(validator, KeyShares::ONE)])],
+  );
+
+  let mut task = test.into_task();
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+
+  test.assert_task_iterations_with_no_events_ran(1, 2);
+}
+
+#[tokio::test]
+async fn intend_task_handles_downgrades_events_when_no_session_available() {
+  let mut test = IntendTest::default();
+
+  let validator1 = SeraiAddress([0x01; 32]);
+  let validator2 = SeraiAddress([0x02; 32]);
+
+  let set0 = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
+  let vset0 =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(0) };
+
+  let block1_hash = test.serai.make_block(1);
+  test.serai.set_events(block1_hash, vec![burn_with_instruction_event(validator1)]);
+
+  let allocations_block2 =
+    [(validator1, ExternalNetworkId::Bitcoin, 100), (validator2, ExternalNetworkId::Bitcoin, 200)];
+  let block2_hash = test.serai.make_block(2);
+  let mut events = events_from_allocations(&allocations_block2);
+  events.push(set_decided_event(
+    vset0,
+    vec![(validator1, KeyShares::ONE), (validator2, KeyShares::try_from(2).unwrap())],
+  ));
+  events.push(set_keys_event(set0));
+  test.serai.set_events(block2_hash, events);
+
+  let block3_hash = test.serai.make_block(3);
+  test.serai.set_events(block3_hash, vec![burn_with_instruction_event(validator2)]);
+
+  let mut task = test.into_task();
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+
+  test.assert_task_iteration_per_block(1);
+  test
+    .assert_block_events_is_expected(BlockEventData { block_number: 1, has_events: HasEvents::No });
+
+  test.assert_task_iteration_per_block(2);
+  test
+    .assert_block_events_is_expected(BlockEventData { block_number: 2, has_events: HasEvents::No });
+
+  test.assert_task_iteration_per_block_with_non_notable_events_ran(3);
+
+  test.assert_scan_cosign_from_is_expected(4);
+}
+
+#[tokio::test]
+async fn intend_task_handles_errors_when_global_session_not_in_database() {
+  use serai_db::Db as _;
+
+  let mut test = IntendTest::default();
+
+  let validator = SeraiAddress([0x01; 32]);
+
+  let fake_session_id = [0xAB; 32];
+  {
+    let mut txn = test.db.txn();
+    LatestGlobalSessionIntended::set(&mut txn, &fake_session_id);
+    txn.commit();
+  }
+
+  let block1_hash = test.serai.make_block(1);
+  test.serai.set_events(block1_hash, vec![burn_with_instruction_event(validator)]);
+
+  let mut task = test.into_task();
+  Test::assert_task_run_and_failed_with(&mut task, "wasn't saved to the database").await;
+
+  test.assert_no_substrate_block_hash(1);
+  test.assert_no_scan_cosign_from();
+  test.assert_no_block_events();
+
+  test.assert_latest_global_session_intended(Some(fake_session_id));
+}
+
+#[tokio::test]
+async fn intend_task_handles_safeguard_prevents_cosigning_with_no_session() {
+  let mut test = IntendTest::default();
+
+  let validator1 = SeraiAddress([0x01; 32]);
+  let validator2 = SeraiAddress([0x02; 32]);
+
+  let block1_hash = test.serai.make_block(1);
+  test.serai.set_events(block1_hash, vec![burn_with_instruction_event(validator1)]);
+
+  let set0 = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
+  let vset0 =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(0) };
+
+  let allocations =
+    [(validator1, ExternalNetworkId::Bitcoin, 100), (validator2, ExternalNetworkId::Bitcoin, 200)];
+  let block2_hash = test.serai.make_block(2);
+  let mut events = events_from_allocations(&allocations);
+  events.push(set_decided_event(vset0, vec![(validator1, KeyShares::ONE)]));
+  events.push(set_keys_event(set0));
+  test.serai.set_events(block2_hash, events);
+
+  let mut task = test.into_task();
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+
+  test.assert_task_iteration_per_block(1);
+  test
+    .assert_block_events_is_expected(BlockEventData { block_number: 1, has_events: HasEvents::No });
+
+  test.assert_task_iteration_per_block(2);
+  test
+    .assert_block_events_is_expected(BlockEventData { block_number: 2, has_events: HasEvents::No });
+
+  assert!(
+    LatestGlobalSessionIntended::get(&test.db).is_some(),
+    "session should have been created by block 2"
+  );
+
+  test.assert_scan_cosign_from_is_expected(3);
 }

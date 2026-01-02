@@ -7,8 +7,15 @@ use serai_task::ContinuallyRan;
 use crate::evaluator::CosignedBlocks;
 
 /// How often callers should broadcast the cosigns flagged for rebroadcasting.
+#[cfg(not(test))]
 pub const BROADCAST_FREQUENCY: Duration = Duration::from_secs(60);
+#[cfg(not(test))]
 const SYNCHRONY_EXPECTATION: Duration = Duration::from_secs(10);
+/// How often callers should broadcast the cosigns flagged for rebroadcasting.
+#[cfg(test)]
+pub const BROADCAST_FREQUENCY: Duration = Duration::from_secs(6);
+#[cfg(test)]
+const SYNCHRONY_EXPECTATION: Duration = Duration::from_secs(1);
 pub(crate) const ACKNOWLEDGEMENT_DELAY: Duration =
   Duration::from_secs(BROADCAST_FREQUENCY.as_secs() + SYNCHRONY_EXPECTATION.as_secs());
 
@@ -37,17 +44,16 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
 
       loop {
         let mut txn = self.db.txn();
-        // Every loop iteration consumes a CosignedBlocks queue message, if successful
-        let cosigned_block = CosignedBlocks::try_recv(&mut txn);
 
-        let Some((block_number, time_evaluated)) = cosigned_block else {
+        // Peek before consuming
+        let Some((block_number, time_evaluated)) = CosignedBlocks::try_recv(&mut txn) else {
           // Queue was empty -> nothing to commit
           drop(txn);
-          // Stop when no blocks in queue
           break;
         };
 
         if block_number == 0u64 {
+          // Clear block from queue
           txn.commit();
           continue;
         }
@@ -55,25 +61,27 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         // If we've already acknowledged a later block, consume and skip (don't wait).
         let already_cosigned = LatestCosignedBlockNumber::get(&txn).unwrap_or(0);
         if block_number <= already_cosigned {
+          // Clear block from queue
           txn.commit();
           continue;
         }
 
         // Calculate when we should mark it as valid, checking for overflow to avoid panic
-        let time_evaluated_duration = Duration::from_secs(time_evaluated);
-        let time_valid =
-          time_evaluated_duration.checked_add(ACKNOWLEDGEMENT_DELAY).ok_or_else(|| {
+        let time_valid = Duration::from_secs(time_evaluated)
+          .checked_add(ACKNOWLEDGEMENT_DELAY)
+          .ok_or_else(|| {
             format!(
-              "time_evaluated ({time_evaluated}) would overflow when adding ACKNOWLEDGEMENT_DELAY",
+              "time_evaluated ({time_evaluated}) would overflow when adding ACKNOWLEDGEMENT_DELAY"
             )
           })?;
         let now = now_timestamp();
 
-        // If the time valid is greater than the current time, sleep until the time valid is reached
         if time_valid > now {
-          // db txn being held and not committed until sleep completed
-          // if a timeout occurs, this block will be restarted on the next iteration
-          tokio::time::sleep(time_valid.saturating_sub(now)).await;
+          // NOT READY YET - don't consume, just return
+          // leave message in queue, check again in next task iteration
+          // simulates sleeping until ready, but continually iterating until ready instead
+          drop(txn);
+          return Ok(made_progress);
         }
 
         LatestCosignedBlockNumber::set(&mut txn, &block_number);

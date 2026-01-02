@@ -9,7 +9,11 @@ use crate::{
   intend::{GlobalSessionsChannel, BlockEventData, BlockEvents},
 };
 
+#[cfg(not(test))]
 pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(60);
+#[cfg(test)]
+pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(6);
+
 const COSIGN_COMMIT_THRESHOLD: u64 = 83;
 
 create_db!(

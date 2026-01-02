@@ -20,17 +20,9 @@ use crate::{
     CosignEvaluatorTask, CosignedBlocks, CurrentlyEvaluatedGlobalSession, REQUEST_COSIGNS_SPACING,
   },
   intend::{BlockEventData, BlockEvents, GlobalSessionsChannel},
-  tests::{IntoTask, Test},
+  tests::{IntoTask, Test, TestRequest},
 };
 use crate::RequestNotableCosigns;
-
-use serai_task::{ContinuallyRan};
-
-#[derive(Clone)]
-pub(crate) struct TestRequest {
-  pub(crate) calls: Arc<AtomicUsize>,
-  pub(crate) should_error: bool,
-}
 
 pub(crate) struct EvaluatorTest {
   pub(crate) db: MemDb,
@@ -48,36 +40,6 @@ impl IntoTask for EvaluatorTest {
   fn into_task(&self) -> Self::Task {
     let (request, _calls) = TestRequest::new(false);
     CosignEvaluatorTask { db: self.db.clone(), request, last_request_for_cosigns: Instant::now() }
-  }
-}
-
-#[derive(Debug)]
-pub(crate) struct RequestError;
-
-impl TestRequest {
-  pub(crate) fn new(should_error: bool) -> (Self, Arc<AtomicUsize>) {
-    let calls = Arc::new(AtomicUsize::new(0));
-    (Self { calls: calls.clone(), should_error }, calls)
-  }
-}
-
-impl RequestNotableCosigns for TestRequest {
-  type Error = RequestError;
-
-  fn request_notable_cosigns(
-    &self,
-    _global_session: [u8; 32],
-  ) -> impl Send + core::future::Future<Output = Result<(), Self::Error>> {
-    let calls = self.calls.clone();
-    let should_error = self.should_error;
-    async move {
-      calls.fetch_add(1, Ordering::SeqCst);
-      if should_error {
-        Err(RequestError)
-      } else {
-        Ok(())
-      }
-    }
   }
 }
 
@@ -167,7 +129,7 @@ impl EvaluatorTest {
 async fn evaluator_task_returns_false_with_no_block_events() {
   let test = EvaluatorTest::default();
   let mut task = test.into_task();
-  Test::assert_task_run_and_check_progress(&mut task, false).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, false).await;
   test.assert_evaluator_db_is_clear();
 }
 
@@ -182,7 +144,7 @@ async fn evaluator_task_returns_false_with_genesis_block() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_check_progress(&mut task, false).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, false).await;
 }
 
 #[tokio::test]
@@ -199,7 +161,7 @@ async fn evaluator_task_processes_blocks_with_no_events() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_check_progress(&mut task, true).await;
+  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
   test.assert_task_iteration_completed(1, 2);
 }
 

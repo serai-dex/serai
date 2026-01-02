@@ -165,16 +165,19 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
                 }
                 validator_sets::Event::SetDecided { set, validators } => {
                   let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
-                  Validators::set(
-                    &mut txn,
-                    set,
-                    &validators.iter().map(|(validator, _key_shares)| *validator).collect(),
-                  );
+                  if validators.len() > 0 {
+                    Validators::set(
+                      &mut txn,
+                      set,
+                      &validators.iter().map(|(validator, _key_shares)| *validator).collect(),
+                    );
+                  }
                 }
                 validator_sets::Event::SetKeys { set, key_pair } => {
                   has_events = HasEvents::Notable;
 
                   let validators = Validators::take(&mut txn, *set)
+                    .filter(|v| !v.is_empty())
                     .ok_or_else(|| "set which wasn't decided set keys".to_string())?;
 
                   let mut stake = 0;
@@ -223,7 +226,7 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
               .ok_or_else(|| format!("total stake overflow: {} + {}", total_stake, stake.0))?;
           }
           if total_stake == 0 {
-            // commit only per block finished otherwise reset progress
+            // commit only per block finished otherwise reset db progress
             drop(txn);
             return Err(format!("cosigning sets for block #{block_number} had 0 stake in total"))?;
           }
@@ -289,7 +292,7 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
         // Mark this block as handled, meaning we should scan from the next block moving on
         ScanCosignFrom::set(&mut txn, &(block_number + 1));
 
-        // All-or-nothing, commit only per block finished otherwise reset progress
+        // All-or-nothing, commit only per block finished otherwise reset db progress
         // avoids partially adding db entries without committing the full expected db additions
         // i.e. saving a SubstrateBlockHash initially but later failing mid-way
         txn.commit();

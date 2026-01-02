@@ -225,6 +225,7 @@ pub struct Cosigning<D: Db> {
   _task_handles: Vec<TaskHandle>,
 }
 impl<D: Db> Cosigning<D> {
+  #[cfg(test)]
   /// Create a cosigning handle using an already-initialized database.
   ///
   /// This does not spawn any background tasks; use `Cosigning::spawn` for the full service.
