@@ -83,7 +83,7 @@ runs:
         sudo apt update -y
         sudo apt upgrade -y
         sudo apt autoremove -y
-        sudo apt clean
+        sudo apt clean -y
       if: runner.os == 'Linux'
 
     - name: Set GitHub CI Environment Variables

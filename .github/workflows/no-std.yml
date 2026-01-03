@@ -40,9 +40,9 @@ jobs:
       - name: Install RISC-V Toolchain
         shell: bash
         run: |
-          sudo apt update
-          sudo apt install -y gcc-riscv64-unknown-elf gcc-multilib
-          rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal --component rust-src
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt install -y gcc-riscv64-unknown-elf gcc-multilib
+          fi
 
       - name: Verify no-std builds
         shell: bash
