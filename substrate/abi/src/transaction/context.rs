@@ -2,13 +2,13 @@ use core::num::NonZero;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::{BlockHash, address::SeraiAddress, balance::Amount, crypto::Signature};
+use serai_primitives::{BlockHash, address::SeraiAddress, balance::Balance, crypto::Signature};
 
 /// Part of the context used to sign with, from the protocol.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct ImplicitContext {
-  /// The genesis hash of the blockchain.
-  pub genesis: BlockHash,
+  /// The hash of the blockchain's genesis block.
+  pub genesis_block_hash: BlockHash,
   /// The ID of the current protocol.
   pub protocol_id: [u8; 32],
 }
@@ -32,10 +32,10 @@ pub struct ExplicitContext {
   /// The signer's nonce.
   pub nonce: u32,
 
-  /// The fee, in SRI, paid to the network for inclusion.
+  /// The fee paid to the network for inclusion.
   ///
   /// This fee is paid regardless of the success of any of the calls.
-  pub fee: Amount,
+  pub fee: Balance,
 }
 
 /// A signature, with context.
@@ -49,18 +49,19 @@ pub struct ContextualizedSignature {
 
 #[test]
 fn serialize() {
-  use serai_primitives::crypto::RistrettoSignature;
+  use alloc::vec::Vec;
   use rand_core::{RngCore as _, OsRng};
+  use serai_primitives::{coin::Coin, balance::Amount, crypto::RistrettoSignature};
 
   for _ in 0 .. 100 {
-    let mut genesis = [0; 32];
-    OsRng.fill_bytes(&mut genesis);
-    let genesis = BlockHash(genesis);
+    let mut genesis_block_hash = [0; 32];
+    OsRng.fill_bytes(&mut genesis_block_hash);
+    let genesis_block_hash = BlockHash(genesis_block_hash);
 
     let mut protocol_id = [0; 32];
     OsRng.fill_bytes(&mut protocol_id);
 
-    let context = ImplicitContext { genesis, protocol_id };
+    let context = ImplicitContext { genesis_block_hash, protocol_id };
 
     assert_eq!(
       ImplicitContext::deserialize_reader(&mut borsh::to_vec(&context).unwrap().as_slice())
@@ -87,7 +88,14 @@ fn serialize() {
     #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
     let nonce = OsRng.next_u64() as u32;
 
-    let fee = Amount(OsRng.next_u64());
+    let fee = {
+      let coin = {
+        let coins = Coin::all().collect::<Vec<_>>();
+        coins[(OsRng.next_u64() as usize) % coins.len()]
+      };
+      let amount = Amount(OsRng.next_u64());
+      Balance { coin, amount }
+    };
 
     let context = ExplicitContext { historic_block, include_by, signer, nonce, fee };
     assert_eq!(

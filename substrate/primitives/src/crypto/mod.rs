@@ -12,10 +12,6 @@ pub use embedded_elliptic_curve_keys::*;
 /// This does not validate the 32-byte blob is actually a valid public key. It solely associates
 /// the idea this 32-byte blob will be used as a public key.
 ///
-/// This is currently used somewhat-interchangeably with [`SeraiAddress`] as they have an identical
-/// wire format. This is not exactly correct however as some accounts may not have a Ristretto key
-/// associated.
-///
 /// This is approximate to [`sp_core::sr25519::Public`] but implements the APIs from `borsh`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
@@ -81,6 +77,7 @@ pub enum Signature {
   /// A Ristretto (sr25519) signature.
   Ristretto(RistrettoSignature),
 }
+#[cfg(feature = "scale")]
 crate::borsh_as_scale!(Signature);
 
 impl From<schnorrkel::Signature> for Signature {
@@ -205,7 +202,7 @@ fn key_pair() {
       let mut public = Public([0; 32]);
       OsRng.fill_bytes(&mut public.0);
       let mut vec =
-        vec![0; usize::try_from(OsRng.next_u64() % u64::from(ExternalKey::MAX_LEN)).unwrap()];
+        vec![0; usize::try_from(OsRng.next_u64() % u64::from(ExternalKey::MAX_SIZE)).unwrap()];
       OsRng.fill_bytes(&mut vec);
       let external_key = ExternalKey(vec.try_into().unwrap());
       KeyPair(public, external_key)

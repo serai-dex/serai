@@ -70,7 +70,7 @@ RUN apk update && apk upgrade && apk --no-cache add musl-dev gcc make cmake git
 
   let debian_mimalloc = format!(
     r#"
-FROM debian:trixie-slim AS mimalloc-debian
+FROM debian:stable-slim AS mimalloc-debian
 
 RUN apt update && apt upgrade -y && apt install -y gcc make cmake git
 

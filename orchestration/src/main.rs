@@ -120,7 +120,7 @@ WORKDIR /home/{user}
 
     Os::Debian => format!(
       r#"
-FROM debian:trixie-slim AS image
+FROM debian:stable-slim AS image
 
 COPY --from=mimalloc-debian libmimalloc.so /usr/lib
 RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
@@ -164,10 +164,10 @@ RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
 
 # Add dev dependencies
-RUN apt install -y pkg-config libclang-dev clang
+RUN apt install -y libclang-dev clang
 
 # Dependencies for the Serai node
-RUN apt install -y make protobuf-compiler
+RUN apt install -y protobuf-compiler
 "#
     }
     Os::Alpine => {
@@ -187,9 +187,6 @@ RUN apk add clang-dev
   .to_owned() +
     &format!(
       r#"
-# Add the wasm toolchain
-RUN rustup target add wasm32v1-none
-
 {prelude}
 
 # Add files for build

@@ -17,7 +17,7 @@ impl Get<BlockLength> for Limits {
       these limits. It implements its own solution to enforce the block size accordingly. That
       makes this setting pointless other than as a declared intent.
     */
-    BlockLength::max(u32::try_from(serai_abi::Block::SIZE_LIMIT).unwrap())
+    BlockLength::max(u32::try_from(serai_abi::Block::MAX_SIZE).unwrap())
   }
 }
 impl Get<BlockWeights> for Limits {

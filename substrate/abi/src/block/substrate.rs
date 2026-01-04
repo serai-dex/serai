@@ -153,6 +153,8 @@ impl From<&SubstrateHeader> for Header {
 }
 
 /// A block, as needed by Substrate.
+///
+/// This _DOES NOT_ enforce [`Block::MAX_SIZE`] on decode.
 #[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, DecodeWithMemTracking)]
 pub struct SubstrateBlock {
   header: SubstrateHeader,
@@ -160,6 +162,7 @@ pub struct SubstrateBlock {
 }
 
 impl From<SubstrateBlock> for Block {
+  /// This may create a potentially over-sized [`Block`].
   fn from(block: SubstrateBlock) -> Self {
     Self { header: (&block.header).into(), transactions: block.transactions }
   }

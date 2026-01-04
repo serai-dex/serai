@@ -11,6 +11,9 @@
 extern crate alloc;
 use alloc::{vec, vec::Vec};
 
+use sp_core::sr25519::Public as SchnorrkelPublic;
+use serai_abi::primitives::address::SeraiAddress;
+
 mod embedded_elliptic_curve_keys;
 use embedded_elliptic_curve_keys::*;
 
@@ -25,7 +28,6 @@ use keys::{KeysStorage, Keys as _};
 
 #[frame_support::pallet]
 mod pallet {
-  use sp_core::sr25519::Public;
   use sp_application_crypto::RuntimePublic as _;
 
   use frame_system::pallet_prelude::*;
@@ -49,7 +51,6 @@ mod pallet {
         Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct, SlashReport,
         DeallocationTimeline,
       },
-      address::SeraiAddress,
     },
     economic_security::EconomicSecurity,
     validator_sets::Event,
@@ -99,7 +100,7 @@ mod pallet {
     Identity,
     ExternalNetworkId,
     Blake2_128Concat,
-    Public,
+    SeraiAddress,
     serai_abi::primitives::crypto::EmbeddedEllipticCurveKeys,
     OptionQuery,
   >;
@@ -144,7 +145,7 @@ mod pallet {
   type TotalAllocatedStake<T: Config> = StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
   #[pallet::storage]
   type DelayedDeallocations<T: Config> =
-    StorageDoubleMap<_, Blake2_128Concat, Public, Identity, Session, Amount, OptionQuery>;
+    StorageDoubleMap<_, Blake2_128Concat, SeraiAddress, Identity, Session, Amount, OptionQuery>;
   #[pallet::storage]
   type PendingSlashReport<T: Config> = StorageMap<_, Identity, ExternalNetworkId, (), OptionQuery>;
 
@@ -165,7 +166,7 @@ mod pallet {
   // Satisfy the `Keys` abstractions
   #[pallet::storage]
   type OraclizationKeys<T: Config> =
-    StorageMap<_, Identity, ExternalValidatorSet, Public, OptionQuery>;
+    StorageMap<_, Identity, ExternalValidatorSet, SchnorrkelPublic, OptionQuery>;
   #[pallet::storage]
   type ExternalKeys<T: Config> =
     StorageMap<_, Identity, ExternalValidatorSet, ExternalKey, OptionQuery>;
@@ -221,19 +222,24 @@ mod pallet {
       );
 
       // Spawn BABE's, GRANDPA's genesis session
+      // This conversion assumes `SeraiAddress == SchnorrkelPublic`
       let genesis_serai_validators = Abstractions::<T>::serai_validators(Session(0));
       Babe::<T>::on_genesis_session(
-        genesis_serai_validators.iter().map(|(validator, key)| (validator, (*key).into())),
+        genesis_serai_validators
+          .iter()
+          .map(|(validator, key)| (validator, SchnorrkelPublic::from(*key).into())),
       );
       Grandpa::<T>::on_genesis_session(
-        genesis_serai_validators.iter().map(|(validator, key)| (validator, (*key).into())),
+        genesis_serai_validators
+          .iter()
+          .map(|(validator, key)| (validator, SchnorrkelPublic::from(*key).into())),
       );
     }
   }
 
   impl<T: Config> Pallet<T> {
     fn account() -> T::AccountId {
-      SeraiAddress::system(b"ValidatorSets").into()
+      SeraiAddress::system(b"ValidatorSets")
     }
 
     /// The current session for a network.
@@ -256,7 +262,7 @@ mod pallet {
     /// If a validator is present within the specified validator set.
     ///
     /// This MAY return `false` for _any_ historic session, even if the validator _was_ present,
-    pub fn in_validator_set(set: ValidatorSet, validator: Public) -> bool {
+    pub fn in_validator_set(set: ValidatorSet, validator: SeraiAddress) -> bool {
       Abstractions::<T>::in_validator_set(set, validator)
     }
 
@@ -265,7 +271,7 @@ mod pallet {
     /// This MAY return `None` for _any_ historic session, even if the validator _was_ present,
     pub fn key_shares_possessed_by_validator(
       set: ValidatorSet,
-      validator: Public,
+      validator: SeraiAddress,
     ) -> Option<KeySharesStruct> {
       Abstractions::<T>::key_shares_possessed_by_validator(set, validator)
     }
@@ -310,11 +316,11 @@ mod pallet {
 
     pub fn selected_validators(
       set: ValidatorSet,
-    ) -> impl Iterator<Item = (Public, KeySharesStruct)> {
+    ) -> impl Iterator<Item = (SeraiAddress, KeySharesStruct)> {
       Abstractions::<T>::selected_validators(set)
     }
 
-    pub fn oraclization_key(set: ExternalValidatorSet) -> Option<Public> {
+    pub fn oraclization_key(set: ExternalValidatorSet) -> Option<SchnorrkelPublic> {
       Abstractions::<T>::oraclization_key(set)
     }
 
@@ -327,7 +333,7 @@ mod pallet {
     }
 
     pub fn embedded_elliptic_curve_keys(
-      validator: Public,
+      validator: SeraiAddress,
       network: ExternalNetworkId,
     ) -> Option<EmbeddedEllipticCurveKeysStruct> {
       <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::embedded_elliptic_curve_keys(
@@ -336,7 +342,7 @@ mod pallet {
     }
 
     fn set_embedded_elliptic_curve_keys_internal(
-      validator: Public,
+      validator: SeraiAddress,
       keys: SignedEmbeddedEllipticCurveKeys,
     ) -> DispatchResult {
       let keys =
@@ -344,10 +350,7 @@ mod pallet {
           validator, keys,
         )
         .map_err(|()| Error::<T>::InvalidEmbeddedEllipticCurveKeys)?;
-      Core::<T>::emit_event(Event::SetEmbeddedEllipticCurveKeys {
-        validator: validator.into(),
-        keys,
-      });
+      Core::<T>::emit_event(Event::SetEmbeddedEllipticCurveKeys { validator, keys });
       Ok(())
     }
 
@@ -377,7 +380,7 @@ mod pallet {
     */
   }
 
-  #[pallet::hooks]
+  #[pallet::hooks] // TODO: This is unsafe usage of `hooks` as defined by `serai-core-pallet`
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_initialize(n: BlockNumberFor<T>) -> Weight {
       if <T as Config>::ShouldEndSession::should_end_session(n) {
@@ -425,8 +428,10 @@ mod pallet {
           let queued_serai_validators =
             Abstractions::<T>::serai_validators(latest_decided_serai_session);
 
-          fn map_babe((validator, key): &(Public, Public)) -> (&Public, pallet_babe::AuthorityId) {
-            (validator, (*key).into())
+          fn map_babe(
+            (validator, key): &(SeraiAddress, SeraiAddress),
+          ) -> (&SeraiAddress, pallet_babe::AuthorityId) {
+            (validator, SchnorrkelPublic::from(*key).into())
           }
           Babe::<T>::on_new_session(
             validators_changed,
@@ -435,9 +440,9 @@ mod pallet {
           );
 
           fn map_grandpa(
-            (validator, key): &(Public, Public),
-          ) -> (&Public, pallet_grandpa::AuthorityId) {
-            (validator, (*key).into())
+            (validator, key): &(SeraiAddress, SeraiAddress),
+          ) -> (&SeraiAddress, pallet_grandpa::AuthorityId) {
+            (validator, SchnorrkelPublic::from(*key).into())
           }
           Grandpa::<T>::on_new_session(
             validators_changed,
@@ -541,12 +546,7 @@ mod pallet {
       let timeline = Abstractions::<T>::decrease_allocation(network, validator, amount)
         .map_err(Error::<T>::DeallocationError)?;
 
-      Core::<T>::emit_event(Event::Deallocation {
-        validator: validator.into(),
-        network,
-        amount,
-        timeline,
-      });
+      Core::<T>::emit_event(Event::Deallocation { validator, network, amount, timeline });
 
       if matches!(timeline, DeallocationTimeline::Immediate) {
         Coins::<T>::transfer_fn(Self::account(), validator, Balance { coin: Coin::Serai, amount })?;
@@ -567,7 +567,7 @@ mod pallet {
         .map_err(Error::<T>::DeallocationError)?;
 
       Core::<T>::emit_event(Event::DelayedDeallocationClaimed {
-        validator: validator.into(),
+        validator,
         deallocation: ValidatorSet { network, session },
       });
 
@@ -622,7 +622,15 @@ mod pallet {
               continue;
             }
 
-            signers.push(participant);
+            /*
+              This assumes `SeraiAddress == SchnorrkelPublic`, again.
+
+              In the future, this will _need_ to be upgraded with post-quantum cryptography. When
+              the time comes, the current expectation of non-interactive aggregation may be in
+              conflict with how `Signature` is also used for transactions. For this reason, this
+              `Signature` type is documented to potentially diverge in the future.
+            */
+            signers.push(SchnorrkelPublic::from(participant));
             signing_key_shares += u16::from(shares);
           }
 
@@ -710,7 +718,7 @@ sp_api::decl_runtime_apis! {
     /// Returns the validator set for a given network.
     fn validators(
       network_id: serai_abi::primitives::network_id::NetworkId,
-    ) -> Vec<serai_abi::primitives::crypto::Public>;
+    ) -> Vec<SeraiAddress>;
 
     /// Returns the external network key for a given external network.
     fn external_network_key(

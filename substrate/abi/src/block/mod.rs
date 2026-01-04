@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use borsh::{BorshSerialize, BorshDeserialize};
+use borsh::{io, BorshSerialize, BorshDeserialize};
 
 use crate::{
   primitives::{BlockHash, merkle::UnbalancedMerkleTree},
@@ -12,10 +12,10 @@ mod substrate;
 #[cfg(feature = "substrate")]
 pub use substrate::*;
 
-/// The tag for a block's header, forming a leaf of the Merkle tree which is `builds_upon`.
-pub const BLOCK_HEADER_LEAF_TAG: u8 = 0;
+/// The tag for a block's hash, forming a leaf of the Merkle tree which is `builds_upon`.
+pub const BLOCK_LEAF_TAG: u8 = 0;
 /// The tag for branch hashes in `builds_upon`.
-pub const BLOCK_HEADER_BRANCH_TAG: u8 = 1;
+pub const BLOCK_BRANCH_TAG: u8 = 1;
 
 /// The tag for a transaction, forming a leaf of the Merkle tree which is the transactions'
 /// commitment.
@@ -54,8 +54,8 @@ pub struct HeaderV1 {
   pub builds_upon: UnbalancedMerkleTree,
   /// The UNIX time in milliseconds this block was created at.
   pub unix_time_in_millis: u64,
-  /// The commitment to the transactions within this block, including the inherent start/end of
-  /// block transactions.
+  /// The commitment to the transactions within this block, including the transaction from the
+  /// start of the block.
   pub transactions_commitment: UnbalancedMerkleTree,
   /// The commitment to the events within this block.
   ///
@@ -124,7 +124,7 @@ impl Header {
 ///
 /// This does not guarantee consistency nor validity. The header's `transactions_root` may not
 /// match the contained transactions, among other ill effects.
-#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize)]
 pub struct Block {
   /// The block's header.
   pub header: Header,
@@ -135,8 +135,19 @@ pub struct Block {
 impl Block {
   /// The size limit for a block.
   ///
-  /// This is not enforced upon deserialization. The caller MUST be careful accordingly.
-  pub const SIZE_LIMIT: usize = 512 * 1024;
+  /// This is enforced upon deserialization but it is still possible to create an over-sized
+  ///  `Block` via directly accessing the `transactions` field.
+  pub const MAX_SIZE: usize = 512 * 1024;
+}
+
+impl BorshDeserialize for Block {
+  fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let mut reader =
+      serai_primitives::sp_borsh::BoundedReader::<_, { Block::MAX_SIZE }>::from(reader);
+    let header = Header::deserialize_reader(&mut reader)?;
+    let transactions = Vec::<Transaction>::deserialize_reader(&mut reader)?;
+    Ok(Block { header, transactions })
+  }
 }
 
 #[test]

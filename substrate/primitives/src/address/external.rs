@@ -14,14 +14,14 @@ pub struct ExternalAddress(
     serialize_with = "crate::borsh_serialize_bounded_vec",
     deserialize_with = "crate::borsh_deserialize_bounded_vec"
   )]
-  BoundedVec<u8, ConstU32<{ ExternalAddress::MAX_LEN }>>,
+  BoundedVec<u8, ConstU32<{ ExternalAddress::MAX_SIZE }>>,
 );
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(ExternalAddress);
 
 impl ExternalAddress {
-  /// The maximum length for an `ExternalAddress`.
-  pub const MAX_LEN: u32 = 512;
+  /// The maximum size for an `ExternalAddress`.
+  pub const MAX_SIZE: u32 = 512;
 }
 
 /// An error when converting from a `Vec`.
@@ -61,7 +61,7 @@ fn serialize() {
   use rand_core::{RngCore as _, OsRng};
 
   // Fuzz test various `ExternalAddress`s
-  for i in 0 .. usize::try_from(ExternalAddress::MAX_LEN).unwrap() {
+  for i in 0 .. usize::try_from(ExternalAddress::MAX_SIZE).unwrap() {
     let mut vec = vec![0; i];
     OsRng.fill_bytes(&mut vec);
     let address = ExternalAddress::try_from(vec)

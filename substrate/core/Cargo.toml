@@ -29,6 +29,10 @@ pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", de
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
 
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+
 [features]
 std = [
   "borsh/std",

@@ -24,6 +24,7 @@ sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-fea
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
 sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["serde"], optional = true }
 frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
 
 serai-primitives = { path = "../primitives", version = "0.1", default-features = false }
 
@@ -40,9 +41,10 @@ std = [
   "scale?/std",
   "sp-runtime?/std",
   "frame-support?/std",
+  "frame-system?/std",
 
   "serai-primitives/std",
 ]
-substrate = ["scale", "sp-runtime", "frame-support", "serai-primitives/scale"]
+substrate = ["scale", "sp-runtime", "frame-support", "frame-system", "serai-primitives/scale"]
 try-runtime = ["sp-runtime/try-runtime"]
 default = ["std"]

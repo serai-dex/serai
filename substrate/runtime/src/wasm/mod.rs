@@ -15,7 +15,8 @@ use serai_abi::{
     constants::*,
     crypto::EmbeddedEllipticCurveKeys,
     network_id::{ExternalNetworkId, NetworkId},
-    balance::Amount,
+    coin::Coin,
+    balance::{Amount, Balance},
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
     address::SeraiAddress,
   },
@@ -29,6 +30,8 @@ mod map;
 /// The configuration for `frame_system`.
 mod system;
 
+// The `pallet_index`es don't matter here as we define our ABI elsewhere, and they don't affect the
+// storage layout. The only important property is the order hooks are executed in.
 #[frame_support::runtime]
 mod runtime {
   use super::*;
@@ -37,51 +40,57 @@ mod runtime {
   #[runtime::derive(RuntimeCall, RuntimeEvent, RuntimeError, RuntimeOrigin)]
   pub struct Runtime;
 
-  #[runtime::pallet_index(0)]
-  pub type System = frame_system::Pallet<Runtime>;
-
-  #[runtime::pallet_index(1)]
-  pub type Core = serai_core_pallet::Pallet<Runtime>;
-
-  #[runtime::pallet_index(2)]
-  pub type Coins = serai_coins_pallet::Pallet<Runtime, CoinsInstance>;
-
-  #[runtime::pallet_index(3)]
-  pub type ValidatorSets = serai_validator_sets_pallet::Pallet<Runtime>;
-
-  #[runtime::pallet_index(4)]
-  pub type Signals = serai_signals_pallet::Pallet<Runtime>;
-
-  #[runtime::pallet_index(5)]
-  pub type LiquidityTokens = serai_coins_pallet::Pallet<Runtime, LiquidityTokensInstance>;
-
-  #[runtime::pallet_index(6)]
-  pub type Dex = serai_dex_pallet::Pallet<Runtime>;
-
-  #[runtime::pallet_index(7)]
-  pub type GenesisLiquidity = serai_genesis_liquidity_pallet::Pallet<Runtime>;
-
-  #[runtime::pallet_index(8)]
-  pub type EconomicSecurity = serai_economic_security_pallet::Pallet<Runtime>;
-
-  #[runtime::pallet_index(9)]
-  pub type InInstructions = serai_in_instructions_pallet::Pallet<Runtime>;
-
-  #[runtime::pallet_index(0x80)]
-  pub type Emissions = serai_emissions_pallet::Pallet<Runtime>;
-
-  #[runtime::pallet_index(0xfd)]
+  #[runtime::pallet_index(0x00)]
   #[runtime::disable_inherent]
   pub type Timestamp = pallet_timestamp::Pallet<Runtime>;
 
-  #[runtime::pallet_index(0xfe)]
+  #[runtime::pallet_index(0x01)]
   pub type Babe = pallet_babe::Pallet<Runtime>;
 
-  #[runtime::pallet_index(0xff)]
+  #[runtime::pallet_index(0x02)]
   pub type Grandpa = pallet_grandpa::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0x40)]
+  pub type System = frame_system::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0x41)]
+  pub type Core = serai_core_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0x42)]
+  pub type Coins = serai_coins_pallet::Pallet<Runtime, CoinsInstance>;
+
+  #[runtime::pallet_index(0x43)]
+  pub type ValidatorSets = serai_validator_sets_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0x44)]
+  pub type Signals = serai_signals_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0x45)]
+  pub type LiquidityTokens = serai_coins_pallet::Pallet<Runtime, LiquidityTokensInstance>;
+
+  #[runtime::pallet_index(0x46)]
+  pub type Dex = serai_dex_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0x47)]
+  pub type GenesisLiquidity = serai_genesis_liquidity_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0x48)]
+  pub type EconomicSecurity = serai_economic_security_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0x49)]
+  pub type InInstructions = serai_in_instructions_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0xc0)]
+  pub type Emissions = serai_emissions_pallet::Pallet<Runtime>;
 }
 
-impl serai_core_pallet::Config for Runtime {}
+impl serai_core_pallet::Config for Runtime {
+  // TODO via build script
+  const PROTOCOL_ID: [u8; 32] = [0; 32];
+  // TODO
+  const SIGNATURE_VERIFICATION_WEIGHT: Weight = Weight::zero();
+  type PreInherents = ();
+}
 
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint; // TODO
@@ -154,7 +163,9 @@ impl pallet_grandpa::Config for Runtime {
   type EquivocationReportSystem = ();
 }
 
-type Executive = frame_executive::Executive<Runtime, Block, Context, Runtime, AllPalletsWithSystem>;
+type ExecutiveContext = PhantomData<(Core, FeeContext)>;
+type Executive =
+  frame_executive::Executive<Runtime, Block, ExecutiveContext, Runtime, AllPalletsWithSystem>;
 
 const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
 pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
@@ -389,7 +400,7 @@ sp_api::impl_runtime_apis! {
     fn events() -> Vec<Vec<Vec<u8>>> {
       Core::events()
     }
-    fn validators(network: NetworkId) -> Vec<serai_abi::primitives::crypto::Public> {
+    fn validators(network: NetworkId) -> Vec<SeraiAddress> {
       // Returning the latest-decided, not latest and active, means the active set
       // may fail to peer find if there isn't sufficient overlap. If a large amount reboot,
       // forcing some validators to successfully peer find in order for the threshold to become
@@ -438,48 +449,21 @@ sp_api::impl_runtime_apis! {
   }
 }
 
-#[derive(Clone, Default, PartialEq, Eq, Debug)]
-struct Context;
-impl serai_abi::TransactionContext for Context {
-  // TODO
-  const SIGNED_WEIGHT: Weight = Weight::zero();
-
-  type RuntimeCall = RuntimeCall;
-
-  /// The implicit context to verify transactions with.
-  fn implicit_context() -> serai_abi::ImplicitContext {
-    serai_abi::ImplicitContext {
-      genesis: System::block_hash(0).into(),
-      protocol_id: [0; 32], // TODO via build script
-    }
-  }
-
-  /// The size of the current block.
-  fn current_block_size(&self) -> usize {
-    let current_block_size = frame_system::AllExtrinsicsLen::<Runtime>::get().unwrap_or(0);
-    usize::try_from(current_block_size).unwrap_or(usize::MAX)
-  }
-
-  /// If a block is present in the blockchain.
-  fn block_is_present_in_blockchain(&self, hash: &serai_abi::primitives::BlockHash) -> bool {
-    serai_core_pallet::Pallet::<Runtime>::block_exists(hash)
-  }
-  /// The time embedded into the current block.
-  fn current_time(&self) -> u64 {
-    pallet_timestamp::Pallet::<Runtime>::get()
-  }
-  /// Get the next nonce for an account.
-  fn next_nonce(&self, signer: &SeraiAddress) -> u32 {
-    serai_core_pallet::Pallet::<Runtime>::next_nonce(signer)
-  }
-  /// If the signer can pay the SRI fee.
+struct FeeContext;
+impl serai_abi::TransactionFeeContext for FeeContext {
+  /// If the signer can pay the fee.
   fn can_pay_fee(
-    &self,
     signer: &SeraiAddress,
-    fee: serai_abi::primitives::balance::Amount,
+    fee: Balance,
   ) -> Result<(), sp_runtime::transaction_validity::TransactionValidityError> {
-    use serai_abi::primitives::coin::Coin;
-    if serai_coins_pallet::Pallet::<Runtime, CoinsInstance>::balance(signer, Coin::Serai) >= fee {
+    if fee.coin != Coin::Serai {
+      Err(sp_runtime::transaction_validity::TransactionValidityError::Invalid(
+        sp_runtime::transaction_validity::InvalidTransaction::Payment,
+      ))?;
+    }
+
+    if serai_coins_pallet::Pallet::<Runtime, CoinsInstance>::balance(signer, fee.coin) >= fee.amount
+    {
       Ok(())
     } else {
       Err(sp_runtime::transaction_validity::TransactionValidityError::Invalid(
@@ -488,31 +472,23 @@ impl serai_abi::TransactionContext for Context {
     }
   }
 
-  fn start_transaction(&self, len: usize) {
-    Core::start_transaction(len);
-  }
-  fn consume_next_nonce(&self, signer: &SeraiAddress) {
-    serai_core_pallet::Pallet::<Runtime>::consume_next_nonce(signer);
-  }
-  /// Have the transaction pay its SRI fee.
+  /// Have the transaction pay its fee.
   fn pay_fee(
-    &self,
     signer: &SeraiAddress,
-    fee: serai_abi::primitives::balance::Amount,
+    fee: Balance,
   ) -> Result<(), sp_runtime::transaction_validity::TransactionValidityError> {
-    use serai_abi::primitives::{coin::*, balance::*};
-    serai_coins_pallet::Pallet::<Runtime, CoinsInstance>::burn(
-      RuntimeOrigin::signed(Public::from(*signer)),
-      Balance { coin: Coin::Serai, amount: fee },
-    )
-    .map_err(|_| {
-      sp_runtime::transaction_validity::TransactionValidityError::Invalid(
+    if fee.coin != Coin::Serai {
+      Err(sp_runtime::transaction_validity::TransactionValidityError::Invalid(
         sp_runtime::transaction_validity::InvalidTransaction::Payment,
-      )
-    })
-  }
-  fn end_transaction(&self, transaction_hash: [u8; 32]) {
-    Core::end_transaction(transaction_hash);
+      ))?;
+    }
+
+    serai_coins_pallet::Pallet::<Runtime, CoinsInstance>::burn(RuntimeOrigin::signed(*signer), fee)
+      .map_err(|_| {
+        sp_runtime::transaction_validity::TransactionValidityError::Invalid(
+          sp_runtime::transaction_validity::InvalidTransaction::Payment,
+        )
+      })
   }
 }
 

@@ -1,6 +1,5 @@
-use sp_core::sr25519::Public;
-
 use serai_abi::primitives::{
+  address::SeraiAddress,
   crypto::{
     EmbeddedEllipticCurveKeys as EmbeddedEllipticCurveKeysStruct, SignedEmbeddedEllipticCurveKeys,
   },
@@ -15,7 +14,7 @@ pub(crate) trait EmbeddedEllipticCurveKeysStorage {
   /// This is opaque and to be exclusively read/write by `EmbeddedEllipticCurveKeys`.
   type EmbeddedEllipticCurveKeys: StorageDoubleMap<
     ExternalNetworkId,
-    Public,
+    SeraiAddress,
     EmbeddedEllipticCurveKeysStruct,
     Query = Option<EmbeddedEllipticCurveKeysStruct>,
   >;
@@ -25,35 +24,37 @@ pub(crate) trait EmbeddedEllipticCurveKeysStorage {
 pub(crate) trait EmbeddedEllipticCurveKeys {
   /// Set a validator's embedded elliptic curve keys for an external network.
   fn set_embedded_elliptic_curve_keys(
-    validator: Public,
+    validator: SeraiAddress,
     keys: SignedEmbeddedEllipticCurveKeys,
   ) -> Result<EmbeddedEllipticCurveKeysStruct, ()>;
 
   /// Get a validator's embedded elliptic curve keys, for an external network.
   fn embedded_elliptic_curve_keys(
-    validator: Public,
+    validator: SeraiAddress,
     network: ExternalNetworkId,
   ) -> Option<EmbeddedEllipticCurveKeysStruct>;
 
   /// Check if a validator still needs to set embedded elliptic curve keys.
-  fn still_needs_to_set_embedded_elliptic_curve_keys(network: NetworkId, validator: Public)
-    -> bool;
+  fn still_needs_to_set_embedded_elliptic_curve_keys(
+    network: NetworkId,
+    validator: SeraiAddress,
+  ) -> bool;
 }
 
 impl<S: EmbeddedEllipticCurveKeysStorage> EmbeddedEllipticCurveKeys for S {
   /// Set a validator's embedded elliptic curve keys, for an external network.
   fn set_embedded_elliptic_curve_keys(
-    validator: Public,
+    validator: SeraiAddress,
     keys: SignedEmbeddedEllipticCurveKeys,
   ) -> Result<EmbeddedEllipticCurveKeysStruct, ()> {
-    let keys = keys.verify(validator.into()).ok_or(())?;
+    let keys = keys.verify(validator).ok_or(())?;
     S::EmbeddedEllipticCurveKeys::insert(keys.network(), validator, keys);
     Ok(keys)
   }
 
   /// Get a validator's embedded elliptic curve keys, for an external network.
   fn embedded_elliptic_curve_keys(
-    validator: Public,
+    validator: SeraiAddress,
     network: ExternalNetworkId,
   ) -> Option<EmbeddedEllipticCurveKeysStruct> {
     S::EmbeddedEllipticCurveKeys::get(network, validator)
@@ -62,7 +63,7 @@ impl<S: EmbeddedEllipticCurveKeysStorage> EmbeddedEllipticCurveKeys for S {
   /// Check if a validator still needs to set embedded elliptic curve keys.
   fn still_needs_to_set_embedded_elliptic_curve_keys(
     network: NetworkId,
-    validator: Public,
+    validator: SeraiAddress,
   ) -> bool {
     match network {
       // Validators never need to set embedded elliptic curve keys for Serai

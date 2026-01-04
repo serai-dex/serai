@@ -58,4 +58,5 @@ std = [
 
   "bech32/std"
 ]
+scale = ["dep:scale", "sp-core/serde"]
 default = ["std"]

@@ -1,13 +1,15 @@
-use sp_core::{Encode as _, sr25519::Public};
+use sp_core::Encode as _;
 
-use serai_abi::primitives::{network_id::NetworkId, balance::Amount, validator_sets::KeyShares};
+use serai_abi::primitives::{
+  address::SeraiAddress, network_id::NetworkId, balance::Amount, validator_sets::KeyShares,
+};
 
 use frame_support::storage::{StorageMap, StoragePrefixedMap};
 
 /// The key to use for the allocations map.
-pub(crate) type AllocationsKey = (NetworkId, Public);
+pub(crate) type AllocationsKey = (NetworkId, SeraiAddress);
 /// The key to use for the sorted allocations map.
-pub(crate) type SortedAllocationsKey = (NetworkId, [u8; 8], [u8; 16], Public);
+pub(crate) type SortedAllocationsKey = (NetworkId, [u8; 8], [u8; 16], SeraiAddress);
 
 /// The storage underlying `Allocations`.
 ///
@@ -51,10 +53,10 @@ pub(crate) trait Allocations {
   /// Set an allocation.
   ///
   /// Returns the validator's prior allocation.
-  fn set_allocation(network: NetworkId, key: Public, amount: Amount) -> Option<Amount>;
+  fn set_allocation(network: NetworkId, key: SeraiAddress, amount: Amount) -> Option<Amount>;
 
   /// Get an allocation.
-  fn get_allocation(network: NetworkId, key: Public) -> Option<Amount>;
+  fn get_allocation(network: NetworkId, key: SeraiAddress) -> Option<Amount>;
 
   /// Iterate over allocations for a network, yielding the highest-valued allocations.
   ///
@@ -65,7 +67,7 @@ pub(crate) trait Allocations {
   fn iter_allocations(
     network: NetworkId,
     minimum_allocation: Amount,
-  ) -> impl Iterator<Item = (Public, Amount)>;
+  ) -> impl Iterator<Item = (SeraiAddress, Amount)>;
 
   /// Calculate the expected key shares for a network, per the current allocations.
   fn expected_key_shares(network: NetworkId, allocation_per_key_share: Amount) -> KeyShares;
@@ -86,9 +88,9 @@ fn reverse_lexicographic_order<const N: usize>(bytes: [u8; N]) -> [u8; N] {
 #[inline]
 fn sorted_allocation_storage_key(
   network: NetworkId,
-  key: Public,
+  key: SeraiAddress,
   amount: Amount,
-) -> (NetworkId, [u8; 8], [u8; 16], Public) {
+) -> (NetworkId, [u8; 8], [u8; 16], SeraiAddress) {
   // We want the accounts with the highest allocations to be first. Since the DB iterates from
   // low to high, we take the BE bytes of the amount (meaning the lowest-value allocations have
   // the lowest lexicographic order and will be first), then reverse their order.
@@ -99,8 +101,8 @@ fn sorted_allocation_storage_key(
 }
 
 // Recover the user's public key from a storage key.
-fn recover_key_from_sorted_allocation_storage_key(key: &[u8]) -> Public {
-  <Public as From<[u8; 32]>>::from(key[(key.len() - 32) ..].try_into().unwrap())
+fn recover_key_from_sorted_allocation_storage_key(key: &[u8]) -> SeraiAddress {
+  SeraiAddress(key[(key.len() - 32) ..].try_into().unwrap())
 }
 
 // Recover the amount allocated from a storage key.
@@ -115,7 +117,7 @@ fn recover_amount_from_sorted_allocation_storage_key(key: &[u8]) -> Amount {
 }
 
 impl<Storage: AllocationsStorage> Allocations for Storage {
-  fn set_allocation(network: NetworkId, key: Public, amount: Amount) -> Option<Amount> {
+  fn set_allocation(network: NetworkId, key: SeraiAddress, amount: Amount) -> Option<Amount> {
     // Remove their existing allocation, if one exists
     let prior = Storage::Allocations::take((network, key));
     if let Some(amount) = prior {
@@ -132,14 +134,14 @@ impl<Storage: AllocationsStorage> Allocations for Storage {
     prior
   }
 
-  fn get_allocation(network: NetworkId, key: Public) -> Option<Amount> {
+  fn get_allocation(network: NetworkId, key: SeraiAddress) -> Option<Amount> {
     Storage::Allocations::get((network, key))
   }
 
   fn iter_allocations(
     network: NetworkId,
     minimum_allocation: Amount,
-  ) -> impl Iterator<Item = (Public, Amount)> {
+  ) -> impl Iterator<Item = (SeraiAddress, Amount)> {
     // Iterate over the sorted allocations for this network
     let mut prefix = Storage::SortedAllocations::final_prefix().to_vec();
     prefix.extend(&network.encode());
@@ -274,7 +276,7 @@ fn test_allocations() {
     let rand_allocation = || {
       let mut key = [0; 32];
       OsRng.fill_bytes(&mut key);
-      let key = Public::from(key);
+      let key = SeraiAddress(key);
       let amount = Amount(OsRng.next_u64());
       (key, amount)
     };

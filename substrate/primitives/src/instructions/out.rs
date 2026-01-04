@@ -32,7 +32,7 @@ fn serialize() {
   for coin in ExternalCoin::all() {
     #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
     let instruction = {
-      let mut address = vec![0; ((OsRng.next_u64() as u32) % ExternalAddress::MAX_LEN) as usize];
+      let mut address = vec![0; ((OsRng.next_u64() as u32) % ExternalAddress::MAX_SIZE) as usize];
       OsRng.fill_bytes(&mut address);
       OutInstruction::Transfer(ExternalAddress::try_from(address).unwrap())
     };

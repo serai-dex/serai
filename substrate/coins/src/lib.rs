@@ -39,13 +39,13 @@ mod pallet {
   use core::any::TypeId;
   use alloc::vec::Vec;
 
-  use sp_core::sr25519::Public;
-
   use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
 
   use serai_abi::{
-    primitives::{coin::*, balance::*, instructions::OutInstructionWithBalance},
+    primitives::{
+      address::SeraiAddress, coin::*, balance::*, instructions::OutInstructionWithBalance,
+    },
     coins::Event,
   };
 
@@ -65,7 +65,7 @@ mod pallet {
   /// The configuration of this pallet.
   #[pallet::config]
   pub trait Config<I: 'static = ()>:
-    frame_system::Config<AccountId = Public> + serai_core_pallet::Config
+    frame_system::Config<AccountId = SeraiAddress> + serai_core_pallet::Config
   {
     /// What decides if mints are allowed.
     type AllowMint: AllowMint;
@@ -110,7 +110,7 @@ mod pallet {
   // Identity is used as the second key's hasher due to Coin being a small, fixed-space ID.
   #[pallet::storage]
   type Balances<T: Config<I>, I: 'static = ()> =
-    StorageDoubleMap<_, Blake2_128Concat, Public, Identity, Coin, Amount, ValueQuery>;
+    StorageDoubleMap<_, Blake2_128Concat, SeraiAddress, Identity, Coin, Amount, ValueQuery>;
 
   /// The total supply of each coin.
   #[pallet::storage]
@@ -139,7 +139,7 @@ mod pallet {
 
     /// Returns the balance of `coin` for the specified account.
     pub fn balance(
-      of: impl scale::EncodeLike<Public>,
+      of: impl scale::EncodeLike<SeraiAddress>,
       coin: impl scale::EncodeLike<Coin>,
     ) -> Amount {
       Balances::<T, I>::get(of, coin)
@@ -150,7 +150,7 @@ mod pallet {
       Supply::<T, I>::get(coin)
     }
 
-    fn decrease_balance_internal(from: Public, balance: Balance) -> Result<(), Error<T, I>> {
+    fn decrease_balance_internal(from: SeraiAddress, balance: Balance) -> Result<(), Error<T, I>> {
       let coin = &balance.coin;
 
       // sub amount from account
@@ -166,7 +166,7 @@ mod pallet {
       Ok(())
     }
 
-    fn increase_balance_internal(to: Public, balance: Balance) -> Result<(), Error<T, I>> {
+    fn increase_balance_internal(to: SeraiAddress, balance: Balance) -> Result<(), Error<T, I>> {
       let coin = &balance.coin;
 
       // add amount to account
@@ -181,7 +181,7 @@ mod pallet {
     /// Mint `balance` to the given account.
     ///
     /// Errors if any amount overflows.
-    pub fn mint(to: Public, coins: Balance) -> Result<(), Error<T, I>> {
+    pub fn mint(to: SeraiAddress, coins: Balance) -> Result<(), Error<T, I>> {
       {
         // If this is an external coin, check if we can mint it
         let external_balance = ExternalBalance::try_from(coins);
@@ -201,12 +201,12 @@ mod pallet {
         (Supply::<T, I>::get(coins.coin) + coins.amount).ok_or(Error::<T, I>::AmountOverflowed)?;
       Supply::<T, I>::set(coins.coin, new_supply);
 
-      Self::emit_event(Event::Mint { to: to.into(), coins });
+      Self::emit_event(Event::Mint { to, coins });
       Ok(())
     }
 
     /// Burn `balance` from the specified account.
-    fn burn_internal(from: Public, balance: Balance) -> Result<(), Error<T, I>> {
+    fn burn_internal(from: SeraiAddress, balance: Balance) -> Result<(), Error<T, I>> {
       // update the balance
       Self::decrease_balance_internal(from, balance)?;
 
@@ -225,18 +225,22 @@ mod pallet {
     }
 
     /// Transfer `coins` from `from` to `to`.
-    pub fn transfer_fn(from: Public, to: Public, coins: Balance) -> Result<(), Error<T, I>> {
+    pub fn transfer_fn(
+      from: SeraiAddress,
+      to: SeraiAddress,
+      coins: Balance,
+    ) -> Result<(), Error<T, I>> {
       // update balances of accounts
       Self::decrease_balance_internal(from, coins)?;
       Self::increase_balance_internal(to, coins)?;
-      Self::emit_event(Event::Transfer { from: from.into(), to: to.into(), coins });
+      Self::emit_event(Event::Transfer { from, to, coins });
       Ok(())
     }
 
     /// Burn `coins` from `from`.
-    pub fn burn_fn(from: Public, coins: Balance) -> Result<(), Error<T, I>> {
+    pub fn burn_fn(from: SeraiAddress, coins: Balance) -> Result<(), Error<T, I>> {
       Self::burn_internal(from, coins)?;
-      Self::emit_event(Event::Burn { from: from.into(), coins });
+      Self::emit_event(Event::Burn { from, coins });
       Ok(())
     }
   }
@@ -246,7 +250,7 @@ mod pallet {
     /// Transfer `balance` from the signer to `to`.
     #[pallet::call_index(0)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
-    pub fn transfer(origin: OriginFor<T>, to: Public, coins: Balance) -> DispatchResult {
+    pub fn transfer(origin: OriginFor<T>, to: SeraiAddress, coins: Balance) -> DispatchResult {
       let from = ensure_signed(origin)?;
       Self::transfer_fn(from, to, coins)?;
       Ok(())
@@ -275,7 +279,7 @@ mod pallet {
 
       let from = ensure_signed(origin)?;
       Self::burn_internal(from, instruction.balance.into())?;
-      Self::emit_event(Event::BurnWithInstruction { from: from.into(), instruction });
+      Self::emit_event(Event::BurnWithInstruction { from, instruction });
       Ok(())
     }
   }

@@ -1,4 +1,4 @@
-use core::{fmt::Debug, time::Duration};
+use core::{marker::PhantomData, fmt::Debug, time::Duration};
 use alloc::vec;
 
 use scale::{Encode, Decode};
@@ -10,8 +10,11 @@ use sp_runtime::{
   Weight,
 };
 use frame_support::dispatch::{DispatchClass, Pays, DispatchInfo, GetDispatchInfo, PostDispatchInfo};
+use frame_system::RawOrigin;
 
-use serai_primitives::crypto::Signature;
+use serai_primitives::{
+  BlockHash, address::SeraiAddress, coin::Coin, balance::Balance, crypto::Signature,
+};
 
 use super::*;
 
@@ -40,15 +43,18 @@ impl ExtrinsicCall for Transaction {
 }
 
 /// The context which transactions are executed in.
-pub trait TransactionContext: 'static + Send + Sync + Clone + PartialEq + Eq + Debug {
-  /// The base weight for a signed transaction.
-  const SIGNED_WEIGHT: Weight;
+///
+/// This does not accept `&self` as it's presumed to interact with a static context, as the
+/// externalities of a Substrate runtime are presented.
+pub trait TransactionContext: Send + Sync {
+  /// The weight for verifying a signed transaction's signature (and context).
+  const SIGNATURE_VERIFICATION_WEIGHT: Weight;
 
   /// The call type for the runtime.
   type RuntimeCall: From<Call>
     + GetDispatchInfo
     + Dispatchable<
-      RuntimeOrigin: From<Option<SeraiAddress>>,
+      RuntimeOrigin: From<RawOrigin<SeraiAddress>>,
       Info = DispatchInfo,
       PostInfo = PostDispatchInfo,
     >;
@@ -57,39 +63,48 @@ pub trait TransactionContext: 'static + Send + Sync + Clone + PartialEq + Eq + D
   fn implicit_context() -> ImplicitContext;
 
   /// The size of the current block.
-  fn current_block_size(&self) -> usize;
+  fn current_block_size() -> usize;
 
   /// If a block is present in the blockchain.
-  fn block_is_present_in_blockchain(&self, hash: &BlockHash) -> bool;
+  fn block_is_present_in_blockchain(hash: &BlockHash) -> bool;
   /// The time embedded into the current block.
-  fn current_time(&self) -> u64;
+  fn current_time() -> u64;
   /// Get the next nonce for an account.
-  fn next_nonce(&self, signer: &SeraiAddress) -> u32;
-  /// If the signer can pay the fee, denominated in SRI.
-  fn can_pay_fee(&self, signer: &SeraiAddress, fee: Amount)
-    -> Result<(), TransactionValidityError>;
+  fn next_nonce(signer: &SeraiAddress) -> u32;
 
   /// Begin execution of a transaction.
-  fn start_transaction(&self, len: usize);
+  fn start_transaction(len: usize);
   /// Consume the next nonce for an account.
   ///
   /// This MUST NOT be called if the next nonce is `u32::MAX`. The function MAY panic in that case.
-  fn consume_next_nonce(&self, signer: &SeraiAddress);
-  /// Have the transaction pay its SRI fee.
-  fn pay_fee(&self, signer: &SeraiAddress, fee: Amount) -> Result<(), TransactionValidityError>;
+  fn consume_next_nonce(signer: &SeraiAddress);
   /// End execution of a transaction.
-  fn end_transaction(&self, transaction_hash: [u8; 32]);
+  fn end_transaction(transaction_hash: [u8; 32]);
+}
+
+/// The context which transaction fees are handled within.
+///
+/// This does not accept `&self` as it's presumed to interact with a static context, as the
+/// externalities of a Substrate runtime are presented.
+pub trait TransactionFeeContext: Send + Sync {
+  /// If the signer can pay the fee.
+  fn can_pay_fee(signer: &SeraiAddress, fee: Balance) -> Result<(), TransactionValidityError>;
+
+  /// Have the transaction pay its fee.
+  fn pay_fee(signer: &SeraiAddress, fee: Balance) -> Result<(), TransactionValidityError>;
 }
 
 /// A transaction with the context necessary to evaluate it within Substrate.
 #[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
-pub struct TransactionWithContext<Context: TransactionContext> {
+pub struct TransactionWithContext<Context: TransactionContext, FeeContext: TransactionFeeContext> {
   transaction: Transaction,
   #[codec(skip)]
-  context: Context,
+  context: PhantomData<(Context, FeeContext)>,
 }
 
-impl<Context: TransactionContext> GetDispatchInfo for TransactionWithContext<Context> {
+impl<Context: TransactionContext, FeeContext: TransactionFeeContext> GetDispatchInfo
+  for TransactionWithContext<Context, FeeContext>
+{
   fn get_dispatch_info(&self) -> DispatchInfo {
     match &self.transaction {
       Transaction::Unsigned { call } => DispatchInfo {
@@ -105,7 +120,7 @@ impl<Context: TransactionContext> GetDispatchInfo for TransactionWithContext<Con
           .cloned()
           .map(|call| Context::RuntimeCall::from(call).get_dispatch_info().call_weight)
           .fold(Weight::zero(), |accum, item| accum + item),
-        extension_weight: Context::SIGNED_WEIGHT,
+        extension_weight: Context::SIGNATURE_VERIFICATION_WEIGHT,
         class: DispatchClass::Normal,
         pays_fee: Pays::Yes,
       },
@@ -114,10 +129,15 @@ impl<Context: TransactionContext> GetDispatchInfo for TransactionWithContext<Con
 }
 
 // Next, we implement all of the `trait`s necessary for `frame_executive`.
-impl<Context: TransactionContext> Checkable<Context> for Transaction {
-  type Checked = TransactionWithContext<Context>;
+impl<Context: TransactionContext, FeeContext: TransactionFeeContext>
+  Checkable<PhantomData<(Context, FeeContext)>> for Transaction
+{
+  type Checked = TransactionWithContext<Context, FeeContext>;
 
-  fn check(self, context: &Context) -> Result<Self::Checked, TransactionValidityError> {
+  fn check(
+    self,
+    context: &PhantomData<(Context, FeeContext)>,
+  ) -> Result<Self::Checked, TransactionValidityError> {
     match &self {
       Transaction::Unsigned { .. } => {}
       Transaction::Signed {
@@ -140,19 +160,21 @@ impl<Context: TransactionContext> Checkable<Context> for Transaction {
       }
     }
 
-    Ok(TransactionWithContext { transaction: self, context: context.clone() })
+    Ok(TransactionWithContext { transaction: self, context: *context })
   }
 
   #[cfg(feature = "try-runtime")]
   fn unchecked_into_checked_i_know_what_i_am_doing(
     self,
-    context: &Context,
+    context: &PhantomData<(Context, FeeContext)>,
   ) -> Result<Self::Checked, TransactionValidityError> {
-    Ok(TransactionWithContext { transaction: self, context: context.clone() })
+    Ok(TransactionWithContext { transaction: self, context: *context })
   }
 }
 
-impl<Context: TransactionContext> TransactionWithContext<Context> {
+impl<Context: TransactionContext, FeeContext: TransactionFeeContext>
+  TransactionWithContext<Context, FeeContext>
+{
   fn validate_except_fee<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
     &self,
     len: usize,
@@ -160,7 +182,7 @@ impl<Context: TransactionContext> TransactionWithContext<Context> {
     mempool_priority_if_signed: u64,
   ) -> TransactionValidity {
     // Check the block size is respected
-    if self.context.current_block_size().saturating_add(len) > crate::Block::SIZE_LIMIT {
+    if Context::current_block_size().saturating_add(len) > crate::Block::MAX_SIZE {
       Err(TransactionValidityError::Invalid(InvalidTransaction::ExhaustsResources))?;
     }
 
@@ -171,13 +193,13 @@ impl<Context: TransactionContext> TransactionWithContext<Context> {
       Transaction::Signed { calls: _, contextualized_signature } => {
         let ExplicitContext { historic_block, include_by, signer, nonce, fee: _ } =
           &contextualized_signature.explicit_context;
-        if !self.context.block_is_present_in_blockchain(historic_block) {
+        if !Context::block_is_present_in_blockchain(historic_block) {
           // We don't know if this is a block from a fundamentally distinct blockchain or a
           // continuation of this blockchain we have yet to sync (which would be `Future`)
           Err(TransactionValidityError::Unknown(UnknownTransaction::CannotLookup))?;
         }
         if let Some(include_by) = *include_by {
-          if self.context.current_time() >= u64::from(include_by) {
+          if Context::current_time() >= u64::from(include_by) {
             // Since this transaction has a time bound which has passed, error
             Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
           }
@@ -186,7 +208,7 @@ impl<Context: TransactionContext> TransactionWithContext<Context> {
         let tag_for_nonce = |nonce| borsh::to_vec(&(signer, nonce)).unwrap();
         let mut requires = vec![];
         {
-          let next_nonce = self.context.next_nonce(signer);
+          let next_nonce = Context::next_nonce(signer);
           // `consume_next_nonce` is allowed to panic if we attempt to consume this nonce, so we
           // invalidate the account at this point (which should be impractical anyways)
           if next_nonce == u32::MAX {
@@ -223,7 +245,9 @@ impl<Context: TransactionContext> TransactionWithContext<Context> {
   }
 }
 
-impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> {
+impl<Context: TransactionContext, FeeContext: TransactionFeeContext> Applyable
+  for TransactionWithContext<Context, FeeContext>
+{
   type Call = Context::RuntimeCall;
 
   fn validate<V: ValidateUnsigned<Call = Context::RuntimeCall>>(
@@ -242,12 +266,21 @@ impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> 
         contextualized_signature:
           ContextualizedSignature { explicit_context: ExplicitContext { signer, fee, .. }, .. },
       } => {
-        self.context.can_pay_fee(signer, *fee)?;
+        FeeContext::can_pay_fee(signer, *fee)?;
 
-        // Prioritize transactions by their fees
+        /*
+          Prioritize transactions by their fees.
+
+          This ignores non-SRI fees as non-SRI fees have no defined value at this time and are
+          expected to be rejected by the runtime. The choice to define `fee` as a `Balance`,
+          allowing the user to specify a `coin`, is intended to allow upgrading the runtime in the
+          future (to allow paying a fee with _any_ `coin`) _without_ breaking the wire format.
+
+          This is not implemented at this time though.
+        */
         {
-          let fee = fee.0;
-          Weight::from_all(fee).checked_div_per_component(&info.call_weight).unwrap_or(0)
+          let amount = if fee.coin == Coin::Serai { fee.amount.0 } else { 0 };
+          Weight::from_all(amount).checked_div_per_component(&info.call_weight).unwrap_or(0)
         }
       }
     };
@@ -276,7 +309,7 @@ impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> 
     }
 
     // Start the transaction
-    self.context.start_transaction(len);
+    Context::start_transaction(len);
 
     let transaction_hash = self.transaction.hash();
 
@@ -284,7 +317,7 @@ impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> 
       Transaction::Unsigned { call } => {
         let call = Context::RuntimeCall::from(call.0);
         V::pre_dispatch(&call)?;
-        match call.dispatch(None.into()) {
+        match call.dispatch(RawOrigin::None.into()) {
           Ok(res) => Ok(Ok(res)),
           // Unsigned transactions should only be included if valid in all regards
           Err(_err) => Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(0))),
@@ -296,21 +329,21 @@ impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> 
           ContextualizedSignature { explicit_context: ExplicitContext { signer, fee, .. }, .. },
       } => {
         // Consume the signer's next nonce
-        self.context.consume_next_nonce(&signer);
+        Context::consume_next_nonce(&signer);
         // Pay the fee
-        self.context.pay_fee(&signer, fee)?;
+        FeeContext::pay_fee(&signer, fee)?;
 
         /*
           The `actual_weight` is compared to the total weight from the `DispatchInfo`, not the call
           weight alone. Accordingly, we need to include the base weight for a signed transaction
           here.
         */
-        let mut actual_weight = Context::SIGNED_WEIGHT;
+        let mut actual_weight = Context::SIGNATURE_VERIFICATION_WEIGHT;
         let _res = frame_support::storage::transactional::with_storage_layer(|| {
           for call in calls.0 {
             let call = Context::RuntimeCall::from(call);
-            actual_weight += call.get_dispatch_info().call_weight;
-            match call.dispatch(Some(signer).into()) {
+            actual_weight = actual_weight.saturating_add(call.get_dispatch_info().call_weight);
+            match call.dispatch(RawOrigin::Signed(signer).into()) {
               Ok(_res) => {}
               // Because this call errored, don't continue and revert all prior calls
               Err(e) => return Err(e),
@@ -337,7 +370,7 @@ impl<Context: TransactionContext> Applyable for TransactionWithContext<Context> 
     };
 
     // End the transaction
-    self.context.end_transaction(transaction_hash);
+    Context::end_transaction(transaction_hash);
 
     res
   }

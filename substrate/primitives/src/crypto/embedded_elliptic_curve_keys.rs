@@ -16,7 +16,7 @@ use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 use schnorr_signatures::SchnorrSignature;
 
-use crate::{network_id::ExternalNetworkId, crypto::Public};
+use crate::{address::SeraiAddress, network_id::ExternalNetworkId};
 
 /// Identifier for an embedded elliptic curve.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
@@ -132,7 +132,7 @@ impl SignedEmbeddedEllipticCurveKeys {
     }
   }
 
-  fn transcript(&self, validator: Public) -> [u8; 64] {
+  fn transcript(&self, validator: SeraiAddress) -> [u8; 64] {
     let embedwards25519_nonce_commitment_len =
       <<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr::default().as_slice().len();
     let secq256k1_nonce_commitment_len =
@@ -161,7 +161,11 @@ impl SignedEmbeddedEllipticCurveKeys {
   }
 
   /// Verify these key(s)' signature(s), returning the key(s) if valid.
-  pub fn verify(self, validator: Public) -> Option<EmbeddedEllipticCurveKeys> {
+  ///
+  /// This does not require any signature from the validator. The validator is expected to provide
+  /// their signature over these keys when they publish the message (or transaction) declaring
+  /// these keys.
+  pub fn verify(self, validator: SeraiAddress) -> Option<EmbeddedEllipticCurveKeys> {
     let challenge = self.transcript(validator);
 
     // Verify the Schnorr signatures for Embedwards25519
@@ -242,7 +246,7 @@ impl SignedEmbeddedEllipticCurveKeys {
   #[doc(hidden)]
   pub fn bitcoin(
     rng: &mut (impl RngCore + CryptoRng),
-    validator: Public,
+    validator: SeraiAddress,
     embedwards25519: &Zeroizing<<Embedwards25519 as WrappedGroup>::F>,
     secq256k1: &Zeroizing<<Secq256k1 as WrappedGroup>::F>,
   ) -> Self {
@@ -265,7 +269,7 @@ impl SignedEmbeddedEllipticCurveKeys {
   #[doc(hidden)]
   pub fn ethereum(
     rng: &mut (impl RngCore + CryptoRng),
-    validator: Public,
+    validator: SeraiAddress,
     embedwards25519: &Zeroizing<<Embedwards25519 as WrappedGroup>::F>,
     secq256k1: &Zeroizing<<Secq256k1 as WrappedGroup>::F>,
   ) -> Self {
@@ -288,7 +292,7 @@ impl SignedEmbeddedEllipticCurveKeys {
   #[doc(hidden)]
   pub fn monero(
     rng: &mut (impl RngCore + CryptoRng),
-    validator: Public,
+    validator: SeraiAddress,
     embedwards25519: &Zeroizing<<Embedwards25519 as WrappedGroup>::F>,
   ) -> Self {
     let mut em_sig = [0; 64];
@@ -461,7 +465,7 @@ fn serialize() {
     {
       let mut validator = [0; 32];
       OsRng.fill_bytes(&mut validator);
-      let validator = Public(validator);
+      let validator = SeraiAddress(validator);
 
       // `A || m`
       let mut transcript = borsh::to_vec(&(validator, embedded_elliptic_curve_keys)).unwrap();
@@ -493,8 +497,8 @@ fn sign_and_verify() {
   let mut other_validator = validator;
   other_validator[0] ^= 1;
 
-  let validator = Public(validator);
-  let other_validator = Public(other_validator);
+  let validator = SeraiAddress(validator);
+  let other_validator = SeraiAddress(other_validator);
 
   let embedwards25519 = Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng));
   let embedwards25519_pub = (Embedwards25519::generator() * *embedwards25519).to_bytes();
