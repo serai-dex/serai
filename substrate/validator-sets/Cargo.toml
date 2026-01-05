@@ -16,8 +16,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-bitvec = { version = "1", default-features = false, features = ["alloc", "serde"] }
-
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "bit-vec"] }
 
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
@@ -46,8 +44,6 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 
 [features]
 std = [
-  "bitvec/std",
-
   "scale/std",
 
   "sp-core/std",

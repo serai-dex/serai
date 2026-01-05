@@ -1251,7 +1251,6 @@ checksum = "1bc2832c24239b0141d5674bb9174f9d68a8b5b3f2753311927c172ca46f7e9c"
 dependencies = [
  "funty",
  "radium",
- "serde",
  "tap",
  "wyz",
 ]
@@ -7974,7 +7973,6 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 name = "serai-abi"
 version = "0.1.0"
 dependencies = [
- "bitvec",
  "borsh",
  "frame-support",
  "frame-system",
@@ -8059,7 +8057,6 @@ dependencies = [
 name = "serai-client-serai"
 version = "0.1.0"
 dependencies = [
- "bitvec",
  "blake2 0.11.0-rc.3",
  "borsh",
  "core-json-derive",
@@ -8165,7 +8162,6 @@ dependencies = [
 name = "serai-coordinator-substrate"
 version = "0.1.0"
 dependencies = [
- "bitvec",
  "borsh",
  "dkg",
  "futures",
@@ -8257,7 +8253,6 @@ dependencies = [
  "serai-abi",
  "serai-coins-pallet",
  "serai-core-pallet",
- "sp-core",
  "sp-io",
 ]
 
@@ -8938,7 +8933,6 @@ dependencies = [
 name = "serai-validator-sets-pallet"
 version = "0.1.0"
 dependencies = [
- "bitvec",
  "borsh",
  "frame-support",
  "frame-system",

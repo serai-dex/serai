@@ -201,6 +201,7 @@ impl Transaction {
   }
 }
 
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
 #[test]
 fn serialize() {
   use alloc::vec;
@@ -248,7 +249,6 @@ fn serialize() {
     OsRng.fill_bytes(&mut signer);
     let signer = SeraiAddress(signer);
 
-    #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
     let nonce = OsRng.next_u64() as u32;
 
     let fee = {

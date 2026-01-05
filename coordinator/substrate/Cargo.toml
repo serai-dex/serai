@@ -18,8 +18,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-bitvec = { version = "1", default-features = false, features = ["std"] }
-
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
