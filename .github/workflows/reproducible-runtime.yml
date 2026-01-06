@@ -4,13 +4,7 @@ on:
   push:
     branches:
       - develop
-    paths:
-      - "Cargo.lock"
-      - "common/**"
-      - "crypto/**"
-      - "substrate/**"
-      - "orchestration/runtime/**"
-      - "tests/reproducible-runtime/**"
+      - macos-docker-tuning
 
   pull_request:
     paths:
@@ -27,7 +21,7 @@ jobs:
   # Do one run to determine what the hash of the runtime _should_ be
   # Any host is valid for this as they _should_ all give the same result
   source_of_truth:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     outputs:
       hash: ${{ steps.build.outputs.hash }}
     steps:
@@ -69,7 +63,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: [macos-latest, macos-15-intel, windows-latest]
+        os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     needs: source_of_truth
 
