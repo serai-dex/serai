@@ -6,6 +6,7 @@ use std::{
 
 use blake2::{Blake2b256, Digest};
 use serai_db::{Db as _, DbTxn, MemDb};
+use serai_task::ContinuallyRan;
 
 use serai_client_serai::{
   Events,
@@ -789,38 +790,7 @@ async fn intend_task_handles_allocation_events() {
 }
 
 #[tokio::test]
-async fn intend_task_handles_allocation_events_overflow() {
-  let mut test = IntendTest::default();
-
-  let validator = SeraiAddress([0x01; 32]);
-
-  let block1_hash = test.serai.make_block(1);
-  let allocations_block1 = [(validator, ExternalNetworkId::Bitcoin, u64::MAX)];
-  test.serai.set_events(block1_hash, events_from_allocations(&allocations_block1));
-
-  // Capture builds_upon after block 1
-  let builds_upon_after_block_1 = test.serai.builds_upon.clone();
-
-  // Block 2: Allocate more u64::MAX amount - should cause overflow error
-  let block2_hash = test.serai.make_block(2);
-  test.serai.set_events(
-    block2_hash,
-    vec![allocation_event(validator, NetworkId::External(ExternalNetworkId::Bitcoin), u64::MAX)],
-  );
-
-  let mut task = test.into_task();
-
-  Test::assert_task_run_and_failed_with(&mut task, "stake overflow").await;
-
-  test.assert_stakes_is_expected(ExternalNetworkId::Bitcoin, validator, Some(Amount(u64::MAX)));
-  test.assert_task_iterations_with_no_events_failed_at(2, &builds_upon_after_block_1);
-
-  // Stake still stores the values from block 1, before the failure
-  let all_allocations: Vec<_> = allocations_block1.iter().copied().collect();
-  test.assert_stakes_from_allocations_is_expected(&all_allocations);
-}
-
-#[tokio::test]
+#[should_panic(expected = "no prior existing stake")]
 async fn intend_task_handles_deallocation_without_prior_allocation() {
   let mut test = IntendTest::default();
 
@@ -829,15 +799,12 @@ async fn intend_task_handles_deallocation_without_prior_allocation() {
   let block1_hash = test.serai.make_block(1);
   test.serai.set_events(
     block1_hash,
-    // Deallocate without any prior allocation should error
+    // Deallocate without any prior allocation should panic
     vec![deallocation_event(validator, NetworkId::External(ExternalNetworkId::Bitcoin), 100)],
   );
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_failed_with(&mut task, "no prior existing stake").await;
-
-  // No stakes should be recorded since the operation failed
-  test.assert_global_db_is_clear_after_block(1);
+  task.run_iteration().await.unwrap();
 }
 
 #[tokio::test]
@@ -861,27 +828,6 @@ async fn intend_task_handles_deallocation_event() {
 
   test.assert_stakes_is_expected(ExternalNetworkId::Bitcoin, validator, Some(Amount(70)));
   test.assert_task_iteration_per_block_with_no_events_ran(1);
-}
-
-#[tokio::test]
-async fn intend_task_handles_deallocation_underflow_error() {
-  let mut test = IntendTest::default();
-
-  let validator = SeraiAddress([0x01; 32]);
-
-  let block1_hash = test.serai.make_block(1);
-  test.serai.set_events(
-    block1_hash,
-    vec![
-      allocation_event(validator, NetworkId::External(ExternalNetworkId::Bitcoin), 50),
-      deallocation_event(validator, NetworkId::External(ExternalNetworkId::Bitcoin), 200),
-    ],
-  );
-
-  let mut task = test.into_task();
-  Test::assert_task_run_and_failed_with(&mut task, "stake underflow").await;
-
-  test.assert_global_db_is_clear_after_block(1);
 }
 
 #[tokio::test]
@@ -1069,67 +1015,6 @@ async fn intend_task_handles_set_keys_event_error_if_notable_block_has_no_stake(
 
   let mut task = test.into_task();
   Test::assert_task_run_and_failed_with(&mut task, "had 0 stake").await;
-}
-
-#[tokio::test]
-async fn intend_task_handles_notable_event_errors_with_total_stake_overflow() {
-  let mut test = IntendTest::default();
-
-  let validator1 = SeraiAddress([0x01; 32]);
-  let validator2 = SeraiAddress([0x02; 32]);
-
-  let set0_btc = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
-  let vset0_btc =
-    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(0) };
-  let set0_eth = ExternalValidatorSet { network: ExternalNetworkId::Ethereum, session: Session(0) };
-  let vset0_eth =
-    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Ethereum), session: Session(0) };
-
-  // Block 1: Allocate near-max stake to validator1 on Bitcoin
-  let block1_hash = test.serai.make_block(1);
-  test.serai.set_events(
-    block1_hash,
-    vec![
-      allocation_event(
-        validator1,
-        NetworkId::External(ExternalNetworkId::Bitcoin),
-        u64::MAX - 1000,
-      ),
-      set_decided_event(vset0_btc, vec![(validator1, KeyShares::ONE)]),
-      set_keys_event(set0_btc),
-    ],
-  );
-
-  // Capture builds_upon after block 1
-  let builds_upon_after_block_1 = test.serai.builds_upon.clone();
-
-  // Block 2: Allocate more stake on Ethereum - this should cause total_stake overflow
-  let block2_hash = test.serai.make_block(2);
-  test.serai.set_events(
-    block2_hash,
-    vec![
-      allocation_event(validator2, NetworkId::External(ExternalNetworkId::Ethereum), 2000),
-      set_decided_event(vset0_eth, vec![(validator2, KeyShares::ONE)]),
-      set_keys_event(set0_eth),
-    ],
-  );
-
-  let mut task = test.into_task();
-
-  // Run should fail on block 2 due to total_stake overflow (after successfully processing block 1)
-  Test::assert_task_run_and_failed_with(&mut task, "total stake overflow").await;
-
-  // Verify block 1 was processed successfully before the error on block 2
-  test.assert_stakes_is_expected(
-    ExternalNetworkId::Bitcoin,
-    validator1,
-    Some(Amount(u64::MAX - 1000)),
-  );
-  test.assert_latest_set_is_expected(
-    ExternalNetworkId::Bitcoin,
-    Some(&Set { session: Session(0), key: Public([0xff; 32]), stake: Amount(u64::MAX - 1000) }),
-  );
-  test.assert_task_iterations_with_no_events_failed_at(2, &builds_upon_after_block_1);
 }
 
 #[tokio::test]

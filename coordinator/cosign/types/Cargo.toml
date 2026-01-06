@@ -17,6 +17,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 [lints]
 workspace = true
 
+[features]
+default = []
+test-helpers = []
+
 [dependencies]
 schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
 

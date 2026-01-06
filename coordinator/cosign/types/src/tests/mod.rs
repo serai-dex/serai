@@ -1,16 +1,45 @@
-use crate::{BlockHash, COSIGN_CONTEXT, Cosign, CosignIntent, ExternalNetworkId, Public, SignedCosign};
+use crate::{COSIGN_CONTEXT, Cosign, SignedCosign};
 
-pub(crate) fn sr25519_fixture() -> schnorrkel::Keypair {
+#[cfg(test)]
+use crate::{BlockHash, CosignIntent, ExternalNetworkId, Public};
+
+fn sr25519_fixture() -> schnorrkel::Keypair {
   schnorrkel::MiniSecretKey::from_bytes(&[0xff; 32])
     .expect("fixed seed should be valid")
     .expand_to_keypair(schnorrkel::ExpansionMode::Ed25519)
 }
 
-pub(crate) fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosign {
+fn sr25519_fixture_from_seed(seed: [u8; 32]) -> schnorrkel::Keypair {
+  schnorrkel::MiniSecretKey::from_bytes(&seed)
+    .expect("seed should be valid")
+    .expand_to_keypair(schnorrkel::ExpansionMode::Ed25519)
+}
+
+fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosign {
   SignedCosign {
     cosign: cosign.clone(),
     signature: keypair.sign_simple(COSIGN_CONTEXT, &cosign.signature_message()).to_bytes(),
   }
+}
+
+/// Returns the public key bytes from the test fixture keypair (seed [0xff; 32])
+pub fn fixture_public_key() -> [u8; 32] {
+  sr25519_fixture().public.to_bytes()
+}
+
+/// Returns the public key bytes for a keypair with the given seed
+pub fn public_key_from_seed(seed: [u8; 32]) -> [u8; 32] {
+  sr25519_fixture_from_seed(seed).public.to_bytes()
+}
+
+/// Creates a SignedCosign using the test fixture keypair (seed [0xff; 32])
+pub fn sign_cosign_with_fixture(cosign: Cosign) -> SignedCosign {
+  sign_cosign(cosign, &sr25519_fixture())
+}
+
+/// Creates a SignedCosign using a keypair derived from the given seed
+pub fn sign_cosign_with_seed(cosign: Cosign, seed: [u8; 32]) -> SignedCosign {
+  sign_cosign(cosign, &sr25519_fixture_from_seed(seed))
 }
 
 #[test]

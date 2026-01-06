@@ -80,8 +80,11 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let start_block_number = ScanCosignFrom::get(&self.db).unwrap_or(1);
-      let latest_block_number =
-        self.serai.latest_finalized_block_number().await.map_err(|e| format!("{e:?}"))?;
+      let latest_block_number = self
+        .serai
+        .latest_finalized_block_number()
+        .await
+        .map_err(|e| format!("RPC error fetching latest finalized block number: {e}"))?;
 
       if latest_block_number < start_block_number {
         return Ok(false);
@@ -94,9 +97,14 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
           .serai
           .block_by_number(block_number)
           .await
-          .map_err(|e| format!("{e}"))?
+          .map_err(|e| format!("RPC error fetching block #{block_number}: {e}"))?
           .ok_or_else(|| "couldn't get block which should've been finalized".to_owned())?;
-        let events = self.serai.events(block.header.hash()).await.map_err(|e| format!("{e}"))?;
+
+        let events = self
+          .serai
+          .events(block.header.hash())
+          .await
+          .map_err(|e| format!("RPC error fetching events for block #{block_number}: {e}"))?;
 
         let mut has_events = HasEvents::No;
 
@@ -136,7 +144,8 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
                 }
                 validator_sets::Event::Deallocation { validator, network, amount, timeline: _ } => {
                   let Ok(network) = ExternalNetworkId::try_from(*network) else { continue };
-                  let existing = Stakes::get(&txn, network, *validator).unwrap_or(Amount(0));
+                  let existing = Stakes::get(&txn, network, *validator)
+                    .expect("unable to deallocate with no prior existing stake");
                   Stakes::set(&mut txn, network, *validator, &Amount(existing.0 - amount.0));
                 }
                 validator_sets::Event::SetDecided { set, validators } => {
@@ -197,7 +206,7 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
             sets.push(set);
             keys.insert(set.network, key);
             stakes.insert(set.network, stake.0);
-            total_stake += total_stake;
+            total_stake += stake.0;
           }
           if total_stake == 0 {
             // Ephemeral error here, do not txn commit but reset progress

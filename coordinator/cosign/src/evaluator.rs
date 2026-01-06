@@ -114,19 +114,10 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
       let mut made_progress = false;
       loop {
         let mut txn = self.db.txn();
-        let events = BlockEvents::try_recv(&mut txn);
-
-        let Some(BlockEventData { block_number, has_events }) = events else {
-          // no block_events from BlockEvents channel, nothing to commit
-          drop(txn);
+        let Some(BlockEventData { block_number, has_events }) = BlockEvents::try_recv(&mut txn)
+        else {
           break;
         };
-
-        if block_number == 0 {
-          // clear BlockEvents queue and continue to next
-          txn.commit();
-          continue;
-        }
 
         // Fetch the global session information
         let (global_session, global_session_info) =
@@ -136,22 +127,18 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
           // Because this had notable events, we require an explicit cosign for this block by a
           // supermajority of the prior block's validator sets
           HasEvents::Notable => {
-            let mut weight_cosigned = 0u64;
-
+            let mut weight_cosigned = 0;
             for set in global_session_info.sets {
               // Check if we have the cosign from this set
               if NetworksLatestCosignedBlock::get(&txn, global_session, set.network)
                 .map(|signed_cosign| signed_cosign.cosign.block_number)
                 == Some(block_number)
               {
-                // Since we have this cosign, add the set's weight to the weight which has cosigned
-                let stake = global_session_info.stakes.get(&set.network).ok_or_else(|| {
-                  "ValidatorSet in global session yet didn't have its stake".to_owned()
-                })?;
-
-                weight_cosigned = weight_cosigned
-                  .checked_add(*stake)
-                  .ok_or_else(|| "weight_cosigned overflow".to_owned())?;
+                // Since have this cosign, add the set's weight to the weight which has cosigned
+                weight_cosigned +=
+                  global_session_info.stakes.get(&set.network).ok_or_else(|| {
+                    "ValidatorSet in global session yet didn't have its stake".to_owned()
+                  })?;
               }
             }
             // Check if the sum weight doesn't cross the required threshold
@@ -165,12 +152,10 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                   .map_err(|e| format!("{e:?}"))?;
               }
 
-              // clear BlockEvents queue and continue to next
-              txn.commit();
               // We return an error so the delay before this task is run again increases
-              return Err(format!(
+              Err(format!(
                 "notable block (#{block_number}) wasn't yet cosigned. this should resolve shortly",
-              ));
+              ))?;
             }
 
             #[cfg(not(coverage))]
@@ -196,7 +181,7 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                 is during the latest global session we've evaluated the start of.
               */
 
-              let mut weight_cosigned = 0u64;
+              let mut weight_cosigned = 0;
               let mut lowest_common_block: Option<u64> = None;
 
               for set in global_session_info.sets {
@@ -208,12 +193,10 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                 };
 
                 if cosign.cosign.block_number >= block_number {
-                  let stake = global_session_info.stakes.get(&set.network).ok_or_else(|| {
-                    "ValidatorSet in global session yet didn't have its stake".to_owned()
-                  })?;
-                  weight_cosigned = weight_cosigned
-                    .checked_add(*stake)
-                    .ok_or_else(|| "weight_cosigned overflow".to_owned())?;
+                  weight_cosigned +=
+                    global_session_info.stakes.get(&set.network).ok_or_else(|| {
+                      "ValidatorSet in global session yet didn't have its stake".to_owned()
+                    })?;
                 }
 
                 // Update the lowest block common to all of these cosigns
@@ -236,12 +219,10 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                     .map_err(|e| format!("{e:?}"))?;
                 }
 
-                // clear BlockEvents queue and continue to next
-                txn.commit();
                 // We return an error so the delay before this task is run again increases
-                return Err(format!(
+                Err(format!(
                   "block (#{block_number}) wasn't yet cosigned. this should resolve shortly",
-                ));
+                ))?;
               }
 
               // Update the cached result for the block we know is cosigned

@@ -2,7 +2,7 @@ use std::time::{Duration, Instant};
 
 use crate::{
   LatestCosignedBlockNumber,
-  delay::{ACKNOWLEDGEMENT_DELAY, CosignDelayTask, now_timestamp},
+  delay::{CosignDelayTask, now_timestamp},
   evaluator::CosignedBlocks,
   tests::{IntoTask, Test, wait_until},
 };
@@ -73,7 +73,7 @@ async fn delay_task_updates_latest_cosigned_block_number_after_ack_delay() {
   }
 
   let task = test.into_task();
-  let handle = Test::spawn_task_continually_running(task, vec![]);
+  let _handle = Test::spawn_task_continually_running(task, vec![]);
 
   test.assert_task_iteration_completes_with(2).await;
 

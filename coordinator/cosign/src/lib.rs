@@ -4,7 +4,11 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{fmt::Debug, future::Future};
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{
+  collections::HashMap,
+  sync::Arc,
+  time::{Duration, Instant},
+};
 
 use serai_client_serai::Serai;
 
@@ -40,6 +44,13 @@ use delay::LatestCosignedBlockNumber;
 #[cfg(test)]
 /// Test helpers and fixtures.
 pub mod tests;
+
+/// The interval at which the cosigning loop runs.
+#[cfg(not(test))]
+pub const COSIGN_LOOP_INTERVAL: Duration = Duration::from_secs(5);
+/// The interval at which the cosigning loop runs (shortened for tests).
+#[cfg(test)]
+pub const COSIGN_LOOP_INTERVAL: Duration = Duration::from_millis(10);
 
 /// Abstraction over the Serai RPC client so tests can inject custom behaviour.
 pub trait SeraiRpc: Clone + Send + Sync + 'static {
@@ -268,7 +279,7 @@ impl<D: Db> Cosigning<D> {
   /// The latest cosigned block number.
   pub fn latest_cosigned_block_number(getter: &impl Get) -> Result<u64, Faulted> {
     if FaultedSession::get(getter).is_some() {
-      return Err(Faulted)?;
+      Err(Faulted)?;
     }
 
     Ok(LatestCosignedBlockNumber::get(getter).unwrap_or(0))
@@ -352,7 +363,7 @@ impl<D: Db> Cosigning<D> {
         NetworksLatestCosignedBlock::get(&self.db, cosign.global_session, network)
       {
         if existing.cosign.block_number >= cosign.block_number {
-          return Err(IntakeCosignError::StaleCosign)?;
+          Err(IntakeCosignError::StaleCosign)?;
         }
       }
     }
@@ -364,7 +375,7 @@ impl<D: Db> Cosigning<D> {
     // Check the cosigned block number is in range to the global session
     if cosign.block_number < global_session.start_block_number {
       // Cosign is for a block predating the global session
-      return Err(IntakeCosignError::BeforeGlobalSessionStart)?;
+      Err(IntakeCosignError::BeforeGlobalSessionStart)?;
     }
     if !faulty {
       // This prevents a malicious validator set, on the same chain, from producing a cosign after
@@ -372,7 +383,7 @@ impl<D: Db> Cosigning<D> {
       if let Some(last_block) = GlobalSessionsLastBlock::get(&self.db, cosign.global_session) {
         if cosign.block_number > last_block {
           // Cosign is for a block after the last block this global session should have signed
-          return Err(IntakeCosignError::AfterGlobalSessionEnd)?;
+          Err(IntakeCosignError::AfterGlobalSessionEnd)?;
         }
       }
     }
@@ -382,7 +393,7 @@ impl<D: Db> Cosigning<D> {
       let key =
         *global_session.keys.get(&network).ok_or(IntakeCosignError::NonParticipatingNetwork)?;
       if !signed_cosign.verify_signature(key) {
-        return Err(IntakeCosignError::InvalidSignature)?;
+        Err(IntakeCosignError::InvalidSignature)?;
       }
     }
 

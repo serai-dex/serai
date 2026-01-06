@@ -5,7 +5,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{BlockHash, crypto::Public, network_id::ExternalNetworkId};
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-helpers"))]
 /// Test helpers and fixtures.
 pub mod tests;
 
