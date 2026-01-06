@@ -1,0 +1,60 @@
+name: minimal-ci
+description: Initializes a minimal CI
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set GitHub CI Environment Variables
+      shell: bash
+      run: |
+        # These tweak the amount of iterations performed in tests as approprtiate for GitHub's CI
+        echo 'GITHUB_CI=true' >> "$GITHUB_ENV"
+        echo RUSTFLAGS="$RUSTFLAGS --cfg github_ci" >> "$GITHUB_ENV"
+        # We always appreciate backtraces in the CI
+        echo 'RUST_BACKTRACE=1' >> "$GITHUB_ENV"
+
+    - name: Remove unused packages
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        # Ensure the repositories are synced
+        sudo apt update -y
+
+        # Actually perform the removals
+        sudo apt remove -y "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
+        sudo apt remove -y "*nodejs*" "*npm*" "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
+        sudo apt remove -y "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
+
+        sudo apt remove -y --allow-remove-essential -f shim-signed *python3*
+        # This removal command requires the prior removals due to unmet dependencies otherwise
+        sudo apt remove -y "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
+
+        # Reinstall python3 as a general dependency of a functional operating system
+        sudo apt install -y python3 --fix-missing
+
+    - name: Remove unused packages
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        (gem uninstall -aIx) || (exit 0)
+        brew uninstall --force "*msbuild*" "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
+        brew uninstall --force "*nodejs*" "*npm*" "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
+        brew uninstall --force "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
+        brew uninstall --force "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
+        brew cleanup
+
+    - name: Update system dependencies
+      shell: bash
+      run: |
+        sudo apt update -y
+        sudo apt upgrade -y
+        sudo apt autoremove -y
+        sudo apt clean -y
+      if: runner.os == 'Linux'
+
+    - name: Update system dependencies
+      shell: bash
+      run: |
+        brew upgrade
+        rm -rf $(brew --cache)
+      if: runner.os == 'macOS'

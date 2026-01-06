@@ -33,8 +33,10 @@ jobs:
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
-      - name: Install Build Dependencies
-        uses: ./.github/actions/build-dependencies
+      - name: Minimal CI
+        uses: ./.github/actions/minimal-ci
+      - name: Install `docker`
+        uses: ./.github/actions/docker
 
       - name: Run Reproducible Runtime tests on the Source of Truth
         id: build
@@ -43,7 +45,7 @@ jobs:
           # Allow the following command to fail
           set +e
           # Capture the output to `stdout.txt`
-          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture > stdout.txt
+          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture | tee stdout.txt
           CODE=$?
           # Print `stdout` for the CI logs, as we captured it to process it, not swallow it
           cat stdout.txt
@@ -74,8 +76,10 @@ jobs:
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
-      - name: Install Build Dependencies
-        uses: ./.github/actions/build-dependencies
+      - name: Minimal CI
+        uses: ./.github/actions/minimal-ci
+      - name: Install `docker`
+        uses: ./.github/actions/docker
 
       - name: Run Reproducible Runtime tests
         env:
@@ -85,7 +89,7 @@ jobs:
           # Allow the following command to fail
           set +e
           # Capture the output to `stdout.txt`
-          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture > stdout.txt
+          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture | tee stdout.txt
           CODE=$?
           # Print `stdout` for the CI logs, as we captured it to process it, not swallow it
           cat stdout.txt

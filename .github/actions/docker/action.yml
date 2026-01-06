@@ -16,7 +16,7 @@ runs:
         sudo apt install -y uidmap
 
     - name: Install rootless Docker (Linux)
-      uses: docker/setup-docker-action@e61617a16c407a86262fb923c35a616ddbe070b3 # 4.6.0
+      uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4 # 4.7.0
       if: runner.os == 'Linux'
       with:
         rootless: true
@@ -37,8 +37,95 @@ runs:
           exit 1
         fi
 
+    # This is notably faster than `-netdev user`, which Lima defaults to
+    - name: Use `vmnet` for QEMU's networking driver
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        # Install QEMU and `socat`, which we use to replicate `user,hostfwd`
+        brew install qemu socat
+
+        # Define a wrapper which replaces the network driver with `vmnet-shared`
+        echo '#!/bin/sh
+
+        # Using `vmnet-shared` requires elevated privileges, so we run with `sudo`
+        QEMU="sudo qemu-system-aarch64"
+
+        # Replace `-netdev user` with `-netdev vmnet-shared`
+        NETDEV=0
+        NETDEV_NEXT=0
+        NETDEV_FWD_FROM=""
+        NETDEV_FWD_TO=""
+        for var in "$@"; do
+          if [ $NETDEV_NEXT -eq 1 ]; then
+            NETDEV_ID=$(printf "%s" "$var" | grep --only-matching ,id=[^,]*)
+            NETDEV_ID=$(printf "%s" "$NETDEV_ID" | grep --only-matching [^=]*$)
+            if [ ! "$NETDEV_ID" = "" ]; then
+              NETDEV=1
+
+              # Translate `dhcpstart`, the first of 16 addresses for DHCP, to `start-address`,
+              # `end-address`, the `vmnet` options for a range of addresses to use for DHCP
+              NETDEV_START=$(printf "%s" "$var" | grep --only-matching ,dhcpstart=[^,]*)
+              NETDEV_START=$(printf "%s" "$NETDEV_START" | grep --only-matching [^=]*$)
+
+              NETDEV_FIRST_THREE=$(printf "%s" "$NETDEV_START" | grep --only-matching ".*\.")
+              NETDEV_END_FOURTH=$(( $(echo $NETDEV_START | grep --only-matching "[0-9]*$") + 16 ))
+              NETDEV_END=$NETDEV_FIRST_THREE$NETDEV_END_FOURTH
+
+              # The observable effects of macOS are that the starting IP is used for the gateway,
+              # with the IPs assigned incrementally after that. So, for the one machine we spawn,
+              # it will be assigned the IP following the gateway
+              NETDEV_FIRST_IP_FOURTH=$(( $(echo $NETDEV_START | grep --only-matching "[0-9]*$") + 1 ))
+              NETDEV_FIRST_IP=$NETDEV_FIRST_THREE$NETDEV_FIRST_IP_FOURTH
+
+              NETDEV_FWD=$(printf "%s" "$var" | grep --only-matching ,hostfwd=[^,]*)
+              NETDEV_FWD=$(printf "%s" "$NETDEV_FWD" | grep --only-matching [^=]*$)
+
+              NETDEV_FWD_FROM=$(printf "%s" "$NETDEV_FWD" | grep --only-matching ^[^-]*)
+
+              NETDEV_FWD_TO_PORT=$(printf "%s" "$NETDEV_FWD" | grep --only-matching [^-]*$)
+              NETDEV_FWD_TO=tcp:$NETDEV_FIRST_IP$NETDEV_FWD_TO_PORT
+              echo "Forwarding from $NETDEV_FWD_FROM to $NETDEV_FWD_TO"
+
+              var="vmnet-shared,id=$NETDEV_ID,start-address=$NETDEV_START,end-address=$NETDEV_END,subnet-mask=255.255.255.0"
+              echo "Using \`-netdev $var\`"
+            fi
+          fi
+          NETDEV_NEXT=0
+
+          if [ "$var" = "-netdev" ]; then
+            NETDEV_NEXT=1
+          fi
+
+          QEMU="$QEMU $var"
+        done
+
+        if [ $NETDEV -eq 0 ]; then
+          $QEMU
+        else
+          $QEMU &
+          QEMU_PID=$!
+
+          # Spawn `socat` to service socket connections for as long as QEMU is running
+          NETDEV_FWD_FROM_PORT=$(printf "%s" "$NETDEV_FWD_FROM" | grep --only-matching [^:]*$)
+          while [ $(kill -0 $QEMU_PID; printf "%i" $?) -eq 0 ]; do
+            sudo socat $NETDEV_FWD_TO,nodelay,keepalive tcp4-listen:$NETDEV_FWD_FROM_PORT,nodelay,keepalive
+            # This presumably means the machine has yet to listen on this port, so we `sleep` as to
+            # not hammer the still-booting VM
+            if [ $? -ne 0 ]; then
+              sleep 10
+            fi
+          done
+        fi
+        ' > ./qemu-system-aarch64-vmnet
+        chmod +x ./qemu-system-aarch64-vmnet
+
+        # Install our wrapper to the same directory as QEMU
+        # This is necessary as Lima assumes firmware files' locations relative to the executable's
+        mv qemu-system-aarch64-vmnet $(which qemu-system-aarch64 | sed s/"\/"[^\/]*$//)
+
     - name: Install Docker (macOS)
-      uses: docker/setup-docker-action@e61617a16c407a86262fb923c35a616ddbe070b3 # 4.6.0
+      uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4 # 4.7.0
       if: runner.os == 'macOS'
       env:
         # m1 chips, as seen in the GitHub CI, don't support nested hardware virtualization.
@@ -49,11 +136,31 @@ runs:
         # We also need `-cpu *` to stop Lima from providing `-cpu host` as:
         # 1) `-cpu host` requires `kvm` or `hvf` (which we don't have)
         # 2) `-cpu host` implies `host-phys-bits=on` which is borked in this environment
-        # From which CPU to actually emulate, we choose what will be the most performant.
+        # We choose `-cpu max` as the most reasonable option.
         #
-        # We accomplish both of these goals with the methodology from
+        # Finally, for performance reasons (running Docker containers with `qemu-system-aarch64` as
+        # our containerization solution, which then executes x86-64 binaries), we apply a myriad of
+        # configuration options.
+        #
+        # While we use `-cpu max`, we disable `pmu` (performance monitoring) as unnecessary, large
+        # vector instructions (to simplify the emulated CPU), `sme` (matrix instructions) for the
+        # same reason, and `pauth` (memory authentication) for a notable performance benefit.
+        #
+        # We limit to 2 cores, and 2 GB of RAM, as our processes should not require a notable amount
+        # of RAM. As we cannot use the `hvf` accelerator, it isn't an issue to specify the default
+        # `tcg` accelerator, and we do so to provide it with a massive cache. While it defaults to
+        # 1 GB, we use 3 GB (specified in MiB) to maximize our performance. In total, this leaves
+        # 2 GB of RAM for macOS itself (as the runner has 7 GB).
+        #
+        # Finally, while we cannot use `hvf` as an accelerator (as m1 chips do not support nested
+        # virtualization, and this runner is already virtualized), we do enable the HVF-premised
+        # networking (`vmnet`) for the performance speedup there. Interestingly, it doesn't require
+        # `hvf=accel`. This is done by using our `qemu-system-aarch64-vmnet` wrapper instead of
+        # `qemu-system-aarch64`.
+        #
+        # We accomplish all of this with the methodology from
         # [this comment](https://github.com/lima-vm/lima/pull/3173#issuecomment-2623130310).
-        QEMU_SYSTEM_AARCH64: "qemu-system-aarch64 -machine virt -cpu max,pmu=off,sve=on,sve128=on,sme=off,pauth=off"
+        QEMU_SYSTEM_AARCH64: "qemu-system-aarch64-vmnet -machine virt -cpu max,pmu=off,sve=on,sve128=on,sme=off,pauth=off -smp 2 -m 2G -accel tcg,tb-size=3072"
       with:
         set-host: true
 
