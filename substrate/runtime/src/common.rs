@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 use serai_abi::primitives::{
-  crypto::{Public, EmbeddedEllipticCurveKeys, SignedEmbeddedEllipticCurveKeys, KeyPair},
+  crypto::{EmbeddedEllipticCurveKeys, SignedEmbeddedEllipticCurveKeys, KeyPair},
   network_id::{ExternalNetworkId, NetworkId},
   validator_sets::{Session, ExternalValidatorSet},
   balance::{Amount, Balance},
@@ -11,9 +11,9 @@ use serai_abi::primitives::{
 #[derive(scale::Encode, scale::Decode)]
 pub struct GenesisConfig {
   /// The genesis validators for the network.
-  pub validators: Vec<(Public, Vec<SignedEmbeddedEllipticCurveKeys>)>,
+  pub validators: Vec<(SeraiAddress, Vec<SignedEmbeddedEllipticCurveKeys>)>,
   /// The accounts to start with balances, intended solely for testing purposes.
-  pub coins: Vec<(Public, Balance)>,
+  pub coins: Vec<(SeraiAddress, Balance)>,
 }
 
 sp_api::decl_runtime_apis! {
@@ -22,7 +22,7 @@ sp_api::decl_runtime_apis! {
   }
   pub trait SeraiApi {
     fn events() -> Vec<Vec<Vec<u8>>>;
-    fn validators(network: NetworkId) -> Vec<Public>;
+    fn validators(network: NetworkId) -> Vec<SeraiAddress>;
     fn current_session(network: NetworkId) -> Option<Session>;
     fn current_stake(network: NetworkId) -> Option<Amount>;
     fn keys(set: ExternalValidatorSet) -> Option<KeyPair>;

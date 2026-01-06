@@ -20,8 +20,6 @@ mod pallet {
 
   use serai_core_pallet::Pallet as Core;
 
-  use super::*;
-
   /// The configuration of this pallet.
   #[pallet::config]
   pub trait Config:

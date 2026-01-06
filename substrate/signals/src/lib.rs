@@ -8,8 +8,6 @@ mod registered_retirement_signal;
 #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
 #[frame_support::pallet]
 pub mod pallet {
-  use sp_core::sr25519::Public;
-
   use serai_abi::{
     primitives::{prelude::*, signals::*},
     signals::Event,
@@ -26,10 +24,7 @@ pub mod pallet {
 
   #[pallet::config]
   pub trait Config:
-    frame_system::Config<AccountId = Public, Block = SubstrateBlock>
-    + pallet_babe::Config
-    + CoreConfig
-    + VsConfig
+    frame_system::Config<Block = SubstrateBlock> + pallet_babe::Config + CoreConfig + VsConfig
   {
     /// How long a retirement signal is locked-in for before retirement.
     type RetirementLockInDurationInSlots: Get<u64>;
@@ -96,7 +91,7 @@ pub mod pallet {
   #[pallet::storage]
   type Halted<T: Config> = StorageMap<_, Identity, ExternalNetworkId, (), OptionQuery>;
 
-  #[pallet::hooks]
+  #[pallet::hooks] // serai-core-pallet: allow
   impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
     fn on_initialize(_current_number: BlockNumberFor<T>) -> Weight {
       /*
@@ -228,7 +223,7 @@ pub mod pallet {
         Err::<(), _>(Error::<T>::RevokingNonExistentFavor)?;
       }
       Favors::<T>::remove((signal, with_network), validator);
-      Core::<T>::emit_event(Event::FavorRevoked { signal, by: validator.into(), with_network });
+      Core::<T>::emit_event(Event::FavorRevoked { signal, by: validator, with_network });
 
       // Update the tally for this network
       Self::tally_for_network(signal, with_network);
@@ -286,7 +281,7 @@ pub mod pallet {
         This prevents a malicious actor from frontrunning a proposal, causing them to be the
         registrant, just to cancel it later.
       */
-      let registrant = SeraiAddress::from(validator);
+      let registrant = validator;
       let signal = RegisteredRetirementSignal {
         registrant,
         in_favor_of,
@@ -319,7 +314,7 @@ pub mod pallet {
       let Some(registered_signal) = RegisteredRetirementSignals::<T>::get(retirement_signal) else {
         return Err::<(), _>(Error::<T>::NonExistentRetirementSignal.into());
       };
-      if SeraiAddress::from(validator) != registered_signal.registrant {
+      if validator != registered_signal.registrant {
         Err::<(), _>(Error::<T>::NotRetirementSignalRegistrant)?;
       }
       RegisteredRetirementSignals::<T>::remove(retirement_signal);
@@ -381,7 +376,7 @@ pub mod pallet {
       // Set the validator as in favor
       Favors::<T>::set((signal, with_network), validator, Some(()));
 
-      Core::<T>::emit_event(Event::SignalFavored { signal, by: validator.into(), with_network });
+      Core::<T>::emit_event(Event::SignalFavored { signal, by: validator, with_network });
 
       // Check if the network is in favor
       let network_in_favor = Self::tally_for_network(signal, with_network);
@@ -467,11 +462,7 @@ pub mod pallet {
         }
       }
 
-      Core::<T>::emit_event(Event::AgainstSignal {
-        signal,
-        account: validator.into(),
-        with_network,
-      });
+      Core::<T>::emit_event(Event::AgainstSignal { signal, account: validator, with_network });
 
       Ok(())
     }

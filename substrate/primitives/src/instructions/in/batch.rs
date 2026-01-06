@@ -65,23 +65,8 @@ batch_struct!(#[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize)] pu
 
 impl BorshDeserialize for Batch {
   fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    // A custom reader which enforces the `Batch`'s max size limit
-    struct SizeLimitReader<'reader, R: io::Read> {
-      reader: &'reader mut R,
-      read: usize,
-    }
-    impl<R: io::Read> io::Read for SizeLimitReader<'_, R> {
-      fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let read = self.reader.read(buf)?;
-        self.read = self.read.saturating_add(read);
-        if self.read > Batch::MAX_SIZE {
-          Err(io::Error::other("`Batch` size exceeded maximum"))?;
-        }
-        Ok(read)
-      }
-    }
-
-    let mut size_limit_reader = SizeLimitReader { reader, read: 0 };
+    let mut size_limit_reader =
+      crate::sp_borsh::BoundedReader::<_, { Batch::MAX_SIZE }>::from(reader);
     let BatchDeserialize {
       encoded_size: _,
       network,
@@ -90,7 +75,7 @@ impl BorshDeserialize for Batch {
       instructions,
     } = <_>::deserialize_reader(&mut size_limit_reader)?;
     Ok(Batch {
-      encoded_size: size_limit_reader.read,
+      encoded_size: size_limit_reader.bytes_read(),
       network,
       id,
       external_network_block_hash,
@@ -254,7 +239,7 @@ fn batch() {
           },
           6 => {
             let mut address =
-              vec![0; ((OsRng.next_u64() as u32) % ExternalAddress::MAX_LEN) as usize];
+              vec![0; ((OsRng.next_u64() as u32) % ExternalAddress::MAX_SIZE) as usize];
             OsRng.fill_bytes(&mut address);
             InInstruction::SwapOut {
               instruction: OutInstruction::Transfer(address.try_into().unwrap()),

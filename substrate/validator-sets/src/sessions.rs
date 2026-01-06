@@ -1,8 +1,11 @@
 use alloc::vec::Vec;
-use sp_core::{Encode as _, Decode as _, ConstU32, sr25519::Public, bounded::BoundedVec};
+use sp_core::{
+  Encode as _, Decode as _, ConstU32, bounded::BoundedVec, sr25519::Public as SchnorrkelPublic,
+};
 
 use serai_abi::{
   primitives::{
+    address::SeraiAddress,
     network_id::{ExternalNetworkId, NetworkId},
     balance::Amount,
     validator_sets::{
@@ -23,10 +26,10 @@ use crate::{
 
 /// The list of genesis validators.
 pub(crate) type GenesisValidators =
-  BoundedVec<Public, ConstU32<{ KeySharesStruct::MAX_PER_SET_U32 }>>;
+  BoundedVec<SeraiAddress, ConstU32<{ KeySharesStruct::MAX_PER_SET_U32 }>>;
 
 /// The key for the SelectedValidators map.
-pub(crate) type SelectedValidatorsKey = (ValidatorSet, [u8; 16], Public);
+pub(crate) type SelectedValidatorsKey = (ValidatorSet, [u8; 16], SeraiAddress);
 
 pub(crate) trait SessionsStorage: EmbeddedEllipticCurveKeys + Allocations + Keys {
   /// The configuration for the core pallet.
@@ -78,7 +81,13 @@ pub(crate) trait SessionsStorage: EmbeddedEllipticCurveKeys + Allocations + Keys
   /// The delayed deallocations.
   ///
   /// This is opaque and to be exclusively read/write by `Sessions`.
-  type DelayedDeallocations: StorageDoubleMap<Public, Session, Amount, Query = Option<Amount>>;
+  #[rustfmt::skip]
+  type DelayedDeallocations: StorageDoubleMap<
+    SeraiAddress,
+    Session,
+    Amount,
+    Query = Option<Amount>
+  >;
 
   /// Networks for which we're awaiting slash reports.
   ///
@@ -87,14 +96,14 @@ pub(crate) trait SessionsStorage: EmbeddedEllipticCurveKeys + Allocations + Keys
 }
 
 /// The storage key for the SelectedValidators map.
-fn selected_validators_key(set: ValidatorSet, key: Public) -> SelectedValidatorsKey {
+fn selected_validators_key(set: ValidatorSet, key: SeraiAddress) -> SelectedValidatorsKey {
   let hash = sp_io::hashing::blake2_128(&(set, key).encode());
   (set, hash, key)
 }
 
 fn selected_validators<Storage: StoragePrefixedMap<KeySharesStruct>>(
   set: ValidatorSet,
-) -> impl Iterator<Item = (Public, KeySharesStruct)> {
+) -> impl Iterator<Item = (SeraiAddress, KeySharesStruct)> {
   let mut prefix = Storage::final_prefix().to_vec();
   prefix.extend(&set.encode());
   frame_support::storage::PrefixIterator::<_, ()>::new(
@@ -103,7 +112,7 @@ fn selected_validators<Storage: StoragePrefixedMap<KeySharesStruct>>(
     |key, mut key_shares| {
       Ok((
         // Recover the validator's key from the storage key
-        <[u8; 32]>::try_from(&key[(key.len() - 32) ..]).unwrap().into(),
+        SeraiAddress(<[u8; 32]>::try_from(&key[(key.len() - 32) ..]).unwrap()),
         // Decode the key shares from the value
         KeySharesStruct::decode(&mut key_shares).unwrap(),
       ))
@@ -179,7 +188,7 @@ pub(crate) trait Sessions {
   /// of it.
   fn increase_allocation(
     network: NetworkId,
-    validator: Public,
+    validator: SeraiAddress,
     amount: Amount,
     block_reward: bool,
   ) -> Result<(), AllocationError>;
@@ -190,7 +199,7 @@ pub(crate) trait Sessions {
   /// of it.
   fn decrease_allocation(
     network: NetworkId,
-    validator: Public,
+    validator: SeraiAddress,
     amount: Amount,
   ) -> Result<DeallocationTimeline, DeallocationError>;
 
@@ -199,7 +208,7 @@ pub(crate) trait Sessions {
   /// This does not perform any transfers of any coins/tokens. It solely performs the book-keeping
   /// of it.
   fn claim_delayed_deallocation(
-    validator: Public,
+    validator: SeraiAddress,
     network: NetworkId,
     session: Session,
   ) -> Result<Amount, DeallocationError>;
@@ -223,14 +232,14 @@ pub(crate) trait Sessions {
   /// If a validator is present within the specified validator set.
   ///
   /// This MAY return `false` for _any_ historic session, even if the validator _was_ present,
-  fn in_validator_set(set: ValidatorSet, validator: Public) -> bool;
+  fn in_validator_set(set: ValidatorSet, validator: SeraiAddress) -> bool;
 
   /// The key shares possessed by a validator, within a validator set.
   ///
   /// This MAY return `None` for _any_ historic session, even if the validator _was_ present,
   fn key_shares_possessed_by_validator(
     set: ValidatorSet,
-    validator: Public,
+    validator: SeraiAddress,
   ) -> Option<KeySharesStruct>;
 
   /// The stake for the current validator set.
@@ -240,10 +249,13 @@ pub(crate) trait Sessions {
   ///
   /// This will return an empty iterator if the validators have yet to be decided, or if the
   /// selected validators were cleared due to being historic.
-  fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (Public, KeySharesStruct)>;
+  fn selected_validators(
+    set: ValidatorSet,
+  ) -> impl Iterator<Item = (SeraiAddress, KeySharesStruct)>;
 
-  /// The validators for the Serai network, in the form expected by BABE, GRANDPA.
-  fn serai_validators(session: Session) -> Vec<(Public, Public)> {
+  /// The validators for the Serai network, with a syntax amenable to the form expected by
+  /// BABE, GRANDPA.
+  fn serai_validators(session: Session) -> Vec<(SeraiAddress, SeraiAddress)> {
     Self::selected_validators(ValidatorSet { network: NetworkId::Serai, session })
       .map(|(validator, _key_shares)| (validator, validator))
       .collect()
@@ -251,8 +263,8 @@ pub(crate) trait Sessions {
 
   /// If this network is awaiting a slash report.
   ///
-  /// If so, this returns the key which should publish the slash report.
-  fn waiting_for_slash_report(network: ExternalNetworkId) -> Option<Public>;
+  /// If so, this returns the oraclization key which should publish the slash report.
+  fn waiting_for_slash_report(network: ExternalNetworkId) -> Option<SchnorrkelPublic>;
 }
 
 impl<Storage: SessionsStorage> Sessions for Storage {
@@ -336,10 +348,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
 
     Core::<Storage::Config>::emit_event(Event::SetDecided {
       set: latest_decided_set,
-      validators: selected_validators
-        .into_iter()
-        .map(|(key, key_shares)| (key.into(), key_shares))
-        .collect(),
+      validators: selected_validators.into_iter().collect(),
     });
 
     true
@@ -409,7 +418,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
 
   fn increase_allocation(
     network: NetworkId,
-    validator: Public,
+    validator: SeraiAddress,
     amount: Amount,
     block_reward: bool,
   ) -> Result<(), AllocationError> {
@@ -488,18 +497,14 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       }
     }
 
-    Core::<Storage::Config>::emit_event(Event::Allocation {
-      validator: validator.into(),
-      network,
-      amount,
-    });
+    Core::<Storage::Config>::emit_event(Event::Allocation { validator, network, amount });
 
     Ok(())
   }
 
   fn decrease_allocation(
     network: NetworkId,
-    validator: Public,
+    validator: SeraiAddress,
     amount: Amount,
   ) -> Result<DeallocationTimeline, DeallocationError> {
     // TODO: Check if this would introduce a single point of failure
@@ -599,7 +604,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
   }
 
   fn claim_delayed_deallocation(
-    validator: Public,
+    validator: SeraiAddress,
     network: NetworkId,
     session: Session,
   ) -> Result<Amount, DeallocationError> {
@@ -624,13 +629,13 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     Storage::KeyShares::get(set)
   }
 
-  fn in_validator_set(set: ValidatorSet, validator: Public) -> bool {
+  fn in_validator_set(set: ValidatorSet, validator: SeraiAddress) -> bool {
     Storage::SelectedValidators::contains_key(selected_validators_key(set, validator))
   }
 
   fn key_shares_possessed_by_validator(
     set: ValidatorSet,
-    validator: Public,
+    validator: SeraiAddress,
   ) -> Option<KeySharesStruct> {
     Storage::SelectedValidators::get(selected_validators_key(set, validator))
   }
@@ -639,11 +644,13 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     Storage::TotalAllocatedStake::get(network)
   }
 
-  fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (Public, KeySharesStruct)> {
+  fn selected_validators(
+    set: ValidatorSet,
+  ) -> impl Iterator<Item = (SeraiAddress, KeySharesStruct)> {
     selected_validators::<Storage::SelectedValidators>(set)
   }
 
-  fn waiting_for_slash_report(network: ExternalNetworkId) -> Option<Public> {
+  fn waiting_for_slash_report(network: ExternalNetworkId) -> Option<SchnorrkelPublic> {
     if !Storage::PendingSlashReport::contains_key(network) {
       None?;
     }

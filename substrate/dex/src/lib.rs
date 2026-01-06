@@ -177,21 +177,17 @@ mod pallet {
         (sri_actual, external_coin_actual, liquidity)
       };
 
+      Coins::<T>::transfer_fn(from, pool, Balance { coin: Coin::Serai, amount: sri_actual })?;
       Coins::<T>::transfer_fn(
         from,
-        pool.into(),
-        Balance { coin: Coin::Serai, amount: sri_actual },
-      )?;
-      Coins::<T>::transfer_fn(
-        from,
-        pool.into(),
+        pool,
         Balance { coin: Coin::from(external_coin), amount: external_coin_actual },
       )?;
       let liquidity_tokens = ExternalBalance { coin: external_coin, amount: liquidity };
       LiquidityTokens::<T>::mint(from, liquidity_tokens.into())?;
 
       Self::emit_event(Event::LiquidityAddition {
-        recipient: from.into(),
+        recipient: from,
         liquidity_tokens,
         sri_amount: sri_actual,
         external_coin_amount: external_coin_actual,
@@ -209,9 +205,9 @@ mod pallet {
       liquidity_tokens: ExternalBalance,
     ) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      LiquidityTokens::<T>::transfer_fn(from, to.into(), liquidity_tokens.into())?;
+      LiquidityTokens::<T>::transfer_fn(from, to, liquidity_tokens.into())?;
 
-      Self::emit_event(Event::LiquidityTransfer { from: from.into(), to, liquidity_tokens });
+      Self::emit_event(Event::LiquidityTransfer { from, to, liquidity_tokens });
 
       Ok(())
     }
@@ -251,19 +247,15 @@ mod pallet {
       }
 
       LiquidityTokens::<T>::burn_fn(from, liquidity_tokens.into())?;
+      Coins::<T>::transfer_fn(from, pool, Balance { coin: Coin::Serai, amount: sri_amount })?;
       Coins::<T>::transfer_fn(
         from,
-        pool.into(),
-        Balance { coin: Coin::Serai, amount: sri_amount },
-      )?;
-      Coins::<T>::transfer_fn(
-        from,
-        pool.into(),
+        pool,
         Balance { coin: Coin::from(external_coin), amount: external_coin_amount },
       )?;
 
       Self::emit_event(Event::LiquidityRemoval {
-        from: from.into(),
+        from,
         liquidity_tokens,
         sri_amount,
         external_coin_amount,
@@ -280,7 +272,7 @@ mod pallet {
       coins_to_swap: Balance,
       minimum_to_receive: Balance,
     ) -> DispatchResult {
-      let origin = SeraiAddress::from(ensure_signed(origin)?);
+      let origin = ensure_signed(origin)?;
 
       let mut transfer_from = origin;
       let mut next_amount = coins_to_swap.amount;
@@ -308,7 +300,7 @@ mod pallet {
         */
         assert!(transfer_from != pool, "swap routed from a coin to itself");
         let delta = Balance { coin: swap.r#in(), amount: next_amount };
-        Coins::<T>::transfer_fn(transfer_from.into(), pool.into(), delta)?;
+        Coins::<T>::transfer_fn(transfer_from, pool, delta)?;
         deltas.push(delta);
 
         // Update the current status
@@ -323,7 +315,7 @@ mod pallet {
 
       // Transfer the resulting coins to the origin
       let delta = Balance { coin: minimum_to_receive.coin, amount: next_amount };
-      Coins::<T>::transfer_fn(transfer_from.into(), origin.into(), delta)?;
+      Coins::<T>::transfer_fn(transfer_from, origin, delta)?;
       deltas.push(delta);
 
       Self::emit_event(Event::Swap { from: origin, deltas });
@@ -339,7 +331,7 @@ mod pallet {
       coins_to_receive: Balance,
       maximum_to_swap: Balance,
     ) -> DispatchResult {
-      let origin = SeraiAddress::from(ensure_signed(origin)?);
+      let origin = ensure_signed(origin)?;
 
       let mut transfer_to = origin;
       let mut next_amount = coins_to_receive.amount;
@@ -374,7 +366,7 @@ mod pallet {
         */
         assert!(transfer_to != pool, "swap routed to a coin from itself");
         let delta = Balance { coin: swap.out(), amount: next_amount };
-        Coins::<T>::transfer_fn(pool.into(), transfer_to.into(), delta)?;
+        Coins::<T>::transfer_fn(pool, transfer_to, delta)?;
         deltas.push(delta);
 
         transfer_to = pool;
@@ -390,7 +382,7 @@ mod pallet {
 
       // Transfer the necessary coins from the origin
       let delta = Balance { coin: maximum_to_swap.coin, amount: next_amount };
-      Coins::<T>::transfer_fn(origin.into(), transfer_to.into(), delta)?;
+      Coins::<T>::transfer_fn(origin, transfer_to, delta)?;
       deltas.push(delta);
 
       deltas.reverse();

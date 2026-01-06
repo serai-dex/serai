@@ -151,7 +151,7 @@ sp_api::impl_runtime_apis! {
     }
     fn validators(
       network: NetworkId
-    ) -> Vec<serai_abi::primitives::crypto::Public> {
+    ) -> Vec<SeraiAddress> {
       unimplemented!("runtime is only implemented when WASM")
     }
     fn current_session(network: NetworkId) -> Option<Session> {

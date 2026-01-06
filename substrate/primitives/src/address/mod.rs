@@ -28,8 +28,16 @@ const HUMAN_READABLE_PART: bech32::Hrp = bech32::Hrp::parse_unchecked("sri");
 ///
 /// The 32-byte blob within it is used as an identifier for the account and when verifying
 /// signatures, a commitment to the signing key for the account.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
-#[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
+#[rustfmt::skip]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Zeroize, BorshSerialize, BorshDeserialize)]
+#[cfg_attr(
+  feature = "scale",
+  derive(scale::MaxEncodedLen, sp_core::serde::Serialize, sp_core::serde::Deserialize)
+)]
+// We also derive `serde` here as it's a requirement for this to be usable as an `AccountId`
+// within Substrate, the same context during which `scale` would be implemented.
+#[cfg_attr(feature = "scale", serde(crate = "sp_core::serde"))]
 pub struct SeraiAddress(pub [u8; 32]);
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(SeraiAddress);

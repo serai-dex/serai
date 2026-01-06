@@ -3,7 +3,6 @@ use alloc::vec::Vec;
 use borsh::{io, BorshSerialize, BorshDeserialize};
 
 use sp_core::{ConstU32, bounded::BoundedVec};
-use serai_primitives::{BlockHash, address::SeraiAddress, balance::Amount};
 use crate::Call;
 
 mod context;
@@ -202,13 +201,17 @@ impl Transaction {
   }
 }
 
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
 #[test]
 fn serialize() {
   use alloc::vec;
   use rand_core::{RngCore as _, OsRng};
   use serai_primitives::{
-    balance::Balance,
+    BlockHash,
+    coin::Coin,
+    balance::{Amount, Balance},
     crypto::{RistrettoSignature, Signature},
+    address::SeraiAddress,
   };
 
   let unsigned_call = {
@@ -227,8 +230,7 @@ fn serialize() {
     let mut to = [0; 32];
     OsRng.fill_bytes(&mut to);
     let to = SeraiAddress(to);
-    let coins =
-      Balance { coin: serai_primitives::coin::Coin::Serai, amount: Amount(OsRng.next_u64()) };
+    let coins = Balance { coin: Coin::Serai, amount: Amount(OsRng.next_u64()) };
     Call::from(crate::coins::Call::transfer { to, coins })
   };
 
@@ -247,10 +249,16 @@ fn serialize() {
     OsRng.fill_bytes(&mut signer);
     let signer = SeraiAddress(signer);
 
-    #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
     let nonce = OsRng.next_u64() as u32;
 
-    let fee = Amount(OsRng.next_u64());
+    let fee = {
+      let coin = {
+        let coins = Coin::all().collect::<Vec<_>>();
+        coins[(OsRng.next_u64() as usize) % coins.len()]
+      };
+      let amount = Amount(OsRng.next_u64());
+      Balance { coin, amount }
+    };
 
     ExplicitContext { historic_block, include_by, signer, nonce, fee }
   };

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use blake2::{Digest as _, Blake2b256};
 
 use serai_abi::{
-  primitives::merkle::UnbalancedMerkleTree, BLOCK_HEADER_LEAF_TAG, BLOCK_HEADER_BRANCH_TAG,
+  primitives::merkle::UnbalancedMerkleTree, BLOCK_LEAF_TAG, BLOCK_BRANCH_TAG,
   TRANSACTION_COMMITMENT_LEAF_TAG, TRANSACTION_COMMITMENT_BRANCH_TAG,
   TRANSACTION_EVENTS_COMMITMENT_LEAF_TAG, TRANSACTION_EVENTS_COMMITMENT_BRANCH_TAG,
   EVENTS_COMMITMENT_LEAF_TAG, EVENTS_COMMITMENT_BRANCH_TAG,
@@ -112,11 +112,11 @@ async fn blockchain() {
 
           {
             assert_eq!(
-              UnbalancedMerkleTree::new(BLOCK_HEADER_BRANCH_TAG, tagged_block_hashes.clone()).root,
+              UnbalancedMerkleTree::new(BLOCK_BRANCH_TAG, tagged_block_hashes.clone()).root,
               block.header.builds_upon().root,
             );
             tagged_block_hashes.push({
-              let mut tagged = vec![BLOCK_HEADER_LEAF_TAG];
+              let mut tagged = vec![BLOCK_LEAF_TAG];
               tagged.extend(&block.header.hash().0);
               Blake2b256::digest(tagged).into()
             });
@@ -125,18 +125,15 @@ async fn blockchain() {
           {
             let mut start_transaction = [0; 32];
             start_transaction[24 ..].copy_from_slice(&i.to_be_bytes());
-            let mut end_transaction = start_transaction;
-            end_transaction[.. 16].copy_from_slice(&[0xff; 16]);
             let transactions_iter = core::iter::once(start_transaction)
-              .chain(block.transactions.iter().map(serai_abi::Transaction::hash))
-              .chain(core::iter::once(end_transaction));
+              .chain(block.transactions.iter().map(serai_abi::Transaction::hash));
 
             let events = serai.events(block.header.hash()).await.unwrap();
             let events = events
               .events()
               .map(|iter| iter.into_iter().cloned().collect::<Vec<_>>())
               .collect::<Vec<_>>();
-            assert_eq!(events.len(), 2 + block.transactions.len());
+            assert_eq!(events.len(), 1 + block.transactions.len());
 
             let mut transaction_leaves = vec![];
             let mut events_leaves = vec![];

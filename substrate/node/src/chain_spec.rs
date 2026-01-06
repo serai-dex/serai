@@ -14,17 +14,14 @@ use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 
 use serai_abi::{
-  primitives::{
-    prelude::*,
-    crypto::{Public, SignedEmbeddedEllipticCurveKeys},
-  },
+  primitives::{prelude::*, crypto::SignedEmbeddedEllipticCurveKeys},
   SubstrateBlock as Block,
 };
 use serai_runtime::GenesisConfig;
 
 pub type ChainSpec = sc_service::GenericChainSpec;
 
-fn insecure_account_from_name(name: &'static str) -> Public {
+fn insecure_account_from_name(name: &'static str) -> SeraiAddress {
   sp_core::sr25519::Pair::from_string(&format!("//{name}"), None).unwrap().public().into()
 }
 
@@ -67,7 +64,10 @@ fn wasm_binary(dev: bool) -> Vec<u8> {
   serai_runtime::WASM.to_vec()
 }
 
-fn devnet_genesis(validators: &[&'static str], endowed_accounts: Vec<Public>) -> GenesisConfig {
+fn devnet_genesis(
+  validators: &[&'static str],
+  endowed_accounts: Vec<SeraiAddress>,
+) -> GenesisConfig {
   GenesisConfig {
     validators: validators
       .iter()
@@ -200,18 +200,18 @@ pub fn bootnode_multiaddrs(id: &str) -> Vec<libp2p::Multiaddr> {
   }
 }
 
-struct GenesisBlock<Executor>(
-  GenesisBlockBuilder<Block, Backend<Block>, Executor>,
-  sp_runtime::Digest,
-);
+struct GenesisBlock<Executor> {
+  builder: GenesisBlockBuilder<Block, Backend<Block>, Executor>,
+  digest: sp_runtime::Digest,
+}
 impl<Executor: RuntimeVersionOf> BuildGenesisBlock<Block> for GenesisBlock<Executor> {
   type BlockImportOperation = sc_client_db::BlockImportOperation<Block>;
 
   fn build_genesis_block(self) -> sp_blockchain::Result<(Block, Self::BlockImportOperation)> {
-    let (genesis_block, op) = self.0.build_genesis_block()?;
+    let (genesis_block, op) = self.builder.build_genesis_block()?;
 
     let mut header = genesis_block.header().clone();
-    *header.digest_mut() = self.1;
+    *header.digest_mut() = self.digest;
     let genesis_block = Block::new(header, genesis_block.extrinsics().to_vec());
 
     Ok((genesis_block, op))
@@ -236,8 +236,13 @@ pub(super) fn genesis_block(
   };
 
   let commit_genesis_state = true;
-  Ok(GenesisBlock(
-    GenesisBlockBuilder::new_with_storage(storage, commit_genesis_state, backend, executor)?,
+  Ok(GenesisBlock {
+    builder: GenesisBlockBuilder::new_with_storage(
+      storage,
+      commit_genesis_state,
+      backend,
+      executor,
+    )?,
     digest,
-  ))
+  })
 }

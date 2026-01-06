@@ -1,3 +1,5 @@
+use borsh::io;
+
 mod length_prefix;
 mod bounded_vec;
 pub use bounded_vec::*;
@@ -82,4 +84,35 @@ macro_rules! borsh_as_scale {
     }
     impl<$(const $const: $type, )*> scale::DecodeWithMemTracking for $name<$($const, )*> {}
   };
+}
+
+/// A wrapper for a reader which enforces a bound on the amount of bytes read.
+#[doc(hidden)]
+pub struct BoundedReader<'reader, R: io::Read, const BOUND: usize> {
+  reader: &'reader mut R,
+  read: usize,
+}
+impl<'reader, R: io::Read, const BOUND: usize> From<&'reader mut R>
+  for BoundedReader<'reader, R, BOUND>
+{
+  fn from(reader: &'reader mut R) -> Self {
+    Self { reader, read: 0 }
+  }
+}
+impl<R: io::Read, const BOUND: usize> io::Read for BoundedReader<'_, R, BOUND> {
+  fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+    let read = self.reader.read(buf)?;
+    self.read = self.read.saturating_add(read);
+    if self.read > BOUND {
+      Err(io::Error::other("read amount of bytes exceeded the bound"))?;
+    }
+    Ok(read)
+  }
+}
+impl<R: io::Read, const BOUND: usize> BoundedReader<'_, R, BOUND> {
+  /// The amount of bytes read via this wrapper.
+  #[doc(hidden)]
+  pub fn bytes_read(&self) -> usize {
+    self.read
+  }
 }

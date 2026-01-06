@@ -1,10 +1,11 @@
+#![cfg_attr(test, expect(unexpected_cfgs))]
+
 #[test]
 pub fn reproducibly_builds() {
   use std::{path::PathBuf, process::Command};
 
   use rand_core::{RngCore as _, OsRng};
 
-  #[expect(unexpected_cfgs)]
   const RUNS: usize = {
     // 3 is a sane, healthy amount of runs to ensure this isn't being randomized when built.
     #[cfg(any(target_arch = "x86_64", not(github_ci)))]
@@ -35,7 +36,6 @@ pub fn reproducibly_builds() {
   assert_eq!(path.file_name().unwrap(), "Cargo.toml");
   assert!(path.pop());
 
-  #[expect(unexpected_cfgs)]
   {
     // Build the images in parallel
     let mut commands = vec![];

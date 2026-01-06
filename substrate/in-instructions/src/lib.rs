@@ -10,7 +10,6 @@
 )]
 #[frame_support::pallet]
 mod pallet {
-  use sp_core::sr25519::Public;
   use sp_application_crypto::RuntimePublic as _;
 
   use frame_support::{pallet_prelude::*, dispatch::RawOrigin};
@@ -74,7 +73,7 @@ mod pallet {
 
       // Mint the balance to ourself
       let address = serai_abi::in_instructions::address();
-      Coins::<T>::mint(address.into(), balance)?;
+      Coins::<T>::mint(address, balance)?;
 
       match instruction {
         InInstruction::GenesisLiquidity(address) => {
@@ -85,30 +84,24 @@ mod pallet {
         }
         InInstruction::TransferWithSwap { to, maximum_to_swap, sri } => {
           serai_dex_pallet::Pallet::<T>::swap_for(
-            RawOrigin::Signed(address.into()).into(),
+            RawOrigin::Signed(address).into(),
             Balance { coin: Coin::Serai, amount: sri },
             Balance { coin: balance.coin, amount: maximum_to_swap },
           )?;
 
           Coins::<T>::transfer_fn(
-            address.into(),
-            to.into(),
-            Balance {
-              coin: balance.coin,
-              amount: Coins::<T>::balance(Public::from(address), balance.coin),
-            },
+            address,
+            to,
+            Balance { coin: balance.coin, amount: Coins::<T>::balance(address, balance.coin) },
           )?;
           Coins::<T>::transfer_fn(
-            address.into(),
-            to.into(),
-            Balance {
-              coin: Coin::Serai,
-              amount: Coins::<T>::balance(Public::from(address), Coin::Serai),
-            },
+            address,
+            to,
+            Balance { coin: Coin::Serai, amount: Coins::<T>::balance(address, Coin::Serai) },
           )?;
         }
         InInstruction::Transfer { to } => {
-          Coins::<T>::transfer_fn(address.into(), to.into(), balance)?;
+          Coins::<T>::transfer_fn(address, to, balance)?;
         }
         InInstruction::SwapAndAddLiquidity {
           address: destination,
@@ -118,7 +111,7 @@ mod pallet {
         } => {
           let external_coin = external_balance.coin;
           serai_dex_pallet::Pallet::<T>::swap(
-            RawOrigin::Signed(address.into()).into(),
+            RawOrigin::Signed(address).into(),
             Balance {
               coin: Coin::External(external_coin),
               amount: (balance.amount - coin).ok_or(serai_dex_pallet::Error::<T>::Underflow)?,
@@ -129,13 +122,12 @@ mod pallet {
             },
           )?;
 
-          let sri_intended = (Coins::<T>::balance(Public::from(address), Coin::Serai) -
-            sri_for_fees)
+          let sri_intended = (Coins::<T>::balance(address, Coin::Serai) - sri_for_fees)
             .expect("swapped to amount sufficient for minimum, fees, but received less than fees?");
           let coin_intended = coin;
           let coin_minimum = coin;
           serai_dex_pallet::Pallet::<T>::add_liquidity(
-            RawOrigin::Signed(address.into()).into(),
+            RawOrigin::Signed(address).into(),
             external_coin,
             sri_intended,
             coin_intended,
@@ -146,38 +138,35 @@ mod pallet {
           // Transfer the rest, which will be more than the amount requested for fees, to the
           // destination
           Coins::<T>::transfer_fn(
-            address.into(),
-            destination.into(),
-            Balance {
-              coin: Coin::Serai,
-              amount: Coins::<T>::balance(Public::from(address), Coin::Serai),
-            },
+            address,
+            destination,
+            Balance { coin: Coin::Serai, amount: Coins::<T>::balance(address, Coin::Serai) },
           )?;
         }
         InInstruction::Swap { address: destination, minimum_to_receive } => {
           serai_dex_pallet::Pallet::<T>::swap(
-            RawOrigin::Signed(address.into()).into(),
+            RawOrigin::Signed(address).into(),
             balance,
             minimum_to_receive,
           )?;
 
           let coin = minimum_to_receive.coin;
-          let received_amount = Coins::<T>::balance(Public::from(address), coin);
+          let received_amount = Coins::<T>::balance(address, coin);
           let received = Balance { coin, amount: received_amount };
-          Coins::<T>::transfer_fn(address.into(), destination.into(), received)?;
+          Coins::<T>::transfer_fn(address, destination, received)?;
         }
         InInstruction::SwapOut { instruction, minimum_to_receive } => {
           serai_dex_pallet::Pallet::<T>::swap(
-            RawOrigin::Signed(address.into()).into(),
+            RawOrigin::Signed(address).into(),
             balance,
             minimum_to_receive.into(),
           )?;
 
           let coin = minimum_to_receive.coin;
-          let received_amount = Coins::<T>::balance(Public::from(address), Coin::from(coin));
+          let received_amount = Coins::<T>::balance(address, Coin::from(coin));
           let received = ExternalBalance { coin, amount: received_amount };
           Coins::<T>::burn_with_instruction(
-            RawOrigin::Signed(address.into()).into(),
+            RawOrigin::Signed(address).into(),
             OutInstructionWithBalance { instruction, balance: received },
           )?;
         }

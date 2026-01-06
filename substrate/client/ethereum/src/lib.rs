@@ -41,13 +41,13 @@ impl ContractDeployment {
     // The max address length, minus the type byte, minus the size of the gas
     #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
     const MAX_CODE_LEN: usize = ({
-      // If this branch triggers, then `MAX_LEN` fits within a `usize`
-      // Else, `usize::MAX > u32::MAX` when `MAX_LEN` _is_ a `u32`
+      // If this branch triggers, then `MAX_SIZE` fits within a `usize`
+      // Else, `usize::MAX > u32::MAX` when `MAX_SIZE` _is_ a `u32`
       // Both conditions ensure this following `as` cast is safe
       if core::mem::size_of::<usize>() <= core::mem::size_of::<u32>() {
-        assert!(ExternalAddress::MAX_LEN <= (usize::MAX as u32));
+        assert!(ExternalAddress::MAX_SIZE <= (usize::MAX as u32));
       }
-      ExternalAddress::MAX_LEN as usize
+      ExternalAddress::MAX_SIZE as usize
     }) - (1 + core::mem::size_of::<u32>());
     if code.len() > MAX_CODE_LEN {
       None?;

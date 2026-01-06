@@ -14,7 +14,7 @@ runs:
       id: cache-monerod
       uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # 4.2.4
       with:
-        path: /usr/bin/monerod
+        path: monerod*
         key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
 
     - name: Download the Monero Daemon
@@ -26,28 +26,47 @@ runs:
 
         OS=$(echo "$OS" | tr "[:upper:]" "[:lower:]")
         ARCH=$(echo "$ARCH" | tr "[:upper:]" "[:lower:]")
+        EXT="tar.bz2"
 
         if [ "$OS" = "windows" ]; then
-          OS=win
-          echo "Windows is unsupported at this time"
-          exit 1
-        fi
-        if [ "$OS" = "macos" ]; then
-          OS=mac
+          OS="win"
+          EXT="zip"
         fi
         if [ "$ARCH" = "arm64" ]; then
-          ARCH=armv8
+          ARCH="armv8"
+        fi
+        if [ "$OS" = "macos" ]; then
+          OS="mac"
+          # If this is an ARM macOS downloading a historic version, download x64 to run via Rosetta
+          if [ $(echo "${{ inputs.version }}" | cut -d'.' -f2) -lt 18 ]; then
+            ARCH="x64"
+          fi
         fi
 
-        FILE=monero-$OS-$ARCH-${{ inputs.version }}.tar.bz2
-        wget https://downloads.getmonero.org/cli/$FILE
-        tar -xvf $FILE
-        rm $FILE
+        FILE=monero-$OS-$ARCH-${{ inputs.version }}.$EXT
+        mkdir monero-tmp
+        cd monero-tmp
+        curl -L https://downloads.getmonero.org/cli/$FILE -o $FILE
+        if [ "$EXT" = "tar.bz2" ]; then
+          tar -xf $FILE
+        fi
+        if [ "$EXT" = "zip" ]; then
+          unzip $FILE
+        fi
+        cd ..
 
-        sudo mv $(find . -name monerod) /usr/bin/monerod
-        sudo chmod 777 /usr/bin/monerod
-        sudo chmod +x /usr/bin/monerod
+        mv $(find . -type f -name "monerod*") .
+        rm -rf monero-tmp
 
     - name: Monero Regtest Daemon
       shell: bash
-      run: PATH=$PATH:/usr/bin ./orchestration/dev/networks/monero/run.sh --detach
+      run: |
+        PATH="$PATH:$(pwd)"
+        COMMAND="./orchestration/dev/networks/monero/run.sh"
+
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          $COMMAND --install-service
+          $COMMAND --start-service
+        else
+          $COMMAND --detach
+        fi

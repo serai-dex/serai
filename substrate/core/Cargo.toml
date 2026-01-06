@@ -12,6 +12,9 @@ rust-version = "1.85"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo-machete]
+ignored = ["scale"]
+
 [lints]
 workspace = true
 
@@ -28,6 +31,10 @@ frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", defau
 pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
+
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
 
 [features]
 std = [

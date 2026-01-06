@@ -18,8 +18,27 @@ on:
   workflow_dispatch:
 
 jobs:
-  test-networks:
-    runs-on: ubuntu-latest
+  test-bitcoin:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+
+      - name: Test Dependencies
+        uses: ./.github/actions/test-dependencies
+
+      - name: Run Tests
+        run: cargo test --all-features -p bitcoin-serai
+
+  test-ethereum:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
@@ -29,8 +48,7 @@ jobs:
       - name: Run Tests
         run: |
           cargo test --all-features \
-            -p bitcoin-serai \
             -p build-solidity-contracts \
             -p ethereum-schnorr-contract \
             -p alloy-simple-request-transport \
-            -p serai-ethereum-relayer \
+            -p serai-ethereum-relayer

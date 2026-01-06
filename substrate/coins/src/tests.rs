@@ -1,7 +1,10 @@
 use sp_core::{Pair as _, sr25519::Pair};
 use frame_system::RawOrigin;
 
-use serai_abi::primitives::{coin::*, balance::*, address::*, instructions::*};
+use serai_abi::{
+  primitives::{coin::*, balance::*, address::*, instructions::*},
+  TransactionContext as _,
+};
 
 use crate::mock::*;
 
@@ -14,7 +17,7 @@ fn mint() {
 
     // minting u64::MAX should work
     let coin = Coin::Serai;
-    let to = Pair::generate().0.public();
+    let to = SeraiAddress::from(Pair::generate().0.public());
     let balance = Balance { coin, amount: Amount(u64::MAX) };
 
     Coins::mint(to, balance).unwrap();
@@ -40,7 +43,7 @@ fn mint() {
       })
       .collect::<Vec<_>>();
 
-    assert_eq!(mint_events, vec![CoinsEvent::Mint { to: to.into(), coins: balance }]);
+    assert_eq!(mint_events, vec![CoinsEvent::Mint { to, coins: balance }]);
   });
 }
 
@@ -51,12 +54,14 @@ fn burn_with_instruction() {
 
     // mint some coin
     let coin = Coin::External(ExternalCoin::Bitcoin);
-    let to = Pair::generate().0.public();
+    let to = SeraiAddress::from(Pair::generate().0.public());
     let balance = Balance { coin, amount: Amount(10 * 10u64.pow(coin.decimals())) };
 
     Coins::mint(to, balance).unwrap();
     assert_eq!(Coins::balance(to, coin), balance.amount);
     assert_eq!(Coins::supply(coin), balance.amount);
+
+    let from = to;
 
     // we shouldn't be able to burn more than what we have
     let mut instruction = OutInstructionWithBalance {
@@ -67,15 +72,15 @@ fn burn_with_instruction() {
       },
     };
     assert!(
-      Coins::burn_with_instruction(RawOrigin::Signed(to).into(), instruction.clone()).is_err()
+      Coins::burn_with_instruction(RawOrigin::Signed(from).into(), instruction.clone()).is_err()
     );
 
     // it should now work
     instruction.balance.amount = balance.amount;
-    Coins::burn_with_instruction(RawOrigin::Signed(to).into(), instruction.clone()).unwrap();
+    Coins::burn_with_instruction(RawOrigin::Signed(from).into(), instruction.clone()).unwrap();
 
     // balance & supply now should be back to 0
-    assert_eq!(Coins::balance(to, coin), Amount(0));
+    assert_eq!(Coins::balance(from, coin), Amount(0));
     assert_eq!(Coins::supply(coin), Amount(0));
 
     let burn_events = Core::events()
@@ -91,7 +96,7 @@ fn burn_with_instruction() {
       })
       .collect::<Vec<_>>();
 
-    assert_eq!(burn_events, vec![CoinsEvent::BurnWithInstruction { from: to.into(), instruction }]);
+    assert_eq!(burn_events, vec![CoinsEvent::BurnWithInstruction { from, instruction }]);
   });
 }
 
@@ -102,7 +107,7 @@ fn transfer() {
 
     // mint some coin
     let coin = Coin::External(ExternalCoin::Bitcoin);
-    let from = Pair::generate().0.public();
+    let from = SeraiAddress::from(Pair::generate().0.public());
     let balance = Balance { coin, amount: Amount(10 * 10u64.pow(coin.decimals())) };
 
     Coins::mint(from, balance).unwrap();
@@ -110,7 +115,7 @@ fn transfer() {
     assert_eq!(Coins::supply(coin), balance.amount);
 
     // we can't send more than what we have
-    let to = Pair::generate().0.public();
+    let to = SeraiAddress::from(Pair::generate().0.public());
     assert!(Coins::transfer(
       RawOrigin::Signed(from).into(),
       to,

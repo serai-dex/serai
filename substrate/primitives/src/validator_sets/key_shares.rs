@@ -1,9 +1,7 @@
 use zeroize::Zeroize;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use sp_core::sr25519::Public;
-
-use crate::balance::Amount;
+use crate::{address::SeraiAddress, balance::Amount};
 
 /// The representation for an amount of key shares.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
@@ -62,7 +60,7 @@ impl KeyShares {
   /// Reduction occurs by reducing each validator in a reverse round-robin. This means the
   /// validators with the least key shares are evicted first.
   #[must_use]
-  pub fn amortize_excess(validators: &mut [(Public, KeyShares)]) -> usize {
+  pub fn amortize_excess(validators: &mut [(SeraiAddress, KeyShares)]) -> usize {
     let total_key_shares = validators.iter().map(|(_key, shares)| shares.0).sum::<u16>();
     let mut actual_len = validators.len();
     let mut offset = 1;
@@ -153,14 +151,14 @@ fn key_shares() {
 fn amortize_excess() {
   use alloc::vec;
   use rand_core::{RngCore as _, OsRng};
-  let public = || {
-    let mut public = [0; 32];
-    OsRng.fill_bytes(&mut public);
-    Public::from_raw(public)
+  let address = || {
+    let mut address = [0; 32];
+    OsRng.fill_bytes(&mut address);
+    SeraiAddress(address)
   };
-  let alice = public();
-  let bob = public();
-  let charlie = public();
+  let alice = address();
+  let bob = address();
+  let charlie = address();
   for (mut input, output) in [
     (vec![], [].as_slice()),
     (vec![(alice, KeyShares::ONE)], [(alice, KeyShares::ONE)].as_slice()),

@@ -113,7 +113,7 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
 
         // Check we are indexing a linear chain
         if block.header.builds_upon()
-          != builds_upon.clone().calculate(serai_client_serai::abi::BLOCK_HEADER_BRANCH_TAG)
+          != builds_upon.clone().calculate(serai_client_serai::abi::BLOCK_BRANCH_TAG)
         {
           // Ephemeral error here, do not txn commit but reset progress
           Err(format!(
@@ -124,8 +124,8 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
         let block_hash = block.header.hash();
         SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
         builds_upon.append(
-          serai_client_serai::abi::BLOCK_HEADER_BRANCH_TAG,
-          Blake2b256::new_with_prefix([serai_client_serai::abi::BLOCK_HEADER_LEAF_TAG])
+          serai_client_serai::abi::BLOCK_BRANCH_TAG,
+          Blake2b256::new_with_prefix([serai_client_serai::abi::BLOCK_LEAF_TAG])
             .chain_update(block_hash.0)
             .finalize()
             .into(),

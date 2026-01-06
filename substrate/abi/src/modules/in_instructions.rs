@@ -29,6 +29,7 @@ impl Call {
 }
 
 // This is the smallest bound with a 4-byte length prefix.
+#[expect(clippy::as_conversions)]
 const IN_INSTRUCTION_RESULTS_BOUND: u64 = (u16::MAX as u64) + 1;
 
 /// An event from the `InInstruction`s module.
@@ -61,7 +62,10 @@ fn in_instruction_results_bound() {
     parity. Here, we ensure the bound isn't too low on the assumption each instruction takes at
     least one byte to encode.
   */
-  assert!(IN_INSTRUCTION_RESULTS_BOUND >= (serai_primitives::prelude::Batch::MAX_SIZE as u64));
+  assert!(
+    IN_INSTRUCTION_RESULTS_BOUND >=
+      u64::try_from(serai_primitives::prelude::Batch::MAX_SIZE).unwrap()
+  );
 
   // Confirm this bound causes a 4-byte length prefix
   {

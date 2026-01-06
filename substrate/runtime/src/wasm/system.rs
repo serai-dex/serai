@@ -1,18 +1,5 @@
 use super::*;
 
-/// The lookup for a SeraiAddress -> Public.
-pub struct Lookup;
-impl sp_runtime::traits::StaticLookup for Lookup {
-  type Source = SeraiAddress;
-  type Target = Public;
-  fn lookup(source: SeraiAddress) -> Result<Public, sp_runtime::traits::LookupError> {
-    Ok(source.into())
-  }
-  fn unlookup(source: Public) -> SeraiAddress {
-    source.into()
-  }
-}
-
 /// The runtime version.
 pub struct Version;
 // TODO: Are we reasonably able to prune `RuntimeVersion` from Substrate?
@@ -43,13 +30,13 @@ impl frame_system::Config for Runtime {
   type Hash = <Self::Block as sp_runtime::traits::Block>::Hash;
 
   type Block = Block;
-  type AccountId = sp_core::sr25519::Public;
-  type Lookup = Lookup;
+  type AccountId = SeraiAddress;
+  type Lookup = sp_runtime::traits::IdentityLookup<SeraiAddress>;
   type Nonce = u32;
 
-  type PreInherents = serai_core_pallet::StartOfBlock<Runtime>;
+  type PreInherents = ();
   type PostInherents = ();
-  type PostTransactions = serai_core_pallet::EndOfBlock<Runtime>;
+  type PostTransactions = ();
 
   /*
     We do not globally filter the types of calls which may be performed. Instead, our ABI only

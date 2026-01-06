@@ -1,14 +1,5 @@
 use super::*;
 
-impl From<Option<SeraiAddress>> for RuntimeOrigin {
-  fn from(signer: Option<SeraiAddress>) -> Self {
-    match signer {
-      None => RuntimeOrigin::none(),
-      Some(signer) => RuntimeOrigin::signed(signer.into()),
-    }
-  }
-}
-
 impl From<serai_abi::Call> for RuntimeCall {
   fn from(call: serai_abi::Call) -> Self {
     match call {

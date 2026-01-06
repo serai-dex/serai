@@ -89,10 +89,10 @@ fn test_len() {
   assert_eq!(len(u64::MAX), 8);
 
   // Check non-powers of two are padded to powers of two
-  assert_eq!(len(u64::MAX & ((1 << 24) - 1)), 4);
-  assert_eq!(len(u64::MAX & ((1 << 40) - 1)), 8);
-  assert_eq!(len(u64::MAX & ((1 << 48) - 1)), 8);
-  assert_eq!(len(u64::MAX & ((1 << 56) - 1)), 8);
+  assert_eq!(len((1 << 24) - 1), 4);
+  assert_eq!(len((1 << 40) - 1), 8);
+  assert_eq!(len((1 << 48) - 1), 8);
+  assert_eq!(len((1 << 56) - 1), 8);
 }
 
 #[test]

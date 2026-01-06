@@ -1,8 +1,9 @@
 //! Test environment for the DEX pallet.
 #![expect(clippy::as_conversions, clippy::same_name_method)]
 
-use frame_support::{sp_runtime::BuildStorage as _, derive_impl, construct_runtime};
+use frame_support::{sp_runtime::BuildStorage as _, weights::Weight, derive_impl, construct_runtime};
 
+use serai_abi::primitives::address::SeraiAddress;
 use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance};
 
 use crate as dex;
@@ -21,17 +22,27 @@ construct_runtime!(
 
 #[derive_impl(frame_system::config_preludes::TestDefaultConfig)]
 impl frame_system::Config for Test {
-  type AccountId = sp_core::sr25519::Public;
+  type AccountId = SeraiAddress;
   type Lookup = frame_support::sp_runtime::traits::IdentityLookup<Self::AccountId>;
   type Block = frame_system::mocking::MockBlock<Test>;
   type BlockLength = serai_core_pallet::Limits;
   type BlockWeights = serai_core_pallet::Limits;
 }
 
+impl From<serai_abi::Call> for RuntimeCall {
+  fn from(_call: serai_abi::Call) -> Self {
+    unimplemented!();
+  }
+}
+
 #[derive_impl(pallet_timestamp::config_preludes::TestDefaultConfig)]
 impl pallet_timestamp::Config for Test {}
 
-impl serai_core_pallet::Config for Test {}
+impl serai_core_pallet::Config for Test {
+  const PROTOCOL_ID: [u8; 32] = [0; 32];
+  const SIGNATURE_VERIFICATION_WEIGHT: Weight = Weight::zero();
+  type PreInherents = ();
+}
 
 impl serai_coins_pallet::Config<CoinsInstance> for Test {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;

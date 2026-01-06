@@ -25,7 +25,6 @@ simple-request = { path = "../../../common/request", version = "0.3" }
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
 borsh = { version = "1", default-features = false, features = ["std"] }
 
-bitvec = { version = "1", default-features = false, features = ["alloc", "std"] }
 serai-abi = { path = "../../abi", version = "0.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]

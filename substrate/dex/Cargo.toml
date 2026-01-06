@@ -21,8 +21,6 @@ workspace = true
 [dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
-
 frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
@@ -40,8 +38,6 @@ pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", de
 [features]
 std = [
   "scale/std",
-
-  "sp-core/std",
 
   "frame-system/std",
   "frame-support/std",
