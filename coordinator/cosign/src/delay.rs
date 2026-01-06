@@ -2,7 +2,7 @@ use core::future::Future;
 use std::time::{Duration, SystemTime};
 
 use serai_db::*;
-use serai_task::ContinuallyRan;
+use serai_task::{DoesNotError, ContinuallyRan};
 
 use crate::evaluator::CosignedBlocks;
 
@@ -36,27 +36,19 @@ pub(crate) struct CosignDelayTask<D: Db> {
 }
 
 impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
-  type Error = String;
+  type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let mut made_progress = false;
-
       loop {
         let mut txn = self.db.txn();
 
-        // Peek before consuming
+        // Peek the next block to mark as cosigned, without consuming yet
         let Some((block_number, time_evaluated)) = CosignedBlocks::try_recv(&mut txn) else {
-          // Queue was empty -> nothing to commit
-          drop(txn);
+          // Queue was empty -> nothing to commit, txn gets dropped
           break;
         };
-
-        if block_number == 0u64 {
-          // Clear block from queue
-          txn.commit();
-          continue;
-        }
 
         // If we've already acknowledged a later block, consume and skip (don't wait).
         let already_cosigned = LatestCosignedBlockNumber::get(&txn).unwrap_or(0);
@@ -66,27 +58,25 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
           continue;
         }
 
-        // Calculate when we should mark it as valid, checking for overflow to avoid panic
-        let time_valid = Duration::from_secs(time_evaluated)
-          .checked_add(ACKNOWLEDGEMENT_DELAY)
-          .ok_or_else(|| {
-            format!(
-              "time_evaluated ({time_evaluated}) would overflow when adding ACKNOWLEDGEMENT_DELAY"
-            )
-          })?;
+        // Calculate when we should mark it as valid
+        let time_valid = Duration::from_secs(time_evaluated) + ACKNOWLEDGEMENT_DELAY;
         let now = now_timestamp();
 
+        // drop txn during sleep
+        drop(txn);
+
         if time_valid > now {
-          // NOT READY YET - don't consume, just return
-          // leave message in queue, check again in next task iteration
-          // simulates sleeping until ready, but continually iterating until ready instead
-          drop(txn);
-          return Ok(made_progress);
+          // Sleep until then
+          let time_left = time_valid - now;
+          tokio::time::sleep(time_left).await;
         }
 
+        let mut txn = self.db.txn();
+        let _consumed_block = CosignedBlocks::try_recv(&mut txn);
+        // Set the cosigned block
         LatestCosignedBlockNumber::set(&mut txn, &block_number);
-
         txn.commit();
+
         made_progress = true;
       }
 

@@ -80,11 +80,8 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let start_block_number = ScanCosignFrom::get(&self.db).unwrap_or(1);
-      let latest_block_number = self
-        .serai
-        .latest_finalized_block_number()
-        .await
-        .map_err(|e| format!("RPC error fetching latest finalized block number: {e}"))?;
+      let latest_block_number =
+        self.serai.latest_finalized_block_number().await.map_err(|e| format!("{e:?}"))?;
 
       if latest_block_number < start_block_number {
         return Ok(false);
@@ -97,14 +94,9 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
           .serai
           .block_by_number(block_number)
           .await
-          .map_err(|e| format!("RPC error fetching block #{block_number}: {e}"))?
+          .map_err(|e| format!("{e}"))?
           .ok_or_else(|| "couldn't get block which should've been finalized".to_owned())?;
-
-        let events = self
-          .serai
-          .events(block.header.hash())
-          .await
-          .map_err(|e| format!("RPC error fetching events for block #{block_number}: {e}"))?;
+        let events = self.serai.events(block.header.hash()).await.map_err(|e| format!("{e}"))?;
 
         let mut has_events = HasEvents::No;
 
@@ -115,9 +107,8 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
         if block.header.builds_upon()
           != builds_upon.clone().calculate(serai_client_serai::abi::BLOCK_HEADER_BRANCH_TAG)
         {
-          // nothing to commit
-          drop(txn);
-          return Err(format!(
+          // Ephemeral error here, do not txn commit but reset progress
+          Err(format!(
             "node's block #{block_number} doesn't build upon the block #{} prior indexed",
             block_number - 1
           ))?;
@@ -141,27 +132,12 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
                 validator_sets::Event::Allocation { validator, network, amount } => {
                   let Ok(network) = ExternalNetworkId::try_from(*network) else { continue };
                   let existing = Stakes::get(&txn, network, *validator).unwrap_or(Amount(0));
-                  let new_stake = existing.0.checked_add(amount.0).ok_or_else(|| {
-                    format!(
-                      "stake overflow for validator {:?} on network {:?}: {} + {}",
-                      validator, network, existing.0, amount.0
-                    )
-                  })?;
-                  Stakes::set(&mut txn, network, *validator, &Amount(new_stake));
+                  Stakes::set(&mut txn, network, *validator, &Amount(existing.0 + amount.0));
                 }
                 validator_sets::Event::Deallocation { validator, network, amount, timeline: _ } => {
                   let Ok(network) = ExternalNetworkId::try_from(*network) else { continue };
-
-                  let existing_stake = Stakes::get(&txn, network, *validator)
-                    .ok_or_else(|| format!("unable to deallocate with no prior existing stake"))?;
-
-                  let new_stake = existing_stake.0.checked_sub(amount.0).ok_or_else(|| {
-                    format!(
-                      "stake underflow for validator {:?} on network {:?}: {} - {}",
-                      validator, network, existing_stake.0, amount.0
-                    )
-                  })?;
-                  Stakes::set(&mut txn, network, *validator, &Amount(new_stake));
+                  let existing = Stakes::get(&txn, network, *validator).unwrap_or(Amount(0));
+                  Stakes::set(&mut txn, network, *validator, &Amount(existing.0 - amount.0));
                 }
                 validator_sets::Event::SetDecided { set, validators } => {
                   let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
@@ -216,19 +192,16 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
           let mut sets = Vec::with_capacity(sets_and_keys_and_stakes.len());
           let mut keys = HashMap::with_capacity(sets_and_keys_and_stakes.len());
           let mut stakes = HashMap::with_capacity(sets_and_keys_and_stakes.len());
-          let mut total_stake = 0u64;
+          let mut total_stake = 0;
           for (set, key, stake) in sets_and_keys_and_stakes {
             sets.push(set);
             keys.insert(set.network, key);
             stakes.insert(set.network, stake.0);
-            total_stake = total_stake
-              .checked_add(stake.0)
-              .ok_or_else(|| format!("total stake overflow: {} + {}", total_stake, stake.0))?;
+            total_stake += total_stake;
           }
           if total_stake == 0 {
-            // commit only per block finished otherwise reset db progress
-            drop(txn);
-            return Err(format!("cosigning sets for block #{block_number} had 0 stake in total"))?;
+            // Ephemeral error here, do not txn commit but reset progress
+            Err(format!("cosigning sets for block #{block_number} had 0 stake in total"))?;
           }
 
           let global_session_info = GlobalSession {
@@ -293,8 +266,7 @@ impl<D: Db, S: SeraiRpc> ContinuallyRan for CosignIntendTask<D, S> {
         ScanCosignFrom::set(&mut txn, &(block_number + 1));
 
         // All-or-nothing, commit only per block finished otherwise reset db progress
-        // avoids partially adding db entries without committing the full expected db additions
-        // i.e. saving a SubstrateBlockHash initially but later failing mid-way
+        // for ephemeral errors
         txn.commit();
       }
 
