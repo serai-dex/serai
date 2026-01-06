@@ -151,7 +151,6 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                   .await
                   .map_err(|e| format!("{e:?}"))?;
               }
-
               // We return an error so the delay before this task is run again increases
               Err(format!(
                 "notable block (#{block_number}) wasn't yet cosigned. this should resolve shortly",
@@ -183,7 +182,6 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
 
               let mut weight_cosigned = 0;
               let mut lowest_common_block: Option<u64> = None;
-
               for set in global_session_info.sets {
                 // Check if this set cosigned this block or not
                 let Some(cosign) =
@@ -191,7 +189,6 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                 else {
                   continue;
                 };
-
                 if cosign.cosign.block_number >= block_number {
                   weight_cosigned +=
                     global_session_info.stakes.get(&set.network).ok_or_else(|| {

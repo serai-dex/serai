@@ -231,8 +231,6 @@ impl IntakeCosignError {
 /// The interface to manage cosigning with.
 pub struct Cosigning<D: Db> {
   db: D,
-  // The task system stops a task once all its handles are dropped. Keep these alive for as long as
-  // this cosigning service should run.
   _task_handles: Vec<TaskHandle>,
 }
 impl<D: Db> Cosigning<D> {
@@ -353,7 +351,7 @@ impl<D: Db> Cosigning<D> {
 
     // Check our indexed blockchain includes a block with this block number
     let Some(our_block_hash) = SubstrateBlockHash::get(&self.db, cosign.block_number) else {
-      return Err(IntakeCosignError::NotYetIndexedBlock)?;
+      Err(IntakeCosignError::NotYetIndexedBlock)?
     };
     let faulty = cosign.block_hash != our_block_hash;
 
@@ -369,7 +367,7 @@ impl<D: Db> Cosigning<D> {
     }
 
     let Some(global_session) = GlobalSessions::get(&self.db, cosign.global_session) else {
-      return Err(IntakeCosignError::UnrecognizedGlobalSession)?;
+      Err(IntakeCosignError::UnrecognizedGlobalSession)?
     };
 
     // Check the cosigned block number is in range to the global session

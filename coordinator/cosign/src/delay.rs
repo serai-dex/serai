@@ -46,7 +46,6 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
 
         // Peek the next block to mark as cosigned, without consuming yet
         let Some((block_number, time_evaluated)) = CosignedBlocks::try_recv(&mut txn) else {
-          // Queue was empty -> nothing to commit, txn gets dropped
           break;
         };
 
