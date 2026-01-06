@@ -1,5 +1,17 @@
-use crate::{BlockHash, Cosign, CosignIntent, ExternalNetworkId, Public, SignedCosign};
-use crate::tests::{sign_cosign, sr25519_fixture};
+use crate::{BlockHash, COSIGN_CONTEXT, Cosign, CosignIntent, ExternalNetworkId, Public, SignedCosign};
+
+pub(crate) fn sr25519_fixture() -> schnorrkel::Keypair {
+  schnorrkel::MiniSecretKey::from_bytes(&[0xff; 32])
+    .expect("fixed seed should be valid")
+    .expand_to_keypair(schnorrkel::ExpansionMode::Ed25519)
+}
+
+pub(crate) fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosign {
+  SignedCosign {
+    cosign: cosign.clone(),
+    signature: keypair.sign_simple(COSIGN_CONTEXT, &cosign.signature_message()).to_bytes(),
+  }
+}
 
 #[test]
 fn cosign_intent_to_cosign() {
