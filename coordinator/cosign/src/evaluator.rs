@@ -250,7 +250,6 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
               .as_secs(),
           ),
         );
-
         txn.commit();
 
         #[cfg(not(coverage))]
