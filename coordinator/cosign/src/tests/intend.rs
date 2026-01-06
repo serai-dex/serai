@@ -11,7 +11,7 @@ use serai_task::ContinuallyRan;
 use serai_client_serai::{
   Events,
   abi::{
-    Block, Event, Header, HeaderV1, BLOCK_HEADER_BRANCH_TAG, BLOCK_HEADER_LEAF_TAG, coins,
+    Block, Event, Header, HeaderV1, BLOCK_BRANCH_TAG, BLOCK_LEAF_TAG, coins,
     primitives::{
       BlockHash,
       address::{ExternalAddress, SeraiAddress},
@@ -132,7 +132,7 @@ impl Serai {
     let block = Block {
       header: Header::V1(HeaderV1 {
         number,
-        builds_upon: self.builds_upon.clone().calculate(BLOCK_HEADER_BRANCH_TAG),
+        builds_upon: self.builds_upon.clone().calculate(BLOCK_BRANCH_TAG),
         unix_time_in_millis: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
           as u64,
         transactions_commitment: UnbalancedMerkleTree::EMPTY,
@@ -145,8 +145,8 @@ impl Serai {
     let block_hash = block.header.hash();
 
     self.builds_upon.append(
-      BLOCK_HEADER_BRANCH_TAG,
-      Blake2b256::new_with_prefix([BLOCK_HEADER_LEAF_TAG])
+      BLOCK_BRANCH_TAG,
+      Blake2b256::new_with_prefix([BLOCK_LEAF_TAG])
         .chain_update(block_hash.0)
         .finalize()
         .into(),

@@ -2628,12 +2628,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "env_filter"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bf3c259d255ca70051b30e2e95b5446cdb8949ac4cd22c0d7fd634d89f568e2"
+dependencies = [
+ "log",
+]
+
+[[package]]
 name = "env_logger"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4cd405aab171cb85d6735e5c8d9db038c17d3ca007a4d2c25f337935c3d90580"
 dependencies = [
  "humantime",
+ "log",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.11.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "13c863f0904021b108aa8b2f55046443e6b1ebde8fd4a15c399893aae4fa069f"
+dependencies = [
+ "env_filter",
  "log",
 ]
 
@@ -8097,7 +8116,7 @@ dependencies = [
  "ciphersuite 0.4.2",
  "dalek-ff-group 0.5.0",
  "dkg-musig",
- "env_logger",
+ "env_logger 0.10.2",
  "frost-schnorrkel",
  "hex",
  "log",
@@ -8216,14 +8235,11 @@ version = "0.1.0"
 dependencies = [
  "blake2 0.11.0-rc.3",
  "borsh",
- "k256",
+ "env_logger 0.11.8",
  "log",
- "rand_core 0.6.4",
- "schnorrkel",
  "serai-client-serai",
  "serai-cosign-types",
  "serai-db",
- "serai-substrate-tests",
  "serai-task",
  "tokio",
 ]
@@ -8343,7 +8359,7 @@ dependencies = [
 name = "serai-ethereum-relayer"
 version = "0.1.0"
 dependencies = [
- "env_logger",
+ "env_logger 0.10.2",
  "log",
  "serai-db",
  "serai-env",
@@ -8403,7 +8419,7 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "dalek-ff-group 0.5.0",
- "env_logger",
+ "env_logger 0.10.2",
  "flexible-transcript",
  "hex",
  "log",
@@ -8592,7 +8608,7 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "dkg-evrf",
- "env_logger",
+ "env_logger 0.10.2",
  "hex",
  "log",
  "serai-cosign-types",

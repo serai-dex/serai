@@ -1,7 +1,4 @@
-use std::{
-  collections::HashMap,
-  time::{Duration, Instant},
-};
+use std::{collections::HashMap, time::Duration};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -17,16 +14,14 @@ use serai_client_serai::abi::primitives::{
 };
 
 use crate::{
-  BROADCAST_FREQUENCY, Cosign, CosignIntent, Cosigning, Faulted, FaultedSession, Faults,
-  GlobalSession, GlobalSessions, GlobalSessionsLastBlock, IntakeCosignError,
-  NetworksLatestCosignedBlock, SeraiRpc, SignedCosign, SubstrateBlockHash,
-  delay::{ACKNOWLEDGEMENT_DELAY, LatestCosignedBlockNumber},
+  Cosign, CosignIntent, Cosigning, Faulted, FaultedSession, Faults, GlobalSession, GlobalSessions,
+  GlobalSessionsLastBlock, IntakeCosignError, NetworksLatestCosignedBlock, SignedCosign,
+  SubstrateBlockHash,
+  delay::LatestCosignedBlockNumber,
   evaluator::CurrentlyEvaluatedGlobalSession,
-  intend::GlobalSessionsChannel,
+  intend::IntendedCosigns,
   tests::{TestRequest, intend::Serai},
 };
-
-use crate::intend::IntendedCosigns;
 
 use serai_cosign_types::tests::{
   fixture_public_key, public_key_from_seed, sign_cosign_with_fixture, sign_cosign_with_seed,
