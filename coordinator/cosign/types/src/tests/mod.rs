@@ -22,18 +22,22 @@ fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosign {
   }
 }
 
+/// Returns the public key bytes from the test fixture keypair (seed [0xff; 32])
 pub fn fixture_public_key() -> [u8; 32] {
   sr25519_fixture().public.to_bytes()
 }
 
+/// Returns the public key bytes for a keypair with the given seed
 pub fn public_key_from_seed(seed: [u8; 32]) -> [u8; 32] {
   sr25519_fixture_from_seed(seed).public.to_bytes()
 }
 
+/// Creates a SignedCosign using the test fixture keypair (seed [0xff; 32])
 pub fn sign_cosign_with_fixture(cosign: Cosign) -> SignedCosign {
   sign_cosign(cosign, &sr25519_fixture())
 }
 
+/// Creates a SignedCosign using a keypair derived from the given seed
 pub fn sign_cosign_with_seed(cosign: Cosign, seed: [u8; 32]) -> SignedCosign {
   sign_cosign(cosign, &sr25519_fixture_from_seed(seed))
 }
