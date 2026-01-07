@@ -146,11 +146,13 @@ runs:
         # vector instructions (to simplify the emulated CPU), `sme` (matrix instructions) for the
         # same reason, and `pauth` (memory authentication) for a notable performance benefit.
         #
-        # We limit to 2 cores, and 2 GB of RAM, as our processes should not require a notable amount
-        # of RAM. As we cannot use the `hvf` accelerator, it isn't an issue to specify the default
-        # `tcg` accelerator, and we do so to provide it with a massive cache. While it defaults to
-        # 1 GB, we use 3 GB (specified in MiB) to maximize our performance. In total, this leaves
-        # 2 GB of RAM for macOS itself (as the runner has 7 GB).
+        # We limit to 3 GB of RAM, as our processes should not require a notable amount of RAM.
+        # As we cannot use the `hvf` accelerator, it isn't an issue to specify the default `tcg`
+        # accelerator, and we do so to provide it with a massive cache. While it defaults to 1 GB,
+        # we use 2 GB (specified in MiB) to maximize our performance. In total, this leaves 2 GB of
+        # RAM for macOS itself (as the runner has 7 GB).
+        #
+        # We also specify no graphics card, as we do not need to emulate one in our CI.
         #
         # Finally, while we cannot use `hvf` as an accelerator (as m1 chips do not support nested
         # virtualization, and this runner is already virtualized), we do enable the HVF-premised
@@ -160,7 +162,7 @@ runs:
         #
         # We accomplish all of this with the methodology from
         # [this comment](https://github.com/lima-vm/lima/pull/3173#issuecomment-2623130310).
-        QEMU_SYSTEM_AARCH64: "qemu-system-aarch64-vmnet -machine virt -cpu max,pmu=off,sve=on,sve128=on,sme=off,pauth=off -smp 2 -m 2G -accel tcg,tb-size=3072"
+        QEMU_SYSTEM_AARCH64: "qemu-system-aarch64-vmnet -machine virt -cpu max,pmu=off,sve=on,sve128=on,sme=off,pauth=off -m 3G -accel tcg,tb-size=2048 -vga none"
       with:
         set-host: true
 
