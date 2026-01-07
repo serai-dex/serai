@@ -40,11 +40,9 @@ pub fn reproducibly_builds() {
     // Build the images in parallel
     let mut commands = vec![];
     for image in &images {
-      #[cfg_attr(not(github_ci), expect(unused_mut))]
       let mut command = Command::new("docker")
         .current_dir(&path)
         .arg("build")
-        .arg("--quiet")
         .arg("--no-cache")
         .arg("--file=./orchestration/runtime/Dockerfile")
         .arg("--tag")
@@ -52,6 +50,10 @@ pub fn reproducibly_builds() {
         .arg(".")
         .spawn()
         .unwrap();
+
+      // Multiple simultaneous build processes are very noisy, so we quiet them
+      #[cfg(not(github_ci))]
+      command.arg("--quiet");
 
       // In the GH CI, we force this to be sequential due to experiencing OOM kills on
       // `macos-15-intel`. This doesn't take so long to run we're concerned about any time limit.

@@ -27,7 +27,7 @@ ADD AGPL-3.0 /serai
 WORKDIR /serai
 
 # Build the runtime
-RUN cargo build --release -p serai-runtime --no-default-features
+RUN cargo build --release -p serai-runtime --no-default-features -vv
 
 # Copy the artifact to its own image which solely exists to further export it
 FROM busybox:musl
