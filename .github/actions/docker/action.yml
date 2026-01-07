@@ -162,7 +162,7 @@ runs:
         #
         # We accomplish all of this with the methodology from
         # [this comment](https://github.com/lima-vm/lima/pull/3173#issuecomment-2623130310).
-        QEMU_SYSTEM_AARCH64: "qemu-system-aarch64-vmnet -machine virt -cpu max,pmu=off,sve=on,sve128=on,sme=off,pauth=off -m 3G -accel tcg,tb-size=2048 -vga none"
+        QEMU_SYSTEM_AARCH64: "qemu-system-aarch64-vmnet -machine virt -cpu cortex-a76 -m 3G -accel tcg,tb-size=2048 -vga none"
       with:
         set-host: true
 
