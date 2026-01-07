@@ -43,10 +43,8 @@ jobs:
           # Allow the following command to fail
           set +e
           # Capture the output to `stdout.txt`
-          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture > stdout.txt
+          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture | tee stdout.txt
           CODE=$?
-          # Print `stdout` for the CI logs, as we captured it to process it, not swallow it
-          cat stdout.txt
           # Check the exit code from `cargo`
           if [ $CODE -ne 0 ]; then
             exit $CODE
@@ -85,10 +83,8 @@ jobs:
           # Allow the following command to fail
           set +e
           # Capture the output to `stdout.txt`
-          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture > stdout.txt
+          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture | tee stdout.txt
           CODE=$?
-          # Print `stdout` for the CI logs, as we captured it to process it, not swallow it
-          cat stdout.txt
           # Check the exit code from `cargo`
           if [ $CODE -ne 0 ]; then
             exit $CODE
