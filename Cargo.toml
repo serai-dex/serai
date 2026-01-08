@@ -208,6 +208,7 @@ home = { path = "patches/home" }
 # Updates to the latest version
 darling = { path = "patches/darling" }
 dtoa = { path = "patches/dtoa" }
+getrandom = { path = "patches/getrandom" }
 ryu = { path = "patches/ryu" }
 thiserror = { path = "patches/thiserror" }
 

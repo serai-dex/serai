@@ -12,9 +12,18 @@ pub fn serai(
   network: Network,
   serai_key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
 ) {
-  // Always builds in release for performance reasons
   let setup = mimalloc(Os::Debian) +
-    &build_serai_service("RUN rustup component add rust-src", Os::Debian, true, "", "serai-node");
+    &build_serai_service(
+      r#"
+RUN rustup component add rust-src
+# Always build with optimizations as effectively required by Substrate
+ENV RUSTFLAGS -C opt-level=3
+      "#,
+      Os::Debian,
+      network.release(),
+      "",
+      "serai-node",
+    );
 
   let env_vars = [("KEY", hex::encode(serai_key.to_repr()))];
   let mut env_vars_str = String::new();

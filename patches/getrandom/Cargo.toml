@@ -1,0 +1,22 @@
+[package]
+name = "getrandom"
+version = "0.2.99"
+description = "Updates to the latest version"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/getrandom"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+getrandom = { version = "0.3", default-features = false }
+
+[features]
+std = ["getrandom/std"]
+js = ["getrandom/wasm_js"]

@@ -152,6 +152,21 @@ fn build_serai_service(
 ) -> String {
   let profile = if release { "release" } else { "debug" };
   let profile_flag = if release { "--release" } else { "" };
+  /*
+    We explicitly enable debug assertions on debug, allowing us to independently tune the
+    optimization level (as required for `serai-node`).
+
+    We also enable `ub-checks`, considering them an extension of `debug-assertions`. While they
+    produce aborting panics, which cannot be caught via unwinding, we do not make use of unwinding.
+
+    When not compiling for production, we test randomized layouts. While ideally, we would enable
+    this for security purposes (hardening), the feature is unstable and the risk of programmers who
+    have assumed a layout is real. Instead of enabling it in a situation where we may have unsafe
+    behavior, with critical effects, we solely enable it when debugging. This achieves its
+    secondary purpose of helping to detect unsafe expectations about layouts.
+  */
+  let debug_rust_flags =
+    if release { "" } else { "-C debug-assertions=on -Z ub-checks=on -Z randomize-layout" };
 
   (match os {
     Os::Debian => {
@@ -207,12 +222,18 @@ ADD AGPL-3.0 /serai
 
 WORKDIR /serai
 
-# Mount the caches and build
+# Mount the caches and build the service.
+#
+# We enable `-C stack-protector=all` (https://github.com/rust-lang/pull/146369) in its
+# pre-stablized form. Per discussion on how to stablize it, we use `=all` as it's the option with
+# well-defined semantics when considered within the context of Rust.
 RUN --mount=type=cache,target=/root/.cargo \
   --mount=type=cache,target=/usr/local/cargo/registry \
   --mount=type=cache,target=/usr/local/cargo/git \
   --mount=type=cache,target=/serai/target \
   mkdir /serai/bin && \
+  RUSTC_BOOTSTRAP=1 \
+  RUSTFLAGS="$RUSTFLAGS -Z stack-protector=all {debug_rust_flags}" \
   cargo build {profile_flag} --features "{features}" -p {package} && \
   mv /serai/target/{profile}/{package} /serai/bin
 "#

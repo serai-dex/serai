@@ -12,7 +12,6 @@ fn main() {
   const WASM: &str = "-C link-arg=--export-table";
   const REQUIRED_BY_SUBSTRATE: &str = "--cfg substrate_runtime";
   const SAFETY: &str = "-C overflow-checks=true -C panic=abort";
-  // `symbol-mangling-version` is defined to provide an explicit, canonical definition of symbols.
   // `embed-bitcode=false` is set as the bitcode is unnecessary yet takes notable time to compile.
   /*
     Rust's LTO requires bitcode, forcing us to defer to the linker's LTO. While this would suggest
@@ -20,22 +19,47 @@ fn main() {
     and should solely be done when compiling one library with mixed methods of linking. When
     compiling and linking just once (as seen here), it's suggested to use the linker's LTO instead.
 
-    https://doc.rust-lang.org/1.91.1/rustc/codegen-options/index.html#embed-bitcode
+    https://doc.rust-lang.org/1.92.0/rustc/codegen-options/index.html#embed-bitcode
   */
-  const COMPILATION: &str =
-    "-C symbol-mangling-version=v0 -C embed-bitcode=false -C linker-plugin-lto=true";
+  const COMPILATION: &str = "-C embed-bitcode=false -C linker-plugin-lto=true";
+  // `symbol-mangling-version` is defined to provide an explicit, canonical definition of symbols.
+  /*
+    `codegen-source-order` is a nightly flag explicitly intended to cause reproducible builds
+    when building in parallel. See https://github.com/rust-lang/rust/pull/144722 for more info.
+
+    It should be unnecessary at this time due to the lack of a parallel frontend, but it doesn't
+    hurt to enable now.
+  */
+  const DETERMINISM: &str = "-C symbol-mangling-version=v0 -Z codegen-source-order";
 
   let profile = env::var("PROFILE").unwrap();
   let mut env = vec![];
   let release = profile == "release";
-  let mut rustflags = format!("{ONE_45491} {WASM} {REQUIRED_BY_SUBSTRATE} {SAFETY} {COMPILATION}");
+  let mut rustflags =
+    format!("{ONE_45491} {WASM} {REQUIRED_BY_SUBSTRATE} {SAFETY} {COMPILATION} {DETERMINISM}");
   if release {
+    /*
+      The expected options upon `--release`.
+
+      It is documented that reducing the codegen units can lead to more optimized code, which we
+      ensure here by using a minimal amount of codegen units (1). Potentially surprisingly, having
+      multiple codegen units is not expected to impact reproducibility
+      (https://github.com/rust-lang/rust/issues/128675), so this is solely for the optimizations
+      made possible and not related to the desired determinism.
+    */
     rustflags.push_str(" -C debug-assertions=false -C codegen-units=1 -C opt-level=3");
+    /*
+      `incremental` is recommended to be disabled for release builds, and this should be a clean
+      build used just once as part of the reproducible build process.
+
+      https://doc.rust-lang.org/1.92.0/rustc/codegen-options/index.html#incremental
+      https://doc.rust-lang.org/1.92.0/cargo/reference/profiles.html#incremental
+    */
+    env.push(("CARGO_INCREMENTAL", "false"));
+
     // Strip debug info, as we have debug builds for that
     rustflags.push_str(" -C debuginfo=none -C strip=symbols -C force-unwind-tables=no");
-    // `incremental` is recommended to be disabled for release builds, and this should
-    // be a clean build used just once as part of the reproducible build process.
-    env.push(("CARGO_INCREMENTAL", "false"));
+    rustflags.push_str(" -Z location-detail=none");
   }
 
   let target_dir = PathBuf::from(env::var("OUT_DIR").unwrap()).join("target");
@@ -78,6 +102,16 @@ fn main() {
 
   let mut command = cargo_command();
   command
+    // This is necessary for all of our "-Z ..." options
+    // https://github.com/rust-lang/rust-project-goals/issues/274 will allow `build-std` without it
+    .env("RUSTC_BOOTSTRAP", "1")
+    /*
+      `trim-paths` is a nightly flag to strip the build environment's paths, as would otherwise
+      prevent reproducible builds without an exactly-matching filesystem layout.
+      -
+      This would be part of `DETERMINISM` except for how it's a `cargo` flag, not a `rustc` flag.
+    */
+    .arg("-Ztrim-paths=all")
     .arg("rustc")
     .arg("--package")
     .arg(env::var("CARGO_PKG_NAME").unwrap())
@@ -86,12 +120,9 @@ fn main() {
     .arg("--crate-type")
     .arg("cdylib")
     .arg("--no-default-features")
-    // This is necessary to use `-Z build-std` on stable
-    // TODO: Remove with the accomplishment of
-    // https://github.com/rust-lang/rust-project-goals/issues/274
-    .env("RUSTC_BOOTSTRAP", "1")
     // `build-std` for performance reasons and to ensure all our flags/configuration is respected
-    .arg("-Zbuild-std=core,alloc");
+    .arg("-Zbuild-std=compiler_builtins,panic_abort,core,alloc")
+    .arg("-Zbuild-std-features=");
   if release {
     command.arg("--release");
   }

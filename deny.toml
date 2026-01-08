@@ -14,6 +14,9 @@ ignore = [
 [licenses]
 version = 2
 
+include-dev = true
+include-build = true
+
 allow = [
   # Effective public domain
   "CC0-1.0",

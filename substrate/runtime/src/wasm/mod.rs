@@ -386,12 +386,12 @@ sp_api::impl_runtime_apis! {
       for network in NetworkId::all() {
         for participant in
           <Self as super::runtime_decl_for_serai_api::SeraiApi<Block>>::validators(network) {
-          all.insert(sp_core::sr25519::Public::from(participant).into());
+          all.insert(Public::from(participant).into());
         }
       }
       all
         .into_iter()
-        .map(|id| sp_authority_discovery::AuthorityId::from(sp_core::sr25519::Public::from(id)))
+        .map(|id| sp_authority_discovery::AuthorityId::from(Public::from(id)))
         .collect()
     }
   }
