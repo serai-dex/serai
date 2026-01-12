@@ -45,7 +45,7 @@ pub fn reproducibly_builds() {
         .current_dir(&path)
         .arg("build")
         .arg("--no-cache")
-        .arg("--file=./orchestration/runtime/Dockerfile")
+        .arg("--file=./orchestration/runtime/Containerfile")
         .arg("--tag")
         .arg(image)
         .arg(".");

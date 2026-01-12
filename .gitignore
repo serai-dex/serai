@@ -6,7 +6,7 @@ Cargo.lock
 
 # Don't commit any `Dockerfile`, as they're auto-generated, except the only one which isn't
 Dockerfile
-!orchestration/runtime/Dockerfile
+!orchestration/runtime/Containerfile
 
 .test-logs
 

@@ -513,7 +513,7 @@ fn start(network: Network, services: HashSet<String>) {
           .current_dir(&repo_path)
           .arg("build")
           .arg("--no-cache")
-          .arg("--file=./orchestration/runtime/Dockerfile")
+          .arg("--file=./orchestration/runtime/Containerfile")
           .arg("--tag")
           .arg(format!("serai-{}-runtime-img", network.label()))
           .arg(".")
@@ -545,9 +545,9 @@ fn start(network: Network, services: HashSet<String>) {
         // Wait until its built
         let mut ticks = 0;
         while !built() {
-          std::thread::sleep(core::time::Duration::from_secs(60));
+          std::thread::sleep(core::time::Duration::from_mins(1));
           ticks += 1;
-          assert!(ticks < (6 * 60), "couldn't build the runtime after 6 hours");
+          assert!(ticks < (24 * 60), "couldn't build the runtime after 24 hours");
         }
       }
     }
