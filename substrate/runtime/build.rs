@@ -65,6 +65,13 @@
 //!
 //! ### Caveats
 //!
+//! This is not expected to produce reproducible builds when compiled in a non-`release` profile.
+//! `location-detail` includes the host-formatted file path by default, which will be dependent on
+//! the host (even with our usage of `-Z trim-paths`). While we could set
+//! `location-detail=line,column` to omit the file path, this would so adversely harm debugging it
+//! isn't valued when the intent is to enable verifying _published_ builds (not in-development
+//! builds).
+//!
 //! The included methodology is specific to WASM which means this build script will not
 //! immediately work to produce a PolkaVM runtime, a feature which can be assumed if one instead
 //! used `substrate-wasm-builder`.
