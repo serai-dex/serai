@@ -704,3 +704,6 @@ pub fn slash_report_transaction(getter: &impl Get, set: &NewSetInformation) -> T
   }
   Transaction::SlashReport { slash_points, signed: Signed::default() }
 }
+
+#[cfg(test)]
+mod tests;

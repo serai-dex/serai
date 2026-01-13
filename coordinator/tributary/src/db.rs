@@ -22,7 +22,7 @@ pub enum Topic {
   },
 
   // DkgParticipation isn't represented here as participations are immediately sent to the
-  // processor, not accumulated within this databse
+  // processor, not accumulated within this database
   /// Participation in the signing protocol to confirm the DKG results on Substrate
   DkgConfirmation {
     /// The attempt number this is for
@@ -68,7 +68,7 @@ impl Topic {
   }
 
   // The topic for the re-attempt to schedule
-  fn reattempt_topic(self) -> Option<(u32, Topic)> {
+  pub(crate) fn reattempt_topic(self) -> Option<(u32, Topic)> {
     #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
@@ -330,7 +330,7 @@ impl TributaryDb {
     );
   }
   pub(crate) fn finish_cosigning(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
-    assert!(ActivelyCosigning::take(txn, set).is_some(), "finished cosigning but not cosigning");
+    assert!(ActivelyCosigning::take(txn, set).is_some(), "finished cosigning but wasn't cosigning");
   }
   pub(crate) fn mark_cosigned(
     txn: &mut impl DbTxn,
@@ -352,7 +352,8 @@ impl TributaryDb {
     RecognizedTopics::send(txn, set, &topic);
   }
   pub(crate) fn recognized(getter: &impl Get, set: ExternalValidatorSet, topic: Topic) -> bool {
-    AccumulatedWeight::get(getter, set, topic).is_some()
+    AccumulatedWeight::get(getter, set, topic).is_some() &&
+      RecognizedTopics::peek(getter, set).is_some()
   }
 
   pub(crate) fn start_of_block(txn: &mut impl DbTxn, set: ExternalValidatorSet, block_number: u64) {
