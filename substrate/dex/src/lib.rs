@@ -246,6 +246,7 @@ mod pallet {
         Err(Error::<T>::Unsatisfied)?;
       }
 
+      #[expect(clippy::disallowed_methods)]
       LiquidityTokens::<T>::burn_fn(from, liquidity_tokens.into())?;
       Coins::<T>::transfer_fn(from, pool, Balance { coin: Coin::Serai, amount: sri_amount })?;
       Coins::<T>::transfer_fn(

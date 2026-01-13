@@ -57,7 +57,6 @@ mod pallet {
   };
 
   use serai_core_pallet::Pallet as Core;
-  use serai_coins_pallet::AllowMint;
   type Coins<T> = serai_coins_pallet::Pallet<T, serai_coins_pallet::CoinsInstance>;
 
   use super::*;
@@ -692,21 +691,6 @@ mod pallet {
     // Explicitly provide a pre-dispatch which calls `validate_unsigned`
     fn pre_dispatch(call: &Self::Call) -> Result<(), TransactionValidityError> {
       Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ())
-    }
-  }
-
-  /*
-    TODO: Add an intent. While we shouldn't allow `Transfer`, `AddLiquidity` when we're within a
-    certain range of the limit, we should still allow swaps.
-  */
-  impl<T: Config> AllowMint for Pallet<T> {
-    fn is_allowed(balance: &ExternalBalance) -> bool {
-      let current_requirement = Self::network_stake_requirement(balance.coin.network());
-      let new_requirement = current_requirement.saturating_add(Self::stake_requirement(*balance));
-      let staked =
-        Abstractions::<T>::stake_for_current_validator_set(balance.coin.network().into())
-          .unwrap_or(Amount(0));
-      staked.0 >= new_requirement
     }
   }
 }

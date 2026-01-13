@@ -1,5 +1,20 @@
-disallowed-methods = [
-  "Option::map_or",
-  "Option::map_or_else",
-]
 allow-one-hash-in-raw-strings = true
+
+[[disallowed-methods]]
+path = "Option::map_or"
+[[disallowed-methods]]
+path = "Option::map_or_else"
+
+[[disallowed-methods]]
+path = "serai_coins_pallet::pallet::Pallet::burn_fn"
+reason = "this method should only be used when not `CoinsInstance`, which isn't enforced at compile-time"
+
+[[disallowed-methods]]
+path = "serai_coins_pallet::pallet::Pallet::transfer"
+reason = "this method should only be used with `CoinsInstance`, which isn't enforced at compile-time"
+[[disallowed-methods]]
+path = "serai_coins_pallet::pallet::Pallet::burn"
+reason = "this method should only be used with `CoinsInstance`, which isn't enforced at compile-time"
+[[disallowed-methods]]
+path = "serai_coins_pallet::pallet::Pallet::burn_with_instruction"
+reason = "this method should only be used with `CoinsInstance`, which isn't enforced at compile-time"

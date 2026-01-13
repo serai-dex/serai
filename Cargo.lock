@@ -8076,6 +8076,7 @@ dependencies = [
  "frame-system",
  "pallet-timestamp",
  "parity-scale-codec",
+ "rand_core 0.6.4",
  "serai-abi",
  "serai-core-pallet",
  "sp-core",
