@@ -586,6 +586,15 @@ which will build the WASM as part of its build process, with the necessary confi
   build_command.arg("--target").arg("wasm32v1-none");
   build_command.arg("--crate-type").arg("cdylib");
   build_command.arg("--no-default-features");
+  {
+    #[allow(unused_mut)]
+    let mut features = "--features=".to_owned();
+    #[cfg(feature = "try-runtime")]
+    write!(features, "try-runtime,").unwrap();
+    #[cfg(feature = "runtime-benchmarks")]
+    write!(features, "runtime-benchmarks,").unwrap();
+    build_command.arg(features);
+  }
 
   if release_wasm() {
     build_command.arg("--release");
