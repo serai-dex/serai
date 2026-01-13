@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::{Network, Os, mimalloc, os, write_dockerfile};
 
 pub fn bitcoin(orchestration_path: &Path, network: Network) {
-  const VERSION: &str = "30.1";
+  const VERSION: &str = "30.2";
   let file = format!("bitcoin-{VERSION}-$(uname -m)-linux-gnu.tar.gz");
   let url = format!("https://bitcoincore.org/bin/bitcoin-core-{VERSION}");
 
