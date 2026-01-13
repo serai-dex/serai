@@ -168,6 +168,20 @@ pub mod pallet {
     /// ). `GenesisBuilder` is not preferred due to the requirement that the genesis state be
     /// represented as JSON.
     pub fn genesis(config: &impl BuildGenesisConfig) {
+      /*
+        Assert `MinimumPeriod` is non-zero to ensure the header's timestamp always _increases_
+        with each block, and isn't solely guaranteed to just _never decrease_.
+
+        While asserting monotonicity alone would be fine, knowing there's a measurable difference
+        in the time between blocks enables some pleasantries. Specifically, it allows asserting the
+        duration between two blocks is non-zero.
+
+        As timestamps are measured in the milliseconds, this should never be a concern and should
+        solely benefit static analysis by ensuring yes, there is a formally defined bound here.
+      */
+      use sp_core::Get as _;
+      assert!(<T as pallet_timestamp::Config>::MinimumPeriod::get() > <_>::zero());
+
       BlocksCommitmentMerkle::<T>::new_expecting_none();
       BlockTransactionsCommitmentMerkle::<T>::new_expecting_none();
       BlockEventsCommitmentMerkle::<T>::new_expecting_none();

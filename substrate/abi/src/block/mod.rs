@@ -53,6 +53,8 @@ pub struct HeaderV1 {
   /// inherently provide lower-depth paths to more recent items *on imbalance*.
   pub builds_upon: UnbalancedMerkleTree,
   /// The UNIX time in milliseconds this block was created at.
+  ///
+  /// This is guaranteed to be greater than the time of the immediately prior block.
   pub unix_time_in_millis: u64,
   /// The commitment to the transactions within this block, including the transaction from the
   /// start of the block.
