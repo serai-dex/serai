@@ -567,8 +567,13 @@ which will build the WASM as part of its build process, with the necessary confi
     will be locked by the build process we're currently running.
   */
   let target_dir = PathBuf::from(cargo_env("OUT_DIR")).join("target");
-  // Remove the directory if it already exists
-  let _ = fs::remove_dir_all(&target_dir);
+  if release_wasm() {
+    /*
+      Remove the directory if it already exists, as this will be a non-incremental build so at best
+      it does nothing, and at worst it accumulates due to `cargo`'s lack-luster garbage collection.
+    */
+    let _ = fs::remove_dir_all(&target_dir);
+  }
   build_command.env("CARGO_TARGET_DIR", &target_dir);
 
   /*
