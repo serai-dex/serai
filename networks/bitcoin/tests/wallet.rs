@@ -323,4 +323,56 @@ async_sequential! {
     check(tx.output[0].script_pubkey.instructions());
     check(tx.output[0].script_pubkey.instructions_minimal());
   }
+
+  // Test that weight calculation correctly includes OP_RETURN output
+  // This is a regression test for issue #691
+  async fn test_op_return_weight_calculation() {
+    let (keys, key) = keys();
+
+    let rpc = rpc().await;
+    let scanner = Scanner::new(key).unwrap();
+
+    let output = send_and_get_output(&rpc, &scanner, key).await;
+    assert_eq!(output.offset(), Scalar::ZERO);
+
+    // Create transaction with OP_RETURN data
+    let data = vec![0u8; 80]; // Maximum OP_RETURN data size
+    let signable_tx = SignableTransaction::new(
+      vec![output.clone()],
+      &[],
+      Some(p2tr_script_buf(key).unwrap()),
+      Some(data),
+      FEE
+    ).unwrap();
+
+    let needed_fee = signable_tx.needed_fee();
+    let tx = sign(&keys, &signable_tx);
+
+    // Verify the fee accounts for the OP_RETURN output
+    // The actual vsize should match the fee calculation
+    let actual_vsize = u64::try_from(tx.vsize()).unwrap();
+    let expected_fee = actual_vsize * FEE;
+
+    // The needed_fee should be >= expected_fee (it may be slightly higher due to ceiling)
+    assert!(
+      needed_fee >= expected_fee,
+      "Fee calculation did not account for OP_RETURN output. \
+       needed_fee ({}) should be >= actual_vsize ({}) * FEE ({})",
+      needed_fee, actual_vsize, FEE
+    );
+
+    // The fee should not be significantly more than expected (within 1 vbyte tolerance)
+    assert!(
+      needed_fee <= expected_fee + FEE,
+      "Fee calculation is too high. \
+       needed_fee ({}) should be <= (actual_vsize ({}) + 1) * FEE ({})",
+      needed_fee, actual_vsize, FEE
+    );
+
+    // Verify the weight is within the policy limit
+    assert!(
+      tx.weight().to_wu() <= u64::from(bitcoin_serai::bitcoin::policy::MAX_STANDARD_TX_WEIGHT),
+      "Transaction weight exceeds MAX_STANDARD_TX_WEIGHT"
+    );
+  }
 }

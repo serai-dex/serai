@@ -63,6 +63,7 @@ impl SignableTransaction {
     inputs: usize,
     payments: &[(ScriptBuf, u64)],
     change: Option<&ScriptBuf>,
+    data: Option<&[u8]>,
   ) -> (u64, u64) {
     // Expand this a full transaction in order to use the bitcoin library's weight function
     let mut tx = Transaction {
@@ -96,6 +97,16 @@ impl SignableTransaction {
       // Use a 0 value since we're currently unsure what the change amount will be, and since
       // the value is fixed size (so any value could be used here)
       tx.output.push(TxOut { value: Amount::ZERO, script_pubkey: change.clone() });
+    }
+    // Include the OP_RETURN output in weight calculation if data is present
+    if let Some(data) = data {
+      tx.output.push(TxOut {
+        value: Amount::ZERO,
+        script_pubkey: ScriptBuf::new_op_return(
+          PushBytesBuf::try_from(data.to_vec())
+            .expect("data didn't fit into PushBytes despite being checked"),
+        ),
+      });
     }
 
     let weight = tx.weight();
@@ -190,18 +201,10 @@ impl SignableTransaction {
       .map(|payment| TxOut { value: Amount::from_sat(payment.1), script_pubkey: payment.0.clone() })
       .collect::<Vec<_>>();
 
-    // Add the OP_RETURN output
-    if let Some(data) = data {
-      tx_outs.push(TxOut {
-        value: Amount::ZERO,
-        script_pubkey: ScriptBuf::new_op_return(
-          PushBytesBuf::try_from(data)
-            .expect("data didn't fit into PushBytes depsite being checked"),
-        ),
-      })
-    }
-
-    let (mut weight, vbytes) = Self::calculate_weight_vbytes(tx_ins.len(), payments, None);
+    // Calculate weight including OP_RETURN output if data is present
+    let data_ref = data.as_deref();
+    let (mut weight, vbytes) =
+      Self::calculate_weight_vbytes(tx_ins.len(), payments, None, data_ref);
 
     let mut needed_fee = fee_per_vbyte * vbytes;
     // Technically, if there isn't change, this TX may still pay enough of a fee to pass the
@@ -223,7 +226,7 @@ impl SignableTransaction {
     // If there's a change address, check if there's change to give it
     if let Some(change) = change {
       let (weight_with_change, vbytes_with_change) =
-        Self::calculate_weight_vbytes(tx_ins.len(), payments, Some(&change));
+        Self::calculate_weight_vbytes(tx_ins.len(), payments, Some(&change), data_ref);
       let fee_with_change = fee_per_vbyte * vbytes_with_change;
       if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
         if value >= DUST {
@@ -232,6 +235,17 @@ impl SignableTransaction {
           needed_fee = fee_with_change;
         }
       }
+    }
+
+    // Add the OP_RETURN output after weight calculation
+    if let Some(data) = data {
+      tx_outs.push(TxOut {
+        value: Amount::ZERO,
+        script_pubkey: ScriptBuf::new_op_return(
+          PushBytesBuf::try_from(data)
+            .expect("data didn't fit into PushBytes despite being checked"),
+        ),
+      })
     }
 
     if tx_outs.is_empty() {
