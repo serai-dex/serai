@@ -50,19 +50,36 @@ enum Participating {
   Everyone,
 }
 
+pub(crate) fn required_participation(n: u16) -> u16 {
+  // All of our topics require 2/3rds participation
+  ((2 * n) / 3) + 1
+}
+
 impl Topic {
   // The topic used by the next attempt of this protocol
-  fn next_attempt_topic(self) -> Option<Topic> {
+  pub(crate) fn next_attempt_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
-      Topic::DkgConfirmation { attempt, round: _ } => Some(Topic::DkgConfirmation {
-        attempt: attempt + 1,
-        round: SigningProtocolRound::Preprocess,
-      }),
+      Topic::DkgConfirmation { attempt, round: _ } => {
+        // checked_add here, sanity prevent infinite consecutive attempts
+        if let Some(next_attempt) = attempt.checked_add(1) {
+          Some(Topic::DkgConfirmation {
+            attempt: next_attempt,
+            round: SigningProtocolRound::Preprocess,
+          })
+        } else {
+          None
+        }
+      }
       Topic::SlashReport => None,
       Topic::Sign { id, attempt, round: _ } => {
-        Some(Topic::Sign { id, attempt: attempt + 1, round: SigningProtocolRound::Preprocess })
+        // checked_add here, sanity prevent infinite consecutive attempts
+        if let Some(next_attempt) = attempt.checked_add(1) {
+          Some(Topic::Sign { id, attempt: next_attempt, round: SigningProtocolRound::Preprocess })
+        } else {
+          None
+        }
       }
     }
   }
@@ -74,19 +91,33 @@ impl Topic {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          let attempt = attempt + 1;
-          Some((
-            attempt,
-            Topic::DkgConfirmation { attempt, round: SigningProtocolRound::Preprocess },
-          ))
+          // checked_add here, sanity prevent infinite consecutive attempts
+          if let Some(next_attempt) = attempt.checked_add(1) {
+            Some((
+              next_attempt,
+              Topic::DkgConfirmation {
+                attempt: next_attempt,
+                round: SigningProtocolRound::Preprocess,
+              },
+            ))
+          } else {
+            None
+          }
         }
         SigningProtocolRound::Share => None,
       },
       Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          let attempt = attempt + 1;
-          Some((attempt, Topic::Sign { id, attempt, round: SigningProtocolRound::Preprocess }))
+          // checked_add here, sanity prevent infinite consecutive attempts
+          if let Some(next_attempt) = attempt.checked_add(1) {
+            Some((
+              next_attempt,
+              Topic::Sign { id, attempt: next_attempt, round: SigningProtocolRound::Preprocess },
+            ))
+          } else {
+            None
+          }
         }
         SigningProtocolRound::Share => None,
       },
@@ -136,7 +167,7 @@ impl Topic {
   /// The topic which precedes this topic as a prerequisite
   ///
   /// The preceding topic must define this topic as succeeding
-  fn preceding_topic(self) -> Option<Topic> {
+  pub(crate) fn preceding_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
@@ -159,7 +190,7 @@ impl Topic {
   /// The topic which succeeds this topic, with this topic as a prerequisite
   ///
   /// The succeeding topic must define this topic as preceding
-  fn succeeding_topic(self) -> Option<Topic> {
+  pub(crate) fn succeeding_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
@@ -194,13 +225,7 @@ impl Topic {
     }
   }
 
-  fn required_participation(&self, n: u16) -> u16 {
-    let _ = self;
-    // All of our topics require 2/3rds participation
-    ((2 * n) / 3) + 1
-  }
-
-  fn participating(&self) -> Participating {
+  pub(crate) fn participating(&self) -> Participating {
     #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => Participating::Everyone,
@@ -330,7 +355,7 @@ impl TributaryDb {
     );
   }
   pub(crate) fn finish_cosigning(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
-    assert!(ActivelyCosigning::take(txn, set).is_some(), "finished cosigning but wasn't cosigning");
+    ActivelyCosigning::take(txn, set).expect("finished cosigning but wasn't cosigning");
   }
   pub(crate) fn mark_cosigned(
     txn: &mut impl DbTxn,
@@ -390,6 +415,7 @@ impl TributaryDb {
     validator: SeraiAddress,
     reason: &str,
   ) {
+    #[cfg(not(coverage))]
     log::warn!("{validator} fatally slashed: {reason}");
     SlashPoints::set(txn, set, validator, &u32::MAX);
   }
@@ -446,7 +472,7 @@ impl TributaryDb {
     // The complete lack of validation on the data by these NOPs opens the potential for spam here
 
     // If we've already accumulated past the threshold, NOP
-    if accumulated_weight >= topic.required_participation(total_weight) {
+    if accumulated_weight >= required_participation(total_weight) {
       return DataSet::None;
     }
     // If this is for an old attempt, NOP
@@ -462,7 +488,7 @@ impl TributaryDb {
     Accumulated::set(txn, set, topic, validator, data);
 
     // Check if we now cross the weight threshold
-    if accumulated_weight >= topic.required_participation(total_weight) {
+    if accumulated_weight >= required_participation(total_weight) {
       // Queue this for re-attempt after enough time passes
       let reattempt_topic = topic.reattempt_topic();
       if let Some((attempt, reattempt_topic)) = reattempt_topic {

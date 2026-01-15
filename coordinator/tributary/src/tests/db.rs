@@ -1,23 +1,15 @@
 use serai_primitives::{
-  BlockHash,
+  address::SeraiAddress,
   network_id::ExternalNetworkId,
   validator_sets::{ExternalValidatorSet, Session},
-  address::SeraiAddress,
+  BlockHash,
 };
 
 use messages::sign::VariantSignId;
 
 use serai_db::{Db, DbTxn, MemDb};
 
-use crate::{
-  db::{
-    Topic, TributaryDb, DataSet, CosignIntents as DbCosignIntents,
-    SubstrateBlockPlans as DbSubstrateBlockPlans, Reattempt, ProcessorMessages,
-    DkgConfirmationMessages,
-  },
-  transaction::SigningProtocolRound,
-  SlashPoints,
-};
+use crate::{db::*, transaction::SigningProtocolRound};
 
 struct Test;
 impl Test {
@@ -277,4 +269,136 @@ fn db_fatal_slash() {
 
   assert!(TributaryDb::is_fatally_slashed(&db, set, validator));
   assert_eq!(SlashPoints::get(&db, set, validator), Some(u32::MAX));
+}
+
+#[test]
+fn db_accumulate() {
+  let mut db = MemDb::new();
+  let set = Test::new_test_set();
+  let mut block_number = 1u64;
+  let total_weight = 3u16;
+
+  let validators =
+    vec![Test::new_test_validator(1), Test::new_test_validator(2), Test::new_test_validator(3)];
+
+  fn assert_less_participation_accumulate_result<D: Db>(
+    txn: &mut D::Transaction<'_>,
+    set: ExternalValidatorSet,
+    total_weight: u16,
+    topic: Topic,
+    validator: SeraiAddress,
+    result: &DataSet<Vec<u32>>,
+  ) {
+    if topic.requires_recognition() {
+      assert!(
+        TributaryDb::is_fatally_slashed(txn, set, validator),
+        concat!(
+          "should have been slashed ",
+          "for participating in unrecognized topic which requires recognition"
+        )
+      );
+      assert!(matches!(result, DataSet::None));
+      return;
+    }
+
+    let preceding_topic = topic.preceding_topic();
+    if let Some(preceding_topic) = preceding_topic {
+      if Accumulated::<Vec<u32>>::get(txn, set, preceding_topic, validator).is_none() {
+        assert!(
+          TributaryDb::is_fatally_slashed(txn, set, validator),
+          "should have been slashed for participating in topic without participating in prior"
+        );
+        assert!(matches!(result, DataSet::None));
+        return;
+      }
+    }
+
+    let accumulated_weight = AccumulatedWeight::get(txn, set, topic).unwrap_or(0);
+    if accumulated_weight >= required_participation(total_weight) {
+      assert!(matches!(result, DataSet::None));
+      return;
+    }
+
+    if let Some(next_attempt_topic) = topic.next_attempt_topic() {
+      if AccumulatedWeight::get(txn, set, next_attempt_topic).is_some() {
+        assert!(matches!(result, DataSet::None));
+        return;
+      }
+    }
+
+    assert!(AccumulatedWeight::get(txn, set, topic).is_some());
+    assert!(Accumulated::<Vec<u32>>::get(txn, set, topic, validator).is_some());
+  }
+
+  for topic in Test::new_scenarios() {
+    let mut txn = db.txn();
+
+    let accumulated_weight = AccumulatedWeight::get(&mut txn, set, topic);
+    assert!(accumulated_weight.is_none());
+
+    // First validator accumulates - should return None (not enough weight yet)
+    let validator = validators[0];
+    let result = TributaryDb::accumulate::<Vec<u32>>(
+      &mut txn,
+      set,
+      &validators,
+      total_weight,
+      block_number,
+      topic,
+      validator,
+      1,
+      &vec![0, 0, 0],
+    );
+    assert_less_participation_accumulate_result::<MemDb>(
+      &mut txn,
+      set,
+      total_weight,
+      topic,
+      validator,
+      &result,
+    );
+
+    // Second validator accumulates - should return None (still not enough)
+    let validator = validators[1];
+    let result = TributaryDb::accumulate::<Vec<u32>>(
+      &mut txn,
+      set,
+      &validators,
+      total_weight,
+      block_number,
+      topic,
+      validator,
+      1,
+      &vec![0, 0, 0],
+    );
+    assert_less_participation_accumulate_result::<MemDb>(
+      &mut txn,
+      set,
+      total_weight,
+      topic,
+      validator,
+      &result,
+    );
+
+    // Third validator accumulates - should cross threshold (2/3 + 1 = 3)
+    let result = TributaryDb::accumulate::<Vec<u32>>(
+      &mut txn,
+      set,
+      &validators,
+      total_weight,
+      block_number,
+      topic,
+      validators[2],
+      1,
+      &vec![0, 0, 0],
+    );
+
+    txn.commit();
+    block_number += 1;
+  }
+
+  // assert!(matches!(result, DataSet::Participating(_)));
+  // if let DataSet::Participating(data) = result {
+  //   assert_eq!(data.len(), 3);
+  // }
 }
