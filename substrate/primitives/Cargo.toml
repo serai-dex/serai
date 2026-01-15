@@ -36,6 +36,11 @@ schnorrkel = { version = "0.11", default-features = false }
 
 bech32 = { version = "0.11", default-features = false }
 
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
+bech32 = { version = "0.11", default-features = false, features = ["alloc"] }
+
 [features]
 std = [
   "rand_core/std",
