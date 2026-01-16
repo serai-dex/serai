@@ -47,7 +47,7 @@ base of common utilities.
 
 The other instances' frontends restrict the argument of `coin: Coin` to the
 subset `coin: ExternalCoin`, corresponding to a liquidity pool (as each
-external coin has a single liquidity pool, `SRI-EXT`). This is why
+external coin has a single liquidity pool, `SRI-sriEXT`). This is why
 `Coin::Serai` would be a nonsensical argument for these other instances, as
 it'd be referring to a `SRI-SRI` liquidity pool. This isn't a strict
 requirement inherited from/assumed by `serai-coins-pallet`, solely an
