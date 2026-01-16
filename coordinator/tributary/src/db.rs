@@ -45,14 +45,13 @@ pub enum Topic {
   },
 }
 
-enum Participating {
+pub(crate) enum Participating {
   Participated,
   Everyone,
 }
 
-pub(crate) fn required_participation(n: u16) -> u16 {
-  // All of our topics require 2/3rds participation
-  ((2 * n) / 3) + 1
+pub(crate) fn required_participation(n: u16) -> Option<u16> {
+  n.checked_mul(2)?.checked_div(3)?.checked_add(1)
 }
 
 impl Topic {
@@ -413,7 +412,7 @@ impl TributaryDb {
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
     validator: SeraiAddress,
-    reason: &str,
+    #[cfg_attr(coverage, allow(unused_variables))] reason: &str,
   ) {
     #[cfg(not(coverage))]
     log::warn!("{validator} fatally slashed: {reason}");
@@ -470,9 +469,12 @@ impl TributaryDb {
     }
 
     // The complete lack of validation on the data by these NOPs opens the potential for spam here
+    let Some(required_participation) = required_participation(total_weight) else {
+      return DataSet::None;
+    };
 
     // If we've already accumulated past the threshold, NOP
-    if accumulated_weight >= required_participation(total_weight) {
+    if accumulated_weight >= required_participation {
       return DataSet::None;
     }
     // If this is for an old attempt, NOP
@@ -488,7 +490,7 @@ impl TributaryDb {
     Accumulated::set(txn, set, topic, validator, data);
 
     // Check if we now cross the weight threshold
-    if accumulated_weight >= required_participation(total_weight) {
+    if accumulated_weight >= required_participation {
       // Queue this for re-attempt after enough time passes
       let reattempt_topic = topic.reattempt_topic();
       if let Some((attempt, reattempt_topic)) = reattempt_topic {
