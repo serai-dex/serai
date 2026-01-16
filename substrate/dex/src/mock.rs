@@ -46,10 +46,12 @@ impl serai_core_pallet::Config for Test {
 
 impl serai_coins_pallet::Config<CoinsInstance> for Test {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type Weights = ();
 }
 
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Test {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type Weights = ();
 }
 
 impl crate::Config for Test {}

@@ -72,13 +72,16 @@ impl crate::AllowMint for StaticAllowMint {
 
 impl crate::Config<CoinsInstance> for Test {
   type AllowMint = crate::AlwaysAllowMint;
+  type Weights = ();
 }
 impl crate::Config<LiquidityTokensInstance> for Test {
   type AllowMint = crate::AlwaysAllowMint;
+  type Weights = ();
 }
 // We use `GenesisLiquidityTokens` to test `AllowMint`
 impl crate::Config<GenesisLiquidityTokensInstance> for Test {
   type AllowMint = StaticAllowMint;
+  type Weights = ();
 }
 
 pub(crate) fn new_test_ext(coins: Vec<(SeraiAddress, Balance)>) -> sp_io::TestExternalities {

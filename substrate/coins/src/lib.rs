@@ -5,6 +5,9 @@
 
 extern crate alloc;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
 #[cfg(test)]
 mod tests;
 
@@ -48,6 +51,31 @@ mod pallet {
 
   use super::*;
 
+  /// The weights for the pallet.
+  pub trait Weights {
+    /// The weight for a transfer.
+    fn transfer() -> Weight;
+    /// The weight for a burn.
+    fn burn() -> Weight;
+    /// The weight for a burn with an `OutInstruction`.
+    fn burn_with_instruction() -> Weight;
+  }
+
+  /// A shimmed set of weights, returning zero.
+  ///
+  /// This is NOT safe for usage in a production system and is provided only for testing purposes.
+  impl Weights for () {
+    fn transfer() -> Weight {
+      Weight::zero()
+    }
+    fn burn() -> Weight {
+      Weight::zero()
+    }
+    fn burn_with_instruction() -> Weight {
+      Weight::zero()
+    }
+  }
+
   /// The instance used to represent coins on the Serai network.
   #[derive(Default)]
   pub struct CoinsInstance;
@@ -71,6 +99,8 @@ mod pallet {
   {
     /// What decides if mints are allowed.
     type AllowMint: AllowMint;
+    /// The weights for this pallet.
+    type Weights: Weights;
   }
 
   /// The genesis state to use for this pallet.
@@ -307,7 +337,7 @@ mod pallet {
     /// This function is only intended to be called with the [`CoinsInstance`] and may have
     /// unexpected behavior otherwise.
     #[pallet::call_index(0)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((T::Weights::transfer(), DispatchClass::Normal))]
     pub fn transfer(origin: OriginFor<T>, to: SeraiAddress, coins: Balance) -> DispatchResult {
       let from = ensure_signed(origin)?;
       Self::transfer_fn(from, to, coins)?;
@@ -319,7 +349,7 @@ mod pallet {
     /// This function is only intended to be called with the [`CoinsInstance`] and may have
     /// unexpected behavior otherwise.
     #[pallet::call_index(1)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((T::Weights::burn(), DispatchClass::Normal))]
     pub fn burn(origin: OriginFor<T>, coins: Balance) -> DispatchResult {
       let from = ensure_signed(origin)?;
       Self::burn_fn(from, coins)?;
@@ -332,7 +362,7 @@ mod pallet {
     /// This function is only intended to be called with the [`CoinsInstance`] and may have
     /// unexpected behavior otherwise.
     #[pallet::call_index(2)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((T::Weights::burn_with_instruction(), DispatchClass::Normal))]
     pub fn burn_with_instruction(
       origin: OriginFor<T>,
       instruction: OutInstructionWithBalance,
@@ -359,7 +389,7 @@ mod pallet {
 
 pub use pallet::{
   CoinsInstance, LiquidityTokensInstance, GenesisLiquidityTokensInstance, Config, GenesisConfig,
-  Error, Pallet, Call,
+  Error, Pallet, Call, Weights,
 };
 #[doc(hidden)]
 pub use pallet::*;

@@ -94,6 +94,7 @@ impl serai_core_pallet::Config for Runtime {
 
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint; // TODO
+  type Weights = (); // TODO
 }
 impl serai_validator_sets_pallet::Config for Runtime {
   type ShouldEndSession = Babe;
@@ -104,6 +105,7 @@ impl serai_signals_pallet::Config for Runtime {
 }
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type Weights = (); // TODO
 }
 impl serai_dex_pallet::Config for Runtime {}
 impl serai_genesis_liquidity_pallet::Config for Runtime {}

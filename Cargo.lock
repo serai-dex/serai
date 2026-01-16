@@ -8072,6 +8072,7 @@ name = "serai-coins-pallet"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "pallet-timestamp",

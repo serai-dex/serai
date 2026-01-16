@@ -26,6 +26,10 @@ frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", defaul
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
 serai-core-pallet = { path = "../core", default-features = false }
 
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
@@ -46,6 +50,10 @@ std = [
 
   "serai-abi/std",
   "serai-core-pallet/std",
+
+  "sp-io?/std",
+  "pallet-timestamp?/std",
+  "frame-benchmarking?/std",
 ]
 
 try-runtime = [
@@ -61,6 +69,10 @@ runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
 
   "serai-core-pallet/runtime-benchmarks",
+
+  "sp-io",
+  "frame-benchmarking/runtime-benchmarks",
+  "pallet-timestamp/runtime-benchmarks",
 ]
 
 default = ["std"]
