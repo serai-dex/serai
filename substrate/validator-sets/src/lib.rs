@@ -295,7 +295,7 @@ mod pallet {
     /// The required amount of stake for a balance.
     fn stake_requirement(balance: ExternalBalance) -> AmountRepr {
       let value = T::EconomicSecurity::sri_value(balance).0;
-      // As 67% can misbehave, 67% of stake must be sufficient to secure this
+      // As 67% can execute signing protocols, 67% of stake must be sufficient to secure this
       let requirement = value.saturating_mul(3) / 2;
       // We add an additional margin of 20%
       let margin = requirement / 5;
@@ -303,12 +303,18 @@ mod pallet {
     }
 
     /// The required amount of stake for a network.
-    fn network_stake_requirement(network: ExternalNetworkId) -> AmountRepr {
+    ///
+    /// This evaluates the stake required to secure the amount of coins within the liquidity pool,
+    /// with the valuation from the economic security oracle.
+    pub fn network_stake_requirement(network: ExternalNetworkId) -> AmountRepr {
       let mut requirement = AmountRepr::zero();
       for coin in network.coins() {
-        let supply = Coins::<T>::supply(Coin::from(coin));
-        requirement = requirement
-          .saturating_add(Self::stake_requirement(ExternalBalance { coin, amount: supply }));
+        let liquidity_pool_balance =
+          Coins::<T>::balance(serai_abi::dex::address(coin), Coin::from(coin));
+        requirement = requirement.saturating_add(Self::stake_requirement(ExternalBalance {
+          coin,
+          amount: liquidity_pool_balance,
+        }));
       }
       requirement
     }
