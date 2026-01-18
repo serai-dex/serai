@@ -1,12 +1,21 @@
-//! Test environment for the DEX pallet.
 #![expect(clippy::as_conversions, clippy::same_name_method)]
 
-use frame_support::{sp_runtime::BuildStorage as _, weights::Weight, derive_impl, construct_runtime};
+use sp_core::{Pair as _, sr25519::Pair};
+use frame_support::{sp_runtime::DispatchError, weights::Weight, derive_impl, construct_runtime};
 
-use serai_abi::primitives::address::SeraiAddress;
-use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance};
+use serai_abi::{
+  primitives::{coin::*, balance::*, address::*},
+  TransactionContext as _, Event,
+};
+
+use serai_coins_pallet::{self as coins, CoinsInstance, LiquidityTokensInstance};
 
 use crate as dex;
+
+mod add_liquidity;
+mod transfer_liquidity;
+mod remove_liquidity;
+mod swap;
 
 construct_runtime!(
   pub enum Test
@@ -14,8 +23,8 @@ construct_runtime!(
     System: frame_system,
     Timestamp: pallet_timestamp,
     Core: serai_core_pallet,
-    Coins: serai_coins_pallet::<CoinsInstance>,
-    LiquidityTokens: serai_coins_pallet::<LiquidityTokensInstance>,
+    Coins: coins::<CoinsInstance>,
+    LiquidityTokens: coins::<LiquidityTokensInstance>,
     Dex: dex,
   }
 );
@@ -48,30 +57,34 @@ impl serai_coins_pallet::Config<CoinsInstance> for Test {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
   type Weights = ();
 }
-
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Test {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
   type Weights = ();
 }
 
-impl crate::Config for Test {}
+impl crate::Config for Test {
+  type Weights = ();
+}
 
-#[expect(dead_code)] // TODO
 pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
-  let mut storage = frame_system::GenesisConfig::<Test>::default().build_storage().unwrap();
-
-  serai_coins_pallet::GenesisConfig::<Test, CoinsInstance> {
-    accounts: vec![],
-    _instance: Default::default(),
-  }
-  .assimilate_storage(&mut storage)
-  .unwrap();
-  serai_coins_pallet::GenesisConfig::<Test, LiquidityTokensInstance> {
-    accounts: vec![],
-    _instance: Default::default(),
-  }
-  .assimilate_storage(&mut storage)
-  .unwrap();
-
-  storage.into()
+  let mut externalities = sp_io::TestExternalities::new_empty();
+  externalities.execute_with(|| {
+    let system = frame_system::GenesisConfig::<Test>::default();
+    let coins = serai_coins_pallet::GenesisConfig::<Test, CoinsInstance> {
+      accounts: vec![],
+      _instance: Default::default(),
+    };
+    let liquidity_tokens = serai_coins_pallet::GenesisConfig::<Test, LiquidityTokensInstance> {
+      accounts: vec![],
+      _instance: Default::default(),
+    };
+    let dex = crate::GenesisConfig::<Test> {
+      fees: ExternalCoin::all()
+        .map(|coin| (coin, if coin == ExternalCoin::Bitcoin { 0 } else { 100 }))
+        .collect(),
+      _config: Default::default(),
+    };
+    Core::genesis(&RuntimeGenesisConfig { system, coins, liquidity_tokens, dex });
+  });
+  externalities
 }

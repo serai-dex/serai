@@ -107,7 +107,9 @@ impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
   type Weights = (); // TODO
 }
-impl serai_dex_pallet::Config for Runtime {}
+impl serai_dex_pallet::Config for Runtime {
+  type Weights = (); // TODO
+}
 impl serai_genesis_liquidity_pallet::Config for Runtime {}
 impl serai_economic_security_pallet::Config for Runtime {}
 impl serai_emissions_pallet::Config for Runtime {}
@@ -188,6 +190,11 @@ sp_api::impl_runtime_apis! {
         },
 
         liquidity_tokens: LiquidityTokensConfig { accounts: vec![], _instance: PhantomData },
+
+        dex: DexConfig {
+          fees: genesis.fees,
+          _config: PhantomData,
+        },
 
         validator_sets: ValidatorSetsConfig {
           participants:

@@ -73,6 +73,12 @@ fn devnet_genesis(
       .iter()
       .map(|name| (insecure_account_from_name(name), insecure_embedded_elliptic_curve_keys(name)))
       .collect(),
+    fees: vec![
+      (ExternalCoin::Bitcoin, 2),
+      (ExternalCoin::Ether, 2),
+      (ExternalCoin::Dai, 2),
+      (ExternalCoin::Monero, 15),
+    ],
     coins: endowed_accounts
       .into_iter()
       .map(|address| (address, Balance { coin: Coin::Serai, amount: Amount(1 << 60) }))

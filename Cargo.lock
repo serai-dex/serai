@@ -8243,6 +8243,7 @@ name = "serai-dex-pallet"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "pallet-timestamp",
@@ -8250,6 +8251,7 @@ dependencies = [
  "serai-abi",
  "serai-coins-pallet",
  "serai-core-pallet",
+ "sp-core",
  "sp-io",
 ]
 
