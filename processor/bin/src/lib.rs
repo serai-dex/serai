@@ -15,10 +15,10 @@ use serai_primitives::validator_sets::Session;
 use serai_env as env;
 use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
 
-use primitives::EncodableG;
+use primitives::{EncodableG, ScannerFeed};
 use ::key_gen::{Ristretto, KeyGenParams, KeyGen};
 use scheduler::{SignableTransaction, TransactionFor};
-use scanner::{ScannerFeed, Scanner, KeyFor, Scheduler};
+use scanner::{Scanner, KeyFor, Scheduler};
 use signers::{TransactionPublisher, Signers};
 
 mod coordinator;

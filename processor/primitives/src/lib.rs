@@ -23,6 +23,9 @@ pub use block::*;
 mod payment;
 pub use payment::*;
 
+mod scanner;
+pub use scanner::*;
+
 /// An ID for an output/transaction/block/etc.
 ///
 /// IDs don't need to implement `Copy`, enabling `[u8; 33]`, `[u8; 64]` to be used. IDs are still

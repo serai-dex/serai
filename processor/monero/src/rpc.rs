@@ -4,7 +4,7 @@ use monero_simple_request_rpc::{prelude::*, SimpleRequestTransport};
 
 use serai_primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount};
 
-use scanner::ScannerFeed;
+use primitives::ScannerFeed;
 use signers::TransactionPublisher;
 
 use crate::{
@@ -13,8 +13,14 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub(crate) struct Rpc {
+pub struct Rpc {
   pub(crate) rpc: MoneroDaemon<SimpleRequestTransport>,
+}
+
+impl Rpc {
+  pub fn new(rpc: MoneroDaemon<SimpleRequestTransport>) -> Self {
+    Rpc { rpc }
+  }
 }
 
 impl ScannerFeed for Rpc {

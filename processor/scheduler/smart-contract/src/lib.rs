@@ -9,9 +9,9 @@ use group::GroupEncoding as _;
 
 use serai_db::{Get, DbTxn, create_db};
 
-use primitives::{ReceivedOutput as _, Payment};
+use primitives::{ScannerFeed, ReceivedOutput as _, Payment};
 use scanner::{
-  LifetimeStage, ScannerFeed, KeyFor, AddressFor, EventualityFor, BlockFor, SchedulerUpdate,
+  LifetimeStage, KeyFor, AddressFor, EventualityFor, BlockFor, SchedulerUpdate,
   KeyScopedEventualities, Scheduler as SchedulerTrait,
 };
 use scheduler_primitives::*;

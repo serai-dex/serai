@@ -6,8 +6,8 @@ use core::{fmt::Debug, future::Future};
 
 use serai_primitives::balance::Amount;
 
-use primitives::{ReceivedOutput as _, Payment};
-use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor};
+use primitives::{ScannerFeed, ReceivedOutput as _, Payment};
+use scanner::{KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor};
 use scheduler_primitives::*;
 
 mod tree;

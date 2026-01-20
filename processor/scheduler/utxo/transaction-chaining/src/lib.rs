@@ -11,9 +11,9 @@ use serai_primitives::{coin::ExternalCoin, balance::Amount};
 
 use serai_db::DbTxn;
 
-use primitives::{OutputType, ReceivedOutput as _, Payment};
+use primitives::{ScannerFeed, OutputType, ReceivedOutput as _, Payment};
 use scanner::{
-  LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor,
+  LifetimeStage, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor,
   SchedulerUpdate, KeyScopedEventualities, Scheduler as SchedulerTrait,
 };
 use scheduler_primitives::*;

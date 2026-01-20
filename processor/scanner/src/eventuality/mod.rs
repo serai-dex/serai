@@ -160,7 +160,8 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
       // others the new key
       let (_keys, keys_with_stages) = self.keys_and_keys_with_stages(latest_handled_notable_block);
 
-      let block = self.feed.block_by_number(&self.db, latest_handled_notable_block).await?;
+      let indexed_block_id = crate::index::block_id(&self.db, latest_handled_notable_block);
+      let block = self.feed.block_by_number(latest_handled_notable_block, &indexed_block_id).await?;
 
       let mut txn = self.db.txn();
       // Drain the entire channel
@@ -272,7 +273,8 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTas
         // Since we're handling this block, we are making progress
         made_progress = true;
 
-        let block = self.feed.block_by_number(&self.db, b).await?;
+        let indexed_block_id = crate::index::block_id(&self.db, b);
+        let block = self.feed.block_by_number(b, &indexed_block_id).await?;
 
         log::debug!("checking eventuality completions in block: {} ({b})", hex::encode(block.id()));
 

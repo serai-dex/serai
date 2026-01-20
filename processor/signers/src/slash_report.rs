@@ -8,8 +8,7 @@ use serai_db::{DbTxn as _, Db};
 
 use messages::sign::VariantSignId;
 
-use primitives::task::{DoesNotError, ContinuallyRan};
-use scanner::ScannerFeed;
+use primitives::{ScannerFeed, task::{DoesNotError, ContinuallyRan}};
 
 use frost_attempt_manager::*;
 

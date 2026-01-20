@@ -9,9 +9,9 @@ use serai_primitives::{
 
 use serai_db::{Get, DbTxn, create_db, db_channel};
 
-use primitives::{Payment, ReceivedOutput as _};
+use primitives::{ScannerFeed, Payment, ReceivedOutput as _};
 use utxo_scheduler_primitives::TreeTransaction;
-use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor};
+use scanner::{KeyFor, AddressFor, OutputFor};
 
 create_db! {
   UtxoScheduler {

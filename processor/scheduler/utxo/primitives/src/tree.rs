@@ -5,8 +5,7 @@ use serai_primitives::{
   balance::{Amount, ExternalBalance},
 };
 
-use primitives::{Address, Payment};
-use scanner::ScannerFeed;
+use primitives::{Address, Payment, ScannerFeed};
 
 /// A transaction within a tree to fulfill payments.
 #[derive(Clone, BorshSerialize, BorshDeserialize)]

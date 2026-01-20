@@ -80,7 +80,7 @@ impl scheduler::SignableTransaction for SignableTransaction {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Eventuality {
+pub struct Eventuality {
   pub(crate) id: [u8; 32],
   pub(crate) singular_spent_output: Option<OutputId>,
   pub(crate) eventuality: MEventuality,

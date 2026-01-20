@@ -13,7 +13,7 @@ use serai_cosign::SignedCosign;
 
 use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
 
-use scanner::ScannerFeed;
+use primitives::ScannerFeed;
 
 use message_queue::{Service, Metadata, client::MessageQueue};
 

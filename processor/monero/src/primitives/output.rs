@@ -21,7 +21,7 @@ use primitives::{OutputType, ReceivedOutput};
 use crate::{EXTERNAL_SUBADDRESS, BRANCH_SUBADDRESS, CHANGE_SUBADDRESS, FORWARDED_SUBADDRESS};
 
 #[derive(Clone, Copy, PartialEq, Eq, Default, Hash, Debug, BorshSerialize, BorshDeserialize)]
-pub(crate) struct OutputId(pub(crate) [u8; 32]);
+pub struct OutputId(pub(crate) [u8; 32]);
 impl AsRef<[u8]> for OutputId {
   fn as_ref(&self) -> &[u8] {
     self.0.as_ref()
@@ -34,7 +34,7 @@ impl AsMut<[u8]> for OutputId {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Output(pub(crate) WalletOutput);
+pub struct Output(pub(crate) WalletOutput);
 impl ReceivedOutput<<Ed25519 as WrappedGroup>::G, Address> for Output {
   type Id = OutputId;
   type TransactionId = [u8; 32];

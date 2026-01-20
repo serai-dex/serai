@@ -106,7 +106,8 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
         .expect("ScanTask run before writing the start block");
 
       for b in next_to_scan ..= latest_scannable {
-        let block = self.feed.block_by_number(&self.db, b).await?;
+        let indexed_block_id = crate::index::block_id(&self.db, b);
+        let block = self.feed.block_by_number(b, &indexed_block_id).await?;
 
         log::info!("scanning block: {} ({b})", hex::encode(block.id()));
 

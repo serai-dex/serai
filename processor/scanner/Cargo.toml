@@ -38,3 +38,16 @@ serai-primitives = { path = "../../substrate/primitives", default-features = fal
 
 primitives = { package = "serai-processor-primitives", path = "../primitives" }
 scheduler-primitives = { package = "serai-processor-scheduler-primitives", path = "../scheduler/primitives" }
+
+[dev-dependencies]
+tempfile = "3"
+serai-db = { path = "../../common/db", features = ["rocksdb"] }
+serai-monero-processor = { path = "../monero", features = ["rocksdb"] }
+
+monero-simple-request-rpc = { git = "https://github.com/monero-oxide/monero-oxide", rev = "cae84b7b16051ac8bf92ed151aad49b9e6f4fcae", default-features = false }
+monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "cae84b7b16051ac8bf92ed151aad49b9e6f4fcae", default-features = false, features = ["std"] }
+monero-ed25519 = { git = "https://github.com/monero-oxide/monero-oxide", rev = "cae84b7b16051ac8bf92ed151aad49b9e6f4fcae", version = "0.1.0", default-features = false, features = ["std"] }
+
+zeroize = { version = "1", default-features = false, features = ["std"] }
+
+serial_test = "*"

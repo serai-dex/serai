@@ -22,9 +22,9 @@ use serai_cosign::{Cosign, SignedCosign};
 
 use messages::sign::{VariantSignId, ProcessorMessage, CoordinatorMessage};
 
-use primitives::task::{Task, TaskHandle, ContinuallyRan as _};
+use primitives::{ScannerFeed, task::{Task, TaskHandle, ContinuallyRan as _}};
 use scheduler::{Transaction, SignableTransaction, TransactionFor};
-use scanner::{ScannerFeed, Scheduler};
+use scanner::Scheduler;
 
 mod wrapped_schnorrkel;
 pub(crate) use wrapped_schnorrkel::WrappedSchnorrkelMachine;

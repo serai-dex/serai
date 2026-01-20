@@ -14,9 +14,9 @@ use serai_primitives::{
 
 use serai_db::DbTxn;
 
-use primitives::{ReceivedOutput as _, Payment};
+use primitives::{ScannerFeed, ReceivedOutput as _, Payment};
 use scanner::{
-  LifetimeStage, ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor,
+  LifetimeStage, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor,
   SchedulerUpdate, KeyScopedEventualities, Scheduler as SchedulerTrait,
 };
 use scheduler_primitives::*;

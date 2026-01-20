@@ -12,7 +12,7 @@ use tokio::task::JoinSet;
 
 use serai_db::Db;
 
-use scanner::ScannerFeed;
+use primitives::{ScannerFeed, Block as _};
 
 use ethereum_schnorr::PublicKey;
 use ethereum_router::{InInstruction as EthereumInInstruction, Executed, Router};

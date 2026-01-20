@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub(crate) struct BlockHeader(pub(crate) MBlock);
+pub struct BlockHeader(pub(crate) MBlock);
 impl primitives::BlockHeader for BlockHeader {
   fn id(&self) -> [u8; 32] {
     self.0.hash()
@@ -28,7 +28,7 @@ impl primitives::BlockHeader for BlockHeader {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct Block(pub(crate) MScannableBlock);
+pub struct Block(pub(crate) MScannableBlock);
 
 impl primitives::Block for Block {
   type Header = BlockHeader;
