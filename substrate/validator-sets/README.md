@@ -155,14 +155,48 @@ representing an unattributable compromise of all expected operations, deserving
 a slash for all associated stake, this is not considered in a reduction of the
 trust assumptions.
 
-For Serai's validator sets, the handling of slashes is
-[currently deferred](https://github.com/serai-dex/serai/issues/657).
+For Serai's validator set, an inherent transaction (with a reason specified as
+an opaque byte vector) can be used to fatally slash any individual Serai
+validator. This defers on-chain verification of BABE/GRANDPA equivocation
+proofs for off-chain validation via the traditional inherent transaction
+pipeline. The allowance to specify an opaque byte vector as the reason still
+allows embedding such proofs on-chain however, allowing any individual to
+verify the justification for the slash. The reason for not validating the
+proofs themselves directly on-chain is to not tightly bind to BABE/GRANDPA's
+formatting of equivocation proofs, allowing future flexibility with how the
+protocol is defined.
 
 ### Session Keys
 
 "Session Keys" are a traditional component of a
 Substrate runtime/Substrate-based blockchain, where each validator declares a
 variety of keys (each scoped to a specific purpose), and even allows regularly
-updating them. Serai uses a single key to represent a validator and participate
-in consensus, in contradiction to this practice. For more information, please
-read this [GitHub issue](https://github.com/serai-dex/serai/issues/735).
+updating them.
+
+Serai does not use Session Keys, but does allow each validator to declare (and
+regularly update) their embedded elliptic curve keys used with external
+networks. For the identity of the validator themselves, and role in consensus,
+Serai allows declaring `EmbeddedEllipticCurveKeys` for the Serai network which
+contain the Ristretto public key to use for the validator. When published, it
+will also contain a proof of its validity, as necessary to ensure its safe
+usage within our various protocols.
+
+This is inferior to Session Keys in that it only allows declaring a single key
+of a specific type. Serai has homogenized the cryptography within its protocol
+proper, allowing us to solely use a Ristretto key. As for using a single key,
+removing the independent domains offered by independent keys, the Serai
+protocol applies an account derivation scheme to produce independent subkeys
+for each intended usage. The signatures are not malleable due to the Schnorr
+signatures over Ristretto exhibiting a key-binding property. However, it should
+be noted that _any_ subkey can be used to recover the root key
+_and all other subkeys_. This prohibits a theoretical construction of a BABE
+process which, if compromised, does not threaten the integrity of the same
+validator's GRANDPA process. Due to how niche such a deployment would be, this
+is accepted.
+
+The primary benefits to explicitly declaring a distinct key for the validator
+are:
+- A compromised validator may be slashed, yet the adversary does not have the
+  incentive of being able to deallocate its stake
+- Keys for historic sessions may be erased, preventing their recovery if the
+  validator is compromised in the future
