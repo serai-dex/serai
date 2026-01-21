@@ -389,6 +389,8 @@ sp_api::impl_runtime_apis! {
   }
 
   impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
+    // TODO: This has to be updated regardining
+    // `sp_application_crypto::key_types::AUTHORITY_DISCOVERY`
     fn authorities() -> Vec<sp_authority_discovery::AuthorityId> {
       // Converts to `[u8; 32]` so it can be hashed
       let mut all = alloc::collections::BTreeSet::<[u8; 32]>::new();

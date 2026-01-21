@@ -8945,6 +8945,8 @@ dependencies = [
  "serai-core-pallet",
  "sp-api",
  "sp-application-crypto",
+ "sp-consensus-babe",
+ "sp-consensus-grandpa",
  "sp-core",
  "sp-io",
  "zeroize",

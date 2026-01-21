@@ -46,7 +46,7 @@ async fn validator_sets() {
       {
         use sp_core::{Pair as _, sr25519::Pair};
         let genesis_validators = vec![(
-          SeraiAddress::from(Pair::from_string("//Alice", None).unwrap().public()),
+          SeraiAddress::from(Pair::from_seed(&sp_core::blake2_256(b"//Alice")).public()),
           KeyShares::ONE,
         )];
 

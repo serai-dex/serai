@@ -20,6 +20,8 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+sp-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+sp-consensus-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
@@ -48,6 +50,8 @@ std = [
 
   "sp-core/std",
   "sp-application-crypto/std",
+  "sp-consensus-babe/std",
+  "sp-consensus-grandpa/std",
   "sp-io/std",
   "sp-api/std",
 
