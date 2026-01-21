@@ -7974,6 +7974,8 @@ dependencies = [
  "parity-scale-codec",
  "rand_core 0.6.4",
  "serai-primitives",
+ "sp-consensus-babe",
+ "sp-consensus-grandpa",
  "sp-core",
  "sp-runtime",
 ]

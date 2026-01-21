@@ -220,3 +220,86 @@ pub enum Event {
     deallocation: ValidatorSet,
   },
 }
+
+#[test]
+fn serialize_slashes() {
+  use alloc::{vec, vec::Vec};
+  use rand_core::{RngCore as _, OsRng};
+  use serai_primitives::crypto::RistrettoSignature;
+
+  let external_networks = ExternalNetworkId::all().collect::<Vec<_>>();
+
+  for _ in 0 .. 1000 {
+    {
+      let mut validator = [0; 32];
+      OsRng.fill_bytes(&mut validator);
+      let validator = SeraiAddress(validator);
+
+      let mut reason = vec![0u8; usize::try_from(OsRng.next_u64() % u64::from(u16::MAX)).unwrap()];
+      OsRng.fill_bytes(&mut reason);
+
+      let slashes = Slashes::Serai { validator, reason: reason.try_into().unwrap() };
+
+      assert_eq!(
+        slashes,
+        Slashes::deserialize_reader(&mut borsh::to_vec(&slashes).unwrap().as_slice()).unwrap()
+      );
+    }
+
+    {
+      #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+      let network = external_networks[(OsRng.next_u64() as usize) % external_networks.len()];
+
+      let mut slashes = vec![];
+      for _ in 0 .. (OsRng.next_u64() % KeyShares::MAX_PER_SET_U64) {
+        if (OsRng.next_u64() & 1) == 1 {
+          slashes.push(Slash::Fatal);
+        } else {
+          #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+          slashes.push(Slash::Points(OsRng.next_u64() as u32));
+        }
+      }
+      let slashes = SlashReport(slashes.try_into().unwrap());
+
+      let mut signature = [0; 64];
+      OsRng.fill_bytes(&mut signature);
+      let signature = Signature::from(RistrettoSignature(signature));
+
+      let slashes = Slashes::ExternalNetwork { network, slashes, signature };
+
+      assert_eq!(
+        slashes,
+        Slashes::deserialize_reader(&mut borsh::to_vec(&slashes).unwrap().as_slice()).unwrap()
+      );
+    }
+  }
+}
+
+#[cfg(feature = "substrate")]
+#[test]
+fn babe_grandpa_equivocation_lengths() {
+  use scale::MaxEncodedLen as _;
+  use sp_runtime::traits::Header as HeaderTrait;
+  use crate::{Header, SubstrateHeader};
+
+  // Check two headers, as part of an equivocation proof, fit within a slash's reason once encoded
+  {
+    let two_serai_headers_with_babe_digest =
+      2 * (Header::SIZE + sp_consensus_babe::digests::PreDigest::max_encoded_len());
+    // We check we have a wide margin
+    assert!(two_serai_headers_with_babe_digest < usize::from(u16::MAX / 2));
+  }
+
+  // For GRANDPA, the equivocation does not implement `MaxEncodedLen` but does not contain any
+  // heap-allocated types (such as `Digest`), so we simplify to a `size_of` with an even more
+  // aggressive bound. We should be _well_ below this regardless
+  {
+    let grandpa_equivocation = core::mem::size_of::<
+      sp_consensus_grandpa::EquivocationProof<
+        <SubstrateHeader as HeaderTrait>::Hash,
+        <SubstrateHeader as HeaderTrait>::Number,
+      >,
+    >();
+    assert!(grandpa_equivocation < usize::from(u16::MAX / 64));
+  }
+}

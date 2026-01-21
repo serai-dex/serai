@@ -4,7 +4,10 @@ use std::sync::Arc;
 use futures::stream::{StreamExt as _, FuturesOrdered};
 
 use serai_client_serai::{
-  abi::{self, primitives::network_id::ExternalNetworkId},
+  abi::{
+    self,
+    primitives::{network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet},
+  },
   Serai,
 };
 
@@ -72,8 +75,7 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
             };
             let events = serai.events(block_hash).await.map_err(|e| format!("{e}"))?;
             let set_keys_events = events.validator_sets().set_keys_events().cloned().collect();
-            let slash_report_events =
-              events.validator_sets().slash_report_events().cloned().collect();
+            let slash_report_events = events.validator_sets().slashes_events().cloned().collect();
             let batch_events = events.in_instructions().batch_events().cloned().collect();
             let burn_events = events.coins().burn_with_instruction_events().cloned().collect();
             let Some(block) = serai.block(block_hash).await.map_err(|e| format!("{e:?}"))? else {
@@ -135,14 +137,16 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
         }
 
         for slash_report in block.slash_report_events {
-          let abi::validator_sets::Event::SlashReport { set } = &slash_report else {
-            panic!("`SlashReport` event wasn't a `SlashReport` event: {slash_report:?}");
+          let abi::validator_sets::Event::Slashes { set } = &slash_report else {
+            panic!("`Slashes` event wasn't a `Slashes` event: {slash_report:?}");
           };
-          crate::Canonical::send(
-            &mut txn,
-            set.network,
-            &CoordinatorMessage::SlashesReported { session: set.session },
-          );
+          if let Ok(set) = ExternalValidatorSet::try_from(*set) {
+            crate::Canonical::send(
+              &mut txn,
+              set.network,
+              &CoordinatorMessage::SlashesReported { session: set.session },
+            );
+          }
         }
 
         for network in ExternalNetworkId::all() {

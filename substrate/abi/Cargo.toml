@@ -30,6 +30,9 @@ serai-primitives = { path = "../primitives", version = "0.1", default-features =
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
+sp-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+sp-consensus-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+
 [features]
 std = [
   "borsh/std",

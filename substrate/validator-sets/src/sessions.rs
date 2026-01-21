@@ -378,11 +378,12 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       NetworkId::External(network) => {
         // If this network never submitted its slash report, treat it as submitting `vec![]`
         if Storage::PendingSlashReport::take(network).is_some() {
-          Core::<Storage::Config>::emit_event(Event::SlashReport {
-            set: ExternalValidatorSet {
+          Core::<Storage::Config>::emit_event(Event::Slashes {
+            set: (ExternalValidatorSet {
               network,
               session: prior.expect("pending slash report yet no prior session"),
-            },
+            })
+            .into(),
           });
         }
         // Mark this network as pending a slash report
@@ -588,8 +589,8 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     let prior_session = Session(
       current_session.0.checked_sub(1).expect("handling slash report yet no prior session"),
     );
-    Core::<Storage::Config>::emit_event(Event::SlashReport {
-      set: ExternalValidatorSet { network, session: prior_session },
+    Core::<Storage::Config>::emit_event(Event::Slashes {
+      set: (ExternalValidatorSet { network, session: prior_session }).into(),
     });
 
     // TODO: Actually handle `_slashes`

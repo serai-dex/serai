@@ -1,3 +1,5 @@
+use serai_abi::validator_sets::Slashes;
+
 use super::*;
 
 impl From<serai_abi::Call> for RuntimeCall {
@@ -21,7 +23,8 @@ impl From<serai_abi::Call> for RuntimeCall {
           Call::set_keys { network, key_pair, signature_participants, signature } => {
             Scall::set_keys { network, key_pair, signature_participants, signature }
           }
-          Call::report_slashes { network, slashes, signature } => {
+          Call::report_slashes(Slashes::Serai { .. }) => todo!("TODO"),
+          Call::report_slashes(Slashes::ExternalNetwork { network, slashes, signature }) => {
             Scall::report_slashes { network, slashes, signature }
           }
           Call::set_embedded_elliptic_curve_keys { keys } => {
