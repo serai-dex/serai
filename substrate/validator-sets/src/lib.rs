@@ -97,7 +97,7 @@ mod pallet {
   type EmbeddedEllipticCurveKeys<T: Config> = StorageDoubleMap<
     _,
     Identity,
-    ExternalNetworkId,
+    NetworkId,
     Blake2_128Concat,
     SeraiAddress,
     serai_abi::primitives::crypto::EmbeddedEllipticCurveKeys,
@@ -198,7 +198,7 @@ mod pallet {
           .expect("amount of genesis validators exceeded the maximum allowed per set"),
       ));
       for (participant, keys) in &self.participants {
-        for (network, keys) in ExternalNetworkId::all().zip(keys.iter().cloned()) {
+        for (network, keys) in NetworkId::all().zip(keys.iter().cloned()) {
           assert_eq!(network, keys.network());
           Pallet::<T>::set_embedded_elliptic_curve_keys_internal(*participant, keys)
             .expect("genesis embedded elliptic curve keys weren't valid");
@@ -221,17 +221,33 @@ mod pallet {
       );
 
       // Spawn BABE's, GRANDPA's genesis session
-      // This conversion assumes `SeraiAddress == SchnorrkelPublic`
-      let genesis_serai_validators = Abstractions::<T>::serai_validators(Session(0));
+      let genesis_serai_validators = Abstractions::<T>::selected_validators(ValidatorSet {
+        network: NetworkId::Serai,
+        session: Session(0),
+      })
+      .map(|(validator, _key_shares)| {
+        (
+          validator,
+          match <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::embedded_elliptic_curve_keys(
+            validator,
+            NetworkId::Serai,
+          ) {
+            Some(EmbeddedEllipticCurveKeysStruct::Serai(ristretto)) => {
+              SchnorrkelPublic::from(ristretto)
+            }
+            Some(_) => {
+              panic!("requested `EmbeddedEllipticCurveKeys` for `Serai` and received `_`")
+            }
+            None => panic!("genesis validator lacked `EmbeddedEllipticCurveKeys::Serai`"),
+          },
+        )
+      })
+      .collect::<Vec<_>>();
       Babe::<T>::on_genesis_session(
-        genesis_serai_validators
-          .iter()
-          .map(|(validator, key)| (validator, SchnorrkelPublic::from(*key).into())),
+        genesis_serai_validators.iter().map(|(validator, key)| (validator, (*key).into())),
       );
       Grandpa::<T>::on_genesis_session(
-        genesis_serai_validators
-          .iter()
-          .map(|(validator, key)| (validator, SchnorrkelPublic::from(*key).into())),
+        genesis_serai_validators.iter().map(|(validator, key)| (validator, (*key).into())),
       );
     }
   }
@@ -339,10 +355,11 @@ mod pallet {
 
     pub fn embedded_elliptic_curve_keys(
       validator: SeraiAddress,
-      network: ExternalNetworkId,
+      network: impl Into<NetworkId>,
     ) -> Option<EmbeddedEllipticCurveKeysStruct> {
       <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::embedded_elliptic_curve_keys(
-        validator, network,
+        validator,
+        network.into(),
       )
     }
 
@@ -418,25 +435,73 @@ mod pallet {
             "latest decided Serai session wasn't the session after the current session"
           );
 
-          let prior_serai_validators = Abstractions::<T>::serai_validators(Session(
-            current_serai_session.0.checked_sub(1).expect("ShouldEndSession triggered on genesis"),
-          ));
-          assert!(
-            !prior_serai_validators.is_empty(),
-            "prior Serai validators weren't able to be fetched from storage",
-          );
+          let serai_validators = Abstractions::<T>::selected_validators(ValidatorSet {
+            network: NetworkId::Serai,
+            session: current_serai_session,
+          })
+          .collect::<Vec<_>>();
 
-          let serai_validators = Abstractions::<T>::serai_validators(current_serai_session);
+          let validators_changed = {
+            let prior_serai_validators = Abstractions::<T>::selected_validators(ValidatorSet {
+              network: NetworkId::Serai,
+              session: Session(
+                current_serai_session
+                  .0
+                  .checked_sub(1)
+                  .expect("ShouldEndSession triggered on genesis"),
+              ),
+            })
+            .collect::<Vec<_>>();
+            assert!(
+              !prior_serai_validators.is_empty(),
+              "prior Serai validators weren't able to be fetched from storage",
+            );
+            prior_serai_validators != serai_validators
+          };
 
-          let validators_changed = prior_serai_validators != serai_validators;
+          let queued_serai_validators = Abstractions::<T>::selected_validators(ValidatorSet {
+            network: NetworkId::Serai,
+            session: latest_decided_serai_session,
+          })
+          .collect::<Vec<_>>();
 
+          fn validators_to_serai_validators<T: Config>(
+            validators: impl IntoIterator<Item = (SeraiAddress, KeySharesStruct)>,
+          ) -> Vec<(SeraiAddress, SchnorrkelPublic)> {
+            validators
+              .into_iter()
+              .map(|(validator, _key_shares)| {
+                let embedded_elliptic_curve_keys =
+                  <
+                    Abstractions<T> as crate::EmbeddedEllipticCurveKeys
+                  >::embedded_elliptic_curve_keys(validator, NetworkId::Serai);
+                (
+                  validator,
+                  match embedded_elliptic_curve_keys {
+                    Some(EmbeddedEllipticCurveKeysStruct::Serai(ristretto)) => {
+                      SchnorrkelPublic::from(ristretto)
+                    }
+                    Some(_) => {
+                      panic!("requested `EmbeddedEllipticCurveKeys` for `Serai` and received `_`")
+                    }
+                    None => {
+                      panic!(
+                        "selected Serai validator lacked `EmbeddedEllipticCurveKeysStruct::Serai`"
+                      )
+                    }
+                  },
+                )
+              })
+              .collect()
+          }
+          let serai_validators = validators_to_serai_validators::<T>(serai_validators);
           let queued_serai_validators =
-            Abstractions::<T>::serai_validators(latest_decided_serai_session);
+            validators_to_serai_validators::<T>(queued_serai_validators);
 
           fn map_babe(
-            (validator, key): &(SeraiAddress, SeraiAddress),
+            (validator, key): &(SeraiAddress, SchnorrkelPublic),
           ) -> (&SeraiAddress, pallet_babe::AuthorityId) {
-            (validator, SchnorrkelPublic::from(*key).into())
+            (validator, (*key).into())
           }
           Babe::<T>::on_new_session(
             validators_changed,
@@ -445,9 +510,9 @@ mod pallet {
           );
 
           fn map_grandpa(
-            (validator, key): &(SeraiAddress, SeraiAddress),
+            (validator, key): &(SeraiAddress, SchnorrkelPublic),
           ) -> (&SeraiAddress, pallet_grandpa::AuthorityId) {
-            (validator, SchnorrkelPublic::from(*key).into())
+            (validator, (*key).into())
           }
           Grandpa::<T>::on_new_session(
             validators_changed,

@@ -9,7 +9,11 @@ use sc_service::ChainType;
 
 use rand_core::OsRng;
 use zeroize::Zeroizing;
-use ciphersuite::{group::ff::Field as _, WrappedGroup};
+use ciphersuite::{
+  group::ff::{Field as _, PrimeField as _},
+  WrappedGroup,
+};
+use dalek_ff_group::Ristretto;
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 
@@ -21,14 +25,30 @@ use serai_runtime::GenesisConfig;
 
 pub type ChainSpec = sc_service::GenericChainSpec;
 
+fn insecure_keypair_from_name(name: &'static str) -> sp_core::sr25519::Pair {
+  sp_core::sr25519::Pair::from_string(&format!("//{name}"), None).unwrap()
+}
+
 fn insecure_account_from_name(name: &'static str) -> SeraiAddress {
-  sp_core::sr25519::Pair::from_string(&format!("//{name}"), None).unwrap().public().into()
+  sp_core::sr25519::Pair::from_seed(&sp_core::blake2_256(format!("//{name}").as_bytes()))
+    .public()
+    .into()
 }
 
 fn insecure_embedded_elliptic_curve_keys(
   name: &'static str,
 ) -> Vec<SignedEmbeddedEllipticCurveKeys> {
   vec![
+    SignedEmbeddedEllipticCurveKeys::serai(
+      &mut OsRng,
+      insecure_account_from_name(name),
+      &Zeroizing::new(
+        <Ristretto as WrappedGroup>::F::from_repr(
+          insecure_keypair_from_name(name).to_raw_vec()[.. 32].try_into().unwrap(),
+        )
+        .unwrap(),
+      ),
+    ),
     SignedEmbeddedEllipticCurveKeys::bitcoin(
       &mut OsRng,
       insecure_account_from_name(name),

@@ -451,7 +451,7 @@ sp_api::impl_runtime_apis! {
     }
     fn embedded_elliptic_curve_keys(
       validator: SeraiAddress,
-      network: ExternalNetworkId,
+      network: NetworkId,
     ) -> Option<EmbeddedEllipticCurveKeys> {
       ValidatorSets::embedded_elliptic_curve_keys(validator.into(), network)
     }

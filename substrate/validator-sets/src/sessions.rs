@@ -253,14 +253,6 @@ pub(crate) trait Sessions {
     set: ValidatorSet,
   ) -> impl Iterator<Item = (SeraiAddress, KeySharesStruct)>;
 
-  /// The validators for the Serai network, with a syntax amenable to the form expected by
-  /// BABE, GRANDPA.
-  fn serai_validators(session: Session) -> Vec<(SeraiAddress, SeraiAddress)> {
-    Self::selected_validators(ValidatorSet { network: NetworkId::Serai, session })
-      .map(|(validator, _key_shares)| (validator, validator))
-      .collect()
-  }
-
   /// If this network is awaiting a slash report.
   ///
   /// If so, this returns the oraclization key which should publish the slash report.

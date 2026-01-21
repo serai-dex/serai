@@ -160,11 +160,7 @@ pub(crate) fn module<
         Err(Error::InvalidRequest(r#"validator had an invalid address"#))?
       };
 
-      let Ok(network) = ExternalNetworkId::try_from(network(&params)?) else {
-        Err(Error::InvalidRequest(
-          "asking for the embedded elliptic curve keys for a non-external network",
-        ))?
-      };
+      let network = network(&params)?;
       let Ok(embedded_elliptic_curve_keys) =
         client.runtime_api().embedded_elliptic_curve_keys(block_hash, validator, network)
       else {

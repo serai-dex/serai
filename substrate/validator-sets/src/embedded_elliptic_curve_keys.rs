@@ -13,7 +13,7 @@ pub(crate) trait EmbeddedEllipticCurveKeysStorage {
   ///
   /// This is opaque and to be exclusively read/write by `EmbeddedEllipticCurveKeys`.
   type EmbeddedEllipticCurveKeys: StorageDoubleMap<
-    ExternalNetworkId,
+    NetworkId,
     SeraiAddress,
     EmbeddedEllipticCurveKeysStruct,
     Query = Option<EmbeddedEllipticCurveKeysStruct>,
@@ -31,7 +31,7 @@ pub(crate) trait EmbeddedEllipticCurveKeys {
   /// Get a validator's embedded elliptic curve keys, for an external network.
   fn embedded_elliptic_curve_keys(
     validator: SeraiAddress,
-    network: ExternalNetworkId,
+    network: NetworkId,
   ) -> Option<EmbeddedEllipticCurveKeysStruct>;
 
   /// Check if a validator still needs to set embedded elliptic curve keys.
@@ -55,7 +55,7 @@ impl<S: EmbeddedEllipticCurveKeysStorage> EmbeddedEllipticCurveKeys for S {
   /// Get a validator's embedded elliptic curve keys, for an external network.
   fn embedded_elliptic_curve_keys(
     validator: SeraiAddress,
-    network: ExternalNetworkId,
+    network: NetworkId,
   ) -> Option<EmbeddedEllipticCurveKeysStruct> {
     S::EmbeddedEllipticCurveKeys::get(network, validator)
   }
@@ -65,12 +65,12 @@ impl<S: EmbeddedEllipticCurveKeysStorage> EmbeddedEllipticCurveKeys for S {
     network: NetworkId,
     validator: SeraiAddress,
   ) -> bool {
-    match network {
-      // Validators never need to set embedded elliptic curve keys for Serai
-      NetworkId::Serai => false,
-      NetworkId::External(network) => {
-        !S::EmbeddedEllipticCurveKeys::contains_key(network, validator)
-      }
-    }
+    !(S::EmbeddedEllipticCurveKeys::contains_key(NetworkId::Serai, validator) &&
+      (match network {
+        NetworkId::Serai => true,
+        NetworkId::External(network) => {
+          S::EmbeddedEllipticCurveKeys::contains_key(network, validator)
+        }
+      }))
   }
 }

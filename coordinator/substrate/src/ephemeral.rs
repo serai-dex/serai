@@ -7,7 +7,7 @@ use serai_client_serai::{
   abi::primitives::{
     BlockHash,
     crypto::EmbeddedEllipticCurveKeys as EmbeddedEllipticCurveKeysStruct,
-    network_id::ExternalNetworkId,
+    network_id::{ExternalNetworkId, NetworkId},
     validator_sets::{KeyShares, ExternalValidatorSet},
     address::SeraiAddress,
   },
@@ -148,7 +148,12 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
             );
           };
 
-          EmbeddedEllipticCurveKeys::set(&mut txn, keys.network(), *validator, keys);
+          match keys.network() {
+            NetworkId::Serai => {}
+            NetworkId::External(network) => {
+              EmbeddedEllipticCurveKeys::set(&mut txn, network, *validator, keys);
+            }
+          }
         }
 
         for set_decided in block.set_decided_events {
@@ -188,6 +193,13 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
               let keys = match EmbeddedEllipticCurveKeys::get(&txn, set.network, *validator)
                 .expect("selected validator lacked embedded elliptic curve keys")
               {
+                EmbeddedEllipticCurveKeysStruct::Serai(_) => {
+                  panic!(
+                    "
+                    requested embedded elliptic curve keys for external network yet received `Serai`
+                  "
+                  )
+                }
                 EmbeddedEllipticCurveKeysStruct::Bitcoin(substrate, external) => {
                   assert_eq!(set.network, ExternalNetworkId::Bitcoin);
                   (substrate, external.to_vec())

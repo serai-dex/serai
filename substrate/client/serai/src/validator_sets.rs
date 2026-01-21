@@ -199,7 +199,7 @@ impl State<'_> {
   pub async fn embedded_elliptic_curve_keys(
     &self,
     validator: SeraiAddress,
-    network: ExternalNetworkId,
+    network: NetworkId,
   ) -> Result<Option<EmbeddedEllipticCurveKeys>, RpcError> {
     let Some(keys) = self
       .call::<Option<String>>(

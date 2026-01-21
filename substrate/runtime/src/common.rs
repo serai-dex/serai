@@ -35,7 +35,7 @@ sp_api::decl_runtime_apis! {
     fn pending_slash_report(network: ExternalNetworkId) -> bool;
     fn embedded_elliptic_curve_keys(
       validator: SeraiAddress,
-      network: ExternalNetworkId,
+      network: NetworkId,
     ) -> Option<EmbeddedEllipticCurveKeys>;
   }
 }
