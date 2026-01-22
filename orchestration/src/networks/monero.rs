@@ -89,7 +89,7 @@ RUN ./increase_default_stack_size.sh monerod
     .unwrap();
   }
 
-  let setup = mimalloc(os) + &download_monero;
+  let setup = mimalloc(os, true) + &download_monero;
 
   let run_monero = format!(
     r#"
@@ -103,9 +103,12 @@ CMD ["/run.sh"]
     network.label(),
   );
 
-  let run =
-    crate::os(os, if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" }, "monero") +
-      &run_monero;
+  let run = crate::os(
+    os,
+    true,
+    if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" },
+    "monero",
+  ) + &run_monero;
   let res = setup + &run;
 
   let mut monero_path = orchestration_path.to_path_buf();

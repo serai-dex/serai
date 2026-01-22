@@ -17,7 +17,7 @@ pub fn coordinator(
 ) {
   let db = network.db();
   let longer_reattempts = if network == Network::Dev { "longer-reattempts" } else { "" };
-  let setup = mimalloc(Os::Debian) +
+  let setup = mimalloc(Os::Debian, network.release()) +
     &build_serai_service(
       "",
       Os::Debian,
@@ -58,7 +58,7 @@ CMD {env_vars_str} serai-coordinator
 "#
   );
 
-  let run = os(Os::Debian, ADDITIONAL_ROOT, "coordinator") + &run_coordinator;
+  let run = os(Os::Debian, network.release(), ADDITIONAL_ROOT, "coordinator") + &run_coordinator;
   let res = setup + &run;
 
   let mut coordinator_path = orchestration_path.to_path_buf();
