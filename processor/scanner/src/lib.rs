@@ -39,6 +39,9 @@ mod substrate;
 /// Check blocks for transactions expected to eventually occur.
 mod eventuality;
 
+#[cfg(feature = "tests")]
+pub use index::tests;
+
 pub(crate) fn sort_outputs<K: GroupEncoding, A: Address, O: ReceivedOutput<K, A>>(
   a: &O,
   b: &O,

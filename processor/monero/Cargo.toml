@@ -50,6 +50,12 @@ signers = { package = "serai-processor-signers", path = "../signers" }
 
 bin = { package = "serai-processor-bin", path = "../bin" }
 
+[dev-dependencies]
+monero-ed25519 = { git = "https://github.com/monero-oxide/monero-oxide", rev = "cae84b7b16051ac8bf92ed151aad49b9e6f4fcae", version = "0.1.0", default-features = false, features = ["std"] }
+zeroize = { version = "^1.5", default-features = false }
+
+scanner = { package = "serai-processor-scanner", path = "../scanner", features = ["tests"] }
+
 [features]
 parity-db = ["bin/parity-db"]
 rocksdb = ["bin/rocksdb"]
