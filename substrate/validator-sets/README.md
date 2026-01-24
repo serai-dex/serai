@@ -94,34 +94,59 @@ operations, generally the transferring of coins from the old validator set to
 the new validator set's declared external key), which declares them the current
 set.
 
-The prior set remains active to publish a slash report (see "Slashing") before
+The prior set remains active to [publish a slash report](#slashing) before
 being retired.
 
 ### Validator Selection
 
 Validators for a network are selected by the amount of stake they've allocated
 to said network. A validator which does not want to validate for a specific
-network simply does not have to stake to that network.
+network simply does not have to allocate stake to that network.
+
+In order for a validator to allocate stake to any network, the validator must
+first set their auxiliary keys for the Serai network. The auxiliary key will be
+the key the validator uses to operate their validator, separating the key which
+controls the allocation of stake from the key which is actively online.
 
 In order for a validator to allocate stake to an external network, the
-validators must first declare their embedded elliptic curve keys for the
-network. Embedded elliptic curve keys are keys on an elliptic curve defined
-over a field which is the scalar field of the elliptic curve used with the
-external network, or rather, embedded elliptic curve keys are public keys with
-specific mathematic properties. They're used as part of the DKG protocol for
-the oraclization/external keys, hence why this pallet enforces they're set
-before a validator is selected to participate in a set (and expected to
-participate in a DKG protocol). These keys are signed by the validator which
-uses them, by virtue of being published in a signed transaction, and the keys
-themselves are bundled with a Proof of Knowledge which asserts their validity.
-These proofs are Schnorr signatures, as used to sign transactions, which
-Substrate traditionally uses a host function for (as performing cryptography
-within the runtime is sufficiently slow it is generally preferable to use
-native code instead). As these proofs are simple (they're Schnorr signatures,
-not ZK-STARKs for a blockchain's state transition function) and are infrequent
-(only used when declaring a validator, not with every transaction), Serai does
-not require nor does it employ host functions for their verification,
-preferring the simplicity and determinism guarantees.
+validator must first set their auxiliary keys for the external network as well.
+These auxiliary keys represent elliptic curve keys over an embedded elliptic
+curve, as relevant to the external network in question, and are used as part of
+the DKG protocols for the oraclization/external keys.
+
+### Auxiliary Keys
+
+Auxiliary keys are signed by the validator which uses them, by virtue of them
+being published within a signed transaction, and the keys themselves are
+bundled with a Proof of Knowledge which asserts their validity and ensures the
+validator using them actually is able to use them (to at least a minimal
+degree). These proofs are Schnorr signatures, as used to sign transactions,
+which Substrate traditionally uses a host function for signature (as performing
+cryptography within the runtime is sufficiently slow it is generally preferable
+to use native code instead). As these proofs are simple (they're Schnorr
+signatures, not ZK-STARKs for a blockchain's state transition function) and are
+infrequent (only used when declaring a validator, not with every transaction),
+Serai does not require nor does it employ host functions for their
+verification, preferring the simplicity and determinism guarantees offered by
+remaining within the runtime.
+
+Auxiliary keys arguably take the same role within the Serai runtime as
+"Session Keys" traditionally does within a Substrate runtime. One distinction
+is that Session Keys aim to declare a key per purpose, while Serai solely
+declares keys per network (for which it may serve many purposes). This is
+possible for the Serai network specifically as Serai has homogenized the
+cryptography within its protocol (with regards to consensus and so on) to
+solely make use of Ristretto.
+
+As for using a single key, this removes the independent domains inherently
+offered by independent keys. The Serai protocol applies an account derivation
+scheme to product subkeys for each intended usage, as enabled by our choice of
+cryptography (key-binding Schnorr signatures) not being malleable with regards
+to the key signed with. It should be noted however that _any_ subkey can be
+used to recover the root key _and all other subkeys_. This prohibits a
+theoretical construction of a BABE process which, if compromised, does not
+threaten the integrity of the same validator's GRANDPA process. Due to how
+niche such a deployment would be, this is accepted.
 
 ### Validator Deallocation
 
@@ -165,38 +190,3 @@ verify the justification for the slash. The reason for not validating the
 proofs themselves directly on-chain is to not tightly bind to BABE/GRANDPA's
 formatting of equivocation proofs, allowing future flexibility with how the
 protocol is defined.
-
-### Session Keys
-
-"Session Keys" are a traditional component of a
-Substrate runtime/Substrate-based blockchain, where each validator declares a
-variety of keys (each scoped to a specific purpose), and even allows regularly
-updating them.
-
-Serai does not use Session Keys, but does allow each validator to declare (and
-regularly update) their embedded elliptic curve keys used with external
-networks. For the identity of the validator themselves, and role in consensus,
-Serai allows declaring `EmbeddedEllipticCurveKeys` for the Serai network which
-contain the Ristretto public key to use for the validator. When published, it
-will also contain a proof of its validity, as necessary to ensure its safe
-usage within our various protocols.
-
-This is inferior to Session Keys in that it only allows declaring a single key
-of a specific type. Serai has homogenized the cryptography within its protocol
-proper, allowing us to solely use a Ristretto key. As for using a single key,
-removing the independent domains offered by independent keys, the Serai
-protocol applies an account derivation scheme to produce independent subkeys
-for each intended usage. The signatures are not malleable due to the Schnorr
-signatures over Ristretto exhibiting a key-binding property. However, it should
-be noted that _any_ subkey can be used to recover the root key
-_and all other subkeys_. This prohibits a theoretical construction of a BABE
-process which, if compromised, does not threaten the integrity of the same
-validator's GRANDPA process. Due to how niche such a deployment would be, this
-is accepted.
-
-The primary benefits to explicitly declaring a distinct key for the validator
-are:
-- A compromised validator may be slashed, yet the adversary does not have the
-  incentive of being able to deallocate its stake
-- Keys for historic sessions may be erased, preventing their recovery if the
-  validator is compromised in the future
