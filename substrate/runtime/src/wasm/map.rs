@@ -9,7 +9,7 @@ impl From<serai_abi::Call> for RuntimeCall {
         use serai_abi::coins::Call;
         use serai_coins_pallet::Call as Scall;
         RuntimeCall::Coins(match call {
-          Call::transfer { to, coins } => Scall::transfer { to: to.into(), coins },
+          Call::transfer { to, coins } => Scall::transfer { to: to, coins },
           Call::burn { coins } => Scall::burn { coins },
           Call::burn_with_instruction { instruction } => {
             Scall::burn_with_instruction { instruction }
@@ -23,13 +23,13 @@ impl From<serai_abi::Call> for RuntimeCall {
           Call::set_keys { network, key_pair, signature_participants, signature } => {
             Scall::set_keys { network, key_pair, signature_participants, signature }
           }
-          Call::report_slashes(Slashes::Serai { .. }) => todo!("TODO"),
-          Call::report_slashes(Slashes::ExternalNetwork { network, slashes, signature }) => {
-            Scall::report_slashes { network, slashes, signature }
+          Call::report_slashes(Slashes::Serai { session, validator, reason: _ }) => {
+            Scall::slash_serai_validator { session, validator }
           }
-          Call::set_embedded_elliptic_curve_keys { keys } => {
-            Scall::set_embedded_elliptic_curve_keys { keys }
+          Call::report_slashes(Slashes::ExternalNetwork { set, slashes, signature }) => {
+            Scall::report_slashes { set, slashes, signature }
           }
+          Call::set_embedded_elliptic_curve_keys { keys } => Scall::set_auxiliary_keys { keys },
           Call::allocate { network, amount } => Scall::allocate { network, amount },
           Call::deallocate { network, amount } => Scall::deallocate { network, amount },
           Call::claim_deallocation { deallocation } => Scall::claim_deallocation {

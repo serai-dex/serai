@@ -17,6 +17,8 @@ use serai_primitives::{
 pub enum Slashes {
   /// A single slash for a specific validator of the Serai network.
   Serai {
+    /// The session the misbehavior occurred during.
+    session: Session,
     /// The validator being slashed.
     validator: SeraiAddress,
     /// The reason for the slash, represented as an opaque byte blob.
@@ -43,8 +45,8 @@ pub enum Slashes {
   },
   /// A [`SlashReport`] from an external network.
   ExternalNetwork {
-    /// The network whose latest retired validator set is reporting their slashes.
-    network: ExternalNetworkId,
+    /// The validator set which is reporting their slashes.
+    set: ExternalValidatorSet,
     /// The slashes they're reporting.
     slashes: SlashReport,
     /// The signature confirming the validity of this slash report.
@@ -61,12 +63,12 @@ pub enum Slashes {
 impl BorshSerialize for Slashes {
   fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     match self {
-      Slashes::Serai { validator, reason } => {
-        (NetworkId::Serai, validator).serialize(writer)?;
+      Slashes::Serai { session, validator, reason } => {
+        (NetworkId::Serai, session, validator).serialize(writer)?;
         serai_primitives::sp_borsh::borsh_serialize_bounded_vec(reason, writer)
       }
-      Slashes::ExternalNetwork { network, slashes, signature } => {
-        (network, slashes, signature).serialize(writer)
+      Slashes::ExternalNetwork { set, slashes, signature } => {
+        (set, slashes, signature).serialize(writer)
       }
     }
   }
@@ -76,11 +78,12 @@ impl BorshDeserialize for Slashes {
   fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     Ok(match NetworkId::deserialize_reader(reader)? {
       NetworkId::Serai => Slashes::Serai {
+        session: <_>::deserialize_reader(reader)?,
         validator: <_>::deserialize_reader(reader)?,
         reason: serai_primitives::sp_borsh::borsh_deserialize_bounded_vec(reader)?,
       },
       NetworkId::External(network) => Slashes::ExternalNetwork {
-        network,
+        set: ExternalValidatorSet { network, session: <_>::deserialize_reader(reader)? },
         slashes: <_>::deserialize_reader(reader)?,
         signature: <_>::deserialize_reader(reader)?,
       },
@@ -231,6 +234,9 @@ fn serialize_slashes() {
 
   for _ in 0 .. 1000 {
     {
+      #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+      let session = Session(OsRng.next_u64() as u32);
+
       let mut validator = [0; 32];
       OsRng.fill_bytes(&mut validator);
       let validator = SeraiAddress(validator);
@@ -238,7 +244,7 @@ fn serialize_slashes() {
       let mut reason = vec![0u8; usize::try_from(OsRng.next_u64() % u64::from(u16::MAX)).unwrap()];
       OsRng.fill_bytes(&mut reason);
 
-      let slashes = Slashes::Serai { validator, reason: reason.try_into().unwrap() };
+      let slashes = Slashes::Serai { session, validator, reason: reason.try_into().unwrap() };
 
       assert_eq!(
         slashes,
@@ -247,15 +253,17 @@ fn serialize_slashes() {
     }
 
     {
-      #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+      #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
       let network = external_networks[(OsRng.next_u64() as usize) % external_networks.len()];
+      #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+      let session = Session(OsRng.next_u64() as u32);
 
       let mut slashes = vec![];
       for _ in 0 .. (OsRng.next_u64() % KeyShares::MAX_PER_SET_U64) {
         if (OsRng.next_u64() & 1) == 1 {
           slashes.push(Slash::Fatal);
         } else {
-          #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
+          #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
           slashes.push(Slash::Points(OsRng.next_u64() as u32));
         }
       }
@@ -265,7 +273,11 @@ fn serialize_slashes() {
       OsRng.fill_bytes(&mut signature);
       let signature = Signature::from(RistrettoSignature(signature));
 
-      let slashes = Slashes::ExternalNetwork { network, slashes, signature };
+      let slashes = Slashes::ExternalNetwork {
+        set: ExternalValidatorSet { network, session },
+        slashes,
+        signature,
+      };
 
       assert_eq!(
         slashes,

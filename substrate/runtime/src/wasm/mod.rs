@@ -14,7 +14,7 @@ use serai_abi::{
   primitives::{
     constants::*,
     crypto::EmbeddedEllipticCurveKeys,
-    network_id::{ExternalNetworkId, NetworkId},
+    network_id::NetworkId,
     coin::Coin,
     balance::{Amount, Balance},
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
@@ -89,16 +89,26 @@ impl serai_core_pallet::Config for Runtime {
   const PROTOCOL_ID: [u8; 32] = [0; 32];
   // TODO
   const SIGNATURE_VERIFICATION_WEIGHT: Weight = Weight::zero();
-  type PreInherents = ();
+  type PreInherents = ValidatorSets;
 }
 
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint; // TODO
   type Weights = (); // TODO
 }
+pub struct DummyEmissions;
+impl serai_validator_sets_pallet::Emissions for DummyEmissions {
+  fn block_reward() -> Amount {
+    Amount(0)
+  }
+  fn set_reward(_set: ExternalValidatorSet) -> Amount {
+    Amount(0)
+  }
+}
 impl serai_validator_sets_pallet::Config for Runtime {
   type ShouldEndSession = Babe;
   type EconomicSecurity = EconomicSecurity;
+  type Emissions = DummyEmissions; // TODO
 }
 impl serai_signals_pallet::Config for Runtime {
   type RetirementLockInDurationInSlots = ConstU64<{ RETIREMENT_LOCK_IN_DURATION_IN_SLOTS }>;
@@ -118,6 +128,7 @@ impl serai_in_instructions_pallet::Config for Runtime {}
 impl pallet_timestamp::Config for Runtime {
   type Moment = u64;
   type OnTimestampSet = Babe;
+  #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
   type MinimumPeriod = ConstU64<{ (TARGET_BLOCK_TIME.as_millis() / 2) as u64 }>;
   type WeightInfo = ();
 }
@@ -142,6 +153,7 @@ type MaxAuthorities =
 impl pallet_babe::Config for Runtime {
   type EpochDuration = ConstU64<{ SESSION_LENGTH_IN_SLOTS }>;
 
+  #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
   type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME.as_millis() as u64 }>;
   type EpochChangeTrigger = pallet_babe::ExternalTrigger;
 
@@ -185,7 +197,7 @@ sp_api::impl_runtime_apis! {
         system: SystemConfig { _config: PhantomData },
 
         coins: CoinsConfig {
-          accounts: genesis.coins.into_iter().map(|(key, balance)| (key.into(), balance)).collect(),
+          accounts: genesis.coins.into_iter().map(|(key, balance)| (key, balance)).collect(),
           _instance: PhantomData,
         },
 
@@ -198,7 +210,7 @@ sp_api::impl_runtime_apis! {
 
         validator_sets: ValidatorSetsConfig {
           participants:
-            genesis.validators.into_iter().map(|(key, keys)| (key.into(), keys)).collect(),
+            genesis.validators.into_iter().map(|(key, keys)| (key, keys)).collect(),
         },
         signals: SignalsConfig::default(),
 
@@ -268,7 +280,7 @@ sp_api::impl_runtime_apis! {
             sp_runtime::DigestItem::PreRuntime(consensus, encoded)
               if *consensus == SeraiPreExecutionDigest::CONSENSUS_ID =>
             {
-              let Ok(SeraiPreExecutionDigest { unix_time_in_millis }) =
+              let Ok(SeraiPreExecutionDigest { proposer: _, unix_time_in_millis }) =
                 <_ as borsh::BorshDeserialize>::deserialize_reader(&mut encoded.as_slice()) else {
                 // We don't handle this error as we can't in this position
                 let _ = result.put_error(
@@ -278,7 +290,7 @@ sp_api::impl_runtime_apis! {
                 return result;
               };
 
-              use frame_support::inherent::ProvideInherent;
+              use frame_support::inherent::ProvideInherent as _;
               match pallet_timestamp::Pallet::<Runtime>::check_inherent(
                 &pallet_timestamp::Call::<Runtime>::set { now: unix_time_in_millis },
                 &data
@@ -317,7 +329,7 @@ sp_api::impl_runtime_apis! {
 
   impl sp_consensus_babe::BabeApi<Block> for Runtime {
     fn configuration() -> sp_consensus_babe::BabeConfiguration {
-      use frame_support::traits::Get;
+      use frame_support::traits::Get as _;
 
       let epoch_config = Babe::epoch_config().unwrap_or(BABE_GENESIS_EPOCH_CONFIG);
       sp_consensus_babe::BabeConfiguration {
@@ -422,7 +434,7 @@ sp_api::impl_runtime_apis! {
         return vec![]
       };
       ValidatorSets::selected_validators(ValidatorSet { network, session })
-        .map(|validator| validator.0.into())
+        .map(|validator| validator.0)
         .collect()
     }
     fn current_session(network: NetworkId) -> Option<Session> {
@@ -444,18 +456,18 @@ sp_api::impl_runtime_apis! {
       let session = ValidatorSets::current_session(network)?;
       Some(
         ValidatorSets::selected_validators(ValidatorSet { network, session })
-          .map(|(key, _key_shares)| SeraiAddress::from(key))
+          .map(|(key, _key_shares)| key)
           .collect()
       )
     }
-    fn pending_slash_report(network: ExternalNetworkId) -> bool {
-      ValidatorSets::pending_slash_report(network)
+    fn pending_slash_report(set: ExternalValidatorSet) -> bool {
+      ValidatorSets::pending_slash_report(set)
     }
     fn embedded_elliptic_curve_keys(
       validator: SeraiAddress,
       network: NetworkId,
     ) -> Option<EmbeddedEllipticCurveKeys> {
-      ValidatorSets::embedded_elliptic_curve_keys(validator.into(), network)
+      ValidatorSets::auxiliary_keys(validator, network)
     }
   }
 }
@@ -494,6 +506,9 @@ impl serai_abi::TransactionFeeContext for FeeContext {
       ))?;
     }
 
+    // `clippy::disallowed_methods` as this can be called for non-`CoinsInstance`,
+    // but this is `CoinsInstance` so it's fine
+    #[expect(clippy::disallowed_methods)]
     serai_coins_pallet::Pallet::<Runtime, CoinsInstance>::burn(RuntimeOrigin::signed(*signer), fee)
       .map_err(|_| {
         sp_runtime::transaction_validity::TransactionValidityError::Invalid(

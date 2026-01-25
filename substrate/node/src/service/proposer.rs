@@ -3,13 +3,16 @@ use std::time::Duration;
 use sp_runtime::Digest;
 use sp_consensus::{InherentData, DisableProofRecording};
 
-use serai_abi::{SeraiPreExecutionDigest, SubstrateHeader as Header, SubstrateBlock as Block};
+use serai_abi::{
+  primitives::address::SeraiAddress, SeraiPreExecutionDigest, SubstrateHeader as Header,
+  SubstrateBlock as Block,
+};
 
 use super::{FullClient, TransactionPool};
 
 type UnderlyingProposer =
   sc_basic_authorship::Proposer<Block, FullClient, TransactionPool, DisableProofRecording>;
-pub struct Proposer(UnderlyingProposer);
+pub struct Proposer(SeraiAddress, UnderlyingProposer);
 impl sp_consensus::Proposer<Block> for Proposer {
   type Error = <UnderlyingProposer as sp_consensus::Proposer<Block>>::Error;
   type Proposal = <UnderlyingProposer as sp_consensus::Proposer<Block>>::Proposal;
@@ -28,6 +31,7 @@ impl sp_consensus::Proposer<Block> for Proposer {
       inherent_digests.logs.push(sp_runtime::generic::DigestItem::PreRuntime(
         SeraiPreExecutionDigest::CONSENSUS_ID,
         borsh::to_vec(&SeraiPreExecutionDigest {
+          proposer: self.0,
           unix_time_in_millis: inherent_data
             .get_data::<sp_timestamp::Timestamp>(&sp_timestamp::INHERENT_IDENTIFIER)
             .map_err(|err| sp_blockchain::Error::Application(err.into()))?
@@ -38,19 +42,21 @@ impl sp_consensus::Proposer<Block> for Proposer {
       ));
 
       // Call the underlying propose function
-      self.0.propose(inherent_data, inherent_digests, max_duration, block_size_limit).await
+      self.1.propose(inherent_data, inherent_digests, max_duration, block_size_limit).await
     })
   }
 }
 
 type UnderlyingFactory =
   sc_basic_authorship::ProposerFactory<TransactionPool, FullClient, DisableProofRecording>;
-pub struct ProposerFactory(pub UnderlyingFactory);
+pub struct ProposerFactory(pub SeraiAddress, pub UnderlyingFactory);
 impl sp_consensus::Environment<Block> for ProposerFactory {
   type CreateProposer = core::future::Ready<Result<Proposer, Self::Error>>;
   type Proposer = Proposer;
   type Error = <UnderlyingFactory as sp_consensus::Environment<Block>>::Error;
   fn init(&mut self, parent_header: &Header) -> Self::CreateProposer {
-    core::future::ready(self.0.init(parent_header).into_inner().map(Proposer))
+    core::future::ready(
+      self.1.init(parent_header).into_inner().map(|underlying| Proposer(self.0, underlying)),
+    )
   }
 }

@@ -150,6 +150,10 @@ mod pallet {
   /// within the Serai protocol. While logical, the usage of the _same type_ is specifically used
   /// to enforce an invariant that _no_ balance is _not_ representable within an `Amount` (as any
   /// balance will be less than the supply, which can be so represented).
+  ///
+  /// This is not just an internal variant but is _guaranteed_ to all consumers. This allows
+  /// consumers to perform logic regarding balances with certainty they won't panic, so long as the
+  /// balances themselves are valid.
   #[pallet::storage]
   type Supply<T: Config<I>, I: 'static = ()> = StorageMap<_, Identity, Coin, Amount, ValueQuery>;
 

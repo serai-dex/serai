@@ -16,6 +16,8 @@ use super::*;
 /// The digest for all of the Serai-specific header fields added before execution of the block.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct SeraiPreExecutionDigest {
+  /// The proposer of this block.
+  pub proposer: SeraiAddress,
   /// The UNIX time in milliseconds this block was created at.
   pub unix_time_in_millis: u64,
 }
@@ -133,6 +135,10 @@ impl From<&SubstrateHeader> for Header {
             .as_ref()
             .map(|digest| digest.builds_upon)
             .unwrap_or(UnbalancedMerkleTree::EMPTY),
+          proposer: pre_execution_digest
+            .as_ref()
+            .map(|digest| digest.proposer)
+            .unwrap_or(SeraiAddress([0; 32])),
           unix_time_in_millis: pre_execution_digest
             .as_ref()
             .map(|digest| digest.unix_time_in_millis)
@@ -372,8 +378,12 @@ fn find_serai_pre_execution_digest() {
     }
   };
   push(&mut digest);
+
+  let mut proposer = [0; 32];
+  OsRng.fill_bytes(&mut proposer);
+  let proposer = SeraiAddress(proposer);
   let serai_pre_execution_digest =
-    SeraiPreExecutionDigest { unix_time_in_millis: OsRng.next_u64() };
+    SeraiPreExecutionDigest { proposer, unix_time_in_millis: OsRng.next_u64() };
   digest.push(DigestItem::PreRuntime(
     SeraiPreExecutionDigest::CONSENSUS_ID,
     borsh::to_vec(&serai_pre_execution_digest).unwrap(),
@@ -387,11 +397,14 @@ fn header_from_substrate_header() {
   use alloc::vec;
   use rand_core::{RngCore as _, OsRng};
 
+  let mut proposer = [0; 32];
+  OsRng.fill_bytes(&mut proposer);
+  let proposer = SeraiAddress(proposer);
   let unix_time_in_millis = OsRng.next_u64();
 
   let serai_pre_execution_digest = DigestItem::PreRuntime(
     SeraiPreExecutionDigest::CONSENSUS_ID,
-    borsh::to_vec(&SeraiPreExecutionDigest { unix_time_in_millis }).unwrap(),
+    borsh::to_vec(&SeraiPreExecutionDigest { proposer, unix_time_in_millis }).unwrap(),
   );
 
   let mut builds_upon = [0; 32];
@@ -435,6 +448,7 @@ fn header_from_substrate_header() {
       Header::V1(HeaderV1 {
         number: 0,
         builds_upon: UnbalancedMerkleTree::EMPTY,
+        proposer: SeraiAddress([0; 32]),
         unix_time_in_millis: 0,
         transactions_commitment: UnbalancedMerkleTree::EMPTY,
         events_commitment: UnbalancedMerkleTree::EMPTY,
@@ -452,6 +466,7 @@ fn header_from_substrate_header() {
       Header::V1(HeaderV1 {
         number: 0,
         builds_upon: UnbalancedMerkleTree::EMPTY,
+        proposer,
         unix_time_in_millis,
         transactions_commitment: UnbalancedMerkleTree::EMPTY,
         events_commitment: UnbalancedMerkleTree::EMPTY,
@@ -469,6 +484,7 @@ fn header_from_substrate_header() {
       Header::V1(HeaderV1 {
         number: 0,
         builds_upon,
+        proposer: SeraiAddress([0; 32]),
         unix_time_in_millis: 0,
         transactions_commitment,
         events_commitment,
@@ -486,6 +502,7 @@ fn header_from_substrate_header() {
       Header::V1(HeaderV1 {
         number: 0,
         builds_upon,
+        proposer,
         unix_time_in_millis,
         transactions_commitment,
         events_commitment,

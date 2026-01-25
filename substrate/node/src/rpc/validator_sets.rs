@@ -129,15 +129,15 @@ pub(crate) fn module<
       let Some(block_hash) = block_hash(&**client, &params)? else {
         Err(Error::InvalidStateReference)?
       };
-      let Ok(network) = ExternalNetworkId::try_from(network(&params)?) else {
+      let Ok(set) = ExternalValidatorSet::try_from(set(&params)?) else {
         Err(Error::InvalidRequest(
           "asking if a non-external validator set has a pending slash report",
         ))?
       };
       client
         .runtime_api()
-        .pending_slash_report(block_hash, network)
-        .map_err(|_| Error::Internal("couldn't fetch if this network has a pending slash report"))
+        .pending_slash_report(block_hash, set)
+        .map_err(|_| Error::Internal("couldn't fetch if this set has a pending slash report"))
     },
   )?;
 

@@ -148,11 +148,66 @@ theoretical construction of a BABE process which, if compromised, does not
 threaten the integrity of the same validator's GRANDPA process. Due to how
 niche such a deployment would be, this is accepted.
 
-### Validator Deallocation
+### Allocation of Stake
 
-Validators are allowed to deallocate stake from a network. The deallocation is
-delayed until the validator is no longer active, plus an additional session to
-allow for a response to any misbehavior which occurred during their activity.
+Validator sets are parameterized by the amount of stake required for one key
+share. This value is intended to support being updated, but at this time no
+updating mechanism exists within the runtime other than upgrading the network
+itself. The amount of stake required for a key share will not
+'automatically retarget' according to the current network conditions. For the
+Serai network specifically, which does not have a key nor shares of it,
+'one key share' refers to one unit of voting weight within the consensus
+process.
+
+A validator may allocate enough stake to earn multiple key shares. This will
+not require spawning additional validators, though an entity may create
+multiple addresses on-chain and instead allocate them each enough stake for a
+key share if they wish to operate multiple instances of the validator software
+stack. This would increase the entity's complexity, but perhaps provide a more
+robust validating strategy. It is left entirely to be managed off-chain
+however, with no support on-chain for multiple validator instances nor for
+allocating stake to a validator which isn't one's self.
+
+If a validator allocates stake which is indivisible by the amount required for
+a key share, they will be considered for an amount of key shares corresponding
+to the quotient. If the validators selected for a set would have an amount of
+key shares exceeding the maximum limit, a reverse round robin will be applied
+to reduce their key shares until the maximum amount of key shares is respected.
+In both cases, the selected validators stake will be entirely considered for
+economic security despite the improportional cryptographic properties.
+
+Validators must allocate stake sufficient for at least one key share (under
+current parameters). This does not intend to ensure all allocations present are
+sufficient for at least one key share, but rather to limit allocations which
+won't be eligible for selection (and are accordingly pointless). As an obvious
+example, a validator who allocates the minimum allowed
+_before the allocation per key share is raised_ would immediately have a
+registered allocation less than the requirement for a key share. Again, while
+there is no mechanism currently defined to update the allocation per key share,
+the system is designed around it always being updateable.
+
+If a validator set has achieved a fault tolerance of `f > 0`, validators will
+be limited from allocating stake which would cause the next selection to have
+`f = 0`. This is not assumed to fundamentally prevent validator sets from
+reverting to `f = 0` but is intended to promote a decentralized ecosystem.
+Similarly, if a validator's allocation would _prevent_ achieving `f > 0`, the
+allocation will be rejected.
+
+### Deallocation of Stake
+
+Validators may deallocate stake they've allocated from a network, so long as:
+1) Their resulting allocation is either zero or still sufficient for at least
+   one key share
+1) The deallocation does not cause the validator set to lose fault tolerance
+2) The validator set's updated amount of stake is sufficient for economic
+   security
+
+The deallocation is delayed until the validator is no longer active, plus an
+additional two sessions to allow for a response to any misbehavior which
+occurred during their activity. The requirement for two sessions is due to how
+we require two new sets to be decided, where set deciding occurs on a regular
+interval. We cannot require only the following session to complete as it may
+only last a few blocks if specific timing occurs.
 
 ### Distribution of Rewards
 
@@ -190,3 +245,8 @@ verify the justification for the slash. The reason for not validating the
 proofs themselves directly on-chain is to not tightly bind to BABE/GRANDPA's
 formatting of equivocation proofs, allowing future flexibility with how the
 protocol is defined.
+
+### Integration
+
+A `PreInherents` hook is defined which _must_ be integrated into the runtime
+for this to work properly.

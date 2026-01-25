@@ -1,7 +1,7 @@
 use alloc::vec::Vec;
 use serai_abi::primitives::{
   crypto::{EmbeddedEllipticCurveKeys, SignedEmbeddedEllipticCurveKeys, KeyPair},
-  network_id::{ExternalNetworkId, NetworkId},
+  network_id::NetworkId,
   validator_sets::{Session, ExternalValidatorSet},
   coin::ExternalCoin,
   balance::{Amount, Balance},
@@ -32,7 +32,7 @@ sp_api::decl_runtime_apis! {
     fn current_stake(network: NetworkId) -> Option<Amount>;
     fn keys(set: ExternalValidatorSet) -> Option<KeyPair>;
     fn current_validators(network: NetworkId) -> Option<Vec<SeraiAddress>>;
-    fn pending_slash_report(network: ExternalNetworkId) -> bool;
+    fn pending_slash_report(set: ExternalValidatorSet) -> bool;
     fn embedded_elliptic_curve_keys(
       validator: SeraiAddress,
       network: NetworkId,
