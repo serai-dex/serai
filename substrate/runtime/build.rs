@@ -225,7 +225,21 @@ fn command(bin: &str) -> Command {
   command.env("LC_ALL", "C");
 
   // Propagate the Rust toolchain
-  command.env("CARGO", cargo_env("CARGO")).env("RUSTC", cargo_env("RUSTC"));
+  for key in ["CARGO", "RUSTC", "RUSTDOC"] {
+    command.env(key, cargo_env(key));
+  }
+  /*
+    Propagate toolchain configuration which are _optional_ and may not be set.
+
+    The propagation of the `clippy`-specific environment variables is unfortunately very fragile.
+    https://github.com/rust-lang/rust-clippy/blob/0f17b47529fcde29fde44343e8f35e5cd2f21b89
+      /src/main.rs#L123-L124
+  */
+  for key in ["RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CLIPPY_ARGS", "CLIPPY_TERMINAL_WIDTH"] {
+    if let Ok(value) = env::var(key) {
+      command.env(key, value);
+    }
+  }
 
   /*
     Set `RUSTC_BOOTSTRAP` to be able to use unstable options.
@@ -260,15 +274,20 @@ fn command(bin: &str) -> Command {
   }
 
   /*
-    Propagate `CARGO_NET_GIT_FETCH_WITH_CLI`, if set.
+    Propagate a variety of (optional) configurations which won't affect our determinism.
 
-    This doesn't affect the determinism of our result, for any sane `git` binary, but does allow
-    the user to resolve issues with the built-in `git` (if any exist).
+    Specifically, we propagte the network settings, the terminal display settings, and any
+    configured logging.
   */
-  {
-    const GIT_CLI: &str = "CARGO_NET_GIT_FETCH_WITH_CLI";
-    if let Ok(value) = env::var(GIT_CLI) {
-      command.env(GIT_CLI, value);
+  for (key, value) in env::vars() {
+    if matches!(
+      key.as_str(),
+      "CARGO_LOG" | "HTTPS_PROXY" | "https_proxy" | "http_proxy" | "HTTP_TIMEOUT" | "TERM" |
+      _ if key.starts_with("CARGO_HTTP_") ||
+           key.starts_with("CARGO_NET_") ||
+           key.starts_with("CARGO_TERM_")
+    ) {
+      command.env(key, value);
     }
   }
 
@@ -380,6 +399,13 @@ fn rustc_wrapper(mut args: impl Iterator<Item = String>) {
   let rustc = args.next().expect("missing argument for the `rustc` path");
   let mut command = Command::new(&rustc);
 
+  // If there's yet another wrapper, proxy the actual `rustc` for it now
+  if let Ok(wrapper) = env::var("RUSTC_WORKSPACE_WRAPPER") {
+    if rustc == wrapper {
+      command.arg(args.next().unwrap());
+    }
+  }
+
   // If we're within a split argument or not
   let mut within_split_arg = false;
   // The file being compiled
@@ -389,7 +415,7 @@ fn rustc_wrapper(mut args: impl Iterator<Item = String>) {
   while let Some(arg) = args.next() {
     // Detect if this the file being compiled by checking it's not (part of) an argument
     if (!within_split_arg) && (!arg.starts_with('-')) {
-      assert!(file.is_none());
+      assert!(file.is_none(), "found file {arg} when we have file {}", file.unwrap());
       file = Some(arg.clone());
     }
 
@@ -426,7 +452,7 @@ fn rustc_wrapper(mut args: impl Iterator<Item = String>) {
       It works at this time, simply by the layout `rustc` happens to be invoked with, but this
       could be improved in the future.
     */
-    let arg_is_split_option = arg.starts_with('-') && (!arg.contains('='));
+    let arg_is_split_option = arg.starts_with('-') && (arg != "-") && (!arg.contains('='));
     // If we're already in a split argument, then while this could have been one, it isn't
     let arg_is_split_option = (!within_split_arg) && arg_is_split_option;
     within_split_arg = arg_is_split_option;
@@ -687,7 +713,16 @@ which will build the WASM as part of its build process, with the necessary confi
     build_command.env("PATH", path);
   }
 
-  // Install ourselves as the `rustc` wrapper for the reasons described above
+  /*
+    Install ourselves as the `rustc` wrapper for the reasons described above.
+
+    This would overwrite any system-provided `RUSTC_WRAPPER`, but that shouldn't be a problem here.
+    Tooling such as `clippy` override `RUSTC_WORKSPACE_WRAPPER`, which we respect.
+  */
+  assert!(
+    matches!(env::var("RUSTC_WRAPPER"), Err(env::VarError::NotPresent)),
+    "`RUSTC_WRAPPER` set when this build script sets it itself",
+  );
   build_command.env("RUSTC_WRAPPER", std::env::current_exe().unwrap());
 
   /*

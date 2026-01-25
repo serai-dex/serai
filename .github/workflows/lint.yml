@@ -32,26 +32,21 @@ jobs:
       - name: Run Clippy
         shell: bash
         run: |
-          RUSTFLAGS="$RUSTFLAGS -D warnings"
-
           # stable Rust
-          cargo clippy --all-features --all-targets
-          # Explicitly run `clippy` on the WASM-targeting `serai-runtime`
-          RUSTFLAGS="$RUSTFLAGS --cfg substrate_runtime" RUSTC_BOOTSTRAP=1 cargo clippy --target wasm32v1-none -Zbuild-std=core,alloc --no-default-features --features "try-runtime,runtime-benchmarks" -p serai-runtime
+          cargo clippy --all-features --all-targets -- -D warnings
           # Check a few variations of `serai-primitives`, `serai-abi`
-          cargo clippy --no-default-features --all-targets -p serai-primitives
-          cargo clippy --all-targets -p serai-primitives
-          cargo clippy --no-default-features --all-targets -p serai-abi
-          cargo clippy --all-targets -p serai-abi
+          cargo clippy --no-default-features --all-targets -p serai-primitives -- -D warnings
+          cargo clippy --all-targets -p serai-primitives -- -D warnings
+          cargo clippy --no-default-features --all-targets -p serai-abi -- -D warnings
+          cargo clippy --all-targets -p serai-abi -- -D warnings
 
           # nightly Rust
           NIGHTLY="${{ steps.nightly.outputs.version }}"
-          cargo +$NIGHTLY clippy --all-features --all-targets
-          RUSTFLAGS="$RUSTFLAGS --cfg substrate_runtime" cargo +$NIGHTLY clippy --target wasm32v1-none -Zbuild-std=core,alloc --no-default-features --features "try-runtime,runtime-benchmarks" -p serai-runtime
-          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-primitives
-          cargo +$NIGHTLY clippy --all-targets -p serai-primitives
-          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-abi
-          cargo +$NIGHTLY clippy --all-targets -p serai-abi
+          cargo +$NIGHTLY clippy --all-features --all-targets -- -D warnings
+          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-primitives -- -D warnings
+          cargo +$NIGHTLY clippy --all-targets -p serai-primitives -- -D warnings
+          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-abi -- -D warnings
+          cargo +$NIGHTLY clippy --all-targets -p serai-abi -- -D warnings
 
       - name: Verify `pallet::hooks` is unused
         shell: bash
