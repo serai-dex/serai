@@ -4,8 +4,11 @@
 
 extern crate alloc;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
 #[cfg(test)]
-mod mock;
+mod tests;
 
 #[expect(
   let_underscore_drop,
@@ -15,10 +18,11 @@ mod mock;
 )]
 #[frame_support::pallet]
 mod pallet {
+  use core::marker::PhantomData;
   use alloc::vec::Vec;
 
-  use frame_system::pallet_prelude::*;
   use frame_support::pallet_prelude::*;
+  use frame_system::pallet_prelude::*;
 
   use serai_abi::{
     primitives::{
@@ -35,6 +39,47 @@ mod pallet {
 
   use super::*;
 
+  /// The weights for the pallet.
+  pub trait Weights {
+    /// The weight for a call to `add_liquidity`.
+    fn add_liquidity() -> Weight;
+    /// The weight for a call to `transfer_liquidity`.
+    fn transfer_liquidity() -> Weight;
+    /// The weight for a call to `remove_liquidity`.
+    fn remove_liquidity() -> Weight;
+    /// The weight for a call to `swap`.
+    ///
+    /// `route_len` should be the length of the route the swap occurs via. This means it should be
+    /// `1` if to/from `Coin::Serai` or `2` is neither coin is `Coin::Serai`.
+    fn swap(route_len: usize) -> Weight;
+    /// The weight for a call to `swap_for`.
+    ///
+    /// `route_len` should be the length of the route the swap occurs via. This means it should be
+    /// `1` if to/from `Coin::Serai` or `2` is neither coin is `Coin::Serai`.
+    fn swap_for(route_len: usize) -> Weight;
+  }
+
+  /// A shimmed set of weights, returning zero.
+  ///
+  /// This is NOT safe for usage in a production system and is provided only for testing purposes.
+  impl Weights for () {
+    fn add_liquidity() -> Weight {
+      Weight::zero()
+    }
+    fn transfer_liquidity() -> Weight {
+      Weight::zero()
+    }
+    fn remove_liquidity() -> Weight {
+      Weight::zero()
+    }
+    fn swap(_route_len: usize) -> Weight {
+      Weight::zero()
+    }
+    fn swap_for(_route_len: usize) -> Weight {
+      Weight::zero()
+    }
+  }
+
   /// The configuration of this pallet.
   #[pallet::config]
   pub trait Config:
@@ -43,6 +88,25 @@ mod pallet {
     + serai_coins_pallet::Config<serai_coins_pallet::CoinsInstance>
     + serai_coins_pallet::Config<serai_coins_pallet::LiquidityTokensInstance>
   {
+    /// The weights for this pallet.
+    type Weights: Weights;
+  }
+
+  /// The genesis state to use for this pallet.
+  #[pallet::genesis_config]
+  #[derive(Clone, Debug)]
+  pub struct GenesisConfig<T: Config> {
+    /// The fractional fee to charge for the `Coin::Serai - Coin::External(_)` liquidity pool.
+    ///
+    /// The value is denominated in thousandths. A value MUST be provided for every key.
+    pub fees: Vec<(ExternalCoin, u8)>,
+    /// Consumes the generic argument.
+    pub _config: PhantomData<T>,
+  }
+  impl<T: Config> Default for GenesisConfig<T> {
+    fn default() -> Self {
+      Self { fees: ExternalCoin::all().map(|coin| (coin, 0)).collect(), _config: PhantomData }
+    }
   }
 
   /// An error incurred.
@@ -71,7 +135,24 @@ mod pallet {
   }
 
   #[pallet::storage]
-  type LpFeeInThousandths<T: Config> = StorageMap<_, Identity, ExternalCoin, u8, OptionQuery>;
+  type FeeInThousandths<T: Config> = StorageMap<_, Identity, ExternalCoin, u8, OptionQuery>;
+
+  #[pallet::genesis_build]
+  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+    fn build(&self) {
+      let mut set = 0;
+      for (coin, fee) in &self.fees {
+        assert!(FeeInThousandths::<T>::get(coin).is_none());
+        FeeInThousandths::<T>::insert(coin, fee);
+        set += 1;
+      }
+      assert_eq!(
+        set,
+        ExternalCoin::all().collect::<Vec<_>>().len(),
+        "fee parameter for liquidity pool on genesis omitted"
+      );
+    }
+  }
 
   /// The Pallet struct.
   #[pallet::pallet]
@@ -93,7 +174,7 @@ mod pallet {
   impl<T: Config> Pallet<T> {
     /// Add liquidity.
     #[pallet::call_index(0)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::add_liquidity(), DispatchClass::Normal))]
     pub fn add_liquidity(
       origin: OriginFor<T>,
       external_coin: ExternalCoin,
@@ -103,6 +184,10 @@ mod pallet {
       external_coin_minimum: Amount,
     ) -> DispatchResult {
       let from = ensure_signed(origin)?;
+
+      if (sri_minimum > sri_intended) || (external_coin_minimum > external_coin_intended) {
+        Err(Error::<T>::InvalidLiquidity)?;
+      }
 
       let pool = serai_abi::dex::address(external_coin);
       let supply = LiquidityTokens::<T>::supply(Coin::from(external_coin)).0;
@@ -134,6 +219,10 @@ mod pallet {
           external_coin: Coins::<T>::balance(pool, Coin::from(external_coin)),
         };
 
+        /*
+          The amounts to add to the pool are determined along the curve in order to ensure the
+          user's requested bounds on the valuation of one coin respective to the other is followed.
+        */
         let (sri_actual, external_coin_actual) = {
           let (sri_optimal, external_coin_optimal) = (
             Premise::establish(Coin::from(external_coin), Coin::Serai)
@@ -158,6 +247,10 @@ mod pallet {
           }
         };
 
+        /*
+          The actual amount of liquidity to add is determined linearly so additions of liquidity do
+          not move the price in any way advantageous to whoever adds liquidity.
+        */
         let liquidity = {
           let supply = u128::from(supply);
           let sri_liquidity =
@@ -170,6 +263,8 @@ mod pallet {
           Amount(sri_liquidity.min(external_coin_liquidity))
         };
 
+        // Further check it did not resolve as zero liquidity due to unexpected changes of
+        // magnitude between the time this transaction was published and included on-chain
         if liquidity == Amount(0) {
           Err(Error::<T>::Unsatisfied)?;
         }
@@ -198,7 +293,7 @@ mod pallet {
 
     /// Transfer these liquidity tokens to the specified address.
     #[pallet::call_index(1)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::transfer_liquidity(), DispatchClass::Normal))]
     pub fn transfer_liquidity(
       origin: OriginFor<T>,
       to: SeraiAddress,
@@ -214,7 +309,7 @@ mod pallet {
 
     /// Remove liquidity.
     #[pallet::call_index(2)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::remove_liquidity(), DispatchClass::Normal))]
     pub fn remove_liquidity(
       origin: OriginFor<T>,
       liquidity_tokens: ExternalBalance,
@@ -246,11 +341,12 @@ mod pallet {
         Err(Error::<T>::Unsatisfied)?;
       }
 
+      #[expect(clippy::disallowed_methods)]
       LiquidityTokens::<T>::burn_fn(from, liquidity_tokens.into())?;
-      Coins::<T>::transfer_fn(from, pool, Balance { coin: Coin::Serai, amount: sri_amount })?;
+      Coins::<T>::transfer_fn(pool, from, Balance { coin: Coin::Serai, amount: sri_amount })?;
       Coins::<T>::transfer_fn(
-        from,
         pool,
+        from,
         Balance { coin: Coin::from(external_coin), amount: external_coin_amount },
       )?;
 
@@ -266,7 +362,13 @@ mod pallet {
 
     /// Swap an exact amount of coins.
     #[pallet::call_index(3)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::swap({
+      if (coins_to_swap.coin == Coin::Serai) || (minimum_to_receive.coin == Coin::Serai) {
+        1
+      } else {
+        2
+      }
+    }), DispatchClass::Normal))]
     pub fn swap(
       origin: OriginFor<T>,
       coins_to_swap: Balance,
@@ -282,6 +384,11 @@ mod pallet {
       let mut deltas = Vec::with_capacity(swaps.len() + 1);
       for swap in &swaps {
         let external_coin = swap.external_coin();
+        // If the pool has recognized liquidity, it's been initialized
+        if LiquidityTokens::<T>::supply(external_coin) == Amount(0) {
+          Err(Error::<T>::InvalidLiquidity)?;
+        }
+
         let pool = serai_abi::dex::address(external_coin);
 
         // Fetch the pool's reserves
@@ -289,9 +396,6 @@ mod pallet {
           sri: Coins::<T>::balance(pool, Coin::Serai),
           external_coin: Coins::<T>::balance(pool, Coin::from(external_coin)),
         };
-        if (reserves.sri == Amount(0)) || (reserves.external_coin == Amount(0)) {
-          Err(Error::<T>::InvalidLiquidity)?;
-        }
 
         // Transfer from the prior (the originating account or pool) to the current pool
         /*
@@ -325,7 +429,13 @@ mod pallet {
 
     /// Swap for an exact amount of coins.
     #[pallet::call_index(4)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::swap({
+      if (coins_to_receive.coin == Coin::Serai) || (maximum_to_swap.coin == Coin::Serai) {
+        1
+      } else {
+        2
+      }
+    }), DispatchClass::Normal))]
     pub fn swap_for(
       origin: OriginFor<T>,
       coins_to_receive: Balance,
@@ -345,6 +455,10 @@ mod pallet {
         let swap = swaps[i];
 
         let external_coin = swap.external_coin();
+        if LiquidityTokens::<T>::supply(external_coin) == Amount(0) {
+          Err(Error::<T>::InvalidLiquidity)?;
+        }
+
         let pool = serai_abi::dex::address(external_coin);
 
         // Fetch the pool's reserves
@@ -393,4 +507,6 @@ mod pallet {
   }
 }
 
+pub use pallet::{Config, GenesisConfig, Error, Pallet, Call, Weights};
+#[doc(hidden)]
 pub use pallet::*;

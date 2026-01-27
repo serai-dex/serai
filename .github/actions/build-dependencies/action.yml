@@ -43,16 +43,15 @@ runs:
           choco install protoc
         elif [ "$RUNNER_OS" == "macOS" ]; then
           brew install protobuf llvm
-          HOMEBREW_ROOT_PATH=/opt/homebrew # Apple Silicon
-          if [ $(uname -m) = "x86_64" ]; then HOMEBREW_ROOT_PATH=/usr/local; fi # Intel
-          ls $HOMEBREW_ROOT_PATH/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
-          echo "DYLD_LIBRARY_PATH=$HOMEBREW_ROOT_PATH/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          HOMEBREW_PREFIX=$(brew --prefix)
+          ls $HOMEBREW_PREFIX/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
+          echo "DYLD_LIBRARY_PATH=$HOMEBREW_PREFIX/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
         fi
 
     - name: Install solc
       shell: bash
       run: |
-        cargo install svm-rs --version =0.5.22
+        cargo install svm-rs --version =0.5.23
 
         solc_version() {
           # Install the version of `solc` specified in the contracts
@@ -85,6 +84,13 @@ runs:
         sudo apt autoremove -y
         sudo apt clean -y
       if: runner.os == 'Linux'
+
+    - name: Update system dependencies
+      shell: bash
+      run: |
+        brew upgrade
+        rm -rf $(brew --cache)
+      if: runner.os == 'macOS'
 
     - name: Set GitHub CI Environment Variables
       shell: bash

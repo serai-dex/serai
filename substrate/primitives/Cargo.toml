@@ -26,7 +26,7 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
-schnorr-signatures = { path = "../../crypto/schnorr", default-features = false }
+schnorr-signatures = { path = "../../crypto/schnorr", default-features = false, features = ["alloc"] }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["alloc"] }
 embedwards25519 = { path = "../../crypto/embedwards25519", default-features = false, features = ["alloc"] }
 secq256k1 = { path = "../../crypto/secq256k1", default-features = false, features = ["alloc"] }
@@ -35,6 +35,11 @@ dkg = { package = "dkg-musig", path = "../../crypto/dkg/musig", default-features
 schnorrkel = { version = "0.11", default-features = false }
 
 bech32 = { version = "0.11", default-features = false }
+
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
+bech32 = { version = "0.11", default-features = false, features = ["alloc"] }
 
 [features]
 std = [

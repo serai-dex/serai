@@ -6,7 +6,7 @@ use crate::{Network, Os, mimalloc, write_dockerfile};
 pub fn monero(orchestration_path: &Path, network: Network) {
   let os = Os::Alpine;
 
-  const MONERO_VERSION: &str = "0.18.4.4";
+  const MONERO_VERSION: &str = "0.18.4.5";
 
   let arch = match std::env::consts::ARCH {
     // We probably would run this without issues yet it's not worth needing to provide support for
@@ -32,7 +32,7 @@ RUN wget https://downloads.getmonero.org/cli/{file}
 RUN tar -xf {file} --strip-components=1
 
 # Download the binary's hashes
-RUN wget https://raw.githubusercontent.com/monero-project/monero-site/73084c47b2ef05c6abc12755839e993baf87755b/downloads/hashes.txt -O SHA256SUMS
+RUN wget https://raw.githubusercontent.com/monero-project/monero-site/2d6bd032d666eebfe1de38e040e8188a5b9f22e6/downloads/hashes.txt -O SHA256SUMS
 
 # Verify `SHA256SUMS` with GnuPG
 FROM alpine:latest AS gnupg
@@ -89,7 +89,7 @@ RUN ./increase_default_stack_size.sh monerod
     .unwrap();
   }
 
-  let setup = mimalloc(os) + &download_monero;
+  let setup = mimalloc(os, true) + &download_monero;
 
   let run_monero = format!(
     r#"
@@ -103,9 +103,12 @@ CMD ["/run.sh"]
     network.label(),
   );
 
-  let run =
-    crate::os(os, if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" }, "monero") +
-      &run_monero;
+  let run = crate::os(
+    os,
+    true,
+    if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" },
+    "monero",
+  ) + &run_monero;
   let res = setup + &run;
 
   let mut monero_path = orchestration_path.to_path_buf();

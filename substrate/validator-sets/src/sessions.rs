@@ -253,14 +253,6 @@ pub(crate) trait Sessions {
     set: ValidatorSet,
   ) -> impl Iterator<Item = (SeraiAddress, KeySharesStruct)>;
 
-  /// The validators for the Serai network, with a syntax amenable to the form expected by
-  /// BABE, GRANDPA.
-  fn serai_validators(session: Session) -> Vec<(SeraiAddress, SeraiAddress)> {
-    Self::selected_validators(ValidatorSet { network: NetworkId::Serai, session })
-      .map(|(validator, _key_shares)| (validator, validator))
-      .collect()
-  }
-
   /// If this network is awaiting a slash report.
   ///
   /// If so, this returns the oraclization key which should publish the slash report.
@@ -386,11 +378,12 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       NetworkId::External(network) => {
         // If this network never submitted its slash report, treat it as submitting `vec![]`
         if Storage::PendingSlashReport::take(network).is_some() {
-          Core::<Storage::Config>::emit_event(Event::SlashReport {
-            set: ExternalValidatorSet {
+          Core::<Storage::Config>::emit_event(Event::Slashes {
+            set: (ExternalValidatorSet {
               network,
               session: prior.expect("pending slash report yet no prior session"),
-            },
+            })
+            .into(),
           });
         }
         // Mark this network as pending a slash report
@@ -596,8 +589,8 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     let prior_session = Session(
       current_session.0.checked_sub(1).expect("handling slash report yet no prior session"),
     );
-    Core::<Storage::Config>::emit_event(Event::SlashReport {
-      set: ExternalValidatorSet { network, session: prior_session },
+    Core::<Storage::Config>::emit_event(Event::Slashes {
+      set: (ExternalValidatorSet { network, session: prior_session }).into(),
     });
 
     // TODO: Actually handle `_slashes`

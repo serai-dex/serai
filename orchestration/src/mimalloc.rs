@@ -1,12 +1,15 @@
 use crate::Os;
 
-// 2.2.4
-const MIMALLOC_VERSION: &str = "fbd8b99c2b828428947d70fdc046bb55609be93e";
-const FLAGS: &str =
-  "-DMI_SECURE=ON -DMI_GUARDED=ON -DMI_BUILD_STATIC=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF";
+// 2.2.7
+const MIMALLOC_VERSION: &str = "6a53d72d46a1a641d8e5793db37cb2da60e04192";
+const HARDENING_FLAGS: &str = "-DMI_SECURE=ON -DMI_GUARDED=ON";
+#[rustfmt::skip]
+const COMPILATION_FLAGS: &str =
+  "-DMI_OVERRIDE=ON -DMI_OPT_ARCH=ON -DMI_BUILD_SHARED=ON -DMI_BUILD_STATIC=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF";
 
-pub fn mimalloc(os: Os) -> String {
+pub fn mimalloc(os: Os, release: bool) -> String {
   let build_script = |env, additional_flags| {
+    let flags = format!("{HARDENING_FLAGS} {COMPILATION_FLAGS} {additional_flags}");
     format!(
       r#"
 #!/bin/sh
@@ -19,21 +22,22 @@ git checkout {MIMALLOC_VERSION}
 # For some reason, `mimalloc` contains binary blobs in the repository, so we remove those now
 rm -rf .git ./bin
 
-mkdir -p out/secure
-cd out/secure
+mkdir -p out
+cd out
 
 # `CMakeLists.txt` requires a C++ compiler but `mimalloc` does not use one by default. We claim
 # there is a working C++ compiler so CMake doesn't complain, allowing us to not unnecessarily
 # install one. If it was ever invoked, our choice of `false` would immediately let us know.
+#
 # https://github.com/microsoft/mimalloc/issues/1179
-{env} CXX=false cmake -DCMAKE_CXX_COMPILER_WORKS=1 {FLAGS} {additional_flags} ../..
+{env} CXX=false cmake -DCMAKE_CXX_COMPILER_WORKS=1 {flags} ..
 make
 
-cd ../..
+cd ..
 
 # Copy the built library to the original directory
 cd ..
-cp mimalloc/out/secure/libmimalloc-secure.so ./libmimalloc.so
+cp mimalloc/out/libmimalloc-*.so ./libmimalloc.so
 # Clean up the source directory
 rm -rf ./mimalloc
   "#
@@ -56,7 +60,7 @@ rm -rf ./mimalloc
     result
   };
   let alpine_build = build_commands("CC=$(uname -m)-alpine-linux-musl-gcc", "-DMI_LIBC_MUSL=ON");
-  let debian_build = build_commands("", "");
+  let debian_build = build_commands("", if !release { "-DMI_TRACK_ASAN=ON" } else { "" });
 
   let alpine_mimalloc = format!(
     r#"

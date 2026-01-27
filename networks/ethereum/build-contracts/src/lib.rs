@@ -4,9 +4,15 @@
 
 use std::{path::PathBuf, fs, process::Command};
 
-/// Build contracts from the specified path, outputting the artifacts to the specified path.
+/// A helper for a Rust build script to build contracts from the specified path.
 ///
-/// Requires solc 0.8.29.
+/// The artifacts path is expected to be a subdirectory of the `target` directory. This will output
+/// `cargo:rerun-if-changed` directives for the inputs but _not_ the outputs. As the artifacts will
+/// be within `cargo`'s `target` directory, `cargo` will rerun this if the `target` directory (and
+/// the artifacts within it) are cleaned. If your artifacts are not within your `target` directory,
+/// you should consider any necessary `cargo:rerun-if-changed` directives yourself.
+///
+/// Requires `solc 0.8.29`.
 pub fn build(
   include_paths: &[&str],
   contracts_path: &str,
@@ -19,8 +25,9 @@ pub fn build(
       .map_err(|e| format!("couldn't create the non-existent artifacts directory: {e:?}"))?;
   }
 
-  println!("cargo:rerun-if-changed={contracts_path}/*");
-  println!("cargo:rerun-if-changed={artifacts_path}/*");
+  for path in include_paths.iter().copied().chain(core::iter::once(contracts_path)) {
+    println!("cargo:rerun-if-changed={path}");
+  }
 
   for line in String::from_utf8(
     Command::new("solc")

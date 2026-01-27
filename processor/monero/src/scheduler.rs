@@ -188,7 +188,12 @@ impl TransactionPlanner<Rpc, ()> for Planner {
         Err(SendError::UnsupportedRctType) => {
           panic!("tried to use an RctType monero-wallet doesn't support")
         }
-        Err(SendError::NoInputs | SendError::NoOutputs | SendError::TooManyOutputs) => {
+        Err(
+          SendError::NoInputs |
+          SendError::NoOutputs |
+          SendError::InvalidInputs |
+          SendError::TooManyOutputs,
+        ) => {
           panic!("malformed plan passed to calculate_fee")
         }
         Err(SendError::InvalidDecoyQuantity) => panic!("selected the wrong amount of decoys"),
@@ -247,7 +252,12 @@ impl TransactionPlanner<Rpc, ()> for Planner {
         Err(SendError::UnsupportedRctType) => {
           panic!("tried to use an RctType monero-wallet doesn't support")
         }
-        Err(SendError::NoInputs | SendError::NoOutputs | SendError::TooManyOutputs) => {
+        Err(
+          SendError::NoInputs |
+          SendError::NoOutputs |
+          SendError::InvalidInputs |
+          SendError::TooManyOutputs,
+        ) => {
           panic!("malformed plan passed to calculate_fee")
         }
         Err(SendError::InvalidDecoyQuantity) => panic!("selected the wrong amount of decoys"),

@@ -43,10 +43,8 @@ jobs:
           # Allow the following command to fail
           set +e
           # Capture the output to `stdout.txt`
-          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture > stdout.txt
+          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture | tee stdout.txt
           CODE=$?
-          # Print `stdout` for the CI logs, as we captured it to process it, not swallow it
-          cat stdout.txt
           # Check the exit code from `cargo`
           if [ $CODE -ne 0 ]; then
             exit $CODE
@@ -67,6 +65,7 @@ jobs:
   build:
     strategy:
       matrix:
+        # Unfortunately, we do not run this on `macos-latest` at this time due to it being too slow
         os: [macos-15-intel, windows-latest]
     runs-on: ${{ matrix.os }}
     needs: source_of_truth
@@ -85,10 +84,8 @@ jobs:
           # Allow the following command to fail
           set +e
           # Capture the output to `stdout.txt`
-          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture > stdout.txt
+          cargo test --all-features -p serai-reproducible-runtime-tests -- --nocapture | tee stdout.txt
           CODE=$?
-          # Print `stdout` for the CI logs, as we captured it to process it, not swallow it
-          cat stdout.txt
           # Check the exit code from `cargo`
           if [ $CODE -ne 0 ]; then
             exit $CODE
@@ -105,6 +102,42 @@ jobs:
 
           # Check this agreed with our source of truth
           if [ ! "$HASH" = "$source_of_truth" ]; then
-            echo "$HASH is different from $source_of_truth"
+            echo "$HASH (OCI) is different from $source_of_truth (Linux-host OCI)"
             exit 2
+          fi
+
+  # Perform the build on the native host, without using an OCI runtime.
+  #
+  # This is not guaranteed to work nor endorsed as a build mechanism in any way. It generally
+  # _should_ work however. Unfortunately, even if it does, it can never be recommended in case it
+  # doesn't (which there'd be no way to know without also doing it properly, saving no time at all).
+  build_native:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
+    runs-on: ${{ matrix.os }}
+    needs: source_of_truth
+
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+
+      - name: Install dependencies
+        shell: bash
+        if: runner.os == 'Windows'
+        run: rustup set default-host x86_64-pc-windows-gnu
+
+      - name: Build the runtime (natively)
+        env:
+          source_of_truth: ${{ needs.source_of_truth.outputs.hash }}
+        shell: bash
+        run: |
+          rustup toolchain install 1.92.0 --profile minimal --component rust-src
+          cargo +1.92.0 build -p serai-runtime --release --no-default-features
+
+          HASH=$(sha256sum $(find ./target -name serai_runtime.wasm | head -n1) | cut -d' ' -f1)
+
+          # Check this agreed with our source of truth
+          if [ ! "$HASH" = "$source_of_truth" ]; then
+            echo "$HASH (natively-built runtime) is different from $source_of_truth (Linux-host OCI)"
+            exit 1
           fi

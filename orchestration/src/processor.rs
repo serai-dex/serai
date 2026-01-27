@@ -18,7 +18,7 @@ pub fn processor(
   substrate_evrf_key: Zeroizing<Vec<u8>>,
   network_evrf_key: Zeroizing<Vec<u8>>,
 ) {
-  let setup = mimalloc(Os::Debian) +
+  let setup = mimalloc(Os::Debian, network.release()) +
     &build_serai_service(
       if coin == "ethereum" {
         r#"
@@ -88,7 +88,7 @@ CMD {env_vars_str} serai-processor
 "#
   );
 
-  let run = os(Os::Debian, ADDITIONAL_ROOT, "processor") + &run_processor;
+  let run = os(Os::Debian, network.release(), ADDITIONAL_ROOT, "processor") + &run_processor;
   let res = setup + &run;
 
   let mut processor_path = orchestration_path.to_path_buf();

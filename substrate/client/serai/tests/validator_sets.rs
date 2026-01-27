@@ -46,7 +46,7 @@ async fn validator_sets() {
       {
         use sp_core::{Pair as _, sr25519::Pair};
         let genesis_validators = vec![(
-          SeraiAddress::from(Pair::from_string("//Alice", None).unwrap().public()),
+          SeraiAddress::from(Pair::from_seed(&sp_core::blake2_256(b"//Alice")).public()),
           KeyShares::ONE,
         )];
 
@@ -59,10 +59,10 @@ async fn validator_sets() {
             .set_embedded_elliptic_curve_keys_events()
             .cloned()
             .collect::<Vec<_>>();
-          assert_eq!(events.len(), ExternalNetworkId::all().collect::<Vec<_>>().len());
+          assert_eq!(events.len(), NetworkId::all().collect::<Vec<_>>().len());
 
           let state = serai.state().await.unwrap();
-          for (event, network) in events.into_iter().zip(ExternalNetworkId::all()) {
+          for (event, network) in events.into_iter().zip(NetworkId::all()) {
             assert_eq!(
               event,
               Event::SetEmbeddedEllipticCurveKeys {

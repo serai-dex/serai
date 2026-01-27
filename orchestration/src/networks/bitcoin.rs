@@ -3,7 +3,7 @@ use std::path::Path;
 use crate::{Network, Os, mimalloc, os, write_dockerfile};
 
 pub fn bitcoin(orchestration_path: &Path, network: Network) {
-  const VERSION: &str = "30.1";
+  const VERSION: &str = "30.2";
   let file = format!("bitcoin-{VERSION}-$(uname -m)-linux-gnu.tar.gz");
   let url = format!("https://bitcoincore.org/bin/bitcoin-core-{VERSION}");
 
@@ -57,7 +57,7 @@ RUN cat SHA256SUMS | sha256sum -c
 RUN touch /tmp/done
 "#);
 
-  let setup = mimalloc(Os::Alpine) + &download_bitcoin;
+  let setup = mimalloc(Os::Alpine, true) + &download_bitcoin;
 
   let run_bitcoin = format!(
     r#"
@@ -77,7 +77,7 @@ CMD ["/run.sh"]
     network.label()
   );
 
-  let run = os(Os::Alpine, "", "bitcoin") + &run_bitcoin;
+  let run = os(Os::Alpine, true, "", "bitcoin") + &run_bitcoin;
   let res = setup + &run;
 
   let mut bitcoin_path = orchestration_path.to_path_buf();

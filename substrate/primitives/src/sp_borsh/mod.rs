@@ -78,8 +78,23 @@ macro_rules! borsh_as_scale {
         }
 
         let mut reader = Reader(input, None);
-        <Self as borsh::BorshDeserialize>::deserialize_reader(&mut reader)
-          .map_err(|_| reader.1.expect("Reader::read errored but didn't set the error"))
+        let result = <Self as borsh::BorshDeserialize>::deserialize_reader(&mut reader);
+        match result {
+          Ok(value) => Ok(value),
+          Err(_e) => {
+            // If we have a `scale::Error` proper from our `Reader`, return it now
+            if let Some(scale_input_error) = reader.1 {
+              Err(scale_input_error)?;
+            }
+
+            // On `std`, `borsh::io::Error` is `std::io::Error` which we can convert to SCALE's
+            #[cfg(feature = "std")]
+            Err(scale::Error::from(_e))?;
+
+            // Else, `scale::Error` is opaque
+            Err(scale::Error::from("`borsh` raised an error during decode (opaque)"))?
+          }
+        }
       }
     }
     impl<$(const $const: $type, )*> scale::DecodeWithMemTracking for $name<$($const, )*> {}
@@ -115,4 +130,28 @@ impl<R: io::Read, const BOUND: usize> BoundedReader<'_, R, BOUND> {
   pub fn bytes_read(&self) -> usize {
     self.read
   }
+}
+
+// https://github.com/serai-dex/serai/issues/727
+#[cfg(feature = "scale")]
+#[test]
+fn borsh_error_propagates_as_scale_error() {
+  use sp_core::{Encode as _, Decode as _};
+  use ::bitvec::{bitvec, order::Lsb0};
+
+  // 9 bits => 2 bytes; last byte has 7 unused bits (in Lsb0).
+  let inner: ::bitvec::vec::BitVec<u8, Lsb0> = bitvec!(u8, Lsb0; 0; 9);
+  let v = BitVec::<64>::try_from(inner).unwrap();
+
+  /*
+    `borsh_as_scale!` has SCALE defer to Borsh, the latter requiring canonicity.
+
+    We set an unused bit in the last byte to produce a non-canonical encoding and force a Borsh
+    error.
+  */
+  let mut bytes = v.encode();
+  *bytes.last_mut().unwrap() |= 0x80;
+
+  // Decoding this should error as being non-canonical
+  BitVec::<64>::decode(&mut &bytes[..]).unwrap_err();
 }

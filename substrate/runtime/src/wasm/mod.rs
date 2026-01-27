@@ -94,6 +94,7 @@ impl serai_core_pallet::Config for Runtime {
 
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint; // TODO
+  type Weights = (); // TODO
 }
 impl serai_validator_sets_pallet::Config for Runtime {
   type ShouldEndSession = Babe;
@@ -104,8 +105,11 @@ impl serai_signals_pallet::Config for Runtime {
 }
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type Weights = (); // TODO
 }
-impl serai_dex_pallet::Config for Runtime {}
+impl serai_dex_pallet::Config for Runtime {
+  type Weights = (); // TODO
+}
 impl serai_genesis_liquidity_pallet::Config for Runtime {}
 impl serai_economic_security_pallet::Config for Runtime {}
 impl serai_emissions_pallet::Config for Runtime {}
@@ -186,6 +190,11 @@ sp_api::impl_runtime_apis! {
         },
 
         liquidity_tokens: LiquidityTokensConfig { accounts: vec![], _instance: PhantomData },
+
+        dex: DexConfig {
+          fees: genesis.fees,
+          _config: PhantomData,
+        },
 
         validator_sets: ValidatorSetsConfig {
           participants:
@@ -380,18 +389,20 @@ sp_api::impl_runtime_apis! {
   }
 
   impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
+    // TODO: This has to be updated regardining
+    // `sp_application_crypto::key_types::AUTHORITY_DISCOVERY`
     fn authorities() -> Vec<sp_authority_discovery::AuthorityId> {
       // Converts to `[u8; 32]` so it can be hashed
       let mut all = alloc::collections::BTreeSet::<[u8; 32]>::new();
       for network in NetworkId::all() {
         for participant in
           <Self as super::runtime_decl_for_serai_api::SeraiApi<Block>>::validators(network) {
-          all.insert(sp_core::sr25519::Public::from(participant).into());
+          all.insert(Public::from(participant).into());
         }
       }
       all
         .into_iter()
-        .map(|id| sp_authority_discovery::AuthorityId::from(sp_core::sr25519::Public::from(id)))
+        .map(|id| sp_authority_discovery::AuthorityId::from(Public::from(id)))
         .collect()
     }
   }
@@ -442,7 +453,7 @@ sp_api::impl_runtime_apis! {
     }
     fn embedded_elliptic_curve_keys(
       validator: SeraiAddress,
-      network: ExternalNetworkId,
+      network: NetworkId,
     ) -> Option<EmbeddedEllipticCurveKeys> {
       ValidatorSets::embedded_elliptic_curve_keys(validator.into(), network)
     }

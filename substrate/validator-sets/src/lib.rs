@@ -26,6 +26,9 @@ use sessions::{*, GenesisValidators as GenesisValidatorsContainer};
 mod keys;
 use keys::{KeysStorage, Keys as _};
 
+mod babe_grandpa;
+use babe_grandpa::*;
+
 #[frame_support::pallet]
 mod pallet {
   use sp_application_crypto::RuntimePublic as _;
@@ -57,7 +60,6 @@ mod pallet {
   };
 
   use serai_core_pallet::Pallet as Core;
-  use serai_coins_pallet::AllowMint;
   type Coins<T> = serai_coins_pallet::Pallet<T, serai_coins_pallet::CoinsInstance>;
 
   use super::*;
@@ -98,7 +100,7 @@ mod pallet {
   type EmbeddedEllipticCurveKeys<T: Config> = StorageDoubleMap<
     _,
     Identity,
-    ExternalNetworkId,
+    NetworkId,
     Blake2_128Concat,
     SeraiAddress,
     serai_abi::primitives::crypto::EmbeddedEllipticCurveKeys,
@@ -199,7 +201,7 @@ mod pallet {
           .expect("amount of genesis validators exceeded the maximum allowed per set"),
       ));
       for (participant, keys) in &self.participants {
-        for (network, keys) in ExternalNetworkId::all().zip(keys.iter().cloned()) {
+        for (network, keys) in NetworkId::all().zip(keys.iter().cloned()) {
           assert_eq!(network, keys.network());
           Pallet::<T>::set_embedded_elliptic_curve_keys_internal(*participant, keys)
             .expect("genesis embedded elliptic curve keys weren't valid");
@@ -222,18 +224,16 @@ mod pallet {
       );
 
       // Spawn BABE's, GRANDPA's genesis session
-      // This conversion assumes `SeraiAddress == SchnorrkelPublic`
-      let genesis_serai_validators = Abstractions::<T>::serai_validators(Session(0));
-      Babe::<T>::on_genesis_session(
-        genesis_serai_validators
-          .iter()
-          .map(|(validator, key)| (validator, SchnorrkelPublic::from(*key).into())),
-      );
-      Grandpa::<T>::on_genesis_session(
-        genesis_serai_validators
-          .iter()
-          .map(|(validator, key)| (validator, SchnorrkelPublic::from(*key).into())),
-      );
+      let genesis_serai_validators = Abstractions::<T>::selected_validators(ValidatorSet {
+        network: NetworkId::Serai,
+        session: Session(0),
+      });
+      let genesis_serai_validators = validators_to_validators_with_serai_auxilliary_key::<
+        Abstractions<T>,
+        _,
+      >(genesis_serai_validators);
+      Babe::<T>::on_genesis_session(validators_to_babe_validators(&genesis_serai_validators));
+      Grandpa::<T>::on_genesis_session(validators_to_grandpa_validators(&genesis_serai_validators));
     }
   }
 
@@ -296,7 +296,7 @@ mod pallet {
     /// The required amount of stake for a balance.
     fn stake_requirement(balance: ExternalBalance) -> AmountRepr {
       let value = T::EconomicSecurity::sri_value(balance).0;
-      // As 67% can misbehave, 67% of stake must be sufficient to secure this
+      // As 67% can execute signing protocols, 67% of stake must be sufficient to secure this
       let requirement = value.saturating_mul(3) / 2;
       // We add an additional margin of 20%
       let margin = requirement / 5;
@@ -304,12 +304,18 @@ mod pallet {
     }
 
     /// The required amount of stake for a network.
-    fn network_stake_requirement(network: ExternalNetworkId) -> AmountRepr {
+    ///
+    /// This evaluates the stake required to secure the amount of coins within the liquidity pool,
+    /// with the valuation from the economic security oracle.
+    pub fn network_stake_requirement(network: ExternalNetworkId) -> AmountRepr {
       let mut requirement = AmountRepr::zero();
       for coin in network.coins() {
-        let supply = Coins::<T>::supply(Coin::from(coin));
-        requirement = requirement
-          .saturating_add(Self::stake_requirement(ExternalBalance { coin, amount: supply }));
+        let liquidity_pool_balance =
+          Coins::<T>::balance(serai_abi::dex::address(coin), Coin::from(coin));
+        requirement = requirement.saturating_add(Self::stake_requirement(ExternalBalance {
+          coin,
+          amount: liquidity_pool_balance,
+        }));
       }
       requirement
     }
@@ -334,10 +340,11 @@ mod pallet {
 
     pub fn embedded_elliptic_curve_keys(
       validator: SeraiAddress,
-      network: ExternalNetworkId,
+      network: impl Into<NetworkId>,
     ) -> Option<EmbeddedEllipticCurveKeysStruct> {
       <Abstractions<T> as crate::EmbeddedEllipticCurveKeys>::embedded_elliptic_curve_keys(
-        validator, network,
+        validator,
+        network.into(),
       )
     }
 
@@ -413,41 +420,54 @@ mod pallet {
             "latest decided Serai session wasn't the session after the current session"
           );
 
-          let prior_serai_validators = Abstractions::<T>::serai_validators(Session(
-            current_serai_session.0.checked_sub(1).expect("ShouldEndSession triggered on genesis"),
-          ));
-          assert!(
-            !prior_serai_validators.is_empty(),
-            "prior Serai validators weren't able to be fetched from storage",
-          );
+          let serai_validators = Abstractions::<T>::selected_validators(ValidatorSet {
+            network: NetworkId::Serai,
+            session: current_serai_session,
+          })
+          .collect::<Vec<_>>();
 
-          let serai_validators = Abstractions::<T>::serai_validators(current_serai_session);
+          let validators_changed = {
+            let prior_serai_validators = Abstractions::<T>::selected_validators(ValidatorSet {
+              network: NetworkId::Serai,
+              session: Session(
+                current_serai_session
+                  .0
+                  .checked_sub(1)
+                  .expect("ShouldEndSession triggered on genesis"),
+              ),
+            })
+            .collect::<Vec<_>>();
+            assert!(
+              !prior_serai_validators.is_empty(),
+              "prior Serai validators weren't able to be fetched from storage",
+            );
+            prior_serai_validators != serai_validators
+          };
 
-          let validators_changed = prior_serai_validators != serai_validators;
+          let queued_serai_validators = Abstractions::<T>::selected_validators(ValidatorSet {
+            network: NetworkId::Serai,
+            session: latest_decided_serai_session,
+          })
+          .collect::<Vec<_>>();
 
-          let queued_serai_validators =
-            Abstractions::<T>::serai_validators(latest_decided_serai_session);
+          let serai_validators = validators_to_validators_with_serai_auxilliary_key::<
+            Abstractions<T>,
+            _,
+          >(serai_validators);
+          let queued_serai_validators = validators_to_validators_with_serai_auxilliary_key::<
+            Abstractions<T>,
+            _,
+          >(queued_serai_validators);
 
-          fn map_babe(
-            (validator, key): &(SeraiAddress, SeraiAddress),
-          ) -> (&SeraiAddress, pallet_babe::AuthorityId) {
-            (validator, SchnorrkelPublic::from(*key).into())
-          }
           Babe::<T>::on_new_session(
             validators_changed,
-            serai_validators.iter().map(map_babe),
-            queued_serai_validators.iter().map(map_babe),
+            validators_to_babe_validators(&serai_validators),
+            validators_to_babe_validators(&queued_serai_validators),
           );
-
-          fn map_grandpa(
-            (validator, key): &(SeraiAddress, SeraiAddress),
-          ) -> (&SeraiAddress, pallet_grandpa::AuthorityId) {
-            (validator, SchnorrkelPublic::from(*key).into())
-          }
           Grandpa::<T>::on_new_session(
             validators_changed,
-            serai_validators.iter().map(map_grandpa),
-            queued_serai_validators.iter().map(map_grandpa),
+            validators_to_grandpa_validators(&serai_validators),
+            validators_to_grandpa_validators(&queued_serai_validators),
           );
         }
 
@@ -692,21 +712,6 @@ mod pallet {
     // Explicitly provide a pre-dispatch which calls `validate_unsigned`
     fn pre_dispatch(call: &Self::Call) -> Result<(), TransactionValidityError> {
       Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ())
-    }
-  }
-
-  /*
-    TODO: Add an intent. While we shouldn't allow `Transfer`, `AddLiquidity` when we're within a
-    certain range of the limit, we should still allow swaps.
-  */
-  impl<T: Config> AllowMint for Pallet<T> {
-    fn is_allowed(balance: &ExternalBalance) -> bool {
-      let current_requirement = Self::network_stake_requirement(balance.coin.network());
-      let new_requirement = current_requirement.saturating_add(Self::stake_requirement(*balance));
-      let staked =
-        Abstractions::<T>::stake_for_current_validator_set(balance.coin.network().into())
-          .unwrap_or(Amount(0));
-      staked.0 >= new_requirement
     }
   }
 }

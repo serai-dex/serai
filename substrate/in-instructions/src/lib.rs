@@ -165,6 +165,7 @@ mod pallet {
           let coin = minimum_to_receive.coin;
           let received_amount = Coins::<T>::balance(address, Coin::from(coin));
           let received = ExternalBalance { coin, amount: received_amount };
+          #[expect(clippy::disallowed_methods)]
           Coins::<T>::burn_with_instruction(
             RawOrigin::Signed(address).into(),
             OutInstructionWithBalance { instruction, balance: received },

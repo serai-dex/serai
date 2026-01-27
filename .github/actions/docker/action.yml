@@ -16,7 +16,7 @@ runs:
         sudo apt install -y uidmap
 
     - name: Install rootless Docker (Linux)
-      uses: docker/setup-docker-action@e61617a16c407a86262fb923c35a616ddbe070b3 # 4.6.0
+      uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4 # 4.7.0
       if: runner.os == 'Linux'
       with:
         rootless: true
@@ -38,7 +38,7 @@ runs:
         fi
 
     - name: Install Docker (macOS)
-      uses: docker/setup-docker-action@e61617a16c407a86262fb923c35a616ddbe070b3 # 4.6.0
+      uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4 # 4.7.0
       if: runner.os == 'macOS'
       env:
         # m1 chips, as seen in the GitHub CI, don't support nested hardware virtualization.

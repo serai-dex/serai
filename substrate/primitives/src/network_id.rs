@@ -33,13 +33,6 @@ impl scale::MaxEncodedLen for ExternalNetworkId {
 #[cfg(feature = "scale")]
 impl scale::EncodeLike<NetworkId> for ExternalNetworkId {}
 
-#[expect(clippy::as_conversions)]
-impl From<ExternalNetworkId> for u8 {
-  fn from(network_id: ExternalNetworkId) -> Self {
-    network_id as u8
-  }
-}
-
 impl ExternalNetworkId {
   /// All external networks.
   pub fn all() -> impl Iterator<Item = Self> {

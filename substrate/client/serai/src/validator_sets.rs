@@ -11,7 +11,7 @@ pub use serai_abi::{
     balance::Amount,
     address::SeraiAddress,
   },
-  validator_sets::{Call, Event},
+  validator_sets::{Slashes, Call, Event},
   UnsignedCall, Transaction,
 };
 
@@ -55,9 +55,9 @@ impl ValidatorSets {
     self.events().filter(|event| matches!(event, Event::AcceptedHandover { .. }))
   }
 
-  /// The `SlashReport` events from the validator sets module.
-  pub fn slash_report_events(&self) -> impl Iterator<Item = &Event> {
-    self.events().filter(|event| matches!(event, Event::SlashReport { .. }))
+  /// The `Slashes` events from the validator sets module.
+  pub fn slashes_events(&self) -> impl Iterator<Item = &Event> {
+    self.events().filter(|event| matches!(event, Event::Slashes { .. }))
   }
 
   /// The `SetEmbeddedEllipticCurveKeys` events from the validator sets module.
@@ -105,11 +105,9 @@ impl ValidatorSets {
     signature: Signature,
   ) -> Transaction {
     Transaction::Unsigned {
-      call: UnsignedCall::try_from(serai_abi::Call::from(Call::report_slashes {
-        network,
-        slashes,
-        signature,
-      }))
+      call: UnsignedCall::try_from(serai_abi::Call::from(Call::report_slashes(
+        Slashes::ExternalNetwork { network, slashes, signature },
+      )))
       .expect("`report_slashes` wasn't an unsigned call?"),
     }
   }
@@ -199,7 +197,7 @@ impl State<'_> {
   pub async fn embedded_elliptic_curve_keys(
     &self,
     validator: SeraiAddress,
-    network: ExternalNetworkId,
+    network: NetworkId,
   ) -> Result<Option<EmbeddedEllipticCurveKeys>, RpcError> {
     let Some(keys) = self
       .call::<Option<String>>(

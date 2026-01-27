@@ -32,26 +32,21 @@ jobs:
       - name: Run Clippy
         shell: bash
         run: |
-          RUSTFLAGS="$RUSTFLAGS -D warnings"
-
           # stable Rust
-          cargo clippy --all-features --all-targets
-          # Explicitly run `clippy` on the WASM-targeting `serai-runtime`
-          RUSTFLAGS="$RUSTFLAGS --cfg substrate_runtime" RUSTC_BOOTSTRAP=1 cargo clippy --target wasm32v1-none -Zbuild-std=core,alloc --no-default-features --features "try-runtime,runtime-benchmarks" -p serai-runtime
+          cargo clippy --all-features --all-targets -- -D warnings
           # Check a few variations of `serai-primitives`, `serai-abi`
-          cargo clippy --no-default-features --all-targets -p serai-primitives
-          cargo clippy --all-targets -p serai-primitives
-          cargo clippy --no-default-features --all-targets -p serai-abi
-          cargo clippy --all-targets -p serai-abi
+          cargo clippy --no-default-features --all-targets -p serai-primitives -- -D warnings
+          cargo clippy --all-targets -p serai-primitives -- -D warnings
+          cargo clippy --no-default-features --all-targets -p serai-abi -- -D warnings
+          cargo clippy --all-targets -p serai-abi -- -D warnings
 
           # nightly Rust
           NIGHTLY="${{ steps.nightly.outputs.version }}"
-          cargo +$NIGHTLY clippy --all-features --all-targets
-          RUSTFLAGS="$RUSTFLAGS --cfg substrate_runtime" cargo +$NIGHTLY clippy --target wasm32v1-none -Zbuild-std=core,alloc --no-default-features --features "try-runtime,runtime-benchmarks" -p serai-runtime
-          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-primitives
-          cargo +$NIGHTLY clippy --all-targets -p serai-primitives
-          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-abi
-          cargo +$NIGHTLY clippy --all-targets -p serai-abi
+          cargo +$NIGHTLY clippy --all-features --all-targets -- -D warnings
+          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-primitives -- -D warnings
+          cargo +$NIGHTLY clippy --all-targets -p serai-primitives -- -D warnings
+          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-abi -- -D warnings
+          cargo +$NIGHTLY clippy --all-targets -p serai-abi -- -D warnings
 
       - name: Verify `pallet::hooks` is unused
         shell: bash
@@ -107,7 +102,7 @@ jobs:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Install cargo deny
-        run: cargo +1.92 install cargo-deny --version =0.18.9
+        run: cargo +1.93 install cargo-deny --version =0.19.0
 
       - name: Run cargo deny
         run: cargo deny -L error --all-features check --hide-inclusion-graph
@@ -153,8 +148,8 @@ jobs:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
       - name: Verify all dependencies are in use
         run: |
-          cargo +1.92 install cargo-machete --version =0.9.1
-          cargo +1.92 machete
+          cargo +1.93 install cargo-machete --version =0.9.1
+          cargo +1.93 machete
 
   msrv:
     runs-on: ubuntu-latest
@@ -163,7 +158,7 @@ jobs:
       - name: Verify claimed `rust-version`
         shell: bash
         run: |
-          cargo +1.92 install cargo-msrv --version =0.18.4
+          cargo +1.93 install cargo-msrv --version =0.18.4
 
           function check_msrv {
             # We `cd` into the directory passed as the first argument, but will return to the

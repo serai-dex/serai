@@ -429,11 +429,12 @@ fn block_flow() {
             session: Session(OsRng.next_u64() as u32),
           },
         }),
-        serai_abi::Event::ValidatorSets(serai_abi::validator_sets::Event::SlashReport {
-          set: ExternalValidatorSet {
+        serai_abi::Event::ValidatorSets(serai_abi::validator_sets::Event::Slashes {
+          set: (ExternalValidatorSet {
             network: ExternalNetworkId::Bitcoin,
             session: Session(OsRng.next_u64() as u32),
-          },
+          })
+          .into(),
         }),
       ]
     };
