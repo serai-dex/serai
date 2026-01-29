@@ -85,7 +85,7 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     let should_request_cosigns = |last_request_for_cosigns: &mut Instant| {
-      const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(60);
+      const REQUEST_COSIGNS_SPACING: Duration = Duration::from_mins(1);
       if Instant::now() < (*last_request_for_cosigns + REQUEST_COSIGNS_SPACING) {
         return false;
       }

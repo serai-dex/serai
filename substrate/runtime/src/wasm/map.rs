@@ -9,7 +9,7 @@ impl From<serai_abi::Call> for RuntimeCall {
         use serai_abi::coins::Call;
         use serai_coins_pallet::Call as Scall;
         RuntimeCall::Coins(match call {
-          Call::transfer { to, coins } => Scall::transfer { to: to, coins },
+          Call::transfer { to, coins } => Scall::transfer { to, coins },
           Call::burn { coins } => Scall::burn { coins },
           Call::burn_with_instruction { instruction } => {
             Scall::burn_with_instruction { instruction }

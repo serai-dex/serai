@@ -318,7 +318,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
             }
           }
         }
-        tokio::time::sleep(core::time::Duration::from_secs(60)).await;
+        tokio::time::sleep(core::time::Duration::from_mins(1)).await;
       }
     }
   });

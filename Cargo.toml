@@ -179,7 +179,6 @@ revm-state = { opt-level = 3 }
 [patch.crates-io]
 # Point to empty crates for crates unused within in our tree
 alloy-eip2124 = { path = "patches/ethereum/alloy-eip2124" }
-alloy-eip7928 = { path = "patches/ethereum/alloy-eip7928" }
 ark-ff-3 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.3" }
 ark-ff-4 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.4" }
 c-kzg = { path = "patches/ethereum/c-kzg" }

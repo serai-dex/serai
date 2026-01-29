@@ -52,7 +52,7 @@ impl<TD: Db, Tx: TransactionTrait, P: P2p> ContinuallyRan for HeartbeatTask<TD, 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       // If our blockchain hasn't had a block in the past minute, trigger the heartbeat protocol
-      const TIME_TO_TRIGGER_SYNCING: Duration = Duration::from_secs(60);
+      const TIME_TO_TRIGGER_SYNCING: Duration = Duration::from_mins(1);
 
       let mut tip = self.reader.tip();
       let time_since = {

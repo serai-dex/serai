@@ -69,7 +69,7 @@ fn basic_functionality() {
   let (coord_key, priv_keys, composition) = instance();
   test.provide_container(composition);
   test.run(async move |ops| {
-    tokio::time::timeout(core::time::Duration::from_secs(60), async move {
+    tokio::time::timeout(core::time::Duration::from_mins(1), async move {
       // Sleep for a second for the message-queue to boot
       // It isn't an error to start immediately, it just silences an error
       tokio::time::sleep(core::time::Duration::from_secs(1)).await;
