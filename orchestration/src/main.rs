@@ -270,10 +270,26 @@ fn build_serai_service(
     }
   }
 
+  // x86(-64)-specific hardening
+  #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+  {
+    /*
+      Retpolines: https://support.google.com/faqs/answer/7625886
+
+      These are tracked within `rustc` with: https://github.com/rust-lang/rust/issues/116852
+    */
+    rustflags += " -Z retpoline";
+  }
+
   // AArch64-specific hardening.
   #[cfg(target_arch = "aarch64")]
   {
-    // Straight line speculation
+    /*
+      Harden against straight-line speculation.
+
+      https://github.com/rust-lang/rust/pull/136597 would allow us to specify `-Z harden-sls=all`
+      and replace direct specification of these target features.
+    */
     rustflags += " -C target-feature=+harden-sls-ijmp -C target-feature=+harden-sls-ret";
 
     /*
