@@ -6,7 +6,10 @@ use scale::{Encode as _, DecodeAll as _};
 
 use serai_abi::{
   primitives::{
-    address::SeraiAddress, network_id::NetworkId, balance::Amount, validator_sets::KeyShares,
+    address::SeraiAddress,
+    network_id::{ExternalNetworkId, NetworkId},
+    balance::Amount,
+    validator_sets::KeyShares,
   },
   economic_security::EconomicSecurity as _,
 };
@@ -511,6 +514,13 @@ impl<Storage: AllocationsStorage> Allocations for Storage {
           }
         }
       }
+    }
+
+    // Finally, we check this isn't pre-economic security
+    if ExternalNetworkId::all().any(|network| {
+      !<Storage::Config as Config>::EconomicSecurity::achieved_economic_security(network)
+    }) {
+      Err(DeallocationError::EconomicSecurity)?;
     }
 
     update_allocation::<Self>(network, validator, new_allocation);

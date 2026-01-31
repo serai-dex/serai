@@ -196,11 +196,14 @@ allocation will be rejected.
 ### Deallocation of Stake
 
 Validators may deallocate stake they've allocated from a network, so long as:
+
 1) Their resulting allocation is either zero or still sufficient for at least
    one key share
-1) The deallocation does not cause the validator set to lose fault tolerance
-2) The validator set's updated amount of stake is sufficient for economic
+2) The deallocation does not cause the validator set to lose fault tolerance
+3) The validator set's updated amount of stake is sufficient for economic
    security
+4) It isn't the pre-economic security era, as defined in the
+   [Economics specification](/spec/Economics.md)
 
 The deallocation is delayed until the validator is no longer active, plus an
 additional two sessions to allow for a response to any misbehavior which
