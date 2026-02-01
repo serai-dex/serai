@@ -68,3 +68,6 @@ recorded, and if so, the list of networks' recorded values is iterated over.
 This causes a total of `v + n` operations to occur, where `v` is the amount of
 validators within a network and `n` is the amount of networks, instead of
 `v * n` (if every validator for every network was re-tallied).
+
+Halting a network solely marks it as halted within the pallet. A consumer must
+then use this information to prevent further actions from occurring.

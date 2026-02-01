@@ -1,9 +1,67 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![cfg_attr(not(any(test, feature = "std")), no_std)]
 
 mod registered_retirement_signal;
+
+#[cfg(test)]
+mod tests;
+
+/// The utilities for benchmarking this pallet.
+#[cfg(feature = "runtime-benchmarks")]
+pub mod benchmarking;
+
+use serai_abi::primitives::{
+  address::SeraiAddress,
+  network_id::NetworkId,
+  balance::Amount,
+  validator_sets::{Session, ValidatorSet, KeyShares},
+};
+
+pub(crate) mod sealed {
+  #[doc(hidden)]
+  pub trait Sealed {}
+}
+/// Loosely bind to `serai-validator-sets-pallet` so we may shim it when testing.
+pub trait ValidatorSets: sealed::Sealed {
+  /// Fetch the current session for the specified network.
+  ///
+  /// For `NetworkId::Serai`, this MUST return `Some(_)`. By virtue of this blockchain existing,
+  /// there must be a Serai validator set.
+  fn current_session(network: NetworkId) -> Option<Session>;
+  /// The amount of key shares (or weight in consensus) for the specified validator set.
+  ///
+  /// This MUST NOT return `None` for a current validator set.
+  fn key_shares(set: ValidatorSet) -> Option<KeyShares>;
+  /// The selected validators, and their key shares, for the specified validator set.
+  ///
+  /// This is allowed to have undefined behavior if called for a validator set which isn't current.
+  fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (SeraiAddress, KeyShares)>;
+  /// The stake (in `Coin::Serai`) for the current validator set for the specified network.
+  fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount>;
+}
+
+impl<T: serai_validator_sets_pallet::Config> sealed::Sealed
+  for serai_validator_sets_pallet::Pallet<T>
+{
+}
+impl<T: serai_validator_sets_pallet::Config> ValidatorSets
+  for serai_validator_sets_pallet::Pallet<T>
+{
+  fn current_session(network: NetworkId) -> Option<Session> {
+    serai_validator_sets_pallet::Pallet::<T>::current_session(network)
+  }
+  fn key_shares(set: ValidatorSet) -> Option<KeyShares> {
+    serai_validator_sets_pallet::Pallet::<T>::key_shares(set)
+  }
+  fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (SeraiAddress, KeyShares)> {
+    serai_validator_sets_pallet::Pallet::<T>::selected_validators(set)
+  }
+  fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount> {
+    serai_validator_sets_pallet::Pallet::<T>::stake_for_current_validator_set(network)
+  }
+}
 
 #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
 #[frame_support::pallet]
@@ -11,16 +69,14 @@ pub mod pallet {
   use serai_abi::{
     primitives::{prelude::*, signals::*},
     signals::Event,
-    SubstrateBlock,
   };
 
   use frame_support::pallet_prelude::*;
   use frame_system::pallet_prelude::*;
 
   use serai_core_pallet::{Config as CoreConfig, Pallet as Core};
-  use serai_validator_sets_pallet::{Config as VsConfig, Pallet as ValidatorSets};
 
-  use super::registered_retirement_signal::*;
+  use super::{registered_retirement_signal::*, *};
 
   /// The weights for the calls within this pallet.
   pub trait Weights {
@@ -36,12 +92,33 @@ pub mod pallet {
     fn stand_against() -> Weight;
   }
 
+  /// A shimmed set of weights, returning zero.
+  ///
+  /// This is NOT safe for usage in a production system and is provided only for testing purposes.
+  impl Weights for () {
+    fn register_retirement_signal() -> Weight {
+      Weight::zero()
+    }
+    fn revoke_retirement_signal() -> Weight {
+      Weight::zero()
+    }
+    fn favor() -> Weight {
+      Weight::zero()
+    }
+    fn revoke_favor() -> Weight {
+      Weight::zero()
+    }
+    fn stand_against() -> Weight {
+      Weight::zero()
+    }
+  }
+
   #[pallet::config]
-  pub trait Config:
-    frame_system::Config<Block = SubstrateBlock> + pallet_babe::Config + CoreConfig + VsConfig
-  {
+  pub trait Config: frame_system::Config + pallet_babe::Config + CoreConfig {
     /// How long a retirement signal is locked-in for before retirement.
     type RetirementLockInDurationInSlots: Get<u64>;
+    /// The validator sets pallet.
+    type ValidatorSets: ValidatorSets;
 
     /// The weights to use for this pallet's [`Call`].
     type Weights: Weights;
@@ -102,10 +179,9 @@ pub mod pallet {
 
   /// The locked-in retirement signal.
   ///
-  /// This is in the format `(protocol_id, retiry_block)`.
+  /// This is in the format `(protocol_id, retiry_slot)`.
   #[pallet::storage]
-  type LockedInRetirement<T: Config> =
-    StorageValue<_, (ProtocolId, BlockNumberFor<T>), OptionQuery>;
+  type LockedInRetirement<T: Config> = StorageValue<_, (ProtocolId, u64), OptionQuery>;
 
   /// Halted networks.
   ///
@@ -151,7 +227,7 @@ pub mod pallet {
 
   impl<T: Config> Pallet<T> {
     fn current_serai_session() -> Session {
-      ValidatorSets::<T>::current_session(NetworkId::Serai).expect("no current session for Serai?")
+      T::ValidatorSets::current_session(NetworkId::Serai).expect("no current session for Serai?")
     }
 
     /// Perform the relevant checks for this class of signal.
@@ -184,13 +260,27 @@ pub mod pallet {
       Ok(())
     }
 
+    /// The required threshold which must favor this signal.
+    ///
+    /// We use a 80% threshold for retirement, but just a 34% threshold for halting another
+    /// validator set. This is representative of how 34% of validators can cause a liveness failure
+    /// during asynchronous BFT.
+    fn required_threshold(signal: &Signal, amount: u64) -> u64 {
+      (match signal {
+        Signal::Retire { .. } => {
+          u64::try_from((u128::from(amount) * 4) / 5).expect("u64::MAX * 4 / 5 < u64::MAX")
+        }
+        Signal::Halt { .. } => amount / 3,
+      }) + 1
+    }
+
     /// Tally the support for a signal by a network's current validator set.
     ///
     /// This will mutate the storage with the resulting tally.
     ///
     /// This returns `true` if the network is sufficiently in favor of the signal.
     fn tally_for_network(signal: Signal, network: NetworkId) -> bool {
-      let Some(session) = ValidatorSets::<T>::current_session(network) else {
+      let Some(session) = T::ValidatorSets::current_session(network) else {
         return false;
       };
       let validator_set = ValidatorSet { network, session };
@@ -203,11 +293,14 @@ pub mod pallet {
         validators proportionality to each other.
       */
 
-      let mut needed_favor = u16::from(
-        ValidatorSets::<T>::key_shares(validator_set)
-          .expect("latest validator set without key shares set"),
+      let mut needed_favor = Self::required_threshold(
+        &signal,
+        u64::from(u16::from(
+          T::ValidatorSets::key_shares(validator_set)
+            .expect("latest validator set without key shares set"),
+        )),
       );
-      for (validator, key_shares) in ValidatorSets::<T>::selected_validators(validator_set) {
+      for (validator, key_shares) in T::ValidatorSets::selected_validators(validator_set) {
         let Some(favor_until_serai_session) = Favors::<T>::get((signal, network), validator) else {
           continue;
         };
@@ -215,7 +308,8 @@ pub mod pallet {
           continue;
         }
 
-        let Some(still_needed_favor) = needed_favor.checked_sub(u16::from(key_shares)) else {
+        let Some(still_needed_favor) = needed_favor.checked_sub(u64::from(u16::from(key_shares)))
+        else {
           needed_favor = 0;
           break;
         };
@@ -248,33 +342,27 @@ pub mod pallet {
       let mut total_in_favor_stake = 0;
       let mut total_allocated_stake = 0;
       for network in NetworkId::all() {
-        let Some(session) = ValidatorSets::<T>::current_session(network) else {
-          return false;
+        let Some(session) = T::ValidatorSets::current_session(network) else {
+          continue;
         };
         let validator_set = ValidatorSet { network, session };
 
         let network_stake =
-          ValidatorSets::<T>::stake_for_current_validator_set(validator_set.network)
+          T::ValidatorSets::stake_for_current_validator_set(validator_set.network)
             .unwrap_or(Amount(0));
         if ValidatorSetsInFavor::<T>::contains_key((signal, validator_set)) {
           total_in_favor_stake += network_stake.0;
         }
         total_allocated_stake += network_stake.0;
       }
-
-      /*
-        We use a 80% threshold for retirement, but just a 34% threshold for halting another
-        validator set. This is representative of how 34% of validators can cause a liveness failure
-        during asynchronous BFT.
-      */
-      let threshold = match signal {
-        Signal::Retire { .. } => u64::try_from((u128::from(total_allocated_stake) * 4) / 5)
-          .expect("u64::MAX * 4 / 5 < u64::MAX"),
-        Signal::Halt { .. } => total_allocated_stake / 3,
-      };
-      total_in_favor_stake > threshold
+      total_in_favor_stake >= Self::required_threshold(&signal, total_allocated_stake)
     }
 
+    /// Revoke a validator's favor for a network.
+    ///
+    /// This function is not atomic in that it may update the storage even if it returns an error.
+    /// Any storage updates will be well-defined and not lead to corruption however, making the
+    /// only observable effect the difference in the trie.
     fn revoke_favor_internal(
       validator: T::AccountId,
       signal: Signal,
@@ -282,10 +370,11 @@ pub mod pallet {
     ) -> DispatchResult {
       Self::validate_signal(&signal)?;
 
-      if !Favors::<T>::contains_key((signal, with_network), validator) {
+      if Favors::<T>::take((signal, with_network), validator) < Some(Self::current_serai_session())
+      {
+        // Stale favor is not considered to exist
         Err::<(), _>(Error::<T>::RevokingNonExistentFavor)?;
       }
-      Favors::<T>::remove((signal, with_network), validator);
       Core::<T>::emit_event(Event::FavorRevoked { signal, by: validator, with_network });
 
       // Update the tally for this network
@@ -389,7 +478,7 @@ pub mod pallet {
       Self::validate_signal(&signal)?;
 
       let current_serai_session = Self::current_serai_session();
-      let favor_until_serai_session = Session(current_serai_session.0 + 2);
+      let favor_until_serai_session = Session(current_serai_session.0 + 1);
 
       // Set the validator as in favor
       Favors::<T>::set((signal, with_network), validator, Some(favor_until_serai_session));

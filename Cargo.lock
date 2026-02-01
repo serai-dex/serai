@@ -8915,15 +8915,19 @@ name = "serai-signals-pallet"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "pallet-babe",
+ "pallet-session",
+ "pallet-timestamp",
  "parity-scale-codec",
  "rand_core 0.6.4",
  "serai-abi",
  "serai-core-pallet",
  "serai-validator-sets-pallet",
  "sp-core",
+ "sp-io",
 ]
 
 [[package]]

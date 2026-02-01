@@ -112,6 +112,8 @@ impl serai_validator_sets_pallet::Config for Runtime {
 }
 impl serai_signals_pallet::Config for Runtime {
   type RetirementLockInDurationInSlots = ConstU64<{ RETIREMENT_LOCK_IN_DURATION_IN_SLOTS }>;
+  type ValidatorSets = ValidatorSets;
+  type Weights = (); // TODO
 }
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
