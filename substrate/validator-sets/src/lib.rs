@@ -23,7 +23,12 @@
 //! are allowed to be tightly bound to the pallet, and some are. Notably, for any storage value
 //! which says it may be read from anywhere within the pallet, we tend to directly access the
 //! pallet's definition of the storage value. This would mean the abstaction expected to write into
-//! it must be defined over the pallet's storage value, and not for its own shim.
+//! it must be defined over the pallet's storage value, and not for its own shim. This does
+//! question why have the abstractions at all, instead of hooking `impl<T: Config> Pallet<T>`, and
+//! the honest answer would be how they're an artifact from the development process. They do confer
+//! the pleasant advantage of organizing, and documenting, storage within their own readable blocks
+//! however (instead of within this monolithic file where the definitions must live). In some
+//! cases, it does allow more granular testing however.
 //!
 //! Note the `EmbeddedEllipticCurveKeys` functionality is internally referred to as
 //! `AuxiliaryKeys`. This is inconsistent with `EmbeddedEllipticCurveKeys` solely because the
@@ -181,7 +186,7 @@ mod pallet {
   >;
 
   impl<T: Config> AuxiliaryKeysStorage for Abstractions<T> {
-    type Config = T;
+    type EmitEvent = serai_core_pallet::Pallet<T>;
 
     type AuxiliaryKeys = AuxiliaryKeys<T>;
   }
@@ -208,6 +213,8 @@ mod pallet {
   >;
 
   impl<T: Config> AllocationsStorage for Abstractions<T> {
+    type EconomicSecurity = T::EconomicSecurity;
+    type NetworkStakeRequirement = Pallet<T>;
     type AllocationPerKeyShare = AllocationPerKeyShare<T>;
     type Allocations = Allocations<T>;
     type SortedAllocations = SortedAllocations<T>;
@@ -318,11 +325,13 @@ mod pallet {
           .expect("amount of genesis validators exceeded the maximum allowed per set"),
       ));
       for (participant, keys) in &self.participants {
-        for (network, keys) in NetworkId::all().zip(keys.iter().cloned()) {
+        let mut keys_iter = keys.iter().cloned();
+        for (network, keys) in NetworkId::all().zip(&mut keys_iter) {
           assert_eq!(network, keys.network());
           Abstractions::<T>::set_auxiliary_keys(*participant, keys)
             .expect("genesis auxiliary keys weren't valid");
         }
+        assert!(keys_iter.next().is_none(), "more keys provided than networks");
       }
       for network in NetworkId::all() {
         assert!(

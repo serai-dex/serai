@@ -11,7 +11,7 @@ use serai_abi::{
     balance::Amount,
     validator_sets::KeyShares,
   },
-  economic_security::EconomicSecurity as _,
+  economic_security::EconomicSecurity,
 };
 
 use frame_support::storage::{StorageMap, StoragePrefixedMap};
@@ -22,10 +22,25 @@ pub(crate) use sorted_key::*;
 mod delayed;
 pub use delayed::*;
 
-use crate::{Config, auxiliary_keys::AuxiliaryKeys as _};
+use crate::auxiliary_keys::AuxiliaryKeys as _;
 
 /// The key to use for the allocations map.
 pub(crate) type AllocationsKey = (NetworkId, SeraiAddress);
+
+pub(crate) trait NetworkStakeRequirement {
+  fn requirement(network: ExternalNetworkId) -> Amount;
+}
+impl<T: crate::Config> NetworkStakeRequirement for crate::Pallet<T> {
+  fn requirement(network: ExternalNetworkId) -> Amount {
+    Self::network_stake_requirement(network)
+  }
+}
+#[cfg(test)]
+impl NetworkStakeRequirement for () {
+  fn requirement(_network: ExternalNetworkId) -> Amount {
+    Amount(0)
+  }
+}
 
 /// An error when allocating.
 #[derive(
@@ -61,6 +76,11 @@ pub enum DeallocationError {
 
 /// The storage underlying `Allocations`.
 pub(crate) trait AllocationsStorage: crate::AuxiliaryKeysStorage {
+  /// The evaluator of economic security.
+  type EconomicSecurity: EconomicSecurity;
+  /// A getter for the network's required amount of allocated stake.
+  type NetworkStakeRequirement: NetworkStakeRequirement;
+
   /// The allocation required for a key share (or unit of voting weight) on a network.
   ///
   /// The usage of is shared with the rest of the pallet. `Allocations` only reads it to limit
@@ -506,9 +526,9 @@ impl<Storage: AllocationsStorage> Allocations for Storage {
         NetworkId::Serai => {}
         NetworkId::External(network) => {
           if would_be_selected &&
-            <Storage::Config as Config>::EconomicSecurity::achieved_economic_security(network) &&
+            Storage::EconomicSecurity::achieved_economic_security(network) &&
             ((Amount(expected_stake) - amount) <
-              Some(crate::Pallet::<Storage::Config>::network_stake_requirement(network)))
+              Some(Storage::NetworkStakeRequirement::requirement(network)))
           {
             Err(DeallocationError::EconomicSecurity)?;
           }
@@ -517,9 +537,9 @@ impl<Storage: AllocationsStorage> Allocations for Storage {
     }
 
     // Finally, we check this isn't pre-economic security
-    if ExternalNetworkId::all().any(|network| {
-      !<Storage::Config as Config>::EconomicSecurity::achieved_economic_security(network)
-    }) {
+    if ExternalNetworkId::all()
+      .any(|network| !Storage::EconomicSecurity::achieved_economic_security(network))
+    {
       Err(DeallocationError::EconomicSecurity)?;
     }
 
@@ -536,7 +556,10 @@ impl<Storage: AllocationsStorage> Allocations for Storage {
 #[cfg(test)]
 mod mock {
   use frame_support::{pallet_prelude::*, traits::StorageInstance};
-  use serai_abi::primitives::{network_id::NetworkId, balance::Amount};
+  use serai_abi::primitives::{
+    network_id::{ExternalNetworkId, NetworkId},
+    balance::{Amount, ExternalBalance},
+  };
   use super::{AllocationsKey, SortedAllocationsKey};
 
   pub struct PerKeyShare;
@@ -570,7 +593,19 @@ mod mock {
   type SortedAllocationsMap =
     StorageMap<StorageSorted, Identity, SortedAllocationsKey, (), OptionQuery>;
 
+  pub(crate) struct DummyEconomicSecurity;
+  impl serai_abi::economic_security::EconomicSecurity for DummyEconomicSecurity {
+    fn achieved_economic_security(_network: ExternalNetworkId) -> bool {
+      true
+    }
+    fn sri_value(_balance: ExternalBalance) -> Amount {
+      Amount(0)
+    }
+  }
+
   impl super::AllocationsStorage for crate::MockStorage {
+    type EconomicSecurity = DummyEconomicSecurity;
+    type NetworkStakeRequirement = ();
     type AllocationPerKeyShare = AllocationPerKeyShareMap;
     type Allocations = AllocationsMap;
     type SortedAllocations = SortedAllocationsMap;

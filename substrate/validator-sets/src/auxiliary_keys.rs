@@ -12,9 +12,22 @@ use serai_abi::{
 
 use frame_support::storage::StorageDoubleMap;
 
+pub(crate) trait EmitEvent {
+  fn emit(event: Event);
+}
+impl<T: serai_core_pallet::Config> EmitEvent for serai_core_pallet::Pallet<T> {
+  fn emit(event: Event) {
+    Self::emit_event(event);
+  }
+}
+#[cfg(test)]
+impl EmitEvent for () {
+  fn emit(_event: Event) {}
+}
+
 /// The storage underlying `AuxiliaryKeys`.
 pub(crate) trait AuxiliaryKeysStorage {
-  type Config: crate::Config;
+  type EmitEvent: EmitEvent;
 
   /// An map storing auxiliary keys.
   ///
@@ -62,10 +75,7 @@ impl<S: AuxiliaryKeysStorage> AuxiliaryKeys for S {
   ) -> Result<AuxiliaryKeysStruct, ()> {
     let keys = keys.verify(validator).ok_or(())?;
     S::AuxiliaryKeys::insert(keys.network(), validator, keys);
-    serai_core_pallet::Pallet::<S::Config>::emit_event(Event::SetEmbeddedEllipticCurveKeys {
-      validator,
-      keys,
-    });
+    S::EmitEvent::emit(Event::SetEmbeddedEllipticCurveKeys { validator, keys });
     Ok(keys)
   }
 
@@ -106,6 +116,8 @@ mod mock {
     OptionQuery,
   >;
   impl super::AuxiliaryKeysStorage for crate::MockStorage {
+    type EmitEvent = ();
+
     type AuxiliaryKeys = AuxiliaryKeysMap;
   }
 }
