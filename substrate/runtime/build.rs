@@ -215,6 +215,21 @@ fn command(bin: &str) -> Command {
   command.env(BUILD_SCRIPT_MARKER, "1");
 
   /*
+    We do propagate the host's `PATH`, as the Rust toolchain requires the host's C compiler, even
+    when using the self-contained linker, in order to drive it and provide the platform-specific
+    libraries.
+
+    While we could build a `PATH` from the Rust toolchain, and then append the value of
+    `RUSTC_LINKER` (to have a `PATH` deterministic to the Rust toolchain with the sole exception of
+    the host's linker), `RUSTC_LINKER` is the linker for the _target_, not the host, when we would
+    want to set the linker for the host specifically. There also isn't a trivial way to query the
+    _resolved_ linker after all the possible configuration methods are taken into consideration.
+  */
+  if let Ok(path) = env::var("PATH") {
+    command.env("PATH", path);
+  }
+
+  /*
     Normalize the locale, in case any tooling attempts to take it into consideration.
 
     This is likely redundant, but could matter if any tooling performed a string sort by deferring
@@ -234,8 +249,18 @@ fn command(bin: &str) -> Command {
     The propagation of the `clippy`-specific environment variables is unfortunately very fragile.
     https://github.com/rust-lang/rust-clippy/blob/0f17b47529fcde29fde44343e8f35e5cd2f21b89
       /src/main.rs#L123-L124
+
+    Also propagate `RUSTUP_HOME` and `RUSTUP_TOOLCHAIN` so that when we create a fresh
+    `CARGO_HOME`, rustup can still resolve the correct toolchain.
   */
-  for key in ["RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CLIPPY_ARGS", "CLIPPY_TERMINAL_WIDTH"] {
+  for key in [
+    "RUSTC_WRAPPER",
+    "RUSTC_WORKSPACE_WRAPPER",
+    "CLIPPY_ARGS",
+    "CLIPPY_TERMINAL_WIDTH",
+    "RUSTUP_HOME",
+    "RUSTUP_TOOLCHAIN",
+  ] {
     if let Ok(value) = env::var(key) {
       command.env(key, value);
     }
@@ -697,21 +722,6 @@ which will build the WASM as part of its build process, with the necessary confi
     To solve this, we explicitly declare the original workspace for our future calls.
   */
   build_command.env("WORKSPACE_DIR", workspace_dir());
-
-  /*
-    We do propagate the host's `PATH`, as the Rust toolchain requires the host's C compiler, even
-    when using the self-contained linker, in order to drive it and provide the platform-specific
-    libraries.
-
-    While we could build a `PATH` from the Rust toolchain, and then append the value of
-    `RUSTC_LINKER` (to have a `PATH` deterministic to the Rust toolchain with the sole exception of
-    the host's linker), `RUSTC_LINKER` is the linker for the _target_, not the host, when we would
-    want to set the linker for the host specifically. There also isn't a trivial way to query the
-    _resolved_ linker after all the possible configuration methods are taken into consideration.
-  */
-  if let Ok(path) = env::var("PATH") {
-    build_command.env("PATH", path);
-  }
 
   /*
     Install ourselves as the `rustc` wrapper for the reasons described above.

@@ -17,6 +17,7 @@ use super::*;
 
 /// A `struct` representing the runtime as necessary to define the available APIs.
 // This `struct` itself is never instantiated, solely the `RuntimeApi` derived around it.
+#[allow(dead_code)]
 struct Runtime;
 
 sp_api::impl_runtime_apis! {

@@ -71,8 +71,8 @@ mod benchmarks {
           .flat_map(IntoIterator::into_iter)
           .map(|event| borsh::from_slice::<serai_abi::Event>(event.as_slice()).unwrap())
           .filter(|event| matches!(event, serai_abi::Event::Signals(_)))
-          .last() ==
-          Some(serai_abi::Event::Signals(Event::RetirementSignalLockedIn { signal: signal_id }))
+          .last()
+          == Some(serai_abi::Event::Signals(Event::RetirementSignalLockedIn { signal: signal_id }))
         {
           break 'outer;
         }
