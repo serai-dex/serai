@@ -6,6 +6,7 @@ pub trait BenchmarkValidatorSets {
   fn create_maximal_sessions();
 }
 
+#[expect(clippy::double_ended_iterator_last)]
 #[allow(clippy::float_arithmetic)]
 #[frame_benchmarking::v2::benchmarks(
   where
@@ -70,9 +71,8 @@ mod benchmarks {
           .flat_map(IntoIterator::into_iter)
           .map(|event| borsh::from_slice::<serai_abi::Event>(event.as_slice()).unwrap())
           .filter(|event| matches!(event, serai_abi::Event::Signals(_)))
-          .collect::<Vec<_>>()
           .last() ==
-          Some(&serai_abi::Event::Signals(Event::RetirementSignalLockedIn { signal: signal_id }))
+          Some(serai_abi::Event::Signals(Event::RetirementSignalLockedIn { signal: signal_id }))
         {
           break 'outer;
         }
@@ -141,9 +141,8 @@ mod benchmarks {
         .flat_map(IntoIterator::into_iter)
         .map(|event| borsh::from_slice::<serai_abi::Event>(event.as_slice()).unwrap())
         .filter(|event| matches!(event, serai_abi::Event::Signals(_)))
-        .collect::<Vec<_>>()
         .last(),
-      Some(&serai_abi::Event::Signals(Event::RetirementSignalLockedIn { signal: signal_id }))
+      Some(serai_abi::Event::Signals(Event::RetirementSignalLockedIn { signal: signal_id }))
     );
   }
 
@@ -191,9 +190,8 @@ mod benchmarks {
         .flat_map(IntoIterator::into_iter)
         .map(|event| borsh::from_slice::<serai_abi::Event>(event.as_slice()).unwrap())
         .filter(|event| matches!(event, serai_abi::Event::Signals(_)))
-        .collect::<Vec<_>>()
         .last(),
-      Some(&serai_abi::Event::Signals(Event::ValidatorSetInFavor {
+      Some(serai_abi::Event::Signals(Event::ValidatorSetInFavor {
         signal: Signal::Retire { signal_id },
         set
       }))
@@ -249,9 +247,8 @@ mod benchmarks {
         .flat_map(IntoIterator::into_iter)
         .map(|event| borsh::from_slice::<serai_abi::Event>(event.as_slice()).unwrap())
         .filter(|event| matches!(event, serai_abi::Event::Signals(_)))
-        .collect::<Vec<_>>()
         .last(),
-      Some(&serai_abi::Event::Signals(Event::ValidatorSetInFavor {
+      Some(serai_abi::Event::Signals(Event::ValidatorSetInFavor {
         signal: Signal::Retire { signal_id },
         set
       }))
