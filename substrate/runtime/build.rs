@@ -276,6 +276,65 @@ fn command(bin: &str) -> Command {
   }
 
   /*
+    If this `rustc` was built from source, with a version string which declares itself as so,
+    normalize the version string to the one from the release build.
+
+    This is required as the version impacts how symbols are mangled, and symbol mangling, even when
+    symbols are stripped, effect the resulting binary. While we expect a consistent Rust toolchain
+    to perform this build process, we want to support a consistent Rust toolchain built from source
+    _or_ downloaded as a pre-built release.
+
+    This won't effect how the symbols within the standard library themselves are mangled, due to
+    `rustc` expecting it to be pre-compiled and therefore literally defined, so there's still
+    _some_ non-determinism here. Thankfully, normalizing how _most_ symbols are mangled is
+    sufficient.
+  */
+  {
+    let version = Command::new(cargo_env("RUSTC"))
+      .arg("--version")
+      .output()
+      .expect("couldn't invoke `rustc` to get the version");
+    assert!(version.status.success());
+    let version = String::from_utf8(version.stdout).expect("`rustc` version wasn't UTF-8");
+
+    #[expect(clippy::get_first)]
+    if version.contains("built from a source tarball") {
+      let version = version.split(' ').collect::<Vec<_>>();
+      assert_eq!(version.get(0).copied(), Some("rustc"));
+      let version = version
+        .get(1)
+        .copied()
+        .expect("`rustc --version` didn't contain its version in the expected position");
+
+      const CANONICAL_RUSTC_VERSION: &str = "1.93.0";
+      if version != CANONICAL_RUSTC_VERSION {
+        eprintln!(
+          "
+          `rustc` version ({version}) was different from {CANONICAL_RUSTC_VERSION} (canonical).
+          this will not be a canonical build
+        "
+        );
+      }
+      if let Some(version) = match version {
+        "1.91.1" => Some("1.91.1 (ed61e7d7e 2025-11-07)"),
+        "1.92.0" => Some("1.92.0 (ded5c06cf 2025-12-08)"),
+        "1.93.0" => Some("1.93.0 (254b59607 2026-01-19)"),
+        _ => {
+          eprintln!(
+            "
+            unrecognized `rustc` version.
+            this may not be a canonical build, even within this version of the Rust toolchain
+          "
+          );
+          None
+        }
+      } {
+        command.env("RUSTC_FORCE_RUSTC_VERSION", version);
+      }
+    }
+  }
+
+  /*
     Set `RUSTC_BOOTSTRAP` to be able to use unstable options.
 
     We use a few of these, and each must be carefully reviewed. We MUST NOT use any unstable issues
