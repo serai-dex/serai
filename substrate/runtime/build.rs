@@ -88,7 +88,7 @@ use std::{
 #[rustfmt::skip]
 /// Fetch an environment variable which `cargo` sets when building crates.
 ///
-/// https://doc.rust-lang.org/1.92.0/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates
+/// https://doc.rust-lang.org/1.93.0/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates
 /// provides the full list of these.
 fn cargo_env(var: &str) -> String {
   env::var(var).unwrap_or_else(|_| {
@@ -154,7 +154,7 @@ fn wasm_rustflags() -> String {
   /// `linker-plugin-lto` is used as Rust's LTO requires bitcode, forcing us to defer to the
   /// linker's LTO. While this would suggest we _should_ set `embed-bitcode=true`,
   /// [Rust's documentation](
-  ///   https://doc.rust-lang.org/1.92.0/rustc/codegen-options/index.html#embed-bitcode
+  ///   https://doc.rust-lang.org/1.93.0/rustc/codegen-options/index.html#embed-bitcode
   /// ) suggests that's likely not desired and should solely be done when compiling one library
   /// with mixed methods of linking. When compiling and linking just once (as seen here), it's
   /// suggested to use the linker's LTO instead.
@@ -267,8 +267,8 @@ fn command(bin: &str) -> Command {
     /*
       `incremental` is recommended to be disabled for release builds.
 
-      https://doc.rust-lang.org/1.92.0/rustc/codegen-options/index.html#incremental
-      https://doc.rust-lang.org/1.92.0/cargo/reference/profiles.html#incremental
+      https://doc.rust-lang.org/1.93.0/rustc/codegen-options/index.html#incremental
+      https://doc.rust-lang.org/1.93.0/cargo/reference/profiles.html#incremental
     */
     command.env("CARGO_INCREMENTAL", "false");
   }
@@ -514,7 +514,7 @@ fn main() {
       If we're invoked as `rustc`'s wrapper, `cargo` guarantees an argument of the `rustc` which
       should be used.
 
-      https://doc.rust-lang.org/1.92.0/cargo/reference/config.html#buildrustc-wrapper
+      https://doc.rust-lang.org/1.93.0/cargo/reference/config.html#buildrustc-wrapper
 
       This lets us determine which context we're being called in by if there are arguments.
     */
@@ -752,7 +752,7 @@ which will build the WASM as part of its build process, with the necessary confi
     `trim-paths` is an unstable flag to strip the build environment's paths, as would otherwise
     prevent reproducible builds without an exactly-matching filesystem layout.
 
-    https://doc.rust-lang.org/1.92.0/cargo/reference/unstable.html#profile-trim-paths-option
+    https://doc.rust-lang.org/1.93.0/cargo/reference/unstable.html#profile-trim-paths-option
 
     This would be part of `DETERMINISM` except for how it's a `cargo` argument, not a `rustc` flag.
   */
@@ -775,13 +775,13 @@ which will build the WASM as part of its build process, with the necessary confi
     `rust-std`, instead solely adding the `rust-src` component (as necessary to build `rust-std`
     here and now). This improves the ability to reproduce Serai from a bootstrapped environment.
 
-    https://doc.rust-lang.org/1.92.0/cargo/reference/unstable.html#build-std
+    https://doc.rust-lang.org/1.93.0/cargo/reference/unstable.html#build-std
   */
   build_command.arg("-Zbuild-std=compiler_builtins,panic_abort,core,alloc");
   /*
     We set this to an empty value to override the default values which enable unwinding.
 
-    https://doc.rust-lang.org/1.92.0/cargo/reference/unstable.html#build-std-features
+    https://doc.rust-lang.org/1.93.0/cargo/reference/unstable.html#build-std-features
   */
   build_command.arg("-Zbuild-std-features=");
 
@@ -793,7 +793,7 @@ which will build the WASM as part of its build process, with the necessary confi
     to the current `out` directory.
 
     Ideally, we would use `--artifact-dir` for this
-    (https://doc.rust-lang.org/1.92.0/cargo/reference/unstable.html#artifact-dir), but it's only
+    (https://doc.rust-lang.org/1.93.0/cargo/reference/unstable.html#artifact-dir), but it's only
     available for `cargo build` (when we use `cargo rustc` due to needing `--crate-type`).
 
     Since the target directory format is unstable, we either have to:
