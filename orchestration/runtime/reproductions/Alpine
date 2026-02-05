@@ -1,9 +1,8 @@
 # syntax=docker/dockerfile:1
-# check=skip=FromPlatformFlagConstDisallowed;error=true
-# We want to explicitly set the platform to ensure a constant host environment
+# check=error=true
 
 # rust:1.93.0-alpine3.23 as of February 1st, 2026 (GMT)
-FROM --platform=linux/amd64 rust@sha256:6f37c2b56fde862a67116c4bddbb6014c0a758b24944f8650c8ff8c735f96f06 AS builder
+FROM rust@sha256:69d7b9d9aeaf108a1419d9a7fcf7860dcc043e9dbd1ab7ce88e44228774d99e9 AS builder
 
 # Add Rust's source, as necessary to `build-std` as we do for the WASM
 RUN rustup component add rust-src
@@ -32,7 +31,6 @@ RUN cargo build --release -p serai-runtime --no-default-features -vv
 RUN mv $(find /serai -name serai_runtime.wasm | head -n1) /serai.wasm
 
 # Copy the artifact to its own image which solely exists to further export it
-# We don't use a platform-pin here as we don't require reproducibility and want this to be native
 FROM alpine:latest
 # Copy the artifact itself
 COPY --from=builder /serai.wasm /
