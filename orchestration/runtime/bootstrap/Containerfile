@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1
+# check=error=true
+
+# StageX `pallet-rust` as built by `bootstrap.sh`
+FROM stagex/pallet-rust AS builder
+
+# Add files for build
+ADD patches /serai/patches
+ADD common /serai/common
+ADD crypto /serai/crypto
+ADD networks /serai/networks
+ADD message-queue /serai/message-queue
+ADD processor /serai/processor
+ADD coordinator /serai/coordinator
+ADD substrate /serai/substrate
+ADD orchestration/Cargo.toml /serai/orchestration/Cargo.toml
+ADD orchestration/src /serai/orchestration/src
+ADD tests /serai/tests
+ADD Cargo.toml /serai
+ADD Cargo.lock /serai
+ADD AGPL-3.0 /serai
+
+WORKDIR /serai
+
+# Build the runtime
+RUN cargo build --release -p serai-runtime --no-default-features -vv
+# Move it to the root
+RUN mv $(find /serai -name serai_runtime.wasm | head -n1) /serai.wasm
+
+# Copy the artifact to its own image which solely exists to further export it
+# We don't use a StageX here as we don't require reproducibility and want this to be native
+# (StageX images are currently only available for x86-64)
+FROM busybox:stable-musl
+# Copy the artifact itself
+COPY --from=builder /serai.wasm /
+# By default, copy the artifact to `/volume`, presumably a provided volume
+CMD ["cp", "/serai.wasm", "/volume/"]

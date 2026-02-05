@@ -60,8 +60,8 @@
 //! options. As part of this, `cargo build` will be invoked with a _fresh_ `CARGO_HOME`. This means
 //! any host-specific `cargo` configuration will _NOT_ be propagated.
 //!
-//! The one exception is `CARGO_NET_GIT_FETCH_WITH_CLI`. If set within the host environment, it
-//! will be propagated to the child `cargo build` as well.
+//! Exceptionally, networking configuration from the host environment is propagated as it isn't
+//! expected to impact the result and may be necessary to download dependencies.
 //!
 //! ### Caveats
 //!

@@ -25,3 +25,11 @@ Currently, the following reproductions are available:
 
 They are verified to produce an identical WASM blob in our CI but are not
 guaranteed to nor endorsed as an alternative method of production.
+
+### `bootstrap/`
+
+To completely demonstrate the supply chain and allow full inspection of the
+entire process used to build `serai-runtime`, a bootstrap from a minimal binary
+seed is present in the `bootstrap/` folder. This is again not canonical nor
+endorsed, but it would be if not for the practical issue of it taking several
+hours.
