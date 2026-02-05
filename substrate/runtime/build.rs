@@ -206,6 +206,7 @@ fn command(bin: &str) -> Command {
   command.env_clear();
 
   // Propagate Window's `SystemRoot` environment variable as required for basic functioning
+  // Notably, `git` for Windows won't function at all if this isn't set
   #[cfg(target_family = "windows")]
   if let Ok(root) = env::var("SystemRoot") {
     command.env("SystemRoot", root);
@@ -228,6 +229,39 @@ fn command(bin: &str) -> Command {
   for key in ["CARGO", "RUSTC", "RUSTDOC"] {
     command.env(key, cargo_env(key));
   }
+
+  /*
+    We also propagate `RUSTUP_HOME` and `RUSTUP_TOOLCHAIN` so that when we create a fresh
+    `CARGO_HOME` later in this build script, `rustup` can still resolve its toolchain.
+
+    This wasn't observed as necessary on an `x86_64-unknown-linux-gnu` host. It was reported as
+    necessary on an `aarch64-apple-darwin` host however. It _shouldn't_ be necessary as this script
+    should _solely_ use the _already resolved_ `rustc`, `cargo`, as identified by the
+    `RUSTC`, `CARGO` environment variables. It isn't observed to be problematic
+    (re: reproducibility) to include here however, and solves a practical issue of this not working
+    otherwise. Ideally, a cleaner solution would overall.
+  */
+  for key in ["RUSTUP_HOME", "RUSTUP_TOOLCHAIN"] {
+    if let Ok(value) = env::var(key) {
+      command.env(key, value);
+    }
+  }
+
+  /*
+    Finally, we propagate the host's `PATH`, as the Rust toolchain requires the host's C compiler,
+    even when using the self-contained linker, in order to drive it and provide the
+    platform-specific libraries.
+
+    While we could build a `PATH` from the Rust toolchain, and then append the value of
+    `RUSTC_LINKER` (to have a `PATH` deterministic to the Rust toolchain with the sole exception of
+    the host's linker), `RUSTC_LINKER` is the linker for the _target_, not the host, when we would
+    want to set the linker for the host specifically. There also isn't a trivial way to query the
+    _resolved_ linker after all the possible configuration methods are taken into consideration.
+  */
+  if let Ok(path) = env::var("PATH") {
+    command.env("PATH", path);
+  }
+
   /*
     Propagate toolchain configuration which are _optional_ and may not be set.
 
@@ -697,21 +731,6 @@ which will build the WASM as part of its build process, with the necessary confi
     To solve this, we explicitly declare the original workspace for our future calls.
   */
   build_command.env("WORKSPACE_DIR", workspace_dir());
-
-  /*
-    We do propagate the host's `PATH`, as the Rust toolchain requires the host's C compiler, even
-    when using the self-contained linker, in order to drive it and provide the platform-specific
-    libraries.
-
-    While we could build a `PATH` from the Rust toolchain, and then append the value of
-    `RUSTC_LINKER` (to have a `PATH` deterministic to the Rust toolchain with the sole exception of
-    the host's linker), `RUSTC_LINKER` is the linker for the _target_, not the host, when we would
-    want to set the linker for the host specifically. There also isn't a trivial way to query the
-    _resolved_ linker after all the possible configuration methods are taken into consideration.
-  */
-  if let Ok(path) = env::var("PATH") {
-    build_command.env("PATH", path);
-  }
 
   /*
     Install ourselves as the `rustc` wrapper for the reasons described above.

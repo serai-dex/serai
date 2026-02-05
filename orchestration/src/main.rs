@@ -304,7 +304,9 @@ fn build_serai_service(
 
     // LLVM's MemTagSanitizer
     #[cfg(target_feature = "mte")]
-    rustflags += " -C target-feature=+mte -Z sanitizer=memtag";
+    {
+      rustflags += " -C target-feature=+mte -Z sanitizer=memtag";
+    }
   }
 
   /*
