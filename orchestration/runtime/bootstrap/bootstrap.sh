@@ -10,9 +10,9 @@ cd orchestration/runtime/bootstrap
 if [ -d "./stagex" ]; then
   rm -rf ./stagex
 fi
-git clone https://codeberg.org/kayabaNerve/stagex
+git clone https://codeberg.org/stagex/stagex
 cd stagex
-git checkout 44dbfeeafcfb91a789738820fc4397adc5ae5cf4
+git checkout 75844e6ade2532734db5cbddddb6401df470059c
 make NOCACHE=1 pallet-rust
 
 cd "$WORKSPACE"
