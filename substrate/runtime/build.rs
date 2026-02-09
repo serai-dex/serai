@@ -58,10 +58,16 @@
 //! This crate _MUST_ be built for a non-`wasm32v1-none` target. It will then spawn a nested
 //! `cargo build` command to build this for `wasm32v1-none`, with the desired configuration and
 //! options. As part of this, `cargo build` will be invoked with a _fresh_ `CARGO_HOME`. This means
-//! any host-specific `cargo` configuration will _NOT_ be propagated.
+//! any host-specific `cargo` configuration will _NOT_ be propagated. Exceptionally, networking
+//! configuration from the host environment is propagated as it isn't expected to impact the result
+//! and may be necessary to download dependencies.
 //!
-//! Exceptionally, networking configuration from the host environment is propagated as it isn't
-//! expected to impact the result and may be necessary to download dependencies.
+//! The `SERAI_PROTOCOL_ID` environment variable will be propagated, if set, as intended for the
+//! runtime to know its protocol ID. The build script does not require it be set nor will it
+//! provide a default value if it isn't set. The value is RECOMMENDED to be set to the currently
+//! checked-out Git commit, as is being built to create the runtime and comprehensive to the
+//! entirety of the Serai protocol/software stack. The value of `SERAI_PROTOCOL_ID` MUST be
+//! set consistently when performing a reproducible build..
 //!
 //! ### Caveats
 //!
@@ -382,6 +388,11 @@ fn command(bin: &str) -> Command {
     ) {
       command.env(key, value);
     }
+  }
+
+  // Propagate the `SERAI_PROTOCOL_ID` environment variable, as documented
+  if let Ok(protocol_id) = env::var("SERAI_PROTOCOL_ID") {
+    command.env("SERAI_PROTOCOL_ID", protocol_id);
   }
 
   command
