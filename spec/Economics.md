@@ -11,7 +11,8 @@ The economics of the Serai codebase are delineated into two different eras:
     All validator sets have achieved economic security.
 
 These two eras have vastly different considerations and accordingly each have
-their own set of rules.
+their own set of rules. They both occur _after_ the protocol's genesis, which
+can be itself considered its own era if one desires to but is not here.
 
 ## Genesis
 
@@ -21,39 +22,51 @@ addresses for Serai (over Bitcoin, Ethereum, and Monero) to receive coins with
 (BTC, ETH, DAI, and XMR, further referred to with indifference as XYZ).
 
 ```
-GENESIS_SRI = 100,000,000.000000 SRI
+GENESIS_SRI = 100,000,000.000000000 SRI
 GENESIS_LIQUIDITY_TIME = 30 days
 ```
 
 Over `GENESIS_LIQUIDITY_TIME`, any user will be able to provide XYZ. At the end
-of `GENESIS_LIQUIDITY_TIME`, the validators will oraclize the price of 1 XYZ
+of `GENESIS_LIQUIDITY_TIME`, the validators will oraclize the value of 1 XYZ
 in terms of 0.00000001 BTC (except for BTC). With the value of `sriXYZ`
 considered equivalent to the value of `XYZ`, the value of each pool is
 determined. `GENESIS_SRI` is proportionately distributed.
 
-Genesis is now complete. Swaps become available.
+With the SRI distributed to the pools, the required amount of SRI for a
+validator set to be considered as economically secure can be calculated (as
+detailed in following sections). The amount of SRI which must be allocated for
+a key share is determined such that for `g` genesis validators,
+`(((2 * g) + 1) * allocation_per_key_share) > economic_security_requirement`.
+This ensures at least one genesis validator is require to participate in every
+signing operation until the network is economically secure. It is potentially
+excessive in that liquidity may be added to a pool during genesis, then removed
+pre-economic security, without the allocation per key share value decreasing
+proportionately however. This is accepted as an oddity.
+
+Genesis is now complete. Allocating stake and swaps become available.
 
 ## Pre-economic Security
 
 ### Liquidity Providers
 
-Due to Serai's pools operating with an `xyk` formula, for `M XYZ : N SRI`, the
-only way for the XYZ portion to decrease is for SRI exogenous to the pool to
-be introduced. If SRI is swapped out from the pools, and swapped back in, it
-has a neutral effect (slightly in favor to the pool due to fees) and accordingly
-isn't considered exogenous.
+Liquidity may not be added to the pools during this era.
+
+Due to Serai's pools premised upon the `x * y = k` formula, for
+`M XYZ : N SRI`, the only way for the XYZ portion to decrease is for SRI
+exogenous to the pool to be introduced. If SRI is swapped out from the pools,
+and swapped back in, it has a neutral effect (slightly in favor to the pool due
+to fees) and accordingly isn't considered exogenous.
 
 Exogenous SRI has four possible sources:
 
 1) Circulating SRI.
 
-    There will be no distributions of SRI during this era which isn't
-    `GENESIS_SRI` or staked.
+    There will be no distributions of SRI during this era which isn't staked
+    and unable to be deallocated until the economic security era.
 
 2) Removed liquidity.
 
-    All liquidity removed during this era will only yield the XYZ component,
-    burning the SRI.
+    All liquidity removed during this era will burn the SRI component.
 
 3) Removed stake.
 
@@ -71,15 +84,25 @@ Exogenous SRI has four possible sources:
     enables them to swap it to the XYZ and recoup their value, barring fees
     and ABC-XYZ price fluctuations.
 
-Accordingly, exogenous is considered managed, with the intention being for the
-XYZ quantity received to be greater than or equal to the initial contribution.
+Accordingly, exogenous SRI is considered managed, with the intention being for
+the XYZ quantity received to be at least approximate to the initial
+contribution.
 
 ### Swap to Staked SRI
 
-At the median price, any external actor may swap XYZ to SRI outside of the
+At the median quote, any external actor may swap XYZ to SRI outside of the
 pools. This SRI would be freshly minted and immediately staked to a validator
 within a set for an external network. The XYZ received would be used to form
-protocol-owned liquidity, making all existing LPs have more XYZ and less SRI.
+protocol-owned liquidity, yet removed genesis liquidity will explicitly not
+have their XYZ increased in response to this _despite_ the pool's XYZ
+increasing (while its SRI remains constant). This prevents an adversary from
+providing liquidity at genesis, swapping to staked SRI, before removing their
+liquidity to earn staked SRI at a discount proportional to the percentage of
+liquidity they provided.
+
+This policy, combined with the lack of emissions and fees to liquidity
+providers in the pre-economic security era, leaves the incentive for liquidity
+provides as the airdropped SRI.
 
 ### Emissions
 
@@ -114,13 +137,13 @@ literal evaluation of this, `SERAI_VALIDATORS_STAKE_DESIRED` is used.
 
 ### Fees
 
-The fees for a swap within a pool are 0.5% plus a slippage-based fee. While
+The fees for a swap within a pool are specific to the pool. Currently, all
+pools have a 0.3% fee except the `sriXMR` pool which has a 1% fee. While
 aggressive compared to comparables and centralized exchanges, this is argued as
 better than instant exchangers while the protocol near-exclusively offers
-specific functionality. This is a prime opportunity for the protocol to
-capitalize on.
+specific functionality.
 
-These fees are then used to form protocol-owned liquidity.
+These fees are used to form protocol-owned liquidity.
 
 ## Post-economic Security
 
