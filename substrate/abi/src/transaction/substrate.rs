@@ -214,7 +214,7 @@ impl<Context: TransactionContext, FeeContext: TransactionFeeContext>
           if next_nonce == u32::MAX {
             Err(TransactionValidityError::Invalid(InvalidTransaction::BadSigner))?;
           }
-          match next_nonce.cmp(nonce) {
+          match nonce.cmp(&next_nonce) {
             core::cmp::Ordering::Less => {
               Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?
             }
