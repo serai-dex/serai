@@ -413,7 +413,7 @@ RUN --mount=type=cache,from={image},source=/usr/local/rustup,target=/usr/local/r
   # We disable `target-applies-to-host` due to Rust attempting weird `build-std`/sanitizer
   # configurations for build scripts otherwise.
   RUSTFLAGS="$RUSTFLAGS {rustflags}"                                                            \
-  cargo build                                                                                   \
+  cargo build --locked                                                                          \
     -Z target-applies-to-host --config "target-applies-to-host=false"                           \
     -Z build-std=panic_abort,compiler_builtins,core,alloc,std,std_detect -Z build-std-features= \
     {profile_flag} --features "{features}" -p {package}

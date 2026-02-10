@@ -67,7 +67,7 @@
 //! provide a default value if it isn't set. The value is RECOMMENDED to be set to the currently
 //! checked-out Git commit, as is being built to create the runtime and comprehensive to the
 //! entirety of the Serai protocol/software stack. The value of `SERAI_PROTOCOL_ID` MUST be
-//! set consistently when performing a reproducible build..
+//! set consistently when performing a reproducible build.
 //!
 //! ### Caveats
 //!
@@ -848,6 +848,7 @@ which will build the WASM as part of its build process, with the necessary confi
   build_command.arg("-Ztrim-paths=all");
 
   build_command.arg("rustc");
+  build_command.arg("--locked");
   build_command.arg("--package").arg(cargo_env("CARGO_PKG_NAME"));
   build_command.arg("--target").arg("wasm32v1-none");
   build_command.arg("--crate-type").arg("cdylib");

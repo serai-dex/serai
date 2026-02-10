@@ -26,7 +26,7 @@ ADD AGPL-3.0 /serai
 WORKDIR /serai
 
 # Build the runtime
-RUN cargo build --release -p serai-runtime --no-default-features -vv
+RUN cargo build --locked --release -p serai-runtime --no-default-features -vv
 # Move it to the root
 RUN mv $(find /serai -name serai_runtime.wasm | head -n1) /serai.wasm
 
