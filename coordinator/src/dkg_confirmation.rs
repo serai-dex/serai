@@ -12,8 +12,10 @@ use frost_schnorrkel::{
 
 use serai_db::{DbTxn as _, Db as DbTrait};
 
-#[rustfmt::skip]
-use serai_client_serai::abi::primitives::{validator_sets::ExternalValidatorSet, address::SeraiAddress};
+use serai_client_serai::abi::primitives::{
+  validator_sets::{ExternalValidatorSet, ValidatorSet},
+  address::SeraiAddress,
+};
 
 use serai_task::{DoesNotError, ContinuallyRan};
 
@@ -158,7 +160,7 @@ impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
     let (machine, preprocess) = AlgorithmMachine::new(
       schnorrkel(),
       // We use a 1-of-1 Musig here as we don't know who will actually be in this Musig yet
-      musig(ExternalValidatorSet::musig_context(&set), key, &[public_key]).unwrap(),
+      musig(ValidatorSet::from(set).musig_context(), key, &[public_key]).unwrap(),
     )
     .preprocess(&mut OsRng);
     // We take the preprocess so we can use it in a distinct machine with the actual Musig
@@ -259,7 +261,7 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                 .collect::<Vec<_>>();
 
               let keys = musig(
-                ExternalValidatorSet::musig_context(&self.set.set),
+                ValidatorSet::from(self.set.set).musig_context(),
                 self.key.clone(),
                 &musig_public_keys,
               )

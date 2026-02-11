@@ -23,7 +23,7 @@ use serai_abi::{
   SubstrateHeader as Header, SubstrateBlock as Block, LazySubstrateBlock as LazyBlock,
 };
 
-use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance};
+use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance, GenesisLiquidityTokensInstance};
 
 /// Maps `serai_abi` types into the types expected within the Substrate runtime
 mod map;
@@ -72,12 +72,16 @@ mod runtime {
   pub type Dex = serai_dex_pallet::Pallet<Runtime>;
 
   #[runtime::pallet_index(0x47)]
-  pub type GenesisLiquidity = serai_genesis_liquidity_pallet::Pallet<Runtime>;
+  pub type GenesisLiquidityTokens =
+    serai_coins_pallet::Pallet<Runtime, GenesisLiquidityTokensInstance>;
 
   #[runtime::pallet_index(0x48)]
-  pub type EconomicSecurity = serai_economic_security_pallet::Pallet<Runtime>;
+  pub type GenesisLiquidity = serai_genesis_liquidity_pallet::Pallet<Runtime>;
 
   #[runtime::pallet_index(0x49)]
+  pub type EconomicSecurity = serai_economic_security_pallet::Pallet<Runtime>;
+
+  #[runtime::pallet_index(0x50)]
   pub type InInstructions = serai_in_instructions_pallet::Pallet<Runtime>;
 
   #[runtime::pallet_index(0xc0)]
@@ -121,6 +125,10 @@ impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
 }
 impl serai_dex_pallet::Config for Runtime {
   type Weights = (); // TODO
+}
+impl serai_coins_pallet::Config<GenesisLiquidityTokensInstance> for Runtime {
+  type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type Weights = ();
 }
 impl serai_genesis_liquidity_pallet::Config for Runtime {}
 impl serai_economic_security_pallet::Config for Runtime {}
@@ -208,6 +216,11 @@ sp_api::impl_runtime_apis! {
         dex: DexConfig {
           fees: genesis.fees,
           _config: PhantomData,
+        },
+
+        genesis_liquidity_tokens: GenesisLiquidityTokensConfig {
+          accounts: vec![],
+          _instance: PhantomData,
         },
 
         validator_sets: ValidatorSetsConfig {

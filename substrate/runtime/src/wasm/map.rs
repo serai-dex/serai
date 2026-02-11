@@ -94,8 +94,12 @@ impl From<serai_abi::Call> for RuntimeCall {
       serai_abi::Call::GenesisLiquidity(call) => {
         use serai_abi::genesis_liquidity::Call;
         RuntimeCall::GenesisLiquidity(match call {
-          Call::oraclize_values { values, signature } => {
-            serai_genesis_liquidity_pallet::Call::oraclize_values { values, signature }
+          Call::oraclize_values { values, signature_participants, signature } => {
+            serai_genesis_liquidity_pallet::Call::oraclize_values {
+              values,
+              signature_participants,
+              signature,
+            }
           }
           Call::transfer_genesis_liquidity { to, genesis_liquidity } => {
             serai_genesis_liquidity_pallet::Call::transfer_genesis_liquidity {
@@ -103,9 +107,15 @@ impl From<serai_abi::Call> for RuntimeCall {
               genesis_liquidity,
             }
           }
-          Call::remove_genesis_liquidity { genesis_liquidity } => {
-            serai_genesis_liquidity_pallet::Call::remove_genesis_liquidity { genesis_liquidity }
-          }
+          Call::remove_genesis_liquidity {
+            genesis_liquidity,
+            sri_minimum,
+            external_coin_minimum,
+          } => serai_genesis_liquidity_pallet::Call::remove_genesis_liquidity {
+            genesis_liquidity,
+            sri_minimum,
+            external_coin_minimum,
+          },
         })
       }
       serai_abi::Call::InInstructions(call) => {

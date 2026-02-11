@@ -7982,6 +7982,7 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 name = "serai-abi"
 version = "0.1.0"
 dependencies = [
+ "bitvec",
  "borsh",
  "frame-support",
  "frame-system",
@@ -8384,6 +8385,8 @@ dependencies = [
  "serai-coins-pallet",
  "serai-core-pallet",
  "serai-dex-pallet",
+ "serai-validator-sets-pallet",
+ "sp-application-crypto",
  "sp-core",
 ]
 

@@ -68,7 +68,7 @@ impl TryFrom<ValidatorSet> for ExternalValidatorSet {
   }
 }
 
-impl ExternalValidatorSet {
+impl ValidatorSet {
   /// The MuSig context for this validator set.
   pub fn musig_context(&self) -> [u8; 32] {
     sp_core::blake2_256(&borsh::to_vec(&(b"ValidatorSets-musig_key", self)).unwrap())
@@ -88,7 +88,9 @@ impl ExternalValidatorSet {
     }
     dkg::musig_key::<Ristretto>(self.musig_context(), &decompressed_keys).unwrap().to_bytes().into()
   }
+}
 
+impl ExternalValidatorSet {
   /// The message for the `set_keys` signature.
   pub fn set_keys_message(&self, key_pair: &KeyPair) -> Vec<u8> {
     borsh::to_vec(&(b"ValidatorSets-set_keys", self, key_pair)).unwrap()

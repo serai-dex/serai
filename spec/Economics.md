@@ -76,17 +76,19 @@ Exogenous SRI has four possible sources:
 
 4) Intra-pool SRI movement.
 
-    For coins XYZ, ABC, the XYZ pool may `+XYZ, -SRI`. This enables `+SRI, -ABC`
-    in the ABC pool. To resolve this, each pool tracks `+XYZ` and `+SRI`
-    received from such swaps. When an XYZ liquidity provider removes their
-    liquidity, they do not receive the XYZ in question. When an ABC liquidity
-    provider removes their liquidity, they do receive the SRI in question. This
-    enables them to swap it to the XYZ and recoup their value, barring fees
-    and ABC-XYZ price fluctuations.
+    For coins sriXYZ, sriABC, the sriXYZ pool may `+sriXYZ, -SRI`. This enables
+    `+SRI, -sriABC` in the sriABC pool. To resolve this, each pool tracks
+    `+-sriXYZ` and `+-sriSRI` received from such swaps. When an sriXYZ
+    liquidity provider removes their liquidity, they do not receive the
+    additional sriXYZ in question. When an sriABC liquidity provider removes
+    their liquidity, they do receive the SRI in question. This enables them to
+    swap it to the sriXYZ and recoup approximate value, barring fees,
+    sriABC-sriXYZ price fluctuations, slippage, etc.
 
 Accordingly, exogenous SRI is considered managed, with the intention being for
-the XYZ quantity received to be at least approximate to the initial
-contribution.
+genesis liquidity providers who remove their liquidity during the pre-economic
+security era to receive value at least approximate to the amount of sriXYZ
+initially added as liquidity.
 
 ### Swap to Staked SRI
 
@@ -114,8 +116,8 @@ INITIAL_REWARD = 100,000 SRI / BLOCKS_PER_DAY
 LITERAL_STAKE_REQUIRED = 1.5 * sri_in_pools()
 EXTERNAL_STAKE_REQUIRED = LITERAL_STAKE_REQUIRED * 1.2
 SERAI_VALIDATORS_DESIRED_PERCENTAGE = 0.2
-STAKE_REQUIRED = EXTERNAL_STAKE_REQUIRED / (1 - SERAI_VALIDATORS_DESIRED_PERCENTAGE)
-SERAI_VALIDATORS_STAKE_DESIRED = SERAI_VALIDATORS_DESIRED_PERCENTAGE * STAKE_REQUIRED
+STAKE_DESIRED = EXTERNAL_STAKE_REQUIRED / (1 - SERAI_VALIDATORS_DESIRED_PERCENTAGE)
+SERAI_VALIDATORS_STAKE_DESIRED = SERAI_VALIDATORS_DESIRED_PERCENTAGE * STAKE_DESIRED
 SECURE_BY = 1 year
 ```
 
@@ -125,7 +127,7 @@ unused capacity only counts for the amount required to be secure).
 
 The block reward from genesis till the end of `INITIAL_PERIOD` is fixed to
 `INITIAL_REWARD`. Afterwards, the block reward is
-`(STAKE_REQUIRED - CURRENT_STAKE) / blocks_until(SECURE_BY)`.
+`(STAKE_DESIRED - CURRENT_STAKE) / blocks_until(SECURE_BY)`.
 
 This ensures economic security by the specified date. As economic security by
 printing SRI is undesirable, the amount of economic security so achieved is a
@@ -150,13 +152,15 @@ These fees are used to form protocol-owned liquidity.
 ### Liquidity Providers
 
 ```
-GENESIS_SRI_TRICKLE_FEED = 180 days
+GENESIS_TRICKLE_FEED = 180 days
 ```
 
-Liquidity may be added as the capacity allows. Genesis liquidity may be removed
-without burning the SRI portion in its entirety, instead burning
-`(GENESIS_SRI_TRICKLE_FEED - days_since_security()) / GENESIS_SRI_TRICKLE_FEED`
-of the amount.
+Liquidity may be added as the capacity allows.
+
+When genesis liquidity is removed, whereas prior the provider would not receive
+additional sriXYZ nor airdropped SRI, they may now receive
+`days_since_economic_security().min(GENESIS_TRICKLE_FEED) / GENESIS_TRICKLE_FEED`
+of the additional sriXYZ/airdropped SRI.
 
 ### Emissions
 

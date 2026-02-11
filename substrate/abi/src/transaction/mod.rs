@@ -212,6 +212,7 @@ fn serialize() {
     balance::{Amount, Balance},
     crypto::{RistrettoSignature, Signature},
     address::SeraiAddress,
+    validator_sets::KeyShares,
   };
 
   let unsigned_call = {
@@ -220,10 +221,19 @@ fn serialize() {
       dai: Amount(OsRng.next_u64()),
       monero: Amount(OsRng.next_u64()),
     };
+    let mut signature_participants = bitvec::vec::BitVec::<_, _>::new();
+    #[expect(clippy::range_plus_one)]
+    for _ in 0 .. (1 + (OsRng.next_u64() % (KeyShares::MAX_PER_SET_U64 - 1))) {
+      signature_participants.push((OsRng.next_u64() % 2) == 1);
+    }
     let mut signature = [0; 64];
     OsRng.fill_bytes(&mut signature);
     let signature = RistrettoSignature(signature);
-    Call::from(crate::genesis_liquidity::Call::oraclize_values { values, signature })
+    Call::from(crate::genesis_liquidity::Call::oraclize_values {
+      values,
+      signature_participants: signature_participants.try_into().unwrap(),
+      signature,
+    })
   };
 
   let signed_call = {

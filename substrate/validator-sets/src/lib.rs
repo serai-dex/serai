@@ -374,6 +374,9 @@ mod pallet {
 
     /// Set the allocation required per key share.
     ///
+    /// The value is not sanity checked at all. The caller is liable to ensure it's a sane value.
+    /// Setting the allocation per key share to `0` may produce undefined behavior.
+    ///
     /// This is required in order for validators who have allocated stake to be selected.
     pub fn set_allocation_per_key_share(network: NetworkId, allocation_per_key_share: Amount) {
       AllocationPerKeyShare::<T>::set(network, Some(allocation_per_key_share));
@@ -663,7 +666,7 @@ mod pallet {
           // Verify the signature with the MuSig key of the signers
           match signature {
             Signature::Ristretto(signature) => {
-              if !set
+              if !ValidatorSet::from(set)
                 .musig_key(&signers)
                 .verify(&set.set_keys_message(key_pair), &signature.0.into())
               {

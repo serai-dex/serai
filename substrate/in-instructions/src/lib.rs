@@ -76,8 +76,12 @@ mod pallet {
       Coins::<T>::mint(address, balance)?;
 
       match instruction {
-        InInstruction::GenesisLiquidity(address) => {
-          serai_genesis_liquidity_pallet::Pallet::<T>::add_liquidity(address, external_balance)?;
+        InInstruction::GenesisLiquidity(to) => {
+          serai_genesis_liquidity_pallet::Pallet::<T>::add_liquidity(
+            address,
+            to,
+            external_balance,
+          )?;
         }
         InInstruction::SwapToStakedSri { validator, minimum } => {
           todo!("TODO {validator:?} {minimum:?}")

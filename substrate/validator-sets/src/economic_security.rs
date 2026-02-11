@@ -20,7 +20,8 @@ impl<T: Config> Pallet<T> {
     Amount(requirement.saturating_add(margin))
   }
 
-  /// The required amount of stake for a network.
+  /// The required amount of SRI which must be allocated as stake for a network to be considered
+  /// economically secure.
   ///
   /// This evaluates the stake required to secure the amount of coins within the liquidity pool,
   /// with the valuation from the economic security oracle.
