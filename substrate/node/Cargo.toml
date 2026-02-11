@@ -50,7 +50,7 @@ sp-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 
 serai-abi = { path = "../abi", features = ["std", "substrate"] }
-serai-runtime = { path = "../runtime", features = ["std", "runtime-type"] }
+serai-runtime = { path = "../runtime", features = ["std"] }
 
 clap = { version = "4", features = ["derive"] }
 
