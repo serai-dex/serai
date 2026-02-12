@@ -199,7 +199,7 @@ sp_api::impl_runtime_apis! {
         system: SystemConfig { _config: PhantomData },
 
         coins: CoinsConfig {
-          accounts: genesis.coins.into_iter().map(|(key, balance)| (key, balance)).collect(),
+          accounts: genesis.coins,
           _instance: PhantomData,
         },
 
@@ -211,8 +211,7 @@ sp_api::impl_runtime_apis! {
         },
 
         validator_sets: ValidatorSetsConfig {
-          participants:
-            genesis.validators.into_iter().map(|(key, keys)| (key, keys)).collect(),
+          participants: genesis.validators,
         },
         signals: SignalsConfig::default(),
 
