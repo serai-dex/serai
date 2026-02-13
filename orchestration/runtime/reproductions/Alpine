@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 # check=error=true
 
-# rust:1.93.0-alpine3.23 as of February 1st, 2026 (GMT)
-FROM rust@sha256:69d7b9d9aeaf108a1419d9a7fcf7860dcc043e9dbd1ab7ce88e44228774d99e9 AS builder
+# rust:1.93.1-alpine3.23 as of February 13th, 2026 (GMT)
+FROM rust@sha256:4fec02de605563c297c78a31064c8335bc004fa2b0bf406b1b99441da64e2d2d AS builder
 
 # Add Rust's source, as necessary to `build-std` as we do for the WASM
 RUN rustup component add rust-src

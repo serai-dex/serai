@@ -22,8 +22,8 @@ allowed to when bootstrapping isn't possible).
 needed to reproduce the canonical WASM blob. While StageX's latest release
 offers Rust 1.91.1, which satisfies the runtime's MSRV, it released with
 LLVM 20.1.8 while Rust's official release of 1.91.1 used LLVM 21.1.2. The
-source has updated StageX to LLVM 21.1.8 and Rust 1.93.0, as matching the
-official release of Rust 1.93.0, allowing it to achieve the expected
+source has updated StageX to LLVM 21.1.8 and Rust 1.93.1, as matching the
+official release of Rust 1.93.1, allowing it to achieve the expected
 reproduction. It also contains miscellaneous bug fixes and tweaks.
 
 The process is not contained to the `Containerfile` which CANNOT be used
