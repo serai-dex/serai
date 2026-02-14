@@ -130,7 +130,9 @@ impl serai_coins_pallet::Config<GenesisLiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
   type Weights = ();
 }
-impl serai_genesis_liquidity_pallet::Config for Runtime {}
+impl serai_genesis_liquidity_pallet::Config for Runtime {
+  type Weights = (); // TODO
+}
 impl serai_economic_security_pallet::Config for Runtime {}
 impl serai_emissions_pallet::Config for Runtime {}
 impl serai_in_instructions_pallet::Config for Runtime {}

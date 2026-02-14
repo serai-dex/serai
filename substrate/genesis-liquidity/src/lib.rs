@@ -45,6 +45,31 @@ mod pallet {
   const GENESIS_TRICKLE_FEED: u128 =
     serai_abi::primitives::constants::DAY.checked_mul(180).unwrap().as_millis();
 
+  /// The weights for the pallet.
+  pub trait Weights {
+    /// The weight for a call to `oraclize_values`.
+    fn oraclize_values() -> Weight;
+    /// The weight for a call to `transfer_genesis_liquidity`.
+    fn transfer_genesis_liquidity() -> Weight;
+    /// The weight for a call to `remove_genesis_liquidity`.
+    fn remove_genesis_liquidity() -> Weight;
+  }
+
+  /// A shimmed set of weights, returning zero.
+  ///
+  /// This is NOT safe for usage in a production system and is provided only for testing purposes.
+  impl Weights for () {
+    fn oraclize_values() -> Weight {
+      Weight::zero()
+    }
+    fn transfer_genesis_liquidity() -> Weight {
+      Weight::zero()
+    }
+    fn remove_genesis_liquidity() -> Weight {
+      Weight::zero()
+    }
+  }
+
   /// The configuration of this pallet.
   #[pallet::config]
   pub trait Config:
@@ -56,6 +81,8 @@ mod pallet {
     + serai_dex_pallet::Config
     + serai_validator_sets_pallet::Config
   {
+    /// The weights for this pallet's calls.
+    type Weights: Weights;
   }
 
   /// The first (non-genesis) block's timestamp.
@@ -146,7 +173,7 @@ mod pallet {
     ///
     /// This will trigger the addition of the liquidity into the pools and their initialization.
     #[pallet::call_index(0)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::oraclize_values(), DispatchClass::Operational))]
     pub fn oraclize_values(
       origin: OriginFor<T>,
       values: GenesisValues,
@@ -278,7 +305,7 @@ mod pallet {
 
     /// Transfer genesis liquidity.
     #[pallet::call_index(1)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::transfer_genesis_liquidity(), DispatchClass::Normal))]
     pub fn transfer_genesis_liquidity(
       origin: OriginFor<T>,
       to: SeraiAddress,
@@ -307,7 +334,7 @@ mod pallet {
     /// transactional and accordingly don't have to be atomic, but it's worth noting very
     /// carefully.
     #[pallet::call_index(2)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::remove_genesis_liquidity(), DispatchClass::Normal))]
     pub fn remove_genesis_liquidity(
       origin: OriginFor<T>,
       genesis_liquidity: ExternalBalance,
@@ -744,6 +771,6 @@ mod pallet {
   }
 }
 
-pub use pallet::{Config, Error, Pallet, Call};
+pub use pallet::{Weights, Config, Error, Pallet, Call};
 #[doc(hidden)]
 pub use pallet::*;
