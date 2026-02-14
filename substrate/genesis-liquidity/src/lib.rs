@@ -10,7 +10,7 @@
 )]
 #[frame_support::pallet]
 mod pallet {
-  use core::time::Duration;
+  use core::{marker::PhantomData, time::Duration};
 
   extern crate alloc;
   use alloc::vec;
@@ -300,6 +300,12 @@ mod pallet {
     /// https://github.com/serai-dex/patch-polkadot-sdk
     ///   /blob/55a9d2cf03623408ee8231b73189bbd3d1ee93d2/polkadot-sdk
     ///     /substrate/frame/support/procedural/src/pallet/expand/call.rs#L242-L246
+    ///
+    /// This transactional layer is only applied when dispatching a call however. If this function
+    /// is called directly, it won't. This is _fine_ as it follows a general practice within the
+    /// Serai codebase, that calls (and their implementing functions) are assumed to be
+    /// transactional and accordingly don't have to be atomic, but it's worth noting very
+    /// carefully.
     #[pallet::call_index(2)]
     #[pallet::weight((0, DispatchClass::Normal))] // TODO
     pub fn remove_genesis_liquidity(
@@ -308,6 +314,20 @@ mod pallet {
       sri_minimum: Amount,
       external_coin_minimum: Amount,
     ) -> DispatchResult {
+      /*
+        This function takes pride in not erroring under any condition, except:
+
+        - If a called function errors, which will be propagated
+        - If the pool has invalid liquidity
+        - If the user's request is unsatisfied
+
+        All arithmetic operations are explicitly handled, extensively bounded, and documented to
+        why they won't trap and are sound. While this does occassionally require calls to
+        `min`/`max` to ensure, these calls are logically sound and still fulfill the intended
+        calculations. There's also plenty of detail to ensuring rounding errors do not favor the
+        user, granting an adversary the ability to perform economic attacks.
+      */
+
       let signer = ensure_signed(origin)?;
 
       let total_genesis_liquidity_prior_to_burn =
@@ -315,6 +335,28 @@ mod pallet {
       // This is disallowed as `burn_fn` shouldn't be called for `CoinsInstance`, which this isn't
       #[expect(clippy::disallowed_methods)]
       GenesisLiquidityTokens::<T>::burn_fn(signer, genesis_liquidity.into())?;
+
+      /*
+        Emit the `GenesisLiquidityRemoved` event at the end of the function.
+
+        This ensures that even if we return early, this event will be emitted. It also means this
+        event will be emitted even if we return an error, but that is presumed to be caught by the
+        transactional layer. If we emitted the event outright now, we'd still rely on the
+        transactional layer.
+
+        As for why we don't emit this event now, it follows how `serai_dex_pallet` emits its events
+        at the _end_ of its functions, once the operations are complete.
+      */
+      struct GenesisLiquidityRemovedEvent<T: Config>(Event, PhantomData<T>);
+      impl<T: Config> Drop for GenesisLiquidityRemovedEvent<T> {
+        fn drop(&mut self) {
+          Pallet::<T>::emit_event(self.0.clone());
+        }
+      }
+      let _event = GenesisLiquidityRemovedEvent::<T>(
+        Event::GenesisLiquidityRemoved { by: signer, genesis_liquidity },
+        PhantomData,
+      );
 
       let our_address = serai_abi::genesis_liquidity::address(genesis_liquidity.coin);
 
@@ -581,8 +623,6 @@ mod pallet {
         signer,
         (ExternalBalance { coin: genesis_liquidity.coin, amount: yieldable_external_coin }).into(),
       )?;
-
-      Self::emit_event(Event::GenesisLiquidityRemoved { by: signer, genesis_liquidity });
 
       Ok(())
     }
