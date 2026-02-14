@@ -260,7 +260,10 @@ mod pallet {
     OptionQuery,
   >;
   #[pallet::storage]
-  pub(crate) type TotalAllocatedStake<T: Config> =
+  pub(crate) type CurrentAllocatedStake<T: Config> =
+    StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
+  #[pallet::storage]
+  pub(crate) type LatestDecidedAllocatedStake<T: Config> =
     StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
   #[pallet::storage]
   pub(crate) type PendingSlashReport<T: Config> =
@@ -275,7 +278,8 @@ mod pallet {
     type LatestDecidedSession = LatestDecidedSession<T>;
     type KeyShares = KeyShares<T>;
     type SelectedValidators = SelectedValidators<T>;
-    type TotalAllocatedStake = TotalAllocatedStake<T>;
+    type CurrentAllocatedStake = CurrentAllocatedStake<T>;
+    type LatestDecidedAllocatedStake = LatestDecidedAllocatedStake<T>;
   }
 
   impl<T: Config> SlashReportsStorage for Abstractions<T> {

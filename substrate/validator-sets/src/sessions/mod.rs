@@ -27,6 +27,7 @@ use serai_abi::{
       DeallocationTimeline,
     },
   },
+  economic_security::EconomicSecurity as _,
   validator_sets::Event,
 };
 
@@ -100,15 +101,15 @@ pub(crate) trait SessionsStorage:
       (SchnorrkelPublic, KeySharesStruct), Query = Option<(SchnorrkelPublic, KeySharesStruct)>,
     >;
 
-  /// The total allocated stake for a network.
+  /// The amount of allocated stake for a network's current session.
   ///
   /// This is opaque and to be exclusively read/write by `Sessions`.
+  type CurrentAllocatedStake: StorageMap<NetworkId, Amount, Query = Option<Amount>>;
+
+  /// The amount of allocated stake for a network's latest decided session.
   ///
-  /// Internally, this storage value will always track the _current_ validator set's stake. This
-  /// includes being updated when a validator present in the current validator set increases their
-  /// stake. When moving to a new session, this will be set when the latest decided set accepts the
-  /// handover and becomes current.
-  type TotalAllocatedStake: StorageMap<NetworkId, Amount, Query = Option<Amount>>;
+  /// This is opaque and to be exclusively read/write by `Sessions`.
+  type LatestDecidedAllocatedStake: StorageMap<NetworkId, Amount, Query = Option<Amount>>;
 }
 
 pub(crate) trait Sessions {
@@ -170,6 +171,11 @@ pub(crate) trait Sessions {
   ///
   /// This will return `None` if and only if there is no current validator set.
   fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount>;
+
+  /// The stake for the latest decided validator set.
+  ///
+  /// This will return `None` if and only if there is no latest decided validator set.
+  fn stake_for_latest_decided_validator_set(network: NetworkId) -> Option<Amount>;
 }
 
 impl<Storage: SessionsStorage> Sessions for Storage {
@@ -247,11 +253,35 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       return false;
     }
 
+    let mut latest_decided_allocated_stake = Amount(0);
+    for (validator, _key_shares) in &selected_validators {
+      // Safe as the entire supply will fit within an `Amount` per `serai-coins-pallet`'s bounds
+      latest_decided_allocated_stake = (latest_decided_allocated_stake +
+        Self::allocation(network, *validator).unwrap_or(Amount(0)))
+      .unwrap();
+    }
+    // Only rotate to this set if they have sufficient stake
+    match network {
+      NetworkId::Serai => {}
+      NetworkId::External(network) => {
+        let achieved_economic_security =
+          <Storage::Config as crate::Config>::EconomicSecurity::achieved_economic_security(network);
+        if achieved_economic_security &&
+          (latest_decided_allocated_stake <
+            crate::Pallet::<Storage::Config>::network_stake_requirement(network))
+        {
+          return false;
+        }
+      }
+    }
+
     let latest_decided_session = Storage::LatestDecidedSession::mutate(network, |session| {
       let next_session = session.map(|session| Session(session.0 + 1)).unwrap_or(Session(0));
       *session = Some(next_session);
       next_session
     });
+
+    Storage::LatestDecidedAllocatedStake::set(network, Some(latest_decided_allocated_stake));
 
     let latest_decided_set = ValidatorSet { network, session: latest_decided_session };
     Storage::KeyShares::insert(
@@ -306,18 +336,14 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       (current, latest_decided)
     };
 
-    // Update `TotalAllocatedStake`
-    {
-      let mut total_allocated_stake = Amount(0);
-      for (key, (_aux_key, _key_shares)) in
-        Storage::SelectedValidators::iter_prefix(ValidatorSet { network, session: current })
-      {
-        // Safe as the entire supply will fit within an `Amount` per `serai-coins-pallet`'s bounds
-        total_allocated_stake =
-          (total_allocated_stake + Self::allocation(network, key).unwrap_or(Amount(0))).unwrap();
-      }
-      Storage::TotalAllocatedStake::set(network, Some(total_allocated_stake));
-    }
+    // Update `CurrentAllocatedStake`
+    Storage::CurrentAllocatedStake::set(
+      network,
+      Some(
+        Storage::LatestDecidedAllocatedStake::get(network)
+          .expect("accepting handover but never set latest decided set's stake"),
+      ),
+    );
 
     // If there was a prior set, retire it within the `SlashReports` abstractions
     if let Some(prior) = prior {
@@ -372,22 +398,35 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       network, validator, amount, reward,
     )?;
 
-    // If this validator is active, update `TotalAllocatedStake`
+    // If this validator is active, update `CurrentAllocatedStake`
     if let Some(current) = Storage::CurrentSession::get(network) {
       if Storage::SelectedValidators::contains_key(
         ValidatorSet { network, session: current },
         validator,
       ) {
-        Storage::TotalAllocatedStake::mutate(network, |existing| {
+        Storage::CurrentAllocatedStake::mutate(network, |existing| {
           /*
-            The `expect` regarding `TotalAllocatedStake` is guaranteed by the behavior within this
-            file, as `TotalAllocatedStake` is owned by this abstraction.
+            The `expect` regarding `CurrentAllocatedStake` is guaranteed by the behavior within
+            this file, as `CurrentAllocatedStake` is owned by this abstraction.
 
             The `unwrap` on this addition is safe so long as the supply fits within an `Amount`, as
             `serai-coins-pallet` guarantees.
           */
+          Some((existing.expect("current session but no allocated stake set") + amount).unwrap())
+        });
+      }
+    }
+
+    // The same, but for the latest decided session
+    if let Some(latest_decided) = Storage::LatestDecidedSession::get(network) {
+      if Storage::SelectedValidators::contains_key(
+        ValidatorSet { network, session: latest_decided },
+        validator,
+      ) {
+        Storage::LatestDecidedAllocatedStake::mutate(network, |existing| {
           Some(
-            (existing.expect("current session but no total allocated stake set") + amount).unwrap(),
+            (existing.expect("latest decided session but no allocated stake set") + amount)
+              .unwrap(),
           )
         });
       }
@@ -401,14 +440,42 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     validator: SeraiAddress,
     amount: Amount,
   ) -> Result<DeallocationTimeline, DeallocationError> {
+    let in_latest_decided_session =
+      if let Some(latest_decided_session) = Storage::LatestDecidedSession::get(network) {
+        if Storage::SelectedValidators::contains_key(
+          ValidatorSet { network, session: latest_decided_session },
+          validator,
+        ) {
+          match network {
+            NetworkId::Serai => {}
+            NetworkId::External(network) => {
+              // Check this doesn't cause the latest decided session to become insecure
+              if (Storage::LatestDecidedAllocatedStake::get(network)
+                .expect("latest decided session but no allocated stake set") -
+                amount)
+                .expect("validator in set deallocated stake the set didn't have") <
+                crate::Pallet::<Storage::Config>::network_stake_requirement(network)
+              {
+                Err(DeallocationError::EconomicSecurity)?;
+              }
+            }
+          }
+          true
+        } else {
+          false
+        }
+      } else {
+        false
+      };
+
     /*
       Decrease the allocation.
 
       This doesn't affect the key shares, as that's immutable after creation, and doesn't affect
-      affect the `TotalAllocatedStake` as the validator either isn't current or the deallocation
+      affect the `CurrentAllocatedStake` as the validator either isn't current or the deallocation
       will be queued *but is still considered allocated for this session*.
 
-      When the next set is selected, and becomes current, `TotalAllocatedStake` will be updated
+      When the next set is selected, and becomes current, `CurrentAllocatedStake` will be updated
       per the allocations as-is.
 
       This is the last call which may error, the called function is atomic, and all effects happen
@@ -418,10 +485,24 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       network, validator, amount,
     )?;
 
+    // This does affect `LatestDecidedAllocatedStake`, as expected
+    if in_latest_decided_session {
+      Storage::LatestDecidedAllocatedStake::mutate(network, |existing| {
+        Some(
+          (existing.expect("latest decided session but no allocated stake set") - amount)
+            .expect("validator in set deallocated stake the set didn't have"),
+        )
+      });
+    }
+
     Ok(Self::potentially_delay_deallocation(network, validator, amount))
   }
 
   fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount> {
-    Storage::TotalAllocatedStake::get(network)
+    Storage::CurrentAllocatedStake::get(network)
+  }
+
+  fn stake_for_latest_decided_validator_set(network: NetworkId) -> Option<Amount> {
+    Storage::LatestDecidedAllocatedStake::get(network)
   }
 }

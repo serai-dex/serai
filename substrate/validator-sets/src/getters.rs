@@ -46,6 +46,11 @@ impl<T: Config> Pallet<T> {
     Abstractions::<T>::stake_for_current_validator_set(network)
   }
 
+  /// The stake for the latest decided validator set for a network.
+  pub fn stake_for_latest_decided_validator_set(network: NetworkId) -> Option<Amount> {
+    Abstractions::<T>::stake_for_latest_decided_validator_set(network)
+  }
+
   /// The validators selected for a validator set.
   ///
   /// This will return an empty iterator for a set which hasn't been decided and MAY do so for
