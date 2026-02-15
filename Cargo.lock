@@ -8291,6 +8291,8 @@ dependencies = [
  "serai-coins-pallet",
  "serai-core-pallet",
  "serai-dex-pallet",
+ "serai-validator-sets-pallet",
+ "substrate-median",
 ]
 
 [[package]]

@@ -177,11 +177,12 @@ profit incentive of approximately twice the value of the external coins in the
 liquidity pool, despite economic security being calculated regarded solely the
 value of the external coins in the pool.
 
-To mitigate this, the minting of _any_ external coins is only allowed so long
-as the associated validator set is able to provide security for them
-_sans additional buffer_. This also means additional liquidity will be rejected
-before minting of coins at all is rejected, allowing swaps to continue to be
-enabled even when adding liquidity isn't.
+To mitigate this, once a network has achieved economic security, the minting of
+_any_ external coins is only allowed so long as the associated validator set is
+able to provide security for them _sans additional buffer_. This also means
+additional liquidity will be rejected before minting of coins at all is
+rejected, allowing swaps to continue to be enabled even when adding liquidity
+is no longer.
 
 This does mean, for a validator set whose economic security has low capacity,
 floating coins (coins added to the network but outside of a liquidity pool) can

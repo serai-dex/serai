@@ -97,7 +97,7 @@ impl serai_core_pallet::Config for Runtime {
 }
 
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
-  type AllowMint = serai_coins_pallet::AlwaysAllowMint; // TODO
+  type AllowMint = serai_economic_security_pallet::CoinsInstanceAllowMint<Self>;
   type Weights = (); // TODO
 }
 pub struct DummyEmissions;
@@ -120,7 +120,7 @@ impl serai_signals_pallet::Config for Runtime {
   type Weights = (); // TODO
 }
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
-  type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type AllowMint = serai_economic_security_pallet::LiquidityTokensInstanceAllowMint<Self>;
   type Weights = (); // TODO
 }
 impl serai_dex_pallet::Config for Runtime {

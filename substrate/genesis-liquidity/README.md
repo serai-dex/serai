@@ -2,6 +2,21 @@
 
 This pallet corresponds to the
 ["Genesis" section of the Economics specification](/spec/Economics.md#genesis).
+It also implements the conditions on removing liquidity added during genesis.
+
+### Implementation Details
+
+As liquidity tokens represent a share of the value within a liquidity pool,
+genesis liquidity tokens are minted and represent a share of the liquidity
+tokens moderated by the genesis liquidity module. These genesis liquidity
+tokens may be transferred, allowing participants to update their keys as they
+see fit.
+
+The removal logic is non-trivial and potentially even more math than the
+entirety of the liquidity pools themselves. It does introspect the relation of
+liquidity tokens to coins within a liquidity pool, and assumes a quote as the
+ratio between coins within a pool, making it tightly bound to the symmetric
+liquidity design of Serai's DEX implementation.
 
 ### Integration Details
 

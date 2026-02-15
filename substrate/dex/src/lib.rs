@@ -170,6 +170,33 @@ mod pallet {
   /// additions can be reasonably grained when their share of the new supply is calculated.
   const MINIMUM_LIQUIDITY: u64 = 1 << 16;
 
+  impl<T: Config> Pallet<T> {
+    /// Receive the quote, denominated in SRI, for one unit of the external coin.
+    ///
+    /// This will return `None` if the pool has yet be initialized.
+    ///
+    /// This returns `Option<u128>` as the resulting quote, for an entire unit of the external coin
+    /// (not atomic unit, but unit, as declared with [`Coin::decimals`]), may not fit within a
+    /// `u64`. The exact range is `0 ..= (10.pow(external_coin.decimals()) * u64::MAX)`.
+    pub fn sri_quote(external_coin: ExternalCoin) -> Option<u128> {
+      if LiquidityTokens::<T>::supply(external_coin) == Amount(0) {
+        None?;
+      }
+
+      let pool = serai_abi::dex::address(external_coin);
+      let reserves = Reserves {
+        sri: Coins::<T>::balance(pool, Coin::Serai),
+        external_coin: Coins::<T>::balance(pool, Coin::from(external_coin)),
+      };
+      // If this pool has liquidity, it _MUST_ have a non-zero amount for the external coin as
+      // otherwise, we'd have `k = 0` and therefore have violated the `k` invariant.
+      Some(
+        (u128::from(10u64.pow(external_coin.decimals())) * u128::from(reserves.sri.0)) /
+          u128::from(reserves.external_coin.0),
+      )
+    }
+  }
+
   #[pallet::call]
   impl<T: Config> Pallet<T> {
     /// Add liquidity.
@@ -279,6 +306,10 @@ mod pallet {
         Balance { coin: Coin::from(external_coin), amount: external_coin_actual },
       )?;
       let liquidity_tokens = ExternalBalance { coin: external_coin, amount: liquidity };
+
+      // This MUST be done last as the desired `AllowMint` implementation will evaluate economic
+      // security by the amount of coins within the pool, requiring the coins already be _in_ the
+      // pool (as transferred above).
       LiquidityTokens::<T>::mint(from, liquidity_tokens.into())?;
 
       Self::emit_event(Event::LiquidityAddition {

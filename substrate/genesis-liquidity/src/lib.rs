@@ -227,6 +227,11 @@ mod pallet {
           Coins::<T>::mint(our_address, Balance { coin: Coin::Serai, amount: sri })?;
           let external_coin_amount =
             GenesisLiquidityTokens::<T>::supply(Coin::External(external_coin));
+          /*
+            This may fail if a pool didn't receive any non-trivial amount of liquidity, which is
+            fine as any actor could add such a trivial amount to cause this to be greater than the
+            minimum amount of liquidity.
+          */
           serai_dex_pallet::Pallet::<T>::add_liquidity(
             RawOrigin::Signed(our_address).into(),
             external_coin,

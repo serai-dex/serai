@@ -24,8 +24,8 @@ scale = { package = "parity-scale-codec", version = "3", default-features = fals
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
 serai-core-pallet = { path = "../core", default-features = false }
@@ -40,8 +40,8 @@ std = [
   "sp-core/std",
   "sp-application-crypto/std",
 
-  "frame-system/std",
   "frame-support/std",
+  "frame-system/std",
 
   "serai-abi/std",
   "serai-core-pallet/std",
@@ -51,8 +51,8 @@ std = [
 ]
 
 try-runtime = [
-  "frame-system/try-runtime",
   "frame-support/try-runtime",
+  "frame-system/try-runtime",
 
   "serai-abi/try-runtime",
   "serai-core-pallet/try-runtime",
@@ -62,8 +62,8 @@ try-runtime = [
 ]
 
 runtime-benchmarks = [
-  "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
+  "frame-system/runtime-benchmarks",
 
   "serai-core-pallet/runtime-benchmarks",
   "serai-coins-pallet/runtime-benchmarks",
