@@ -61,12 +61,13 @@ Exogenous SRI has four possible sources:
 
 1) Circulating SRI.
 
-    There will be no distributions of SRI during this era which isn't staked
-    and unable to be deallocated until the economic security era.
+    There will be no emissions of SRI during this era which aren't immediately
+    allocated as stake.
 
 2) Removed liquidity.
 
-    All liquidity removed during this era will burn the SRI component.
+    All liquidity removed during this era will burn the SRI airdropped to it in
+    order to form the liquidity position.
 
 3) Removed stake.
 
@@ -114,7 +115,8 @@ Emissions only start after genesis.
 INITIAL_PERIOD = 30 days
 INITIAL_REWARD = 100,000 SRI / BLOCKS_PER_DAY
 LITERAL_STAKE_REQUIRED = 1.5 * sri_in_pools()
-EXTERNAL_STAKE_REQUIRED = LITERAL_STAKE_REQUIRED * 1.2
+EXTERNAL_STAKE_BUFFER = 0.2
+EXTERNAL_STAKE_REQUIRED = LITERAL_STAKE_REQUIRED * (1 + EXTERNAL_STAKE_BUFFER)
 SERAI_VALIDATORS_DESIRED_PERCENTAGE = 0.2
 STAKE_DESIRED = EXTERNAL_STAKE_REQUIRED / (1 - SERAI_VALIDATORS_DESIRED_PERCENTAGE)
 SERAI_VALIDATORS_STAKE_DESIRED = SERAI_VALIDATORS_DESIRED_PERCENTAGE * STAKE_DESIRED
@@ -161,6 +163,48 @@ When genesis liquidity is removed, whereas prior the provider would not receive
 additional sriXYZ nor airdropped SRI, they may now receive
 `days_since_economic_security().min(GENESIS_TRICKLE_FEED) / GENESIS_TRICKLE_FEED`
 of the additional sriXYZ/airdropped SRI.
+
+### Addition of Coins
+
+While liquidity may only be added as per the capacity in the economic security,
+this leaves the minting of coins undiscussed. The goal of Serai, in general, is
+to always allow minting coins as necessary to perform swaps and ensure the
+pools' quotes are consistent (which requires the ability to add, remove
+liquidity, interact with external entities, and perform swaps). Unfortunately,
+the ability for a malicious validator set to arbitrarily mint sriEXT would
+allow them to drain the corresponding liquidity pool of its SRI. This offers a
+profit incentive of approximately twice the value of the external coins in the
+liquidity pool, despite economic security being calculated regarded solely the
+value of the external coins in the pool.
+
+To mitigate this, the minting of _any_ external coins is only allowed so long
+as the associated validator set is able to provide security for them
+_sans additional buffer_. This also means additional liquidity will be rejected
+before minting of coins at all is rejected, allowing swaps to continue to be
+enabled even when adding liquidity isn't.
+
+This does mean, for a validator set whose economic security has low capacity,
+floating coins (coins added to the network but outside of a liquidity pool) can
+further endanger the economic security. To this end, it's left to the
+participants who added coins to perform their own considerations of risk and
+remove them per their evaluation.
+
+As a malicious validator set who does arbitrarily mint sriEXT to swap for SRI
+would drive the quote down, raising the capacity, the economic security oracle
+will only consider the _highest_ observed median price over an extended window
+of time.
+
+Distinctly, two side effects can be noted:
+
+- The potential inability to add coins, to swap to them to SRI, enacts a
+  circuit breaker such that the radical decline in value for a coin may not be
+  recognizable on the Serai network.
+
+- An adversary who pays the opportunity cost of adding coins to Serai, and
+  bears the associated risk, is able to tie up capacity _without_ performing a
+  service such as providing liquidity. This is unfortunate but accepted for the
+  time being, where a network which is unable to fulfill its purpose can be
+  retired in favor of a new ruleset, as possible via Signals.
 
 ### Emissions
 

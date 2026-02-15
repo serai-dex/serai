@@ -10,35 +10,79 @@ impl<T: Config> Pallet<T> {
     }
   }
 
-  /// The required amount of allocated stake (denominated in SRI) to consider a balance secure.
+  /// The required amount of SRI which must be allocated as stake for a network to be considered
+  /// economically secure regarding the total amount of coins.
   ///
-  /// This may return `Amount(u64::MAX)` to represent an overflow.
-  fn stake_for_balance(balance: ExternalBalance) -> Amount {
-    let value = T::EconomicSecurity::sri_value(balance);
-    // As 67% can execute signing protocols, 67% of stake must be sufficient to secure this
-    let requirement = (u128::from(value.0) * 3).div_ceil(2);
-    // We require an additional margin of 20%
-    let margin = requirement.div_ceil(5);
-    Amount(u64::try_from(requirement.saturating_add(margin)).unwrap_or(u64::MAX))
+  /// This evaluates the stake required to secure the amount of coins with the valuation from the
+  /// economic security oracle, without any buffer.
+  ///
+  /// This accepts a `proposed_additional_balance` which, if present, will be added to the relevant
+  /// supply when performing the calculation. The balance's coin's network MUST be `network` for
+  /// this to be sound. This has undefined behavior if it isn't.
+  ///
+  /// This may return `Amount(u64::MAX)` to represent an overflow. As `u64::MAX` can be assumed to
+  /// exceed the SRI supply, this will represent a requirement which can never be fulfilled.
+  pub fn coins_stake_requirement(
+    network: ExternalNetworkId,
+    proposed_additional_balance: Option<Balance>,
+  ) -> Amount {
+    let mut requirement = Amount(0).0;
+    for coin in network.coins() {
+      let mut coin_supply = Coins::<T>::supply(Coin::from(coin));
+      if let Some(proposed_additional_balance) = proposed_additional_balance {
+        if proposed_additional_balance.coin == Coin::External(coin) {
+          coin_supply.0 = coin_supply.0.saturating_add(proposed_additional_balance.amount.0);
+        }
+      }
+
+      let stake_for_balance = {
+        let value = T::EconomicSecurity::sri_value(ExternalBalance { coin, amount: coin_supply });
+        // As 67% can execute signing protocols, 67% of stake must be sufficient to secure this
+        let requirement = (u128::from(value.0) * 3).div_ceil(2);
+        Amount(u64::try_from(requirement).unwrap_or(u64::MAX))
+      };
+
+      requirement = requirement.saturating_add(stake_for_balance.0);
+    }
+    Amount(requirement)
+  }
+
+  /// The required amount of SRI which must be allocated as stake for a network to be considered
+  /// economically secure regarding the coins in the liquidity pool.
+  ///
+  /// This evaluates the stake required to secure the amount of coins within the liquidity pool
+  /// with the valuation from the economic security oracle, with an additional buffer for safety.
+  ///
+  /// This may return `Amount(u64::MAX)` to represent an overflow. As `u64::MAX` can be assumed to
+  /// exceed the SRI supply, this will represent a requirement which can never be fulfilled.
+  pub fn liquidity_tokens_stake_requirement(network: ExternalNetworkId) -> Amount {
+    let mut requirement = Amount(0).0;
+    for coin in network.coins() {
+      let liquidity_pool_balance =
+        Coins::<T>::balance(serai_abi::dex::address(coin), Coin::from(coin));
+
+      let stake_for_balance = {
+        let value =
+          T::EconomicSecurity::sri_value(ExternalBalance { coin, amount: liquidity_pool_balance });
+        // As 67% can execute signing protocols, 67% of stake must be sufficient to secure this
+        let requirement = (u128::from(value.0) * 3).div_ceil(2);
+        // We require an additional margin of 20%
+        let margin = requirement.div_ceil(5);
+        Amount(u64::try_from(requirement.saturating_add(margin)).unwrap_or(u64::MAX))
+      };
+
+      requirement = requirement.saturating_add(stake_for_balance.0);
+    }
+    Amount(requirement)
   }
 
   /// The required amount of SRI which must be allocated as stake for a network to be considered
   /// economically secure.
   ///
-  /// This evaluates the stake required to secure the amount of coins within the liquidity pool,
-  /// with the valuation from the economic security oracle.
-  ///
   /// This may return `Amount(u64::MAX)` to represent an overflow. As `u64::MAX` can be assumed to
   /// exceed the SRI supply, this will represent a requirement which can never be fulfilled.
   pub fn network_stake_requirement(network: ExternalNetworkId) -> Amount {
-    let mut requirement = Amount(0).0;
-    for coin in network.coins() {
-      let liquidity_pool_balance =
-        Coins::<T>::balance(serai_abi::dex::address(coin), Coin::from(coin));
-      requirement = requirement.saturating_add(
-        Self::stake_for_balance(ExternalBalance { coin, amount: liquidity_pool_balance }).0,
-      );
-    }
-    Amount(requirement)
+    Self::coins_stake_requirement(network, None)
+      .max(Self::liquidity_tokens_stake_requirement(network))
   }
 }
