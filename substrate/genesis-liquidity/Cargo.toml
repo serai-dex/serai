@@ -33,6 +33,18 @@ serai-coins-pallet = { path = "../coins", default-features = false }
 serai-dex-pallet = { path = "../dex", default-features = false }
 serai-validator-sets-pallet = { path = "../validator-sets", default-features = false }
 
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
+bitvec = { version = "1", default-features = false, features = ["alloc", "std"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+sp-keyring = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+
+pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+
 [features]
 std = [
   "scale/std",

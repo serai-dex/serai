@@ -2,6 +2,11 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
+extern crate alloc;
+
+#[cfg(test)]
+mod tests;
+
 #[expect(
   let_underscore_drop,
   clippy::as_conversions,
@@ -12,7 +17,6 @@
 mod pallet {
   use core::{marker::PhantomData, time::Duration};
 
-  extern crate alloc;
   use alloc::vec;
 
   use sp_application_crypto::RuntimePublic as _;
@@ -22,9 +26,13 @@ mod pallet {
 
   use serai_abi::{
     primitives::{
-      prelude::*, BitVec, crypto::RistrettoSignature, genesis_liquidity::GenesisValues,
+      prelude::*,
+      BitVec,
+      crypto::{RistrettoSignature, EmbeddedEllipticCurveKeys},
+      validator_sets::KeyShares,
+      genesis_liquidity::GenesisValues,
     },
-    economic_security::EconomicSecurity as _,
+    economic_security::EconomicSecurity,
     genesis_liquidity::Event,
     TransactionContext as _,
   };
@@ -36,10 +44,71 @@ mod pallet {
   type Dex<T> = serai_dex_pallet::Pallet<T>;
   type GenesisLiquidityTokens<T> =
     serai_coins_pallet::Pallet<T, serai_coins_pallet::GenesisLiquidityTokensInstance>;
-  type ValidatorSets<T> = serai_validator_sets_pallet::Pallet<T>;
+
+  /// Methods from [`serai_validator_sets_pallet::Pallet`] which [`Pallet`] requires.
+  ///
+  /// This is behind a `trait` to allow shimming it when testing. For the exact description, and
+  /// bounds, of these methods, please refer to [`serai_validator_sets_pallet::Pallet`].
+  pub trait ValidatorSets {
+    /// Set the allocation required per key share.
+    fn set_allocation_per_key_share(network: NetworkId, allocation_per_key_share: Amount);
+
+    /// The current session for a network.
+    fn current_session(network: NetworkId) -> Option<Session>;
+
+    /// The amount of key shares a validator set has.
+    fn key_shares(set: ValidatorSet) -> Option<KeyShares>;
+
+    /// The validators selected for a validator set.
+    fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (SeraiAddress, KeyShares)>;
+
+    /// The auxiliary keys for a validator.
+    fn auxiliary_keys(
+      validator: SeraiAddress,
+      network: NetworkId,
+    ) -> Option<EmbeddedEllipticCurveKeys>;
+
+    /// The required amount of SRI which must be allocated as stake for a network to be considered
+    /// economically secure.
+    fn network_stake_requirement(network: ExternalNetworkId) -> Amount;
+  }
+
+  impl<T: serai_validator_sets_pallet::Config> ValidatorSets
+    for serai_validator_sets_pallet::Pallet<T>
+  {
+    fn set_allocation_per_key_share(network: NetworkId, allocation_per_key_share: Amount) {
+      serai_validator_sets_pallet::Pallet::<T>::set_allocation_per_key_share(
+        network,
+        allocation_per_key_share,
+      )
+    }
+
+    fn current_session(network: NetworkId) -> Option<Session> {
+      serai_validator_sets_pallet::Pallet::<T>::current_session(network)
+    }
+
+    fn key_shares(set: ValidatorSet) -> Option<KeyShares> {
+      serai_validator_sets_pallet::Pallet::<T>::key_shares(set)
+    }
+
+    fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (SeraiAddress, KeyShares)> {
+      serai_validator_sets_pallet::Pallet::<T>::selected_validators(set)
+    }
+
+    fn auxiliary_keys(
+      validator: SeraiAddress,
+      network: NetworkId,
+    ) -> Option<EmbeddedEllipticCurveKeys> {
+      serai_validator_sets_pallet::Pallet::<T>::auxiliary_keys(validator, network)
+    }
+
+    fn network_stake_requirement(network: ExternalNetworkId) -> Amount {
+      serai_validator_sets_pallet::Pallet::<T>::network_stake_requirement(network)
+    }
+  }
 
   // These are from `specs/Economics.md`
-  const GENESIS_SRI: Amount = Amount(100_000_000 * 10u64.pow(Coin::Serai.decimals()));
+  pub(crate) const GENESIS_SRI: Amount = Amount(100_000_000 * 10u64.pow(Coin::Serai.decimals()));
   const GENESIS_LIQUIDITY_TIME: Duration =
     serai_abi::primitives::constants::DAY.checked_mul(30).unwrap();
   const GENESIS_TRICKLE_FEED: u128 =
@@ -73,14 +142,17 @@ mod pallet {
   /// The configuration of this pallet.
   #[pallet::config]
   pub trait Config:
-    frame_system::Config
+    frame_system::Config<RuntimeOrigin: From<Option<SeraiAddress>>>
     + serai_core_pallet::Config
     + serai_coins_pallet::Config<serai_coins_pallet::CoinsInstance>
     + serai_coins_pallet::Config<serai_coins_pallet::LiquidityTokensInstance>
     + serai_coins_pallet::Config<serai_coins_pallet::GenesisLiquidityTokensInstance>
     + serai_dex_pallet::Config
-    + serai_validator_sets_pallet::Config
   {
+    /// The economic security module.
+    type EconomicSecurity: EconomicSecurity;
+    /// The validator sets pallet.
+    type ValidatorSets: ValidatorSets;
     /// The weights for this pallet's calls.
     type Weights: Weights;
   }
@@ -145,7 +217,7 @@ mod pallet {
     /// Add liquidity on behalf of the specified address.
     pub fn add_liquidity(
       transfer_from: SeraiAddress,
-      to: SeraiAddress,
+      add_to: SeraiAddress,
       genesis_liquidity: ExternalBalance,
     ) -> DispatchResult {
       if Oraclized::<T>::get().is_some() {
@@ -160,8 +232,8 @@ mod pallet {
         tracking, and to let `remove_genesis_liquidity` to know how much was originally added from
         the specification of the amount of genesis liquidity being removed.
       */
-      GenesisLiquidityTokens::<T>::mint(to, genesis_liquidity.into())?;
-      Self::emit_event(Event::GenesisLiquidityAdded { to, genesis_liquidity });
+      GenesisLiquidityTokens::<T>::mint(add_to, genesis_liquidity.into())?;
+      Self::emit_event(Event::GenesisLiquidityAdded { to: add_to, genesis_liquidity });
 
       Ok(())
     }
@@ -249,12 +321,12 @@ mod pallet {
         // Use the current Serai set, as this _should_ represent the genesis validators
         let set = ValidatorSet {
           network: NetworkId::Serai,
-          session: ValidatorSets::<T>::current_session(NetworkId::Serai)
+          session: T::ValidatorSets::current_session(NetworkId::Serai)
             .expect("oraclizing values yet never genesis'd Serai"),
         };
 
         let amount_of_genesis_key_shares = u16::from(
-          ValidatorSets::<T>::key_shares(set)
+          T::ValidatorSets::key_shares(set)
             .expect("validator set is current but doesn't have its key shares defined"),
         );
 
@@ -270,12 +342,12 @@ mod pallet {
 
         let mut external_stake_required = Amount(0);
         for network in ExternalNetworkId::all() {
-          let requirement = ValidatorSets::<T>::network_stake_requirement(network);
+          let requirement = T::ValidatorSets::network_stake_requirement(network);
           // `target_non_genesis_validator_key_shares` is non-zero by how it's calculated
           let requirement_per_key_share = Amount(
             requirement.0.div_ceil(u64::from(u16::from(target_non_genesis_validator_key_shares))),
           );
-          ValidatorSets::<T>::set_allocation_per_key_share(
+          T::ValidatorSets::set_allocation_per_key_share(
             network.into(),
             requirement_per_key_share.max(SANITY_REQUIREMENT_PER_KEY_SHARE),
           );
@@ -299,7 +371,7 @@ mod pallet {
             .0
             .div_ceil(u64::from(u16::from(target_non_genesis_validator_key_shares))),
         );
-        ValidatorSets::<T>::set_allocation_per_key_share(
+        T::ValidatorSets::set_allocation_per_key_share(
           NetworkId::Serai,
           serai_per_key_share.max(SANITY_REQUIREMENT_PER_KEY_SHARE),
         );
@@ -691,12 +763,12 @@ mod pallet {
             // exact reasoning on this assumption is documented in this crate's README.
             let set = ValidatorSet {
               network: NetworkId::Serai,
-              session: ValidatorSets::<T>::current_session(NetworkId::Serai)
+              session: T::ValidatorSets::current_session(NetworkId::Serai)
                 .expect("oraclizing values yet never genesis'd Serai"),
             };
 
             let mut signature_participants = signature_participants.into_iter();
-            let mut selected_validators = ValidatorSets::<T>::selected_validators(set);
+            let mut selected_validators = T::ValidatorSets::selected_validators(set);
 
             let mut total_key_shares = 0;
             let mut participating_key_shares = 0;
@@ -708,7 +780,7 @@ mod pallet {
               if *participating {
                 participating_key_shares += u16::from(key_shares);
                 participating_keys.push(
-                  match ValidatorSets::<T>::auxiliary_keys(validator, NetworkId::Serai) {
+                  match T::ValidatorSets::auxiliary_keys(validator, NetworkId::Serai) {
                     Some(serai_abi::primitives::crypto::EmbeddedEllipticCurveKeys::Serai(key)) => {
                       sp_core::sr25519::Public::from(key)
                     }

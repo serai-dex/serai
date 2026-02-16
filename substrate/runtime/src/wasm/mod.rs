@@ -131,9 +131,13 @@ impl serai_coins_pallet::Config<GenesisLiquidityTokensInstance> for Runtime {
   type Weights = ();
 }
 impl serai_genesis_liquidity_pallet::Config for Runtime {
+  type EconomicSecurity = EconomicSecurity;
+  type ValidatorSets = ValidatorSets;
   type Weights = (); // TODO
 }
-impl serai_economic_security_pallet::Config for Runtime {}
+impl serai_economic_security_pallet::Config for Runtime {
+  type ValidatorSets = ValidatorSets;
+}
 impl serai_emissions_pallet::Config for Runtime {}
 impl serai_in_instructions_pallet::Config for Runtime {}
 
