@@ -83,7 +83,7 @@ mod pallet {
   /// The configuration of this pallet.
   #[pallet::config]
   pub trait Config:
-    frame_system::Config
+    frame_system::Config<RuntimeOrigin: From<Option<SeraiAddress>>>
     + serai_core_pallet::Config
     + serai_coins_pallet::Config<serai_coins_pallet::CoinsInstance>
     + serai_coins_pallet::Config<serai_coins_pallet::LiquidityTokensInstance>
@@ -136,6 +136,8 @@ mod pallet {
 
   #[pallet::storage]
   type FeeInThousandths<T: Config> = StorageMap<_, Identity, ExternalCoin, u8, OptionQuery>;
+  #[pallet::storage]
+  type BurntFees<T: Config> = StorageMap<_, Identity, ExternalCoin, u128, ValueQuery>;
 
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
@@ -194,6 +196,78 @@ mod pallet {
         (u128::from(10u64.pow(external_coin.decimals())) * u128::from(reserves.sri.0)) /
           u128::from(reserves.external_coin.0),
       )
+    }
+
+    /// Effect the fee for a swap in progress.
+    ///
+    /// This must be called _before and after_ the swap as the fee will only be applied when
+    /// `current_coin == Coin::Serai`.
+    ///
+    /// When calculating for an amount _out_, the swap engine works in reverse, calculating how
+    /// much must be fed _in_ to achieve the desired amount _out_. `add_fee_to_amount` allows
+    /// toggling this behavior.
+    ///
+    /// This WILL update the storage to tally the fees accrued.
+    fn effect_fee(
+      external_coin: ExternalCoin,
+      current_coin: Coin,
+      amount: &mut Amount,
+      add_fee_to_amount: bool,
+    ) -> DispatchResult {
+      if current_coin != Coin::Serai {
+        return Ok(());
+      }
+
+      let fee_in_thousandths: u8 =
+        FeeInThousandths::<T>::get(external_coin).expect("fee set and asserted on genesis");
+
+      let fee_to_effect = if add_fee_to_amount {
+        let one_thousand_minus_fee_in_thousandths = 1_000u16 - u16::from(fee_in_thousandths);
+        // This won't trap as `fee_in_thousandths` is a `u8` and less than `1000`
+        let new_amount = Amount(
+          u64::try_from(
+            (u128::from(amount.0) * 1000)
+              .div_ceil(u128::from(one_thousand_minus_fee_in_thousandths)),
+          )
+          .map_err(|_| Error::<T>::Overflow)?,
+        );
+        let fee_to_effect = (new_amount - *amount).expect("added fee yet amount was lesser");
+        *amount = new_amount;
+        fee_to_effect
+      } else {
+        let fee_to_effect = Amount(
+          u64::try_from((u128::from(amount.0) * u128::from(fee_in_thousandths)).div_ceil(1_000))
+            .expect("fee (`u8`) exceeded 1000?"),
+        );
+        // This won't trap as it's a fraction of the amount itself
+        amount.0 -= fee_to_effect.0;
+        fee_to_effect
+      };
+
+      let fee_to_burn = Amount(fee_to_effect.0.div_ceil(2));
+
+      BurntFees::<T>::mutate(external_coin, |burnt| {
+        // This is wide to ensure it won't overflow. While we know the supply fits in a `u64`, this
+        // may increase even as burns occur and the supply is reduced, making that insufficient.
+        *burnt += u128::from(fee_to_burn.0);
+      });
+
+      // This is disallowed as `burn` MUST ONLY be called for `CoinsInstance`, which this does
+      #[expect(clippy::disallowed_methods)]
+      Coins::<T>::burn(
+        Some(serai_abi::dex::address(external_coin)).into(),
+        Balance { coin: Coin::Serai, amount: fee_to_burn },
+      )?;
+
+      Ok(())
+    }
+
+    /// Take the burnt fees.
+    ///
+    /// This does not perform any transfers of any type. This solely resets the bookkeeping entry
+    /// for the burnt fees, yielding its value.
+    pub fn take_burnt_fees(coin: ExternalCoin) -> u128 {
+      BurntFees::<T>::take(coin)
     }
   }
 
@@ -440,7 +514,13 @@ mod pallet {
 
         // Update the current status
         transfer_from = pool;
+
+        // This may burn the fee, slightly changing the reserves, but we intentially don't update
+        // them as we don't want the direction of the swap (and if the burn happens before or after
+        // the quote) to affect the quote itself
+        Self::effect_fee(external_coin, swap.r#in(), &mut next_amount, false)?;
         next_amount = swap.quote_for_in(reserves, next_amount).map_err(Error::<T>::from)?;
+        Self::effect_fee(external_coin, swap.out(), &mut next_amount, false)?;
       }
 
       // Check the amount meets the expectation
@@ -515,7 +595,10 @@ mod pallet {
         deltas.push(delta);
 
         transfer_to = pool;
+
+        Self::effect_fee(external_coin, swap.out(), &mut next_amount, true)?;
         next_amount = swap.quote_for_out(reserves, next_amount).map_err(Error::<T>::from)?;
+        Self::effect_fee(external_coin, swap.r#in(), &mut next_amount, true)?;
 
         i != 0
       } {}

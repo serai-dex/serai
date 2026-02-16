@@ -147,7 +147,11 @@ aggressive compared to comparables and centralized exchanges, this is argued as
 better than instant exchangers while the protocol near-exclusively offers
 specific functionality.
 
-These fees are used to form protocol-owned liquidity.
+Half of the fees are used to form protocol-owned liquidity. This is via burning
+half of the fees at the time of swap, but since the sole liquidity provider is
+the genesis liquidity module, the proportional value of its liquidity is
+transferred to the protocol at the end of each block. The other half of the
+fees are left in the liquidity pool.
 
 ## Post-economic Security
 
@@ -234,8 +238,8 @@ network.
 
 ### Fees
 
-The amount of fees charged remains the same. The fees are taken in SRI. Half
-remains in the pool, effectively being distributed to LPs, with the rest burnt.
+The amount of fees charged remains the same. Half remains in the pool,
+effectively being distributed to LPs, as before, but the rest are burnt.
 
 The intention here is to further reward all parties as usage increases. While
 burning SRI presumably increases the value of all remaining SRI, this may be

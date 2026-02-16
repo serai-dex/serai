@@ -80,7 +80,7 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
     };
     let dex = crate::GenesisConfig::<Test> {
       fees: ExternalCoin::all()
-        .map(|coin| (coin, if coin == ExternalCoin::Bitcoin { 0 } else { 100 }))
+        .map(|coin| (coin, if coin == ExternalCoin::Monero { 100 } else { 0 }))
         .collect(),
       _config: Default::default(),
     };
