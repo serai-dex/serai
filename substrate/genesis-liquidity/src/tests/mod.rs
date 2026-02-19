@@ -80,9 +80,26 @@ impl serai_dex_pallet::Config for Test {
   type Weights = ();
 }
 
+use std::{
+  sync::{Mutex, LazyLock},
+  collections::HashMap,
+};
+
+const TEST_ID_STORAGE: &[u8] = b"TEST_ID";
+#[expect(clippy::type_complexity)]
+static SET_ALLOCATION_PER_KEY_SHARE: LazyLock<
+  Mutex<HashMap<(Option<Vec<u8>>, NetworkId), Amount>>,
+> = LazyLock::new(|| Mutex::new(HashMap::new()));
+
 #[expect(unused)]
 impl crate::ValidatorSets for () {
-  fn set_allocation_per_key_share(network: NetworkId, allocation_per_key_share: Amount) {}
+  fn set_allocation_per_key_share(network: NetworkId, allocation_per_key_share: Amount) {
+    let mut set_allocation_per_key_share = SET_ALLOCATION_PER_KEY_SHARE.lock().unwrap();
+    let test_id = sp_io::storage::get(TEST_ID_STORAGE).map(|test_id| test_id.to_vec());
+    assert!(set_allocation_per_key_share
+      .insert((test_id, network), allocation_per_key_share)
+      .is_none());
+  }
 
   fn current_session(network: NetworkId) -> Option<Session> {
     Some(Session(0)) // TODO
@@ -123,10 +140,11 @@ impl crate::ValidatorSets for () {
   }
 
   fn network_stake_requirement(network: ExternalNetworkId) -> Amount {
-    Amount(0) // TODO
+    serai_validator_sets_pallet::network_stake_requirement::<Test, DummyEconomicSecurity>(network)
   }
 }
 
+// TODO: Defer to the actual `serai-economic-security-pallet` to test the composition
 pub struct DummyEconomicSecurity;
 #[expect(unused)]
 impl EconomicSecurity for DummyEconomicSecurity {
@@ -134,7 +152,13 @@ impl EconomicSecurity for DummyEconomicSecurity {
     false // TODO
   }
   fn sri_value(balance: ExternalBalance) -> Amount {
-    Amount(0) // TODO
+    Amount(
+      u64::try_from(
+        (u128::from(balance.amount.0) * Dex::sri_quote(balance.coin).unwrap_or(0)) /
+          u128::from(10u64.pow(balance.coin.decimals())),
+      )
+      .unwrap(),
+    )
   }
 }
 

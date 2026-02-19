@@ -1,8 +1,12 @@
 use super::*;
 
+const TEST_ID: &[u8] = b"oraclize_values";
+
 #[test]
 fn oraclize_values() {
   new_test_ext().execute_with(|| {
+    sp_io::storage::set(TEST_ID_STORAGE, TEST_ID);
+
     Core::start_transaction(0);
 
     let eve = SeraiAddress::from(Pair::generate().0.public());
@@ -41,6 +45,21 @@ fn oraclize_values() {
     )
     .unwrap();
 
+    let mut total_required_stake = crate::GENESIS_SRI.0 * 3 / 2;
+    total_required_stake += total_required_stake / 5;
+    let genesis_key_shares = u16::from(
+      <() as crate::ValidatorSets>::key_shares(ValidatorSet {
+        network: NetworkId::Serai,
+        session: Session(0),
+      })
+      .unwrap(),
+    );
+    let target_key_shares = (2 * genesis_key_shares) + 1;
+
+    let allocation_per_key_share =
+      |required_stake: Amount| Amount(required_stake.0.div_ceil(u64::from(target_key_shares)));
+
+    let mut percent_by_network = HashMap::new();
     for (coin, percent) in [
       (ExternalCoin::Bitcoin, 4),
       (ExternalCoin::Ether, 20),
@@ -50,7 +69,7 @@ fn oraclize_values() {
       assert_eq!(Coins::balance(serai_abi::dex::address(coin), coin), Coins::supply(coin));
       assert_eq!(
         Coins::balance(serai_abi::dex::address(coin), Coin::Serai),
-        Amount(crate::GENESIS_SRI.0 * percent / 100)
+        Amount((crate::GENESIS_SRI.0 * percent) / 100)
       );
       let supply = LiquidityTokens::supply(coin);
       assert!(supply != Amount(0));
@@ -58,6 +77,22 @@ fn oraclize_values() {
         LiquidityTokens::balance(serai_abi::genesis_liquidity::address(coin), coin),
         supply
       );
+      let sum_percent = percent_by_network.get(&coin.network()).copied().unwrap_or(0) + percent;
+      percent_by_network.insert(coin.network(), sum_percent);
     }
+
+    let set_allocation_per_key_share = SET_ALLOCATION_PER_KEY_SHARE.lock().unwrap();
+    for (network, percent) in percent_by_network {
+      assert_eq!(
+        set_allocation_per_key_share[&(Some(TEST_ID.to_vec()), NetworkId::from(network))],
+        allocation_per_key_share(Amount((total_required_stake * percent) / 100))
+      );
+    }
+
+    assert_eq!(
+      set_allocation_per_key_share[&(Some(TEST_ID.to_vec()), NetworkId::Serai)],
+      // If it's 25% of the total required, it's 25% of the resulting 125%, or 20% as desired
+      allocation_per_key_share(Amount((total_required_stake * 25) / 100))
+    );
   });
 }

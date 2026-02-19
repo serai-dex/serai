@@ -358,12 +358,12 @@ mod pallet {
 
         /*
           `STAKE_DESIRED`, but with `/ (1 - SERAI_VALIDATORS_DESIRED_PERCENTAGE)` written as
-          `* 6 / 5` (as both are equal to `* 1.2` given how
+          `* 5 / 4` (as both are equal to `* 1.2` given how
           `SERAI_VALIDATORS_DESIRED_PERCENTAGE = 0.2`).
         */
         let stake_desired = Amount(
-          external_stake_required.0.checked_mul(6).ok_or(serai_dex_pallet::Error::<T>::Overflow)? /
-            5,
+          external_stake_required.0.checked_mul(5).ok_or(serai_dex_pallet::Error::<T>::Overflow)? /
+            4,
         );
         let serai_validators_stake_desired = Amount(stake_desired.0 / 5);
         let serai_per_key_share = Amount(
