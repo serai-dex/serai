@@ -139,20 +139,6 @@ Emissions are distributed to each validator set as a function of their distance
 from economic security. For the Serai validator set, which does not have a
 literal evaluation of this, `SERAI_VALIDATORS_STAKE_DESIRED` is used.
 
-### Fees
-
-The fees for a swap within a pool are specific to the pool. Currently, all
-pools have a 0.3% fee except the `sriXMR` pool which has a 1% fee. While
-aggressive compared to comparables and centralized exchanges, this is argued as
-better than instant exchangers while the protocol near-exclusively offers
-specific functionality.
-
-Half of the fees are used to form protocol-owned liquidity. This is via burning
-half of the fees at the time of swap, but since the sole liquidity provider is
-the genesis liquidity module, the proportional value of its liquidity is
-transferred to the protocol at the end of each block. The other half of the
-fees are left in the liquidity pool.
-
 ## Post-economic Security
 
 ### Liquidity Providers
@@ -236,20 +222,29 @@ pool and validators, respectively. If unused capacity ever hits 0,
 `DISTRIBUTION = inf`, so all of the emissions will go to the validators for that
 network.
 
-### Fees
+## Fees
 
-The amount of fees charged remains the same. Half remains in the pool,
-effectively being distributed to LPs, as before, but the rest are burnt.
+Independent of the era, fees are handled consistently.
+
+The fee rate is localized to each pool with all pools having a 0.3% fee except
+the `sriXMR` pool, which has a 1% fee. While aggressive compared to comparables
+and centralized exchanges, this is argued as likely lower than the effective
+difference between market value out and actual out offered by most instant
+exchangers while the protocol near-exclusively offers specific functionality.
+
+Half of the fees are left in the liquidity pool, effectively being distributed
+to LPs, while the other half are burnt.
 
 The intention here is to further reward all parties as usage increases. While
 burning SRI presumably increases the value of all remaining SRI, this may be
-arbitraged away as the LPs suffer impermanent loss. LPs also represent a
-minority of the network's SRI, so they're not the primary benefactor to such a
-scheme. This is why the explicit distribution exists.
+arbitraged away as the LPs suffer impermanent loss. LPs also are presumed to
+represent a minority of the network's SRI, so they're not the primary
+benefactor to such a scheme. This is why the explicit distribution exists.
 
 Validators are presumed to represent a majority of the network's SRI, and are
 entirely denominated in SRI, hence why burning SRI alone is considered
-sufficient for them.
+sufficient for them. Additional, in the pre-Economic Security era, burning SRI
+within the pools reduces the distance to economic security.
 
 ## Social Policy
 
