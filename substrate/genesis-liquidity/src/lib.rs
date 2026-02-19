@@ -103,7 +103,7 @@ mod pallet {
     }
 
     fn network_stake_requirement(network: ExternalNetworkId) -> Amount {
-      serai_validator_sets_pallet::Pallet::<T>::network_stake_requirement(network)
+      serai_validator_sets_pallet::network_stake_requirement::<T, T::EconomicSecurity>(network)
     }
   }
 

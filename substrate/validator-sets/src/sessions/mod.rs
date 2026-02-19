@@ -268,7 +268,10 @@ impl<Storage: SessionsStorage> Sessions for Storage {
           <Storage::Config as crate::Config>::EconomicSecurity::achieved_economic_security(network);
         if achieved_economic_security &&
           (latest_decided_allocated_stake <
-            crate::Pallet::<Storage::Config>::network_stake_requirement(network))
+            crate::network_stake_requirement::<
+              Storage::Config,
+              <Storage::Config as crate::Config>::EconomicSecurity,
+            >(network))
         {
           return false;
         }
@@ -454,7 +457,10 @@ impl<Storage: SessionsStorage> Sessions for Storage {
                 .expect("latest decided session but no allocated stake set") -
                 amount)
                 .expect("validator in set deallocated stake the set didn't have") <
-                crate::Pallet::<Storage::Config>::network_stake_requirement(network)
+                crate::network_stake_requirement::<
+                  Storage::Config,
+                  <Storage::Config as crate::Config>::EconomicSecurity,
+                >(network)
               {
                 Err(DeallocationError::EconomicSecurity)?;
               }

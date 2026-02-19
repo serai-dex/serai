@@ -78,7 +78,7 @@ impl crate::ValidatorSets for () {
   ) -> Amount {
     Amount(1)
   }
-  fn liquidity_tokens_stake_requirement(network: ExternalNetworkId) -> Amount {
+  fn liquidity_stake_requirement(network: ExternalNetworkId) -> Amount {
     Amount(1)
   }
   fn network_stake_requirement(network: ExternalNetworkId) -> Amount {

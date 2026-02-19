@@ -68,7 +68,7 @@ use serai_abi::{
     address::SeraiAddress,
     network_id::{ExternalNetworkId, NetworkId},
     coin::Coin,
-    balance::{Amount, ExternalBalance, Balance},
+    balance::{Amount, Balance},
     validator_sets::{
       Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct, SlashReport,
       DeallocationTimeline,
@@ -103,6 +103,7 @@ pub use babe_grandpa::*;
 
 mod getters;
 mod economic_security;
+pub use economic_security::*;
 
 /// An abstract view of `Coin::Serai`'s emissions.
 pub trait Emissions {
@@ -442,7 +443,7 @@ mod pallet {
 
       Abstractions::<T>::attempt_new_session(
         attempting_network.into(),
-        Self::include_genesis_validators(attempting_network),
+        include_genesis_validators::<T, T::EconomicSecurity>(attempting_network),
       );
 
       // Queue the attempt for the next external network

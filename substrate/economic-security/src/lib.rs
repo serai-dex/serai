@@ -46,7 +46,7 @@ mod pallet {
     ) -> Amount;
     /// The required amount of SRI which must be allocated as stake for a network to be considered
     /// economically secure regarding the coins in the liquidity pool.
-    fn liquidity_tokens_stake_requirement(network: ExternalNetworkId) -> Amount;
+    fn liquidity_stake_requirement(network: ExternalNetworkId) -> Amount;
     /// The required amount of SRI which must be allocated as stake for a network to be considered
     /// economically secure.
     fn network_stake_requirement(network: ExternalNetworkId) -> Amount;
@@ -65,16 +65,16 @@ mod pallet {
       network: ExternalNetworkId,
       proposed_additional_balance: Option<Balance>,
     ) -> Amount {
-      serai_validator_sets_pallet::Pallet::<T>::coins_stake_requirement(
+      serai_validator_sets_pallet::coins_stake_requirement::<T, T::EconomicSecurity>(
         network,
         proposed_additional_balance,
       )
     }
-    fn liquidity_tokens_stake_requirement(network: ExternalNetworkId) -> Amount {
-      serai_validator_sets_pallet::Pallet::<T>::liquidity_tokens_stake_requirement(network)
+    fn liquidity_stake_requirement(network: ExternalNetworkId) -> Amount {
+      serai_validator_sets_pallet::liquidity_stake_requirement::<T, T::EconomicSecurity>(network)
     }
     fn network_stake_requirement(network: ExternalNetworkId) -> Amount {
-      serai_validator_sets_pallet::Pallet::<T>::network_stake_requirement(network)
+      serai_validator_sets_pallet::network_stake_requirement::<T, T::EconomicSecurity>(network)
     }
   }
 
@@ -515,8 +515,7 @@ mod pallet {
             external_coin.network().into(),
           ));
           let sufficient_stake =
-            Some(T::ValidatorSets::liquidity_tokens_stake_requirement(external_coin.network())) <=
-              stake;
+            Some(T::ValidatorSets::liquidity_stake_requirement(external_coin.network())) <= stake;
           ExternalNetworkId::all().all(Pallet::<T>::achieved_economic_security) && sufficient_stake
         }
       }

@@ -67,7 +67,7 @@ impl<T: Config> Pallet<T> {
     assert!(
       Abstractions::<T>::attempt_new_session(
         NetworkId::Serai,
-        Self::include_genesis_validators(NetworkId::Serai)
+        include_genesis_validators::<T, T::EconomicSecurity>(NetworkId::Serai)
       ),
       "failed to attempt the next session for the Serai network"
     );

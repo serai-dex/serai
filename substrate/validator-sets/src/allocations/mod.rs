@@ -32,7 +32,7 @@ pub(crate) trait NetworkStakeRequirement {
 }
 impl<T: crate::Config> NetworkStakeRequirement for crate::Pallet<T> {
   fn requirement(network: ExternalNetworkId) -> Amount {
-    Self::network_stake_requirement(network)
+    crate::network_stake_requirement::<T, T::EconomicSecurity>(network)
   }
 }
 #[cfg(test)]
