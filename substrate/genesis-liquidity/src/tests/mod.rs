@@ -24,6 +24,7 @@ use serai_dex_pallet as dex;
 use crate as genesis_liquidity;
 
 mod oraclize_values;
+mod remove_genesis_liquidity;
 
 construct_runtime!(
   pub enum Test
@@ -102,7 +103,7 @@ impl crate::ValidatorSets for () {
   }
 
   fn current_session(network: NetworkId) -> Option<Session> {
-    Some(Session(0)) // TODO
+    Some(Session(0))
   }
 
   fn key_shares(set: ValidatorSet) -> Option<KeyShares> {
@@ -144,12 +145,13 @@ impl crate::ValidatorSets for () {
   }
 }
 
-// TODO: Defer to the actual `serai-economic-security-pallet` to test the composition
+// TODO: Improve by deferring to the actual `serai-economic-security-pallet`, testing the
+// composition
 pub struct DummyEconomicSecurity;
 #[expect(unused)]
 impl EconomicSecurity for DummyEconomicSecurity {
   fn achieved_economic_security(network: ExternalNetworkId) -> bool {
-    false // TODO
+    false
   }
   fn sri_value(balance: ExternalBalance) -> Amount {
     Amount(

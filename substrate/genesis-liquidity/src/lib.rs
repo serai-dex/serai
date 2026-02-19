@@ -26,7 +26,7 @@ type GenesisLiquidityTokens<T> =
 )]
 #[frame_support::pallet]
 mod pallet {
-  use core::{marker::PhantomData, time::Duration};
+  use core::time::Duration;
 
   use alloc::vec;
 
@@ -116,7 +116,7 @@ mod pallet {
   pub(crate) const GENESIS_SRI: Amount = Amount(100_000_000 * 10u64.pow(Coin::Serai.decimals()));
   pub(crate) const GENESIS_LIQUIDITY_TIME: Duration =
     serai_abi::primitives::constants::DAY.checked_mul(30).unwrap();
-  const GENESIS_TRICKLE_FEED: u128 =
+  pub(crate) const GENESIS_TRICKLE_FEED: u128 =
     serai_abi::primitives::constants::DAY.checked_mul(180).unwrap().as_millis();
 
   /// The weights for the pallet.
@@ -170,7 +170,7 @@ mod pallet {
   pub(crate) type Oraclized<T: Config> = StorageValue<_, (), OptionQuery>;
   /// When economic security was achieved, represented in milliseconds since the epoch.
   #[pallet::storage]
-  type EconomicSecurityAchieved<T: Config> = StorageValue<_, u64, OptionQuery>;
+  pub(crate) type EconomicSecurityAchieved<T: Config> = StorageValue<_, u64, OptionQuery>;
 
   /// An error incurred.
   #[pallet::error]
@@ -449,33 +449,21 @@ mod pallet {
       #[expect(clippy::disallowed_methods)]
       GenesisLiquidityTokens::<T>::burn_fn(signer, genesis_liquidity.into())?;
 
-      /*
-        Emit the `GenesisLiquidityRemoved` event at the end of the function.
-
-        This ensures that even if we return early, this event will be emitted. It also means this
-        event will be emitted even if we return an error, but that is presumed to be caught by the
-        transactional layer. If we emitted the event outright now, we'd still rely on the
-        transactional layer.
-
-        As for why we don't emit this event now, it follows how `serai_dex_pallet` emits its events
-        at the _end_ of its functions, once the operations are complete.
-      */
-      struct GenesisLiquidityRemovedEvent<T: Config>(Event, PhantomData<T>);
-      impl<T: Config> Drop for GenesisLiquidityRemovedEvent<T> {
-        fn drop(&mut self) {
-          Pallet::<T>::emit_event(self.0.clone());
-        }
-      }
-      let _event = GenesisLiquidityRemovedEvent::<T>(
-        Event::GenesisLiquidityRemoved { by: signer, genesis_liquidity },
-        PhantomData,
-      );
-
       let our_address = serai_abi::genesis_liquidity::address(genesis_liquidity.coin);
 
       // If this is prior to initializing the pools, this is a straightforward removal
       if Oraclized::<T>::get().is_none() {
+        if (sri_minimum != Amount(0)) || (external_coin_minimum > genesis_liquidity.amount) {
+          Err(serai_dex_pallet::Error::<T>::Unsatisfied)?;
+        }
         Coins::<T>::transfer_fn(our_address, signer, genesis_liquidity.into())?;
+        Self::emit_event(Event::GenesisLiquidityRemoval {
+          by: signer,
+          genesis_liquidity,
+          sri_yielded: Amount(0),
+          sri_burnt: Amount(0),
+          external_coin_yielded: genesis_liquidity.amount,
+        });
         return Ok(());
       }
 
@@ -712,15 +700,13 @@ mod pallet {
       )?;
 
       // Burn the SRI which is from the incomplete trickle feed
+      let sri_to_burn = (liquidity_position_sri - yieldable_sri)
+        .expect("ensured `yieldable_sri <= liquidity_position_sri` but couldn't subtract it?");
       // This is disallowed as `burn` MUST ONLY be called for `CoinsInstance`, which this does
       #[expect(clippy::disallowed_methods)]
       Coins::<T>::burn(
         Some(our_address).into(),
-        Balance {
-          coin: Coin::Serai,
-          amount: (liquidity_position_sri - yieldable_sri)
-            .expect("ensured `yieldable_sri <= liquidity_position_sri` but couldn't subtract it?"),
-        },
+        Balance { coin: Coin::Serai, amount: sri_to_burn },
       )?;
 
       // Transfer the yieldable SRI to the user
@@ -736,6 +722,14 @@ mod pallet {
         signer,
         (ExternalBalance { coin: genesis_liquidity.coin, amount: yieldable_external_coin }).into(),
       )?;
+
+      Self::emit_event(Event::GenesisLiquidityRemoval {
+        by: signer,
+        genesis_liquidity,
+        sri_burnt: sri_to_burn,
+        sri_yielded: yieldable_sri,
+        external_coin_yielded: yieldable_external_coin,
+      });
 
       Ok(())
     }

@@ -79,10 +79,16 @@ pub enum Event {
     genesis_liquidity: ExternalBalance,
   },
   /// Genesis liquidity removed.
-  GenesisLiquidityRemoved {
+  GenesisLiquidityRemoval {
     /// The account which removed the genesis liquidity.
     by: SeraiAddress,
     /// The amount of genesis liquidity removed.
     genesis_liquidity: ExternalBalance,
+    /// The amount of SRI which was burnt by this removal.
+    sri_burnt: Amount,
+    /// The amount of SRI yielded to the user by this removal.
+    sri_yielded: Amount,
+    /// The amount of the coin which was yielded to the user by this removal.
+    external_coin_yielded: Amount,
   },
 }
