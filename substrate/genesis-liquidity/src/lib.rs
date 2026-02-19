@@ -4,8 +4,19 @@
 
 extern crate alloc;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
 #[cfg(test)]
 mod tests;
+
+use serai_core_pallet::Pallet as Core;
+type Coins<T> = serai_coins_pallet::Pallet<T, serai_coins_pallet::CoinsInstance>;
+type LiquidityTokens<T> =
+  serai_coins_pallet::Pallet<T, serai_coins_pallet::LiquidityTokensInstance>;
+type Dex<T> = serai_dex_pallet::Pallet<T>;
+type GenesisLiquidityTokens<T> =
+  serai_coins_pallet::Pallet<T, serai_coins_pallet::GenesisLiquidityTokensInstance>;
 
 #[expect(
   let_underscore_drop,
@@ -37,13 +48,7 @@ mod pallet {
     TransactionContext as _,
   };
 
-  use serai_core_pallet::Pallet as Core;
-  type Coins<T> = serai_coins_pallet::Pallet<T, serai_coins_pallet::CoinsInstance>;
-  type LiquidityTokens<T> =
-    serai_coins_pallet::Pallet<T, serai_coins_pallet::LiquidityTokensInstance>;
-  type Dex<T> = serai_dex_pallet::Pallet<T>;
-  type GenesisLiquidityTokens<T> =
-    serai_coins_pallet::Pallet<T, serai_coins_pallet::GenesisLiquidityTokensInstance>;
+  use super::*;
 
   /// Methods from [`serai_validator_sets_pallet::Pallet`] which [`Pallet`] requires.
   ///
@@ -109,7 +114,7 @@ mod pallet {
 
   // These are from `specs/Economics.md`
   pub(crate) const GENESIS_SRI: Amount = Amount(100_000_000 * 10u64.pow(Coin::Serai.decimals()));
-  const GENESIS_LIQUIDITY_TIME: Duration =
+  pub(crate) const GENESIS_LIQUIDITY_TIME: Duration =
     serai_abi::primitives::constants::DAY.checked_mul(30).unwrap();
   const GENESIS_TRICKLE_FEED: u128 =
     serai_abi::primitives::constants::DAY.checked_mul(180).unwrap().as_millis();
@@ -159,10 +164,10 @@ mod pallet {
 
   /// The first (non-genesis) block's timestamp.
   #[pallet::storage]
-  type GenesisTimestamp<T: Config> = StorageValue<_, u64, OptionQuery>;
+  pub(crate) type GenesisTimestamp<T: Config> = StorageValue<_, u64, OptionQuery>;
   /// If the values have been oraclized, signifying the end of the genesis period.
   #[pallet::storage]
-  type Oraclized<T: Config> = StorageValue<_, (), OptionQuery>;
+  pub(crate) type Oraclized<T: Config> = StorageValue<_, (), OptionQuery>;
   /// When economic security was achieved, represented in milliseconds since the epoch.
   #[pallet::storage]
   type EconomicSecurityAchieved<T: Config> = StorageValue<_, u64, OptionQuery>;
@@ -203,9 +208,9 @@ mod pallet {
       /*
         This hook is minute. It's:
         - A conditional which evaluates to `false` for all but one block
-        - A few storage reads every block until economic security, a near constant amount of work
-          which can be considered as always present and not weight consumed, but capacity for
-          weight never present, except for one exceptional block
+        - A few storage reads, except for one exceptional block which also has a write, every block
+          until economic security. This is a near constant amount of work which can be considered
+          as always present and not weight consumed, but capacity for weight never present.
 
         So we handwave the weight of this hook here.
       */
@@ -265,13 +270,17 @@ mod pallet {
         let btc = GenesisLiquidityTokens::<T>::supply(Coin::External(ExternalCoin::Bitcoin));
         let GenesisValues { ether, dai, monero } = values;
         let value = |coin: ExternalCoin, value_in_btc: Amount| {
-          (u128::from(GenesisLiquidityTokens::<T>::supply(Coin::External(coin)).0) *
+          let result = (u128::from(GenesisLiquidityTokens::<T>::supply(Coin::External(coin)).0) *
             u128::from(value_in_btc.0)) /
-            10u128.pow(coin.decimals())
+            10u128.pow(coin.decimals());
+          if result == 0 {
+            return Err(serai_dex_pallet::Error::<T>::InvalidLiquidity);
+          }
+          Ok(result)
         };
-        let ether = value(ExternalCoin::Ether, ether);
-        let dai = value(ExternalCoin::Dai, dai);
-        let monero = value(ExternalCoin::Monero, monero);
+        let ether = value(ExternalCoin::Ether, ether)?;
+        let dai = value(ExternalCoin::Dai, dai)?;
+        let monero = value(ExternalCoin::Monero, monero)?;
 
         // Then, we determine the total value and each coin's share of the total value
         let total_value = [ether, dai, monero]

@@ -33,11 +33,20 @@ serai-coins-pallet = { path = "../coins", default-features = false }
 serai-dex-pallet = { path = "../dex", default-features = false }
 serai-validator-sets-pallet = { path = "../validator-sets", default-features = false }
 
+bitvec = { version = "1", default-features = false, features = ["alloc"], optional = true }
+pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
 bitvec = { version = "1", default-features = false, features = ["alloc", "std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc", "std"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["alloc", "std"] }
+schnorrkel = { version = "0.11", default-features = false, features = ["alloc", "std"] }
+dkg-musig = { path = "../../crypto/dkg/musig", default-features = false, features = ["std"] }
 
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
 sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
@@ -60,6 +69,10 @@ std = [
   "serai-coins-pallet/std",
   "serai-dex-pallet/std",
   "serai-validator-sets-pallet/std",
+
+  "bitvec?/std",
+  "pallet-timestamp?/std",
+  "frame-benchmarking?/std",
 ]
 
 try-runtime = [
@@ -81,6 +94,10 @@ runtime-benchmarks = [
   "serai-coins-pallet/runtime-benchmarks",
   "serai-dex-pallet/runtime-benchmarks",
   "serai-validator-sets-pallet/runtime-benchmarks",
+
+  "bitvec",
+  "pallet-timestamp",
+  "frame-benchmarking/runtime-benchmarks",
 ]
 
 default = ["std"]

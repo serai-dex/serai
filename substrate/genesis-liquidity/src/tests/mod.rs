@@ -111,10 +111,10 @@ impl crate::ValidatorSets for () {
 
   fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (SeraiAddress, KeyShares)> {
     [
-      (SeraiAddress(Keyring::AliceStash.to_raw_public()), KeyShares::ONE),
-      (SeraiAddress(Keyring::BobStash.to_raw_public()), KeyShares::ONE),
-      (SeraiAddress(Keyring::CharlieStash.to_raw_public()), KeyShares::ONE),
-      (SeraiAddress(Keyring::DaveStash.to_raw_public()), KeyShares::ONE),
+      (SeraiAddress(Keyring::AliceStash.pair().public().0), KeyShares::ONE),
+      (SeraiAddress(Keyring::BobStash.pair().public().0), KeyShares::ONE),
+      (SeraiAddress(Keyring::CharlieStash.pair().public().0), KeyShares::ONE),
+      (SeraiAddress(Keyring::DaveStash.pair().public().0), KeyShares::ONE),
     ]
     .into_iter()
   }
@@ -125,14 +125,14 @@ impl crate::ValidatorSets for () {
   ) -> Option<EmbeddedEllipticCurveKeys> {
     assert_eq!(network, NetworkId::Serai);
     Some(EmbeddedEllipticCurveKeys::Serai(
-      (if validator == SeraiAddress(Keyring::AliceStash.to_raw_public()) {
-        Keyring::Alice.to_raw_public()
-      } else if validator == SeraiAddress(Keyring::BobStash.to_raw_public()) {
-        Keyring::Bob.to_raw_public()
-      } else if validator == SeraiAddress(Keyring::CharlieStash.to_raw_public()) {
-        Keyring::Charlie.to_raw_public()
-      } else if validator == SeraiAddress(Keyring::DaveStash.to_raw_public()) {
-        Keyring::Dave.to_raw_public()
+      (if validator == SeraiAddress(Keyring::AliceStash.pair().public().0) {
+        Keyring::Alice.pair().public().0
+      } else if validator == SeraiAddress(Keyring::BobStash.pair().public().0) {
+        Keyring::Bob.pair().public().0
+      } else if validator == SeraiAddress(Keyring::CharlieStash.pair().public().0) {
+        Keyring::Charlie.pair().public().0
+      } else if validator == SeraiAddress(Keyring::DaveStash.pair().public().0) {
+        Keyring::Dave.pair().public().0
       } else {
         unreachable!()
       }),
