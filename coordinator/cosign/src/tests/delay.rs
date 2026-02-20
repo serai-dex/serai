@@ -4,7 +4,7 @@ use crate::{
   LatestCosignedBlockNumber,
   delay::{CosignDelayTask, now_timestamp},
   evaluator::CosignedBlocks,
-  tests::{IntoTask, Test, wait_until},
+  tests::{IntoTask, TaskTest, wait_until},
 };
 
 use serai_db::{Db as _, DbTxn as _, MemDb};
@@ -51,7 +51,7 @@ async fn delay_task_returns_false_with_no_messages() {
   let test = DelayTest::default();
   let mut task = test.into_task();
 
-  Test::assert_task_run_iteration_and_check_progress(&mut task, false).await;
+  TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
 
   assert_eq!(LatestCosignedBlockNumber::get(&test.db), None);
   assert_eq!(CosignedBlocks::peek(&test.db), None);
@@ -73,7 +73,7 @@ async fn delay_task_updates_latest_cosigned_block_number_after_ack_delay() {
   }
 
   let task = test.into_task();
-  let _handle = Test::spawn_task_continually_running(task, vec![]);
+  let _handle = TaskTest::spawn_task_continually_running(task, vec![]);
 
   test.assert_task_iteration_completes_with(2).await;
 
@@ -129,7 +129,7 @@ async fn delay_task_does_not_regress_and_skips_if_not_a_later_block() {
 
   let mut task = test.into_task();
   // returns made_progress as true
-  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
   // This is unlikely to actually happen in practice but it needs to be tested that it does what it is
   // meant to do, which is that if we've already acknowledged a later block, consume and skip
@@ -146,6 +146,6 @@ async fn delay_task_does_not_regress_and_skips_if_not_a_later_block() {
 
   // No progress was made since the same block number was skipped,
   // made_progress returns false
-  Test::assert_task_run_iteration_and_check_progress(&mut task, false).await;
+  TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
   test.assert_task_iteration_completes_with(4).await;
 }

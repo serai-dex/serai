@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
@@ -6,26 +6,34 @@ use blake2::{Blake2s256, Digest};
 
 use serai_db::{Db as _, DbTxn, MemDb};
 
-use serai_client_serai::abi::primitives::{
-  BlockHash,
-  crypto::Public,
-  network_id::ExternalNetworkId,
-  validator_sets::{ExternalValidatorSet, Session},
+use serai_simulator_node::{SimulatorNode, SimulatorState};
+
+use serai_client_serai::{
+  Serai,
+  abi::primitives::{
+    BlockHash,
+    crypto::Public,
+    network_id::ExternalNetworkId,
+    validator_sets::{ExternalValidatorSet, Session},
+  },
 };
 
 use crate::{
   Cosign, CosignIntent, Cosigning, Faulted, FaultedSession, Faults, GlobalSession, GlobalSessions,
   GlobalSessionsLastBlock, IntakeCosignError, NetworksLatestCosignedBlock, SignedCosign,
-  SubstrateBlockHash,
-  delay::LatestCosignedBlockNumber,
-  evaluator::CurrentlyEvaluatedGlobalSession,
-  intend::IntendedCosigns,
-  tests::{TestRequest, intend::Serai},
+  SubstrateBlockHash, delay::LatestCosignedBlockNumber, evaluator::CurrentlyEvaluatedGlobalSession,
+  intend::IntendedCosigns, tests::TestRequest,
 };
 
 use serai_cosign_types::tests::{
   fixture_public_key, public_key_from_seed, sign_cosign_with_fixture, sign_cosign_with_seed,
 };
+
+async fn setup_mock_serai() -> (SimulatorNode, Arc<Serai>) {
+  let node = SimulatorNode::start(SimulatorState::default()).await;
+  let serai = Arc::new(Serai::new(node.url()).unwrap());
+  (node, serai)
+}
 
 const FIXTURE_SEED: [u8; 32] = [0xff; 32];
 
@@ -159,7 +167,7 @@ fn temporal_returns_false_for_non_temporal_errors() {
 #[tokio::test]
 async fn spawn_creates_cosigning_instance() {
   let db = MemDb::new();
-  let serai = Serai::default();
+  let (_node, serai) = setup_mock_serai().await;
   let (request, _calls) = TestRequest::new(false);
   let cosigning = Cosigning::spawn(db, serai, request, vec![]);
 
@@ -171,7 +179,7 @@ async fn spawn_with_tasks_to_run_upon_cosigning() {
   use serai_task::Task;
 
   let db = MemDb::new();
-  let serai = Serai::default();
+  let (_node, serai) = setup_mock_serai().await;
   let (request, _calls) = TestRequest::new(false);
 
   let (_task, task_handle) = Task::new();
@@ -185,7 +193,7 @@ async fn spawn_with_tasks_to_run_upon_cosigning() {
 #[tokio::test]
 async fn spawn_initializes_cosigning_instance_correctly() {
   let db = MemDb::new();
-  let serai = Serai::default();
+  let (_node, serai) = setup_mock_serai().await;
   let (request, _calls) = TestRequest::new(false);
 
   let cosigning = Cosigning::spawn(db.clone(), serai, request, vec![]);
@@ -200,7 +208,7 @@ async fn spawn_initializes_cosigning_instance_correctly() {
 #[tokio::test]
 async fn spawn_tasks_chain_correctly() {
   let db = MemDb::new();
-  let serai = Serai::default();
+  let (_node, serai) = setup_mock_serai().await;
   let (request, _calls) = TestRequest::new(false);
 
   let _cosigning = Cosigning::spawn(db.clone(), serai, request, vec![]);
@@ -271,7 +279,7 @@ fn cosigned_block_errors_when_faulted() {
     FaultedSession::set(&mut txn, &[1u8; 32]);
     txn.commit();
   }
-  assert!(matches!(Cosigning::<MemDb>::cosigned_block(&db, 0), Err(Faulted)));
+  assert!(matches!(Cosigning::<MemDb>::cosigned_block(&db, 1), Err(Faulted)));
 }
 
 #[tokio::test]
@@ -796,7 +804,7 @@ fn intake_cosign_accepts_cosign_at_global_session_last_block() {
   {
     let mut txn = db.txn();
     GlobalSessionsLastBlock::set(&mut txn, id, &5u64);
-    for i in 1..=5 {
+    for i in 1 ..= 5 {
       SubstrateBlockHash::set(&mut txn, i, &BlockHash([i as u8; 32]));
     }
     txn.commit();

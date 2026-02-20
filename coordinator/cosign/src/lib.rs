@@ -16,15 +16,8 @@ use blake2::{Digest as _, Blake2s256};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client_serai::{
-  abi::{
-    primitives::{
-      BlockHash, crypto::Public, network_id::ExternalNetworkId,
-      validator_sets::ExternalValidatorSet,
-    },
-    Block,
-  },
-  Events,
+use serai_client_serai::abi::primitives::{
+  BlockHash, crypto::Public, network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet,
 };
 
 use serai_db::*;
@@ -45,51 +38,12 @@ use delay::LatestCosignedBlockNumber;
 /// Test helpers and fixtures.
 pub mod tests;
 
+#[cfg(not(any(test, feature = "dev")))]
 /// The interval at which the cosigning loop runs.
-#[cfg(not(test))]
 pub const COSIGN_LOOP_INTERVAL: Duration = Duration::from_secs(5);
-/// The interval at which the cosigning loop runs (shortened for tests).
-#[cfg(test)]
+#[cfg(any(test, feature = "dev"))]
+/// The interval at which the cosigning loop runs.
 pub const COSIGN_LOOP_INTERVAL: Duration = Duration::from_millis(10);
-
-/// Abstraction over the Serai RPC client so tests can inject custom behaviour.
-pub trait SeraiRpc: Clone + Send + Sync + 'static {
-  /// Return the latest finalized block number.
-  fn latest_finalized_block_number(&self) -> impl Send + Future<Output = Result<u64, String>>;
-
-  /// Fetch a block by its number.
-  fn block_by_number(
-    &self,
-    block: u64,
-  ) -> impl Send + Future<Output = Result<Option<Block>, String>>;
-
-  /// Fetch all events associated with the provided block hash.
-  fn events(&self, block: BlockHash) -> impl Send + Future<Output = Result<Events, String>>;
-}
-
-#[cfg(not(coverage))]
-impl SeraiRpc for Arc<Serai> {
-  fn latest_finalized_block_number(&self) -> impl Send + Future<Output = Result<u64, String>> {
-    let serai = self.clone();
-    async move { serai.as_ref().latest_finalized_block_number().await.map_err(|e| format!("{e:?}")) }
-  }
-
-  fn block_by_number(
-    &self,
-    block: u64,
-  ) -> impl Send + Future<Output = Result<Option<Block>, String>> {
-    let serai = self.clone();
-    async move { serai.as_ref().block_by_number(block).await.map_err(|e| format!("{e:?}")) }
-  }
-
-  fn events(&self, block: BlockHash) -> impl Send + Future<Output = Result<Events, String>> {
-    let serai = self.clone();
-    async move {
-      let events = serai.as_ref().events(block).await.map_err(|e| format!("{e:?}"))?;
-      Ok(events)
-    }
-  }
-}
 
 /// A 'global session', defined as all validator sets used for cosigning at a given moment.
 ///
@@ -118,7 +72,7 @@ pub(crate) struct GlobalSession {
   pub(crate) total_stake: u64,
 }
 impl GlobalSession {
-  fn id(mut cosigners: Vec<ExternalValidatorSet>) -> [u8; 32] {
+  pub(crate) fn id(mut cosigners: Vec<ExternalValidatorSet>) -> [u8; 32] {
     cosigners.sort_by_key(|a| borsh::to_vec(a).unwrap());
     Blake2s256::digest(borsh::to_vec(&cosigners).unwrap()).into()
   }
@@ -216,14 +170,14 @@ impl IntakeCosignError {
   /// If this error is temporal to the local view
   pub fn temporal(&self) -> bool {
     match self {
-      IntakeCosignError::NotYetIndexedBlock
-      | IntakeCosignError::StaleCosign
-      | IntakeCosignError::UnrecognizedGlobalSession
-      | IntakeCosignError::FutureGlobalSession => true,
-      IntakeCosignError::BeforeGlobalSessionStart
-      | IntakeCosignError::AfterGlobalSessionEnd
-      | IntakeCosignError::NonParticipatingNetwork
-      | IntakeCosignError::InvalidSignature => false,
+      IntakeCosignError::NotYetIndexedBlock |
+      IntakeCosignError::StaleCosign |
+      IntakeCosignError::UnrecognizedGlobalSession |
+      IntakeCosignError::FutureGlobalSession => true,
+      IntakeCosignError::BeforeGlobalSessionStart |
+      IntakeCosignError::AfterGlobalSessionEnd |
+      IntakeCosignError::NonParticipatingNetwork |
+      IntakeCosignError::InvalidSignature => false,
     }
   }
 }
@@ -246,9 +200,9 @@ impl<D: Db> Cosigning<D> {
   ///
   /// The database specified must only be used with a singular instance of the Serai network, and
   /// only used once at any given time.
-  pub fn spawn<R: RequestNotableCosigns, S: SeraiRpc>(
+  pub fn spawn<R: RequestNotableCosigns + Sync>(
     db: D,
-    serai: S,
+    serai: Arc<Serai>,
     request: R,
     tasks_to_run_upon_cosigning: Vec<TaskHandle>,
   ) -> Self {
@@ -288,12 +242,13 @@ impl<D: Db> Cosigning<D> {
     getter: &impl Get,
     block_number: u64,
   ) -> Result<Option<BlockHash>, Faulted> {
-    if block_number > Self::latest_cosigned_block_number(getter)? {
+    if block_number == 0 || block_number > Self::latest_cosigned_block_number(getter)? {
       return Ok(None);
     }
 
     Ok(Some(
-      SubstrateBlockHash::get(getter, block_number).expect("cosigned block but didn't index it"),
+      SubstrateBlockHash::get(getter, block_number)
+        .expect(&format!("cosigned block {} but didn't index it", block_number)),
     ))
   }
 

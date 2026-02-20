@@ -4,21 +4,24 @@ use std::{
   time::{Duration, Instant},
 };
 
-use serai_db::{DbTxn, Db as _, MemDb};
-use serai_task::ContinuallyRan;
+use serai_cosign_types::SignedCosign;
+use serai_db::{Db as _, DbTxn, MemDb};
 use serai_client_serai::abi::primitives::{
+  BlockHash,
   crypto::Public,
+  network_id::ExternalNetworkId,
   validator_sets::{ExternalValidatorSet, Session},
 };
 
+use serai_task::ContinuallyRan;
+
 use crate::{
-  BlockHash, Cosign, ExternalNetworkId, GlobalSession, HasEvents, NetworksLatestCosignedBlock,
-  SignedCosign,
+  Cosign, GlobalSession, HasEvents, NetworksLatestCosignedBlock,
   evaluator::{
     CosignEvaluatorTask, CosignedBlocks, CurrentlyEvaluatedGlobalSession, REQUEST_COSIGNS_SPACING,
   },
   intend::{BlockEventData, BlockEvents, GlobalSessionsChannel},
-  tests::{IntoTask, Test, TestRequest},
+  tests::{IntoTask, TaskTest, TestRequest},
 };
 
 pub(crate) struct EvaluatorTest {
@@ -48,7 +51,7 @@ impl EvaluatorTest {
   /// Asserts that cosigned blocks from start_block to end_block (inclusive) are present in order.
   fn assert_cosigned_blocks_range(&mut self, start_block: u64, end_block: u64) {
     let mut txn = self.db.txn();
-    for expected_block in start_block..=end_block {
+    for expected_block in start_block ..= end_block {
       let (block_number, _time) = CosignedBlocks::try_recv(&mut txn)
         .unwrap_or_else(|| panic!("expected cosigned block {expected_block}"));
       assert_eq!(block_number, expected_block, "cosigned block mismatch");
@@ -120,7 +123,7 @@ impl EvaluatorTest {
 async fn evaluator_task_returns_false_with_no_block_events() {
   let test = EvaluatorTest::default();
   let mut task = test.into_task();
-  Test::assert_task_run_iteration_and_check_progress(&mut task, false).await;
+  TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
   test.assert_evaluator_db_is_clear();
 }
 
@@ -138,7 +141,7 @@ async fn evaluator_task_processes_blocks_with_no_events() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
   test.assert_task_iteration_completed(0, 2);
 }
 
@@ -160,7 +163,7 @@ async fn evaluator_task_errors_on_notable_events_without_cosign() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_failed_with(&mut task, "wasn't yet cosigned").await;
+  TaskTest::assert_task_run_and_failed_with(&mut task, "wasn't yet cosigned").await;
   // When iteration fails, nothing is committed - block events are consumed but CosignedBlocks is empty
   test.assert_no_global_sessions_channel();
   test.assert_has_block_events();
@@ -178,7 +181,7 @@ async fn evaluator_task_errors_on_notable_events_without_cosign() {
   let mut task: CosignEvaluatorTask<MemDb, TestRequest> = test.into_task().into();
   task.last_request_for_cosigns = Instant::now() - Duration::from_secs(5);
 
-  Test::assert_task_run_and_failed_with(&mut task, "wasn't yet cosigned").await;
+  TaskTest::assert_task_run_and_failed_with(&mut task, "wasn't yet cosigned").await;
   test.assert_no_global_sessions_channel();
   test.assert_has_block_events();
 }
@@ -232,7 +235,7 @@ async fn evaluator_task_errors_on_notable_events_without_stakes() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_failed_with(&mut task, "didn't have its stake").await;
+  TaskTest::assert_task_run_and_failed_with(&mut task, "didn't have its stake").await;
 }
 
 #[tokio::test]
@@ -253,7 +256,7 @@ async fn evaluator_task_errors_on_non_notable_events_without_cosign() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_failed_with(&mut task, "wasn't yet cosigned").await;
+  TaskTest::assert_task_run_and_failed_with(&mut task, "wasn't yet cosigned").await;
   // When iteration fails, nothing is committed
   test.assert_no_global_sessions_channel();
   test.assert_has_block_events();
@@ -271,7 +274,7 @@ async fn evaluator_task_errors_on_non_notable_events_without_cosign() {
   let mut task: CosignEvaluatorTask<MemDb, TestRequest> = test.into_task().into();
   task.last_request_for_cosigns = Instant::now() - Duration::from_secs(5);
 
-  Test::assert_task_run_and_failed_with(&mut task, "wasn't yet cosigned").await;
+  TaskTest::assert_task_run_and_failed_with(&mut task, "wasn't yet cosigned").await;
 }
 
 #[tokio::test]
@@ -295,7 +298,7 @@ async fn evaluator_task_errors_on_request_notable_cosigns_failure() {
     last_request_for_cosigns: Instant::now() - REQUEST_COSIGNS_SPACING - Duration::from_secs(5),
   };
 
-  Test::assert_task_run_and_failed_with(&mut task, "RequestError").await;
+  TaskTest::assert_task_run_and_failed_with(&mut task, "RequestError").await;
   assert_eq!(calls.load(Ordering::SeqCst), 1, "request_notable_cosigns should have been called");
 }
 
@@ -320,7 +323,7 @@ async fn evaluator_task_errors_on_request_non_notable_cosigns_failure() {
     last_request_for_cosigns: Instant::now() - REQUEST_COSIGNS_SPACING - Duration::from_secs(5),
   };
 
-  Test::assert_task_run_and_failed_with(&mut task, "RequestError").await;
+  TaskTest::assert_task_run_and_failed_with(&mut task, "RequestError").await;
   assert_eq!(calls.load(Ordering::SeqCst), 1, "request_notable_cosigns should have been called");
 }
 
@@ -345,7 +348,7 @@ async fn evaluator_task_processes_notable_events_when_cosigned() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
   let (block_number, _time) = CosignedBlocks::peek(&test.db).expect("expected cosigned block");
   assert_eq!(block_number, 1);
@@ -380,7 +383,7 @@ async fn evaluator_task_non_notable_uses_cached_known_cosign() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
   // All three blocks should be marked as cosigned
   test.assert_cosigned_blocks_range(1, 3);
@@ -407,7 +410,7 @@ async fn evaluator_task_non_notable_with_cosign_returns_some() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
   test.assert_cosigned_blocks_range(1, 1);
 }
@@ -433,7 +436,7 @@ async fn evaluator_task_non_notable_cosign_too_low_does_not_add_weight() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_failed_with(&mut task, "wasn't yet cosigned").await;
+  TaskTest::assert_task_run_and_failed_with(&mut task, "wasn't yet cosigned").await;
 }
 
 #[tokio::test]
@@ -474,7 +477,7 @@ async fn evaluator_task_errors_on_non_notable_events_without_stakes() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_failed_with(&mut task, "didn't have its stake").await;
+  TaskTest::assert_task_run_and_failed_with(&mut task, "didn't have its stake").await;
 }
 
 #[tokio::test]
@@ -534,13 +537,13 @@ async fn evaluator_task_non_notable_computes_lowest_common_block() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
   test.assert_cosigned_blocks_range(1, 3);
 }
 
 #[tokio::test]
-#[should_panic(expected = "candidate's start block number exceeds our block number")]
+#[should_panic(expected = "candidate's start block number ")]
 async fn evaluator_task_panics_when_session_starts_after_block() {
   let mut test = EvaluatorTest::default();
 
@@ -652,7 +655,7 @@ async fn evaluator_task_advances_global_session_at_start_block() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_iteration_and_check_progress(&mut task, true).await;
+  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
   test.assert_cosigned_blocks_range(1, 3);
 
@@ -712,7 +715,7 @@ async fn evaluator_task_errors_on_weight_overflow_notable() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_failed_with(&mut task, "weight_cosigned overflow").await;
+  TaskTest::assert_task_run_and_failed_with(&mut task, "weight_cosigned overflow").await;
 }
 
 #[tokio::test]
@@ -765,10 +768,11 @@ async fn evaluator_task_errors_on_weight_overflow_non_notable() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_failed_with(&mut task, "weight_cosigned overflow").await;
+  TaskTest::assert_task_run_and_failed_with(&mut task, "weight_cosigned overflow").await;
 }
 
 #[tokio::test]
+#[should_panic(expected = "fetching latest global session yet none declared")]
 async fn evaluator_task_errors_when_no_global_session_in_channel() {
   let mut test = EvaluatorTest::default();
 
@@ -779,9 +783,5 @@ async fn evaluator_task_errors_when_no_global_session_in_channel() {
   }
 
   let mut task = test.into_task();
-  Test::assert_task_run_and_failed_with(&mut task, "but none declared in channel yet").await;
-
-  test.assert_no_currently_evaluated_global_session();
-  test.assert_no_cosigned_blocks();
-  test.assert_no_global_sessions_channel();
+  let _ = task.run_iteration().await;
 }

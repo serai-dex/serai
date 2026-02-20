@@ -12,8 +12,6 @@ use serai_primitives::{
   validator_sets::*,
 };
 
-pub use serai_primitives::validator_sets::DeallocationTimeline;
-
 /// Slash(es) to occur on-chain.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Slashes {

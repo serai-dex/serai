@@ -17,7 +17,10 @@ use std::{
   },
 };
 
-use serai_task::{ContinuallyRan, Task, TaskHandle};
+pub(crate) use serai_test_task::{IntoTask, TaskTest};
+
+pub(crate) static SERAI_NODE_LOCK: std::sync::LazyLock<tokio::sync::Mutex<()>> =
+  std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
 use crate::RequestNotableCosigns;
 
@@ -102,40 +105,6 @@ macro_rules! wait_until {
   }};
 }
 pub(crate) use wait_until;
-
-pub(crate) struct Test;
-impl Test {
-  pub(crate) async fn assert_task_run_iteration_and_check_progress(
-    task: &mut impl ContinuallyRan,
-    made_progress: bool,
-  ) {
-    assert_eq!(task.run_iteration().await.unwrap(), made_progress);
-  }
-
-  pub(crate) async fn assert_task_run_and_failed_with(task: &mut impl ContinuallyRan, error: &str) {
-    let err = task.run_iteration().await.unwrap_err();
-    let err_str = format!("{err:?}");
-    assert!(err_str.contains(error), "{err_str}");
-  }
-
-  /// Spawns a task to run continuously in the background, returning its handle.
-  ///
-  /// This allows testing a task while it runs as expected (with the full `continually_run`
-  /// loop including delays and error handling). Drop the returned `TaskHandle` to stop the task.
-  pub fn spawn_task_continually_running<T: ContinuallyRan + 'static>(
-    task_runner: T,
-    dependents: Vec<TaskHandle>,
-  ) -> TaskHandle {
-    let (task, task_handle) = Task::new();
-    tokio::spawn(task_runner.continually_run(task, dependents));
-    task_handle
-  }
-}
-
-pub(crate) trait IntoTask {
-  type Task: ContinuallyRan + 'static;
-  fn into_task(&self) -> Self::Task;
-}
 
 #[derive(Clone)]
 pub(crate) struct TestRequest {

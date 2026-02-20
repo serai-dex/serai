@@ -32,6 +32,9 @@ serai-task = { path = "../../common/task", version = "0.1" }
 
 serai-cosign-types = { path = "./types" }
 
+[features]
+dev = []
+
 [dev-dependencies]
-env_logger = { version = "0.11", default-features = false }
+env_logger = { version = "0.10", default-features = false }
 serai-cosign-types = { path = "./types", features = ["test-helpers"] }
