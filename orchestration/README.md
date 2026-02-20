@@ -96,3 +96,10 @@ memory allocations via `malloc`. We have an open issue to also adopt
 [`snmalloc`](https://github.com/serai-dex/serai/issues/713) to replace the
 allocator monoculture. Additionally, `snmallloc` advertises _distinct_ security
 functionality and improved performance, making it independently a valid option.
+
+### Runtime
+
+This directory also contains the canonical build process for Serai's runtime, a
+deterministic WebAssembly blob encoding all of the rules for whether a block is
+valid and the associated effects (its "State Transition Function"). For more
+information, please see the `runtime/` folder.

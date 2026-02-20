@@ -100,13 +100,13 @@ impl ValidatorSets {
 
   /// Create a transaction to report the slashes for a validator set.
   pub fn report_slashes(
-    network: ExternalNetworkId,
+    set: ExternalValidatorSet,
     slashes: SlashReport,
     signature: Signature,
   ) -> Transaction {
     Transaction::Unsigned {
       call: UnsignedCall::try_from(serai_abi::Call::from(Call::report_slashes(
-        Slashes::ExternalNetwork { network, slashes, signature },
+        Slashes::ExternalNetwork { set, slashes, signature },
       )))
       .expect("`report_slashes` wasn't an unsigned call?"),
     }
@@ -184,11 +184,11 @@ impl State<'_> {
   }
 
   /// If the prior validators for this network is still expected to publish a slash report.
-  pub async fn pending_slash_report(&self, network: ExternalNetworkId) -> Result<bool, RpcError> {
+  pub async fn pending_slash_report(&self, set: ExternalValidatorSet) -> Result<bool, RpcError> {
     self
       .call(
         "validator-sets/pending_slash_report",
-        &format!(r#", "network": {} "#, rpc_network(network)),
+        &format!(r#", "network": {}, "session": {} "#, rpc_network(set.network), set.session.0),
       )
       .await
   }

@@ -2,27 +2,9 @@
 
 #[test]
 pub fn reproducibly_builds() {
-  use std::{path::PathBuf, process::Command};
+  use std::{path::PathBuf, fs, process::Command};
 
   use rand_core::{RngCore as _, OsRng};
-
-  const RUNS: usize = {
-    // 3 is a sane, healthy amount of runs to ensure this isn't being randomized when built.
-    #[cfg(any(target_arch = "x86_64", not(github_ci)))]
-    let runs = 3;
-    // This test is _incredibly_ slow when the host has to be emulated, so when in the GitHub CI
-    // where this will be cross-checked against other machines, we only run it once.
-    #[cfg(all(not(target_arch = "x86_64"), github_ci))]
-    let runs = 1;
-    runs
-  };
-
-  let mut images = vec![];
-  for _ in 0 .. RUNS {
-    let mut image = [0; 32];
-    OsRng.fill_bytes(&mut image);
-    images.push(format!("runtime-{}", hex::encode(image)));
-  }
 
   let path = Command::new("cargo")
     .arg("locate-project")
@@ -36,16 +18,47 @@ pub fn reproducibly_builds() {
   assert_eq!(path.file_name().unwrap(), "Cargo.toml");
   assert!(path.pop());
 
+  const RUNS: usize = {
+    // 3 is a sane, healthy amount of runs to ensure this isn't being randomized when built.
+    #[cfg(any(target_arch = "x86_64", not(github_ci)))]
+    let runs = 3;
+    // This test is _incredibly_ slow when the host has to be emulated, so when in the GitHub CI
+    // where this will be cross-checked against other machines, we only run it once.
+    #[cfg(all(not(target_arch = "x86_64"), github_ci))]
+    let runs = 1;
+    runs
+  };
+
+  let mut images = vec![];
+  // Push multiple builds via the canonical process
+  for _ in 0 .. RUNS {
+    let mut image = [0; 32];
+    OsRng.fill_bytes(&mut image);
+    images.push((
+      PathBuf::from("./orchestration/runtime/Containerfile"),
+      format!("runtime-{}", hex::encode(image)),
+    ));
+  }
+  // Push one run of each reproduction
+  for file in fs::read_dir(path.clone().join("orchestration/runtime/reproductions"))
+    .expect("couldn't iterate directory of reproducing `Containerfile`s")
+  {
+    let file = file.unwrap();
+    let mut image = [0; 32];
+    OsRng.fill_bytes(&mut image);
+    images.push((file.path(), format!("runtime-{}", hex::encode(image))));
+  }
+
   {
     // Build the images in parallel
     let mut commands = vec![];
-    for image in &images {
+    for (containerfile, image) in &images {
       let mut command = Command::new("docker");
       command
         .current_dir(&path)
         .arg("build")
         .arg("--no-cache")
-        .arg("--file=./orchestration/runtime/Containerfile")
+        .arg(format!("--file={}", containerfile.display()))
         .arg("--tag")
         .arg(image)
         .arg(".");
@@ -72,7 +85,7 @@ pub fn reproducibly_builds() {
   }
 
   let mut outputs = vec![];
-  for image in images {
+  for (_containerfile, image) in images {
     outputs.push(
       Command::new("docker")
         .arg("run")
@@ -81,7 +94,6 @@ pub fn reproducibly_builds() {
         .arg("never")
         .arg("--rm")
         .arg(&image)
-        .arg("busybox")
         .arg("sha256sum")
         .arg("/serai.wasm")
         .output(),

@@ -91,8 +91,11 @@ fn new_frame_system_block() {
     &Digest {
       logs: vec![DigestItem::PreRuntime(
         SeraiPreExecutionDigest::CONSENSUS_ID,
-        borsh::to_vec(&SeraiPreExecutionDigest { unix_time_in_millis: block_number * 6_000 })
-          .unwrap(),
+        borsh::to_vec(&SeraiPreExecutionDigest {
+          proposer: SeraiAddress([0; 32]),
+          unix_time_in_millis: block_number * 6_000,
+        })
+        .unwrap(),
       )],
     },
   );
@@ -177,6 +180,7 @@ fn block_size_limit() {
       header: serai_abi::Header::V1(serai_abi::HeaderV1 {
         number: 0,
         builds_upon: UnbalancedMerkleTree::EMPTY,
+        proposer: SeraiAddress([0; 32]),
         unix_time_in_millis: 0,
         transactions_commitment: UnbalancedMerkleTree::EMPTY,
         events_commitment: UnbalancedMerkleTree::EMPTY,

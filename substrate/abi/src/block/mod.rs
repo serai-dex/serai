@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use borsh::{io, BorshSerialize, BorshDeserialize};
 
 use crate::{
-  primitives::{BlockHash, merkle::UnbalancedMerkleTree},
+  primitives::{BlockHash, merkle::UnbalancedMerkleTree, address::SeraiAddress},
   Transaction,
 };
 
@@ -52,7 +52,9 @@ pub struct HeaderV1 {
   /// unbalanced Merkle tree doesn't achieve such notably short paths for recent blocks, it does
   /// inherently provide lower-depth paths to more recent items *on imbalance*.
   pub builds_upon: UnbalancedMerkleTree,
-  /// The UNIX time in milliseconds this block was created at.
+  /// The proposer of the block.
+  pub proposer: SeraiAddress,
+  /// The UNIX time in milliseconds this block was proposed at.
   ///
   /// This is guaranteed to be greater than the time of the immediately prior block.
   pub unix_time_in_millis: u64,
@@ -72,7 +74,7 @@ pub struct HeaderV1 {
 
 impl HeaderV1 {
   /// The size of a serialized V1 header.
-  pub const SIZE: usize = 8 + 32 + 8 + 32 + 32 + 32;
+  pub const SIZE: usize = 8 + 32 + 32 + 8 + 32 + 32 + 32;
 }
 
 /// A header for a block.
@@ -96,6 +98,12 @@ impl Header {
   pub fn builds_upon(&self) -> UnbalancedMerkleTree {
     match self {
       Header::V1(HeaderV1 { builds_upon, .. }) => *builds_upon,
+    }
+  }
+  /// Get the proposer of this block.
+  pub fn proposer(&self) -> SeraiAddress {
+    match self {
+      Header::V1(HeaderV1 { proposer, .. }) => *proposer,
     }
   }
   /// Get the UNIX time, in milliseconds since the epoch, for when this block was proposed.
@@ -162,6 +170,10 @@ fn header_getters() {
   OsRng.fill_bytes(&mut builds_upon);
   let builds_upon = UnbalancedMerkleTree { root: builds_upon };
 
+  let mut proposer = [0; 32];
+  OsRng.fill_bytes(&mut proposer);
+  let proposer = SeraiAddress(proposer);
+
   let unix_time_in_millis = OsRng.next_u64();
 
   let mut transactions_commitment = [0; 32];
@@ -178,6 +190,7 @@ fn header_getters() {
   let header = Header::V1(HeaderV1 {
     number,
     builds_upon,
+    proposer,
     unix_time_in_millis,
     transactions_commitment,
     events_commitment,
@@ -185,6 +198,7 @@ fn header_getters() {
   });
 
   assert_eq!(header.number(), number);
+  assert_eq!(header.proposer(), proposer);
   assert_eq!(header.builds_upon(), builds_upon);
   assert_eq!(header.unix_time_in_millis(), unix_time_in_millis);
   assert_eq!(header.transactions_commitment(), transactions_commitment);
@@ -197,6 +211,7 @@ fn header_size() {
     borsh::to_vec(&HeaderV1 {
       number: u64::MAX,
       builds_upon: UnbalancedMerkleTree { root: [0xff; 32] },
+      proposer: SeraiAddress([0xff; 32]),
       unix_time_in_millis: u64::MAX,
       transactions_commitment: UnbalancedMerkleTree { root: [0xff; 32] },
       events_commitment: UnbalancedMerkleTree { root: [0xff; 32] },
@@ -211,6 +226,7 @@ fn header_size() {
     borsh::to_vec(&HeaderV1 {
       number: 0,
       builds_upon: UnbalancedMerkleTree::EMPTY,
+      proposer: SeraiAddress([0; 32]),
       unix_time_in_millis: 0,
       transactions_commitment: UnbalancedMerkleTree::EMPTY,
       events_commitment: UnbalancedMerkleTree::EMPTY,

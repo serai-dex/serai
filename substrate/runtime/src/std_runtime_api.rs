@@ -5,7 +5,7 @@ use alloc::borrow::Cow;
 use serai_abi::{
   primitives::{
     crypto::{KeyPair, EmbeddedEllipticCurveKeys},
-    network_id::{ExternalNetworkId, NetworkId},
+    network_id::NetworkId,
     validator_sets::{Session, ExternalValidatorSet},
     balance::Amount,
     address::SeraiAddress,
@@ -17,7 +17,6 @@ use super::*;
 
 /// A `struct` representing the runtime as necessary to define the available APIs.
 // This `struct` itself is never instantiated, solely the `RuntimeApi` derived around it.
-#[expect(dead_code)]
 struct Runtime;
 
 sp_api::impl_runtime_apis! {
@@ -166,7 +165,7 @@ sp_api::impl_runtime_apis! {
     fn current_validators(network: NetworkId) -> Option<Vec<SeraiAddress>> {
       unimplemented!("runtime is only implemented when WASM")
     }
-    fn pending_slash_report(network: ExternalNetworkId) -> bool {
+    fn pending_slash_report(set: ExternalValidatorSet) -> bool {
       unimplemented!("runtime is only implemented when WASM")
     }
     fn embedded_elliptic_curve_keys(

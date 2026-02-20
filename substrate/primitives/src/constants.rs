@@ -5,9 +5,19 @@ pub const TARGET_BLOCK_TIME: Duration = Duration::from_secs(6);
 
 #[cfg_attr(not(test), expect(unused))]
 const MINUTE: Duration = Duration::from_mins(1);
-const HOUR: Duration = Duration::from_hours(1);
-const DAY: Duration = HOUR.checked_mul(24).unwrap();
-const WEEK: Duration = DAY.checked_mul(7).unwrap();
+/// One hour, as Serai considers it.
+pub const HOUR: Duration = Duration::from_hours(1);
+/// One day, as Serai considers it.
+///
+/// This is defined as exactly 24 hours, regardless of the context. It does not consider leap
+/// seconds or any smudging which may happen during some days following certain calendars.
+pub const DAY: Duration = HOUR.checked_mul(24).unwrap();
+/// One week, as Serai considers it.
+///
+/// This is defined as exactly 7 days, as Serai considers a day, regardless of the context. It does
+/// not consider leap seconds/days or any smudging which may happen during some weeks following
+/// certain calendars.
+pub const WEEK: Duration = DAY.checked_mul(7).unwrap();
 
 /// The intended duration for a session.
 pub const SESSION_LENGTH: Duration = WEEK;

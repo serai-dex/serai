@@ -33,7 +33,7 @@ alloy-rpc-types-eth = { version = "1", default-features = false }
 alloy-transport = { version = "1", default-features = false }
 alloy-provider = { version = "1", default-features = false }
 
-revm = { version = "33", default-features = false }
+revm = { version = "34", default-features = false }
 
 ethereum-schnorr = { package = "ethereum-schnorr-contract", path = "../../../networks/ethereum/schnorr", default-features = false, features = ["std"] }
 

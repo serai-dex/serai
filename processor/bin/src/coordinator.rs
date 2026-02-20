@@ -153,7 +153,7 @@ impl Coordinator {
         }
         None => {
           let _ =
-            tokio::time::timeout(core::time::Duration::from_secs(60), self.received_message.recv())
+            tokio::time::timeout(core::time::Duration::from_mins(1), self.received_message.recv())
               .await;
         }
       }

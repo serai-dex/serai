@@ -8,7 +8,7 @@ use crate::{evaluator::CosignedBlocks, latest_cosigned_block_number};
 
 #[cfg(not(any(test, feature = "dev")))]
 /// How often callers should broadcast the cosigns flagged for rebroadcasting.
-pub const BROADCAST_FREQUENCY: Duration = Duration::from_secs(60);
+pub const BROADCAST_FREQUENCY: Duration = Duration::from_mins(1);
 #[cfg(any(test, feature = "dev"))]
 /// How often callers should broadcast the cosigns flagged for rebroadcasting.
 pub const BROADCAST_FREQUENCY: Duration = Duration::from_secs(6);

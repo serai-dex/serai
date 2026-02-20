@@ -67,6 +67,14 @@ impl<V: LexicographicEncoding> scale::Encode for LexicographicReverse<V> {
 
 impl<V: LexicographicEncoding> scale::EncodeLike for LexicographicReverse<V> {}
 
+impl<V: LexicographicEncoding<Encoding: scale::MaxEncodedLen>> scale::MaxEncodedLen
+  for LexicographicReverse<V>
+{
+  fn max_encoded_len() -> usize {
+    V::Encoding::max_encoded_len()
+  }
+}
+
 /// This is a bijective mapping such that `reverse(reverse(encoding)) == encoding`.
 fn reverse<E: AsMut<[u8]>>(mut encoding: E) -> E {
   for byte in encoding.as_mut().iter_mut() {
@@ -79,10 +87,12 @@ impl<V: LexicographicEncoding> LexicographicReverse<V> {
   pub(super) fn from_encoding(encoding: V::Encoding) -> Self {
     Self(reverse(encoding))
   }
-  pub(super) fn from(value: &V) -> Self {
+  /// Wrap a value with [`LexicographicReverse`].
+  pub fn from(value: &V) -> Self {
     Self::from_encoding(value.lexicographic_encode())
   }
-  pub(super) fn into(self) -> V {
+  /// Consume a [`LexicographicReverse`] into the value encoded with a reversed ordering.
+  pub fn into(self) -> V {
     V::lexicographic_decode(reverse(self.0))
   }
 }

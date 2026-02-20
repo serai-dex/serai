@@ -2,6 +2,7 @@ use std::{boxed::Box, sync::Arc};
 
 use futures_util::stream::StreamExt as _;
 
+use sp_core::Pair as _;
 use sp_timestamp::InherentDataProvider as TimestampInherent;
 use sp_consensus_babe::{SlotDuration, inherents::InherentDataProvider as BabeInherent};
 
@@ -16,7 +17,7 @@ use sc_client_api::BlockBackend as _;
 
 use sc_telemetry::{Telemetry, TelemetryWorker};
 
-use serai_abi::SubstrateBlock as Block;
+use serai_abi::{primitives::address::SeraiAddress, SubstrateBlock as Block};
 use serai_runtime::RuntimeApi;
 
 use sc_consensus_babe::{self, SlotProportion};
@@ -75,7 +76,7 @@ pub fn new_partial(
         InherentDataProviders: sc_consensus_slots::InherentDataProviderExt,
       >,
     >,
-    Arc<dyn sp_keystore::Keystore>,
+    (SeraiAddress, Arc<dyn sp_keystore::Keystore>),
   ),
   ServiceError,
 > {
@@ -122,16 +123,17 @@ pub fn new_partial(
   };
   let client = Arc::new(client);
 
-  let keystore: Arc<dyn sp_keystore::Keystore> =
-    if let Some(keystore) = crate::keystore::Keystore::from_env() {
-      Arc::new(keystore)
+  let keystore: (SeraiAddress, Arc<dyn sp_keystore::Keystore>) =
+    if let Some((validator_identity, keystore)) = crate::keystore::Keystore::from_env() {
+      (validator_identity, Arc::new(keystore))
     } else if let Some(seed) = config.dev_key_seed.as_ref() {
-      Arc::new(crate::keystore::Keystore::from(
-        <sp_core::sr25519::Pair as sp_core::Pair>::from_string(seed, None)
-          .expect("dev key had invalid seed"),
-      ))
+      let pair = <sp_core::sr25519::Pair as sp_core::Pair>::from_string(seed, None)
+        .expect("dev key had invalid seed");
+      let identity =
+        sp_core::sr25519::Pair::from_seed(&sp_core::blake2_256(seed.as_bytes())).public();
+      (identity.into(), Arc::new(crate::keystore::Keystore::from(pair)))
     } else {
-      keystore_container.keystore()
+      panic!("unrecognized keystore")
     };
 
   let telemetry = telemetry.map(|(worker, telemetry)| {
@@ -216,7 +218,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       transaction_pool,
       other: (block_import, babe_link, grandpa_link, shared_voter_state, mut telemetry),
     },
-    keystore_container,
+    (validator_identity, keystore_container),
   ) = new_partial(&mut config)?;
 
   type N = sc_network::service::NetworkWorker<Block, <Block as sp_runtime::traits::Block>::Hash>;
@@ -316,7 +318,7 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
             }
           }
         }
-        tokio::time::sleep(core::time::Duration::from_secs(60)).await;
+        tokio::time::sleep(core::time::Duration::from_mins(1)).await;
       }
     }
   });
@@ -399,13 +401,16 @@ pub fn new_full(mut config: Configuration) -> Result<TaskManager, ServiceError> 
       keystore: keystore.clone(),
       client: client.clone(),
       select_chain,
-      env: proposer::ProposerFactory(sc_basic_authorship::ProposerFactory::new(
-        task_manager.spawn_handle(),
-        client,
-        transaction_pool.clone(),
-        prometheus_registry.as_ref(),
-        telemetry.as_ref().map(Telemetry::handle),
-      )),
+      env: proposer::ProposerFactory(
+        validator_identity,
+        sc_basic_authorship::ProposerFactory::new(
+          task_manager.spawn_handle(),
+          client,
+          transaction_pool.clone(),
+          prometheus_registry.as_ref(),
+          telemetry.as_ref().map(Telemetry::handle),
+        ),
+      ),
       block_import,
       sync_oracle: sync_service.clone(),
       justification_sync_link: sync_service.clone(),

@@ -10,5 +10,7 @@ pub trait EconomicSecurity {
   fn achieved_economic_security(network: ExternalNetworkId) -> bool;
 
   /// The security oracle's valuation of this balance in SRI.
+  ///
+  /// This may return `Amount(u64::MAX)` to represent an overflow.
   fn sri_value(balance: ExternalBalance) -> Amount;
 }

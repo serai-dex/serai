@@ -1,7 +1,12 @@
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{
-  crypto::RistrettoSignature, address::SeraiAddress, coin::ExternalCoin, balance::ExternalBalance,
+  BitVec,
+  crypto::RistrettoSignature,
+  address::SeraiAddress,
+  validator_sets::KeyShares,
+  coin::ExternalCoin,
+  balance::{Amount, ExternalBalance},
   genesis_liquidity::GenesisValues,
 };
 
@@ -19,6 +24,8 @@ pub enum Call {
   oraclize_values {
     /// The values of the non-Bitcoin external coins.
     values: GenesisValues,
+    /// The genesis validators who signed off on these values.
+    signature_participants: BitVec<{ KeyShares::MAX_PER_SET_U64 }>,
     /// The signature by the genesis validators for these values.
     ///
     /// This is limited to `RistrettoSignature`, instead of using `Signature`, as it does not need
@@ -36,6 +43,10 @@ pub enum Call {
   remove_genesis_liquidity {
     /// The genesis liquidity to remove.
     genesis_liquidity: ExternalBalance,
+    /// The minimum amount of SRI to receive.
+    sri_minimum: Amount,
+    /// The minimum amount of the coin to receive.
+    external_coin_minimum: Amount,
   },
 }
 
@@ -54,7 +65,7 @@ pub enum Event {
   /// Genesis liquidity added.
   GenesisLiquidityAdded {
     /// The recipient of the genesis liquidity.
-    recipient: SeraiAddress,
+    to: SeraiAddress,
     /// The coins added as genesis liquidity.
     genesis_liquidity: ExternalBalance,
   },
@@ -68,10 +79,16 @@ pub enum Event {
     genesis_liquidity: ExternalBalance,
   },
   /// Genesis liquidity removed.
-  GenesisLiquidityRemoved {
+  GenesisLiquidityRemoval {
     /// The account which removed the genesis liquidity.
-    from: SeraiAddress,
+    by: SeraiAddress,
     /// The amount of genesis liquidity removed.
     genesis_liquidity: ExternalBalance,
+    /// The amount of SRI which was burnt by this removal.
+    sri_burnt: Amount,
+    /// The amount of SRI yielded to the user by this removal.
+    sri_yielded: Amount,
+    /// The amount of the coin which was yielded to the user by this removal.
+    external_coin_yielded: Amount,
   },
 }

@@ -4,7 +4,10 @@ use std::sync::Arc;
 use serai_db::{DbTxn as _, Db};
 
 use serai_client_serai::{
-  abi::primitives::{network_id::ExternalNetworkId, validator_sets::Session},
+  abi::primitives::{
+    network_id::ExternalNetworkId,
+    validator_sets::{Session, ExternalValidatorSet},
+  },
   Serai,
 };
 
@@ -43,6 +46,7 @@ impl<D: Db> PublishSlashReportTask<D> {
     let current_session = current_session.map(|session| session.0);
     // Only attempt to publish the slash report for session #n while session #n+1 is still
     // active
+    // TODO: Fix this. It's actually up until #n+2
     let session_after_slash_report_retired = current_session > Some(session_after_slash_report.0);
     if session_after_slash_report_retired {
       // Commit the txn to drain this slash report from the database and not try it again later
@@ -58,7 +62,11 @@ impl<D: Db> PublishSlashReportTask<D> {
     }
 
     // If this session which should publish a slash report already has, move on
-    if !serai.pending_slash_report(network).await.map_err(|e| format!("{e:?}"))? {
+    if !serai
+      .pending_slash_report(ExternalValidatorSet { network, session })
+      .await
+      .map_err(|e| format!("{e:?}"))?
+    {
       txn.commit();
       return Ok(false);
     }

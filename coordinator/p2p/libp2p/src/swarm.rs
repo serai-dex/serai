@@ -31,7 +31,7 @@ use crate::{
   gossip,
 };
 
-const TIME_BETWEEN_REBUILD_PEERS: Duration = Duration::from_secs(10 * 60);
+const TIME_BETWEEN_REBUILD_PEERS: Duration = Duration::from_mins(10);
 
 /*
   `SwarmTask` handles everything we need the `Swarm` object for. The goal is to minimize the
@@ -215,7 +215,7 @@ impl SwarmTask {
                 should dial more). This is accepted as the dial task will eventually run on its
                 natural timer.
               */
-              const MINIMUM_TIME_SINCE_LAST_EXPLICIT_DIAL: Duration = Duration::from_secs(60);
+              const MINIMUM_TIME_SINCE_LAST_EXPLICIT_DIAL: Duration = Duration::from_mins(1);
               let now = Instant::now();
               if (self.last_dial_task_run + MINIMUM_TIME_SINCE_LAST_EXPLICIT_DIAL) < now {
                 self.dial_task.run_now();

@@ -72,7 +72,7 @@ async fn provide_transaction<TD: DbTrait, P: P2p>(
         "Tributary {set:?} was supposed to provide {tx:?} but peers disagree, halting Tributary",
       );
       // Print this every five minutes as this does need to be handled
-      tokio::time::sleep(Duration::from_secs(5 * 60)).await;
+      tokio::time::sleep(Duration::from_mins(5)).await;
     },
   }
 }

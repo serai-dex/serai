@@ -6,7 +6,7 @@ use rand_chacha::ChaCha20Rng;
 use blake2::{
   digest::{
     array::{typenum::U32, Array},
-    crypto_common::KeySizeUser,
+    common::KeySizeUser,
     KeyInit, Mac as _,
   },
   Blake2sMac,

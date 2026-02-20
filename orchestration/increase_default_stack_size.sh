@@ -47,8 +47,9 @@ write_bytes() {
 
 # Magic
 MAGIC=$(read_bytes 0 4)
+OCTAL_7F=$(hex_to_octal 7f)
 # shellcheck disable=SC2059
-EXPECTED_MAGIC=$(printf \\"$(hex_to_octal 7f)"ELF | hex)
+EXPECTED_MAGIC=$(printf \\"$OCTAL_7F"ELF | hex)
 if [ ! "$MAGIC" = "$EXPECTED_MAGIC" ]; then
   echo "Not ELF"
   exit 2
@@ -130,13 +131,15 @@ if [ ! "$ELF_VERSION" = "01" ]; then
 fi
 
 ELF_VERSION_2=$(read_bytes $((0x14)) 4)
-if [ ! "$ELF_VERSION_2" = "$(swap_native_endian 00000001)" ]; then
+NATIVE_ENDIAN_1_U32=$(swap_native_endian 00000001)
+if [ ! "$ELF_VERSION_2" = "$NATIVE_ENDIAN_1_U32" ]; then
   echo "Unknown secondary ELF Version ($ELF_VERSION_2)"
   exit 7
 fi
 
 # Find where the program headers are
-PROGRAM_HEADERS_OFFSET=$(read_integer_by_offset 0x1c 0x20 "$(value_per_bits 4 8)")
+HEADERS_OFFSET_LEN=$(value_per_bits 4 8)
+PROGRAM_HEADERS_OFFSET=$(read_integer_by_offset 0x1c 0x20 "$HEADERS_OFFSET_LEN")
 PROGRAM_HEADER_SIZE=$(value_per_bits 0x20 0x38)
 DECLARED_PROGRAM_HEADER_SIZE=$(read_integer_by_offset 0x2a 0x36 2)
 if [ ! "$PROGRAM_HEADER_SIZE" -eq "$DECLARED_PROGRAM_HEADER_SIZE" ]; then

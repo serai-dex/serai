@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[cfg(not(any(test, feature = "dev")))]
-pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(60);
+pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_mins(1);
 #[cfg(any(test, feature = "dev"))]
 pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(6);
 

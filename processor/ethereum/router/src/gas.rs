@@ -184,16 +184,14 @@ impl Router {
 
       let mut db = InMemoryDB::new(EmptyDB::new());
       // Insert the Router into the state
-      db.insert_account_info(
-        self.address,
-        AccountInfo {
-          balance: U256::from(0),
-          // Per EIP-161
-          nonce: 1,
-          code_hash: bytecode.hash_slow(),
-          code: Some(bytecode),
-        },
-      );
+      db.insert_account_info(self.address, {
+        let balance = U256::from(0);
+        // Per EIP-161
+        let nonce = 1;
+        let code_hash = bytecode.hash_slow();
+        let code = bytecode;
+        AccountInfo::new(balance, nonce, code_hash, code)
+      });
 
       // Insert the value for _smartContractNonce set in the constructor
       // All operations w.r.t. execute in constant-time, making the actual value irrelevant

@@ -58,10 +58,16 @@
 //! This crate _MUST_ be built for a non-`wasm32v1-none` target. It will then spawn a nested
 //! `cargo build` command to build this for `wasm32v1-none`, with the desired configuration and
 //! options. As part of this, `cargo build` will be invoked with a _fresh_ `CARGO_HOME`. This means
-//! any host-specific `cargo` configuration will _NOT_ be propagated.
+//! any host-specific `cargo` configuration will _NOT_ be propagated. Exceptionally, networking
+//! configuration from the host environment is propagated as it isn't expected to impact the result
+//! and may be necessary to download dependencies.
 //!
-//! The one exception is `CARGO_NET_GIT_FETCH_WITH_CLI`. If set within the host environment, it
-//! will be propagated to the child `cargo build` as well.
+//! The `SERAI_PROTOCOL_ID` environment variable will be propagated, if set, as intended for the
+//! runtime to know its protocol ID. The build script does not require it be set nor will it
+//! provide a default value if it isn't set. The value is RECOMMENDED to be set to the currently
+//! checked-out Git commit, as is being built to create the runtime and comprehensive to the
+//! entirety of the Serai protocol/software stack. The value of `SERAI_PROTOCOL_ID` MUST be
+//! set consistently when performing a reproducible build.
 //!
 //! ### Caveats
 //!
@@ -88,7 +94,7 @@ use std::{
 #[rustfmt::skip]
 /// Fetch an environment variable which `cargo` sets when building crates.
 ///
-/// https://doc.rust-lang.org/1.92.0/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates
+/// https://doc.rust-lang.org/1.93.1/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates
 /// provides the full list of these.
 fn cargo_env(var: &str) -> String {
   env::var(var).unwrap_or_else(|_| {
@@ -154,7 +160,7 @@ fn wasm_rustflags() -> String {
   /// `linker-plugin-lto` is used as Rust's LTO requires bitcode, forcing us to defer to the
   /// linker's LTO. While this would suggest we _should_ set `embed-bitcode=true`,
   /// [Rust's documentation](
-  ///   https://doc.rust-lang.org/1.92.0/rustc/codegen-options/index.html#embed-bitcode
+  ///   https://doc.rust-lang.org/1.93.1/rustc/codegen-options/index.html#embed-bitcode
   /// ) suggests that's likely not desired and should solely be done when compiling one library
   /// with mixed methods of linking. When compiling and linking just once (as seen here), it's
   /// suggested to use the linker's LTO instead.
@@ -206,6 +212,7 @@ fn command(bin: &str) -> Command {
   command.env_clear();
 
   // Propagate Window's `SystemRoot` environment variable as required for basic functioning
+  // Notably, `git` for Windows won't function at all if this isn't set
   #[cfg(target_family = "windows")]
   if let Ok(root) = env::var("SystemRoot") {
     command.env("SystemRoot", root);
@@ -228,6 +235,39 @@ fn command(bin: &str) -> Command {
   for key in ["CARGO", "RUSTC", "RUSTDOC"] {
     command.env(key, cargo_env(key));
   }
+
+  /*
+    We also propagate `RUSTUP_HOME` and `RUSTUP_TOOLCHAIN` so that when we create a fresh
+    `CARGO_HOME` later in this build script, `rustup` can still resolve its toolchain.
+
+    This wasn't observed as necessary on an `x86_64-unknown-linux-gnu` host. It was reported as
+    necessary on an `aarch64-apple-darwin` host however. It _shouldn't_ be necessary as this script
+    should _solely_ use the _already resolved_ `rustc`, `cargo`, as identified by the
+    `RUSTC`, `CARGO` environment variables. It isn't observed to be problematic
+    (re: reproducibility) to include here however, and solves a practical issue of this not working
+    otherwise. Ideally, a cleaner solution would overall.
+  */
+  for key in ["RUSTUP_HOME", "RUSTUP_TOOLCHAIN"] {
+    if let Ok(value) = env::var(key) {
+      command.env(key, value);
+    }
+  }
+
+  /*
+    Finally, we propagate the host's `PATH`, as the Rust toolchain requires the host's C compiler,
+    even when using the self-contained linker, in order to drive it and provide the
+    platform-specific libraries.
+
+    While we could build a `PATH` from the Rust toolchain, and then append the value of
+    `RUSTC_LINKER` (to have a `PATH` deterministic to the Rust toolchain with the sole exception of
+    the host's linker), `RUSTC_LINKER` is the linker for the _target_, not the host, when we would
+    want to set the linker for the host specifically. There also isn't a trivial way to query the
+    _resolved_ linker after all the possible configuration methods are taken into consideration.
+  */
+  if let Ok(path) = env::var("PATH") {
+    command.env("PATH", path);
+  }
+
   /*
     Propagate toolchain configuration which are _optional_ and may not be set.
 
@@ -238,6 +278,66 @@ fn command(bin: &str) -> Command {
   for key in ["RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CLIPPY_ARGS", "CLIPPY_TERMINAL_WIDTH"] {
     if let Ok(value) = env::var(key) {
       command.env(key, value);
+    }
+  }
+
+  /*
+    If this `rustc` was built from source, with a version string which declares itself as so,
+    normalize the version string to the one from the release build.
+
+    This is required as the version impacts how symbols are mangled, and symbol mangling, even when
+    symbols are stripped, effect the resulting binary. While we expect a consistent Rust toolchain
+    to perform this build process, we want to support a consistent Rust toolchain built from source
+    _or_ downloaded as a pre-built release.
+
+    This won't effect how the symbols within the standard library themselves are mangled, due to
+    `rustc` expecting it to be pre-compiled and therefore literally defined, so there's still
+    _some_ non-determinism here. Thankfully, normalizing how _most_ symbols are mangled is
+    sufficient.
+  */
+  {
+    let version = Command::new(cargo_env("RUSTC"))
+      .arg("--version")
+      .output()
+      .expect("couldn't invoke `rustc` to get the version");
+    assert!(version.status.success());
+    let version = String::from_utf8(version.stdout).expect("`rustc` version wasn't UTF-8");
+
+    #[expect(clippy::get_first)]
+    if version.contains("built from a source tarball") {
+      let version = version.split(' ').collect::<Vec<_>>();
+      assert_eq!(version.get(0).copied(), Some("rustc"));
+      let version = version
+        .get(1)
+        .copied()
+        .expect("`rustc --version` didn't contain its version in the expected position");
+
+      const CANONICAL_RUSTC_VERSION: &str = "1.93.1";
+      if version != CANONICAL_RUSTC_VERSION {
+        eprintln!(
+          "
+          `rustc` version ({version}) was different from {CANONICAL_RUSTC_VERSION} (canonical).
+          this will not be a canonical build
+        "
+        );
+      }
+      if let Some(version) = match version {
+        "1.91.1" => Some("1.91.1 (ed61e7d7e 2025-11-07)"),
+        "1.92.0" => Some("1.92.0 (ded5c06cf 2025-12-08)"),
+        "1.93.0" => Some("1.93.0 (254b59607 2026-01-19)"),
+        "1.93.1" => Some("1.93.1 (01f6ddf75 2026-02-11)"),
+        _ => {
+          eprintln!(
+            "
+            unrecognized `rustc` version.
+            this may not be a canonical build, even within this version of the Rust toolchain
+          "
+          );
+          None
+        }
+      } {
+        command.env("RUSTC_FORCE_RUSTC_VERSION", version);
+      }
     }
   }
 
@@ -267,8 +367,8 @@ fn command(bin: &str) -> Command {
     /*
       `incremental` is recommended to be disabled for release builds.
 
-      https://doc.rust-lang.org/1.92.0/rustc/codegen-options/index.html#incremental
-      https://doc.rust-lang.org/1.92.0/cargo/reference/profiles.html#incremental
+      https://doc.rust-lang.org/1.93.1/rustc/codegen-options/index.html#incremental
+      https://doc.rust-lang.org/1.93.1/cargo/reference/profiles.html#incremental
     */
     command.env("CARGO_INCREMENTAL", "false");
   }
@@ -289,6 +389,11 @@ fn command(bin: &str) -> Command {
     ) {
       command.env(key, value);
     }
+  }
+
+  // Propagate the `SERAI_PROTOCOL_ID` environment variable, as documented
+  if let Ok(protocol_id) = env::var("SERAI_PROTOCOL_ID") {
+    command.env("SERAI_PROTOCOL_ID", protocol_id);
   }
 
   command
@@ -514,7 +619,7 @@ fn main() {
       If we're invoked as `rustc`'s wrapper, `cargo` guarantees an argument of the `rustc` which
       should be used.
 
-      https://doc.rust-lang.org/1.92.0/cargo/reference/config.html#buildrustc-wrapper
+      https://doc.rust-lang.org/1.93.1/cargo/reference/config.html#buildrustc-wrapper
 
       This lets us determine which context we're being called in by if there are arguments.
     */
@@ -699,21 +804,6 @@ which will build the WASM as part of its build process, with the necessary confi
   build_command.env("WORKSPACE_DIR", workspace_dir());
 
   /*
-    We do propagate the host's `PATH`, as the Rust toolchain requires the host's C compiler, even
-    when using the self-contained linker, in order to drive it and provide the platform-specific
-    libraries.
-
-    While we could build a `PATH` from the Rust toolchain, and then append the value of
-    `RUSTC_LINKER` (to have a `PATH` deterministic to the Rust toolchain with the sole exception of
-    the host's linker), `RUSTC_LINKER` is the linker for the _target_, not the host, when we would
-    want to set the linker for the host specifically. There also isn't a trivial way to query the
-    _resolved_ linker after all the possible configuration methods are taken into consideration.
-  */
-  if let Ok(path) = env::var("PATH") {
-    build_command.env("PATH", path);
-  }
-
-  /*
     Install ourselves as the `rustc` wrapper for the reasons described above.
 
     This would overwrite any system-provided `RUSTC_WRAPPER`, but that shouldn't be a problem here.
@@ -752,13 +842,14 @@ which will build the WASM as part of its build process, with the necessary confi
     `trim-paths` is an unstable flag to strip the build environment's paths, as would otherwise
     prevent reproducible builds without an exactly-matching filesystem layout.
 
-    https://doc.rust-lang.org/1.92.0/cargo/reference/unstable.html#profile-trim-paths-option
+    https://doc.rust-lang.org/1.93.1/cargo/reference/unstable.html#profile-trim-paths-option
 
     This would be part of `DETERMINISM` except for how it's a `cargo` argument, not a `rustc` flag.
   */
   build_command.arg("-Ztrim-paths=all");
 
   build_command.arg("rustc");
+  build_command.arg("--locked");
   build_command.arg("--package").arg(cargo_env("CARGO_PKG_NAME"));
   build_command.arg("--target").arg("wasm32v1-none");
   build_command.arg("--crate-type").arg("cdylib");
@@ -775,13 +866,13 @@ which will build the WASM as part of its build process, with the necessary confi
     `rust-std`, instead solely adding the `rust-src` component (as necessary to build `rust-std`
     here and now). This improves the ability to reproduce Serai from a bootstrapped environment.
 
-    https://doc.rust-lang.org/1.92.0/cargo/reference/unstable.html#build-std
+    https://doc.rust-lang.org/1.93.1/cargo/reference/unstable.html#build-std
   */
   build_command.arg("-Zbuild-std=compiler_builtins,panic_abort,core,alloc");
   /*
     We set this to an empty value to override the default values which enable unwinding.
 
-    https://doc.rust-lang.org/1.92.0/cargo/reference/unstable.html#build-std-features
+    https://doc.rust-lang.org/1.93.1/cargo/reference/unstable.html#build-std-features
   */
   build_command.arg("-Zbuild-std-features=");
 
@@ -793,7 +884,7 @@ which will build the WASM as part of its build process, with the necessary confi
     to the current `out` directory.
 
     Ideally, we would use `--artifact-dir` for this
-    (https://doc.rust-lang.org/1.92.0/cargo/reference/unstable.html#artifact-dir), but it's only
+    (https://doc.rust-lang.org/1.93.1/cargo/reference/unstable.html#artifact-dir), but it's only
     available for `cargo build` (when we use `cargo rustc` due to needing `--crate-type`).
 
     Since the target directory format is unstable, we either have to:

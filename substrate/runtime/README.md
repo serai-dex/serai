@@ -43,3 +43,7 @@ For architectures which aren't `wasm32v1-none`, the `serai-runtime`
 functionality is effectively entirely stubbed. While certain APIs are defined
 and implemented for `RuntimeApi`, they will panic as unimplemented if called.
 They only exist to declare an API contract for the WASM blob.
+
+This can be changed by compiling with `--cfg native_runtime` as a flag to
+`rustc`. This is not officially endorsed nor supported for any reason but may
+be useful for certain testing environments.

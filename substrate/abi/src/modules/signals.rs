@@ -3,6 +3,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serai_primitives::{
   address::SeraiAddress,
   network_id::{ExternalNetworkId, NetworkId},
+  validator_sets::ValidatorSet,
   signals::Signal,
 };
 
@@ -99,19 +100,19 @@ pub enum Event {
     /// The network with which favor for the signal was revoked.
     with_network: NetworkId,
   },
-  /// A supermajority of a network's validator set now favor a signal.
-  NetworkInFavor {
-    /// The signal which now has a supermajority of a network's validator set favoring it.
+  /// A supermajority of a validator set now favor a signal.
+  ValidatorSetInFavor {
+    /// The signal which now has a supermajority of a validator set favoring it.
     signal: Signal,
-    /// The network which is now considered to favor the signal.
-    network: NetworkId,
+    /// The validator set which is now considered to favor the signal.
+    set: ValidatorSet,
   },
-  /// A network's validator set is no longer considered to favor a signal.
-  NetworkNoLongerInFavor {
-    /// The signal which no longer has the network considered in favor of it.
+  /// A validator set is no longer considered to favor a signal.
+  ValidatorSetNoLongerInFavor {
+    /// The signal which no longer has the validator set considered in favor of it.
     signal: Signal,
-    /// The network which is no longer considered to be in favor of the signal.
-    network: NetworkId,
+    /// The validator set which is no longer considered to be in favor of the signal.
+    set: ValidatorSet,
   },
   /// A retirement signal has been locked in.
   RetirementSignalLockedIn {

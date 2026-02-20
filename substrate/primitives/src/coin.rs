@@ -102,7 +102,7 @@ impl TryFrom<Coin> for ExternalCoin {
 
 impl ExternalCoin {
   /// The external network this coin is native to.
-  pub fn network(&self) -> ExternalNetworkId {
+  pub const fn network(&self) -> ExternalNetworkId {
     match self {
       ExternalCoin::Bitcoin => ExternalNetworkId::Bitcoin,
       ExternalCoin::Ether | ExternalCoin::Dai => ExternalNetworkId::Ethereum,
@@ -116,7 +116,7 @@ impl ExternalCoin {
   /// convention*. If so, that means Serai is *truncating* the decimals. A coin which is defined
   /// as having 8 decimals, while Serai claims it has 4 decimals, will have `0.00019999`
   /// interpreted as `0.0001` (in human units, in atomic units, 19999 will be interpreted as 1).
-  pub fn decimals(&self) -> u32 {
+  pub const fn decimals(&self) -> u32 {
     match self {
       // Ether and DAI have 18 decimals, yet we only track 8 in order to fit them within `u64`s
       ExternalCoin::Bitcoin | ExternalCoin::Ether | ExternalCoin::Dai => 8,
@@ -127,10 +127,10 @@ impl ExternalCoin {
 
 impl Coin {
   /// The network this coin is native to.
-  pub fn network(&self) -> NetworkId {
+  pub const fn network(&self) -> NetworkId {
     match self {
       Coin::Serai => NetworkId::Serai,
-      Coin::External(c) => c.network().into(),
+      Coin::External(c) => NetworkId::External(c.network()),
     }
   }
 
@@ -140,7 +140,7 @@ impl Coin {
   /// convention*. If so, that means Serai is *truncating* the decimals. A coin which is defined
   /// as having 8 decimals, while Serai claims it has 4 decimals, will have `0.00019999`
   /// interpreted as `0.0001` (in human units, in atomic units, 19999 will be interpreted as 1).
-  pub fn decimals(&self) -> u32 {
+  pub const fn decimals(&self) -> u32 {
     match self {
       Coin::Serai => 9,
       Coin::External(c) => c.decimals(),

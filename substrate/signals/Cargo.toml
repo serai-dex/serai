@@ -26,6 +26,9 @@ sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-fea
 
 frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+pallet-session = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
 pallet-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
@@ -36,6 +39,11 @@ serai-validator-sets-pallet = { path = "../validator-sets", default-features = f
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+pallet-session = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+
 [features]
 std = [
   "borsh/std",
@@ -45,6 +53,9 @@ std = [
 
   "frame-support/std",
   "frame-system/std",
+  "frame-benchmarking?/std",
+  "pallet-timestamp?/std",
+  "pallet-session?/std",
   "pallet-babe/std",
 
   "serai-abi/std",
@@ -56,6 +67,9 @@ std = [
 runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
+  "frame-benchmarking",
+  "pallet-timestamp/runtime-benchmarks",
+  "pallet-session/runtime-benchmarks",
   "pallet-babe/runtime-benchmarks",
 
   "serai-core-pallet/runtime-benchmarks",

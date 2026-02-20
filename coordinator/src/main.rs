@@ -61,7 +61,7 @@ static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
 
 async fn serai() -> Arc<Serai> {
   const SERAI_CONNECTION_DELAY: Duration = Duration::from_secs(10);
-  const MAX_SERAI_CONNECTION_DELAY: Duration = Duration::from_secs(300);
+  const MAX_SERAI_CONNECTION_DELAY: Duration = Duration::from_mins(5);
 
   let mut delay = SERAI_CONNECTION_DELAY;
   loop {

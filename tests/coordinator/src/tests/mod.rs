@@ -196,7 +196,7 @@ pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
 
       // Wait for the Serai node to boot, and for the Tendermint chain to get past the first block
       // TODO: Replace this with a Coordinator RPC we can query
-      tokio::time::sleep(Duration::from_secs(60)).await;
+      tokio::time::sleep(Duration::from_mins(1)).await;
 
       // Connect to the Message Queues as the processor
       let mut processors: Vec<Processor> = vec![];

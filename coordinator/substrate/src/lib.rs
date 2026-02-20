@@ -226,8 +226,7 @@ impl SlashReports {
       }
     }
 
-    let tx =
-      serai_client_serai::ValidatorSets::report_slashes(set.network, slash_report, signature);
+    let tx = serai_client_serai::ValidatorSets::report_slashes(set, slash_report, signature);
     _public_db::SlashReports::set(txn, set.network, &(set.session, tx));
   }
   pub(crate) fn take(

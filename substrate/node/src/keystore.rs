@@ -1,7 +1,11 @@
+use core::str::FromStr as _;
+
 use zeroize::Zeroize as _;
 
 use sp_core::{crypto::*, sr25519};
 use sp_keystore::*;
+
+use serai_abi::primitives::address::SeraiAddress;
 
 pub struct Keystore(sr25519::Pair);
 
@@ -12,7 +16,11 @@ impl From<sr25519::Pair> for Keystore {
 }
 
 impl Keystore {
-  pub fn from_env() -> Option<Self> {
+  pub fn from_env() -> Option<(SeraiAddress, Self)> {
+    let address = serai_env::var("ADDRESS")?;
+    let address =
+      SeraiAddress::from_str(&address).expect("validator address wasn't properly specified");
+
     let mut key_hex = serai_env::var("KEY")?;
     if key_hex.trim().is_empty() {
       None?;
@@ -25,7 +33,7 @@ impl Keystore {
 
     let res = Self::from(sr25519::Pair::from(schnorrkel::SecretKey::from_bytes(&key).unwrap()));
     key.zeroize();
-    Some(res)
+    Some((address, res))
   }
 
   fn pair(&self, id: KeyTypeId) -> sr25519::Pair {
