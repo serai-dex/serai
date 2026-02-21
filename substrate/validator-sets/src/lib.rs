@@ -110,7 +110,11 @@ pub trait Emissions {
   /// The `Coin::Serai` reward to issue to the block's author.
   fn block_reward() -> Amount;
   /// The `Coin::Serai` rewards to issue to `set`, which has just retired.
-  fn set_reward(set: ExternalValidatorSet) -> Amount;
+  ///
+  /// This will only be called for a set which is no longer the latest-decided set. This will only
+  /// be called once per set, hence the name being `take_set_reward`, noting that the implemetor
+  /// SHOULD remove their storage for this.
+  fn take_set_reward(set: ExternalValidatorSet) -> Amount;
 }
 
 #[frame_support::pallet]
@@ -201,6 +205,9 @@ mod pallet {
   #[pallet::storage]
   pub(crate) type SortedAllocations<T: Config> =
     StorageMap<_, Identity, SortedAllocationsKey, (), OptionQuery>;
+  #[pallet::storage]
+  pub(crate) type SumAllocations<T: Config> =
+    StorageMap<_, Identity, NetworkId, Amount, ValueQuery>;
 
   #[pallet::storage]
   pub(crate) type DelayedDeallocations<T: Config> = StorageDoubleMap<
@@ -219,6 +226,7 @@ mod pallet {
     type AllocationPerKeyShare = AllocationPerKeyShare<T>;
     type Allocations = Allocations<T>;
     type SortedAllocations = SortedAllocations<T>;
+    type SumAllocations = SumAllocations<T>;
   }
 
   impl<T: Config> DelayedDeallocationsStorage for Abstractions<T> {

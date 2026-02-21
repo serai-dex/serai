@@ -41,6 +41,15 @@ impl<T: Config> Pallet<T> {
     SelectedValidators::<T>::get(set, validator).map(|(_aux_key, key_shares)| key_shares)
   }
 
+  /// The total amount of stake allocated for this network.
+  ///
+  /// This function generally SHOULD NOT be used. The actual amount of stake which will be present
+  /// within a validator set may, and probably will be, notably less than this value, and this
+  /// value may have deallocations occur _before_ the next validator set is decided.
+  pub fn total_allocated_stake_for_network(network: NetworkId) -> Amount {
+    SumAllocations::<T>::get(network)
+  }
+
   /// The stake for the current validator set for a network.
   pub fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount> {
     Abstractions::<T>::stake_for_current_validator_set(network)

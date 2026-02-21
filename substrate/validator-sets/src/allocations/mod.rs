@@ -103,6 +103,14 @@ pub(crate) trait AllocationsStorage: crate::AuxiliaryKeysStorage {
   /// This is opaque and to be exclusively read/write by `Allocations`.
   type SortedAllocations: StorageMap<SortedAllocationsKey, (), Query = Option<()>>
     + StoragePrefixedMap<()>;
+
+  /// A map storing the sum of allocations for a network.
+  ///
+  /// This is to be exclusively written to by `Allocations` but may be arbitrarily read.
+  ///
+  /// Internally, this is used pre-Economic Security to evaluate how much stake has been allocated
+  /// in order to then calculate the distance to economic security.
+  type SumAllocations: StorageMap<NetworkId, Amount, Query = Amount>;
 }
 
 /// An interface for managing validators' allocations.
@@ -145,7 +153,8 @@ pub(crate) trait Allocations {
   /// to storage.
   ///
   /// This does not perform any transfers of any coins/tokens. It solely performs the bookkeeping
-  /// for the allocation with regards to the `Allocations` abstraction present here.
+  /// for the allocation with regards to the `Allocations` abstraction present here. This function
+  /// may panic if the transfer has not occured and may be invalid when it occurs.
   ///
   /// This function will be atomic, only modifying the storage if it will return `Ok(())`.
   fn increase_allocation_without_updating_other_contexts(
@@ -204,9 +213,11 @@ const _MAX_PER_SET_IS_IN_RANGE: [(); ((KeyShares::MAX_PER_SET <= (u16::MAX / 4))
 ///
 /// The purpose of this function is to ensure
 /// [`AllocationsStorage::Allocations`] remains exactly synchronized with
-/// [`AllocationsStorage::SortedAllocations`].
+/// [`AllocationsStorage::SortedAllocations`] and
+/// [`AllocationsStorage::SumAllocations`].
 ///
-/// This returns the validator's prior allocation.
+/// This returns the validator's prior allocation. This function has undefined behavior if the new
+/// allocation is not valid.
 fn update_allocation<Storage: AllocationsStorage>(
   network: NetworkId,
   key: SeraiAddress,
@@ -221,6 +232,22 @@ fn update_allocation<Storage: AllocationsStorage>(
   if amount.0 != 0 {
     Storage::Allocations::set((network, key), Some(amount));
     Storage::SortedAllocations::set(SortedAllocationsKey::new(network, key, amount), Some(()));
+  }
+  // Update the sum of allocations
+  {
+    let prior = prior.unwrap_or(Amount(0));
+    if prior < amount {
+      let increase = (amount - prior).expect("couldn't subtract smaller amount from larger amount");
+      Storage::SumAllocations::mutate(network, |value| {
+        *value =
+          (*value + increase).expect("sum of allocations exceeded `Amount`, meaning SRI supply has")
+      });
+    } else {
+      let decrease = (prior - amount).expect("couldn't subtract smaller amount from larger amount");
+      Storage::SumAllocations::mutate(network, |value| {
+        *value = (*value - decrease).expect("sum of allocations was less than a present allocation")
+      });
+    }
   }
   prior
 }
@@ -593,6 +620,16 @@ mod mock {
   type SortedAllocationsMap =
     StorageMap<StorageSorted, Identity, SortedAllocationsKey, (), OptionQuery>;
 
+  pub struct StorageSum;
+  impl StorageInstance for StorageSum {
+    fn pallet_prefix() -> &'static str {
+      "Allocations"
+    }
+
+    const STORAGE_PREFIX: &'static str = "Storage::SumAllocations";
+  }
+  type SumAllocations = StorageMap<StorageSum, Identity, NetworkId, Amount, ValueQuery>;
+
   pub(crate) struct DummyEconomicSecurity;
   impl serai_abi::economic_security::EconomicSecurity for DummyEconomicSecurity {
     fn achieved_economic_security(_network: ExternalNetworkId) -> bool {
@@ -609,6 +646,7 @@ mod mock {
     type AllocationPerKeyShare = AllocationPerKeyShareMap;
     type Allocations = AllocationsMap;
     type SortedAllocations = SortedAllocationsMap;
+    type SumAllocations = SumAllocations;
   }
 }
 
@@ -639,7 +677,7 @@ fn test_get_iter_update_allocations() {
       let mut key = [0; 32];
       OsRng.fill_bytes(&mut key);
       let key = SeraiAddress(key);
-      let amount = Amount(OsRng.next_u64());
+      let amount = Amount(OsRng.next_u64() >> 8);
       (key, amount)
     };
     const ALLOCATIONS: usize = 100;
@@ -649,6 +687,10 @@ fn test_get_iter_update_allocations() {
       allocations.push((key, amount));
       assert_eq!(update_allocation::<MockStorage>(network, key, amount), None);
       assert_eq!(MockStorage::allocation(network, key), Some(amount));
+      assert_eq!(
+        <MockStorage as AllocationsStorage>::SumAllocations::get(network),
+        allocations.iter().fold(Amount(0), |accum, (_, alloc)| (accum + (*alloc)).unwrap())
+      );
     }
     // Sort them from highest amount to lowest
     allocations.sort_by_key(|item| item.1);
@@ -699,18 +741,26 @@ fn test_get_iter_update_allocations() {
       #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
       let i = (OsRng.next_u64() as usize) % allocations.len();
       if (OsRng.next_u64() & 1) == 1 {
-        let new_amount = Amount(OsRng.next_u64());
+        let new_amount = Amount(OsRng.next_u64() >> 8);
         assert_eq!(
           update_allocation::<MockStorage>(network, allocations[i].0, new_amount),
           Some(allocations[i].1)
         );
         allocations[i].1 = new_amount;
+        assert_eq!(
+          <MockStorage as AllocationsStorage>::SumAllocations::get(network),
+          allocations.iter().fold(Amount(0), |accum, (_, alloc)| (accum + (*alloc)).unwrap())
+        );
       } else {
         assert_eq!(
           update_allocation::<MockStorage>(network, allocations[i].0, Amount(0)),
           Some(allocations[i].1)
         );
         allocations.swap_remove(i);
+        assert_eq!(
+          <MockStorage as AllocationsStorage>::SumAllocations::get(network),
+          allocations.iter().fold(Amount(0), |accum, (_, alloc)| (accum + (*alloc)).unwrap())
+        );
       }
     }
     allocations.sort_by_key(|item| item.1);

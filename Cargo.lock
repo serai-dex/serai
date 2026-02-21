@@ -8317,11 +8317,16 @@ version = "0.1.0"
 dependencies = [
  "frame-support",
  "frame-system",
+ "pallet-timestamp",
  "parity-scale-codec",
+ "rand_core 0.6.4",
  "serai-abi",
  "serai-coins-pallet",
  "serai-core-pallet",
  "serai-dex-pallet",
+ "serai-validator-sets-pallet",
+ "sp-core",
+ "sp-io",
 ]
 
 [[package]]

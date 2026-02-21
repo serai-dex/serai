@@ -356,7 +356,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
           let retiring = ExternalValidatorSet { network, session: prior };
           <Self as SlashReports>::retire_set_regarding_slash_report(
             retiring,
-            <Storage::Config as crate::Config>::Emissions::set_reward(retiring),
+            <Storage::Config as crate::Config>::Emissions::take_set_reward(retiring),
           );
         }
       }
