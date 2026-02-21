@@ -755,3 +755,46 @@ sp_api::decl_runtime_apis! {
 /// A `*Storage` backend used when testing, without constructing a full runtime.
 #[cfg(test)]
 struct MockStorage;
+#[cfg(test)]
+impl MockStorage {
+  /// Set random random auxiliary keys for each network for a given validator.
+  pub fn set_random_auxiliary_keys(validator: SeraiAddress) {
+    use rand_core::OsRng;
+    use zeroize::Zeroizing;
+
+    use ciphersuite::{group::ff::Field as _, WrappedGroup};
+    use dalek_ff_group::Ristretto;
+    use embedwards25519::Embedwards25519;
+    use secq256k1::Secq256k1;
+
+    let btc_keys = SignedAuxiliaryKeys::bitcoin(
+      &mut OsRng,
+      validator,
+      &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
+      &Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut OsRng)),
+    );
+    MockStorage::set_auxiliary_keys(validator, btc_keys).unwrap();
+
+    let eth_keys = SignedAuxiliaryKeys::ethereum(
+      &mut OsRng,
+      validator,
+      &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
+      &Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut OsRng)),
+    );
+    MockStorage::set_auxiliary_keys(validator, eth_keys).unwrap();
+
+    let xmr_keys = SignedAuxiliaryKeys::monero(
+      &mut OsRng,
+      validator,
+      &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
+    );
+    MockStorage::set_auxiliary_keys(validator, xmr_keys).unwrap();
+
+    let serai_keys = SignedAuxiliaryKeys::serai(
+      &mut OsRng,
+      validator,
+      &Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng)),
+    );
+    MockStorage::set_auxiliary_keys(validator, serai_keys).unwrap();
+  }
+}

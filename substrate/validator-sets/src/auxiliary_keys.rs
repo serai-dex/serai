@@ -102,7 +102,7 @@ mod mock {
   pub struct Keys;
   impl StorageInstance for Keys {
     fn pallet_prefix() -> &'static str {
-      "Allocations"
+      "ValidatorSets"
     }
     const STORAGE_PREFIX: &'static str = "Storage::AuxiliaryKeys";
   }
@@ -120,4 +120,92 @@ mod mock {
 
     type AuxiliaryKeys = AuxiliaryKeysMap;
   }
+}
+
+#[test]
+fn test_auxiliary_keys() {
+  use zeroize::Zeroizing;
+
+  use rand_core::{RngCore as _, OsRng};
+
+  use ciphersuite::{group::ff::Field as _, WrappedGroup};
+  use dalek_ff_group::Ristretto;
+  use embedwards25519::Embedwards25519;
+  use secq256k1::Secq256k1;
+
+  use sp_io::TestExternalities;
+
+  use crate::MockStorage;
+
+  let rand_key = || {
+    let mut key = [0; 32];
+    OsRng.fill_bytes(&mut key);
+    SeraiAddress(key)
+  };
+
+  TestExternalities::default().execute_with(|| {
+    let validator = rand_key();
+
+    // should return false we don't have the keys set
+    assert!(!MockStorage::has_necessary_auxiliary_keys(
+      validator,
+      ExternalNetworkId::Bitcoin.into()
+    ));
+
+    // have valid keys for the validator
+    let mut btc_keys = SignedAuxiliaryKeys::bitcoin(
+      &mut OsRng,
+      validator,
+      &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
+      &Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut OsRng)),
+    );
+
+    // make Secq256k1 signature invalid
+    {
+      let SignedAuxiliaryKeys::Bitcoin(_, _, _, secq_sig) = &mut btc_keys else {
+        panic!("we just constructed btc keys but it was't btc keys");
+      };
+      secq_sig[0] ^= 1;
+    }
+
+    // should fail to set the keys due to Secq256k1 signature
+    assert_eq!(MockStorage::set_auxiliary_keys(validator, btc_keys.clone()), Err(()));
+
+    // fix Secq256k1 signature
+    {
+      let SignedAuxiliaryKeys::Bitcoin(_, _, _, secq_sig) = &mut btc_keys else {
+        panic!("we just constructed btc keys but it was't btc keys");
+      };
+      secq_sig[0] ^= 1;
+    }
+
+    // should succeed to set the keys now
+    MockStorage::set_auxiliary_keys(validator, btc_keys).unwrap();
+
+    // should still return false since we don't have the serai keys set
+    assert!(!MockStorage::has_necessary_auxiliary_keys(
+      validator,
+      ExternalNetworkId::Bitcoin.into()
+    ));
+
+    // set the serai keys for the validator
+    let serai_keys = SignedAuxiliaryKeys::serai(
+      &mut OsRng,
+      validator,
+      &Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng)),
+    );
+    MockStorage::set_auxiliary_keys(validator, serai_keys).unwrap();
+
+    // should return true now
+    assert!(MockStorage::has_necessary_auxiliary_keys(
+      validator,
+      ExternalNetworkId::Bitcoin.into()
+    ));
+
+    // should still return false for any other network
+    assert!(!MockStorage::has_necessary_auxiliary_keys(
+      validator,
+      ExternalNetworkId::Monero.into()
+    ));
+  });
 }
