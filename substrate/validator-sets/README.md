@@ -249,7 +249,8 @@ proofs themselves directly on-chain is to not tightly bind to BABE/GRANDPA's
 formatting of equivocation proofs, allowing future flexibility with how the
 protocol is defined.
 
-### Integration
+### Integration Details
 
 A `PreInherents` hook is defined which _must_ be integrated into the runtime
-for this to work properly.
+for this to work properly. Said hook will call [`Emissions::block_reward`] so
+that _MUST_ be in a well-defined state prior to this pallet's hook's execution.

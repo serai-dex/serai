@@ -117,6 +117,70 @@ mod pallet {
   /// This is programmed to never panic. The fraction will be within the range `0 ..= 1`. The
   /// numerator and denominator will fit within `u192`, enabling further scaling by a `u64`, and
   /// the denominator will be non-zero, ensuring it can be divided by.
+  /*
+    This can be hard to immediately understand. It's calculating the ratio of two values themselves
+    represented as fractions to calculate the specified ratio, before returning not the ratio but
+    the fraction of the total one side of the ratio represents.
+
+    In order to understand this, the following walkthrough on the premise is recommended.
+
+    ```py
+    DESIRED_UNUSED_CAPACITY = 0.1
+    DESIRED_DISTRIBUTION = 1 - DESIRED_UNUSED_CAPACITY
+    def ratio(CURRENT_DISTRIBUTION):
+      print(
+        str(DESIRED_UNUSED_CAPACITY) +
+          ':' +
+          str(((1 - CURRENT_DISTRIBUTION) * DESIRED_DISTRIBUTION) / CURRENT_DISTRIBUTION)
+      )
+    ```
+
+    For `CURRENT_DISTRIBUTION`, a number in range `0 ..= 1` representing the percentage of capacity
+    actively consumed by requirements, this will print the ratio specified in the Economics
+    specification.
+
+    ```
+    >>> ratio(0.9)
+    0.1:0.09999999999999998
+    ```
+
+    When 90% of the current capacity is consumed, as is our target, the ratio is effectively
+    `1 : 1`. Note the literal numeric values are `0.1 : 0.1` but that doesn't matter as all that
+    matters is their relation to each other.
+
+    ```
+    >>> ratio(0.95)
+    0.1:0.04736842105263162
+    ```
+
+    When 95% of capacity is consumed, as over our target, validators receive more than
+    _twice as much_ of the rewards than the liquidity pools.
+
+    ```
+    >>> ratio(0.85)
+    0.1:0.15882352941176475
+    ```
+
+    But when only 85% of capacity is consumed, as under our target, liquidity pools receive more
+    than 50% more of the rewards than the validators.
+
+    ```
+    >>> ratio(1)
+    0.1:0.0
+    ```
+
+    And of course, if the entire capacity is consumed, all rewards go to the validators as the
+    ratio becomes infinite.
+
+    This function computes the ratio before computing what fraction of the total the validators,
+    the left-hand term of the ratio, represent. For a ratio `2 : 3` (as approximate to the case
+    when 85% of capacity is consumed), this will yield `2 / 5`, saying the validators should
+    receive 40% of the rewards (and the liquidity pools the rest, the 60%).
+
+    The complexity is that this function does so while avoiding floating point numbers, requiring
+    keeping track of all fractions as their numerator/denominators, making sure to note the bounds
+    as needed to prevent over/underflows, and while not dividing by zero.
+  */
   fn post_economic_security_external_network_validator_rewards_fraction(
     used_capacity: Amount,
     capacity_of_network: Amount,
