@@ -230,6 +230,7 @@ mod pallet {
   }
 
   impl<T: Config> DelayedDeallocationsStorage for Abstractions<T> {
+    type Sessions = Self;
     type DelayedDeallocations = DelayedDeallocations<T>;
   }
 

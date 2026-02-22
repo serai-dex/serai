@@ -71,7 +71,7 @@ pub(crate) trait SlashReports {
 }
 
 fn fatal_slash<Storage: SlashReportsStorage>(network: NetworkId, validator: SeraiAddress) {
-  let mut drained = if let Some(amount) = Storage::drain_allocation(network, validator) {
+  let mut drained = if let Some(amount) = Storage::drain_allocation(validator, network) {
     // Emit the `Deallocation` event for the amount we drained
     Core::<Storage::Config>::emit_event(Event::Deallocation {
       validator,
@@ -84,7 +84,7 @@ fn fatal_slash<Storage: SlashReportsStorage>(network: NetworkId, validator: Sera
     Amount(0)
   };
 
-  drained.0 += Storage::drain_delayed_deallocations(network, validator).0;
+  drained.0 += Storage::drain_delayed_deallocations(validator, network).0;
 
   /*
     This should only error if we do not have these coins, which would suggest an accounting
