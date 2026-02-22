@@ -41,6 +41,8 @@ pub(crate) trait SlashReports {
 
   /// Prune a historical validator set.
   ///
+  /// This MUST be called when a validator set becomes historical.
+  ///
   /// If this validator set was expected to and has yet to publish a slash report, a default
   /// (empty) slash report will be entered.
   fn prune_historical_set_regarding_slash_report(set: ExternalValidatorSet);
@@ -154,7 +156,6 @@ impl<Storage: SlashReportsStorage> SlashReports for Storage {
   }
 
   fn prune_historical_set_regarding_slash_report(set: ExternalValidatorSet) {
-    // If this network never submitted its slash report, treat it as submitting `vec![]`
     if Storage::PendingSlashReport::contains_key(set) {
       handle_slash_report::<Storage>(set, None);
     }

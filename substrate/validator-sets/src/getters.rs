@@ -17,7 +17,7 @@ impl<T: Config> Pallet<T> {
 
   /// The amount of key shares a validator set has.
   ///
-  /// This will return `None` for historic set, per the definition in the `Sessions` abstraction.
+  /// This will return `None` for historic sets, per the definition in the `Sessions` abstraction.
   pub fn key_shares(set: ValidatorSet) -> Option<KeySharesStruct> {
     KeyShares::<T>::get(set)
   }
@@ -50,14 +50,14 @@ impl<T: Config> Pallet<T> {
     SumAllocations::<T>::get(network)
   }
 
-  /// The stake for the current validator set for a network.
+  /// The amount of stake considered allocated for a network's current validator set.
   pub fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount> {
-    Abstractions::<T>::stake_for_current_validator_set(network)
+    CurrentAllocatedStake::<T>::get(network)
   }
 
-  /// The stake for the latest decided validator set for a network.
+  /// The amount of stake considered allocated for a network's latest decided validator set.
   pub fn stake_for_latest_decided_validator_set(network: NetworkId) -> Option<Amount> {
-    Abstractions::<T>::stake_for_latest_decided_validator_set(network)
+    LatestDecidedAllocatedStake::<T>::get(network)
   }
 
   /// The validators selected for a validator set.

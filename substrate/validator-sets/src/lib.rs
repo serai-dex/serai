@@ -113,7 +113,7 @@ pub trait Emissions {
   ///
   /// This will only be called for a set which is no longer the latest-decided set. This will only
   /// be called once per set, hence the name being `take_set_reward`, noting that the implemetor
-  /// SHOULD remove their storage for this.
+  /// MUST remove their storage for this.
   fn take_set_reward(set: ExternalValidatorSet) -> Amount;
 }
 
@@ -316,7 +316,8 @@ mod pallet {
     ///
     /// Each genesis validator is expected to provide `SignedAuxiliaryKeys` for each network. They
     /// may not only validate _some_ networks. This is enforced by requiring the order of this
-    /// `Vec<_>` equal the order yielded by [`NetworkId::all`].
+    /// `Vec<_>` equal the order yielded by [`NetworkId::all`], with matching lengths for the two
+    /// lists.
     pub participants: Vec<(T::AccountId, Vec<SignedAuxiliaryKeys>)>,
   }
   impl<T: Config> Default for GenesisConfig<T> {
@@ -328,6 +329,21 @@ mod pallet {
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
+      /*
+        For a network with `n = 3f + 1`, where `n <= KeyShares::MAX_PER_SET`, we want to ensure
+        the genesis validators are of quantity `<= f` and accordingly can become a minority unable
+        to interrupt non-genesis validators.
+
+        Further more, we want to assert a set of additional validators of size equal to the genesis
+        validators is able to co-exist with the genesis validators before outright replacing them.
+        This means we require `n >= 4g + 1`, where `g` is the amount of genesis validators.
+
+        This isn't stricly ensuring, as even with so many validators, the capacity contributed from
+        rewards distributed to genesis validators may still be needed, but it's a good sanity check
+        on the amount of genesis validators.
+      */
+      assert!(((4 * self.participants.len()) + 1) <= usize::from(KeySharesStruct::MAX_PER_SET));
+
       GenesisValidators::<T>::set(Some(
         self
           .participants
@@ -337,15 +353,21 @@ mod pallet {
           .try_into()
           .expect("amount of genesis validators exceeded the maximum allowed per set"),
       ));
+
+      // Set their keys
       for (participant, keys) in &self.participants {
+        let mut networks_iter = NetworkId::all();
         let mut keys_iter = keys.iter().cloned();
-        for (network, keys) in NetworkId::all().zip(&mut keys_iter) {
+        for (network, keys) in (&mut networks_iter).zip(&mut keys_iter) {
           assert_eq!(network, keys.network());
           Abstractions::<T>::set_auxiliary_keys(*participant, keys)
             .expect("genesis auxiliary keys weren't valid");
         }
+        assert!(networks_iter.next().is_none(), "less keys provided than networks");
         assert!(keys_iter.next().is_none(), "more keys provided than networks");
       }
+
+      // Attempt sessions for all networks
       for network in NetworkId::all() {
         assert!(
           Abstractions::<T>::attempt_new_session(network, true),
@@ -410,6 +432,7 @@ mod pallet {
           .0;
         let SeraiPreExecutionDigest { proposer, unix_time_in_millis: _ } =
           SeraiPreExecutionDigest::find(&digest);
+        // We want this block to be rejected if it doesn't accurately specify its author
         assert_eq!(author, proposer);
 
         let reward = T::Emissions::block_reward();
@@ -753,6 +776,10 @@ sp_api::decl_runtime_apis! {
 }
 
 /// A `*Storage` backend used when testing, without constructing a full runtime.
+///
+/// This is used for testing the simpler abstractions where it's feasible to define the relevant
+/// subset and it's helpful for testing. For the abstractions which make use of it, they generally
+/// define themselves and then proceed to implement their `trait Storage for MockStorage`.
 #[cfg(test)]
 struct MockStorage;
 #[cfg(test)]

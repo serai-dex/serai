@@ -1,6 +1,6 @@
 //! `Allocations` is a simple abstraction over a pair of `StorageMap`s which ensure they remain
-//! synchronized and enable iterating over validators by the amount they've allocated. This is used
-//! to select validators for new sessions.
+//! synchronized and enable iterating over validators by the amount they've allocated. This
+//! iteration is used to select validators for new sessions.
 
 use scale::{Encode as _, DecodeAll as _};
 
@@ -108,10 +108,11 @@ pub(crate) trait AllocationsStorage: crate::AuxiliaryKeysStorage {
 
   /// A map storing the sum of allocations for a network.
   ///
-  /// This is to be exclusively written to by `Allocations` but may be arbitrarily read.
+  /// This is to be exclusively written to by `Allocations` but may be read by the rest of the
+  /// pallet.
   ///
-  /// Internally, this is used pre-Economic Security to evaluate how much stake has been allocated
-  /// in order to then calculate the distance to economic security.
+  /// Internally to the Serai protocol, this is used pre-Economic Security to evaluate how much
+  /// stake has been allocated in order to then calculate the distance to economic security.
   type SumAllocations: StorageMap<NetworkId, Amount, Query = Amount>;
 }
 
@@ -148,11 +149,11 @@ pub(crate) trait Allocations {
   /// immediately present here nor emit any events.
   ///
   /// Despite validating this allocation causes the validator to qualify for at least one key
-  /// share, it does not ensure the storage will only contain validators which qualify for at least
-  /// one key share. This is due to the potential for `AllocationPerKeyShare` to be independently
-  /// updated, potentially increasing the value _past_ what some validators have currently
-  /// allocated. It solely applies the minimum bound to prevent trivial entries from being written
-  /// to storage.
+  /// share (when not a reward), it does not ensure the storage will only contain validators which
+  /// qualify for at least one key share. This is due to the potential for `AllocationPerKeyShare`
+  /// to be independently updated, potentially increasing the value _past_ what some validators
+  /// have already allocated, among other things. It solely applies the minimum bound to prevent
+  /// trivial entries from being written to storage.
   ///
   /// This does not perform any transfers of any coins/tokens. It solely performs the bookkeeping
   /// for the allocation with regards to the `Allocations` abstraction present here. This function
@@ -181,7 +182,7 @@ pub(crate) trait Allocations {
     amount: Amount,
   ) -> Result<(), DeallocationError>;
 
-  /// Drain a validator's allocation.
+  /// Drain a validator's current allocation.
   ///
   /// This is intended to be called in response to a fatal slash. It will set the validator's
   /// allocation to `0` regardless of the context.

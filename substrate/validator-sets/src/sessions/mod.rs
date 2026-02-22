@@ -101,14 +101,16 @@ pub(crate) trait SessionsStorage:
       (SchnorrkelPublic, KeySharesStruct), Query = Option<(SchnorrkelPublic, KeySharesStruct)>,
     >;
 
-  /// The amount of allocated stake for a network's current session.
+  /// The amount of stake considered allocated for a network's current session.
   ///
-  /// This is opaque and to be exclusively read/write by `Sessions`.
+  /// This is to be solely written to by `Sessions`, but may be read by the rest of the pallet.
+  /// This will be `None` if and only if there is no current validator set for this network.
   type CurrentAllocatedStake: StorageMap<NetworkId, Amount, Query = Option<Amount>>;
 
-  /// The amount of allocated stake for a network's latest decided session.
+  /// The amount of stake considered allocated for a network's latest decided session.
   ///
-  /// This is opaque and to be exclusively read/write by `Sessions`.
+  /// This is to be solely written to by `Sessions`, but may be read by the rest of the pallet.
+  /// This will be `None` if and only if there is no latest decided validator set for this network.
   type LatestDecidedAllocatedStake: StorageMap<NetworkId, Amount, Query = Option<Amount>>;
 }
 
@@ -166,16 +168,6 @@ pub(crate) trait Sessions {
     validator: SeraiAddress,
     amount: Amount,
   ) -> Result<DeallocationTimeline, DeallocationError>;
-
-  /// The stake for the current validator set.
-  ///
-  /// This will return `None` if and only if there is no current validator set.
-  fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount>;
-
-  /// The stake for the latest decided validator set.
-  ///
-  /// This will return `None` if and only if there is no latest decided validator set.
-  fn stake_for_latest_decided_validator_set(network: NetworkId) -> Option<Amount>;
 }
 
 impl<Storage: SessionsStorage> Sessions for Storage {
@@ -222,10 +214,15 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       let mut genesis_validators = Storage::GenesisValidators::get()
         .expect("genesis validators weren't set")
         .into_iter()
-        .map(|validator| {
-          // This won't panic due to the bound for the `BoundedVec` representing genesis validators
+        .filter(|genesis_validator| {
+          !selected_validators
+            .iter()
+            .any(|(selected_validator, _key_shares)| selected_validator == genesis_validator)
+        })
+        .map(|genesis_validator| {
+          // This won't panic due to the collection storing genesis validators being bounded
           total_key_shares += 1;
-          (validator, KeySharesStruct::ONE)
+          (genesis_validator, KeySharesStruct::ONE)
         })
         .collect::<Vec<_>>();
 
@@ -248,34 +245,81 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       selected_validators.append(&mut genesis_validators);
     }
 
+    // Fetch the network stake requirement
+    let network_stake_requirement = match network {
+      NetworkId::Serai => Amount(0),
+      NetworkId::External(network) => {
+        if <Storage::Config as crate::Config>::EconomicSecurity::achieved_economic_security(network)
+        {
+          crate::network_stake_requirement::<
+            Storage::Config,
+            <Storage::Config as crate::Config>::EconomicSecurity,
+          >(network)
+        } else {
+          Amount(0)
+        }
+      }
+    };
+
+    let stake_for_validators = |selected_validators: &[_]| {
+      let mut stake = Amount(0);
+      for (validator, _key_shares) in selected_validators {
+        // Safe as the entire supply will fit within an `Amount` per `serai-coins-pallet`'s bounds
+        stake = (stake + Self::allocation(network, *validator).unwrap_or(Amount(0))).unwrap();
+      }
+      stake
+    };
+
+    /*
+      If the stake for these validators is less than the requirement, insert genesis validators,
+      even if we weren't instruced to, if they have any amount allocated.
+
+      The exact issue this aims to solve is how immediately post-Economic Security, genesis
+      validators will have been minted rewards _but may be less than the allocation per key share_.
+      This means they _may_ be providing capacity but _may not_ be selected for the next session,
+      causing the set to immediately stall after achieving Economic Security.
+
+      This block _solely_ excepts genesis validators from the `AllocationPerKeyShare` minimum when
+      and only when the proposed set would not otherwise achieve economic security.
+    */
+    if stake_for_validators(&selected_validators) < network_stake_requirement {
+      let mut not_already_included_genesis_validators = Storage::GenesisValidators::get()
+        .expect("genesis validators weren't set")
+        .into_iter()
+        .filter(|genesis_validator| {
+          !selected_validators
+            .iter()
+            .any(|(selected_validator, _key_shares)| selected_validator == genesis_validator)
+        })
+        .map(|genesis_validator| {
+          let allocation = Self::allocation(network, genesis_validator).unwrap_or(Amount(0));
+          (allocation, genesis_validator)
+        })
+        .collect::<Vec<_>>();
+      // Sort the genesis validators by how much they actively have allocated as stake
+      not_already_included_genesis_validators.sort_by(
+        |(a_allocation, _a_genesis_validator), (b_allocation, _b_genesis_validator)| {
+          a_allocation.cmp(b_allocation).reverse()
+        },
+      );
+      for (allocation, genesis_validator) in not_already_included_genesis_validators {
+        // Push genesis validators while they fit and contribute to economic security
+        if (total_key_shares < KeySharesStruct::MAX_PER_SET) && (allocation != Amount(0)) {
+          total_key_shares += 1;
+          selected_validators.push((genesis_validator, KeySharesStruct::ONE));
+        }
+      }
+    }
+
     // If we failed to select any validators, return `false` now
     if total_key_shares == 0 {
       return false;
     }
 
-    let mut latest_decided_allocated_stake = Amount(0);
-    for (validator, _key_shares) in &selected_validators {
-      // Safe as the entire supply will fit within an `Amount` per `serai-coins-pallet`'s bounds
-      latest_decided_allocated_stake = (latest_decided_allocated_stake +
-        Self::allocation(network, *validator).unwrap_or(Amount(0)))
-      .unwrap();
-    }
+    let latest_decided_allocated_stake = stake_for_validators(&selected_validators);
     // Only rotate to this set if they have sufficient stake
-    match network {
-      NetworkId::Serai => {}
-      NetworkId::External(network) => {
-        let achieved_economic_security =
-          <Storage::Config as crate::Config>::EconomicSecurity::achieved_economic_security(network);
-        if achieved_economic_security &&
-          (latest_decided_allocated_stake <
-            crate::network_stake_requirement::<
-              Storage::Config,
-              <Storage::Config as crate::Config>::EconomicSecurity,
-            >(network))
-        {
-          return false;
-        }
-      }
+    if latest_decided_allocated_stake < network_stake_requirement {
+      return false;
     }
 
     let latest_decided_session = Storage::LatestDecidedSession::mutate(network, |session| {
@@ -502,13 +546,5 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     }
 
     Ok(Self::potentially_delay_deallocation(network, validator, amount))
-  }
-
-  fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount> {
-    Storage::CurrentAllocatedStake::get(network)
-  }
-
-  fn stake_for_latest_decided_validator_set(network: NetworkId) -> Option<Amount> {
-    Storage::LatestDecidedAllocatedStake::get(network)
   }
 }
