@@ -98,7 +98,7 @@ pub struct DummyEconomicSecurity;
 #[expect(unused)]
 impl serai_abi::economic_security::EconomicSecurity for DummyEconomicSecurity {
   fn achieved_economic_security(network: ExternalNetworkId) -> bool {
-    false
+    true
   }
   fn sri_value(balance: ExternalBalance) -> Amount {
     Amount(0)
@@ -120,6 +120,7 @@ impl crate::Config for Test {
   type ShouldEndSession = Babe;
   type EconomicSecurity = DummyEconomicSecurity;
   type Emissions = DummyEmissions;
+  type Weights = ();
 }
 
 #[cfg(test)]

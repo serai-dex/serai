@@ -104,6 +104,7 @@ impl serai_validator_sets_pallet::Config for Runtime {
   type ShouldEndSession = Babe;
   type EconomicSecurity = EconomicSecurity;
   type Emissions = Emissions;
+  type Weights = (); // TODO
 }
 impl serai_signals_pallet::Config for Runtime {
   type RetirementLockInDurationInSlots = ConstU64<{ RETIREMENT_LOCK_IN_DURATION_IN_SLOTS }>;

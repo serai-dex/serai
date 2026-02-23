@@ -8989,10 +8989,12 @@ dependencies = [
 name = "serai-validator-sets-pallet"
 version = "0.1.0"
 dependencies = [
+ "bitvec",
  "borsh",
  "ciphersuite 0.4.2",
  "dalek-ff-group 0.5.0",
  "embedwards25519",
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
  "pallet-babe",
@@ -9000,6 +9002,7 @@ dependencies = [
  "pallet-session",
  "pallet-timestamp",
  "parity-scale-codec",
+ "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "secq256k1",
  "serai-abi",

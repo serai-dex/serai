@@ -107,6 +107,9 @@ mod getters;
 mod economic_security;
 pub use economic_security::*;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
 #[cfg(test)]
 mod tests;
 
@@ -126,6 +129,51 @@ pub trait Emissions {
 mod pallet {
   use super::*;
 
+  /// The weights for the pallet.
+  pub trait Weights {
+    /// The weight for the `set_keys` call.
+    fn set_keys() -> Weight;
+    /// The weight for the `slash_serai_validator` call.
+    fn slash_serai_validator() -> Weight;
+    /// The weight for the `report_slashes` call.
+    fn report_slashes() -> Weight;
+    /// The weight for the `set_auxiliary_keys` call.
+    fn set_auxiliary_keys() -> Weight;
+    /// The weight for the `allocate` call.
+    fn allocate() -> Weight;
+    /// The weight for the `deallocate` call.
+    fn deallocate() -> Weight;
+    /// The weight for the `claim_delayed_deallocation` call.
+    fn claim_deallocation() -> Weight;
+  }
+
+  /// A shimmed set of weights, returning zero.
+  ///
+  /// This is NOT safe for usage in a production system and is provided only for testing purposes.
+  impl Weights for () {
+    fn set_keys() -> Weight {
+      Weight::zero()
+    }
+    fn slash_serai_validator() -> Weight {
+      Weight::zero()
+    }
+    fn report_slashes() -> Weight {
+      Weight::zero()
+    }
+    fn set_auxiliary_keys() -> Weight {
+      Weight::zero()
+    }
+    fn allocate() -> Weight {
+      Weight::zero()
+    }
+    fn deallocate() -> Weight {
+      Weight::zero()
+    }
+    fn claim_deallocation() -> Weight {
+      Weight::zero()
+    }
+  }
+
   #[pallet::config]
   pub trait Config:
     frame_system::Config<RuntimeOrigin: From<Option<SeraiAddress>>>
@@ -138,6 +186,7 @@ mod pallet {
     type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
     type EconomicSecurity: EconomicSecurity;
     type Emissions: Emissions;
+    type Weights: Weights;
   }
 
   #[pallet::pallet]
@@ -537,7 +586,7 @@ mod pallet {
   #[pallet::call]
   impl<T: Config> Pallet<T> {
     #[pallet::call_index(0)]
-    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    #[pallet::weight((<T as Config>::Weights::set_keys(), DispatchClass::Operational))]
     pub fn set_keys(
       origin: OriginFor<T>,
       network: ExternalNetworkId,
@@ -567,7 +616,7 @@ mod pallet {
     }
 
     #[pallet::call_index(1)]
-    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    #[pallet::weight((<T as Config>::Weights::slash_serai_validator(), DispatchClass::Operational))]
     pub fn slash_serai_validator(
       origin: OriginFor<T>,
       session: Session,
@@ -579,7 +628,7 @@ mod pallet {
     }
 
     #[pallet::call_index(2)]
-    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    #[pallet::weight((<T as Config>::Weights::report_slashes(), DispatchClass::Operational))]
     pub fn report_slashes(
       origin: OriginFor<T>,
       set: ExternalValidatorSet,
@@ -597,7 +646,7 @@ mod pallet {
     }
 
     #[pallet::call_index(3)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::set_auxiliary_keys(), DispatchClass::Normal))]
     pub fn set_auxiliary_keys(origin: OriginFor<T>, keys: SignedAuxiliaryKeys) -> DispatchResult {
       let validator = ensure_signed(origin)?;
       Abstractions::<T>::set_auxiliary_keys(validator, keys)
@@ -606,7 +655,7 @@ mod pallet {
     }
 
     #[pallet::call_index(4)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::allocate(), DispatchClass::Normal))]
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
 
@@ -623,7 +672,7 @@ mod pallet {
     }
 
     #[pallet::call_index(5)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::deallocate(), DispatchClass::Normal))]
     pub fn deallocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
 
@@ -642,7 +691,7 @@ mod pallet {
     }
 
     #[pallet::call_index(6)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::claim_deallocation(), DispatchClass::Normal))]
     pub fn claim_deallocation(
       origin: OriginFor<T>,
       network: NetworkId,
@@ -693,7 +742,6 @@ mod pallet {
             !participants.is_empty(),
             "set which was decided had no selected participants stored"
           );
-
           // Check the bitvec is of the proper length
           if participants.len() != signature_participants.len() {
             Err(InvalidTransaction::BadProof)?;
