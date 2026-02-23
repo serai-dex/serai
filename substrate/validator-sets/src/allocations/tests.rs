@@ -206,7 +206,7 @@ fn test_currently_tolerates_single_point_of_failure() {
     ));
 
     // should return true if no single allocation is >= 1/3 of total key shares
-    for _ in 0 .. 5 {
+    for _ in 0 .. 6 {
       let (key, amount) = {
         let key = rand_key();
         // allow between 1-2 key share

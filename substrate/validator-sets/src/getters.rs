@@ -1,10 +1,6 @@
 use super::*;
 
 impl<T: Config> Pallet<T> {
-  pub(crate) fn account() -> T::AccountId {
-    SeraiAddress::system(b"ValidatorSets")
-  }
-
   /// The latest decided session for a network.
   pub fn latest_decided_session(network: NetworkId) -> Option<Session> {
     LatestDecidedSession::<T>::get(network)

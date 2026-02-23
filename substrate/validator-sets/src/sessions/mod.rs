@@ -149,6 +149,8 @@ pub(crate) trait Sessions {
   /// This does not perform any transfers of any coins/tokens. It solely performs the bookkeeping
   /// for the allocation.
   ///
+  /// This will emit the expected event defined within [`serai-abi`].
+  ///
   /// This function will be atomic, only modifying the storage if it will return `Ok(())`.
   fn increase_allocation(
     network: NetworkId,
@@ -161,6 +163,8 @@ pub(crate) trait Sessions {
   ///
   /// This does not perform any transfers of any coins/tokens. It solely performs the bookkeeping
   /// for the deallocation.
+  ///
+  /// This will emit the expected event defined within [`serai-abi`].
   ///
   /// This function will be atomic, only modifying the storage if it will return `Ok(_)`.
   fn decrease_allocation(
@@ -215,9 +219,9 @@ impl<Storage: SessionsStorage> Sessions for Storage {
         .expect("genesis validators weren't set")
         .into_iter()
         .filter(|genesis_validator| {
-          !selected_validators
-            .iter()
-            .any(|(selected_validator, _key_shares)| selected_validator == genesis_validator)
+          !selected_validators.iter().any(|(already_selected_validator, _key_shares)| {
+            already_selected_validator == genesis_validator
+          })
         })
         .map(|genesis_validator| {
           // This won't panic due to the collection storing genesis validators being bounded
@@ -272,7 +276,7 @@ impl<Storage: SessionsStorage> Sessions for Storage {
 
     /*
       If the stake for these validators is less than the requirement, insert genesis validators,
-      even if we weren't instruced to, if they have any amount allocated.
+      even if we weren't instructed to, if they have any amount allocated.
 
       The exact issue this aims to solve is how immediately post-Economic Security, genesis
       validators will have been minted rewards _but may be less than the allocation per key share_.
@@ -283,13 +287,13 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       and only when the proposed set would not otherwise achieve economic security.
     */
     if stake_for_validators(&selected_validators) < network_stake_requirement {
-      let mut not_already_included_genesis_validators = Storage::GenesisValidators::get()
+      let mut genesis_validators = Storage::GenesisValidators::get()
         .expect("genesis validators weren't set")
         .into_iter()
         .filter(|genesis_validator| {
-          !selected_validators
-            .iter()
-            .any(|(selected_validator, _key_shares)| selected_validator == genesis_validator)
+          !selected_validators.iter().any(|(already_selected_validator, _key_shares)| {
+            already_selected_validator == genesis_validator
+          })
         })
         .map(|genesis_validator| {
           let allocation = Self::allocation(network, genesis_validator).unwrap_or(Amount(0));
@@ -297,17 +301,18 @@ impl<Storage: SessionsStorage> Sessions for Storage {
         })
         .collect::<Vec<_>>();
       // Sort the genesis validators by how much they actively have allocated as stake
-      not_already_included_genesis_validators.sort_by(
+      genesis_validators.sort_by(
         |(a_allocation, _a_genesis_validator), (b_allocation, _b_genesis_validator)| {
           a_allocation.cmp(b_allocation).reverse()
         },
       );
-      for (allocation, genesis_validator) in not_already_included_genesis_validators {
+      for (allocation, genesis_validator) in genesis_validators {
         // Push genesis validators while they fit and contribute to economic security
-        if (total_key_shares < KeySharesStruct::MAX_PER_SET) && (allocation != Amount(0)) {
-          total_key_shares += 1;
-          selected_validators.push((genesis_validator, KeySharesStruct::ONE));
+        if (total_key_shares >= KeySharesStruct::MAX_PER_SET) || (allocation == Amount(0)) {
+          break;
         }
+        total_key_shares += 1;
+        selected_validators.push((genesis_validator, KeySharesStruct::ONE));
       }
     }
 
@@ -438,12 +443,14 @@ impl<Storage: SessionsStorage> Sessions for Storage {
   ) -> Result<(), AllocationError> {
     /*
       Per the documented bounds on `trait Allocations`, this function will be atomic. As this
-      function will not error after this call, only update its own storage, this function inherits
+      function will not error after this call, only updating the storage, this function inherits
       the desirable atomicity.
     */
     <Self as Allocations>::increase_allocation_without_updating_other_contexts(
       network, validator, amount, reward,
     )?;
+
+    crate::Core::<Storage::Config>::emit_event(Event::Allocation { validator, network, amount });
 
     // If this validator is active, update `CurrentAllocatedStake`
     if let Some(current) = Storage::CurrentSession::get(network) {
@@ -487,46 +494,18 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     validator: SeraiAddress,
     amount: Amount,
   ) -> Result<DeallocationTimeline, DeallocationError> {
-    let in_latest_decided_session =
-      if let Some(latest_decided_session) = Storage::LatestDecidedSession::get(network) {
-        if Storage::SelectedValidators::contains_key(
-          ValidatorSet { network, session: latest_decided_session },
-          validator,
-        ) {
-          match network {
-            NetworkId::Serai => {}
-            NetworkId::External(network) => {
-              // Check this doesn't cause the latest decided session to become insecure
-              if (Storage::LatestDecidedAllocatedStake::get(network)
-                .expect("latest decided session but no allocated stake set") -
-                amount)
-                .expect("validator in set deallocated stake the set didn't have") <
-                crate::network_stake_requirement::<
-                  Storage::Config,
-                  <Storage::Config as crate::Config>::EconomicSecurity,
-                >(network)
-              {
-                Err(DeallocationError::EconomicSecurity)?;
-              }
-            }
-          }
-          true
-        } else {
-          false
-        }
-      } else {
-        false
-      };
-
     /*
       Decrease the allocation.
 
       This doesn't affect the key shares, as that's immutable after creation, and doesn't affect
       affect the `CurrentAllocatedStake` as the validator either isn't current or the deallocation
-      will be queued *but is still considered allocated for this session*.
+      will be queued *but is still considered allocated for this session*. The same holds true for
+      `LatestDecidedAllocatedStake` where the validator either won't be in the latest decided set
+      or the deallocation will be queued *but is still considered allocated for that session*.
 
-      When the next set is selected, and becomes current, `CurrentAllocatedStake` will be updated
-      per the allocations as-is.
+      When the latest decided set becomes current, `CurrentAllocatedStake` will be updated to
+      `LatestDecidedAllocatedStake`. When a new set is decided, `LatestDecidedAllocatedStake` will
+      be updated to the allocations as they are.
 
       This is the last call which may error, the called function is atomic, and all effects happen
       after this call, making this function atomic.
@@ -535,16 +514,13 @@ impl<Storage: SessionsStorage> Sessions for Storage {
       network, validator, amount,
     )?;
 
-    // This does affect `LatestDecidedAllocatedStake`, as expected
-    if in_latest_decided_session {
-      Storage::LatestDecidedAllocatedStake::mutate(network, |existing| {
-        Some(
-          (existing.expect("latest decided session but no allocated stake set") - amount)
-            .expect("validator in set deallocated stake the set didn't have"),
-        )
-      });
-    }
-
-    Ok(Self::potentially_delay_deallocation(network, validator, amount))
+    let timeline = Self::potentially_delay_deallocation(network, validator, amount);
+    Core::<Storage::Config>::emit_event(Event::Deallocation {
+      validator,
+      network,
+      amount,
+      timeline,
+    });
+    Ok(timeline)
   }
 }

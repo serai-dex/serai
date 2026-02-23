@@ -101,6 +101,13 @@ pub(crate) trait DelayedDeallocations {
     network: NetworkId,
     session: Session,
   ) -> Result<Amount, DelayedDeallocationError>;
+
+  /// Retrieve the deallocations delayed from the specified session.
+  fn fetch_deallocations_delayed_from(
+    validator: SeraiAddress,
+    network: NetworkId,
+    session: Session,
+  ) -> Option<Amount>;
 }
 
 /*
@@ -222,13 +229,25 @@ impl<Storage: DelayedDeallocationsStorage> DelayedDeallocations for Storage {
     Storage::DelayedDeallocations::take(validator, ValidatorSet { network, session })
       .ok_or(DelayedDeallocationError::NoDelayedDeallocations)
   }
+
+  fn fetch_deallocations_delayed_from(
+    validator: SeraiAddress,
+    network: NetworkId,
+    session: Session,
+  ) -> Option<Amount> {
+    Storage::DelayedDeallocations::get(
+      validator,
+      ValidatorSet { network, session: Session(session.0 + 3) },
+    )
+  }
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod mock {
   use frame_support::{pallet_prelude::*, traits::StorageInstance};
   use serai_abi::primitives::{network_id::NetworkId, validator_sets::*};
   use super::*;
+  use crate::MockStorage;
 
   pub struct CurrentSessionStorage;
   impl StorageInstance for CurrentSessionStorage {
@@ -237,7 +256,7 @@ mod tests {
     }
     const STORAGE_PREFIX: &'static str = "Storage::CurrentSession";
   }
-  type CurrentSession =
+  pub(crate) type CurrentSession =
     StorageMap<CurrentSessionStorage, Identity, NetworkId, Session, OptionQuery>;
 
   pub struct LatestDecidedSessionStorage;
@@ -247,7 +266,7 @@ mod tests {
     }
     const STORAGE_PREFIX: &'static str = "Storage::LatestDecidedSession";
   }
-  type LatestDecidedSession =
+  pub(crate) type LatestDecidedSession =
     StorageMap<LatestDecidedSessionStorage, Identity, NetworkId, Session, OptionQuery>;
 
   pub struct SelectedValidatorsStorage;
@@ -257,7 +276,7 @@ mod tests {
     }
     const STORAGE_PREFIX: &'static str = "Storage::SelectedValidators";
   }
-  type SelectedValidators = StorageDoubleMap<
+  pub(crate) type SelectedValidators = StorageDoubleMap<
     SelectedValidatorsStorage,
     Identity,
     ValidatorSet,
@@ -274,7 +293,7 @@ mod tests {
     }
     const STORAGE_PREFIX: &'static str = "Storage::DelayedDeallocations";
   }
-  type DelayedDeallocations = StorageDoubleMap<
+  pub(crate) type DelayedDeallocations = StorageDoubleMap<
     DelayedDeallocationsStorage,
     Blake2_128Concat,
     SeraiAddress,
@@ -284,7 +303,7 @@ mod tests {
     OptionQuery,
   >;
 
-  impl Sessions for () {
+  impl Sessions for MockStorage {
     fn current_session(network: NetworkId) -> Option<Session> {
       CurrentSession::get(network)
     }
@@ -296,10 +315,19 @@ mod tests {
     }
   }
 
-  impl super::DelayedDeallocationsStorage for () {
+  impl super::DelayedDeallocationsStorage for MockStorage {
     type Sessions = Self;
     type DelayedDeallocations = DelayedDeallocations;
   }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::{
+    *,
+    mock::{DelayedDeallocations, *},
+  };
+  use crate::MockStorage;
 
   #[test]
   fn test_find_most_recent_relevant_session_for_validator() {
@@ -308,58 +336,67 @@ mod tests {
       let alice = SeraiAddress([0xaa; 32]);
 
       // Someone not present should not be considered present
-      assert_eq!(find_most_recent_relevant_session_for_validator::<()>(network, alice), None);
+      assert_eq!(
+        find_most_recent_relevant_session_for_validator::<MockStorage>(network, alice),
+        None
+      );
 
       // Decide the first session
       LatestDecidedSession::set(network, Some(Session(0)));
       // Alice still is not present and should not be considered present
-      assert_eq!(find_most_recent_relevant_session_for_validator::<()>(network, alice), None);
+      assert_eq!(
+        find_most_recent_relevant_session_for_validator::<MockStorage>(network, alice),
+        None
+      );
       // Add Alice
       SelectedValidators::set(ValidatorSet { network, session: Session(0) }, alice, Some(()));
       assert_eq!(
-        find_most_recent_relevant_session_for_validator::<()>(network, alice),
+        find_most_recent_relevant_session_for_validator::<MockStorage>(network, alice),
         Some(Session(0))
       );
       CurrentSession::set(network, Some(Session(0)));
       assert_eq!(
-        find_most_recent_relevant_session_for_validator::<()>(network, alice),
+        find_most_recent_relevant_session_for_validator::<MockStorage>(network, alice),
         Some(Session(0))
       );
 
       // Updating the session should still yield the relevant session
       LatestDecidedSession::set(network, Some(Session(1)));
       assert_eq!(
-        find_most_recent_relevant_session_for_validator::<()>(network, alice),
+        find_most_recent_relevant_session_for_validator::<MockStorage>(network, alice),
         Some(Session(0))
       );
       CurrentSession::set(network, Some(Session(1)));
       assert_eq!(
-        find_most_recent_relevant_session_for_validator::<()>(network, alice),
+        find_most_recent_relevant_session_for_validator::<MockStorage>(network, alice),
         Some(Session(0))
       );
 
       // And it is the _most recent_ relevant session which should be yielded
       SelectedValidators::set(ValidatorSet { network, session: Session(1) }, alice, Some(()));
       assert_eq!(
-        find_most_recent_relevant_session_for_validator::<()>(network, alice),
+        find_most_recent_relevant_session_for_validator::<MockStorage>(network, alice),
         Some(Session(1))
       );
 
       // If the latest decided session is `+ 3`, but it isn't current, this still relevant
       LatestDecidedSession::set(network, Some(Session(4)));
       assert_eq!(
-        find_most_recent_relevant_session_for_validator::<()>(network, alice),
+        find_most_recent_relevant_session_for_validator::<MockStorage>(network, alice),
         Some(Session(1))
       );
       CurrentSession::set(network, Some(Session(3)));
       assert_eq!(
-        find_most_recent_relevant_session_for_validator::<()>(network, alice),
+        find_most_recent_relevant_session_for_validator::<MockStorage>(network, alice),
         Some(Session(1))
       );
 
       // But it's no longer relevant when the current session is `+ 3`
       CurrentSession::set(network, Some(Session(4)));
-      assert_eq!(find_most_recent_relevant_session_for_validator::<()>(network, alice), None);
+      assert_eq!(
+        find_most_recent_relevant_session_for_validator::<MockStorage>(network, alice),
+        None
+      );
     });
   }
 
@@ -371,7 +408,7 @@ mod tests {
 
       // Delaying the deallocation of a non-present validator should happen immediately
       assert_eq!(
-        <() as super::DelayedDeallocations>::potentially_delay_deallocation(
+        <MockStorage as super::DelayedDeallocations>::potentially_delay_deallocation(
           network,
           alice,
           Amount(1)
@@ -384,7 +421,7 @@ mod tests {
       CurrentSession::set(network, Some(Session(0)));
       SelectedValidators::set(ValidatorSet { network, session: Session(0) }, alice, Some(()));
       assert_eq!(
-        <() as super::DelayedDeallocations>::potentially_delay_deallocation(
+        <MockStorage as super::DelayedDeallocations>::potentially_delay_deallocation(
           network,
           alice,
           Amount(1)
@@ -395,10 +432,18 @@ mod tests {
         DelayedDeallocations::get(alice, ValidatorSet { network, session: Session(3) }),
         Some(Amount(1))
       );
+      assert_eq!(
+        <MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
+          alice,
+          network,
+          Session(0)
+        ),
+        Some(Amount(1))
+      );
 
       // Further deallocations should be possible
       assert_eq!(
-        <() as super::DelayedDeallocations>::potentially_delay_deallocation(
+        <MockStorage as super::DelayedDeallocations>::potentially_delay_deallocation(
           network,
           alice,
           Amount(2)
@@ -409,13 +454,21 @@ mod tests {
         DelayedDeallocations::get(alice, ValidatorSet { network, session: Session(3) }),
         Some(Amount(3))
       );
+      assert_eq!(
+        <MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
+          alice,
+          network,
+          Session(0)
+        ),
+        Some(Amount(3))
+      );
 
       // Existing delayed deallocations should not affect distinctly-delayed deallocations
       LatestDecidedSession::set(network, Some(Session(1)));
       CurrentSession::set(network, Some(Session(1)));
       SelectedValidators::set(ValidatorSet { network, session: Session(1) }, alice, Some(()));
       assert_eq!(
-        <() as super::DelayedDeallocations>::potentially_delay_deallocation(
+        <MockStorage as super::DelayedDeallocations>::potentially_delay_deallocation(
           network,
           alice,
           Amount(5)
@@ -427,7 +480,23 @@ mod tests {
         Some(Amount(3))
       );
       assert_eq!(
+        <MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
+          alice,
+          network,
+          Session(0)
+        ),
+        Some(Amount(3))
+      );
+      assert_eq!(
         DelayedDeallocations::get(alice, ValidatorSet { network, session: Session(4) }),
+        Some(Amount(5))
+      );
+      assert_eq!(
+        <MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
+          alice,
+          network,
+          Session(1)
+        ),
         Some(Amount(5))
       );
     });
@@ -435,6 +504,7 @@ mod tests {
 
   #[test]
   fn drain_delayed_deallocations() {
+    use sp_core::Decode as _;
     sp_io::TestExternalities::new_empty().execute_with(|| {
       let prior_network = NetworkId::decode(&mut [0].as_slice()).unwrap();
       let network = NetworkId::decode(&mut [1].as_slice()).unwrap();
@@ -444,7 +514,7 @@ mod tests {
 
       // If nothing has happened, this should return `0`
       assert_eq!(
-        <() as super::DelayedDeallocations>::drain_delayed_deallocations(alice, network),
+        <MockStorage as super::DelayedDeallocations>::drain_delayed_deallocations(alice, network),
         Amount(0)
       );
 
@@ -473,7 +543,7 @@ mod tests {
 
       // If there no deallocations, this should return `0`
       assert_eq!(
-        <() as super::DelayedDeallocations>::drain_delayed_deallocations(alice, network),
+        <MockStorage as super::DelayedDeallocations>::drain_delayed_deallocations(alice, network),
         Amount(0)
       );
 
@@ -491,7 +561,7 @@ mod tests {
 
       // Draining these should work
       assert_eq!(
-        <() as super::DelayedDeallocations>::drain_delayed_deallocations(alice, network),
+        <MockStorage as super::DelayedDeallocations>::drain_delayed_deallocations(alice, network),
         Amount(3)
       );
 
@@ -521,6 +591,18 @@ mod tests {
       assert!(
         DelayedDeallocations::get(alice, ValidatorSet { network, session: Session(5) }).is_none()
       );
+      assert!(<MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
+        alice,
+        network,
+        Session(1)
+      )
+      .is_none());
+      assert!(<MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
+        alice,
+        network,
+        Session(2)
+      )
+      .is_none());
     });
   }
 
@@ -534,7 +616,11 @@ mod tests {
       CurrentSession::set(network, Some(Session(3)));
 
       assert!(matches!(
-        <() as super::DelayedDeallocations>::claim_delayed_deallocation(alice, network, Session(3)),
+        <MockStorage as super::DelayedDeallocations>::claim_delayed_deallocation(
+          alice,
+          network,
+          Session(3)
+        ),
         Err(DelayedDeallocationError::NoDelayedDeallocations)
       ));
 
@@ -546,7 +632,11 @@ mod tests {
 
       // We should not be able to claim this before this is the current session
       assert!(matches!(
-        <() as super::DelayedDeallocations>::claim_delayed_deallocation(alice, network, Session(4)),
+        <MockStorage as super::DelayedDeallocations>::claim_delayed_deallocation(
+          alice,
+          network,
+          Session(4)
+        ),
         Err(DelayedDeallocationError::DelayNotSatisfied)
       ));
       // This call, which errored, should not modify the storage
@@ -558,7 +648,11 @@ mod tests {
       // Being the latest decided session is insufficient
       LatestDecidedSession::set(network, Some(Session(4)));
       assert!(matches!(
-        <() as super::DelayedDeallocations>::claim_delayed_deallocation(alice, network, Session(4)),
+        <MockStorage as super::DelayedDeallocations>::claim_delayed_deallocation(
+          alice,
+          network,
+          Session(4)
+        ),
         Err(DelayedDeallocationError::DelayNotSatisfied)
       ));
       assert_eq!(
@@ -569,8 +663,12 @@ mod tests {
       // It should work when this is the current session
       CurrentSession::set(network, Some(Session(4)));
       assert_eq!(
-        <() as super::DelayedDeallocations>::claim_delayed_deallocation(alice, network, Session(4))
-          .unwrap(),
+        <MockStorage as super::DelayedDeallocations>::claim_delayed_deallocation(
+          alice,
+          network,
+          Session(4)
+        )
+        .unwrap(),
         Amount(1)
       );
       // It should consume the storage, preventing this from being called again
@@ -578,8 +676,18 @@ mod tests {
         DelayedDeallocations::get(alice, ValidatorSet { network, session: Session(4) }),
         None
       );
+      assert!(<MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
+        alice,
+        network,
+        Session(1)
+      )
+      .is_none());
       assert!(matches!(
-        <() as super::DelayedDeallocations>::claim_delayed_deallocation(alice, network, Session(4)),
+        <MockStorage as super::DelayedDeallocations>::claim_delayed_deallocation(
+          alice,
+          network,
+          Session(4)
+        ),
         Err(DelayedDeallocationError::NoDelayedDeallocations)
       ));
     });

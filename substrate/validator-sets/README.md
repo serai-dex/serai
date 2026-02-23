@@ -219,6 +219,16 @@ only increases Serai's security as rewards are distributed but also makes
 rewards subject to allocated stake's deallocation timeline, allowing them to be
 slashed if/as necessary.
 
+Within a validator set, rewards are distributed to each individual validator
+primarily relative to how many key shares they hold. Stake which is in excess
+of the amount of stake required to effect the amount of key shares the
+validator has only contributes as half, maintaining a reward for allocating it
+while encouraging allocating stake as effects key shares. This is as the key
+shares define the fundamental access structure for the threshold-shared keys
+and deviations between allocated stake (as relevant for economic security) and
+key shares (as relevant for cryptographic security) weaken economic security in
+effect.
+
 ### Slashing
 
 As a general policy, inactivity is _not_ a reason to slash a validator due to

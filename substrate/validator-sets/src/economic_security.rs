@@ -1,3 +1,5 @@
+// TODO: Move most of this file to `serai-economic-security-pallet`.
+
 use serai_abi::{
   primitives::{
     network_id::{ExternalNetworkId, NetworkId},
@@ -51,10 +53,10 @@ pub fn coins_stake_requirement<T: CoinsConfig<CoinsInstance>, E: EconomicSecurit
       let value = E::sri_value(ExternalBalance { coin, amount: coin_supply });
       // As 67% can execute signing protocols, 67% of stake must be sufficient to secure this
       let requirement = (u128::from(value.0) * 3).div_ceil(2);
-      Amount(u64::try_from(requirement).unwrap_or(u64::MAX))
+      u64::try_from(requirement).unwrap_or(u64::MAX)
     };
 
-    requirement = requirement.saturating_add(stake_for_balance.0);
+    requirement = requirement.saturating_add(stake_for_balance);
   }
   Amount(requirement)
 }
@@ -81,10 +83,10 @@ pub fn liquidity_stake_requirement<T: CoinsConfig<CoinsInstance>, E: EconomicSec
       let requirement = (u128::from(value.0) * 3).div_ceil(2);
       // We require an additional margin of 20%
       let margin = requirement.div_ceil(5);
-      Amount(u64::try_from(requirement.saturating_add(margin)).unwrap_or(u64::MAX))
+      u64::try_from(requirement.saturating_add(margin)).unwrap_or(u64::MAX)
     };
 
-    requirement = requirement.saturating_add(stake_for_balance.0);
+    requirement = requirement.saturating_add(stake_for_balance);
   }
   Amount(requirement)
 }
