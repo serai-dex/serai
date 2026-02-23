@@ -1,10 +1,9 @@
 use core::future::Future;
-use std::{collections::HashMap, sync::Arc};
+use std::{sync::Arc, collections::HashMap};
 
 use blake2::{Digest as _, Blake2b256};
 
 use serai_client_serai::{
-  Serai,
   abi::{
     primitives::{
       network_id::ExternalNetworkId,
@@ -13,10 +12,10 @@ use serai_client_serai::{
       validator_sets::{Session, ExternalValidatorSet},
       address::SeraiAddress,
       merkle::IncrementalUnbalancedMerkleTree,
-      constants::GENESIS_LIQUIDITY_PERIOD,
     },
     validator_sets::Event,
   },
+  Serai,
 };
 
 use serai_db::*;
@@ -86,14 +85,13 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         // Ephemeral RPC Err: task to re-run and continue trying
         .map_err(|e| format!("RPC error fetching latest finalized block number: {e}"))?;
 
-      #[cfg(not(coverage))]
-      log::debug!(
+      serai_log::debug!(
         "beginning scan: start={start_scan_block_number}, latest={latest_serai_block_number}"
       );
 
       if latest_serai_block_number < start_scan_block_number {
         // made_progress = False
-        // Return, nothing new to progress with
+        // Skip block already indexed
         return Ok(false);
       }
 
@@ -118,8 +116,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           // Ephemeral RPC Err: task to re-run and continue trying
           .map_err(|e| format!("RPC error fetching events for block #{block_number}: {e}"))?;
 
-        #[cfg(not(coverage))]
-        log::debug!("iterating over block_number={block_number}, hash={serai_block_hash:?}");
+        serai_log::debug!("iterating over block_number={block_number}, hash={serai_block_hash:?}");
 
         let mut txn = self.db.txn();
         let mut builds_upon =
@@ -130,8 +127,8 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           builds_upon.clone().calculate(serai_client_serai::abi::BLOCK_BRANCH_TAG)
         {
           // Ephemeral RPC Err:
-          // serai.block_by_number(block_number) may return a different chain history (fork)
-          // but the prior indexed block was already finalized, so we MUST build upon it
+          // serai.block_by_number(block_number) may have returned a different chain history
+          // from prior indexed block already finalized,
           // task to re-run and continue trying until on the finalized chain
           Err(format!(
             "node's block #{block_number} doesn't build upon the block #{} prior indexed",
@@ -159,7 +156,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           };
           let Ok(network) = ExternalNetworkId::try_from(*network) else {
             // Not an ExternalNetworkId, possible Serai network allocation
-            // safe to skip this allocation event
+            // safe to just skip this allocation event
             continue;
           };
 
@@ -180,8 +177,8 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           let existing = Stakes::get(&txn, network, *validator)
             // critical panic:
             // this is a critical issue and will not be solved after re-tries,
-            // missing Stakes from previous blocks will remain missing until re-indexed (if encountered)
-            // halt the process
+            // missing Stakes from previous blocks will remain missing until re-indexed
+            // if encountered halt the process
             .expect("unable to deallocate with no prior existing stake");
 
           Stakes::set(&mut txn, network, *validator, &Amount(existing.0 - amount.0));
@@ -213,24 +210,29 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           let Event::SetKeys { set, key_pair } = event else {
             unreachable!("event from `set_keys_events` wasn't `Event::SetKeys`")
           };
-          has_events = HasEvents::Notable;
 
           let validators = Validators::take(&mut txn, *set)
             // critical panic:
             // this is a critical issue and will not be solved after re-tries,
-            // missing Validators from previous blocks will remain missing until re-indexed (if encountered)
-            // halt the process
+            // missing Validators from previous blocks will remain missing until re-indexed
+            // if encountered halt the process
             .expect("set which wasn't decided set keys");
 
           let stake: u64 = validators
             .iter()
             .map(|v| Stakes::get(&txn, set.network, *v).unwrap_or(Amount(0)).0)
             .sum();
-          LatestSet::set(
-            &mut txn,
-            set.network,
-            &Set { session: set.session, key: key_pair.0, stake: Amount(stake) },
-          );
+
+          // Sets with 0 stake should be skipped and not considered w.r.t. cosigning
+          // for no set with stake then has_events will remain HasEvents::No for this block and ignored
+          if stake > 0 {
+            has_events = HasEvents::Notable;
+            LatestSet::set(
+              &mut txn,
+              set.network,
+              &Set { session: set.session, key: key_pair.0, stake: Amount(stake) },
+            );
+          }
         }
 
         // Handle burn with instruction events (makes block non-notable if not already notable)
@@ -242,6 +244,8 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
 
         let global_session_for_this_block = LatestGlobalSessionIntended::get(&txn);
 
+        serai_log::debug!("type of has_events={has_events:?}");
+
         // If this is notable, it creates a new global session, which we index into the database
         // now
         if has_events == HasEvents::Notable {
@@ -250,9 +254,10 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             new_sets_and_keys_and_stakes.iter().map(|(set, _key, _stake)| *set).collect(),
           );
 
-          let mut sets = Vec::with_capacity(new_sets_and_keys_and_stakes.len());
-          let mut keys = HashMap::with_capacity(new_sets_and_keys_and_stakes.len());
-          let mut stakes = HashMap::with_capacity(new_sets_and_keys_and_stakes.len());
+          let length = new_sets_and_keys_and_stakes.len();
+          let mut sets = Vec::with_capacity(length);
+          let mut keys = HashMap::with_capacity(length);
+          let mut stakes = HashMap::with_capacity(length);
           let mut total_stake = 0;
           for (set, key, stake) in new_sets_and_keys_and_stakes {
             sets.push(set);
@@ -261,38 +266,12 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             total_stake += stake.0;
           }
 
-          if GenesisTime::get(&txn).is_none() {
-            let time = serai_block.header.unix_time_in_millis();
-            if time > 0 {
-              GenesisTime::set(&mut txn, &time);
-            }
-          }
-
           if total_stake == 0 {
-            let genesis_time = GenesisTime::get(&txn)
-              // critical panic:
-              // this is a critical issue and will not be solved after re-tries,
-              // missing GenesisTime from previous blocks will remain missing until re-indexed (if encountered)
-              // halt the process
-              .expect("no genesis time for block #{block_number}");
-            let time_elapsed_since_genesis =
-              serai_block.header.unix_time_in_millis().saturating_sub(genesis_time);
-            let genesis_period_end_timestamp =
-              genesis_time + u64::try_from(GENESIS_LIQUIDITY_PERIOD.as_millis()).unwrap();
-
-            if time_elapsed_since_genesis >= genesis_period_end_timestamp {
-              // critical panic:
-              // this is a critical issue and will not be solved after re-tries,
-              // missing Stakes from previous blocks will remain missing until re-indexed (if encountered)
-              // halt the process
-              panic!("cosigning sets for block #{block_number} had 0 stake in total, while stake is required");
-            }
-
-            // Genesis era not ended period: assign equal stake to each validator set
-            for set in &sets {
-              stakes.insert(set.network, 1);
-            }
-            total_stake = u64::try_from(sets.len()).unwrap();
+            // critical panic:
+            // this is a critical issue and will not be solved after re-tries,
+            // missing Stakes greater than zero from previous blocks will remain missing until re-indexed
+            // if encountered halt the process
+            panic!("cosigning sets for block #{block_number} had 0 stake in total, while stake is required");
           }
 
           let next_global_session_info = GlobalSession {
@@ -322,19 +301,18 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         match has_events {
           HasEvents::Notable | HasEvents::NonNotable => {
             let global_session_for_this_block = global_session_for_this_block
-              // critical panic: basically unreachable given the condition above this match
+              // panic: invariant, this is checked above
               .expect("global session for this block was None but still attempting to cosign it");
 
             // The GlobalSession that is ending
             let ending_global_session_info =
               GlobalSessions::get(&txn, global_session_for_this_block)
-                // critical panic: something that went wrong above
+                // panic: invariant, this has to exist by this point
                 .expect("last global session intended wasn't saved to the database");
 
             // Tell each set of their expectation to cosign this block
             for set in ending_global_session_info.sets {
-              #[cfg(not(coverage))]
-              log::debug!("set will cosign block: set={set:?}, block_number={block_number}");
+              serai_log::debug!("set will cosign block: set={set:?}, block_number={block_number}");
 
               IntendedCosigns::send(
                 &mut txn,
@@ -351,8 +329,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           HasEvents::No => {}
         }
 
-        #[cfg(not(coverage))]
-        log::debug!("finished iterating: has_events={has_events:?}");
+        serai_log::debug!("finished iterating: has_events={has_events:?}");
 
         // Populate a singular feed with every block's status for the evaluator to work off of
         BlockEvents::send(&mut txn, &(BlockEventData { block_number, has_events }));
