@@ -37,7 +37,6 @@ create_db!(
     Stakes: (network: ExternalNetworkId, validator: SeraiAddress) -> Amount,
     Validators: (set: ExternalValidatorSet) -> Vec<SeraiAddress>,
     LatestSet: (network: ExternalNetworkId) -> Set,
-    GenesisTime: () -> u64,
   }
 );
 
