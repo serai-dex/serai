@@ -14,6 +14,9 @@ These two eras have vastly different considerations and accordingly each have
 their own set of rules. They both occur _after_ the protocol's genesis, which
 can be itself considered its own era if one desires to but is not here.
 
+Note for the entirety of this document, one day is considered as exactly 24
+hours.
+
 ## Genesis
 
 At genesis, a set of genesis nodes (presumably community leaders sufficiently
@@ -113,14 +116,14 @@ Emissions only start after genesis.
 
 ```
 INITIAL_PERIOD = 30 days
-INITIAL_REWARD = 100,000 SRI / BLOCKS_PER_DAY
+INITIAL_REWARD_PER_BLOCK = 100,000 SRI / (1 day / TARGET_BLOCK_TIME)
 LITERAL_STAKE_REQUIRED = 1.5 * sri_in_pools()
 EXTERNAL_STAKE_BUFFER = 0.2
 EXTERNAL_STAKE_REQUIRED = LITERAL_STAKE_REQUIRED * (1 + EXTERNAL_STAKE_BUFFER)
 SERAI_VALIDATORS_DESIRED_PERCENTAGE = 0.2
 STAKE_DESIRED = EXTERNAL_STAKE_REQUIRED / (1 - SERAI_VALIDATORS_DESIRED_PERCENTAGE)
 SERAI_VALIDATORS_STAKE_DESIRED = SERAI_VALIDATORS_DESIRED_PERCENTAGE * STAKE_DESIRED
-SECURE_BY = 1 year
+SECURE_BY = 365 days
 ```
 
 `CURRENT_STAKE` is the amount of stake from each external network, capped at the
@@ -137,7 +140,8 @@ function of necessity due to lack of interest in staking.
 
 Emissions are distributed to each validator set as a function of their distance
 from economic security. For the Serai validator set, which does not have a
-literal evaluation of this, `SERAI_VALIDATORS_STAKE_DESIRED` is used.
+literal evaluation of this, `SERAI_VALIDATORS_STAKE_DESIRED` is used as the
+value required to be considered economically secure.
 
 ## Post-economic Security
 
@@ -200,7 +204,7 @@ Distinctly, two side effects can be noted:
 ### Emissions
 
 ```
-BLOCK_REWARD = 20,000,000 SRI / BLOCKS_PER_YEAR
+BLOCK_REWARD = 20,000,000 SRI / (365 days / TARGET_BLOCK_TIME)
 ```
 
 `BLOCK_REWARD * SERAI_VALIDATORS_DESIRED_PERCENTAGE` is distributed to the Serai
@@ -212,15 +216,17 @@ the pool and the validators is decided.
 
 ```
 DESIRED_UNUSED_CAPACITY = 0.1
-ACCURACY_MULTIPLIER = 10000
-DISTRIBUTION = (capacity_of_network() * ACCURACY_MULTIPLIER) / unused_capacity()
-DESIRED_DISTRIBUTION = DESIRED_UNUSED_CAPACITY * ACCURACY_MULTIPLIER
+CURRENT_DISTRIBUTION = (used_capacity() / capacity_of_network()).min(1)
+DESIRED_DISTRIBUTION = 1 - DESIRED_UNUSED_CAPACITY
 ```
 
-`DESIRED_DISTRIBUTION : DISTRIBUTION` is the ratio used to distribute to the
-pool and validators, respectively. If unused capacity ever hits 0,
-`DISTRIBUTION = inf`, so all of the emissions will go to the validators for that
-network.
+The rewards are distributed between between validators and the liquidity pools
+according to the following ratio.
+
+`DESIRED_UNUSED_CAPACITY : (((1 - CURRENT_DISTRIBUTION) * DESIRED_DISTRIBUTION) / CURRENT_DISTRIBUTION)`
+
+The intent is that as the distribution between usage and capacity skews from
+the desired distribution, rewards shift to incentivize accordingly.
 
 ## Fees
 

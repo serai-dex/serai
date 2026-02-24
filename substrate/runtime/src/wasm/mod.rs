@@ -93,26 +93,18 @@ impl serai_core_pallet::Config for Runtime {
   const PROTOCOL_ID: [u8; 32] = [0; 32];
   // TODO
   const SIGNATURE_VERIFICATION_WEIGHT: Weight = Weight::zero();
-  type PreInherents = ValidatorSets;
+  type PreInherents = (Emissions, ValidatorSets);
 }
 
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
   type AllowMint = serai_economic_security_pallet::CoinsInstanceAllowMint<Self>;
   type Weights = (); // TODO
 }
-pub struct DummyEmissions;
-impl serai_validator_sets_pallet::Emissions for DummyEmissions {
-  fn block_reward() -> Amount {
-    Amount(0)
-  }
-  fn set_reward(_set: ExternalValidatorSet) -> Amount {
-    Amount(0)
-  }
-}
 impl serai_validator_sets_pallet::Config for Runtime {
   type ShouldEndSession = Babe;
   type EconomicSecurity = EconomicSecurity;
-  type Emissions = DummyEmissions; // TODO
+  type Emissions = Emissions;
+  type Weights = (); // TODO
 }
 impl serai_signals_pallet::Config for Runtime {
   type RetirementLockInDurationInSlots = ConstU64<{ RETIREMENT_LOCK_IN_DURATION_IN_SLOTS }>;
@@ -138,7 +130,10 @@ impl serai_genesis_liquidity_pallet::Config for Runtime {
 impl serai_economic_security_pallet::Config for Runtime {
   type ValidatorSets = ValidatorSets;
 }
-impl serai_emissions_pallet::Config for Runtime {}
+impl serai_emissions_pallet::Config for Runtime {
+  type ValidatorSets = ValidatorSets;
+  type EconomicSecurity = EconomicSecurity;
+}
 impl serai_in_instructions_pallet::Config for Runtime {}
 
 impl pallet_timestamp::Config for Runtime {

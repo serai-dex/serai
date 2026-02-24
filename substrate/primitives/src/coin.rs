@@ -7,7 +7,9 @@ use crate::network_id::{ExternalNetworkId, NetworkId};
 /// The type used to identify coins native to external networks.
 ///
 /// This type serializes to a subset of `Coin`.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[rustfmt::skip]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Zeroize, BorshSerialize, BorshDeserialize)]
 #[borsh(use_discriminant = true)]
 pub enum ExternalCoin {
   /// Bitcoin, from the Bitcoin network.
@@ -39,7 +41,7 @@ impl ExternalCoin {
 }
 
 /// The type used to identify coins.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
 pub enum Coin {
   /// The Serai coin.
   Serai,

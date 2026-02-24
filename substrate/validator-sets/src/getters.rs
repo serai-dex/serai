@@ -1,10 +1,6 @@
 use super::*;
 
 impl<T: Config> Pallet<T> {
-  pub(crate) fn account() -> T::AccountId {
-    SeraiAddress::system(b"ValidatorSets")
-  }
-
   /// The latest decided session for a network.
   pub fn latest_decided_session(network: NetworkId) -> Option<Session> {
     LatestDecidedSession::<T>::get(network)
@@ -17,7 +13,7 @@ impl<T: Config> Pallet<T> {
 
   /// The amount of key shares a validator set has.
   ///
-  /// This will return `None` for historic set, per the definition in the `Sessions` abstraction.
+  /// This will return `None` for historic sets, per the definition in the `Sessions` abstraction.
   pub fn key_shares(set: ValidatorSet) -> Option<KeySharesStruct> {
     KeyShares::<T>::get(set)
   }
@@ -41,14 +37,23 @@ impl<T: Config> Pallet<T> {
     SelectedValidators::<T>::get(set, validator).map(|(_aux_key, key_shares)| key_shares)
   }
 
-  /// The stake for the current validator set for a network.
-  pub fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount> {
-    Abstractions::<T>::stake_for_current_validator_set(network)
+  /// The total amount of stake allocated for this network.
+  ///
+  /// This function generally SHOULD NOT be used. The actual amount of stake which will be present
+  /// within a validator set may, and probably will be, notably less than this value, and this
+  /// value may have deallocations occur _before_ the next validator set is decided.
+  pub fn total_allocated_stake_for_network(network: NetworkId) -> Amount {
+    SumAllocations::<T>::get(network)
   }
 
-  /// The stake for the latest decided validator set for a network.
+  /// The amount of stake considered allocated for a network's current validator set.
+  pub fn stake_for_current_validator_set(network: NetworkId) -> Option<Amount> {
+    CurrentAllocatedStake::<T>::get(network)
+  }
+
+  /// The amount of stake considered allocated for a network's latest decided validator set.
   pub fn stake_for_latest_decided_validator_set(network: NetworkId) -> Option<Amount> {
-    Abstractions::<T>::stake_for_latest_decided_validator_set(network)
+    LatestDecidedAllocatedStake::<T>::get(network)
   }
 
   /// The validators selected for a validator set.

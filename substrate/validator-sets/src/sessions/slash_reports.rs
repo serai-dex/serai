@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use sp_core::sr25519::Public as SchnorrkelPublic;
+use sp_core::{ConstU32, bounded::BoundedVec, sr25519::Public as SchnorrkelPublic};
 
 use serai_abi::{
   primitives::{
@@ -16,21 +16,27 @@ use serai_core_pallet::Pallet as Core;
 use crate::{
   keys::KeysStorage,
   allocations::{Allocations, DelayedDeallocations},
-  sessions::Sessions,
+  sessions::{SessionsStorage, Sessions as _},
 };
 
-pub(crate) trait SlashReportsStorage:
-  KeysStorage + Allocations + DelayedDeallocations + Sessions
-{
-  /// The configuration for the core pallet.
-  type Config: crate::Config;
+/// The value storing the data for a pending slash report.
+pub(crate) type PendingSlashReport =
+  BoundedVec<(SeraiAddress, Amount), ConstU32<{ KeyShares::MAX_PER_SET_U32 }>>;
 
+pub(crate) trait SlashReportsStorage:
+  KeysStorage + Allocations + DelayedDeallocations + SessionsStorage
+{
   /// Validator sets for which we're awaiting slash reports.
   ///
   /// This is opaque and to be exclusively read/write by `SlashReports`.
   ///
-  /// Internally, the value is the amount to reward the validator set with.
-  type PendingSlashReport: StorageMap<ExternalValidatorSet, Amount, Query = Option<Amount>>;
+  /// Internally, the value is the list of validators with the amount to reward each with _prior_
+  /// to the calculation of any slashes.
+  type PendingSlashReport: StorageMap<
+    ExternalValidatorSet,
+    PendingSlashReport,
+    Query = Option<PendingSlashReport>,
+  >;
 }
 
 pub(crate) trait SlashReports {
@@ -40,6 +46,8 @@ pub(crate) trait SlashReports {
   fn retire_set_regarding_slash_report(set: ExternalValidatorSet, rewards: Amount);
 
   /// Prune a historical validator set.
+  ///
+  /// This MUST be called when a validator set becomes historical.
   ///
   /// If this validator set was expected to and has yet to publish a slash report, a default
   /// (empty) slash report will be entered.
@@ -69,7 +77,7 @@ pub(crate) trait SlashReports {
 }
 
 fn fatal_slash<Storage: SlashReportsStorage>(network: NetworkId, validator: SeraiAddress) {
-  let mut drained = if let Some(amount) = Storage::drain_allocation(network, validator) {
+  let mut drained = if let Some(amount) = Storage::drain_allocation(validator, network) {
     // Emit the `Deallocation` event for the amount we drained
     Core::<Storage::Config>::emit_event(Event::Deallocation {
       validator,
@@ -82,7 +90,7 @@ fn fatal_slash<Storage: SlashReportsStorage>(network: NetworkId, validator: Sera
     Amount(0)
   };
 
-  drained.0 += Storage::drain_delayed_deallocations(network, validator).0;
+  drained.0 += Storage::drain_delayed_deallocations(validator, network).0;
 
   /*
     This should only error if we do not have these coins, which would suggest an accounting
@@ -93,7 +101,7 @@ fn fatal_slash<Storage: SlashReportsStorage>(network: NetworkId, validator: Sera
   */
   #[expect(clippy::disallowed_methods)]
   crate::Coins::<Storage::Config>::burn(
-    Some(crate::Pallet::<Storage::Config>::account()).into(),
+    Some(serai_abi::validator_sets::address()).into(),
     Balance { coin: Coin::Serai, amount: drained },
   )
   .expect("couldn't burn coins we slashed");
@@ -103,44 +111,43 @@ fn handle_slash_report<Storage: SlashReportsStorage>(
   set: ExternalValidatorSet,
   slashes: Option<SlashReport>,
 ) {
-  let rewards =
+  let validators_with_rewards =
     Storage::PendingSlashReport::take(set).expect("handling a slash report which wasn't pending");
   Core::<Storage::Config>::emit_event(Event::Slashes { set: set.into() });
 
   // If no report was submitted, do not distribute any rewards
   let Some(slashes) = slashes else { return };
+  assert_eq!(validators_with_rewards.len(), slashes.0.len());
 
-  let validators =
-    crate::SelectedValidators::<Storage::Config>::iter_key_prefix(set).collect::<Vec<_>>();
-  assert_eq!(validators.len(), slashes.0.len());
-  let validators_len = u16::try_from(validators.len())
+  let validators_len = u16::try_from(validators_with_rewards.len())
     .expect("selected more than `u16::MAX` (`KeyShares` repr) validators?");
-  let reward_per_validator = Amount(rewards.0 / u64::from(validators_len));
   let validators_len =
     core::num::NonZero::new(validators_len).expect("selected validator set without validators?");
 
   // Distribute rewards as expected
-  for (validator, slash) in validators.into_iter().zip(slashes.0) {
+  for ((validator, reward_for_validator), slash) in
+    validators_with_rewards.into_iter().zip(slashes.0)
+  {
     /*
       We specify `Amount(0)` as the amount this validator has allocated. Introspecting
       `Slash::penalty`, it's only used on `Slash::Fatal` which we handle ourselves. This aligns
       with the intent where allocated stake is only slashed on misbehavior (fatal), not downtime
-      (points). This is because it's surprisingly annoying to calculate the amount a validator
-      allocated as stake during this specific set. It would require tracking another balance
-      sheet for every single session.
+      (points). This avoids us having to propagation `allocation` from when this slash report was
+      queued and discussing whether we should propagate `allocation` or `virtual_stake`.
     */
     match &slash {
       Slash::Points(_) => {
-        let penalty = slash.penalty(validators_len, Amount(0), reward_per_validator);
-        let reward = (reward_per_validator - penalty).unwrap_or(Amount(0));
+        let penalty = slash.penalty(validators_len, Amount(0), reward_for_validator);
+        let reward_for_validator = (reward_for_validator - penalty).unwrap_or(Amount(0));
         if crate::Coins::<Storage::Config>::mint(
-          crate::Pallet::<Storage::Config>::account(),
-          Balance { coin: Coin::Serai, amount: reward },
+          serai_abi::validator_sets::address(),
+          Balance { coin: Coin::Serai, amount: reward_for_validator },
         )
         .is_ok()
         {
           // This is a safe `unwrap` per the documented bounds on `increase_allocation`
-          Storage::increase_allocation(set.network.into(), validator, reward, true).unwrap();
+          Storage::increase_allocation(set.network.into(), validator, reward_for_validator, true)
+            .unwrap();
         }
       }
       Slash::Fatal => fatal_slash::<Storage>(set.network.into(), validator),
@@ -150,11 +157,85 @@ fn handle_slash_report<Storage: SlashReportsStorage>(
 
 impl<Storage: SlashReportsStorage> SlashReports for Storage {
   fn retire_set_regarding_slash_report(set: ExternalValidatorSet, rewards: Amount) {
-    Storage::PendingSlashReport::insert(set, rewards);
+    // Note fetching this now assumes it hasn't changed since the set was decided
+    let allocation_per_key_share = Storage::AllocationPerKeyShare::get(set.network);
+    let validators_with_virtual_stakes =
+      crate::SelectedValidators::<Storage::Config>::iter_prefix(set)
+        .map(|(validator, (_aux_key, key_shares))| {
+          /*
+            We reward validators proportionally to what they do for the network. In order to
+            incentivize validators to allocate according to key shares, as required for the literal
+            cryptographic distribution of key shares to correspond with the distribution of
+            allocated stake, stake which does not effect a key share is only considered for half
+            its value.
+          */
+          let virtual_stake = if let Some(allocation_per_key_share) = allocation_per_key_share {
+            let allocation = {
+              // Fetch their current allocation as would've applied to the current set now retiring
+              let allocation =
+                Storage::allocation(set.network.into(), validator).unwrap_or(Amount(0));
+              // Also fetch their delayed deallocation as it would have still contributed to this
+              // set
+              let delayed_deallocation = Storage::fetch_deallocations_delayed_from(
+                validator,
+                set.network.into(),
+                set.session,
+              )
+              .unwrap_or(Amount(0));
+              // The SRI supply fits within a `u64` so this part of it will
+              (allocation + delayed_deallocation).unwrap()
+            };
+
+            /*
+              Note:
+              - This will reward genesis validators for as if they had stake behind their key
+                shares.
+              - The amount will be `<= allocation` except in the edge case
+                `stake_corresponding_to_key_shares` exceeds `allocation`, as is the case when
+                genesis validators are present. That's why this yields a `u128`.
+            */
+            let stake_corresponding_to_key_shares =
+              u128::from(u16::from(key_shares)) * u128::from(allocation_per_key_share.0);
+            stake_corresponding_to_key_shares +
+              ((u128::from(allocation.0).saturating_sub(stake_corresponding_to_key_shares)) / 2)
+          } else {
+            1
+          };
+          (validator, virtual_stake)
+        })
+        .collect::<Vec<_>>();
+
+    // This won't overflow so long as `KeyShares` is representable within a `u64`
+    let total_virtual_stake_for_validators = validators_with_virtual_stakes
+      .iter()
+      .map(|(_validator, virtual_stake)| virtual_stake)
+      .sum::<u128>();
+
+    // Map from the virtual stake to their reward
+    let validators_with_rewards = validators_with_virtual_stakes
+      .into_iter()
+      .map(|(validator, virtual_stake)| {
+        (
+          validator,
+          Amount(
+            u64::try_from(
+              (sp_core::U256::from(u128::from(rewards.0)) * sp_core::U256::from(virtual_stake)) /
+                sp_core::U256::from(total_virtual_stake_for_validators),
+            )
+            .expect("`virtual_stake > total_virtual_stake_for_validators`?"),
+          ),
+        )
+      })
+      .collect::<Vec<_>>();
+
+    Storage::PendingSlashReport::insert(
+      set,
+      PendingSlashReport::try_from(validators_with_rewards)
+        .expect("more validators in set than allowed by `KeyShares::MAX_PER_SET`?"),
+    );
   }
 
   fn prune_historical_set_regarding_slash_report(set: ExternalValidatorSet) {
-    // If this network never submitted its slash report, treat it as submitting `vec![]`
     if Storage::PendingSlashReport::contains_key(set) {
       handle_slash_report::<Storage>(set, None);
     }
@@ -177,7 +258,7 @@ impl<Storage: SlashReportsStorage> SlashReports for Storage {
     Core::<Storage::Config>::emit_event(Event::Slashes { set });
     fatal_slash::<Self>(network, validator);
 
-    // If this for the current session, disable them
+    // If this for the current session, disable the validator
     if session ==
       crate::pallet::CurrentSession::<Storage::Config>::get(network)
         .expect("slashing Serai validator yet no current session for Serai?")

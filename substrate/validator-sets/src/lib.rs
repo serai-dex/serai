@@ -92,7 +92,9 @@ use allocations::{
 };
 
 mod sessions;
-use sessions::{*, GenesisValidators as GenesisValidatorsContainer};
+use sessions::{
+  *, GenesisValidators as GenesisValidatorsContainer, PendingSlashReport as PendingSlashReportValue,
+};
 
 mod keys;
 use keys::{KeysStorage, Keys as _};
@@ -105,17 +107,72 @@ mod getters;
 mod economic_security;
 pub use economic_security::*;
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
+#[cfg(test)]
+mod tests;
+
 /// An abstract view of `Coin::Serai`'s emissions.
 pub trait Emissions {
   /// The `Coin::Serai` reward to issue to the block's author.
   fn block_reward() -> Amount;
   /// The `Coin::Serai` rewards to issue to `set`, which has just retired.
-  fn set_reward(set: ExternalValidatorSet) -> Amount;
+  ///
+  /// This will only be called for a set which is no longer the latest-decided set. This will only
+  /// be called once per set, hence the name being `take_set_reward`, noting that the implemetor
+  /// MUST remove their storage for this.
+  fn take_set_reward(set: ExternalValidatorSet) -> Amount;
 }
 
 #[frame_support::pallet]
 mod pallet {
   use super::*;
+
+  /// The weights for the pallet.
+  pub trait Weights {
+    /// The weight for the `set_keys` call.
+    fn set_keys() -> Weight;
+    /// The weight for the `slash_serai_validator` call.
+    fn slash_serai_validator() -> Weight;
+    /// The weight for the `report_slashes` call.
+    fn report_slashes() -> Weight;
+    /// The weight for the `set_auxiliary_keys` call.
+    fn set_auxiliary_keys() -> Weight;
+    /// The weight for the `allocate` call.
+    fn allocate() -> Weight;
+    /// The weight for the `deallocate` call.
+    fn deallocate() -> Weight;
+    /// The weight for the `claim_delayed_deallocation` call.
+    fn claim_deallocation() -> Weight;
+  }
+
+  /// A shimmed set of weights, returning zero.
+  ///
+  /// This is NOT safe for usage in a production system and is provided only for testing purposes.
+  impl Weights for () {
+    fn set_keys() -> Weight {
+      Weight::zero()
+    }
+    fn slash_serai_validator() -> Weight {
+      Weight::zero()
+    }
+    fn report_slashes() -> Weight {
+      Weight::zero()
+    }
+    fn set_auxiliary_keys() -> Weight {
+      Weight::zero()
+    }
+    fn allocate() -> Weight {
+      Weight::zero()
+    }
+    fn deallocate() -> Weight {
+      Weight::zero()
+    }
+    fn claim_deallocation() -> Weight {
+      Weight::zero()
+    }
+  }
 
   #[pallet::config]
   pub trait Config:
@@ -129,6 +186,7 @@ mod pallet {
     type ShouldEndSession: ShouldEndSession<BlockNumberFor<Self>>;
     type EconomicSecurity: EconomicSecurity;
     type Emissions: Emissions;
+    type Weights: Weights;
   }
 
   #[pallet::pallet]
@@ -201,6 +259,9 @@ mod pallet {
   #[pallet::storage]
   pub(crate) type SortedAllocations<T: Config> =
     StorageMap<_, Identity, SortedAllocationsKey, (), OptionQuery>;
+  #[pallet::storage]
+  pub(crate) type SumAllocations<T: Config> =
+    StorageMap<_, Identity, NetworkId, Amount, ValueQuery>;
 
   #[pallet::storage]
   pub(crate) type DelayedDeallocations<T: Config> = StorageDoubleMap<
@@ -219,9 +280,11 @@ mod pallet {
     type AllocationPerKeyShare = AllocationPerKeyShare<T>;
     type Allocations = Allocations<T>;
     type SortedAllocations = SortedAllocations<T>;
+    type SumAllocations = SumAllocations<T>;
   }
 
   impl<T: Config> DelayedDeallocationsStorage for Abstractions<T> {
+    type Sessions = Self;
     type DelayedDeallocations = DelayedDeallocations<T>;
   }
 
@@ -268,7 +331,7 @@ mod pallet {
     StorageMap<_, Identity, NetworkId, Amount, OptionQuery>;
   #[pallet::storage]
   pub(crate) type PendingSlashReport<T: Config> =
-    StorageMap<_, Identity, ExternalValidatorSet, Amount, OptionQuery>;
+    StorageMap<_, Identity, ExternalValidatorSet, PendingSlashReportValue, OptionQuery>;
 
   impl<T: Config> SessionsStorage for Abstractions<T> {
     type Config = T;
@@ -284,8 +347,6 @@ mod pallet {
   }
 
   impl<T: Config> SlashReportsStorage for Abstractions<T> {
-    type Config = T;
-
     type PendingSlashReport = PendingSlashReport<T>;
   }
 
@@ -308,7 +369,8 @@ mod pallet {
     ///
     /// Each genesis validator is expected to provide `SignedAuxiliaryKeys` for each network. They
     /// may not only validate _some_ networks. This is enforced by requiring the order of this
-    /// `Vec<_>` equal the order yielded by [`NetworkId::all`].
+    /// `Vec<_>` equal the order yielded by [`NetworkId::all`], with matching lengths for the two
+    /// lists.
     pub participants: Vec<(T::AccountId, Vec<SignedAuxiliaryKeys>)>,
   }
   impl<T: Config> Default for GenesisConfig<T> {
@@ -320,6 +382,34 @@ mod pallet {
   #[pallet::genesis_build]
   impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
     fn build(&self) {
+      /*
+        Substrate _always_ defines `test_genesis_config_builds` which checks if the default genesis
+        config is accepted by `build` or not. Our issue is the default genesis config, which is
+        without validators, is not valid and should not be considered valid.
+
+        When testing, and for testing alone, we immediately return if given the default config so
+        the test passes.
+      */
+      #[cfg(test)]
+      if self.participants.is_empty() {
+        return;
+      }
+
+      /*
+        For a network with `n = 3f + 1`, where `n <= KeyShares::MAX_PER_SET`, we want to ensure
+        the genesis validators are of quantity `<= f` and accordingly can become a minority unable
+        to interrupt non-genesis validators.
+
+        Further more, we want to assert a set of additional validators of size equal to the genesis
+        validators is able to co-exist with the genesis validators before outright replacing them.
+        This means we require `n >= 4g + 1`, where `g` is the amount of genesis validators.
+
+        This isn't stricly ensuring, as even with so many validators, the capacity contributed from
+        rewards distributed to genesis validators may still be needed, but it's a good sanity check
+        on the amount of genesis validators.
+      */
+      assert!(((4 * self.participants.len()) + 1) <= usize::from(KeySharesStruct::MAX_PER_SET));
+
       GenesisValidators::<T>::set(Some(
         self
           .participants
@@ -329,15 +419,21 @@ mod pallet {
           .try_into()
           .expect("amount of genesis validators exceeded the maximum allowed per set"),
       ));
+
+      // Set their keys
       for (participant, keys) in &self.participants {
+        let mut networks_iter = NetworkId::all();
         let mut keys_iter = keys.iter().cloned();
-        for (network, keys) in NetworkId::all().zip(&mut keys_iter) {
+        for (network, keys) in (&mut networks_iter).zip(&mut keys_iter) {
           assert_eq!(network, keys.network());
           Abstractions::<T>::set_auxiliary_keys(*participant, keys)
             .expect("genesis auxiliary keys weren't valid");
         }
+        assert!(networks_iter.next().is_none(), "less keys provided than networks");
         assert!(keys_iter.next().is_none(), "more keys provided than networks");
       }
+
+      // Attempt sessions for all networks
       for network in NetworkId::all() {
         assert!(
           Abstractions::<T>::attempt_new_session(network, true),
@@ -402,11 +498,12 @@ mod pallet {
           .0;
         let SeraiPreExecutionDigest { proposer, unix_time_in_millis: _ } =
           SeraiPreExecutionDigest::find(&digest);
+        // We want this block to be rejected if it doesn't accurately specify its author
         assert_eq!(author, proposer);
 
         let reward = T::Emissions::block_reward();
         if crate::Coins::<T>::mint(
-          crate::Pallet::<T>::account(),
+          serai_abi::validator_sets::address(),
           Balance { coin: Coin::Serai, amount: reward },
         )
         .is_ok()
@@ -489,7 +586,7 @@ mod pallet {
   #[pallet::call]
   impl<T: Config> Pallet<T> {
     #[pallet::call_index(0)]
-    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    #[pallet::weight((<T as Config>::Weights::set_keys(), DispatchClass::Operational))]
     pub fn set_keys(
       origin: OriginFor<T>,
       network: ExternalNetworkId,
@@ -519,7 +616,7 @@ mod pallet {
     }
 
     #[pallet::call_index(1)]
-    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    #[pallet::weight((<T as Config>::Weights::slash_serai_validator(), DispatchClass::Operational))]
     pub fn slash_serai_validator(
       origin: OriginFor<T>,
       session: Session,
@@ -531,7 +628,7 @@ mod pallet {
     }
 
     #[pallet::call_index(2)]
-    #[pallet::weight((0, DispatchClass::Operational))] // TODO
+    #[pallet::weight((<T as Config>::Weights::report_slashes(), DispatchClass::Operational))]
     pub fn report_slashes(
       origin: OriginFor<T>,
       set: ExternalValidatorSet,
@@ -549,7 +646,7 @@ mod pallet {
     }
 
     #[pallet::call_index(3)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::set_auxiliary_keys(), DispatchClass::Normal))]
     pub fn set_auxiliary_keys(origin: OriginFor<T>, keys: SignedAuxiliaryKeys) -> DispatchResult {
       let validator = ensure_signed(origin)?;
       Abstractions::<T>::set_auxiliary_keys(validator, keys)
@@ -558,39 +655,43 @@ mod pallet {
     }
 
     #[pallet::call_index(4)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::allocate(), DispatchClass::Normal))]
     pub fn allocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
 
-      Coins::<T>::transfer_fn(validator, Self::account(), Balance { coin: Coin::Serai, amount })?;
+      Coins::<T>::transfer_fn(
+        validator,
+        serai_abi::validator_sets::address(),
+        Balance { coin: Coin::Serai, amount },
+      )?;
 
       Abstractions::<T>::increase_allocation(network, validator, amount, false)
         .map_err(Error::<T>::AllocationError)?;
-
-      Core::<T>::emit_event(Event::Allocation { validator, network, amount });
 
       Ok(())
     }
 
     #[pallet::call_index(5)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::deallocate(), DispatchClass::Normal))]
     pub fn deallocate(origin: OriginFor<T>, network: NetworkId, amount: Amount) -> DispatchResult {
       let validator = ensure_signed(origin)?;
 
       let timeline = Abstractions::<T>::decrease_allocation(network, validator, amount)
         .map_err(Error::<T>::DeallocationError)?;
 
-      Core::<T>::emit_event(Event::Deallocation { validator, network, amount, timeline });
-
       if matches!(timeline, DeallocationTimeline::Immediate) {
-        Coins::<T>::transfer_fn(Self::account(), validator, Balance { coin: Coin::Serai, amount })?;
+        Coins::<T>::transfer_fn(
+          serai_abi::validator_sets::address(),
+          validator,
+          Balance { coin: Coin::Serai, amount },
+        )?;
       }
 
       Ok(())
     }
 
     #[pallet::call_index(6)]
-    #[pallet::weight((0, DispatchClass::Normal))] // TODO
+    #[pallet::weight((<T as Config>::Weights::claim_deallocation(), DispatchClass::Normal))]
     pub fn claim_deallocation(
       origin: OriginFor<T>,
       network: NetworkId,
@@ -605,7 +706,11 @@ mod pallet {
         deallocation: ValidatorSet { network, session },
       });
 
-      Coins::<T>::transfer_fn(Self::account(), validator, Balance { coin: Coin::Serai, amount })?;
+      Coins::<T>::transfer_fn(
+        serai_abi::validator_sets::address(),
+        validator,
+        Balance { coin: Coin::Serai, amount },
+      )?;
       Ok(())
     }
   }
@@ -637,7 +742,6 @@ mod pallet {
             !participants.is_empty(),
             "set which was decided had no selected participants stored"
           );
-
           // Check the bitvec is of the proper length
           if participants.len() != signature_participants.len() {
             Err(InvalidTransaction::BadProof)?;
@@ -745,5 +849,52 @@ sp_api::decl_runtime_apis! {
 }
 
 /// A `*Storage` backend used when testing, without constructing a full runtime.
+///
+/// This is used for testing the simpler abstractions where it's feasible to define the relevant
+/// subset and it's helpful for testing. For the abstractions which make use of it, they generally
+/// define themselves and then proceed to implement their `trait Storage for MockStorage`.
 #[cfg(test)]
 struct MockStorage;
+#[cfg(test)]
+impl MockStorage {
+  /// Set random random auxiliary keys for each network for a given validator.
+  pub fn set_random_auxiliary_keys(validator: SeraiAddress) {
+    use rand_core::OsRng;
+    use zeroize::Zeroizing;
+
+    use ciphersuite::{group::ff::Field as _, WrappedGroup};
+    use dalek_ff_group::Ristretto;
+    use embedwards25519::Embedwards25519;
+    use secq256k1::Secq256k1;
+
+    let btc_keys = SignedAuxiliaryKeys::bitcoin(
+      &mut OsRng,
+      validator,
+      &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
+      &Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut OsRng)),
+    );
+    MockStorage::set_auxiliary_keys(validator, btc_keys).unwrap();
+
+    let eth_keys = SignedAuxiliaryKeys::ethereum(
+      &mut OsRng,
+      validator,
+      &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
+      &Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut OsRng)),
+    );
+    MockStorage::set_auxiliary_keys(validator, eth_keys).unwrap();
+
+    let xmr_keys = SignedAuxiliaryKeys::monero(
+      &mut OsRng,
+      validator,
+      &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
+    );
+    MockStorage::set_auxiliary_keys(validator, xmr_keys).unwrap();
+
+    let serai_keys = SignedAuxiliaryKeys::serai(
+      &mut OsRng,
+      validator,
+      &Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng)),
+    );
+    MockStorage::set_auxiliary_keys(validator, serai_keys).unwrap();
+  }
+}

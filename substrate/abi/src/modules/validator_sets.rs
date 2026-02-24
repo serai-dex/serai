@@ -12,6 +12,11 @@ use serai_primitives::{
   validator_sets::*,
 };
 
+/// The address used by the validator sets pallet.
+pub fn address() -> SeraiAddress {
+  SeraiAddress::system(borsh::to_vec(b"ValidatorSets").unwrap())
+}
+
 /// Slash(es) to occur on-chain.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Slashes {

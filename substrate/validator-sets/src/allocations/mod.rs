@@ -1,6 +1,6 @@
 //! `Allocations` is a simple abstraction over a pair of `StorageMap`s which ensure they remain
-//! synchronized and enable iterating over validators by the amount they've allocated. This is used
-//! to select validators for new sessions.
+//! synchronized and enable iterating over validators by the amount they've allocated. This
+//! iteration is used to select validators for new sessions.
 
 use scale::{Encode as _, DecodeAll as _};
 
@@ -20,13 +20,22 @@ mod sorted_key;
 pub(crate) use sorted_key::*;
 
 mod delayed;
-pub use delayed::*;
+#[rustfmt::skip]
+pub(crate) use delayed::{DelayedDeallocationsStorage, DelayedDeallocationError, DelayedDeallocations};
 
 use crate::auxiliary_keys::AuxiliaryKeys as _;
+
+#[cfg(test)]
+mod tests;
 
 /// The key to use for the allocations map.
 pub(crate) type AllocationsKey = (NetworkId, SeraiAddress);
 
+/// A `trait` to access networks' stake requirements via.
+///
+/// This should be `serai_validator_sets_pallet::network_stake_requirement`, which requires being
+/// parameterized by a `serai_coins_pallet::Config` and `EconomicSecurity`. Explicitly declaring
+/// this trait here allows the tests for this abstraction to not define such a complete runtime.
 pub(crate) trait NetworkStakeRequirement {
   fn requirement(network: ExternalNetworkId) -> Amount;
 }
@@ -46,6 +55,7 @@ impl NetworkStakeRequirement for () {
 #[derive(
   Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking, frame_support::PalletError,
 )]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum AllocationError {
   /// The validator set didn't define an allocation requirement for a key share.
   NoAllocationPerKeyShareSet,
@@ -61,6 +71,7 @@ pub enum AllocationError {
 #[derive(
   Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking, frame_support::PalletError,
 )]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum DeallocationError {
   /// The validator set didn't define an allocation requirement for a key share.
   NoAllocationPerKeyShareSet,
@@ -103,6 +114,15 @@ pub(crate) trait AllocationsStorage: crate::AuxiliaryKeysStorage {
   /// This is opaque and to be exclusively read/write by `Allocations`.
   type SortedAllocations: StorageMap<SortedAllocationsKey, (), Query = Option<()>>
     + StoragePrefixedMap<()>;
+
+  /// A map storing the sum of allocations for a network.
+  ///
+  /// This is to be exclusively written to by `Allocations` but may be read by the rest of the
+  /// pallet.
+  ///
+  /// Internally to the Serai protocol, this is used pre-Economic Security to evaluate how much
+  /// stake has been allocated in order to then calculate the distance to economic security.
+  type SumAllocations: StorageMap<NetworkId, Amount, Query = Amount>;
 }
 
 /// An interface for managing validators' allocations.
@@ -138,14 +158,15 @@ pub(crate) trait Allocations {
   /// immediately present here nor emit any events.
   ///
   /// Despite validating this allocation causes the validator to qualify for at least one key
-  /// share, it does not ensure the storage will only contain validators which qualify for at least
-  /// one key share. This is due to the potential for `AllocationPerKeyShare` to be independently
-  /// updated, potentially increasing the value _past_ what some validators have currently
-  /// allocated. It solely applies the minimum bound to prevent trivial entries from being written
-  /// to storage.
+  /// share (when not a reward), it does not ensure the storage will only contain validators which
+  /// qualify for at least one key share. This is due to the potential for `AllocationPerKeyShare`
+  /// to be independently updated, potentially increasing the value _past_ what some validators
+  /// have already allocated, among other things. It solely applies the minimum bound to prevent
+  /// trivial entries from being written to storage.
   ///
   /// This does not perform any transfers of any coins/tokens. It solely performs the bookkeeping
-  /// for the allocation with regards to the `Allocations` abstraction present here.
+  /// for the allocation with regards to the `Allocations` abstraction present here. This function
+  /// may panic if the transfer has not occured and may be invalid when it occurs.
   ///
   /// This function will be atomic, only modifying the storage if it will return `Ok(())`.
   fn increase_allocation_without_updating_other_contexts(
@@ -170,13 +191,13 @@ pub(crate) trait Allocations {
     amount: Amount,
   ) -> Result<(), DeallocationError>;
 
-  /// Drain a validator's allocation.
+  /// Drain a validator's current allocation.
   ///
   /// This is intended to be called in response to a fatal slash. It will set the validator's
   /// allocation to `0` regardless of the context.
   ///
   /// This function will return the `Amount` drained.
-  fn drain_allocation(network: NetworkId, validator: SeraiAddress) -> Option<Amount>;
+  fn drain_allocation(validator: SeraiAddress, network: NetworkId) -> Option<Amount>;
 }
 
 /*
@@ -204,9 +225,11 @@ const _MAX_PER_SET_IS_IN_RANGE: [(); ((KeyShares::MAX_PER_SET <= (u16::MAX / 4))
 ///
 /// The purpose of this function is to ensure
 /// [`AllocationsStorage::Allocations`] remains exactly synchronized with
-/// [`AllocationsStorage::SortedAllocations`].
+/// [`AllocationsStorage::SortedAllocations`] and
+/// [`AllocationsStorage::SumAllocations`].
 ///
-/// This returns the validator's prior allocation.
+/// This returns the validator's prior allocation. This function has undefined behavior if the new
+/// allocation is not valid.
 fn update_allocation<Storage: AllocationsStorage>(
   network: NetworkId,
   key: SeraiAddress,
@@ -221,6 +244,22 @@ fn update_allocation<Storage: AllocationsStorage>(
   if amount.0 != 0 {
     Storage::Allocations::set((network, key), Some(amount));
     Storage::SortedAllocations::set(SortedAllocationsKey::new(network, key, amount), Some(()));
+  }
+  // Update the sum of allocations
+  {
+    let prior = prior.unwrap_or(Amount(0));
+    if prior < amount {
+      let increase = (amount - prior).expect("couldn't subtract smaller amount from larger amount");
+      Storage::SumAllocations::mutate(network, |value| {
+        *value =
+          (*value + increase).expect("sum of allocations exceeded `Amount`, meaning SRI supply has")
+      });
+    } else {
+      let decrease = (prior - amount).expect("couldn't subtract smaller amount from larger amount");
+      Storage::SumAllocations::mutate(network, |value| {
+        *value = (*value - decrease).expect("sum of allocations was less than a present allocation")
+      });
+    }
   }
   prior
 }
@@ -548,7 +587,7 @@ impl<Storage: AllocationsStorage> Allocations for Storage {
     Ok(())
   }
 
-  fn drain_allocation(network: NetworkId, validator: SeraiAddress) -> Option<Amount> {
+  fn drain_allocation(validator: SeraiAddress, network: NetworkId) -> Option<Amount> {
     update_allocation::<Self>(network, validator, Amount(0))
   }
 }
@@ -558,9 +597,13 @@ mod mock {
   use frame_support::{pallet_prelude::*, traits::StorageInstance};
   use serai_abi::primitives::{
     network_id::{ExternalNetworkId, NetworkId},
+    coin::{ExternalCoin, Coin},
     balance::{Amount, ExternalBalance},
   };
   use super::{AllocationsKey, SortedAllocationsKey};
+  use crate::MockStorage;
+
+  pub const STAKE_REQUIREMENT: Amount = Amount(30_000 * 10u64.pow(Coin::Serai.decimals()));
 
   pub struct PerKeyShare;
   impl StorageInstance for PerKeyShare {
@@ -593,140 +636,36 @@ mod mock {
   type SortedAllocationsMap =
     StorageMap<StorageSorted, Identity, SortedAllocationsKey, (), OptionQuery>;
 
-  pub(crate) struct DummyEconomicSecurity;
-  impl serai_abi::economic_security::EconomicSecurity for DummyEconomicSecurity {
-    fn achieved_economic_security(_network: ExternalNetworkId) -> bool {
-      true
+  pub struct StorageSum;
+  impl StorageInstance for StorageSum {
+    fn pallet_prefix() -> &'static str {
+      "Allocations"
     }
-    fn sri_value(_balance: ExternalBalance) -> Amount {
-      Amount(0)
+
+    const STORAGE_PREFIX: &'static str = "Storage::SumAllocations";
+  }
+  type SumAllocations = StorageMap<StorageSum, Identity, NetworkId, Amount, ValueQuery>;
+
+  impl serai_abi::economic_security::EconomicSecurity for MockStorage {
+    fn achieved_economic_security(network: ExternalNetworkId) -> bool {
+      SumAllocations::get(network) >= STAKE_REQUIREMENT
+    }
+    fn sri_value(balance: ExternalBalance) -> Amount {
+      match balance.coin {
+        ExternalCoin::Bitcoin => (balance.amount * Amount(10)).unwrap(),
+        ExternalCoin::Ether => (balance.amount * Amount(5)).unwrap(),
+        ExternalCoin::Monero => (balance.amount * Amount(3)).unwrap(),
+        ExternalCoin::Dai => (balance.amount * Amount(2)).unwrap(),
+      }
     }
   }
 
   impl super::AllocationsStorage for crate::MockStorage {
-    type EconomicSecurity = DummyEconomicSecurity;
+    type EconomicSecurity = MockStorage;
     type NetworkStakeRequirement = ();
     type AllocationPerKeyShare = AllocationPerKeyShareMap;
     type Allocations = AllocationsMap;
     type SortedAllocations = SortedAllocationsMap;
+    type SumAllocations = SumAllocations;
   }
-}
-
-#[test]
-fn test_get_iter_update_allocations() {
-  use rand_core::{RngCore as _, OsRng};
-
-  use borsh::BorshDeserialize as _;
-
-  use sp_io::TestExternalities;
-
-  use crate::MockStorage;
-
-  TestExternalities::default().execute_with(|| {
-    let prior_network = NetworkId::deserialize_reader(&mut [0].as_slice()).unwrap();
-    let network = NetworkId::deserialize_reader(&mut [1].as_slice()).unwrap();
-    let following_network = NetworkId::deserialize_reader(&mut [2].as_slice()).unwrap();
-
-    <MockStorage as AllocationsStorage>::AllocationPerKeyShare::insert(prior_network, Amount(1));
-    <MockStorage as AllocationsStorage>::AllocationPerKeyShare::insert(network, Amount(1));
-    <MockStorage as AllocationsStorage>::AllocationPerKeyShare::insert(
-      following_network,
-      Amount(1),
-    );
-
-    // Create allocations
-    let rand_allocation = || {
-      let mut key = [0; 32];
-      OsRng.fill_bytes(&mut key);
-      let key = SeraiAddress(key);
-      let amount = Amount(OsRng.next_u64());
-      (key, amount)
-    };
-    const ALLOCATIONS: usize = 100;
-    let mut allocations = vec![];
-    for _ in 0 .. ALLOCATIONS {
-      let (key, amount) = rand_allocation();
-      allocations.push((key, amount));
-      assert_eq!(update_allocation::<MockStorage>(network, key, amount), None);
-      assert_eq!(MockStorage::allocation(network, key), Some(amount));
-    }
-    // Sort them from highest amount to lowest
-    allocations.sort_by_key(|item| item.1);
-    allocations.reverse();
-
-    // Set allocations for the previous and next network, by byte, to ensure the map isn't solely
-    // these allocations. This ensures we don't read from another network accidentally
-    {
-      let (key, amount) = rand_allocation();
-      assert_eq!(update_allocation::<MockStorage>(prior_network, key, amount), None);
-      assert_eq!(update_allocation::<MockStorage>(following_network, key, amount), None);
-    }
-
-    // Check the iterator works
-    {
-      let mut a = MockStorage::iter_allocations(network, Amount(0));
-      let mut b = allocations.clone().into_iter();
-      for _ in 0 .. allocations.len() {
-        let next = a.next().unwrap();
-        assert_eq!(b.next().unwrap(), next);
-
-        let (validator, amount) = next;
-        assert_eq!(MockStorage::allocation(network, validator), Some(amount));
-      }
-      assert!(a.next().is_none());
-      assert!(b.next().is_none());
-    }
-
-    // Check the minimum works
-    {
-      assert_eq!(
-        MockStorage::iter_allocations(network, allocations[0].1).next(),
-        Some(allocations[0])
-      );
-      assert_eq!(
-        MockStorage::iter_allocations(
-          network,
-          // Fails with probability ~1/2**57
-          (allocations[0].1 + Amount(1)).expect("1/2**57")
-        )
-        .next(),
-        None,
-      );
-    }
-
-    // Check updating an allocation works
-    for _ in 0 .. (allocations.len() / 2) {
-      #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
-      let i = (OsRng.next_u64() as usize) % allocations.len();
-      if (OsRng.next_u64() & 1) == 1 {
-        let new_amount = Amount(OsRng.next_u64());
-        assert_eq!(
-          update_allocation::<MockStorage>(network, allocations[i].0, new_amount),
-          Some(allocations[i].1)
-        );
-        allocations[i].1 = new_amount;
-      } else {
-        assert_eq!(
-          update_allocation::<MockStorage>(network, allocations[i].0, Amount(0)),
-          Some(allocations[i].1)
-        );
-        allocations.swap_remove(i);
-      }
-    }
-    allocations.sort_by_key(|item| item.1);
-    allocations.reverse();
-    {
-      let mut a = MockStorage::iter_allocations(network, Amount(0));
-      let mut b = allocations.clone().into_iter();
-      for _ in 0 .. allocations.len() {
-        let next = a.next().unwrap();
-        assert_eq!(b.next().unwrap(), next);
-
-        let (validator, amount) = next;
-        assert_eq!(MockStorage::allocation(network, validator), Some(amount));
-      }
-      assert!(a.next().is_none());
-      assert!(b.next().is_none());
-    }
-  });
 }
