@@ -2,45 +2,46 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
+use core::time::Duration;
 extern crate alloc;
+
+use serai_abi::{
+  primitives::{constants, coin::Coin, balance::Amount},
+};
+
+mod post_economic_security;
+
+const DAYS_365: Duration = constants::DAY.checked_mul(365).unwrap();
+
+const INITIAL_PERIOD: Duration = constants::DAY.checked_mul(30).unwrap();
+const INITIAL_PERIOD_REWARDS: Amount = Amount(100_000 * 10u64.pow(Coin::Serai.decimals()));
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+const INITIAL_PERIOD_REWARD_PER_BLOCK: Amount = Amount(
+  (((INITIAL_PERIOD_REWARDS.0 as u128) * constants::TARGET_BLOCK_TIME.as_millis()) /
+    INITIAL_PERIOD.as_millis()) as u64,
+);
+const SECURE_BY: Duration = DAYS_365;
+
+const POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS: Amount =
+  Amount(20_000_000 * 10u64.pow(Coin::Serai.decimals()));
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+const BLOCKS_PER_365_DAYS: u64 =
+  DAYS_365.as_millis().checked_div(constants::TARGET_BLOCK_TIME.as_millis()).unwrap() as u64;
+const POST_ECONOMIC_SECURITY_REWARD_PER_BLOCK: Amount =
+  Amount(POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS.0 / BLOCKS_PER_365_DAYS);
 
 #[expect(let_underscore_drop)]
 #[frame_support::pallet]
 mod pallet {
-  use core::time::Duration;
-
   use frame_support::{pallet_prelude::*, traits::PreInherents};
 
   use serai_abi::{
-    primitives::{
-      constants,
-      network_id::*,
-      coin::{ExternalCoin, Coin},
-      balance::{Amount, Balance},
-      validator_sets::*,
-    },
+    primitives::{network_id::*, coin::ExternalCoin, balance::Balance, validator_sets::*},
     economic_security::EconomicSecurity,
     TransactionContext as _,
   };
 
-  const DAYS_365: Duration = constants::DAY.checked_mul(365).unwrap();
-
-  const INITIAL_PERIOD: Duration = constants::DAY.checked_mul(30).unwrap();
-  const INITIAL_PERIOD_REWARDS: Amount = Amount(100_000 * 10u64.pow(Coin::Serai.decimals()));
-  #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
-  const INITIAL_PERIOD_REWARD_PER_BLOCK: Amount = Amount(
-    (((INITIAL_PERIOD_REWARDS.0 as u128) * constants::TARGET_BLOCK_TIME.as_millis()) /
-      INITIAL_PERIOD.as_millis()) as u64,
-  );
-  const SECURE_BY: Duration = DAYS_365;
-
-  const POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS: Amount =
-    Amount(20_000_000 * 10u64.pow(Coin::Serai.decimals()));
-  #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
-  const BLOCKS_PER_365_DAYS: u64 =
-    DAYS_365.as_millis().checked_div(constants::TARGET_BLOCK_TIME.as_millis()).unwrap() as u64;
-  const POST_ECONOMIC_SECURITY_REWARD_PER_BLOCK: Amount =
-    Amount(POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS.0 / BLOCKS_PER_365_DAYS);
+  use super::*;
 
   /// Methods from [`serai_validator_sets_pallet::Pallet`] which [`Pallet`] requires.
   ///
@@ -110,153 +111,6 @@ mod pallet {
   #[pallet::storage]
   type ExternalValidatorSetRewards<T: Config> =
     StorageMap<_, Identity, ExternalValidatorSet, Amount, ValueQuery>;
-
-  /// The fraction of rewards which should go to an external network's validators, per the
-  /// post-Economic Security policy.
-  ///
-  /// This is programmed to never panic. The fraction will be within the range `0 ..= 1`. The
-  /// numerator and denominator will fit within `u192`, enabling further scaling by a `u64`, and
-  /// the denominator will be non-zero, ensuring it can be divided by.
-  /*
-    This can be hard to immediately understand. It's calculating the ratio of two values themselves
-    represented as fractions to calculate the specified ratio, before returning not the ratio but
-    the fraction of the total one side of the ratio represents.
-
-    In order to understand this, the following walkthrough on the premise is recommended.
-
-    ```py
-    DESIRED_UNUSED_CAPACITY = 0.1
-    DESIRED_DISTRIBUTION = 1 - DESIRED_UNUSED_CAPACITY
-    def ratio(CURRENT_DISTRIBUTION):
-      print(
-        str(DESIRED_UNUSED_CAPACITY) +
-          ':' +
-          str(((1 - CURRENT_DISTRIBUTION) * DESIRED_DISTRIBUTION) / CURRENT_DISTRIBUTION)
-      )
-    ```
-
-    For `CURRENT_DISTRIBUTION`, a number in range `0 ..= 1` representing the percentage of capacity
-    actively consumed by requirements, this will print the ratio specified in the Economics
-    specification.
-
-    ```
-    >>> ratio(0.9)
-    0.1:0.09999999999999998
-    ```
-
-    When 90% of the current capacity is consumed, as is our target, the ratio is effectively
-    `1 : 1`. Note the literal numeric values are `0.1 : 0.1` but that doesn't matter as all that
-    matters is their relation to each other.
-
-    ```
-    >>> ratio(0.95)
-    0.1:0.04736842105263162
-    ```
-
-    When 95% of capacity is consumed, as over our target, validators receive more than
-    _twice as much_ of the rewards than the liquidity pools.
-
-    ```
-    >>> ratio(0.85)
-    0.1:0.15882352941176475
-    ```
-
-    But when only 85% of capacity is consumed, as under our target, liquidity pools receive more
-    than 50% more of the rewards than the validators.
-
-    ```
-    >>> ratio(1)
-    0.1:0.0
-    ```
-
-    And of course, if the entire capacity is consumed, all rewards go to the validators as the
-    ratio becomes infinite.
-
-    This function computes the ratio before computing what fraction of the total the validators,
-    the left-hand term of the ratio, represent. For a ratio `2 : 3` (as approximate to the case
-    when 85% of capacity is consumed), this will yield `2 / 5`, saying the validators should
-    receive 40% of the rewards (and the liquidity pools the rest, the 60%).
-
-    The complexity is that this function does so while avoiding floating point numbers, requiring
-    keeping track of all fractions as their numerator/denominators, making sure to note the bounds
-    as needed to prevent over/underflows, and while not dividing by zero.
-  */
-  fn post_economic_security_external_network_validator_rewards_fraction(
-    used_capacity: Amount,
-    capacity_of_network: Amount,
-  ) -> (sp_core::U256, sp_core::U256) {
-    use sp_core::U256;
-
-    /*
-      `DESIRED_UNUSED_CAPACITY = 0.1`
-
-      This fraction has to be any non-zero accurate representation where it should be irreducible
-      to minimize the risks of overflows.
-    */
-    const DESIRED_UNUSED_CAPACITY: (u8, u8) = (1, 10);
-    /*
-      `DESIRED_DISTRIBUTION = 1 - DESIRED_UNUSED_CAPACITY`
-
-      This is `(1 / 1) - DESIRED_UNUSED_CAPACITY`, with `1 / 1` represented as
-      `DESIRED_UNUSED_CAPACITY_DENOM / DESIRED_UNUSED_CAPACITY_DENOM` to allow us to
-      perform the subtraction.
-    */
-    const DESIRED_DISTRIBUTION: (u8, u8) =
-      (DESIRED_UNUSED_CAPACITY.1 - DESIRED_UNUSED_CAPACITY.0, DESIRED_UNUSED_CAPACITY.1);
-
-    // There cannot be more capacity used than in existence, even if we _require_ more than exists
-    let used_capacity = used_capacity.min(capacity_of_network);
-
-    // If this network lacks capacity, state it should receive `1/1` of the rewards
-    if capacity_of_network == Amount(0) {
-      return (sp_core::U256::one(), sp_core::U256::one());
-    } else if used_capacity == Amount(0) {
-      // If this network has capacity but none is used, say the validators should get `0/1`
-      // (so the pools receive `1/1`)
-      return (sp_core::U256::zero(), sp_core::U256::one());
-    }
-
-    let current_distribution = (used_capacity.0, capacity_of_network.0);
-
-    // These values are bounded `0 ..= u8::MAX`
-    let ratio_term_for_validators = DESIRED_UNUSED_CAPACITY;
-
-    // `((1 - CURRENT_DISTRIBUTION) * DESIRED_DISTRIBUTION) / CURRENT_DISTRIBUTION`
-    let ratio_term_for_pools = {
-      let one_minus_current_distribution_times_desired_distribution = {
-        // This won't trap as `current_distribution <= 1`
-        // These values are bounded `0 ..= u64::MAX`
-        let one_minus_current_distribution =
-          (current_distribution.1 - current_distribution.0, current_distribution.1);
-        // These values are bounded `0 ..= u72::MAX`
-        (
-          u128::from(one_minus_current_distribution.0) *
-            u128::from(u16::from(DESIRED_DISTRIBUTION.0)),
-          u128::from(one_minus_current_distribution.1) *
-            u128::from(u16::from(DESIRED_DISTRIBUTION.1)),
-        )
-      };
-      // These values are bounded `0 ..= u136::MAX`
-      (
-        U256::from(one_minus_current_distribution_times_desired_distribution.0) *
-          U256::from(u128::from(current_distribution.1)),
-        U256::from(one_minus_current_distribution_times_desired_distribution.1) *
-          U256::from(u128::from(current_distribution.0)),
-      )
-    };
-
-    // `ratio_term_for_validators / ratio_term_for_pools`
-    // These values are bounded `0 ..= u144::MAX`
-    let ratio = (
-      U256::from(u16::from(ratio_term_for_validators.0)) * ratio_term_for_pools.1,
-      U256::from(u16::from(ratio_term_for_validators.1)) * ratio_term_for_pools.0,
-    );
-
-    // Now that we have the ratio, we convert to the validators' fraction, as useful by consumers.
-    // These values are bounded `0 ..= u145::MAX` which is a subset of `0 ..= u192::MAX`, the
-    // documented bound for the returned values from this function
-    (ratio.0, ratio.0 + ratio.1)
-  }
 
   impl<T: Config> PreInherents for Pallet<T> {
     fn pre_inherents() {
@@ -354,7 +208,7 @@ mod pallet {
           let validators_fraction = {
             // Note this may be `u64::MAX` if an overflow occurred. In that case, we still use it
             // as-is as because the methodology within
-            // `post_economic_security_external_network_validator_rewards_fraction` will bound it
+            // `post_economic_security::external_network_validator_rewards_fraction` will bound it
             // to be at most `capacity_of_network` (used capacity is `<=` actual capacity).
             let used_capacity = serai_validator_sets_pallet::network_stake_requirement::<
               T,
@@ -368,7 +222,7 @@ mod pallet {
             let capacity_of_network =
               T::ValidatorSets::stake_for_latest_decided_validator_set(network.into())
                 .unwrap_or(Amount(0));
-            post_economic_security_external_network_validator_rewards_fraction(
+            post_economic_security::external_network_validator_rewards_fraction(
               used_capacity,
               capacity_of_network,
             )
@@ -473,16 +327,12 @@ mod pallet {
         // Ensure `blocks_until_secure_by` is non-zero as we are in a block and aren't secure yet
         let blocks_until_secure_by = blocks_until_secure_by.max(1);
 
-        let mut external_stake = Amount(0);
         let mut external_stake_required = Some(Amount(0));
         for network in ExternalNetworkId::all() {
           if T::EconomicSecurity::achieved_economic_security(network) {
             continue;
           }
 
-          external_stake = (external_stake +
-            T::ValidatorSets::total_allocated_stake_for_network(network.into()))
-          .expect("stake exceed SRI supply (bounded to `u64::MAX`)");
           external_stake_required = external_stake_required.and_then(|external_stake_required| {
             external_stake_required +
               serai_validator_sets_pallet::network_stake_requirement::<T, T::EconomicSecurity>(
