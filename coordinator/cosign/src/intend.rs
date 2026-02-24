@@ -115,8 +115,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           // Ephemeral RPC Err: task to re-run and continue trying
           .map_err(|e| format!("RPC error fetching events for block #{block_number}: {e}"))?;
 
-        serai_log::debug!("iterating over block_number={block_number}, hash={serai_block_hash:?}");
-
         let mut txn = self.db.txn();
         let mut builds_upon =
           BuildsUpon::get(&txn).unwrap_or(IncrementalUnbalancedMerkleTree::new());
@@ -144,6 +142,8 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             .into(),
         );
         BuildsUpon::set(&mut txn, &builds_upon);
+
+        serai_log::debug!("iterating over block_number={block_number}, hash={serai_block_hash:?}");
 
         let mut has_events = HasEvents::No;
         let vset_events = serai_block_events.validator_sets();
@@ -230,6 +230,11 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
               &mut txn,
               set.network,
               &Set { session: set.session, key: key_pair.0, stake: Amount(stake) },
+            );
+          } else {
+            serai_log::debug!(
+              "skipped session {:#?} with 0 stake from being selected for cosigns",
+              set.session
             );
           }
         }

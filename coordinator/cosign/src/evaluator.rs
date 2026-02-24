@@ -44,7 +44,7 @@ db_channel!(
 fn currently_evaluated_global_session_strict(
   txn: &mut impl DbTxn,
   block_number: u64,
-) -> Result<([u8; 32], GlobalSession), String> {
+) -> ([u8; 32], GlobalSession) {
   let mut res = {
     let existing = match CurrentlyEvaluatedGlobalSession::get(txn) {
       Some(existing) => existing,
@@ -76,7 +76,7 @@ fn currently_evaluated_global_session_strict(
     }
   }
 
-  Ok(res)
+  res
 }
 
 pub(crate) fn currently_evaluated_global_session(getter: &impl Get) -> Option<[u8; 32]> {
@@ -145,9 +145,9 @@ fn commit_cosigned_block(
   CosignedBlocks::send(&mut txn, &(block_number, now_timestamp().as_secs()));
   txn.commit();
 
-  #[cfg(not(coverage))]
+  // Roughly ~1 hour, no need for repetitive logging
   if (block_number % 500) == 0 {
-    log::debug!("marking {label} #{block_number} as cosigned");
+    serai_log::debug!("marking {label} #{block_number} as cosigned");
   }
 
   Ok(())
@@ -177,15 +177,6 @@ async fn ensure_cosigned(
   Err(format!("{label} block (#{block_number}) wasn't yet cosigned. this should resolve shortly"))
 }
 
-fn latest_cosign_block_number(
-  getter: &impl Get,
-  global_session: [u8; 32],
-  network: ExternalNetworkId,
-) -> Option<u64> {
-  NetworksLatestCosignedBlock::get(getter, global_session, network)
-    .map(|signed_cosign| signed_cosign.cosign.block_number)
-}
-
 /// A task to determine if a block has been cosigned and we should handle it.
 pub(crate) struct CosignEvaluatorTask<D: Db, R: RequestNotableCosigns> {
   pub(crate) db: D,
@@ -202,44 +193,30 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
       let mut made_progress = false;
 
       loop {
+        /// This task requires the global sessions channel to be populated
+        // as the block declaring the session is indexed
+        if CurrentlyEvaluatedGlobalSession::get(&self.db).is_none() &&
+          GlobalSessionsChannel::peek(&self.db).is_none()
+        {
+          // no session has ever been declared
+          return Ok(false);
+        }
+
         let mut txn = self.db.txn();
         let Some(BlockEventData { block_number, has_events }) = BlockEvents::try_recv(&mut txn)
         else {
           break;
         };
 
-        #[cfg(not(coverage))]
-        log::debug!(
+        serai_log::log::debug!(
           "beginning evaluator: block_number={block_number}, has_events={:#?}",
           has_events
         );
 
-        // Blocks before the first global session don't need cosigning. The intend task
-        // commits GlobalSessionsChannel and BlockEvents atomically per-block, so if no
-        // session exists in the channel, every block in BlockEvents is guaranteed to have
-        // has_events == HasEvents::No. Pass them through directly so the delay task can
-        // advance LatestCosignedBlockNumber.
-        // if CurrentlyEvaluatedGlobalSession::get(&txn).is_none() {
-        //   let skip = match GlobalSessionsChannel::peek(&txn) {
-        //     Some((_, ref session)) => block_number < session.start_block_number,
-        //     // No session declared yet — all queued blocks are pre-session
-        //     None => true,
-        //   };
-        //   if skip {
-        //     debug_assert!(
-        //       has_events == HasEvents::No,
-        //       "pre-session block #{block_number} had events requiring cosigning"
-        //     );
-        //     commit_cosigned_block(txn, block_number, "pre-session block")?;
-        //     made_progress = true;
-        //     continue;
-        //   }
-        // }
-
         // Fetch the global session information. This must be called for ALL post-session blocks
         // (including HasEvents::No) to maintain incrementality for session transitions.
         let (global_session, global_session_info) =
-          currently_evaluated_global_session_strict(&mut txn, block_number)?;
+          currently_evaluated_global_session_strict(&mut txn, block_number);
 
         match has_events {
           // Because this had notable events, we require an explicit cosign for this block by a
@@ -249,7 +226,9 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
 
             for set in global_session_info.sets {
               // Check if we have the cosign from this set
-              if latest_cosign_block_number(&txn, global_session, set.network) == Some(block_number)
+              if NetworksLatestCosignedBlock::get(&mut txn, global_session, set.network)
+                .map(|signed_cosign| signed_cosign.cosign.block_number) ==
+                Some(block_number)
               {
                 // Since have this cosign, add the set's weight to the weight which has cosigned
                 weight_cosigned +=

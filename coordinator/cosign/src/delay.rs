@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime};
 use serai_db::*;
 use serai_task::{DoesNotError, ContinuallyRan};
 
-use crate::{evaluator::CosignedBlocks, latest_cosigned_block_number};
+use crate::evaluator::CosignedBlocks;
 
 #[cfg(not(any(test, feature = "dev")))]
 /// How often callers should broadcast the cosigns flagged for rebroadcasting.
@@ -52,10 +52,9 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
           break;
         };
 
-        let latest_cosigned_block_number = LatestCosignedBlockNumber::get(getter).unwrap_or(0);
+        let latest_cosigned_block_number = LatestCosignedBlockNumber::get(&mut txn).unwrap_or(0);
 
-        #[cfg(not(coverage))]
-        log::debug!(
+        serai_log::debug!(
           "beginning delay: block_number={block_number}, time_evaluated={time_evaluated}, latest_cosigned_block_number={latest_cosigned_block_number}",
         );
 
