@@ -6,16 +6,16 @@ use serai_task::{DoesNotError, ContinuallyRan};
 
 use crate::evaluator::CosignedBlocks;
 
-#[cfg(not(any(test, feature = "dev")))]
+#[cfg(not(any(test)))]
 /// How often callers should broadcast the cosigns flagged for rebroadcasting.
 pub const BROADCAST_FREQUENCY: Duration = Duration::from_mins(1);
-#[cfg(any(test, feature = "dev"))]
+#[cfg(any(test))]
 /// How often callers should broadcast the cosigns flagged for rebroadcasting.
 pub const BROADCAST_FREQUENCY: Duration = Duration::from_secs(6);
 
-#[cfg(not(any(test, feature = "dev")))]
+#[cfg(not(any(test)))]
 const SYNCHRONY_EXPECTATION: Duration = Duration::from_secs(10);
-#[cfg(any(test, feature = "dev"))]
+#[cfg(any(test))]
 const SYNCHRONY_EXPECTATION: Duration = Duration::from_secs(1);
 
 pub(crate) const ACKNOWLEDGEMENT_DELAY: Duration =

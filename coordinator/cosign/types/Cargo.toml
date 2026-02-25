@@ -18,7 +18,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [features]
-default = []
 test-helpers = []
 
 [dependencies]

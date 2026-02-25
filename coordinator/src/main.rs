@@ -131,8 +131,8 @@ fn spawn_cosigning<D: serai_db::Db>(
         }
       }
 
-      let time_till_cosign_rebroadcast = (last_cosign_rebroadcast
-        + serai_cosign::BROADCAST_FREQUENCY)
+      let time_till_cosign_rebroadcast = (last_cosign_rebroadcast +
+        serai_cosign::BROADCAST_FREQUENCY)
         .saturating_duration_since(Instant::now());
       tokio::select! {
         () = tokio::time::sleep(time_till_cosign_rebroadcast) => {
@@ -379,8 +379,8 @@ async fn main() {
     // Remove retired Tributaries from ActiveTributaries
     let mut active_tributaries = ActiveTributaries::get(&txn).unwrap_or(vec![]);
     active_tributaries.retain(|tributary| {
-      RetiredTributary::get(&txn, tributary.set.network).map(|session| session.0)
-        < Some(tributary.set.session.0)
+      RetiredTributary::get(&txn, tributary.set.network).map(|session| session.0) <
+        Some(tributary.set.session.0)
     });
     ActiveTributaries::set(&mut txn, &active_tributaries);
 
@@ -405,8 +405,8 @@ async fn main() {
       let mut key_bytes = serai_key.to_bytes();
       // Schnorrkel SecretKey is the key followed by 32 bytes of entropy for nonces
       let mut expanded_key = Zeroizing::new([0; 64]);
-      expanded_key.as_mut_slice()[..32].copy_from_slice(&key_bytes);
-      OsRng.fill_bytes(&mut expanded_key.as_mut_slice()[32..]);
+      expanded_key.as_mut_slice()[.. 32].copy_from_slice(&key_bytes);
+      OsRng.fill_bytes(&mut expanded_key.as_mut_slice()[32 ..]);
       key_bytes.zeroize();
       Zeroizing::new(
         schnorrkel::SecretKey::from_bytes(expanded_key.as_slice()).unwrap().to_keypair(),

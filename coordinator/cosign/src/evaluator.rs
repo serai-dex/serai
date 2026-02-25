@@ -1,7 +1,6 @@
 use core::future::Future;
 use std::time::{Duration, Instant};
 
-use serai_client_serai::abi::primitives::network_id::ExternalNetworkId;
 use serai_db::*;
 use serai_task::ContinuallyRan;
 
@@ -11,9 +10,9 @@ use crate::{
   intend::{BlockEventData, BlockEvents, GlobalSessionsChannel},
 };
 
-#[cfg(not(any(test, feature = "dev")))]
+#[cfg(not(any(test)))]
 pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_mins(1);
-#[cfg(any(test, feature = "dev"))]
+#[cfg(any(test))]
 pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(6);
 
 const COSIGN_COMMIT_THRESHOLD: u64 = 83;
@@ -137,22 +136,6 @@ fn evaluate_non_notable_cosigns(
   Ok((weight_cosigned, lowest_common_block))
 }
 
-fn commit_cosigned_block(
-  mut txn: impl DbTxn,
-  block_number: u64,
-  label: &str,
-) -> Result<(), String> {
-  CosignedBlocks::send(&mut txn, &(block_number, now_timestamp().as_secs()));
-  txn.commit();
-
-  // Roughly ~1 hour, no need for repetitive logging
-  if (block_number % 500) == 0 {
-    serai_log::debug!("marking {label} #{block_number} as cosigned");
-  }
-
-  Ok(())
-}
-
 /// If the cosign threshold isn't met, request cosigns and return an error.
 async fn ensure_cosigned(
   weight_cosigned: u64,
@@ -193,7 +176,7 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
       let mut made_progress = false;
 
       loop {
-        /// This task requires the global sessions channel to be populated
+        // This task requires the global sessions channel to be populated
         // as the block declaring the session is indexed
         if CurrentlyEvaluatedGlobalSession::get(&self.db).is_none() &&
           GlobalSessionsChannel::peek(&self.db).is_none()
@@ -213,8 +196,7 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
           has_events
         );
 
-        // Fetch the global session information. This must be called for ALL post-session blocks
-        // (including HasEvents::No) to maintain incrementality for session transitions.
+        // Fetch the global session information
         let (global_session, global_session_info) =
           currently_evaluated_global_session_strict(&mut txn, block_number);
 
@@ -296,7 +278,14 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
         }
 
         // Since we checked we had the necessary cosigns, send it for delay before acknowledgement
-        commit_cosigned_block(txn, block_number, "block")?;
+        CosignedBlocks::send(&mut txn, &(block_number, now_timestamp().as_secs()));
+        txn.commit();
+
+        // Roughly ~1 hour, no need for repetitive logging
+        if (block_number % 500) == 0 {
+          serai_log::debug!("marking block #{block_number} as cosigned");
+        }
+
         made_progress = true;
       }
 

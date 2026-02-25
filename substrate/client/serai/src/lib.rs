@@ -171,13 +171,13 @@ impl Serai {
     self
       .call(
         "blockchain/publish_transaction",
-        &format!(r#"{{ "transaction": "{}" }}"#, hex::encode(borsh::to_vec(transaction).unwrap())),
+        &format!(r#"{{ "transaction": {} }}"#, hex::encode(borsh::to_vec(transaction).unwrap())),
       )
       .await
   }
 
   /// Fetch the events of a specific block.
-  pub async fn events(&self, block: &BlockHash) -> Result<Events, RpcError> {
+  pub async fn events(&self, block: BlockHash) -> Result<Events, RpcError> {
     Ok(Events {
       events: Arc::new(
         self

@@ -32,9 +32,12 @@ serai-task = { path = "../../common/task", version = "0.1" }
 
 serai-cosign-types = { path = "./types" }
 
-[features]
-dev = []
-
 [dev-dependencies]
 env_logger = { version = "0.10", default-features = false }
+
 serai-cosign-types = { path = "./types", features = ["test-helpers"] }
+serai-shim-rpc = { path = "../../tests/shim-rpc" }
+serai-test-task = { path = "../../tests/task" }
+
+hex = { version = "0.4", default-features = false }
+rand_core = { version = "0.6", default-features = false }

@@ -1,10 +1,10 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use crate::{
   LatestCosignedBlockNumber,
   delay::{CosignDelayTask, now_timestamp},
   evaluator::CosignedBlocks,
-  tests::{IntoTask, TaskTest, wait_until},
+  tests::{IntoTask, TaskTest},
 };
 
 use serai_db::{Db as _, DbTxn as _, MemDb};
@@ -39,15 +39,14 @@ impl DelayTest {
   }
 
   async fn assert_task_iteration_completes_with(&self, latest_cosigned_block_number: u64) {
-    wait_until!(LatestCosignedBlockNumber::get(&self.db) => Some(latest_cosigned_block_number));
-
+    assert_eq!(LatestCosignedBlockNumber::get(&self.db), Some(latest_cosigned_block_number));
     // Assert CosignedBlocks queue items have been consumed after task run
     assert_eq!(CosignedBlocks::peek(&self.db), None);
   }
 }
 
 #[tokio::test]
-async fn delay_task_returns_false_with_no_messages() {
+async fn returns_false_with_no_messages() {
   let test = DelayTest::default();
   let mut task = test.into_task();
 
@@ -58,7 +57,7 @@ async fn delay_task_returns_false_with_no_messages() {
 }
 
 #[tokio::test]
-async fn delay_task_updates_latest_cosigned_block_number_after_ack_delay() {
+async fn updates_latest_cosigned_block_number_after_ack_delay() {
   let (mut test, start) = DelayTest::new();
 
   {
@@ -72,12 +71,12 @@ async fn delay_task_updates_latest_cosigned_block_number_after_ack_delay() {
     txn.commit();
   }
 
-  let task = test.into_task();
-  let _handle = TaskTest::spawn_task_continually_running(task, vec![]);
+  let mut task = test.into_task();
 
+  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
   test.assert_task_iteration_completes_with(2).await;
 
-  log::info!("Blocks 0-2 processed after {:?}", start.elapsed());
+  serai_log::log::info!("Blocks 0-2 processed after {:?}", start.elapsed());
 
   {
     let mut txn = test.db.txn();
@@ -90,9 +89,10 @@ async fn delay_task_updates_latest_cosigned_block_number_after_ack_delay() {
     txn.commit();
   }
 
+  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
   test.assert_task_iteration_completes_with(5).await;
 
-  log::info!("Blocks 3-5 processed after {:?}", start.elapsed());
+  serai_log::log::info!("Blocks 3-5 processed after {:?}", start.elapsed());
 
   {
     let mut txn = test.db.txn();
@@ -105,13 +105,14 @@ async fn delay_task_updates_latest_cosigned_block_number_after_ack_delay() {
     txn.commit();
   }
 
+  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
   test.assert_task_iteration_completes_with(8).await;
 
-  log::info!("Blocks 6-8 processed after {:?}", start.elapsed());
+  serai_log::log::info!("Blocks 6-8 processed after {:?}", start.elapsed());
 }
 
 #[tokio::test]
-async fn delay_task_does_not_regress_and_skips_if_not_a_later_block() {
+async fn does_not_regress_and_skips_if_not_a_later_block() {
   let mut test = DelayTest::default();
 
   {

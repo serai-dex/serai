@@ -110,7 +110,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         let serai_block_hash = serai_block.header.hash();
         let serai_block_events = self
           .serai
-          .events(&serai_block_hash)
+          .events(serai_block_hash)
           .await
           // Ephemeral RPC Err: task to re-run and continue trying
           .map_err(|e| format!("RPC error fetching events for block #{block_number}: {e}"))?;
@@ -233,7 +233,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             );
           } else {
             serai_log::debug!(
-              "skipped session {:#?} with 0 stake from being selected for cosigns",
+              "skipped session {:?} with 0 stake from being selected for cosigns",
               set.session
             );
           }

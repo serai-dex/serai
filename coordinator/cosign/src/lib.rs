@@ -38,10 +38,10 @@ use delay::LatestCosignedBlockNumber;
 /// Test helpers and fixtures.
 pub mod tests;
 
-#[cfg(not(any(test, feature = "dev")))]
+#[cfg(not(any(test)))]
 /// The interval at which the cosigning loop runs.
 pub const COSIGN_LOOP_INTERVAL: Duration = Duration::from_secs(5);
-#[cfg(any(test, feature = "dev"))]
+#[cfg(any(test))]
 /// The interval at which the cosigning loop runs.
 pub const COSIGN_LOOP_INTERVAL: Duration = Duration::from_millis(10);
 

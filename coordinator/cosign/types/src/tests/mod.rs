@@ -3,16 +3,14 @@ use crate::{COSIGN_CONTEXT, Cosign, SignedCosign};
 #[cfg(test)]
 use crate::{BlockHash, CosignIntent, ExternalNetworkId, Public};
 
-fn sr25519_fixture() -> schnorrkel::Keypair {
-  schnorrkel::MiniSecretKey::from_bytes(&[0xff; 32])
-    .expect("fixed seed should be valid")
-    .expand_to_keypair(schnorrkel::ExpansionMode::Ed25519)
-}
-
 fn sr25519_fixture_from_seed(seed: [u8; 32]) -> schnorrkel::Keypair {
   schnorrkel::MiniSecretKey::from_bytes(&seed)
     .expect("seed should be valid")
     .expand_to_keypair(schnorrkel::ExpansionMode::Ed25519)
+}
+
+fn sr25519_fixture() -> schnorrkel::Keypair {
+  sr25519_fixture_from_seed([0xff; 32])
 }
 
 fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosign {
@@ -43,7 +41,7 @@ pub fn sign_cosign_with_seed(cosign: Cosign, seed: [u8; 32]) -> SignedCosign {
 }
 
 #[test]
-fn cosign_intent_to_cosign() {
+fn cosign_intent_into_cosign() {
   let intent = CosignIntent {
     global_session: [1u8; 32],
     block_number: 5,
@@ -60,7 +58,7 @@ fn cosign_intent_to_cosign() {
 }
 
 #[test]
-fn cosign_signature_message() {
+fn deterministic_signature_message() {
   let cosign = Cosign {
     global_session: [1u8; 32],
     block_number: 5,
@@ -93,9 +91,6 @@ fn signed_cosign_verify_signature_valid() {
 #[test]
 fn signed_cosign_verify_signature_invalid() {
   let keypair1 = sr25519_fixture();
-  let keypair2 = schnorrkel::MiniSecretKey::from_bytes(&[0x01; 32])
-    .unwrap()
-    .expand_to_keypair(schnorrkel::ExpansionMode::Ed25519);
 
   let cosign = Cosign {
     global_session: [1u8; 32],
@@ -105,7 +100,7 @@ fn signed_cosign_verify_signature_invalid() {
   };
 
   let signed = sign_cosign(cosign, &keypair1);
-  let wrong_pubkey = Public(keypair2.public.to_bytes());
+  let wrong_pubkey = public_key_from_seed([0x01; 32]);
 
   assert!(!signed.verify_signature(wrong_pubkey), "invalid signature should not verify");
 }
