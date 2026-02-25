@@ -116,7 +116,8 @@ Emissions only start after genesis.
 
 ```
 INITIAL_PERIOD = 30 days
-INITIAL_REWARD_PER_BLOCK = 100,000 SRI / (1 day / TARGET_BLOCK_TIME)
+INITIAL_PERIOD_REWARDS = INITIAL_PERIOD * (100,000 SRI / 1 day)
+INITIAL_PERIOD_REWARD_PER_BLOCK = INITIAL_PERIOD_REWARDS / TARGET_BLOCK_TIME
 LITERAL_STAKE_REQUIRED = 1.5 * sri_in_pools()
 EXTERNAL_STAKE_BUFFER = 0.2
 EXTERNAL_STAKE_REQUIRED = LITERAL_STAKE_REQUIRED * (1 + EXTERNAL_STAKE_BUFFER)
@@ -130,9 +131,9 @@ SECURE_BY = 365 days
 amount needed for each external network to be secure (so a validator set with
 unused capacity only counts for the amount required to be secure).
 
-The block reward from genesis till the end of `INITIAL_PERIOD` is fixed to
-`INITIAL_REWARD`. Afterwards, the block reward is
-`(STAKE_DESIRED - CURRENT_STAKE) / blocks_until(SECURE_BY)`.
+During the pre-Economic Security era, the block reward from genesis till the
+end of `INITIAL_PERIOD` is fixed to `INITIAL_REWARD`. Afterwards, the block
+reward is `(STAKE_DESIRED - CURRENT_STAKE) / blocks_until(SECURE_BY)`.
 
 This ensures economic security by the specified date. As economic security by
 printing SRI is undesirable, the amount of economic security so achieved is a
