@@ -174,7 +174,9 @@ mod pallet {
   /// `None` signifies the network having not decided a session or an overflow having occurred. In
   /// either case, we cannot represent the distance as an `Amount` as it's either `null` or out of
   /// range.
-  fn distance_to_economic_security<T: Config>(network: ExternalNetworkId) -> Option<Amount> {
+  pub(crate) fn distance_to_economic_security<T: Config>(
+    network: ExternalNetworkId,
+  ) -> Option<Amount> {
     if T::EconomicSecurity::achieved_economic_security(network) {
       return Some(Amount(0));
     }
@@ -185,7 +187,7 @@ mod pallet {
 
       // The achieved stake is the sum of the allocated stake _and queued rewards_
       let mut achieved = Some(T::ValidatorSets::total_allocated_stake_for_network(network.into()));
-      // We check _all historical sessions_ for rewards which have yet to be distributed
+      // We check _all historical sessions_ for rewards which may have yet to be distributed
       for session in latest_decided_session.0.saturating_sub(4) ..= latest_decided_session.0 {
         let set = ExternalValidatorSet { network, session: Session(session) };
         // If the rewards _have_ been distributed, clean up the storage entry
@@ -216,7 +218,7 @@ mod pallet {
     Some(Amount(stake_required.0.saturating_sub(achieved.0)))
   }
 
-  fn calculate_pre_economic_security_external_set_rewards<T: Config>(
+  pub(crate) fn calculate_pre_economic_security_external_set_rewards<T: Config>(
     network: ExternalNetworkId,
   ) -> Amount {
     let Some(end_of_genesis) = EndOfGenesisTimestamp::<T>::get() else {
@@ -229,7 +231,7 @@ mod pallet {
 
     let current_time = serai_core_pallet::Pallet::<T>::current_time();
     let time_of_last_block =
-      TimeOfLastBlock::<T>::get().expect("taking reward for set on genesis block");
+      TimeOfLastBlock::<T>::get().expect("genesis ended on the very first block?");
     let time_to_consider_rewards_for =
       current_time.checked_sub(time_of_last_block).expect("Serai timestamps are monotonic");
 
@@ -284,19 +286,30 @@ mod pallet {
     let time_since_genesis =
       time_of_last_block.checked_sub(end_of_genesis).expect("Serai timestamps are monotonic");
     let time_until_secure_by = SECURE_BY.as_millis().saturating_sub(u128::from(time_since_genesis));
+    if time_until_secure_by == 0 {
+      /*
+        If `time_until_secure_by == 0`, in that the `SECURE_BY` deadline has passed but we have
+        yet to achieve economic security (due to an unstable clock, slashes, other misc behavior),
+        we set the rewards to the remainder of the distance.
+      */
+      return our_distance;
+    }
 
     /*
       If the rewards calculated exceed the distance, minimize to the distance, which ensures the
       result fits within an `Amount` (as our distance does).
 
-      If `time_until_secure_by == 0`, in that the `SECURE_BY` deadline has passed but we have yet
-      to achieve economic security (due to an unstable clock, slashes, other misc behavior), we set
-      the rewards to the remainder of the distance.
+      We use a `div_ceil` to ensure our emitted rewards _will_ achieve security by the stated
+      deadline, so long as its perfectly polled.
     */
-    (u128::from(our_distance.0) * u128::from(time_to_consider_rewards_for))
-      .checked_div(time_until_secure_by)
-      .map(|rewards| Amount(u64::try_from(rewards.max(u128::from(our_distance.0))).unwrap()))
-      .unwrap_or(our_distance)
+    Amount(
+      u64::try_from(
+        (u128::from(our_distance.0) * u128::from(time_to_consider_rewards_for))
+          .div_ceil(time_until_secure_by)
+          .min(u128::from(our_distance.0)),
+      )
+      .unwrap(),
+    )
   }
 
   /// Effect the post-Economic Security rewards for external networks.
@@ -304,7 +317,7 @@ mod pallet {
   /// This will _return_ the list of amounts to reward the validator sets with. These amounts will
   /// be ordered corresponding to [`ExternalNetworkId::all`]'s order of iteration.
   #[must_use]
-  fn effect_post_economic_security_external_network_rewards<T: Config>() -> Vec<Amount> {
+  pub(crate) fn effect_post_economic_security_external_network_rewards<T: Config>() -> Vec<Amount> {
     let mut total_burnt_fees = 0u128;
     let mut burnt_fees_by_network = vec![];
     for network in ExternalNetworkId::all() {
@@ -379,6 +392,9 @@ mod pallet {
           We use the capacity of the latest decided set as:
           - It will take over, so its economic security we primarily care about.
           - The latest decided set will receive these fees, for reasons described below.
+          Note this doesn't include any pending rewards which is because while during pre-Economic
+          Security, validators cannot deallocate stake and can be presumed to continue their
+          operation, that property does not hold true here and rewarded validators may leave.
         */
         let capacity_of_network =
           T::ValidatorSets::stake_for_latest_decided_validator_set(network.into())

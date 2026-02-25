@@ -70,14 +70,17 @@ impl crate::ValidatorSets for MockValidatorSets {
     Some(Session(1))
   }
   fn total_allocated_stake_for_network(network: NetworkId) -> Amount {
-    if network == NetworkId::Serai {
+    if match network {
+      NetworkId::Serai => true,
+      NetworkId::External(network) => MockEconomicSecurity::achieved_economic_security(network),
+    } {
       Amount(10_000_000)
     } else {
       Amount(0)
     }
   }
-  fn stake_for_latest_decided_validator_set(_network: NetworkId) -> Option<Amount> {
-    Some(Amount(0))
+  fn stake_for_latest_decided_validator_set(network: NetworkId) -> Option<Amount> {
+    Some(Self::total_allocated_stake_for_network(network))
   }
   fn rewards_distributed_for_set(_set: ExternalValidatorSet) -> bool {
     false
@@ -185,5 +188,252 @@ fn test_block_reward() {
 
     // now we should get fixed reward post economic security reward per block
     assert_eq!(Emissions::block_reward().0, POST_ECONOMIC_SECURITY_REWARD_PER_BLOCK.0 / 5);
+  });
+}
+
+#[test]
+fn test_distance_to_economic_security() {
+  new_test_ext().execute_with(|| {
+    Core::start_transaction(0);
+
+    assert_eq!(
+      crate::pallet::distance_to_economic_security::<Test>(ExternalNetworkId::Bitcoin),
+      Some(Amount(0))
+    );
+
+    let coin = ExternalCoin::Bitcoin;
+    let mint_balance =
+      Balance { coin: coin.into(), amount: Amount(10 * 10u64.pow(coin.decimals())) };
+    Coins::mint(SeraiAddress([0u8; 32]), mint_balance).unwrap();
+
+    let required_stake =
+      (MockEconomicSecurity::sri_value(mint_balance.try_into().unwrap()).0 * 3) / 2;
+    assert_eq!(
+      crate::pallet::distance_to_economic_security::<Test>(ExternalNetworkId::Bitcoin),
+      Some(Amount(required_stake))
+    );
+    assert_eq!(
+      crate::pallet::distance_to_economic_security::<Test>(ExternalNetworkId::Ethereum),
+      Some(Amount(0))
+    );
+
+    // If this validator had rewards queued, they should contribute to the distance
+    crate::pallet::HistoricalExternalValidatorSetRewards::<Test>::set(
+      ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) },
+      Amount(1),
+    );
+    crate::pallet::ExternalValidatorSetRewards::<Test>::set(
+      ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(1) },
+      Amount(2),
+    );
+    assert_eq!(
+      crate::pallet::distance_to_economic_security::<Test>(ExternalNetworkId::Bitcoin),
+      Some(Amount(required_stake - 3))
+    );
+  });
+}
+
+#[test]
+fn test_pre_economic_security_external() {
+  new_test_ext().execute_with(|| {
+    Core::start_transaction(0);
+
+    // no rewards are emitted during the genesis period
+    assert_eq!(
+      crate::pallet::calculate_pre_economic_security_external_set_rewards::<Test>(
+        ExternalNetworkId::Bitcoin
+      ),
+      Amount(0)
+    );
+
+    // mark genesis period complete
+    let block_time =
+      u64::try_from(serai_abi::primitives::constants::TARGET_BLOCK_TIME.as_millis()).unwrap();
+    Timestamp::set_timestamp(block_time);
+    <crate::Pallet<Test> as frame_support::traits::Hooks<_>>::on_finalize(0);
+    crate::EndOfGenesisTimestamp::<Test>::set(Some(block_time));
+    // This means _two_ blocks of time have passed
+    Timestamp::set_timestamp(3 * block_time);
+
+    // Mint coins for each network to create distance
+    Coins::mint(
+      SeraiAddress([0u8; 32]),
+      Balance { coin: ExternalCoin::Bitcoin.into(), amount: Amount(1_000) },
+    )
+    .unwrap();
+    Coins::mint(
+      SeraiAddress([0u8; 32]),
+      Balance { coin: ExternalCoin::Ether.into(), amount: Amount(2_000) },
+    )
+    .unwrap();
+    Coins::mint(
+      SeraiAddress([0u8; 32]),
+      Balance { coin: ExternalCoin::Dai.into(), amount: Amount(3_000) },
+    )
+    .unwrap();
+    Coins::mint(
+      SeraiAddress([0u8; 32]),
+      Balance { coin: ExternalCoin::Monero.into(), amount: Amount(4_000) },
+    )
+    .unwrap();
+
+    // Check the rewards for the initial period, for which we're two blocks into
+    let total_reward_for_time = 2 * crate::INITIAL_PERIOD_REWARD_PER_BLOCK.0;
+    let external_reward_for_time = (total_reward_for_time * 4) / 5;
+    assert_eq!(
+      crate::pallet::calculate_pre_economic_security_external_set_rewards::<Test>(
+        ExternalNetworkId::Bitcoin
+      ),
+      Amount(external_reward_for_time / 10)
+    );
+    assert_eq!(
+      crate::pallet::calculate_pre_economic_security_external_set_rewards::<Test>(
+        ExternalNetworkId::Ethereum
+      ),
+      Amount((external_reward_for_time * 5) / 10)
+    );
+    assert_eq!(
+      crate::pallet::calculate_pre_economic_security_external_set_rewards::<Test>(
+        ExternalNetworkId::Monero
+      ),
+      Amount((external_reward_for_time * 4) / 10)
+    );
+
+    // If we supply the Ethereum validators with the required stake, they should not receive
+    // further rewards
+    crate::pallet::HistoricalExternalValidatorSetRewards::<Test>::set(
+      ExternalValidatorSet { network: ExternalNetworkId::Ethereum, session: Session(0) },
+      Amount(7_500),
+    );
+    assert_eq!(
+      crate::pallet::calculate_pre_economic_security_external_set_rewards::<Test>(
+        ExternalNetworkId::Bitcoin
+      ),
+      Amount(external_reward_for_time / 5)
+    );
+    assert_eq!(
+      crate::pallet::calculate_pre_economic_security_external_set_rewards::<Test>(
+        ExternalNetworkId::Ethereum
+      ),
+      Amount(0)
+    );
+    assert_eq!(
+      crate::pallet::calculate_pre_economic_security_external_set_rewards::<Test>(
+        ExternalNetworkId::Monero
+      ),
+      Amount((external_reward_for_time * 4) / 5)
+    );
+
+    // go past the initial period and halfway into `SECURE_BY`
+    let halfway_into_secure_by = u64::try_from(SECURE_BY.as_millis()).unwrap() / 2;
+    assert!(halfway_into_secure_by > u64::try_from(INITIAL_PERIOD.as_millis()).unwrap());
+    pallet_timestamp::Pallet::<Test>::set_timestamp(block_time + halfway_into_secure_by);
+
+    // Each validator set should now be considered for their distance to economic security
+    assert_eq!(
+      crate::pallet::calculate_pre_economic_security_external_set_rewards::<Test>(
+        ExternalNetworkId::Bitcoin
+      ),
+      Amount(1_500 / 2)
+    );
+    assert_eq!(
+      crate::pallet::calculate_pre_economic_security_external_set_rewards::<Test>(
+        ExternalNetworkId::Ethereum
+      ),
+      Amount(0)
+    );
+    assert_eq!(
+      crate::pallet::calculate_pre_economic_security_external_set_rewards::<Test>(
+        ExternalNetworkId::Monero
+      ),
+      Amount(6_000 / 2)
+    );
+  });
+}
+
+#[test]
+fn test_post_economic_security_external() {
+  new_test_ext().execute_with(|| {
+    Core::start_transaction(0);
+
+    let block_time =
+      u64::try_from(serai_abi::primitives::constants::TARGET_BLOCK_TIME.as_millis()).unwrap();
+    Timestamp::set_timestamp(block_time);
+    <crate::Pallet<Test> as frame_support::traits::Hooks<_>>::on_finalize(0);
+    crate::EndOfGenesisTimestamp::<Test>::set(Some(block_time));
+
+    // Consume capacity from each network
+    Coins::mint(
+      SeraiAddress([0u8; 32]),
+      Balance { coin: ExternalCoin::Bitcoin.into(), amount: Amount(10_000_000) },
+    )
+    .unwrap();
+    Coins::mint(
+      SeraiAddress([0u8; 32]),
+      Balance { coin: ExternalCoin::Ether.into(), amount: Amount(4_000_000) },
+    )
+    .unwrap();
+    Coins::mint(
+      SeraiAddress([0u8; 32]),
+      Balance { coin: ExternalCoin::Dai.into(), amount: Amount(2_000_000) },
+    )
+    .unwrap();
+
+    for network in ExternalNetworkId::all() {
+      set_achieved_economic_security(network, true);
+    }
+
+    // Set that two blocks of time have passed
+    Timestamp::set_timestamp(3 * block_time);
+    let total_reward_for_time = 2 * POST_ECONOMIC_SECURITY_REWARD_PER_BLOCK.0;
+    let external_reward_for_time = (total_reward_for_time * 4) / 5;
+
+    let set_burnt_fees = |network: ExternalCoin, amount: u128| {
+      sp_io::storage::set(
+        &(sp_core::twox_128(b"Dex"), sp_core::twox_128(b"BurntFees"), network).encode(),
+        &amount.encode(),
+      );
+    };
+    assert_eq!(Dex::take_burnt_fees(ExternalCoin::Bitcoin), 0);
+    set_burnt_fees(ExternalCoin::Bitcoin, 1);
+    assert_eq!(Dex::take_burnt_fees(ExternalCoin::Bitcoin), 1);
+    assert_eq!(Dex::take_burnt_fees(ExternalCoin::Bitcoin), 0);
+
+    // Set fees for each coin
+    set_burnt_fees(ExternalCoin::Bitcoin, 1_000);
+    set_burnt_fees(ExternalCoin::Ether, 2_000);
+    set_burnt_fees(ExternalCoin::Dai, 3_000);
+    set_burnt_fees(ExternalCoin::Monero, 4_000);
+
+    let rewards = crate::pallet::effect_post_economic_security_external_network_rewards::<Test>();
+    assert_eq!(
+      rewards,
+      vec![
+        // Bitcoin, which has all of its capacity used
+        Amount((external_reward_for_time * 1_000) / 10_000),
+        // Ethereum, which has 90% of its capacity used
+        Amount(((external_reward_for_time * 5_000) / 10_000) / 2),
+        // Monero, which has no capacity used
+        Amount(0),
+      ]
+    );
+    // All the rewards which didn't go to the validators should have gone to the pools
+    assert_eq!(
+      Coins::balance(serai_abi::dex::address(ExternalCoin::Bitcoin), Coin::Serai),
+      Amount(0)
+    );
+    // As Ether : Dai burnt fees at a 2 : 3 ratio, so should the amount minted reflect that
+    assert_eq!(
+      Coins::balance(serai_abi::dex::address(ExternalCoin::Ether), Coin::Serai),
+      Amount(((((external_reward_for_time * 5_000) / 10_000) / 2) * 2) / 5)
+    );
+    assert_eq!(
+      Coins::balance(serai_abi::dex::address(ExternalCoin::Dai), Coin::Serai),
+      Amount(((((external_reward_for_time * 5_000) / 10_000) / 2) * 3) / 5)
+    );
+    assert_eq!(
+      Coins::balance(serai_abi::dex::address(ExternalCoin::Monero), Coin::Serai),
+      Amount((external_reward_for_time * 4_000) / 10_000)
+    );
   });
 }
