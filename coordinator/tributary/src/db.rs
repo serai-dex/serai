@@ -22,7 +22,7 @@ pub enum Topic {
   },
 
   // DkgParticipation isn't represented here as participations are immediately sent to the
-  // processor, not accumulated within this databse
+  // processor, not accumulated within this database
   /// Participation in the signing protocol to confirm the DKG results on Substrate
   DkgConfirmation {
     /// The attempt number this is for

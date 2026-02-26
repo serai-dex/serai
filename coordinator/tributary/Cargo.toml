@@ -41,7 +41,7 @@ serai-coordinator-substrate = { path = "../substrate" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 
-log = { version = "0.4", default-features = false, features = ["std"] }
+serai-log = { path = "../../common/log", version = "0.1.0" }
 
 [features]
 longer-reattempts = []
