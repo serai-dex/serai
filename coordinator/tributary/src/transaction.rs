@@ -77,7 +77,7 @@ impl Signed {
   }
 
   /// Provide a nonce to convert a `Signed` into a `tributary::Signed`.
-  fn to_tributary_signed(self, round: SigningProtocolRound) -> TributarySigned {
+  pub(crate) fn to_tributary_signed(self, round: SigningProtocolRound) -> TributarySigned {
     TributarySigned { signer: self.signer, nonce: round.nonce(), signature: self.signature }
   }
 }
@@ -264,7 +264,7 @@ impl TransactionTrait for Transaction {
 
       Transaction::Sign { id, attempt, round, signed, .. } => TransactionKind::Signed(
         borsh::to_vec(&(b"Sign".as_slice(), id, attempt)).unwrap(),
-        signed.to_tributary_signed(round),
+        signed.to_tributary_signed(*round),
       ),
 
       Transaction::SlashReport { signed, .. } => TransactionKind::Signed(

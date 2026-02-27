@@ -39,6 +39,9 @@ mod db;
 use db::*;
 pub use db::Topic;
 
+#[cfg(test)]
+mod tests;
+
 /// Messages to send to the Processors.
 pub struct ProcessorMessages;
 impl ProcessorMessages {
