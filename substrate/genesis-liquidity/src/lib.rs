@@ -398,7 +398,7 @@ mod pallet {
       genesis_liquidity: ExternalBalance,
     ) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      GenesisLiquidityTokens::<T>::transfer_fn(from, to, genesis_liquidity.into())?;
+      GenesisLiquidityTokens::<T>::transfer_internal(from, to, genesis_liquidity.into())?;
       Self::emit_event(Event::GenesisLiquidityTransferred { from, to, genesis_liquidity });
       Ok(())
     }
@@ -554,8 +554,9 @@ mod pallet {
         // Calculate the amount of the external coin to consider yielding for this liquidity
         let yieldable_external_coin = {
           /*
-            Calculate how much of this external coin is additional to the initial liquidity. This is
-            premised on how the genesis liquidity tokens are 1:1 with the amount originally added.
+            Calculate how much of this external coin is additional to the initial liquidity. This
+            is premised on how the genesis liquidity tokens are 1:1 with the amount originally
+            added.
           */
           let additional_external_coin =
             (liquidity_position_external_coin - genesis_liquidity.amount).unwrap_or(Amount(0));
@@ -693,10 +694,10 @@ mod pallet {
         representing Protocol-Owned Liquidity. This ensures these coins will remain available via
         the pool and able to be swapped.
       */
-      LiquidityTokens::<T>::transfer_fn(
-        our_address,
+      Dex::<T>::transfer_liquidity(
+        Some(our_address).into(),
         pool_address,
-        (ExternalBalance { coin: genesis_liquidity.coin, amount: difference_in_liquidity }).into(),
+        ExternalBalance { coin: genesis_liquidity.coin, amount: difference_in_liquidity },
       )?;
 
       // Burn the SRI which is from the incomplete trickle feed

@@ -189,6 +189,11 @@ fn remove_genesis_liquidity_post_oracle() {
           external_coin_amount: transfer.amount,
           sri_amount: sri_burnt,
         }),
+        serai_abi::Event::Dex(serai_abi::dex::Event::LiquidityTransfer {
+          from: glp_address,
+          to: pool_address,
+          liquidity_tokens: ExternalBalance { coin: COIN, amount: Amount(0) }
+        }),
         serai_abi::Event::Coins(serai_abi::coins::Event::Burn {
           from: glp_address,
           coins: Balance { coin: Coin::Serai, amount: sri_burnt }

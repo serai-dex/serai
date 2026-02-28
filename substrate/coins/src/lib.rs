@@ -288,13 +288,17 @@ mod pallet {
 
     /// Transfer `coins` from `from` to `to`.
     ///
+    /// This function is suffixed "internal", despite being `pub`, as it MUST only be called to
+    /// _implement_ `transfer` functions. It MUST NOT be called by a caller wanting to effect a
+    /// transfer.
+    ///
     /// This will emit an event when, and only when, `I = CoinsInstance`.
     ///
     /// This function will error if the sender does not have a sufficient balance.
     ///
     /// This function is atomic. It will either error with no changes to the state or succeed with
     /// all expected effects.
-    pub fn transfer_fn(
+    pub fn transfer_internal(
       from: SeraiAddress,
       to: SeraiAddress,
       coins: Balance,
@@ -321,6 +325,19 @@ mod pallet {
     }
   }
 
+  impl<T: Config<CoinsInstance>> Pallet<T, CoinsInstance> {
+    /// The transfer function for `serai_coins_pallet::Pallet<T, CoinsInstance>`.
+    ///
+    /// This is functionally equivalent to using the associated call.
+    pub fn transfer_fn(
+      from: SeraiAddress,
+      to: SeraiAddress,
+      coins: Balance,
+    ) -> Result<(), DispatchError> {
+      Self::transfer(frame_system::RawOrigin::Signed(from).into(), to, coins)
+    }
+  }
+
   /*
     The calls corresponding to [`serai_abi::coins::Call`], with the [`CoinsInstance`].
 
@@ -344,7 +361,7 @@ mod pallet {
     #[pallet::weight((T::Weights::transfer(), DispatchClass::Normal))]
     pub fn transfer(origin: OriginFor<T>, to: SeraiAddress, coins: Balance) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      Self::transfer_fn(from, to, coins)?;
+      Self::transfer_internal(from, to, coins)?;
       Ok(())
     }
 
