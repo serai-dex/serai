@@ -434,6 +434,23 @@ mod pallet {
     }
   }
 
+  impl<T: Config> Pallet<T> {
+    /// This will return the observed median quote for a pool if and only if it is healthy.
+    ///
+    /// The window of time over which the median is measured and the definition of health is
+    /// entirely decided by parameters internal to this pallet.
+    pub fn healthy_median_quote(coin: ExternalCoin) -> Option<u128> {
+      // If the median wasn't populated with at least one block per two expected blocks,
+      // we consider it unhealthy
+      if u128::from(Median::<T>::length(coin)) <
+        ((MEDIAN_LENGTH.as_millis() / TARGET_BLOCK_TIME.as_millis()) / 2)
+      {
+        None?;
+      }
+      Median::<T>::median(coin)
+    }
+  }
+
   impl<T: Config> EconomicSecurity for Pallet<T> {
     fn achieved_economic_security(network: ExternalNetworkId) -> bool {
       AchievedEconomicSecurity::<T>::get(network).is_some()
@@ -487,6 +504,7 @@ mod pallet {
       }
     }
   }
+
   /// The `AllowMint` for `serai_coins_pallet::Pallet<T, LiquidityTokensInstance>`.
   ///
   /// This will only allow a mint of liquidity tokens if the coins in the pool are valued at

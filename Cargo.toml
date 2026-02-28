@@ -284,6 +284,7 @@ too_many_lines = "allow"
 wildcard_imports = "allow"
 
 style = { level = "warn", priority = -1 }
+blocks_in_conditions = "allow"
 items_after_test_module = "allow"
 
 # Cherry-pick lints from the `restrictions` group

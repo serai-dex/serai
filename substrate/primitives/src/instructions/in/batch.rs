@@ -180,6 +180,7 @@ fn batch() {
 
   use crate::{prelude::*, crypto::RistrettoSignature};
 
+  let networks = NetworkId::all().collect::<Vec<_>>();
   let coins = Coin::all().collect::<Vec<_>>();
   let external_coins = ExternalCoin::all().collect::<Vec<_>>();
 
@@ -215,9 +216,11 @@ fn batch() {
         let address = SeraiAddress(address);
         let instruction = match OsRng.next_u64() % 7 {
           0 => InInstruction::GenesisLiquidity(address),
-          1 => {
-            InInstruction::SwapToStakedSri { validator: address, minimum: Amount(OsRng.next_u64()) }
-          }
+          1 => InInstruction::SwapToStakedSri {
+            validator: address,
+            network: networks[(OsRng.next_u64() as usize) % networks.len()],
+            minimum: Amount(OsRng.next_u64()),
+          },
           2 => InInstruction::TransferWithSwap {
             to: address,
             maximum_to_swap: Amount(OsRng.next_u64()),
@@ -226,7 +229,7 @@ fn batch() {
           3 => InInstruction::Transfer { to: address },
           4 => InInstruction::SwapAndAddLiquidity {
             address,
-            coin: Amount(OsRng.next_u64()),
+            external_coin_liquidity: Amount(OsRng.next_u64()),
             sri_minimum: Amount(OsRng.next_u64()),
             sri_for_fees: Amount(OsRng.next_u64()),
           },

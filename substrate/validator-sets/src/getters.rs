@@ -11,6 +11,11 @@ impl<T: Config> Pallet<T> {
     CurrentSession::<T>::get(network)
   }
 
+  /// The allocation required per key share.
+  pub fn allocation_per_key_share(network: NetworkId) -> Option<Amount> {
+    AllocationPerKeyShare::<T>::get(network)
+  }
+
   /// The amount of key shares a validator set has.
   ///
   /// This will return `None` for historic sets, per the definition in the `Sessions` abstraction.

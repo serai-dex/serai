@@ -93,7 +93,7 @@ impl serai_core_pallet::Config for Runtime {
   const PROTOCOL_ID: [u8; 32] = [0; 32];
   // TODO
   const SIGNATURE_VERIFICATION_WEIGHT: Weight = Weight::zero();
-  type PreInherents = (Emissions, ValidatorSets);
+  type PreInherents = (Emissions, ValidatorSets, InInstructions);
 }
 
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
@@ -134,7 +134,9 @@ impl serai_emissions_pallet::Config for Runtime {
   type ValidatorSets = ValidatorSets;
   type EconomicSecurity = EconomicSecurity;
 }
-impl serai_in_instructions_pallet::Config for Runtime {}
+impl serai_in_instructions_pallet::Config for Runtime {
+  type Weights = (); // TODO
+}
 
 impl pallet_timestamp::Config for Runtime {
   type Moment = u64;
