@@ -125,7 +125,7 @@ fn update_median<
         .next()
         .expect("stored median was before the actual median yet no values were after it");
       debug_assert_eq!(key_prefix.encode(), _key_prefix.encode(), "{KEY_PREFIX_ASSERT}");
-      debug_assert!(median.lexicographic_encode() != next_value_encoding, "{AFTER_ASSERT}",);
+      debug_assert!(median.lexicographic_encode() != next_value_encoding, "{AFTER_ASSERT}");
       median = MedianValue::lexicographic_decode(next_value_encoding);
       median_instances = next_value_instances;
     }

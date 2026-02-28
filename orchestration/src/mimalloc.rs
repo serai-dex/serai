@@ -52,7 +52,7 @@ rm -rf ./mimalloc
         assert!(!line.contains('"'));
         format!(r#"RUN echo "{line}" >> ./mimalloc.sh"#)
       })
-      .chain(["RUN /bin/sh ./mimalloc.sh", "RUN rm ./mimalloc.sh"].into_iter().map(str::to_string))
+      .chain(["RUN /bin/sh ./mimalloc.sh", "RUN rm ./mimalloc.sh"].into_iter().map(str::to_owned))
     {
       result.push_str(&line);
       result.push('\n');

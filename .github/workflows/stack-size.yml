@@ -16,7 +16,7 @@ jobs:
   stack_size:
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04, macos-15-intel, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04, macos-26-intel, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
@@ -75,8 +75,8 @@ jobs:
             # which explicitly attempts to be be exactly POSIX, without any extensions.
             # We first have to install MacPorts, the easiest method being via source.
             curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.12.1.tar.bz2
-            tar xf MacPorts-2.12.1.tar.bz2
-            cd MacPorts-2.12.1
+            tar xf MacPorts-2.12.2.tar.bz2
+            cd MacPorts-2.12.2
             ./configure
             make
             sudo make install

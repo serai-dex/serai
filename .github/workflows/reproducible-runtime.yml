@@ -66,7 +66,7 @@ jobs:
     strategy:
       matrix:
         # Unfortunately, we do not run this on `macos-latest` at this time due to it being too slow
-        os: [macos-15-intel, windows-latest]
+        os: [macos-26-intel, windows-latest]
     runs-on: ${{ matrix.os }}
     needs: source_of_truth
 
@@ -114,7 +114,7 @@ jobs:
   build_native:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, macos-15-intel, windows-latest]
+        os: [ubuntu-latest, macos-latest, macos-26-intel, windows-latest]
     runs-on: ${{ matrix.os }}
     needs: source_of_truth
 
