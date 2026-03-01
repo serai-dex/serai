@@ -148,7 +148,7 @@ sp_api::impl_runtime_apis! {
     }
     fn validators_for_peering(
       network: NetworkId
-    ) -> Vec<SeraiAddress> {
+    ) -> Vec<sp_authority_discovery::AuthorityId> {
       unimplemented!("runtime is only implemented when WASM")
     }
     fn current_session(network: NetworkId) -> Option<Session> {

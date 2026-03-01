@@ -42,8 +42,8 @@ sp_api::decl_runtime_apis! {
     /// The final `Vec` corresponds to the block, the list of all transactions' lists of all
     /// events.
     fn events() -> Vec<Vec<Vec<u8>>>;
-    /// The validators to use when peering.
-    fn validators_for_peering(network: NetworkId) -> Vec<SeraiAddress>;
+    /// The (derived) IDs for validators to use when peering.
+    fn validators_for_peering(network: NetworkId) -> Vec<sp_authority_discovery::AuthorityId>;
     /// The current session for the network.
     fn current_session(network: NetworkId) -> Option<Session>;
     /// The current stake for a network's current validator set.

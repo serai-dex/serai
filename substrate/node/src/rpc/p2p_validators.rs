@@ -56,7 +56,7 @@ pub(crate) fn module<
       let mut returned_addresses = authority_discovery
         .write()
         .await
-        .get_addresses_by_authority_id(sp_core::sr25519::Public::from(validator).into())
+        .get_addresses_by_authority_id(validator)
         .await
         .unwrap_or_else(HashSet::new)
         .into_iter()

@@ -3,7 +3,7 @@
 use core::marker::PhantomData;
 use alloc::{borrow::Cow, vec, vec::Vec};
 
-use sp_core::{Get, ConstU32, ConstU64, sr25519::Public};
+use sp_core::{Get, ConstU32, ConstU64};
 use sp_runtime::{
   Weight,
   traits::{Header as _, LazyBlock as _},
@@ -13,7 +13,7 @@ use sp_version::RuntimeVersion;
 use serai_abi::{
   primitives::{
     constants::*,
-    crypto::EmbeddedEllipticCurveKeys,
+    crypto::{Public, EmbeddedEllipticCurveKeys},
     network_id::NetworkId,
     coin::Coin,
     balance::{Amount, Balance},
@@ -452,22 +452,21 @@ sp_api::impl_runtime_apis! {
   }
 
   impl sp_authority_discovery::AuthorityDiscoveryApi<Block> for Runtime {
-    // TODO: This has to be updated regardining
-    // `sp_application_crypto::key_types::AUTHORITY_DISCOVERY`
     fn authorities() -> Vec<sp_authority_discovery::AuthorityId> {
-      // Converts to `[u8; 32]` so it can be hashed
-      let mut all = alloc::collections::BTreeSet::<[u8; 32]>::new();
-      for network in NetworkId::all() {
-        for participant in
-          <Self as super::runtime_decl_for_serai_api::SeraiApi<Block>>::validators_for_peering(
-            network
-          ) {
-          all.insert(Public::from(participant).into());
-        }
-      }
-      all
+      /*
+        This represents validator keys by their underlying bytes to satisfy `Hash` and allow us to
+        to use a `BTreeSet` to deduplicate the list of validators.
+      */
+      NetworkId::all()
+        .flat_map(
+          <Self as super::runtime_decl_for_serai_api::SeraiApi<Block>>::validators_for_peering
+        )
+        .map(|validator| <[u8; 32]>::from(validator.into_inner()))
+        .collect::<alloc::collections::BTreeSet<_>>()
         .into_iter()
-        .map(|id| sp_authority_discovery::AuthorityId::from(Public::from(id)))
+        .map(|validator| {
+          sp_authority_discovery::AuthorityId::from(sp_core::sr25519::Public::from(validator))
+        })
         .collect()
     }
   }
@@ -476,7 +475,7 @@ sp_api::impl_runtime_apis! {
     fn events() -> Vec<Vec<Vec<u8>>> {
       Core::events()
     }
-    fn validators_for_peering(network: NetworkId) -> Vec<SeraiAddress> {
+    fn validators_for_peering(network: NetworkId) -> Vec<sp_authority_discovery::AuthorityId> {
       [
         ValidatorSets::current_session(network),
         ValidatorSets::latest_decided_session(network)
@@ -492,7 +491,18 @@ sp_api::impl_runtime_apis! {
         .map(|validator: SeraiAddress| validator.0)
         .collect::<alloc::collections::BTreeSet<_>>()
         .into_iter()
-        .map(SeraiAddress)
+        .map(|validator| {
+          match ValidatorSets::auxiliary_keys(SeraiAddress(validator), NetworkId::Serai) {
+            Some(EmbeddedEllipticCurveKeys::Serai(key)) => {
+              sp_authority_discovery::AuthorityId::from(serai_validator_sets_pallet::subkey(
+                &Public(key).into(),
+                sp_core::crypto::key_types::AUTHORITY_DISCOVERY,
+              ))
+            },
+            Some(_) => panic!("`auxiliary_keys()` returned auxiliary keys for another network"),
+            None => panic!("selected validator lacking Serai auxiliary key"),
+          }
+        })
         .collect()
     }
     fn current_session(network: NetworkId) -> Option<Session> {
