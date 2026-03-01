@@ -876,10 +876,16 @@ which will build the WASM as part of its build process, with the necessary confi
   */
   build_command.arg("-Zbuild-std-features=");
 
-  // Have the build command output with structure, JSON being the only such option.
-  build_command.arg("--message-format=json");
-
   // Invoke the build command and ensure it succeeds
+  assert!(build_command.status().unwrap().success());
+
+  /*
+    Now that we know the build command works, rerun it with structured output.
+
+    We don't do this initially as if the crate has an error, the developer wants to be yielded the
+    error, and yielding the JSON-structured output is a mess for the developer to deal with.
+  */
+  build_command.arg("--message-format=json");
   let build_output = build_command.output().unwrap();
   assert!(build_output.status.success());
 
