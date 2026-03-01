@@ -17,6 +17,9 @@ ignored = ["scale"]
 [lints]
 workspace = true
 
+[build-dependencies]
+core-json = { version = "0.4", default-features = false }
+
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
 

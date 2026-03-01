@@ -876,8 +876,12 @@ which will build the WASM as part of its build process, with the necessary confi
   */
   build_command.arg("-Zbuild-std-features=");
 
+  // Have the build command output with structure, JSON being the only such option.
+  build_command.arg("--message-format=json");
+
   // Invoke the build command and ensure it succeeds
-  assert!(build_command.status().unwrap().success());
+  let build_output = build_command.output().unwrap();
+  assert!(build_output.status.success());
 
   /*
     We now find the location of the build artifact within our nested `target` directory and copy it
@@ -887,41 +891,50 @@ which will build the WASM as part of its build process, with the necessary confi
     (https://doc.rust-lang.org/1.93.1/cargo/reference/unstable.html#artifact-dir), but it's only
     available for `cargo build` (when we use `cargo rustc` due to needing `--crate-type`).
 
-    Since the target directory format is unstable, we either have to:
-    - Hardcode a path
-    - Parse the compiler's standard output
-    - Implement such a search (anooying but less so)
+    Since the target directory format is unstable, we have to parse the build command's output to
+    locate the artifact (hence why we required a structured output).
 
-    The first is fragile. The second requires a JSON library or would be quite hacky. The third is
-    quite simple to implement, just slow as it's a recursive file search and doesn't immediately
-    have the path of the artifact (either via knowing it or being told it).
-
-    This search isn't optimized, and doesn't respect symbolic links/understand cycles, but we can
-    reasonably assume the `target` directory to not have such arcane structure.
+    Reference: https://doc.rust-lang.org/1.93.1/cargo/reference/external-tools.html#json-messages.
   */
+  let wasm_filename = cargo_env("CARGO_PKG_NAME").replace('-', "_") + ".wasm";
+  let mut wasm_path = None;
   {
-    let file = cargo_env("CARGO_PKG_NAME").replace('-', "_") + ".wasm";
-    let mut search_dir = vec![target_dir];
-    let mut done = false;
-    while let Some(next) = search_dir.pop() {
-      for entry in fs::read_dir(next).expect("couldn't read files in target directory") {
-        let entry = entry.expect("couldn't access entry in target directory");
-        if entry
-          .file_type()
-          .expect("couldn't learn file type of entry in target directory")
-          .is_dir()
-        {
-          search_dir.push(entry.path());
-          continue;
-        }
-        if entry.file_name().as_encoded_bytes() == file.as_bytes() {
-          fs::copy(entry.path(), PathBuf::from(cargo_env("OUT_DIR")).join(&file))
-            .expect("couldn't copy artifact to our directory");
-          done = true;
-          break;
+    use core_json::{ConstStack, Deserializer};
+
+    for json_object in String::from_utf8(build_output.stdout).unwrap().lines() {
+      let mut deserializer = Deserializer::<_, ConstStack<32>>::new(json_object.as_bytes())
+        .expect("couldn't begin deserializing `cargo`'s JSON output as JSON");
+      let message = deserializer.value().unwrap();
+
+      let mut message = message.fields().expect("message wasn't a JSON object");
+      while let Some(field) = message.next() {
+        let mut field = field.unwrap();
+        let key = field.key().map(|char| char.unwrap()).collect::<String>();
+        if key == "filenames" {
+          let mut filenames = field.value().iterate().expect("`filenames` wasn't an array");
+          while let Some(filename) = filenames.next() {
+            let filename = filename
+              .unwrap()
+              .to_str()
+              .expect("entry of `filenames` wasn't a string")
+              .map(|char| char.unwrap())
+              .collect::<String>();
+            let filename = PathBuf::from(filename);
+
+            if filename.file_name().unwrap() == wasm_filename.as_str() {
+              assert!(
+                wasm_path.is_none(),
+                "multiple `{wasm_filename}` found within `cargo`'s JSON output"
+              );
+              wasm_path = Some(filename);
+            }
+          }
         }
       }
     }
-    assert!(done, "failed to locate the `{file}` artifact");
+    let wasm_path = wasm_path.expect("couldn't find WASM artifact within `cargo`'s JSON output");
+
+    fs::copy(wasm_path, PathBuf::from(cargo_env("OUT_DIR")).join(&wasm_filename))
+      .expect("couldn't copy artifact to our directory");
   }
 }

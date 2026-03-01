@@ -8945,6 +8945,7 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "const-hex",
+ "core-json",
  "frame-executive",
  "frame-support",
  "frame-system",
