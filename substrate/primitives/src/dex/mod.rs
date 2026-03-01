@@ -136,6 +136,9 @@ impl Premise {
     let (in_reserve, out_reserve) = reserves.as_in_out(self);
     let current_k = Reserves::product(in_reserve, out_reserve);
     let proposed_out_reserve = out_reserve.checked_sub(amount_out.0).ok_or(Error::Underflow)?;
+    if proposed_out_reserve == 0 {
+      return Err(Error::KInvariant)?;
+    }
     let required_proposed_in_reserve = current_k.div_ceil(u128::from(proposed_out_reserve));
     let required_proposed_in_reserve =
       u64::try_from(required_proposed_in_reserve).map_err(|_| Error::Overflow)?;
@@ -197,4 +200,12 @@ fn quote_does_not_panic() {
     let _ = sri_out.quote_for_in(reserves, Amount(OsRng.next_u64()));
     let _ = sri_out.quote_for_out(reserves, Amount(OsRng.next_u64()));
   }
+}
+
+// https://github.com/serai-dex/serai/issues/746
+#[test]
+fn quote_for_full_reserve_out() {
+  let reserves = Reserves { sri: Amount(100_000), external_coin: Amount(10_000) };
+  let sri_in = Premise::establish(Coin::Serai, Coin::from(ExternalCoin::Bitcoin)).unwrap();
+  let _ = sri_in.quote_for_out(reserves, Amount(10_000));
 }
