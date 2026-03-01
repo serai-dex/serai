@@ -8335,6 +8335,7 @@ dependencies = [
  "serai-core-pallet",
  "serai-dex-pallet",
  "serai-validator-sets-pallet",
+ "sp-core",
  "sp-io",
  "substrate-median",
 ]

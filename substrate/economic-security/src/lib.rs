@@ -484,8 +484,10 @@ mod pallet {
         // If there's no quote available, there is no SRI valuation for these coins
         return Amount(0);
       };
-      let quote_for_balance = (u128::from(balance.amount.0) * quote_per_unit) /
-        u128::from(10u64.pow(balance.coin.decimals()));
+
+      use sp_core::U256;
+      let quote_for_balance = (U256::from(balance.amount.0) * U256::from(quote_per_unit)) /
+        U256::from(10u64.pow(balance.coin.decimals()));
       Amount(u64::try_from(quote_for_balance).unwrap_or(u64::MAX))
     }
   }
