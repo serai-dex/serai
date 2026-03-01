@@ -440,11 +440,30 @@ mod pallet {
     /// The window of time over which the median is measured and the definition of health is
     /// entirely decided by parameters internal to this pallet.
     pub fn healthy_median_quote(coin: ExternalCoin) -> Option<u128> {
-      // If the median wasn't populated with at least one block per two expected blocks,
-      // we consider it unhealthy
-      if u128::from(Median::<T>::length(coin)) <
-        ((MEDIAN_LENGTH.as_millis() / TARGET_BLOCK_TIME.as_millis()) / 2)
-      {
+      /*
+        If the median wasn't populated with at least one block per two expected blocks,
+        we consider it unhealthy.
+
+        We also require the median not have any stale quotes, as that would cause the `length` to
+        be larger than the amount of _relevant_ samples, and we want to determine health as having
+        a sufficient amount of _relevant_ samples. If there are _any_ stale quotes, as there could
+        be an unbounded amount of stale quotes, we immediately decide the median is unhealthy.
+      */
+      if !({
+        const LENGTH_OF_MEDIAN_IN_SLOTS: u128 =
+          MEDIAN_LENGTH.as_millis() / TARGET_BLOCK_TIME.as_millis();
+        #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+        const SUFFICIENT_SAMPLES: u64 = LENGTH_OF_MEDIAN_IN_SLOTS.div_ceil(2) as u64;
+        Median::<T>::length(coin) >= SUFFICIENT_SAMPLES
+      } || {
+        let historical_values = find_historical_values::<_, _, PastQuotes<T>>(
+          coin,
+          Core::<T>::current_time(),
+          MEDIAN_LENGTH,
+          1,
+        );
+        historical_values.is_empty()
+      }) {
         None?;
       }
       Median::<T>::median(coin)
