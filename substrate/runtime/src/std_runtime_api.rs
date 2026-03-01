@@ -1,4 +1,4 @@
-#![expect(unused_variables, clippy::used_underscore_binding)]
+#![expect(missing_docs, unused_variables, clippy::used_underscore_binding)]
 
 use alloc::borrow::Cow;
 
@@ -22,19 +22,17 @@ struct Runtime;
 sp_api::impl_runtime_apis! {
   impl sp_api::Core<Block> for Runtime {
     fn version() -> sp_version::RuntimeVersion {
-      #[sp_version::runtime_version]
-      pub const VERSION: sp_version::RuntimeVersion = sp_version::RuntimeVersion {
+      sp_version::RuntimeVersion {
         spec_name: Cow::Borrowed("serai"),
         impl_name: Cow::Borrowed("core"),
         authoring_version: 0,
         // Use the highest possible value so the node doesn't attempt to use this over the WASM
-        spec_version: 0xff_ff_ff_ff,
+        spec_version: 0xff_ff_ff_ffu32,
         impl_version: 0,
         apis: RUNTIME_API_VERSIONS,
         transaction_version: 0,
         system_version: 0,
-      };
-      VERSION
+      }
     }
     fn initialize_block(header: &Header) -> sp_runtime::ExtrinsicInclusionMode {
       unimplemented!("runtime is only implemented when WASM")
@@ -148,7 +146,7 @@ sp_api::impl_runtime_apis! {
     fn events() -> Vec<Vec<Vec<u8>>> {
       unimplemented!("runtime is only implemented when WASM")
     }
-    fn validators(
+    fn validators_for_peering(
       network: NetworkId
     ) -> Vec<SeraiAddress> {
       unimplemented!("runtime is only implemented when WASM")

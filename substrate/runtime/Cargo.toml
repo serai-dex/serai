@@ -34,6 +34,7 @@ sp-authority-discovery = { git = "https://github.com/serai-dex/patch-polkadot-sd
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"], optional = true }
 
 [target.'cfg(any(target_family = "wasm", native_runtime))'.dependencies]
+const-hex = { version = "1", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 borsh = { version = "1", default-features = false }
 

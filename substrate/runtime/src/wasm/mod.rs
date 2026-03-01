@@ -89,10 +89,14 @@ mod runtime {
 }
 
 impl serai_core_pallet::Config for Runtime {
-  // TODO via build script
-  const PROTOCOL_ID: [u8; 32] = [0; 32];
-  // TODO
-  const SIGNATURE_VERIFICATION_WEIGHT: Weight = Weight::zero();
+  const PROTOCOL_ID: [u8; 32] = match core::option_env!("SERAI_PROTOCOL_ID") {
+    Some(hex) => match const_hex::const_decode_to_array(hex.as_bytes()) {
+      Ok(result) => result,
+      Err(_) => panic!("`SERAI_PROTOCOL_ID` wasn't specified as a 32-byte hex string"),
+    },
+    None => [0; 32],
+  };
+  const SIGNATURE_VERIFICATION_WEIGHT: Weight = Weight::zero(); // TODO
   type PreInherents = (Emissions, ValidatorSets, InInstructions);
 }
 
@@ -113,13 +117,15 @@ impl serai_signals_pallet::Config for Runtime {
 }
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_economic_security_pallet::LiquidityTokensInstanceAllowMint<Self>;
-  type Weights = (); // TODO
+  // This does not have weights actually set as its call isn't exposed
+  type Weights = ();
 }
 impl serai_dex_pallet::Config for Runtime {
   type Weights = (); // TODO
 }
 impl serai_coins_pallet::Config<GenesisLiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  // This does not have weights actually set as its call isn't exposed
   type Weights = ();
 }
 impl serai_genesis_liquidity_pallet::Config for Runtime {
@@ -146,8 +152,15 @@ impl pallet_timestamp::Config for Runtime {
   type WeightInfo = ();
 }
 
-// pallet-babe requires `pallet-session` for `GetCurrentSessionForSubstrate` but not it itself
-// We ensure this by having patched `pallet-session` to omit the pallet
+/*
+  `pallet-babe` requires `pallet-session` for `GetCurrentSessionForSubstrate` (from its
+  configuration) but not it itself.
+
+  To ensure `pallet_session::Pallet` truly isn't required, our fork of `polkadot-sdk` (as derived
+  in the `patch-polkadot-sdk` repository) has been patched to _solely_ be this one `trait`. This
+  means if `pallet-babe` ever updated to require something else from `pallet-session`, we'd observe
+  the compilation error.
+*/
 #[doc(hidden)]
 pub struct GetCurrentSessionForSubstrate;
 impl pallet_session::GetCurrentSessionForSubstrate for GetCurrentSessionForSubstrate {
@@ -196,10 +209,30 @@ type ExecutiveContext = PhantomData<(Core, FeeContext)>;
 type Executive =
   frame_executive::Executive<Runtime, Block, ExecutiveContext, Runtime, AllPalletsWithSystem>;
 
-const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
+/// The epoch configuration for BABE.
 pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
   sp_consensus_babe::BabeEpochConfiguration {
-    c: PRIMARY_PROBABILITY,
+    /*
+      This value is used within the Polkadot ecosystem, the citation being:
+      https://research.web3.foundation/Polkadot/protocols/block-production/Babe#6-practical-results
+
+      The research itself is disorganized, but the resulting comment is for $\delta = 1$ (where
+      $\delta$ corresponds to allowed clock drift in _slots_), `c = 0.22` is resistant to clock
+      drift corresponding to one slot to achieve probabilistic consensus over a span of years.
+      `(1, 4)` serves as the approximation of that.
+
+      Perfect optimality would suggest we should run their linked Python script, extensively
+      discuss the parameters, and return an output ourselves. In reality, we defer entirely to
+      Polkadot/Parity/the Web3 Foundation as this is fundamentally defining a bound for
+      probabilistic consensus in a synchronous environment and Serai intends to reject all notions
+      that the world is synchronous. Any efforts of our own to derive an optimal, secure answer
+      would solely yield the obvious answer: Do not use BABE.
+
+      As we are incapable of finding parameters for BABE we would be happy with, we defer to the
+      parameters its creators are happy with, while planning its replacement:
+      https://github.com/serai-dex/serai/issues/333
+    */
+    c: (1, 4),
     allowed_slots: sp_consensus_babe::AllowedSlots::PrimaryAndSecondaryPlainSlots,
   };
 
@@ -208,6 +241,14 @@ sp_api::impl_runtime_apis! {
     fn build(genesis: crate::GenesisConfig) {
       let config = RuntimeGenesisConfig {
         system: SystemConfig { _config: PhantomData },
+
+        // We leave these `authorities` empty as `serai-validator-sets-pallet` initializes them
+        babe: BabeConfig {
+          authorities: vec![],
+          epoch_config: BABE_GENESIS_EPOCH_CONFIG,
+          _config: PhantomData,
+        },
+        grandpa: GrandpaConfig { authorities: vec![], _config: PhantomData },
 
         coins: CoinsConfig {
           accounts: genesis.coins,
@@ -229,15 +270,8 @@ sp_api::impl_runtime_apis! {
         validator_sets: ValidatorSetsConfig {
           participants: genesis.validators,
         },
-        signals: SignalsConfig::default(),
 
-        // We leave these `authorities` empty as `serai-validator-sets-pallet` initializes them
-        babe: BabeConfig {
-          authorities: vec![],
-          epoch_config: BABE_GENESIS_EPOCH_CONFIG,
-          _config: PhantomData,
-        },
-        grandpa: GrandpaConfig { authorities: vec![], _config: PhantomData },
+        signals: SignalsConfig::default(),
       };
 
       Core::genesis(&config);
@@ -425,7 +459,9 @@ sp_api::impl_runtime_apis! {
       let mut all = alloc::collections::BTreeSet::<[u8; 32]>::new();
       for network in NetworkId::all() {
         for participant in
-          <Self as super::runtime_decl_for_serai_api::SeraiApi<Block>>::validators(network) {
+          <Self as super::runtime_decl_for_serai_api::SeraiApi<Block>>::validators_for_peering(
+            network
+          ) {
           all.insert(Public::from(participant).into());
         }
       }
@@ -440,18 +476,23 @@ sp_api::impl_runtime_apis! {
     fn events() -> Vec<Vec<Vec<u8>>> {
       Core::events()
     }
-    fn validators(network: NetworkId) -> Vec<SeraiAddress> {
-      // Returning the latest-decided, not latest and active, means the active set
-      // may fail to peer find if there isn't sufficient overlap. If a large amount reboot,
-      // forcing some validators to successfully peer find in order for the threshold to become
-      // online again, this may cause a liveness failure.
-      //
-      // This is assumed not to matter in real life, yet an interesting note.
-      let Some(session) = ValidatorSets::latest_decided_session(network) else {
-        return vec![]
-      };
-      ValidatorSets::selected_validators(ValidatorSet { network, session })
-        .map(|validator| validator.0)
+    fn validators_for_peering(network: NetworkId) -> Vec<SeraiAddress> {
+      [
+        ValidatorSets::current_session(network),
+        ValidatorSets::latest_decided_session(network)
+      ]
+        .into_iter()
+        .filter_map(|session| {
+          session.map(|session| {
+            ValidatorSets::selected_validators(ValidatorSet { network, session })
+              .map(|(validator, _key_shares)| validator)
+          })
+        })
+        .flatten()
+        .map(|validator: SeraiAddress| validator.0)
+        .collect::<alloc::collections::BTreeSet<_>>()
+        .into_iter()
+        .map(SeraiAddress)
         .collect()
     }
     fn current_session(network: NetworkId) -> Option<Session> {
@@ -491,7 +532,6 @@ sp_api::impl_runtime_apis! {
 
 struct FeeContext;
 impl serai_abi::TransactionFeeContext for FeeContext {
-  /// If the signer can pay the fee.
   fn can_pay_fee(
     signer: &SeraiAddress,
     fee: Balance,
@@ -502,17 +542,15 @@ impl serai_abi::TransactionFeeContext for FeeContext {
       ))?;
     }
 
-    if serai_coins_pallet::Pallet::<Runtime, CoinsInstance>::balance(signer, fee.coin) >= fee.amount
+    if serai_coins_pallet::Pallet::<Runtime, CoinsInstance>::balance(signer, fee.coin) < fee.amount
     {
-      Ok(())
-    } else {
       Err(sp_runtime::transaction_validity::TransactionValidityError::Invalid(
         sp_runtime::transaction_validity::InvalidTransaction::Payment,
-      ))
+      ))?;
     }
+    Ok(())
   }
 
-  /// Have the transaction pay its fee.
   fn pay_fee(
     signer: &SeraiAddress,
     fee: Balance,
@@ -537,41 +575,6 @@ impl serai_abi::TransactionFeeContext for FeeContext {
 
 /* TODO
 use validator_sets::MembershipProof;
-
-impl timestamp::Config for Runtime {
-  type MinimumPeriod = ConstU64<{ (TARGET_BLOCK_TIME * 1000) / 2 }>;
-  type WeightInfo = ();
-}
-
-impl coins::Config for Runtime {
-  type AllowMint = ValidatorSets;
-}
-
-impl dex::Config for Runtime {
-  type LPFee = ConstU32<3>; // 0.3%
-  type MintMinLiquidity = ConstU64<10000>;
-
-  type MaxSwapPathLength = ConstU32<3>; // coin1 -> SRI -> coin2
-
-  type MedianPriceWindowLength = ConstU16<{ MEDIAN_PRICE_WINDOW_LENGTH }>;
-
-  type WeightInfo = dex::weights::SubstrateWeight<Runtime>;
-}
-
-pub struct IdentityValidatorIdOf;
-impl Convert<PublicKey, Option<PublicKey>> for IdentityValidatorIdOf {
-  fn convert(key: PublicKey) -> Option<PublicKey> {
-    Some(key)
-  }
-}
-
-impl emissions::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
-
-impl economic_security::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-}
 
 // for publishing equivocation evidences.
 impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime

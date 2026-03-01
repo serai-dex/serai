@@ -1,6 +1,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../README.md")]
 #![cfg_attr(not(feature = "std"), no_std)]
-#![allow(unexpected_cfgs)]
+#![deny(missing_docs)]
+#![allow(unexpected_cfgs)] // We use `native_runtime` as a config to force building the runtime
 
 #[cfg(any(feature = "std", target_family = "wasm"))]
 extern crate alloc;
@@ -25,10 +27,6 @@ mod std_runtime_api;
 #[cfg(all(feature = "std", not(native_runtime)))]
 pub use std_runtime_api::RuntimeApi;
 
-// If this isn't WASM, regardless of what it is, we include the WASM blob from the build script
-#[cfg(all(not(target_family = "wasm"), debug_assertions))]
-pub const WASM: &[u8] =
-  include_bytes!(concat!(env!("OUT_DIR"), "/target/wasm32v1-none/debug/serai_runtime.wasm"));
-#[cfg(all(not(target_family = "wasm"), not(debug_assertions)))]
-pub const WASM: &[u8] =
-  include_bytes!(concat!(env!("OUT_DIR"), "/target/wasm32v1-none/release/serai_runtime.wasm"));
+/// The current crate as compiled to WASM.
+#[cfg(not(target_family = "wasm"))]
+pub const WASM: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/serai_runtime.wasm"));

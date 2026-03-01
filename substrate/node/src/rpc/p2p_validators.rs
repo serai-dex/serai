@@ -40,7 +40,7 @@ pub(crate) fn module<
 
     let validators = client
       .runtime_api()
-      .validators(latest_block, network)
+      .validators_for_peering(latest_block, network)
       .map_err(|_| Error::Internal("couldn't get validators from the latest block"));
     let validators = match validators {
       Ok(validators) => validators,
