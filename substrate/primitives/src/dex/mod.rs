@@ -187,6 +187,18 @@ fn quote_sanity() {
 fn quote_does_not_panic() {
   use rand_core::{RngCore as _, OsRng};
 
+  // Test exceptional cases, as recommended in https://github.com/serai-dex/serai/issues/746
+  {
+    let reserves = Reserves { sri: Amount(100_000), external_coin: Amount(10_000) };
+    let sri_in = Premise::establish(Coin::Serai, Coin::from(ExternalCoin::Bitcoin)).unwrap();
+    for amount in [Amount(0), reserves.sri, reserves.external_coin, Amount(u64::MAX - 1)] {
+      for amount in [amount, Amount(amount.0 + 1)] {
+        let _ = sri_in.quote_for_in(reserves, amount);
+        let _ = sri_in.quote_for_out(reserves, amount);
+      }
+    }
+  }
+
   // Fuzz test random values to see if a panic occurs
   for _ in 0 .. 100_000 {
     let reserves =
@@ -200,12 +212,4 @@ fn quote_does_not_panic() {
     let _ = sri_out.quote_for_in(reserves, Amount(OsRng.next_u64()));
     let _ = sri_out.quote_for_out(reserves, Amount(OsRng.next_u64()));
   }
-}
-
-// https://github.com/serai-dex/serai/issues/746
-#[test]
-fn quote_for_full_reserve_out() {
-  let reserves = Reserves { sri: Amount(100_000), external_coin: Amount(10_000) };
-  let sri_in = Premise::establish(Coin::Serai, Coin::from(ExternalCoin::Bitcoin)).unwrap();
-  let _ = sri_in.quote_for_out(reserves, Amount(10_000));
 }
