@@ -72,6 +72,17 @@ impl<T: Config> Pallet<T> {
       .map(|(validator, (_aux_key, key_shares))| (validator, key_shares))
   }
 
+  /// The validators selected for a validator set and their auxiliary keys for Serai.
+  ///
+  /// This will return an empty iterator for a set which hasn't been decided and MAY do so for
+  /// _any_ historic set, per the definition in the `Sessions` abstraction.
+  pub fn selected_validators_with_serai_auxiliary_keys(
+    set: ValidatorSet,
+  ) -> impl Iterator<Item = (SeraiAddress, SchnorrkelPublic)> {
+    SelectedValidators::<T>::iter_prefix(set)
+      .map(|(validator, (aux_key, _key_shares))| (validator, aux_key))
+  }
+
   /// The oraclization key for a validator set.
   ///
   /// This will return `None` for a validator set which hasn't set their keys and MAY return `None`

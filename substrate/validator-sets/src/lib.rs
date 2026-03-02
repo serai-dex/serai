@@ -813,7 +813,44 @@ mod pallet {
             .propagate(true)
             .build()
         }
-        Call::slash_serai_validator { .. } |
+        Call::slash_serai_validator { session, validator } => {
+          /*
+            This is expected to be validated by the node, or at the very least, a higher level. The
+            only validation performed here is that the transaction isn't stale as it doesn't make
+            sense to dispatch this call if this is stale.
+          */
+          {
+            let current_session =
+              Pallet::<T>::current_session(NetworkId::Serai).unwrap_or(Session(0));
+            let most_recent_session_with_still_pending_deallocations =
+              current_session.0.saturating_sub(2);
+            // We consider a slash stale if there's no stake to slash
+            if <Abstractions<T> as allocations::Allocations>::allocation(
+              NetworkId::Serai,
+              *validator,
+            )
+            .is_none() &&
+              (most_recent_session_with_still_pending_deallocations ..= current_session.0).all(
+                |session| {
+                  Abstractions::<T>::fetch_deallocations_delayed_from(
+                    *validator,
+                    NetworkId::Serai,
+                    Session(session),
+                  )
+                  .is_none()
+                },
+              )
+            {
+              Err(InvalidTransaction::Stale)?;
+            }
+          }
+
+          ValidTransaction::with_tag_prefix("ValidatorSets")
+            .and_provides((2, session, validator))
+            .longevity(KeySharesStruct::MAX_PER_SET_U32.into())
+            .propagate(true)
+            .build()
+        }
         Call::set_auxiliary_keys { .. } |
         Call::allocate { .. } |
         Call::deallocate { .. } |

@@ -1,11 +1,12 @@
 #![expect(clippy::as_conversions, clippy::same_name_method, clippy::used_underscore_binding)]
 
-use core::marker::PhantomData;
+use core::{marker::PhantomData, convert::AsRef as _};
 use alloc::{borrow::Cow, vec, vec::Vec};
 
 use sp_core::{Get, ConstU32, ConstU64};
 use sp_runtime::{
   Weight,
+  transaction_validity::{InvalidTransaction, TransactionValidityError},
   traits::{Header as _, LazyBlock as _},
 };
 use sp_version::RuntimeVersion;
@@ -29,6 +30,9 @@ use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance, GenesisLiquidit
 mod map;
 /// The configuration for `frame_system`.
 mod system;
+/// Definitions, functions for the usage of BABE and GRANDPA.
+mod babe_grandpa;
+use babe_grandpa::*;
 
 // The `pallet_index`es don't matter here as we define our ABI elsewhere, and they don't affect the
 // storage layout. The only important property is the order hooks are executed in.
@@ -149,92 +153,13 @@ impl pallet_timestamp::Config for Runtime {
   type OnTimestampSet = Babe;
   #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
   type MinimumPeriod = ConstU64<{ (TARGET_BLOCK_TIME.as_millis() / 2) as u64 }>;
+  // This call is never propagated, hence why we are able to use null weights for it
   type WeightInfo = ();
-}
-
-/*
-  `pallet-babe` requires `pallet-session` for `GetCurrentSessionForSubstrate` (from its
-  configuration) but not it itself.
-
-  To ensure `pallet_session::Pallet` truly isn't required, our fork of `polkadot-sdk` (as derived
-  in the `patch-polkadot-sdk` repository) has been patched to _solely_ be this one `trait`. This
-  means if `pallet-babe` ever updated to require something else from `pallet-session`, we'd observe
-  the compilation error.
-*/
-#[doc(hidden)]
-pub struct GetCurrentSessionForSubstrate;
-impl pallet_session::GetCurrentSessionForSubstrate for GetCurrentSessionForSubstrate {
-  fn get() -> u32 {
-    serai_validator_sets_pallet::Pallet::<Runtime>::current_session(NetworkId::Serai)
-      .map(|session| session.0)
-      .unwrap_or(0)
-  }
-}
-impl pallet_session::Config for Runtime {
-  type Session = GetCurrentSessionForSubstrate;
-}
-
-type MaxAuthorities =
-  ConstU32<{ serai_abi::primitives::validator_sets::KeyShares::MAX_PER_SET_U32 }>;
-impl pallet_babe::Config for Runtime {
-  type EpochDuration = ConstU64<{ SESSION_LENGTH_IN_SLOTS }>;
-
-  #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
-  type ExpectedBlockTime = ConstU64<{ TARGET_BLOCK_TIME.as_millis() as u64 }>;
-  type EpochChangeTrigger = pallet_babe::ExternalTrigger;
-
-  type WeightInfo = ();
-  type MaxAuthorities = MaxAuthorities;
-  type MaxNominators = ConstU32<1>;
-
-  // TODO: https://github.com/serai-dex/serai/issues/657
-  type DisabledValidators = ();
-  type KeyOwnerProof = sp_session::MembershipProof;
-  type EquivocationReportSystem = ();
-}
-impl pallet_grandpa::Config for Runtime {
-  type RuntimeEvent = RuntimeEvent;
-
-  type WeightInfo = ();
-  type MaxAuthorities = MaxAuthorities;
-  type MaxNominators = ConstU32<1>;
-
-  // TODO: https://github.com/serai-dex/serai/issues/657
-  type MaxSetIdSessionEntries = ConstU64<0>;
-  type KeyOwnerProof = sp_session::MembershipProof;
-  type EquivocationReportSystem = ();
 }
 
 type ExecutiveContext = PhantomData<(Core, FeeContext)>;
 type Executive =
   frame_executive::Executive<Runtime, Block, ExecutiveContext, Runtime, AllPalletsWithSystem>;
-
-/// The epoch configuration for BABE.
-pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
-  sp_consensus_babe::BabeEpochConfiguration {
-    /*
-      This value is used within the Polkadot ecosystem, the citation being:
-      https://research.web3.foundation/Polkadot/protocols/block-production/Babe#6-practical-results
-
-      The research itself is disorganized, but the resulting comment is for $\delta = 1$ (where
-      $\delta$ corresponds to allowed clock drift in _slots_), `c = 0.22` is resistant to clock
-      drift corresponding to one slot to achieve probabilistic consensus over a span of years.
-      `(1, 4)` serves as the approximation of that.
-
-      Perfect optimality would suggest we should run their linked Python script, extensively
-      discuss the parameters, and return an output ourselves. In reality, we defer entirely to
-      Polkadot/Parity/the Web3 Foundation as this is fundamentally defining a bound for
-      probabilistic consensus in a synchronous environment and Serai intends to reject all notions
-      that the world is synchronous. Any efforts of our own to derive an optimal, secure answer
-      would solely yield the obvious answer: Do not use BABE.
-
-      As we are incapable of finding parameters for BABE we would be happy with, we defer to the
-      parameters its creators are happy with, while planning its replacement:
-      https://github.com/serai-dex/serai/issues/333
-    */
-    c: (1, 4),
-    allowed_slots: sp_consensus_babe::AllowedSlots::PrimaryAndSecondaryPlainSlots,
-  };
 
 sp_api::impl_runtime_apis! {
   impl crate::GenesisApi<Block> for Runtime {
@@ -294,6 +219,42 @@ sp_api::impl_runtime_apis! {
     fn apply_extrinsic(
       extrinsic: <Block as sp_runtime::traits::Block>::Extrinsic,
     ) -> sp_runtime::ApplyExtrinsicResult {
+      /*
+        If this contains a slash for a Serai validator, check its integrity.
+
+        This is awkward. `serai-validator-sets-pallet` never sees this `reason` and is accordingly
+        unable to validate it. This is intentional as the reason is explicitly intended to be not
+        part of the codified protocol. The only requirement for acceptance on-chain is intended to
+        be that it's included in a block a supermajority of validators agreed on (and finalized).
+
+        At the same time however, for matters of feasibility, as of now, it _is_ codified within
+        the Serai protocol here, in this very spot. We treat it as an inherent transaction, being
+        checked when the block's execution begins, but also as an unsigned transaction, propagating
+        it across mempools and checking it when it enters the mempool.
+
+        Ideally, in the future, this is moved entirely into the node. For now, as it is present in
+        the runtime, it likely would have been better to make use of the `ValidateUnsigned` within
+        `serai-validator-sets-pallet`.
+      */
+      if let Some((session, validator, reason)) = (|| {
+        let serai_abi::Transaction::Unsigned { call } = &extrinsic else { None? };
+        let call: &serai_abi::Call = call.as_ref();
+        let serai_abi::Call::ValidatorSets(call) = call else { None? };
+        let serai_abi::validator_sets::Call::report_slashes(slashes) = call else { None? };
+        let serai_abi::validator_sets::Slashes::Serai {
+          session,
+          validator,
+          reason,
+        } = slashes else {
+          None?
+        };
+        Some((*session, *validator, reason))
+      })() {
+        if !verify_serai_slash_reason(session, validator, reason.as_ref()) {
+          Err(TransactionValidityError::Invalid(InvalidTransaction::BadProof))?;
+        }
+      }
+
       Executive::apply_extrinsic(extrinsic)
     }
 
@@ -331,6 +292,7 @@ sp_api::impl_runtime_apis! {
             sp_runtime::DigestItem::PreRuntime(consensus, encoded)
               if *consensus == SeraiPreExecutionDigest::CONSENSUS_ID =>
             {
+              // This ignores `proposer` as it's handled within `serai-validator-sets-pallet`
               let Ok(SeraiPreExecutionDigest { proposer: _, unix_time_in_millis }) =
                 <_ as borsh::BorshDeserialize>::deserialize_reader(&mut encoded.as_slice()) else {
                 // We don't handle this error as we can't in this position
@@ -405,20 +367,18 @@ sp_api::impl_runtime_apis! {
       Babe::next_epoch()
     }
 
-    // TODO: Revisit
     fn generate_key_ownership_proof(
       _slot: sp_consensus_babe::Slot,
       _authority_id: sp_consensus_babe::AuthorityId,
     ) -> Option<sp_consensus_babe::OpaqueKeyOwnershipProof> {
-      None
+      Some(sp_consensus_babe::OpaqueKeyOwnershipProof::new(vec![]))
     }
 
-    // TODO: Revisit
     fn submit_report_equivocation_unsigned_extrinsic(
-      _equivocation_proof: sp_consensus_babe::EquivocationProof<Header>,
+      equivocation_proof: sp_consensus_babe::EquivocationProof<Header>,
       _: sp_consensus_babe::OpaqueKeyOwnershipProof,
     ) -> Option<()> {
-      None
+      submit_babe_equivocation(equivocation_proof)
     }
   }
 
@@ -431,23 +391,18 @@ sp_api::impl_runtime_apis! {
       Grandpa::current_set_id()
     }
 
-    // TODO: Revisit
     fn generate_key_ownership_proof(
       _set_id: sp_consensus_grandpa::SetId,
       _authority_id: sp_consensus_grandpa::AuthorityId,
     ) -> Option<sp_consensus_grandpa::OpaqueKeyOwnershipProof> {
-      None
+      Some(sp_consensus_grandpa::OpaqueKeyOwnershipProof::new(vec![]))
     }
 
-    // TODO: Revisit
     fn submit_report_equivocation_unsigned_extrinsic(
-      _equivocation_proof: sp_consensus_grandpa::EquivocationProof<
-        <Block as sp_runtime::traits::Block>::Hash,
-        u64,
-      >,
+      equivocation_proof: GrandpaEquivocationProof,
       _: sp_consensus_grandpa::OpaqueKeyOwnershipProof,
     ) -> Option<()> {
-      None
+      submit_grandpa_equivocation(equivocation_proof)
     }
   }
 
@@ -542,68 +497,27 @@ sp_api::impl_runtime_apis! {
 
 struct FeeContext;
 impl serai_abi::TransactionFeeContext for FeeContext {
-  fn can_pay_fee(
-    signer: &SeraiAddress,
-    fee: Balance,
-  ) -> Result<(), sp_runtime::transaction_validity::TransactionValidityError> {
+  fn can_pay_fee(signer: &SeraiAddress, fee: Balance) -> Result<(), TransactionValidityError> {
     if fee.coin != Coin::Serai {
-      Err(sp_runtime::transaction_validity::TransactionValidityError::Invalid(
-        sp_runtime::transaction_validity::InvalidTransaction::Payment,
-      ))?;
+      Err(TransactionValidityError::Invalid(InvalidTransaction::Payment))?;
     }
 
     if serai_coins_pallet::Pallet::<Runtime, CoinsInstance>::balance(signer, fee.coin) < fee.amount
     {
-      Err(sp_runtime::transaction_validity::TransactionValidityError::Invalid(
-        sp_runtime::transaction_validity::InvalidTransaction::Payment,
-      ))?;
+      Err(TransactionValidityError::Invalid(InvalidTransaction::Payment))?;
     }
     Ok(())
   }
 
-  fn pay_fee(
-    signer: &SeraiAddress,
-    fee: Balance,
-  ) -> Result<(), sp_runtime::transaction_validity::TransactionValidityError> {
+  fn pay_fee(signer: &SeraiAddress, fee: Balance) -> Result<(), TransactionValidityError> {
     if fee.coin != Coin::Serai {
-      Err(sp_runtime::transaction_validity::TransactionValidityError::Invalid(
-        sp_runtime::transaction_validity::InvalidTransaction::Payment,
-      ))?;
+      Err(TransactionValidityError::Invalid(InvalidTransaction::Payment))?;
     }
 
     // `clippy::disallowed_methods` as this can be called for non-`CoinsInstance`,
     // but this is `CoinsInstance` so it's fine
     #[expect(clippy::disallowed_methods)]
     serai_coins_pallet::Pallet::<Runtime, CoinsInstance>::burn(RuntimeOrigin::signed(*signer), fee)
-      .map_err(|_| {
-        sp_runtime::transaction_validity::TransactionValidityError::Invalid(
-          sp_runtime::transaction_validity::InvalidTransaction::Payment,
-        )
-      })
+      .map_err(|_| TransactionValidityError::Invalid(InvalidTransaction::Payment))
   }
 }
-
-/* TODO
-use validator_sets::MembershipProof;
-
-// for publishing equivocation evidences.
-impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
-where
-  RuntimeCall: From<C>,
-{
-  type Extrinsic = Transaction;
-  type OverarchingCall = RuntimeCall;
-}
-
-// for validating equivocation evidences.
-// The following runtime construction doesn't actually implement the pallet as doing so is
-// unnecessary
-// TODO: Replace the requirement on Config for a requirement on FindAuthor directly
-impl pallet_authorship::Config for Runtime {
-  type FindAuthor = ValidatorSets;
-  type EventHandler = ();
-}
-
-/// Longevity of an offence report.
-pub type ReportLongevity = <Runtime as pallet_babe::Config>::EpochDuration;
-*/
