@@ -390,7 +390,7 @@ mod pallet {
         When testing, and for testing alone, we immediately return if given the default config so
         the test passes.
       */
-      #[cfg(test)]
+      #[cfg(any(test, feature = "tests"))]
       if self.participants.is_empty() {
         return;
       }

@@ -8459,9 +8459,17 @@ version = "0.1.0"
 dependencies = [
  "bitvec",
  "borsh",
+ "ciphersuite 0.4.2",
+ "dalek-ff-group 0.5.0",
+ "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "pallet-babe",
+ "pallet-grandpa",
+ "pallet-session",
+ "pallet-timestamp",
  "parity-scale-codec",
+ "rand_core 0.6.4",
  "serai-abi",
  "serai-coins-pallet",
  "serai-core-pallet",
@@ -8472,6 +8480,8 @@ dependencies = [
  "serai-validator-sets-pallet",
  "sp-application-crypto",
  "sp-core",
+ "sp-io",
+ "zeroize",
 ]
 
 [[package]]

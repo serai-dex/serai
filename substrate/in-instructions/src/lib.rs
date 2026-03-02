@@ -2,6 +2,12 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
+#[cfg(feature = "runtime-benchmarks")]
+mod benchmarking;
+
+#[cfg(test)]
+mod tests;
+
 #[expect(
   let_underscore_drop,
   clippy::as_conversions,
