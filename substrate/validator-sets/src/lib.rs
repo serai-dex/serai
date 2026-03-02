@@ -864,6 +864,65 @@ mod pallet {
       Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ())
     }
   }
+
+  impl<T: Config> frame_support::traits::DisabledValidators for Pallet<T> {
+    fn is_disabled(mut index: u32) -> bool {
+      let session = Pallet::<T>::current_session(NetworkId::Serai).unwrap_or(Session(0));
+      let mut iter =
+        Pallet::<T>::selected_validators(ValidatorSet { network: NetworkId::Serai, session });
+      while index != 0 {
+        let _ = iter.next();
+        index -= 1;
+      }
+      let Some((validator, _)) = iter.next() else {
+        // If requesting information for an invalid index, claim it's disabled
+        return true;
+      };
+      /*
+        The validator is disabled if they aren't a genesis validator and have no stake associated
+        with this session, meaning they have suffered a fatal slash.
+
+        This does have the oddity that the allocation of any stake will then un-disable the
+        validator, but the validator should no longer be able to propose blocks (preventing earning
+        the block reward) and the traditional allocation flow would require allocating at least one
+        key share (and not a trivial amount like one atomic unit). Accordingly, this is fine.
+      */
+      (!GenesisValidators::<T>::get()
+        .expect("validators selected but never set genesis validators")
+        .contains(&validator)) &&
+        <Abstractions<T> as allocations::Allocations>::allocation(NetworkId::Serai, validator)
+          .is_none() &&
+        Abstractions::<T>::fetch_deallocations_delayed_from(validator, NetworkId::Serai, session)
+          .is_none()
+    }
+
+    fn disabled_validators() -> Vec<u32> {
+      let session = Pallet::<T>::current_session(NetworkId::Serai).unwrap_or(Session(0));
+      let Some(genesis_validators) = GenesisValidators::<T>::get() else { return vec![] };
+
+      let mut result = vec![];
+      let mut index = 0u32;
+      #[expect(clippy::explicit_counter_loop)] // `enumerate` would return a `usize`
+      for (validator, _) in
+        Pallet::<T>::selected_validators(ValidatorSet { network: NetworkId::Serai, session })
+      {
+        if (!genesis_validators.contains(&validator)) &&
+          <Abstractions<T> as allocations::Allocations>::allocation(NetworkId::Serai, validator)
+            .is_none() &&
+          Abstractions::<T>::fetch_deallocations_delayed_from(
+            validator,
+            NetworkId::Serai,
+            session,
+          )
+          .is_none()
+        {
+          result.push(index);
+        }
+        index += 1;
+      }
+      result
+    }
+  }
 }
 
 pub use pallet::{Config, Pallet, Call};

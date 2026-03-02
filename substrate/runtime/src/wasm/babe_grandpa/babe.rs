@@ -79,12 +79,7 @@ impl pallet_babe::Config for Runtime {
   type MaxAuthorities = MaxAuthorities;
   type MaxNominators = ConstU32<1>;
 
-  /*
-    TODO: `serai-validator-sets-pallet` does call `on_disabled` but this appears to actually do
-    literally nothing within the client code present within Serai's (stripped) fork of the
-    `polkadot-sdk`. `serai-validator-sets-pallet` has to be extended regarding this.
-  */
-  type DisabledValidators = ();
+  type DisabledValidators = ValidatorSets;
 
   // These are stubbed as while we do handle equivocations, they are not routed through here.
   type KeyOwnerProof = sp_core::Void;
