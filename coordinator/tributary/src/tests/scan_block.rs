@@ -4,7 +4,7 @@ use rand::{Rng, RngCore};
 use rand_core::OsRng;
 use serai_substrate_tests::{random_block_hash, random_serai_address};
 
-use ciphersuite::group::{GroupEncoding};
+use ciphersuite::group::GroupEncoding;
 use dalek_ff_group::RistrettoPoint;
 
 use serai_primitives::address::SeraiAddress;
@@ -25,7 +25,7 @@ use crate::{
     AccumulatedWeight, ActivelyCosigning, CosignIntents as DbCosignIntents,
     LatestSubstrateBlockToCosign, Topic, TributaryDb,
   },
-  tests::default_test_validator_set,
+  tests::{default_test_validator_set, random_serai_address_and_key},
 };
 use crate::transaction::{SigningProtocolRound, Signed, Transaction};
 use crate::{CosignIntents, DkgConfirmationMessages, ProcessorMessages, ScanBlock, SubstrateBlockPlans};
@@ -98,13 +98,6 @@ fn make_scan_block<'a, TDT: DbTxn>(
     total_weight,
     validator_weights,
   }
-}
-
-/// Generate a random Ristretto key and the corresponding SeraiAddress.
-fn random_validator_key() -> (RistrettoPoint, SeraiAddress) {
-  let key = RistrettoPoint::random(&mut OsRng);
-  let address = SeraiAddress(key.to_bytes());
-  (key, address)
 }
 
 /// Create a Signed with the given signer key and a dummy signature.
@@ -413,7 +406,7 @@ mod handle_application_tx {
       let mut txn = db.txn();
 
       // Generate a signer that's actually in the validator set
-      let (signer_key, signer_addr) = random_validator_key();
+      let (signer_key, signer_addr) = random_serai_address_and_key(&mut OsRng);
       let signer_weight = 1u16;
 
       let mut extended_validator_data = validator_data.clone();
@@ -456,9 +449,9 @@ mod handle_application_tx {
       let mut txn = db.txn();
 
       // All 3 validators need real keys so they can sign
-      let (key0, addr0) = random_validator_key();
-      let (key1, addr1) = random_validator_key();
-      let (key2, addr2) = random_validator_key();
+      let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
+      let (key1, addr1) = random_serai_address_and_key(&mut OsRng);
+      let (key2, addr2) = random_serai_address_and_key(&mut OsRng);
 
       let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1)];
       let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
@@ -500,7 +493,7 @@ mod handle_application_tx {
     let set = default_test_validator_set();
 
     // Use a real validator key so the signer exists in participant_indexes
-    let (signer_key, signer_addr) = random_validator_key();
+    let (signer_key, signer_addr) = random_serai_address_and_key(&mut OsRng);
     let validator_data = vec![
       (signer_addr, 1u16),
       (random_serai_address(&mut OsRng), 1),
@@ -528,9 +521,9 @@ mod handle_application_tx {
   fn handle_dkg_confirmation_preprocess_tx_type() {
     let set = default_test_validator_set();
 
-    let (key0, addr0) = random_validator_key();
-    let (key1, addr1) = random_validator_key();
-    let (key2, addr2) = random_validator_key();
+    let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
+    let (key1, addr1) = random_serai_address_and_key(&mut OsRng);
+    let (key2, addr2) = random_serai_address_and_key(&mut OsRng);
     let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1)];
     let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
     let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
@@ -580,9 +573,9 @@ mod handle_application_tx {
   fn handle_dkg_confirmation_share_tx_type() {
     let set = default_test_validator_set();
 
-    let (key0, addr0) = random_validator_key();
-    let (_, addr1) = random_validator_key();
-    let (_, addr2) = random_validator_key();
+    let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
+    let (_, addr1) = random_serai_address_and_key(&mut OsRng);
+    let (_, addr2) = random_serai_address_and_key(&mut OsRng);
     let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1)];
     let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
     let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
@@ -617,9 +610,9 @@ mod handle_application_tx {
   fn dkg_confirmation_preprocess_then_share_flow() {
     let set = default_test_validator_set();
 
-    let (key0, addr0) = random_validator_key();
-    let (key1, addr1) = random_validator_key();
-    let (key2, addr2) = random_validator_key();
+    let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
+    let (key1, addr1) = random_serai_address_and_key(&mut OsRng);
+    let (key2, addr2) = random_serai_address_and_key(&mut OsRng);
     let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1)];
     let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
     let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
@@ -845,9 +838,9 @@ mod handle_application_tx {
   fn handle_sign_tx_type() {
     let set = default_test_validator_set();
 
-    let (key0, addr0) = random_validator_key();
-    let (key1, addr1) = random_validator_key();
-    let (key2, addr2) = random_validator_key();
+    let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
+    let (key1, addr1) = random_serai_address_and_key(&mut OsRng);
+    let (key2, addr2) = random_serai_address_and_key(&mut OsRng);
     let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1)];
     let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
     let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
@@ -907,9 +900,9 @@ mod handle_application_tx {
   fn handle_slash_report_tx_type() {
     let set = default_test_validator_set();
 
-    let (key0, addr0) = random_validator_key();
-    let (_, addr1) = random_validator_key();
-    let (_, addr2) = random_validator_key();
+    let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
+    let (_, addr1) = random_serai_address_and_key(&mut OsRng);
+    let (_, addr2) = random_serai_address_and_key(&mut OsRng);
     let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1)];
     let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
     let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
@@ -949,10 +942,10 @@ mod handle_application_tx {
       let mut db = MemDb::new();
       let mut txn = db.txn();
 
-      let (key0, addr0) = random_validator_key();
-      let (key1, addr1) = random_validator_key();
-      let (key2, addr2) = random_validator_key();
-      let (_, addr3) = random_validator_key();
+      let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
+      let (key1, addr1) = random_serai_address_and_key(&mut OsRng);
+      let (key2, addr2) = random_serai_address_and_key(&mut OsRng);
+      let (_, addr3) = random_serai_address_and_key(&mut OsRng);
       let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1), (addr3, 1)];
       let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
       let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
@@ -1042,10 +1035,10 @@ mod handle_application_tx {
       ) {
         let set = default_test_validator_set();
 
-        let (key0, addr0) = random_validator_key();
-        let (key1, addr1) = random_validator_key();
-        let (key2, addr2) = random_validator_key();
-        let (key3, addr3) = random_validator_key();
+        let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
+        let (key1, addr1) = random_serai_address_and_key(&mut OsRng);
+        let (key2, addr2) = random_serai_address_and_key(&mut OsRng);
+        let (key3, addr3) = random_serai_address_and_key(&mut OsRng);
         let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1), (addr3, 1)];
         let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
         let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
@@ -1118,7 +1111,7 @@ mod handle_application_tx {
 
         // 7 validators, f = (7-1)/3 = 2
         let keys_addrs: Vec<(RistrettoPoint, SeraiAddress)> =
-          (0 .. 7).map(|_| random_validator_key()).collect();
+          (0 .. 7).map(|_| random_serai_address_and_key(&mut OsRng)).collect();
         let validator_data: Vec<(SeraiAddress, u16)> =
           keys_addrs.iter().map(|(_, addr)| (*addr, 1u16)).collect();
         let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
@@ -1178,7 +1171,7 @@ mod handle_application_tx {
         let set = default_test_validator_set();
 
         let keys_addrs: Vec<(RistrettoPoint, SeraiAddress)> =
-          (0 .. num_validators).map(|_| random_validator_key()).collect();
+          (0 .. num_validators).map(|_| random_serai_address_and_key(&mut OsRng)).collect();
         let validator_data: Vec<(SeraiAddress, u16)> =
           keys_addrs.iter().map(|(_, addr)| (*addr, 1u16)).collect();
         let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
@@ -1263,7 +1256,7 @@ mod handle_block {
     };
 
     let mut txn = db.txn();
-    let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+    let scan_block = make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
     scan_block.handle_block(1, block);
     txn.commit();
@@ -1292,7 +1285,7 @@ mod handle_block {
     };
 
     let mut txn = db.txn();
-    let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+    let scan_block = make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
     scan_block.handle_block(1, block);
     txn.commit();

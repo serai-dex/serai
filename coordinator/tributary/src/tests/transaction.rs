@@ -2,7 +2,6 @@ use core::ops::Deref as _;
 
 use rand::{CryptoRng, RngCore, rngs::OsRng};
 use schnorr::SchnorrSignature;
-use zeroize::Zeroizing;
 
 use ciphersuite::{group::Group as _, *};
 use dalek_ff_group::Ristretto;
@@ -18,12 +17,8 @@ use tributary_sdk::{
   transaction::{Transaction as TransactionTrait, TransactionError, TransactionKind},
 };
 
-use crate::db::Topic;
+use crate::{db::Topic, tests::random_key};
 use crate::transaction::{SigningProtocolRound, Signed, Transaction};
-
-fn random_key<R: RngCore + CryptoRng>(rng: &mut R) -> Zeroizing<<Ristretto as WrappedGroup>::F> {
-  Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut *rng))
-}
 
 fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
   let signed = tributary_sdk::tests::random_signed(&mut *rng);
