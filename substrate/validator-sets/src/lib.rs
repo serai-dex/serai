@@ -600,7 +600,7 @@ mod pallet {
       let _ = signature_participants;
       let _ = signature;
 
-      let session = Self::current_session(NetworkId::from(network))
+      let session = Self::latest_decided_session(NetworkId::from(network))
         .expect("validated `set_keys` for a non-existent session");
       let set = ExternalValidatorSet { network, session };
       Abstractions::<T>::set_keys(set, key_pair.clone());
