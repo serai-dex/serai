@@ -1,23 +1,13 @@
 use rand::{RngCore, rngs::OsRng};
 
-use serai_primitives::{
-  address::SeraiAddress,
-  network_id::ExternalNetworkId,
-  validator_sets::{ExternalValidatorSet, Session},
-};
+use serai_primitives::{address::SeraiAddress, validator_sets::ExternalValidatorSet};
 
 use messages::sign::VariantSignId;
 
 use serai_db::{Db, DbTxn, MemDb};
 use serai_substrate_tests::random_serai_address;
 
-use crate::{db::*, transaction::SigningProtocolRound};
-
-fn default_set() -> ExternalValidatorSet {
-  // The external validator set does not change any functionality that is being tested
-  // use this as default
-  ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) }
-}
+use crate::{db::*, transaction::SigningProtocolRound, tests::default_test_validator_set};
 
 fn all_topics() -> Vec<Topic> {
   vec![
@@ -130,7 +120,7 @@ mod topic {
 
   #[test]
   fn sign_id() {
-    let set = default_set();
+    let set = default_test_validator_set();
     for topic in all_topics() {
       match topic {
         Topic::Sign { id, attempt, round: _ } => {
@@ -143,7 +133,7 @@ mod topic {
 
   #[test]
   fn dkg_confirmation_sign_id() {
-    let set = default_set();
+    let set = default_test_validator_set();
     for topic in all_topics() {
       match topic {
         Topic::DkgConfirmation { attempt, round: _ } => assert_eq!(
@@ -227,7 +217,7 @@ mod tributary_db {
   #[test]
   fn start_cosigning() {
     let mut db = MemDb::new();
-    let set = default_set();
+    let set = default_test_validator_set();
     let block_hash1 = random_block_hash(&mut OsRng);
     let block_number1 = OsRng.next_u64();
 
@@ -312,7 +302,7 @@ mod tributary_db {
 #[test]
 fn db_start_of_block() {
   let _ = env_logger::try_init();
-  let set = default_set();
+  let set = default_test_validator_set();
 
   let reattemptable_topics: Vec<Topic> = all_topics()
     .into_iter()
@@ -382,7 +372,7 @@ fn db_start_of_block() {
 #[test]
 fn db_fatal_slash() {
   let mut db = MemDb::new();
-  let set = default_set();
+  let set = default_test_validator_set();
   let validator = random_serai_address(&mut OsRng);
 
   {
@@ -393,6 +383,150 @@ fn db_fatal_slash() {
 
   assert!(TributaryDb::is_fatally_slashed(&db, set, validator));
   assert_eq!(SlashPoints::get(&db, set, validator), Some(u32::MAX));
+}
+
+/// Tests for the preceding topic existence check in `TributaryDb::accumulate`.
+mod accumulate_preceding_topic {
+  use super::*;
+
+  /// Set up a DkgConfirmation Share topic (which has a Preprocess preceding topic),
+  /// with 3 validators of weight 1 each so `required_participation = 3`.
+  fn setup() -> (ExternalValidatorSet, Vec<SeraiAddress>, u16, Topic, Topic, SeraiAddress) {
+    let set = default_test_validator_set();
+    let validators: Vec<SeraiAddress> =
+      (0 .. 3).map(|_| random_serai_address(&mut OsRng)).collect();
+    let total_weight = 3u16;
+
+    let share_topic = Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Share };
+    let preprocess_topic =
+      Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Preprocess };
+    assert_eq!(share_topic.preceding_topic(), Some(preprocess_topic));
+
+    let validator = validators[0];
+    (set, validators, total_weight, share_topic, preprocess_topic, validator)
+  }
+
+  #[test]
+  fn no_preceding_data_slashes_validator() {
+    let (set, validators, total_weight, share_topic, _preprocess_topic, validator) = setup();
+    let mut db = MemDb::new();
+
+    {
+      let mut txn = db.txn();
+
+      // Recognize the share topic so the recognition check doesn't slash
+      TributaryDb::recognize_topic(&mut txn, set, share_topic);
+
+      // Do NOT store any preceding preprocess data - the existence check should fail
+      let result = TributaryDb::accumulate::<[u8; 32]>(
+        &mut txn,
+        set,
+        &validators,
+        total_weight,
+        1,
+        share_topic,
+        validator,
+        1,
+        &[10u8; 32],
+      );
+      txn.commit();
+
+      assert!(matches!(result, DataSet::None));
+    }
+
+    assert!(TributaryDb::is_fatally_slashed(&db, set, validator));
+  }
+
+  #[test]
+  fn different_type_stored_in_preceding_topic_passes_existence_check() {
+    let (set, validators, total_weight, share_topic, preprocess_topic, validator) = setup();
+    let mut db = MemDb::new();
+
+    {
+      let mut txn = db.txn();
+
+      // Recognize the share topic so the recognition check doesn't slash
+      TributaryDb::recognize_topic(&mut txn, set, share_topic);
+
+      // Store preceding preprocess data ([u8; 64])
+      Accumulated::<[u8; 64]>::set(&mut txn, set, preprocess_topic, validator, &[1u8; 64]);
+
+      // Accumulate a share ([u8; 32])
+      // The preceding check should find the key despite the type mismatch and NOT slash.
+      let result = TributaryDb::accumulate::<[u8; 32]>(
+        &mut txn,
+        set,
+        &validators,
+        total_weight,
+        OsRng.next_u64(),
+        share_topic,
+        validator,
+        1,
+        &[2u8; 32],
+      );
+      txn.commit();
+
+      // Below threshold (1 of 3) so result is None but data is stored
+      assert!(matches!(result, DataSet::None));
+    }
+
+    assert_eq!(TributaryDb::is_fatally_slashed(&db, set, validator), false);
+    assert!(Accumulated::<[u8; 32]>::get(&db, set, share_topic, validator).is_some());
+  }
+
+  #[test]
+  fn same_type_stored_in_preceding_topic_still_works() {
+    let (set, validators, total_weight, _share_topic, _preprocess_topic, validator) = setup();
+
+    // Sign Share has a Sign Preprocess preceding topic, both use Vec<Vec<u8>> as D
+    let share_topic = Topic::Sign {
+      id: VariantSignId::Transaction([42; 32]),
+      attempt: 0,
+      round: SigningProtocolRound::Share,
+    };
+    let preprocess_topic = Topic::Sign {
+      id: VariantSignId::Transaction([42; 32]),
+      attempt: 0,
+      round: SigningProtocolRound::Preprocess,
+    };
+    assert_eq!(share_topic.preceding_topic(), Some(preprocess_topic));
+
+    let mut db = MemDb::new();
+
+    {
+      let mut txn = db.txn();
+
+      // Recognize both topics
+      TributaryDb::recognize_topic(&mut txn, set, preprocess_topic);
+      TributaryDb::recognize_topic(&mut txn, set, share_topic);
+
+      // Store preceding data with the same type as share will use
+      let preprocess_data: Vec<Vec<u8>> = vec![vec![1, 2, 3]];
+      Accumulated::set(&mut txn, set, preprocess_topic, validator, &preprocess_data);
+
+      let share_data: Vec<Vec<u8>> = vec![vec![4, 5, 6]];
+      let result = TributaryDb::accumulate::<Vec<Vec<u8>>>(
+        &mut txn,
+        set,
+        &validators,
+        total_weight,
+        OsRng.next_u64(),
+        share_topic,
+        validator,
+        1,
+        &share_data,
+      );
+      txn.commit();
+
+      assert!(matches!(result, DataSet::None));
+      assert_eq!(
+        Accumulated::<Vec<Vec<u8>>>::get(&db, set, share_topic, validator),
+        Some(share_data)
+      );
+    }
+
+    assert!(!TributaryDb::is_fatally_slashed(&db, set, validator));
+  }
 }
 
 mod fuzz {
@@ -417,6 +551,7 @@ mod fuzz {
     pre_slashed: bool,
     has_preceding_accumulated: bool,
     has_next_topic_weight: bool,
+    validator_in_list: bool,
     result: &DataSet<Vec<u8>>,
   ) {
     let required = required_participation(total_weight);
@@ -458,7 +593,7 @@ mod fuzz {
     // Branch 4: Already accumulated past the threshold - NOP.
     if weight_before >= required {
       assert!(matches!(result, DataSet::None));
-      assert_eq!(post_weight, Some(weight_before), "weight unchanged when past threshold");
+      assert_eq!(post_weight, pre_weight, "weight unchanged when past threshold");
       if !pre_slashed {
         assert!(!post_slashed, "should not be slashed on threshold NOP");
       }
@@ -466,10 +601,11 @@ mod fuzz {
     }
 
     // Branch 5: Old attempt - the next attempt's topic already has weight.
+    // Note: pre_weight may be None (topic not yet recognized) which is preserved.
     let next_attempt_superseded = has_next_topic_weight && topic.next_attempt_topic().is_some();
     if next_attempt_superseded {
       assert!(matches!(result, DataSet::None));
-      assert_eq!(post_weight, Some(weight_before), "weight unchanged for superseded attempt");
+      assert_eq!(post_weight, pre_weight, "weight unchanged for superseded attempt");
       if !pre_slashed {
         assert!(!post_slashed, "should not be slashed on superseded NOP");
       }
@@ -517,31 +653,57 @@ mod fuzz {
       }
 
       // 7c: Accumulated data cleanup depends on whether a reattempt exists.
-      // When no reattempt, the data is cleaned up in the collection loop.
+      // The cleanup loop only iterates the `validators` slice, so data for a validator
+      // not in the list is never deleted regardless of reattempt status.
       let has_reattempt = topic.reattempt_topic().is_some();
-      if has_reattempt {
+      if has_reattempt || !validator_in_list {
         assert_eq!(
           Accumulated::<Vec<u8>>::get(db, set, topic, validator),
           Some(data.clone()),
-          "data should be preserved when reattempt exists"
+          "data should be preserved (reattempt={has_reattempt}, in_list={validator_in_list})"
         );
       } else {
         assert!(
           Accumulated::<Vec<u8>>::get(db, set, topic, validator).is_none(),
-          "data should be cleaned up when no reattempt"
+          "data should be cleaned up when no reattempt and validator in list"
         );
       }
 
-      // 7d: Result should be DataSet::Participating (validator just accumulated).
-      match result {
-        DataSet::Participating(data_set) => {
-          assert!(data_set.contains_key(&validator), "validator should be in result data set");
-          assert_eq!(data_set.get(&validator).unwrap(), data, "result data should match input");
+      // 7d: Result depends on whether the validator was in the collection list.
+      // The collection loop only gathers data from the `validators` slice.
+      // `participated` = data_set.contains_key(&validator), which is false when
+      // the validator is not in the slice.
+      if validator_in_list {
+        match result {
+          DataSet::Participating(data_set) => {
+            assert!(data_set.contains_key(&validator), "validator should be in result data set");
+            assert_eq!(data_set.get(&validator).unwrap(), data, "result data should match input");
+          }
+          DataSet::None => {
+            panic!("result should be Participating when threshold crossed by listed validator");
+          }
         }
-        DataSet::None => {
-          panic!(
-            "result should be Participating when threshold crossed by participating validator"
-          );
+      } else {
+        match topic.participating() {
+          Participating::Participated => {
+            // Validator accumulated but isn't in the list, so participated=false
+            assert!(matches!(result, DataSet::None), "Participated + not in list => None");
+          }
+          Participating::Everyone => {
+            // Everyone always returns Participating, but the validator's data won't
+            // be in the set (it was only collected from the validators slice)
+            match result {
+              DataSet::Participating(data_set) => {
+                assert!(
+                  !data_set.contains_key(&validator),
+                  "validator not in list should not appear in data set"
+                );
+              }
+              DataSet::None => {
+                panic!("Everyone topics always return Participating");
+              }
+            }
+          }
         }
       }
     } else {
@@ -580,6 +742,7 @@ mod fuzz {
 
           num_validators in 1u16..u16::MAX,
           cur_validator in 0u16..u16::MAX,
+          validator_in_list in any::<bool>(),
       ) {
           let round =
           if round == 0 { SigningProtocolRound::Preprocess } else { SigningProtocolRound::Share };
@@ -599,7 +762,7 @@ mod fuzz {
           };
 
           let mut db = MemDb::new();
-          let set = default_set();
+          let set = default_test_validator_set();
 
           let validators: Vec<SeraiAddress> =
           (0 .. num_validators).map(|_i| random_serai_address(&mut OsRng)).collect();
@@ -618,8 +781,15 @@ mod fuzz {
               }
           }
 
+          // When validator_in_list is false, the accumulating validator is an outsider
+          // not present in the validators slice. This exercises the `participated = false`
+          // branch when the threshold is crossed.
           let cur_validator = (cur_validator as usize) % validators.len();
-          let validator = validators[cur_validator];
+          let validator = if validator_in_list {
+              validators[cur_validator]
+          } else {
+              random_serai_address(&mut OsRng)
+          };
 
           if has_preceding_topic_accumulated {
               if let Some(preceding_topic) = topic.preceding_topic() {
@@ -657,6 +827,7 @@ mod fuzz {
               pre_slashed,
               has_preceding_topic_accumulated,
               has_next_topic_weight,
+              validator_in_list,
               &result,
           );
       }

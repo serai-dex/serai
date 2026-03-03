@@ -472,13 +472,14 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
             }
             let amortized_slash_report = median_slash_report;
 
-            // Create the resulting slash report
+            // Create the resulting slash report, only including validators who have non-zero
+            // slash points after amortization
             let mut slash_report = vec![];
             for points in amortized_slash_report {
               // TODO: Natively store this as a `Slash`
               if points == u32::MAX {
                 slash_report.push(Slash::Fatal);
-              } else {
+              } else if points > 0 {
                 slash_report.push(Slash::Points(points));
               }
             }

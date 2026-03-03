@@ -4,6 +4,21 @@ use serai_client_serai::Serai;
 
 use dockertest::{StartPolicy, PullPolicy, Image, TestBodySpecification, DockerOperations};
 
+use rand_core::{RngCore, CryptoRng};
+use serai_primitives::{address::SeraiAddress, BlockHash};
+
+pub fn random_serai_address<R: RngCore + CryptoRng>(rng: &mut R) -> SeraiAddress {
+  let mut key = [0; 32];
+  rng.fill_bytes(&mut key);
+  SeraiAddress(key)
+}
+
+pub fn random_block_hash<R: RngCore + CryptoRng>(rng: &mut R) -> BlockHash {
+  let mut hash = [0; 32];
+  rng.fill_bytes(&mut hash);
+  BlockHash(hash)
+}
+
 pub struct Handle(String);
 
 pub fn composition(name: &str, logs_path: String) -> (TestBodySpecification, Handle) {

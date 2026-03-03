@@ -43,5 +43,13 @@ messages = { package = "serai-processor-messages", path = "../../processor/messa
 
 serai-log = { path = "../../common/log", version = "0.1.0" }
 
+[dev-dependencies]
+env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
+rand = { version = "0.8", default-features = false, features = ["std"] }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
+proptest = "1"
+tributary-sdk = { path = "../tributary-sdk", features = ["tests"] }
+serai-substrate-tests = { path = "../../tests/substrate" }
+
 [features]
 longer-reattempts = []

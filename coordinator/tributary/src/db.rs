@@ -297,6 +297,12 @@ db_channel!(
 
 pub(crate) struct TributaryDb;
 impl TributaryDb {
+  pub(crate) fn last_handled_tributary_block(
+    getter: &impl Get,
+    set: ExternalValidatorSet,
+  ) -> Option<(u64, [u8; 32])> {
+    LastHandledTributaryBlock::get(getter, set)
+  }
   pub(crate) fn set_last_handled_tributary_block(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
@@ -306,6 +312,25 @@ impl TributaryDb {
     LastHandledTributaryBlock::set(txn, set, &(block_number, block_hash));
   }
 
+  pub(crate) fn latest_substrate_block_to_cosign(
+    getter: &impl Get,
+    set: ExternalValidatorSet,
+  ) -> Option<BlockHash> {
+    LatestSubstrateBlockToCosign::get(getter, set)
+  }
+  pub(crate) fn set_latest_substrate_block_to_cosign(
+    txn: &mut impl DbTxn,
+    set: ExternalValidatorSet,
+    substrate_block_hash: BlockHash,
+  ) {
+    LatestSubstrateBlockToCosign::set(txn, set, &substrate_block_hash);
+  }
+  pub(crate) fn actively_cosigning(
+    txn: &mut impl DbTxn,
+    set: ExternalValidatorSet,
+  ) -> Option<BlockHash> {
+    ActivelyCosigning::get(txn, set)
+  }
   pub(crate) fn start_cosigning(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
@@ -431,7 +456,9 @@ impl TributaryDb {
     // Check if there's a preceding topic, this validator participated
     let preceding_topic = topic.preceding_topic();
     if let Some(preceding_topic) = preceding_topic {
-      if Accumulated::<D>::get(txn, set, preceding_topic, validator).is_none() {
+      // Use a raw key-existence check instead of `Accumulated::<D>::get` because the preceding
+      // topic may have stored a different type (e.g. preprocess is [u8; 64], share is [u8; 32])
+      if txn.get(Accumulated::<D>::key(set, preceding_topic, validator)).is_none() {
         Self::fatal_slash(
           txn,
           set,
