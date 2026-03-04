@@ -41,7 +41,7 @@ const CHAIN_ID: U256 = U256::from_be_slice(&[1]);
 type RevmContext = Context<BlockEnv, TxEnv, CfgEnv, InMemoryDB, Journal<InMemoryDB>, ()>;
 
 fn precompiles() -> EthPrecompiles {
-  let mut precompiles = EthPrecompiles::default();
+  let mut precompiles = EthPrecompiles::new(SPEC_ID);
   PrecompileProvider::<RevmContext>::set_spec(&mut precompiles, SPEC_ID);
   precompiles
 }
@@ -232,7 +232,7 @@ impl Router {
         unused_gas: 0,
         override_immediate_call_return_value: false,
       },
-      EthInstructions::default(),
+      EthInstructions::new_mainnet_with_spec(SPEC_ID),
       precompiles(),
     )
   }
@@ -319,9 +319,9 @@ impl Router {
         .inspect_run(&mut gas_estimator)
         .unwrap()
       {
-        ExecutionResult::Success { gas_used, gas_refunded, .. } => {
-          assert_eq!(gas_refunded, 0);
-          gas_used
+        ExecutionResult::Success { gas, .. } => {
+          assert_eq!(gas.final_refunded(), 0);
+          gas.used()
         }
         res @ (ExecutionResult::Revert { .. } | ExecutionResult::Halt { .. }) => {
           panic!("estimated execute transaction failed: {res:?}")

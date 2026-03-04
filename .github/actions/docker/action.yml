@@ -16,7 +16,7 @@ runs:
         sudo apt install -y uidmap
 
     - name: Install rootless Docker (Linux)
-      uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4 # 4.7.0
+      uses: docker/setup-docker-action@1a6edb0ba9ac496f6850236981f15d8f9a82254d # 5.0.0
       if: runner.os == 'Linux'
       with:
         rootless: true
@@ -38,7 +38,7 @@ runs:
         fi
 
     - name: Install Docker (macOS)
-      uses: docker/setup-docker-action@e43656e248c0bd0647d3f5c195d116aacf6fcaf4 # 4.7.0
+      uses: docker/setup-docker-action@1a6edb0ba9ac496f6850236981f15d8f9a82254d # 5.0.0
       if: runner.os == 'macOS'
       env:
         # m1 chips, as seen in the GitHub CI, don't support nested hardware virtualization.
@@ -74,9 +74,9 @@ runs:
 
     # The preinstalled Docker, and Docker from `setup-docker-action`, do not allow running Linux
     # containers. We manually install `podman` to workaround this. Alternatively, we could install
-    # 'Docker Desktop' and run `docker desktop engine use linux`, but `docker desktop` is a
+    # 'Docker Desktop' and run `docker desktop engine use linux`, but 'Docker Desktop' is a
     # pseudo-enterprise product and it isn't worth installing/configuring it compared to installing
-    # a more direct solution which behaves as a drop-in replacement to the degree we need it_.
+    # a more direct solution which behaves as a drop-in replacement _to the degree we need it_.
     - name: Install Podman (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
@@ -100,7 +100,7 @@ runs:
     # accordingly. This requires we be able to run a x86-64 userspace.
     - name: Install x64 Qemu for non-x64 Docker
       if: runner.arch != 'X64'
-      uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # 3.7.0
+      uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # 4.0.0
       with:
         platforms: amd64
 

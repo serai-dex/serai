@@ -158,7 +158,7 @@ jobs:
       - name: Verify claimed `rust-version`
         shell: bash
         run: |
-          cargo +1.93 install cargo-msrv --version =0.18.4
+          cargo +1.93 install cargo-msrv --version =0.19.1
 
           function check_msrv {
             # We `cd` into the directory passed as the first argument, but will return to the
