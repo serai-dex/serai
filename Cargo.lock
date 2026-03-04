@@ -1113,6 +1113,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4c7f02d4ea65f2c1853089ffd8d2787bdbc63de2f0d29dedbcf8ccdfa0ccd4cf"
 
 [[package]]
+name = "base16ct"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fd307490d624467aa6f74b0eabb77633d1f758a7b25f12bceb0b22e08d9726f6"
+
+[[package]]
 name = "base58ck"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2594,7 +2600,7 @@ version = "0.13.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5e6043086bf7973472e0c7dff2142ea0b680d30e18d9cc40f267efbf222bd47"
 dependencies = [
- "base16ct",
+ "base16ct 0.2.0",
  "crypto-bigint 0.5.5",
  "digest 0.10.7",
  "ff",
@@ -7932,7 +7938,7 @@ version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3e97a565f76233a6003f9f5c54be1d9c5bdfa3eccfb189469f11ec4901c47dc"
 dependencies = [
- "base16ct",
+ "base16ct 0.2.0",
  "der",
  "generic-array 0.14.7",
  "pkcs8",
@@ -8583,21 +8589,17 @@ dependencies = [
 name = "serai-node"
 version = "0.1.0"
 dependencies = [
- "bitcoin-serai",
+ "base16ct 1.0.0",
  "borsh",
  "ciphersuite 0.4.2",
- "ciphersuite-kp256",
  "clap",
- "curve25519-dalek",
  "dalek-ff-group 0.5.0",
  "embedwards25519",
  "frame-benchmarking",
  "futures-util",
  "hex",
  "jsonrpsee",
- "libp2p",
  "log",
- "monero-address",
  "rand_core 0.6.4",
  "sc-authority-discovery",
  "sc-basic-authorship",
@@ -8621,7 +8623,6 @@ dependencies = [
  "serai-env",
  "serai-runtime",
  "sp-api",
- "sp-block-builder",
  "sp-blockchain",
  "sp-consensus",
  "sp-consensus-babe",
@@ -9182,7 +9183,7 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a84f14a19e9a014bb9f4512488d9829a68e04ecabffb0f9904cd1ace94598177"
 dependencies = [
- "base16ct",
+ "base16ct 0.2.0",
  "serde",
 ]
 

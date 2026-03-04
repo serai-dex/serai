@@ -1,146 +1,50 @@
-use std::sync::Arc;
+use core::str::FromStr as _;
+use std::{sync::Arc, collections::HashSet};
 
-use sp_blockchain::{Error as BlockchainError, HeaderBackend, HeaderMetadata};
-use sp_block_builder::BlockBuilder;
-use sp_api::ProvideRuntimeApi;
+use rand_core::{RngCore as _, OsRng};
 
-use serai_abi::SubstrateBlock as Block;
+use sp_blockchain::HeaderBackend as _;
+use sp_consensus::BlockStatus;
+use sp_api::ProvideRuntimeApi as _;
 
-use jsonrpsee::RpcModule;
+use serai_abi::{
+  primitives::{address::*, network_id::*, validator_sets::*},
+  Transaction, SubstrateBlock as Block,
+};
+use serai_runtime::SeraiApi as _;
 
-use sc_client_api::BlockBackend;
+use jsonrpsee::{types::params::Params, RpcModule};
+
+use sc_client_api::BlockBackend as _;
 use sc_transaction_pool_api::TransactionPool;
+use sc_network::config::MultiaddrWithPeerId;
 
 mod utils;
+use utils::*;
+
 mod blockchain;
 mod validator_sets;
 mod p2p_validators;
 
-pub struct FullDeps<C, P> {
-  pub id: String,
-  pub client: Arc<C>,
-  pub pool: Arc<P>,
-  pub authority_discovery: Option<sc_authority_discovery::Service>,
+use crate::FullClient;
+
+pub(crate) struct FullDeps<P> {
+  pub(crate) bootnodes: Vec<MultiaddrWithPeerId>,
+  pub(crate) client: Arc<FullClient>,
+  pub(crate) pool: Arc<P>,
+  pub(crate) authority_discovery: Option<sc_authority_discovery::Service>,
 }
 
-pub fn create_full<
-  C: 'static
-    + Send
-    + Sync
-    + ProvideRuntimeApi<Block, Api: BlockBuilder<Block> + serai_runtime::SeraiApi<Block>>
-    + HeaderBackend<Block>
-    + HeaderMetadata<Block, Error = BlockchainError>
-    + BlockBackend<Block>,
-  P: 'static + TransactionPool<Block = Block>,
->(
-  deps: FullDeps<C, P>,
+pub(crate) fn create_full<P: 'static + TransactionPool<Block = Block>>(
+  deps: FullDeps<P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>> {
-  let FullDeps { id, client, pool, authority_discovery } = deps;
+  let FullDeps { bootnodes, client, pool, authority_discovery } = deps;
 
   let mut root = RpcModule::new(());
   root.merge(blockchain::module(client.clone(), pool)?)?;
   root.merge(validator_sets::module(client.clone())?)?;
   if let Some(authority_discovery) = authority_discovery {
-    root.merge(p2p_validators::module(id, client, authority_discovery)?)?;
+    root.merge(p2p_validators::module(&bootnodes, client, authority_discovery)?)?;
   }
   Ok(root)
-
-  /* TODO
-  use ciphersuite::{GroupIo, WithPreferredHash};
-  use ciphersuite_kp256::{k256::elliptic_curve::point::AffineCoordinates, Secp256k1};
-  use dalek_ff_group::Ed25519;
-  use bitcoin_serai::bitcoin;
-
-  let mut serai_json_module = RpcModule::new(client);
-
-  // add network address rpc
-  serai_json_module.register_async_method(
-    "external_network_address",
-    async move |params, context| {
-      let network: ExternalNetworkId = params.parse()?;
-      let client = &*context;
-      let latest_block = client.info().best_hash;
-
-      let external_key = client
-        .runtime_api()
-        .external_network_key(latest_block, network)
-        .map_err(|_| Error::Custom("api call error".to_owned()))?
-        .ok_or(Error::Custom("no address for the network".to_owned()))?;
-
-      match network {
-        ExternalNetworkId::Bitcoin => {
-          let key = <Secp256k1 as GroupIo>::read_G::<&[u8]>(&mut external_key.as_slice())
-            .map_err(|_| Error::Custom("invalid key stored in db".to_owned()))?;
-
-          let addr = bitcoin::Address::p2tr_tweaked(
-            bitcoin::key::TweakedPublicKey::dangerous_assume_tweaked(
-              bitcoin::key::XOnlyPublicKey::from_slice(key.to_affine().x().as_slice()).map_err(
-                |_| Error::Custom("x-coordinate for Bitcoin key was invalid".to_owned()),
-              )?,
-            ),
-            bitcoin::address::KnownHrp::Mainnet,
-          );
-
-          Ok(addr.to_string())
-        }
-        // We don't know the eth address before the smart contract is deployed.
-        ExternalNetworkId::Ethereum => Ok(String::new()),
-        ExternalNetworkId::Monero => {
-          // TODO: Serai view-key crate
-          let view_private = zeroize::Zeroizing::new(<Ed25519 as WithPreferredHash>::hash_to_F(
-            &["Monero".as_bytes(), &0u64.to_le_bytes()].concat(),
-          ));
-
-          let spend = <Ed25519 as GroupIo>::read_G::<&[u8]>(&mut external_key.as_slice())
-            .map_err(|_| Error::Custom("invalid key stored in db".to_owned()))?;
-
-          let addr = monero_address::MoneroAddress::new(
-            monero_address::Network::Mainnet,
-            monero_address::AddressType::Featured {
-              subaddress: false,
-              payment_id: None,
-              guaranteed: true,
-            },
-            *spend,
-            view_private.deref() * curve25519_dalek::constants::ED25519_BASEPOINT_TABLE,
-          );
-
-          Ok(addr.to_string())
-        }
-      }
-    },
-  )?;
-
-  // add shorthand encoding rpc
-  serai_json_module.register_async_method("encoded_shorthand", async move |params, _| {
-    // decode using serde and encode back using scale
-    let shorthand: Shorthand = params.parse()?;
-    Ok(shorthand.encode())
-  })?;
-
-  // add simulating a swap path rpc
-  serai_json_module.register_async_method("quote_price", async move |params, context| {
-    let client = &*context;
-    let latest_block = client.info().best_hash;
-    let QuotePriceParams { coin1, coin2, amount, include_fee, exact_in } = params.parse()?;
-
-    let amount = if exact_in {
-      client
-        .runtime_api()
-        .quote_price_exact_tokens_for_tokens(latest_block, coin1, coin2, amount, include_fee)
-        .map_err(|_| Error::Custom("api call error".to_owned()))?
-        .ok_or(Error::Custom("invalid params or empty pool".to_owned()))?
-    } else {
-      client
-        .runtime_api()
-        .quote_price_tokens_for_exact_tokens(latest_block, coin1, coin2, amount, include_fee)
-        .map_err(|_| Error::Custom("api call error".to_owned()))?
-        .ok_or(Error::Custom("invalid params or empty pool".to_owned()))?
-    };
-
-    Ok(amount)
-  })?;
-
-  module.merge(serai_json_module)?;
-  */
 }

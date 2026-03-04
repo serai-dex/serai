@@ -1,23 +1,31 @@
-use std::time::Duration;
+use core::{marker::PhantomData, time::Duration, future::Future};
+use futures_util::future::{self, Ready, Either};
 
-use sp_runtime::Digest;
-use sp_consensus::{InherentData, DisableProofRecording};
-
-use serai_abi::{
-  primitives::address::SeraiAddress, SeraiPreExecutionDigest, SubstrateHeader as Header,
-  SubstrateBlock as Block,
+use sp_runtime::{
+  generic::{DigestItem, Digest},
+  traits::Block,
 };
+use sp_blockchain::Error;
+use sp_consensus::{InherentData, Proposal, Proposer, Environment};
+use sp_timestamp::Timestamp;
 
-use super::{FullClient, TransactionPool};
+use serai_abi::{primitives::address::SeraiAddress, SeraiPreExecutionDigest};
 
-type UnderlyingProposer =
-  sc_basic_authorship::Proposer<Block, FullClient, TransactionPool, DisableProofRecording>;
-pub struct Proposer(SeraiAddress, UnderlyingProposer);
-impl sp_consensus::Proposer<Block> for Proposer {
-  type Error = <UnderlyingProposer as sp_consensus::Proposer<Block>>::Error;
-  type Proposal = <UnderlyingProposer as sp_consensus::Proposer<Block>>::Proposal;
-  type ProofRecording = DisableProofRecording;
-  type Proof = ();
+/// The block proposer for the Serai network.
+///
+/// This is used to insert the `PreRuntime` digest the Serai runtime expects.
+pub(super) struct SeraiProposer<B: Block, Underlying: Proposer<B, Error = Error>> {
+  proposer_identity: SeraiAddress,
+  underlying: Underlying,
+  _block: PhantomData<B>,
+}
+impl<B: Block, Underlying: Proposer<B, Error = Error>> Proposer<B>
+  for SeraiProposer<B, Underlying>
+{
+  type Error = Underlying::Error;
+  type Proposal = Either<Ready<Result<Proposal<B, Self::Proof>, Error>>, Underlying::Proposal>;
+  type ProofRecording = Underlying::ProofRecording;
+  type Proof = Underlying::Proof;
 
   fn propose(
     self,
@@ -26,37 +34,71 @@ impl sp_consensus::Proposer<Block> for Proposer {
     max_duration: Duration,
     block_size_limit: Option<usize>,
   ) -> Self::Proposal {
-    Box::pin(async move {
-      // Insert our expected digest
-      inherent_digests.logs.push(sp_runtime::generic::DigestItem::PreRuntime(
-        SeraiPreExecutionDigest::CONSENSUS_ID,
-        borsh::to_vec(&SeraiPreExecutionDigest {
-          proposer: self.0,
-          unix_time_in_millis: inherent_data
-            .get_data::<sp_timestamp::Timestamp>(&sp_timestamp::INHERENT_IDENTIFIER)
-            .map_err(|err| sp_blockchain::Error::Application(err.into()))?
-            .ok_or(sp_blockchain::Error::Application("missing timestamp inherent".into()))?
-            .as_millis(),
-        })
-        .unwrap(),
-      ));
+    let timestamp = match inherent_data
+      .get_data::<Timestamp>(&sp_timestamp::INHERENT_IDENTIFIER)
+      .map_err(|e| Error::Application(e.into()))
+      .and_then(|timestamp| {
+        timestamp.ok_or(Error::Application("missing timestamp inherent".into()))
+      }) {
+      Ok(timestamp) => timestamp,
+      Err(e) => return Either::Left(future::ready(Err(e))),
+    };
 
-      // Call the underlying propose function
-      self.1.propose(inherent_data, inherent_digests, max_duration, block_size_limit).await
-    })
+    // Insert our expected digest
+    inherent_digests.logs.push(DigestItem::PreRuntime(
+      SeraiPreExecutionDigest::CONSENSUS_ID,
+      borsh::to_vec(&SeraiPreExecutionDigest {
+        proposer: self.proposer_identity,
+        unix_time_in_millis: timestamp.as_millis(),
+      })
+      .unwrap(),
+    ));
+
+    // Passthrough to the underlying proposer's `propose` function
+    Either::Right(self.underlying.propose(
+      inherent_data,
+      inherent_digests,
+      max_duration,
+      block_size_limit,
+    ))
   }
 }
 
-type UnderlyingFactory =
-  sc_basic_authorship::ProposerFactory<TransactionPool, FullClient, DisableProofRecording>;
-pub struct ProposerFactory(pub SeraiAddress, pub UnderlyingFactory);
-impl sp_consensus::Environment<Block> for ProposerFactory {
-  type CreateProposer = core::future::Ready<Result<Proposer, Self::Error>>;
-  type Proposer = Proposer;
-  type Error = <UnderlyingFactory as sp_consensus::Environment<Block>>::Error;
-  fn init(&mut self, parent_header: &Header) -> Self::CreateProposer {
-    core::future::ready(
-      self.1.init(parent_header).into_inner().map(|underlying| Proposer(self.0, underlying)),
-    )
+// This shim works around an overflow and/or cycle in evaluating the following bounds
+trait IsReady: Future {
+  fn into_inner(self) -> Self::Output;
+}
+impl<T> IsReady for Ready<T> {
+  fn into_inner(self) -> Self::Output {
+    Ready::into_inner(self)
+  }
+}
+
+/// The environment for producing blocks for the Serai network.
+///
+/// This wraps the underlying environment's proposer with our own `SeraiProposer` which will insert
+/// the `PreRuntime` digest the Serai runtime expects.
+pub(super) struct SeraiProposerFactory<
+  B: Block,
+  Underlying: Environment<B, Proposer: Proposer<B, Error = Error>>,
+> {
+  pub(super) proposer_identity: SeraiAddress,
+  pub(super) underlying: Underlying,
+  pub(super) _block: PhantomData<B>,
+}
+impl<B: Block, Underlying: Environment<B, Proposer: Proposer<B, Error = Error>>> Environment<B>
+  for SeraiProposerFactory<B, Underlying>
+where
+  Underlying::Error: Send,
+  Underlying::CreateProposer: IsReady,
+{
+  type CreateProposer = Ready<Result<Self::Proposer, Self::Error>>;
+  type Proposer = SeraiProposer<B, Underlying::Proposer>;
+  type Error = Underlying::Error;
+
+  fn init(&mut self, parent_header: &B::Header) -> Self::CreateProposer {
+    future::ready(self.underlying.init(parent_header).into_inner().map(|underlying| {
+      SeraiProposer { proposer_identity: self.proposer_identity, underlying, _block: PhantomData }
+    }))
   }
 }

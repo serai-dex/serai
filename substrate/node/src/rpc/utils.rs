@@ -1,7 +1,6 @@
-use sp_blockchain::{Error as BlockchainError, HeaderMetadata, HeaderBackend};
-use sc_client_api::BlockBackend;
+use jsonrpsee::types::error::ErrorObjectOwned;
 
-use serai_abi::SubstrateBlock as Block;
+use super::*;
 
 pub(super) enum Error {
   Internal(&'static str),
@@ -10,21 +9,17 @@ pub(super) enum Error {
   InvalidTransaction(String),
 }
 
-impl From<Error> for jsonrpsee::types::error::ErrorObjectOwned {
+impl From<Error> for ErrorObjectOwned {
   fn from(error: Error) -> Self {
     match error {
-      Error::Internal(str) => {
-        jsonrpsee::types::error::ErrorObjectOwned::owned(-1, str, Option::<()>::None)
-      }
-      Error::InvalidRequest(str) => {
-        jsonrpsee::types::error::ErrorObjectOwned::owned(-2, str, Option::<()>::None)
-      }
-      Error::InvalidStateReference => jsonrpsee::types::error::ErrorObjectOwned::owned(
+      Error::Internal(str) => ErrorObjectOwned::owned(-1, str, Option::<()>::None),
+      Error::InvalidRequest(str) => ErrorObjectOwned::owned(-2, str, Option::<()>::None),
+      Error::InvalidStateReference => ErrorObjectOwned::owned(
         -3,
         "the block used as the reference was not locally held",
         Option::<()>::None,
       ),
-      Error::InvalidTransaction(str) => jsonrpsee::types::error::ErrorObjectOwned::owned(
+      Error::InvalidTransaction(str) => ErrorObjectOwned::owned(
         -4,
         format!("transaction was not accepted to the mempool: {str}"),
         Option::<()>::None,
@@ -33,11 +28,9 @@ impl From<Error> for jsonrpsee::types::error::ErrorObjectOwned {
   }
 }
 
-pub(super) fn block_hash<
-  C: HeaderMetadata<Block, Error = BlockchainError> + HeaderBackend<Block> + BlockBackend<Block>,
->(
-  client: &C,
-  params: &jsonrpsee::types::params::Params,
+pub(super) fn block_hash(
+  client: &FullClient,
+  params: &Params,
 ) -> Result<Option<<Block as sp_runtime::traits::Block>::Hash>, Error> {
   #[derive(sp_core::serde::Deserialize)]
   #[serde(crate = "sp_core::serde")]
@@ -68,4 +61,43 @@ pub(super) fn block_hash<
     };
     block_hash
   })
+}
+
+pub(super) fn network_from_str(network: impl AsRef<str>) -> Result<NetworkId, Error> {
+  Ok(match network.as_ref().to_lowercase().as_str() {
+    "serai" => NetworkId::Serai,
+    "bitcoin" => NetworkId::External(ExternalNetworkId::Bitcoin),
+    "ethereum" => NetworkId::External(ExternalNetworkId::Ethereum),
+    "monero" => NetworkId::External(ExternalNetworkId::Monero),
+    _ => Err(Error::InvalidRequest("unrecognized network requested"))?,
+  })
+}
+
+pub(super) fn network(params: &Params) -> Result<NetworkId, Error> {
+  #[derive(sp_core::serde::Deserialize)]
+  #[serde(crate = "sp_core::serde")]
+  struct Network {
+    network: String,
+  }
+
+  let Ok(network) = params.parse::<Network>() else {
+    Err(Error::InvalidRequest(r#"missing `string` "network" field"#))?
+  };
+
+  network_from_str(network.network)
+}
+
+pub(super) fn set(params: &Params) -> Result<ValidatorSet, Error> {
+  #[derive(sp_core::serde::Deserialize)]
+  #[serde(crate = "sp_core::serde")]
+  struct Set {
+    network: String,
+    session: u32,
+  }
+
+  let Ok(set) = params.parse::<Set>() else {
+    Err(Error::InvalidRequest(r#"missing `object` "set" field"#))?
+  };
+
+  Ok(ValidatorSet { network: network_from_str(set.network)?, session: Session(set.session) })
 }
