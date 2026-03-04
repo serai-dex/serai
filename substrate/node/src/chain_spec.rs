@@ -147,8 +147,6 @@ fn genesis(
   let mut ext = BasicExternalities::new_empty();
   let code_fetcher = WrappedRuntimeCode(bin.clone().into());
   WasmExecutor::<SubstrateHostFunctions>::builder()
-    // TODO: Is this needed?
-    .with_allow_missing_host_functions(true)
     .build()
     .call(
       &mut ext,
