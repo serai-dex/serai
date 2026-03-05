@@ -61,25 +61,16 @@ impl Topic {
     #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
-      Topic::DkgConfirmation { attempt, round: _ } => {
-        if let Some(next_attempt) = attempt.checked_add(1) {
-          Some(Topic::DkgConfirmation {
-            attempt: next_attempt,
-            round: SigningProtocolRound::Preprocess,
-          })
-        } else {
-          None
-        }
-      }
+      Topic::DkgConfirmation { attempt, round: _ } => Some(Topic::DkgConfirmation {
+        attempt: attempt.checked_add(1).unwrap_or(0),
+        round: SigningProtocolRound::Preprocess,
+      }),
       Topic::SlashReport => None,
-      Topic::Sign { id, attempt, round: _ } => {
-        // checked_add here, sanity prevent infinite consecutive attempts
-        if let Some(next_attempt) = attempt.checked_add(1) {
-          Some(Topic::Sign { id, attempt: next_attempt, round: SigningProtocolRound::Preprocess })
-        } else {
-          None
-        }
-      }
+      Topic::Sign { id, attempt, round: _ } => Some(Topic::Sign {
+        id,
+        attempt: attempt.checked_add(1).unwrap_or(0),
+        round: SigningProtocolRound::Preprocess,
+      }),
     }
   }
 
@@ -90,33 +81,25 @@ impl Topic {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          // checked_add here, sanity prevent infinite consecutive attempts
-          if let Some(next_attempt) = attempt.checked_add(1) {
-            Some((
-              next_attempt,
-              Topic::DkgConfirmation {
-                attempt: next_attempt,
-                round: SigningProtocolRound::Preprocess,
-              },
-            ))
-          } else {
-            None
-          }
+          let next_attempt = attempt.checked_add(1).unwrap_or(0);
+          Some((
+            next_attempt,
+            Topic::DkgConfirmation {
+              attempt: next_attempt,
+              round: SigningProtocolRound::Preprocess,
+            },
+          ))
         }
         SigningProtocolRound::Share => None,
       },
       Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          // checked_add here, sanity prevent infinite consecutive attempts
-          if let Some(next_attempt) = attempt.checked_add(1) {
-            Some((
-              next_attempt,
-              Topic::Sign { id, attempt: next_attempt, round: SigningProtocolRound::Preprocess },
-            ))
-          } else {
-            None
-          }
+          let next_attempt = attempt.checked_add(1).unwrap_or(0);
+          Some((
+            next_attempt,
+            Topic::Sign { id, attempt: next_attempt, round: SigningProtocolRound::Preprocess },
+          ))
         }
         SigningProtocolRound::Share => None,
       },
@@ -371,13 +354,19 @@ impl TributaryDb {
     Cosigned::get(txn, set, substrate_block_hash).is_some()
   }
 
+  /// The next topic requiring recognition which has been recognized by this Tributary.
+  pub fn try_recv_topic_requiring_recognition(
+    txn: &mut impl DbTxn,
+    set: ExternalValidatorSet,
+  ) -> Option<Topic> {
+    RecognizedTopics::try_recv(txn, set)
+  }
   pub(crate) fn recognize_topic(txn: &mut impl DbTxn, set: ExternalValidatorSet, topic: Topic) {
     AccumulatedWeight::set(txn, set, topic, &0);
     RecognizedTopics::send(txn, set, &topic);
   }
   pub(crate) fn recognized(getter: &impl Get, set: ExternalValidatorSet, topic: Topic) -> bool {
-    AccumulatedWeight::get(getter, set, topic).is_some() &&
-      RecognizedTopics::peek(getter, set).is_some()
+    AccumulatedWeight::get(getter, set, topic).is_some()
   }
 
   pub(crate) fn start_of_block(txn: &mut impl DbTxn, set: ExternalValidatorSet, block_number: u64) {

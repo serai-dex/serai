@@ -104,7 +104,7 @@ impl RecognizedTopics {
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
   ) -> Option<Topic> {
-    db::RecognizedTopics::try_recv(txn, set)
+    TributaryDb::try_recv_topic_requiring_recognition(txn, set)
   }
 }
 

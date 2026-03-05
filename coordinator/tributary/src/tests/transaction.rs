@@ -6,7 +6,7 @@ use schnorr::SchnorrSignature;
 use ciphersuite::{group::Group as _, *};
 use dalek_ff_group::Ristretto;
 
-use serai_primitives::{validator_sets::KeyShares, address::SeraiAddress};
+use serai_primitives::validator_sets::KeyShares;
 use serai_substrate_tests::{random_serai_address, random_block_hash};
 
 use messages::sign::VariantSignId;
@@ -149,9 +149,7 @@ mod signed {
         }
       }
 
-      let mut writer = FailingWriter;
-
-      let result = random_signed(&mut OsRng).serialize(&mut writer);
+      let result = random_signed(&mut OsRng).serialize(&mut FailingWriter);
       assert!(result.is_err());
       assert_eq!(result.unwrap_err().kind(), io::ErrorKind::Other);
     }
@@ -165,17 +163,25 @@ mod signed {
         }
       }
 
-      let mut failing_reader = FailingReader;
-      let result = Signed::deserialize_reader(&mut failing_reader);
+      let result = Signed::deserialize_reader(&mut FailingReader);
       assert!(result.is_err());
       assert_eq!(result.unwrap_err().kind(), io::ErrorKind::UnexpectedEof);
     }
 
-    // Errors with incomplete data
+    // Errors with incomplete data (signer read_G fails)
     {
       let serialized = borsh::to_vec(&random_signed(&mut OsRng)).unwrap();
       let truncated = &serialized[.. 5];
       let mut cursor = std::io::Cursor::new(truncated);
+      let result = Signed::deserialize_reader(&mut cursor);
+      assert!(result.is_err());
+    }
+
+    // Errors when signer is valid but signature data is missing (SchnorrSignature::read fails)
+    {
+      let serialized = borsh::to_vec(&random_signed(&mut OsRng)).unwrap();
+      let signer_only = &serialized[.. 32];
+      let mut cursor = std::io::Cursor::new(signer_only);
       let result = Signed::deserialize_reader(&mut cursor);
       assert!(result.is_err());
     }
@@ -225,22 +231,22 @@ mod kind {
 
           let nonce = signed.nonce;
           match tx {
-            Transaction::RemoveParticipant { participant: _, signed: _ } => {
+            Transaction::RemoveParticipant { .. } => {
               assert_eq!(nonce, SigningProtocolRound::Preprocess.nonce())
             }
-            Transaction::DkgParticipation { participation: _, signed: _ } => {
+            Transaction::DkgParticipation { .. } => {
               assert_eq!(nonce, SigningProtocolRound::Preprocess.nonce())
             }
-            Transaction::DkgConfirmationPreprocess { attempt: _, preprocess: _, signed: _ } => {
+            Transaction::DkgConfirmationPreprocess { .. } => {
               assert_eq!(nonce, SigningProtocolRound::Share.nonce())
             }
-            Transaction::DkgConfirmationShare { attempt: _, share: _, signed: _ } => {
+            Transaction::DkgConfirmationShare { .. } => {
               assert_eq!(nonce, SigningProtocolRound::Share.nonce())
             }
-            Transaction::Sign { id: _, attempt: _, round, data: _, signed: _ } => {
+            Transaction::Sign { round, .. } => {
               assert_eq!(nonce, round.nonce())
             }
-            Transaction::SlashReport { slash_points: _, signed: _ } => {
+            Transaction::SlashReport { .. } => {
               assert_eq!(nonce, SigningProtocolRound::Preprocess.nonce())
             }
             _ => panic!("Expected Signed kind for {tx:?}"),
@@ -369,52 +375,45 @@ fn tx_verify() {
 
 #[test]
 fn topic_returns_correct_mapping() {
-  let participant = SeraiAddress([1; 32]);
+  let participant = random_serai_address(&mut OsRng);
 
-  // RemoveParticipant → Some(RemoveParticipant)
   let tx = Transaction::RemoveParticipant { participant, signed: Signed::default() };
   assert_eq!(tx.topic(), Some(Topic::RemoveParticipant { participant }));
 
-  // DkgParticipation → None
   let tx = Transaction::DkgParticipation { participation: vec![], signed: Signed::default() };
   assert_eq!(tx.topic(), None);
 
-  // DkgConfirmationPreprocess → DkgConfirmation with Preprocess round
   let tx = Transaction::DkgConfirmationPreprocess {
-    attempt: 5,
+    attempt: 0,
     preprocess: [0; 64],
     signed: Signed::default(),
   };
   assert_eq!(
     tx.topic(),
-    Some(Topic::DkgConfirmation { attempt: 5, round: SigningProtocolRound::Preprocess })
+    Some(Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Preprocess })
   );
 
-  // DkgConfirmationShare → DkgConfirmation with Share round
   let tx =
-    Transaction::DkgConfirmationShare { attempt: 3, share: [0; 32], signed: Signed::default() };
+    Transaction::DkgConfirmationShare { attempt: 0, share: [0; 32], signed: Signed::default() };
   assert_eq!(
     tx.topic(),
-    Some(Topic::DkgConfirmation { attempt: 3, round: SigningProtocolRound::Share })
+    Some(Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Share })
   );
 
-  // Provided transactions → None
   for tx in all_provided_transactions() {
     assert_eq!(tx.topic(), None, "Provided tx should have no topic: {tx:?}");
   }
 
-  // Sign → Topic::Sign preserving all fields
   let id = VariantSignId::Batch([9; 32]);
   let tx = Transaction::Sign {
     id,
-    attempt: 2,
+    attempt: 0,
     round: SigningProtocolRound::Share,
     data: vec![],
     signed: Signed::default(),
   };
-  assert_eq!(tx.topic(), Some(Topic::Sign { id, attempt: 2, round: SigningProtocolRound::Share }));
+  assert_eq!(tx.topic(), Some(Topic::Sign { id, attempt: 0, round: SigningProtocolRound::Share }));
 
-  // SlashReport → Topic::SlashReport
   let tx = Transaction::SlashReport { slash_points: vec![], signed: Signed::default() };
   assert_eq!(tx.topic(), Some(Topic::SlashReport));
 }
@@ -445,7 +444,7 @@ mod sign {
     // Wrong genesis fails verification
     {
       let mut tx = Transaction::RemoveParticipant {
-        participant: SeraiAddress([1; 32]),
+        participant: random_serai_address(&mut OsRng),
         signed: Signed::default(),
       };
       tx.sign(&mut OsRng, new_genesis(), &key);

@@ -49,6 +49,8 @@ rand = { version = "0.8", default-features = false, features = ["std"] }
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 proptest = "1"
 tributary-sdk = { path = "../tributary-sdk", features = ["tests"] }
+tokio = { version = "1", default-features = false, features = ["rt", "time", "macros", "rt-multi-thread"] }
+serai-test-task = { path = "../../tests/task" }
 serai-substrate-tests = { path = "../../tests/substrate" }
 
 [features]
