@@ -82,7 +82,7 @@ pub(super) fn check_equivocation_proof(mut equivocation_proof: &[u8]) -> Option<
     None?
   };
   let offender = equivocation_proof.offender().clone();
-  if sp_consensus_grandpa::check_equivocation_proof(equivocation_proof) {
+  if !sp_consensus_grandpa::check_equivocation_proof(equivocation_proof) {
     None?;
   }
   Some(offender)
