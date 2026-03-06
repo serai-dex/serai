@@ -69,7 +69,7 @@ impl TryFrom<ValidatorSet> for ExternalValidatorSet {
 }
 
 /// An error from [`ValidatorSet::musig_key`].
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub enum MusigKeyError {
   /// An invalid key was provided.
   InvalidKey,
