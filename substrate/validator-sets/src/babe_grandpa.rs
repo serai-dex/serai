@@ -113,6 +113,12 @@ impl<T: Config> Pallet<T> {
         validators_to_grandpa_validators(&serai_validators),
         validators_to_grandpa_validators(&queued_serai_validators),
       );
+
+      // If any of these validators were already disabled, immediately report as such
+      for i in <Self as frame_support::traits::DisabledValidators>::disabled_validators() {
+        crate::Babe::<T>::on_disabled(i);
+        crate::Grandpa::<T>::on_disabled(i);
+      }
     }
   }
 }

@@ -357,9 +357,8 @@ pub(crate) fn submit_equivocation(equivocation_proof: EquivocationProof<Header>)
     };
 
     return super::submit_babe_grandpa_equivocation(
-      inner_session,
       validator,
-      (BABE_EQUIVOCATION, equivocation_proof).encode().try_into().expect(
+      (BABE_EQUIVOCATION, inner_session, equivocation_proof).encode().try_into().expect(
         "`EquivocationProof<BabeHeader>` is of constant size less than the bound for a reason",
       ),
     );

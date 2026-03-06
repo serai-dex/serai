@@ -13,11 +13,10 @@ const BABE_EQUIVOCATION: u8 = 0;
 const GRANDPA_EQUIVOCATION: u8 = 1;
 
 fn submit_babe_grandpa_equivocation(
-  session: Session,
   validator: SeraiAddress,
   reason: sp_core::bounded::BoundedVec<u8, ConstU32<{ u16::MAX as u32 }>>,
 ) -> Option<()> {
-  let slashes = serai_abi::validator_sets::Slashes::Serai { session, validator, reason };
+  let slashes = serai_abi::validator_sets::Slashes::Serai { validator, reason };
   let transaction: <Block as sp_runtime::traits::Block>::Extrinsic =
     serai_abi::Transaction::Unsigned {
       call: serai_abi::UnsignedCall::try_from(serai_abi::Call::from(
@@ -29,14 +28,13 @@ fn submit_babe_grandpa_equivocation(
 }
 
 #[must_use]
-pub(super) fn verify_serai_slash_reason(
-  session: Session,
-  validator: SeraiAddress,
-  reason: &[u8],
-) -> bool {
-  let Some(kind) = reason.first() else { return false };
-  let reason = &reason[1 ..];
-  let (key_type, expected_authority_id) = match *kind {
+pub(super) fn verify_serai_slash_reason(validator: SeraiAddress, mut reason: &[u8]) -> bool {
+  let Ok((kind, session)) =
+    <(u8, Session) as borsh::BorshDeserialize>::deserialize_reader(&mut reason)
+  else {
+    return false;
+  };
+  let (key_type, expected_authority_id) = match kind {
     kind if kind == BABE_EQUIVOCATION => {
       let Some(authority_id) = babe::check_equivocation_proof(reason) else { return false };
       (sp_core::crypto::key_types::BABE, authority_id.into_inner())

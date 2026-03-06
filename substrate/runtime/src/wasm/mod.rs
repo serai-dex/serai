@@ -236,21 +236,20 @@ sp_api::impl_runtime_apis! {
         the runtime, it likely would have been better to make use of the `ValidateUnsigned` within
         `serai-validator-sets-pallet`.
       */
-      if let Some((session, validator, reason)) = (|| {
+      if let Some((validator, reason)) = (|| {
         let serai_abi::Transaction::Unsigned { call } = &extrinsic else { None? };
         let call: &serai_abi::Call = call.as_ref();
         let serai_abi::Call::ValidatorSets(call) = call else { None? };
         let serai_abi::validator_sets::Call::report_slashes(slashes) = call else { None? };
         let serai_abi::validator_sets::Slashes::Serai {
-          session,
           validator,
           reason,
         } = slashes else {
           None?
         };
-        Some((*session, *validator, reason))
+        Some((*validator, reason))
       })() {
-        if !verify_serai_slash_reason(session, validator, reason.as_ref()) {
+        if !verify_serai_slash_reason(validator, reason.as_ref()) {
           Err(TransactionValidityError::Invalid(InvalidTransaction::BadProof))?;
         }
       }

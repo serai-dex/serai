@@ -617,13 +617,9 @@ mod pallet {
 
     #[pallet::call_index(1)]
     #[pallet::weight((<T as Config>::Weights::slash_serai_validator(), DispatchClass::Operational))]
-    pub fn slash_serai_validator(
-      origin: OriginFor<T>,
-      session: Session,
-      validator: SeraiAddress,
-    ) -> DispatchResult {
+    pub fn slash_serai_validator(origin: OriginFor<T>, validator: SeraiAddress) -> DispatchResult {
       ensure_none(origin)?;
-      Abstractions::<T>::slash_serai_validator(session, validator);
+      Abstractions::<T>::slash_serai_validator(validator);
       Ok(())
     }
 
@@ -813,7 +809,7 @@ mod pallet {
             .propagate(true)
             .build()
         }
-        Call::slash_serai_validator { session, validator } => {
+        Call::slash_serai_validator { validator } => {
           /*
             This is expected to be validated by the node, or at the very least, a higher level. The
             only validation performed here is that the transaction isn't stale as it doesn't make
@@ -846,7 +842,7 @@ mod pallet {
           }
 
           ValidTransaction::with_tag_prefix("ValidatorSets")
-            .and_provides((2, session, validator))
+            .and_provides((2, validator))
             .longevity(KeySharesStruct::MAX_PER_SET_U32.into())
             .propagate(true)
             .build()

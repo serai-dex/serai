@@ -6,7 +6,7 @@ use serai_abi::{
   primitives::{
     address::SeraiAddress, network_id::NetworkId, coin::Coin, balance::*, validator_sets::*,
   },
-  validator_sets::Event,
+  validator_sets::{ReportedSlashes, Event},
 };
 
 use frame_support::{traits::OneSessionHandler as _, storage::StorageMap};
@@ -73,7 +73,7 @@ pub(crate) trait SlashReports {
   /// `Slashes` event.
   ///
   /// The slashed coins will be burnt.
-  fn slash_serai_validator(session: Session, validator: SeraiAddress);
+  fn slash_serai_validator(validator: SeraiAddress);
 }
 
 fn fatal_slash<Storage: SlashReportsStorage>(network: NetworkId, validator: SeraiAddress) {
@@ -113,7 +113,6 @@ fn handle_slash_report<Storage: SlashReportsStorage>(
 ) {
   let validators_with_rewards =
     Storage::PendingSlashReport::take(set).expect("handling a slash report which wasn't pending");
-  Core::<Storage::Config>::emit_event(Event::Slashes { set: set.into() });
 
   // If no report was submitted, do not distribute any rewards
   let Some(slashes) = slashes else { return };
@@ -153,6 +152,8 @@ fn handle_slash_report<Storage: SlashReportsStorage>(
       Slash::Fatal => fatal_slash::<Storage>(set.network.into(), validator),
     }
   }
+
+  Core::<Storage::Config>::emit_event(Event::Slashes(ReportedSlashes::ExternalValidatorSet(set)));
 }
 
 impl<Storage: SlashReportsStorage> SlashReports for Storage {
@@ -252,24 +253,47 @@ impl<Storage: SlashReportsStorage> SlashReports for Storage {
     })
   }
 
-  fn slash_serai_validator(session: Session, validator: SeraiAddress) {
+  fn slash_serai_validator(validator: SeraiAddress) {
     let network = NetworkId::Serai;
-    let set = ValidatorSet { network, session };
-    Core::<Storage::Config>::emit_event(Event::Slashes { set });
     fatal_slash::<Self>(network, validator);
+    Core::<Storage::Config>::emit_event(Event::Slashes(ReportedSlashes::SeraiValidator(validator)));
 
-    // If this for the current session, disable the validator
-    if session ==
-      crate::pallet::CurrentSession::<Storage::Config>::get(network)
-        .expect("slashing Serai validator yet no current session for Serai?")
+    /*
+      If the validator is current and now disabled, emit the relevant BABE/GRANDPA logs.
+
+      This is premised on how an already-disabled validator's slash would be considered stale and
+      not pass validation. If this assumption is wrong, then a validator may have the disabled
+      event emitted multiple times, though this isn't considered an issue.
+
+      This does not consider how a validator may be _re-enabled_ if the validator proceeds to
+      re-allocate sufficient stake, as BABE/GRANDPA do not have such logs. As this log is seemingly
+      only intended for light clients, being entirely without consumption in the actual Serai node,
+      the real comment is light clients should not peruse these logs but rather Serai's own events
+      to determine the current validators.
+
+      TODO: Make this understanding concrete by patching `polkadot-sdk` to remove this flow
+      entirely, ensuring it was as described and isn't extended to new usage in the future.
+    */
+    let current_session = crate::Pallet::<Storage::Config>::current_session(NetworkId::Serai)
+      .expect("Serai validator is being slashed before Serai had a session begin");
+    if let Some(disabled_validator_i) =
+      crate::Pallet::<Storage::Config>::selected_validators(ValidatorSet {
+        network: NetworkId::Serai,
+        session: current_session,
+      })
+      .enumerate()
+      .find_map(|(i, (this_validator, _auxiliary_keys))| {
+        (this_validator == validator)
+          .then_some(u32::try_from(i).expect("amount of validators in set exceeded `u32`"))
+      })
+      .filter(|i| {
+        <crate::Pallet<Storage::Config> as frame_support::traits::DisabledValidators>::is_disabled(
+          *i,
+        )
+      })
     {
-      // Panicking here is fine as a majority of Serai validators approved an invalid inherent
-      let i = crate::Pallet::<Storage::Config>::selected_validators(set)
-        .position(|(this_validator, _)| this_validator == validator)
-        .expect("slashing Serai validator who was not in the alleged session");
-      let i = u32::try_from(i).unwrap();
-      crate::Babe::<Storage::Config>::on_disabled(i);
-      crate::Grandpa::<Storage::Config>::on_disabled(i);
+      crate::Babe::<Storage::Config>::on_disabled(disabled_validator_i);
+      crate::Grandpa::<Storage::Config>::on_disabled(disabled_validator_i);
     }
   }
 }

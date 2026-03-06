@@ -4,10 +4,7 @@ use std::sync::Arc;
 use futures::stream::{StreamExt as _, FuturesOrdered};
 
 use serai_client_serai::{
-  abi::{
-    self,
-    primitives::{network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet},
-  },
+  abi::{self, primitives::network_id::ExternalNetworkId, validator_sets::ReportedSlashes},
   Serai,
 };
 
@@ -137,15 +134,20 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
         }
 
         for slash_report in block.slash_report_events {
-          let abi::validator_sets::Event::Slashes { set } = &slash_report else {
+          // TODO: This assumes this is always reported on set close but that isn't the case. We
+          // need to shim this event if the report isn't published in a timely fashion.
+          let abi::validator_sets::Event::Slashes(reported_slashes) = &slash_report else {
             panic!("`Slashes` event wasn't a `Slashes` event: {slash_report:?}");
           };
-          if let Ok(set) = ExternalValidatorSet::try_from(*set) {
-            crate::Canonical::send(
-              &mut txn,
-              set.network,
-              &CoordinatorMessage::SlashesReported { session: set.session },
-            );
+          match reported_slashes {
+            ReportedSlashes::SeraiValidator(_) => {}
+            ReportedSlashes::ExternalValidatorSet(set) => {
+              crate::Canonical::send(
+                &mut txn,
+                set.network,
+                &CoordinatorMessage::SlashesReported { session: set.session },
+              );
+            }
           }
         }
 
