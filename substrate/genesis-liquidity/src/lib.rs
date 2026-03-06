@@ -30,6 +30,7 @@ mod pallet {
 
   use alloc::vec;
 
+  use sp_core::sr25519::Public;
   use sp_application_crypto::RuntimePublic as _;
 
   use frame_support::{sp_runtime, pallet_prelude::*, dispatch::RawOrigin};
@@ -37,10 +38,7 @@ mod pallet {
 
   use serai_abi::{
     primitives::{
-      prelude::*,
-      BitVec,
-      crypto::{RistrettoSignature, EmbeddedEllipticCurveKeys},
-      validator_sets::KeyShares,
+      prelude::*, BitVec, crypto::RistrettoSignature, validator_sets::KeyShares,
       genesis_liquidity::GenesisValues,
     },
     economic_security::EconomicSecurity,
@@ -68,10 +66,11 @@ mod pallet {
     fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (SeraiAddress, KeyShares)>;
 
     /// The auxiliary keys for a validator.
-    fn auxiliary_keys(
-      validator: SeraiAddress,
-      network: NetworkId,
-    ) -> Option<EmbeddedEllipticCurveKeys>;
+    ///
+    /// This method is not immediately available via [`serai_validator_sets_pallet::Pallet`]. This
+    /// method is expected to return the Serai auxiliary key for a validator, as it was when the
+    /// set was decided. This may return `None` for any session which is not the current session.
+    fn serai_auxiliary_key(validator: SeraiAddress, set: ValidatorSet) -> Option<Public>;
 
     /// The required amount of SRI which must be allocated as stake for a network to be considered
     /// economically secure.
@@ -100,11 +99,21 @@ mod pallet {
       serai_validator_sets_pallet::Pallet::<T>::selected_validators(set)
     }
 
-    fn auxiliary_keys(
-      validator: SeraiAddress,
-      network: NetworkId,
-    ) -> Option<EmbeddedEllipticCurveKeys> {
-      serai_validator_sets_pallet::Pallet::<T>::auxiliary_keys(validator, network)
+    fn serai_auxiliary_key(validator: SeraiAddress, set: ValidatorSet) -> Option<Public> {
+      /*
+        This could use `serai_validator_sets_pallet::Pallet::auxiliary_keys`, executing with a
+        constant amount of storage accesses, yet returning the latest auxiliary keys this validator
+        declared. Instead, it returns the auxiliary keys the validator used when selected as a
+        validator. This prevents a validator from updating their keys _to effect_ within a session,
+        though it effects a linear amount of work to retrieve the keys.
+
+        This is considered fine as this should actually only be called once, when values are
+        oraclized onto the network at the end of the genesis.
+      */
+      serai_validator_sets_pallet::Pallet::<T>::selected_validators_with_serai_auxiliary_keys(set)
+        .find_map(|(this_validator, auxiliary_keys)| {
+          (validator == this_validator).then_some(auxiliary_keys)
+        })
     }
 
     fn network_stake_requirement(network: ExternalNetworkId) -> Amount {
@@ -783,21 +792,10 @@ mod pallet {
               total_key_shares += u16::from(key_shares);
               if *participating {
                 participating_key_shares += u16::from(key_shares);
-                participating_keys.push(
-                  match T::ValidatorSets::auxiliary_keys(validator, NetworkId::Serai) {
-                    Some(serai_abi::primitives::crypto::EmbeddedEllipticCurveKeys::Serai(key)) => {
-                      sp_core::sr25519::Public::from(key)
-                    }
-                    Some(_) => {
-                      panic!(
-                        "`ValidatorSets` yielded auxiliary key for XYZ despite requesting `Serai`"
-                      )
-                    }
-                    None => {
-                      panic!("validator missing auxiliary keys for network they were selected for")
-                    }
-                  },
-                );
+                participating_keys
+                  .push(T::ValidatorSets::serai_auxiliary_key(validator, set).expect(
+                    "validator missing Serai auxiliary key for set they were selected for",
+                  ));
               }
             }
 
