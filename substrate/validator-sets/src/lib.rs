@@ -70,8 +70,8 @@ use serai_abi::{
     coin::Coin,
     balance::{Amount, Balance},
     validator_sets::{
-      Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct, SlashReport,
-      DeallocationTimeline,
+      MusigKeyError, Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct,
+      SlashReport, DeallocationTimeline,
     },
   },
   economic_security::EconomicSecurity,
@@ -769,13 +769,22 @@ mod pallet {
           }
 
           // Verify the signature with the MuSig key of the signers
-          match signature {
-            Signature::Ristretto(signature) => {
-              if !ValidatorSet::from(set)
-                .musig_key(&signers)
-                .verify(&set.set_keys_message(key_pair), &signature.0.into())
-              {
-                Err(InvalidTransaction::BadProof)?;
+          {
+            let key = match ValidatorSet::from(set).musig_key(&signers) {
+              Ok(key) => key,
+              Err(MusigKeyError::InvalidKey) => panic!("invalid auxiliary key on-chain"),
+              Err(MusigKeyError::NoKeysProvided) => {
+                panic!("participants had sufficient key shares but no keys")
+              }
+              Err(MusigKeyError::TooManyKeysProvided) => {
+                panic!("more validators in set than allowed by `dkg` (`u16::MAX`)")
+              }
+            };
+            match signature {
+              Signature::Ristretto(signature) => {
+                if !key.verify(&set.set_keys_message(key_pair), &signature.0.into()) {
+                  Err(InvalidTransaction::BadProof)?;
+                }
               }
             }
           }

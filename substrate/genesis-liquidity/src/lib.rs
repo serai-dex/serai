@@ -38,7 +38,10 @@ mod pallet {
 
   use serai_abi::{
     primitives::{
-      prelude::*, BitVec, crypto::RistrettoSignature, validator_sets::KeyShares,
+      prelude::*,
+      BitVec,
+      crypto::RistrettoSignature,
+      validator_sets::{MusigKeyError, KeyShares},
       genesis_liquidity::GenesisValues,
     },
     economic_security::EconomicSecurity,
@@ -820,8 +823,18 @@ mod pallet {
               detail.
             */
             let public_key: sp_core::sr25519::Public =
-              (ValidatorSet { network: NetworkId::Serai, session: Session(0) })
-                .musig_key(&participating_keys);
+              match (ValidatorSet { network: NetworkId::Serai, session: Session(0) })
+                .musig_key(&participating_keys)
+              {
+                Ok(key) => key,
+                Err(MusigKeyError::InvalidKey) => panic!("invalid auxiliary key on-chain"),
+                Err(MusigKeyError::NoKeysProvided) => {
+                  panic!("participants had sufficient key shares but no keys")
+                }
+                Err(MusigKeyError::TooManyKeysProvided) => {
+                  panic!("more validators in set than allowed by `dkg` (`u16::MAX`)")
+                }
+              };
             if !public_key.verify(
               &values.oraclize_values_message(),
               &sp_core::sr25519::Signature::from(*signature),
