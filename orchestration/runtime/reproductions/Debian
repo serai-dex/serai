@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 # check=error=true
 
-# rust:1.93.1-slim-trixie as of February 13th, 2026 (GMT)
-FROM rust@sha256:be030f67af64b7a5d35a69db45933f5c4589a16303e0ea4a6e3746b42b0679b9 AS builder
+# rust:1.94.0-slim-trixie as of March 7th, 2026 (GMT)
+FROM rust@sha256:d6782f2b326a10eaf593eb90cafc34a03a287b4a25fe4d0c693c90304b06f6d7 AS builder
 
 # Add Rust's source, as necessary to `build-std` as we do for the WASM
 RUN rustup component add rust-src

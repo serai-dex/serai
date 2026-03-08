@@ -24,7 +24,7 @@ jobs:
 
       - name: Run Tests for Libraries on Redoxer
         run: |
-          cargo +1.93 install redoxer --version =0.2.62
+          cargo +1.94.0 install redoxer --version =0.2.62
           redoxer toolchain
           GITHUB_CI=true RUST_BACKTRACE=1 redoxer test -- --all-features \
             -p std-shims \
