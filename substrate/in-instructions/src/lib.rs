@@ -103,11 +103,7 @@ mod pallet {
 
         if let Some(pending_liquidity_resolving_this_block) = {
           let historical_block = frame_system::Pallet::<T>::block_number()
-            .checked_sub(&BlockNumberFor::<T>::from(1u32))
-            .and_then(|prior_block| {
-              prior_block
-                .checked_sub(&BlockNumberFor::<T>::from(BLOCKS_TO_ADD_PENDING_LIQUIDITY_OVER))
-            });
+            .checked_sub(&BlockNumberFor::<T>::from(BLOCKS_TO_ADD_PENDING_LIQUIDITY_OVER.max(1)));
           historical_block
             .and_then(|historical_block| PendingLiquidity::<T>::take(coin, historical_block))
         } {
