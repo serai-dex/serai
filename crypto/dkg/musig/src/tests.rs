@@ -9,9 +9,8 @@ use ciphersuite::WrappedGroup;
 use dkg_recovery::recover_key;
 use crate::*;
 
-/// Tests MuSig key generation.
 #[test]
-pub fn test_musig() {
+fn test_musig() {
   const PARTICIPANTS: u16 = 5;
 
   let mut keys = vec![];

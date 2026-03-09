@@ -19,9 +19,9 @@ pub use dkg::*;
 #[cfg(test)]
 mod tests;
 
-/// Errors encountered when working with threshold keys.
+/// Errors encountered when calculating a MuSig-aggregated key.
 #[derive(Clone, PartialEq, Eq, Debug, thiserror::Error)]
-pub enum MusigError<C: Ciphersuite> {
+pub enum MusigKeyError<C: Ciphersuite> {
   /// No keys were provided.
   #[error("no keys provided")]
   NoKeysProvided,
@@ -36,6 +36,14 @@ pub enum MusigError<C: Ciphersuite> {
   /// A participant was duplicated.
   #[error("a participant was duplicated")]
   DuplicatedParticipant(C::G),
+}
+
+/// Errors encountered when working with threshold keys.
+#[derive(Clone, PartialEq, Eq, Debug, thiserror::Error)]
+pub enum MusigError<C: Ciphersuite> {
+  /// An error with regard to the validity of the key which would be made.
+  #[error("error with what would be the MuSig key ({0})")]
+  MusigKeyError(MusigKeyError<C>),
   /// Participating, yet our public key wasn't found in the list of keys.
   #[error("private key's public key wasn't present in the list of public keys")]
   NotPresent,
@@ -44,19 +52,19 @@ pub enum MusigError<C: Ciphersuite> {
   DkgError(DkgError),
 }
 
-fn check_keys<C: Ciphersuite>(keys: &[C::G]) -> Result<u16, MusigError<C>> {
+fn check_keys<C: Ciphersuite>(keys: &[C::G]) -> Result<u16, MusigKeyError<C>> {
   if keys.is_empty() {
-    Err(MusigError::NoKeysProvided)?;
+    Err(MusigKeyError::NoKeysProvided)?;
   }
 
   let keys_len = u16::try_from(keys.len())
-    .map_err(|_| MusigError::TooManyKeysProvided { max: u16::MAX, provided: keys.len() })?;
+    .map_err(|_| MusigKeyError::TooManyKeysProvided { max: u16::MAX, provided: keys.len() })?;
 
   let mut set = HashSet::with_capacity(keys.len());
   for key in keys {
     let bytes = key.to_bytes().as_ref().to_vec();
     if !set.insert(bytes) {
-      Err(MusigError::DuplicatedParticipant(*key))?;
+      Err(MusigKeyError::DuplicatedParticipant(*key))?;
     }
   }
 
@@ -88,7 +96,7 @@ fn binding_factor<C: Ciphersuite>(mut transcript: Vec<u8>, i: u16) -> C::F {
 fn musig_key_multiexp<C: Ciphersuite>(
   context: [u8; 32],
   keys: &[C::G],
-) -> Result<Vec<(C::F, C::G)>, MusigError<C>> {
+) -> Result<Vec<(C::F, C::G)>, MusigKeyError<C>> {
   let keys_len = check_keys::<C>(keys)?;
   let transcript = binding_factor_transcript::<C>(context, keys_len, keys);
   let mut multiexp = Vec::with_capacity(keys.len());
@@ -100,20 +108,32 @@ fn musig_key_multiexp<C: Ciphersuite>(
 
 /// The group key resulting from using this library's MuSig key aggregation.
 ///
+/// This key will be derived from the list as it is, with the exact ordering affecting the
+/// resulting key.
+///
 /// This function executes in variable time and MUST NOT be used with secret data.
 pub fn musig_key_vartime<C: Ciphersuite>(
   context: [u8; 32],
   keys: &[C::G],
-) -> Result<C::G, MusigError<C>> {
-  Ok(multiexp::multiexp_vartime(&musig_key_multiexp(context, keys)?))
+) -> Result<C::G, MusigKeyError<C>> {
+  Ok(multiexp::multiexp_vartime(&musig_key_multiexp::<C>(context, keys)?))
 }
 
 /// The group key resulting from using this library's MuSig key aggregation.
-pub fn musig_key<C: Ciphersuite>(context: [u8; 32], keys: &[C::G]) -> Result<C::G, MusigError<C>> {
-  Ok(multiexp::multiexp(&musig_key_multiexp(context, keys)?))
+///
+/// This key will be derived from the list as it is, with the exact ordering affecting the
+/// resulting key.
+pub fn musig_key<C: Ciphersuite>(
+  context: [u8; 32],
+  keys: &[C::G],
+) -> Result<C::G, MusigKeyError<C>> {
+  Ok(multiexp::multiexp(&musig_key_multiexp::<C>(context, keys)?))
 }
 
 /// A n-of-n non-interactive DKG which does not guarantee the usability of the resulting key.
+///
+/// The resulting key will be derived from the list as it is, with the exact ordering affecting the
+/// resulting key.
 pub fn musig<C: Ciphersuite>(
   context: [u8; 32],
   private_key: Zeroizing<C::F>,
@@ -124,7 +144,7 @@ pub fn musig<C: Ciphersuite>(
     Err(MusigError::DkgError(DkgError::NotParticipating))?
   };
 
-  let keys_len: u16 = check_keys::<C>(keys)?;
+  let keys_len: u16 = check_keys::<C>(keys).map_err(MusigError::MusigKeyError)?;
 
   let params = ThresholdParams::new(
     keys_len,

@@ -405,7 +405,7 @@ mod pallet {
       liquidity_tokens: ExternalBalance,
     ) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      LiquidityTokens::<T>::transfer_fn(from, to, liquidity_tokens.into())?;
+      LiquidityTokens::<T>::transfer_internal(from, to, liquidity_tokens.into())?;
 
       Self::emit_event(Event::LiquidityTransfer { from, to, liquidity_tokens });
 

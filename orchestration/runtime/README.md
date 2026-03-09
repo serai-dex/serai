@@ -23,8 +23,9 @@ Currently, the following reproductions are available:
 - Rust Debian (official image)
 - Rust Alpine (official image)
 
-They are verified to produce an identical WASM blob in our CI but are not
-guaranteed to nor endorsed as an alternative method of production.
+They are verified to produce an identical WASM blob in our CI, across certain
+CPU architectures, but are not guaranteed to nor are they endorsed as an
+alternative method of production.
 
 ### `bootstrap/`
 

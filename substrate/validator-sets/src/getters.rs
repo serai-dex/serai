@@ -11,6 +11,11 @@ impl<T: Config> Pallet<T> {
     CurrentSession::<T>::get(network)
   }
 
+  /// The allocation required per key share.
+  pub fn allocation_per_key_share(network: NetworkId) -> Option<Amount> {
+    AllocationPerKeyShare::<T>::get(network)
+  }
+
   /// The amount of key shares a validator set has.
   ///
   /// This will return `None` for historic sets, per the definition in the `Sessions` abstraction.
@@ -65,6 +70,17 @@ impl<T: Config> Pallet<T> {
   ) -> impl Iterator<Item = (SeraiAddress, KeySharesStruct)> {
     SelectedValidators::<T>::iter_prefix(set)
       .map(|(validator, (_aux_key, key_shares))| (validator, key_shares))
+  }
+
+  /// The validators selected for a validator set and their auxiliary keys for Serai.
+  ///
+  /// This will return an empty iterator for a set which hasn't been decided and MAY do so for
+  /// _any_ historic set, per the definition in the `Sessions` abstraction.
+  pub fn selected_validators_with_serai_auxiliary_keys(
+    set: ValidatorSet,
+  ) -> impl Iterator<Item = (SeraiAddress, SchnorrkelPublic)> {
+    SelectedValidators::<T>::iter_prefix(set)
+      .map(|(validator, (aux_key, _key_shares))| (validator, aux_key))
   }
 
   /// The oraclization key for a validator set.

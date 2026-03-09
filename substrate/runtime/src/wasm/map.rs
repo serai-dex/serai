@@ -23,8 +23,8 @@ impl From<serai_abi::Call> for RuntimeCall {
           Call::set_keys { network, key_pair, signature_participants, signature } => {
             Scall::set_keys { network, key_pair, signature_participants, signature }
           }
-          Call::report_slashes(Slashes::Serai { session, validator, reason: _ }) => {
-            Scall::slash_serai_validator { session, validator }
+          Call::report_slashes(Slashes::Serai { validator, reason: _ }) => {
+            Scall::slash_serai_validator { validator }
           }
           Call::report_slashes(Slashes::ExternalNetwork { set, slashes, signature }) => {
             Scall::report_slashes { set, slashes, signature }

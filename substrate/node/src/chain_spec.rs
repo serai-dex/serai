@@ -1,11 +1,4 @@
-use std::sync::Arc;
-
-use sp_core::{Decode as _, Pair as _};
-use sp_runtime::traits::{Block as _, Header as _};
-use sc_client_db::Backend;
-use sc_executor::RuntimeVersionOf;
-use sc_chain_spec::{BuildGenesisBlock, GenesisBlockBuilder, ChainSpec as ChainSpecTrait};
-use sc_service::ChainType;
+use std::{sync::Arc, fs};
 
 use rand_core::OsRng;
 use zeroize::Zeroizing;
@@ -17,31 +10,59 @@ use dalek_ff_group::Ristretto;
 use embedwards25519::Embedwards25519;
 use secq256k1::Secq256k1;
 
+use sp_core::{
+  Encode as _, Decode as _, Pair as _,
+  sr25519::Pair,
+  traits::{RuntimeCode, WrappedRuntimeCode, CallContext, CodeExecutor as _},
+};
+use sp_runtime::{
+  Digest,
+  traits::{Block as _, Header as _},
+};
+use sp_state_machine::BasicExternalities;
+use sp_io::SubstrateHostFunctions;
+
 use serai_abi::{
   primitives::{prelude::*, crypto::SignedEmbeddedEllipticCurveKeys},
   SubstrateBlock as Block,
 };
 use serai_runtime::GenesisConfig;
 
-pub type ChainSpec = sc_service::GenericChainSpec;
+use sc_client_db::{BlockImportOperation, Backend};
+use sc_executor::{RuntimeVersionOf, WasmExecutor};
+use sc_chain_spec::{BuildGenesisBlock, GenesisBlockBuilder, ChainSpecBuilder};
+use sc_service::{ChainType, ChainSpec as _, GenericChainSpec as ChainSpec};
 
-fn insecure_keypair_from_name(name: &'static str) -> sp_core::sr25519::Pair {
-  sp_core::sr25519::Pair::from_string(&format!("//{name}"), None).unwrap()
+/// Generate the key pair for the validator corresponding to a development seed.
+///
+/// This is insecure and MUST NOT be used except testing purposes.
+///
+/// Note the development seed itself is used as the _auxiliary key_ used to operate the node with.
+pub(super) fn validator_identity_for_dev_seed(dev_seed: &str) -> SeraiAddress {
+  Pair::from_seed(&sp_core::blake2_256(dev_seed.as_bytes())).public().into()
 }
 
+/// Create an insecure key pair from a name alone.
+///
+/// This will have effectively no entropy and MUST NOT be used except for testing purposes.
+fn insecure_keypair_from_name(name: &'static str) -> Pair {
+  Pair::from_string(&format!("//{name}"), None).unwrap()
+}
+
+/// Create an insecure Serai address (with known private key) from a name alone.
+///
+/// This will have effectively no entropy and MUST NOT be used except for testing purposes.
 fn insecure_account_from_name(name: &'static str) -> SeraiAddress {
-  sp_core::sr25519::Pair::from_seed(&sp_core::blake2_256(format!("//{name}").as_bytes()))
-    .public()
-    .into()
+  Pair::from_seed(&sp_core::blake2_256(format!("//{name}").as_bytes())).public().into()
 }
 
-fn insecure_embedded_elliptic_curve_keys(
-  name: &'static str,
-) -> Vec<SignedEmbeddedEllipticCurveKeys> {
+/// Create a list of insecure auxiliary keys for the specified validator.
+fn insecure_auxiliary_keys(name: &'static str) -> Vec<SignedEmbeddedEllipticCurveKeys> {
+  let validator = insecure_account_from_name(name);
   vec![
     SignedEmbeddedEllipticCurveKeys::serai(
       &mut OsRng,
-      insecure_account_from_name(name),
+      validator,
       &Zeroizing::new(
         <Ristretto as WrappedGroup>::F::from_repr(
           insecure_keypair_from_name(name).to_raw_vec()[.. 32].try_into().unwrap(),
@@ -51,34 +72,33 @@ fn insecure_embedded_elliptic_curve_keys(
     ),
     SignedEmbeddedEllipticCurveKeys::bitcoin(
       &mut OsRng,
-      insecure_account_from_name(name),
+      validator,
       &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
       &Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut OsRng)),
     ),
     SignedEmbeddedEllipticCurveKeys::ethereum(
       &mut OsRng,
-      insecure_account_from_name(name),
+      validator,
       &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
       &Zeroizing::new(<Secq256k1 as WrappedGroup>::F::random(&mut OsRng)),
     ),
     SignedEmbeddedEllipticCurveKeys::monero(
       &mut OsRng,
-      insecure_account_from_name(name),
+      validator,
       &Zeroizing::new(<Embedwards25519 as WrappedGroup>::F::random(&mut OsRng)),
     ),
   ]
 }
 
 fn wasm_binary(dev: bool) -> Vec<u8> {
-  // TODO: Accept a config of runtime path
   const DEFAULT_WASM_PATH: &str = "/runtime/serai.wasm";
-  let path = serai_env::var("SERAI_WASM").unwrap_or(DEFAULT_WASM_PATH.to_owned());
-  if let Ok(binary) = std::fs::read(&path) {
+  let path = serai_env::var("SERAI_WASM_PATH").unwrap_or(DEFAULT_WASM_PATH.to_owned());
+  if let Ok(binary) = fs::read(&path) {
     log::info!("using {path} for the WASM");
     return binary;
   }
 
-  assert!(dev, "runtime WASM was not provided for non-dev network");
+  assert!(dev, "could not read WASM for the runtime and this is not a dev network");
 
   log::info!("using built-in wasm");
   serai_runtime::WASM.to_vec()
@@ -91,7 +111,7 @@ fn devnet_genesis(
   GenesisConfig {
     validators: validators
       .iter()
-      .map(|name| (insecure_account_from_name(name), insecure_embedded_elliptic_curve_keys(name)))
+      .map(|name| (insecure_account_from_name(name), insecure_auxiliary_keys(name)))
       .collect(),
     fees: vec![
       (ExternalCoin::Bitcoin, 2),
@@ -106,20 +126,7 @@ fn devnet_genesis(
   }
 }
 
-/*
-fn testnet_genesis(validators: &[&'static str]) -> GenesisConfig {
-  GenesisConfig {
-    validators: validators
-      .iter()
-      .map(|name| {
-        (insecure_account_from_name(name), insecure_embedded_elliptic_curve_keys(name))
-      })
-      .collect(),
-    coins: vec![],
-  }
-}
-*/
-
+/// Call Serai's genesis API, used to initialize the on-chain storage.
 fn genesis(
   name: &'static str,
   id: &'static str,
@@ -127,33 +134,26 @@ fn genesis(
   protocol_id: &'static str,
   config: &GenesisConfig,
 ) -> ChainSpec {
-  use sp_core::{
-    Encode as _,
-    traits::{RuntimeCode, WrappedRuntimeCode, CodeExecutor as _},
-  };
-  use sc_service::ChainSpec as _;
-
   let bin = wasm_binary(matches!(chain_type, ChainType::Development));
   let hash = sp_core::blake2_256(&bin).to_vec();
 
-  let mut chain_spec = sc_chain_spec::ChainSpecBuilder::new(&bin, None)
+  let mut chain_spec = ChainSpecBuilder::new(&bin, None)
     .with_name(name)
     .with_id(id)
     .with_chain_type(chain_type)
     .with_protocol_id(protocol_id)
     .build();
 
-  let mut ext = sp_state_machine::BasicExternalities::new_empty();
+  let mut ext = BasicExternalities::new_empty();
   let code_fetcher = WrappedRuntimeCode(bin.clone().into());
-  sc_executor::WasmExecutor::<sp_io::SubstrateHostFunctions>::builder()
-    .with_allow_missing_host_functions(true)
+  WasmExecutor::<SubstrateHostFunctions>::builder()
     .build()
     .call(
       &mut ext,
-      &RuntimeCode { heap_pages: None, code_fetcher: &code_fetcher, hash },
+      &RuntimeCode { code_fetcher: &code_fetcher, heap_pages: None, hash },
       "GenesisApi_build",
       &config.encode(),
-      sp_core::traits::CallContext::Onchain,
+      CallContext::Onchain,
     )
     .0
     .unwrap();
@@ -164,7 +164,7 @@ fn genesis(
   chain_spec
 }
 
-pub fn development_config() -> ChainSpec {
+pub(super) fn development_config() -> ChainSpec {
   genesis(
     "Development Network",
     "devnet",
@@ -184,7 +184,7 @@ pub fn development_config() -> ChainSpec {
   )
 }
 
-pub fn local_config() -> ChainSpec {
+pub(super) fn local_config() -> ChainSpec {
   genesis(
     "Local Test Network",
     "local",
@@ -204,61 +204,50 @@ pub fn local_config() -> ChainSpec {
   )
 }
 
-#[expect(clippy::redundant_closure_call)]
-pub fn testnet_config() -> ChainSpec {
-  genesis(
-    "Test Network 0",
-    "testnet-0",
-    ChainType::Live,
-    "serai-testnet-0",
-    &(move || {
-      // let _ = testnet_genesis(vec![]);
-      todo!("TODO")
-    })(),
-  )
-}
-
-pub fn bootnode_multiaddrs(id: &str) -> Vec<libp2p::Multiaddr> {
-  match id {
-    "devnet" | "local" => vec![],
-    "testnet-0" => todo!("TODO"),
-    _ => panic!("unrecognized network ID"),
-  }
-}
-
+/// Construct Serai's genesis block.
 struct GenesisBlock<Executor> {
+  /// The underlying genesis block builder from Substrate.
   builder: GenesisBlockBuilder<Block, Backend<Block>, Executor>,
-  digest: sp_runtime::Digest,
+  /// The `Digest`, which we want with the genesis block but must keep track of ourselves.
+  digest: Digest,
 }
 impl<Executor: RuntimeVersionOf> BuildGenesisBlock<Block> for GenesisBlock<Executor> {
-  type BlockImportOperation = sc_client_db::BlockImportOperation<Block>;
+  type BlockImportOperation = BlockImportOperation<Block>;
 
-  fn build_genesis_block(self) -> sp_blockchain::Result<(Block, Self::BlockImportOperation)> {
-    let (genesis_block, op) = self.builder.build_genesis_block()?;
+  fn build_genesis_block(
+    self,
+  ) -> Result<(Block, Self::BlockImportOperation), sp_blockchain::Error> {
+    let Self { builder, digest } = self;
 
-    let mut header = genesis_block.header().clone();
-    *header.digest_mut() = self.digest;
-    let genesis_block = Block::new(header, genesis_block.extrinsics().to_vec());
+    let (genesis_block, op) = builder.build_genesis_block()?;
+
+    // Attach the digest to the yielded block's header now
+    let genesis_block = {
+      let (mut header, transactions) = genesis_block.deconstruct();
+      *header.digest_mut() = digest;
+      Block::new(header, transactions)
+    };
 
     Ok((genesis_block, op))
   }
 }
 
+/// Construct the genesis block for Serai.
 pub(super) fn genesis_block(
-  chain_spec: &dyn ChainSpecTrait,
+  chain_spec: &dyn sc_chain_spec::ChainSpec,
   backend: Arc<Backend<Block>>,
   executor: impl RuntimeVersionOf,
 ) -> Result<
-  impl BuildGenesisBlock<Block, BlockImportOperation = sc_client_db::BlockImportOperation<Block>>,
+  impl BuildGenesisBlock<Block, BlockImportOperation = BlockImportOperation<Block>>,
   sc_service::error::Error,
 > {
   let storage = chain_spec.as_storage_builder().build_storage()?;
+  // Manually extract the `Digest` from `frame-system` as Substrate won't yield it for us
+  // TODO: While this is technically fine, it'd be better to use a `RuntimeApi`
   let digest = {
     let digest_key = [sp_core::twox_128(b"System"), sp_core::twox_128(b"Digest")].concat();
-    sp_runtime::Digest::decode(
-      &mut storage.top.get(&digest_key).expect("System Digest not set").as_slice(),
-    )
-    .expect("failed to decode System Digest")
+    Digest::decode(&mut storage.top.get(&digest_key).expect("`System Digest` not set").as_slice())
+      .expect("failed to decode `System Digest`")
   };
 
   let commit_genesis_state = true;

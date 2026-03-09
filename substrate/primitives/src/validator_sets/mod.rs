@@ -68,6 +68,17 @@ impl TryFrom<ValidatorSet> for ExternalValidatorSet {
   }
 }
 
+/// An error from [`ValidatorSet::musig_key`].
+#[derive(Debug)]
+pub enum MusigKeyError {
+  /// An invalid key was provided.
+  InvalidKey,
+  /// No keys were provided.
+  NoKeysProvided,
+  /// Too many keys were provided.
+  TooManyKeysProvided,
+}
+
 impl ValidatorSet {
   /// The MuSig context for this validator set.
   pub fn musig_context(&self) -> [u8; 32] {
@@ -76,17 +87,39 @@ impl ValidatorSet {
 
   /// The MuSig public key for a validator set.
   ///
-  /// This function panics on invalid points as keys and on invalid input, per the definition of
-  /// `dkg::musig::musig_key`.
-  pub fn musig_key(&self, keys: &[Public]) -> Public {
+  /// Because [`dkg-musig`] rejects duplicate keys present within a MuSig-aggregated key, this
+  /// function filters keys such that only the _first_ presence of a key is preserved. Later
+  /// presences will be omitted. As MuSig produces an `n`-of-`n` access structure, this does not
+  /// change which private keys must be known to sign with the resulting key.
+  pub fn musig_key(&self, keys: &[Public]) -> Result<Public, MusigKeyError> {
+    let mut deduplicated_keys = vec![];
+    {
+      let mut seen_keys = alloc::collections::BTreeSet::new();
+      for key in keys {
+        if seen_keys.insert(key) {
+          deduplicated_keys.push(key);
+        }
+      }
+    }
+
     let mut decompressed_keys = vec![];
-    for key in keys {
+    for key in deduplicated_keys {
       decompressed_keys.push(
         <Ristretto as GroupIo>::read_G::<&[u8]>(&mut key.0.as_slice())
-          .expect("invalid participant"),
+          .map_err(|_| MusigKeyError::InvalidKey)?,
       );
     }
-    dkg::musig_key::<Ristretto>(self.musig_context(), &decompressed_keys).unwrap().to_bytes().into()
+
+    match dkg::musig_key_vartime::<Ristretto>(self.musig_context(), &decompressed_keys) {
+      Ok(key) => Ok(key.to_bytes().into()),
+      Err(e) => Err(match e {
+        dkg::MusigKeyError::NoKeysProvided => MusigKeyError::NoKeysProvided,
+        dkg::MusigKeyError::TooManyKeysProvided { .. } => MusigKeyError::TooManyKeysProvided,
+        dkg::MusigKeyError::DuplicatedParticipant(_) => {
+          unreachable!("function de-duplicated keys before calling underlying")
+        }
+      }),
+    }
   }
 }
 
@@ -202,4 +235,21 @@ fn validator_set() {
       );
     }
   }
+}
+
+#[test]
+fn musig_key() {
+  use ciphersuite::WrappedGroup as _;
+  let key1 = dalek_ff_group::Ristretto::generator();
+  let key2 = key1 + key1;
+  let key3 = key2 + key1;
+
+  let key1 = key1.to_bytes().into();
+  let key2 = key2.to_bytes().into();
+  let key3 = key3.to_bytes().into();
+
+  let keys = vec![key1, key2, key1, key3];
+  let deduplicated_keys = vec![key1, key2, key3];
+  let set = ValidatorSet { network: NetworkId::Serai, session: Session(0) };
+  assert_eq!(set.musig_key(&keys).unwrap(), set.musig_key(&deduplicated_keys).unwrap());
 }

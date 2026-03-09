@@ -1,29 +1,7 @@
-use std::sync::Arc;
+use super::*;
 
-use sp_blockchain::{Error as BlockchainError, HeaderMetadata, HeaderBackend};
-use sp_consensus::BlockStatus;
-use sp_api::ProvideRuntimeApi;
-use sc_client_api::BlockBackend;
-use sc_transaction_pool_api::TransactionPool;
-
-use serai_abi::{Transaction, SubstrateBlock as Block};
-
-use serai_runtime::SeraiApi;
-
-use jsonrpsee::RpcModule;
-
-use super::utils::{Error, block_hash};
-
-pub(crate) fn module<
-  C: 'static
-    + Send
-    + Sync
-    + HeaderMetadata<Block, Error = BlockchainError>
-    + HeaderBackend<Block>
-    + BlockBackend<Block>
-    + ProvideRuntimeApi<Block, Api: SeraiApi<Block>>,
->(
-  client: Arc<C>,
+pub(crate) fn module(
+  client: Arc<FullClient>,
   pool: Arc<impl 'static + TransactionPool<Block = Block>>,
 ) -> Result<RpcModule<impl 'static + Send + Sync>, Box<dyn std::error::Error + Send + Sync>> {
   let mut module = RpcModule::new(client);
@@ -35,7 +13,7 @@ pub(crate) fn module<
   module.register_method(
     "blockchain/is_finalized",
     |params, client, _ext| -> Result<_, Error> {
-      let Some(block_hash) = block_hash(&**client, &params)? else {
+      let Some(block_hash) = block_hash(client, &params)? else {
         return Ok(false);
       };
       let finalized = client.info().finalized_number;
@@ -53,7 +31,7 @@ pub(crate) fn module<
   )?;
 
   module.register_method("blockchain/block", |params, client, _ext| -> Result<_, Error> {
-    let Some(block_hash) = block_hash(&**client, &params)? else {
+    let Some(block_hash) = block_hash(client, &params)? else {
       return Ok(None);
     };
     let Ok(Some(block)) = client.block(block_hash) else {
@@ -64,9 +42,7 @@ pub(crate) fn module<
   })?;
 
   module.register_method("blockchain/events", |params, client, _ext| -> Result<_, Error> {
-    let Some(block_hash) = block_hash(&**client, &params)? else {
-      Err(Error::InvalidStateReference)?
-    };
+    let Some(block_hash) = block_hash(client, &params)? else { Err(Error::InvalidStateReference)? };
     let Ok(events) = client.runtime_api().events(block_hash) else {
       Err(Error::InvalidStateReference)?
     };

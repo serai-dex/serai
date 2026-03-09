@@ -124,4 +124,6 @@ runtime-benchmarks = [
   "serai-coins-pallet/runtime-benchmarks",
 ]
 
+tests = []
+
 default = ["std"]

@@ -188,6 +188,7 @@ primitive-types-12 = { package = "primitive-types", path = "patches/ethereum/pri
 rapidhash = { path = "patches/ethereum/rapidhash" }
 rlp = { path = "patches/ethereum/rlp" }
 secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-0.30" }
+wit-bindgen-rust-macro = { path = "patches/wit-bindgen-rust-macro" }
 
 # Dependencies from monero-oxide which originate from within our own tree,  potentially shimmed to account for deviations since publishing
 std-shims = { path = "patches/std-shims" }
@@ -208,7 +209,8 @@ home = { path = "patches/home" }
 # Updates to the latest version
 darling = { path = "patches/darling" }
 dtoa = { path = "patches/dtoa" }
-getrandom = { path = "patches/getrandom" }
+getrandom-02 = { package = "getrandom", path = "patches/getrandom-0.2" }
+getrandom-03 = { package = "getrandom", path = "patches/getrandom-0.3" }
 ryu = { path = "patches/ryu" }
 thiserror = { path = "patches/thiserror" }
 
@@ -284,6 +286,7 @@ too_many_lines = "allow"
 wildcard_imports = "allow"
 
 style = { level = "warn", priority = -1 }
+blocks_in_conditions = "allow"
 items_after_test_module = "allow"
 
 # Cherry-pick lints from the `restrictions` group

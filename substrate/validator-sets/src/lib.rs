@@ -70,8 +70,8 @@ use serai_abi::{
     coin::Coin,
     balance::{Amount, Balance},
     validator_sets::{
-      Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct, SlashReport,
-      DeallocationTimeline,
+      MusigKeyError, Session, ExternalValidatorSet, ValidatorSet, KeyShares as KeySharesStruct,
+      SlashReport, DeallocationTimeline,
     },
   },
   economic_security::EconomicSecurity,
@@ -390,7 +390,7 @@ mod pallet {
         When testing, and for testing alone, we immediately return if given the default config so
         the test passes.
       */
-      #[cfg(test)]
+      #[cfg(any(test, feature = "tests"))]
       if self.participants.is_empty() {
         return;
       }
@@ -600,7 +600,7 @@ mod pallet {
       let _ = signature_participants;
       let _ = signature;
 
-      let session = Self::current_session(NetworkId::from(network))
+      let session = Self::latest_decided_session(NetworkId::from(network))
         .expect("validated `set_keys` for a non-existent session");
       let set = ExternalValidatorSet { network, session };
       Abstractions::<T>::set_keys(set, key_pair.clone());
@@ -617,13 +617,9 @@ mod pallet {
 
     #[pallet::call_index(1)]
     #[pallet::weight((<T as Config>::Weights::slash_serai_validator(), DispatchClass::Operational))]
-    pub fn slash_serai_validator(
-      origin: OriginFor<T>,
-      session: Session,
-      validator: SeraiAddress,
-    ) -> DispatchResult {
+    pub fn slash_serai_validator(origin: OriginFor<T>, validator: SeraiAddress) -> DispatchResult {
       ensure_none(origin)?;
-      Abstractions::<T>::slash_serai_validator(session, validator);
+      Abstractions::<T>::slash_serai_validator(validator);
       Ok(())
     }
 
@@ -773,13 +769,22 @@ mod pallet {
           }
 
           // Verify the signature with the MuSig key of the signers
-          match signature {
-            Signature::Ristretto(signature) => {
-              if !ValidatorSet::from(set)
-                .musig_key(&signers)
-                .verify(&set.set_keys_message(key_pair), &signature.0.into())
-              {
-                Err(InvalidTransaction::BadProof)?;
+          {
+            let key = match ValidatorSet::from(set).musig_key(&signers) {
+              Ok(key) => key,
+              Err(MusigKeyError::InvalidKey) => panic!("invalid auxiliary key on-chain"),
+              Err(MusigKeyError::NoKeysProvided) => {
+                panic!("participants had sufficient key shares but no keys")
+              }
+              Err(MusigKeyError::TooManyKeysProvided) => {
+                panic!("more validators in set than allowed by `dkg` (`u16::MAX`)")
+              }
+            };
+            match signature {
+              Signature::Ristretto(signature) => {
+                if !key.verify(&set.set_keys_message(key_pair), &signature.0.into()) {
+                  Err(InvalidTransaction::BadProof)?;
+                }
               }
             }
           }
@@ -813,7 +818,44 @@ mod pallet {
             .propagate(true)
             .build()
         }
-        Call::slash_serai_validator { .. } |
+        Call::slash_serai_validator { validator } => {
+          /*
+            This is expected to be validated by the node, or at the very least, a higher level. The
+            only validation performed here is that the transaction isn't stale as it doesn't make
+            sense to dispatch this call if this is stale.
+          */
+          {
+            let current_session =
+              Pallet::<T>::current_session(NetworkId::Serai).unwrap_or(Session(0));
+            let most_recent_session_with_still_pending_deallocations =
+              current_session.0.saturating_sub(2);
+            // We consider a slash stale if there's no stake to slash
+            if <Abstractions<T> as allocations::Allocations>::allocation(
+              NetworkId::Serai,
+              *validator,
+            )
+            .is_none() &&
+              (most_recent_session_with_still_pending_deallocations ..= current_session.0).all(
+                |session| {
+                  Abstractions::<T>::fetch_deallocations_delayed_from(
+                    *validator,
+                    NetworkId::Serai,
+                    Session(session),
+                  )
+                  .is_none()
+                },
+              )
+            {
+              Err(InvalidTransaction::Stale)?;
+            }
+          }
+
+          ValidTransaction::with_tag_prefix("ValidatorSets")
+            .and_provides((2, validator))
+            .longevity(KeySharesStruct::MAX_PER_SET_U32.into())
+            .propagate(true)
+            .build()
+        }
         Call::set_auxiliary_keys { .. } |
         Call::allocate { .. } |
         Call::deallocate { .. } |
@@ -825,6 +867,65 @@ mod pallet {
     // Explicitly provide a pre-dispatch which calls `validate_unsigned`
     fn pre_dispatch(call: &Self::Call) -> Result<(), TransactionValidityError> {
       Self::validate_unsigned(TransactionSource::InBlock, call).map(|_| ())
+    }
+  }
+
+  impl<T: Config> frame_support::traits::DisabledValidators for Pallet<T> {
+    fn is_disabled(mut index: u32) -> bool {
+      let session = Pallet::<T>::current_session(NetworkId::Serai).unwrap_or(Session(0));
+      let mut iter =
+        Pallet::<T>::selected_validators(ValidatorSet { network: NetworkId::Serai, session });
+      while index != 0 {
+        let _ = iter.next();
+        index -= 1;
+      }
+      let Some((validator, _)) = iter.next() else {
+        // If requesting information for an invalid index, claim it's disabled
+        return true;
+      };
+      /*
+        The validator is disabled if they aren't a genesis validator and have no stake associated
+        with this session, meaning they have suffered a fatal slash.
+
+        This does have the oddity that the allocation of any stake will then un-disable the
+        validator, but the validator should no longer be able to propose blocks (preventing earning
+        the block reward) and the traditional allocation flow would require allocating at least one
+        key share (and not a trivial amount like one atomic unit). Accordingly, this is fine.
+      */
+      (!GenesisValidators::<T>::get()
+        .expect("validators selected but never set genesis validators")
+        .contains(&validator)) &&
+        <Abstractions<T> as allocations::Allocations>::allocation(NetworkId::Serai, validator)
+          .is_none() &&
+        Abstractions::<T>::fetch_deallocations_delayed_from(validator, NetworkId::Serai, session)
+          .is_none()
+    }
+
+    fn disabled_validators() -> Vec<u32> {
+      let session = Pallet::<T>::current_session(NetworkId::Serai).unwrap_or(Session(0));
+      let Some(genesis_validators) = GenesisValidators::<T>::get() else { return vec![] };
+
+      let mut result = vec![];
+      let mut index = 0u32;
+      #[expect(clippy::explicit_counter_loop)] // `enumerate` would return a `usize`
+      for (validator, _) in
+        Pallet::<T>::selected_validators(ValidatorSet { network: NetworkId::Serai, session })
+      {
+        if (!genesis_validators.contains(&validator)) &&
+          <Abstractions<T> as allocations::Allocations>::allocation(NetworkId::Serai, validator)
+            .is_none() &&
+          Abstractions::<T>::fetch_deallocations_delayed_from(
+            validator,
+            NetworkId::Serai,
+            session,
+          )
+          .is_none()
+        {
+          result.push(index);
+        }
+        index += 1;
+      }
+      result
     }
   }
 }

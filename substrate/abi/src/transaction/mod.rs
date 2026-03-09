@@ -87,6 +87,11 @@ impl TryFrom<Call> for UnsignedCall {
     Ok(UnsignedCall(call))
   }
 }
+impl AsRef<Call> for UnsignedCall {
+  fn as_ref(&self) -> &Call {
+    &self.0
+  }
+}
 
 impl BorshDeserialize for UnsignedCall {
   fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {

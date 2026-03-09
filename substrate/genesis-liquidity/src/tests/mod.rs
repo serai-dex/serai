@@ -1,14 +1,17 @@
 #![expect(clippy::as_conversions, clippy::same_name_method)]
 
-use sp_core::{Pair as _, sr25519::Pair};
+use sp_core::{
+  Pair as _,
+  sr25519::{Public, Pair},
+};
 use sp_keyring::sr25519::Keyring;
 
 use frame_support::{weights::Weight, derive_impl, construct_runtime};
 
 use serai_abi::{
   primitives::{
-    network_id::*, coin::*, balance::*, crypto::EmbeddedEllipticCurveKeys, validator_sets::*,
-    genesis_liquidity::GenesisValues, address::*,
+    network_id::*, coin::*, balance::*, validator_sets::*, genesis_liquidity::GenesisValues,
+    address::*,
   },
   economic_security::EconomicSecurity,
   genesis_liquidity::Event,
@@ -120,24 +123,19 @@ impl crate::ValidatorSets for () {
     .into_iter()
   }
 
-  fn auxiliary_keys(
-    validator: SeraiAddress,
-    network: NetworkId,
-  ) -> Option<EmbeddedEllipticCurveKeys> {
-    assert_eq!(network, NetworkId::Serai);
-    Some(EmbeddedEllipticCurveKeys::Serai(
-      (if validator == SeraiAddress(Keyring::AliceStash.pair().public().0) {
-        Keyring::Alice.pair().public().0
-      } else if validator == SeraiAddress(Keyring::BobStash.pair().public().0) {
-        Keyring::Bob.pair().public().0
-      } else if validator == SeraiAddress(Keyring::CharlieStash.pair().public().0) {
-        Keyring::Charlie.pair().public().0
-      } else if validator == SeraiAddress(Keyring::DaveStash.pair().public().0) {
-        Keyring::Dave.pair().public().0
-      } else {
-        unreachable!()
-      }),
-    ))
+  fn serai_auxiliary_key(validator: SeraiAddress, set: ValidatorSet) -> Option<Public> {
+    assert_eq!(set.network, NetworkId::Serai);
+    Some(if validator == SeraiAddress(Keyring::AliceStash.pair().public().0) {
+      Keyring::Alice.pair().public()
+    } else if validator == SeraiAddress(Keyring::BobStash.pair().public().0) {
+      Keyring::Bob.pair().public()
+    } else if validator == SeraiAddress(Keyring::CharlieStash.pair().public().0) {
+      Keyring::Charlie.pair().public()
+    } else if validator == SeraiAddress(Keyring::DaveStash.pair().public().0) {
+      Keyring::Dave.pair().public()
+    } else {
+      unreachable!()
+    })
   }
 
   fn network_stake_requirement(network: ExternalNetworkId) -> Amount {
