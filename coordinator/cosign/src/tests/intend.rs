@@ -332,8 +332,6 @@ mod errors {
 
 /// Random event, state, and block generator.
 struct EventFuzzer {
-  /// Monotonic counter hashed with blake2 for deterministic pseudo-random bytes.
-  counter: u64,
   /// Seed bytes.
   seed: [u8; 32],
   /// Available validator addresses.
@@ -367,7 +365,6 @@ impl EventFuzzer {
     let networks: Vec<NetworkId> = NetworkId::all().collect();
 
     Self {
-      counter: 0,
       seed,
       validators,
       networks,
@@ -377,26 +374,17 @@ impl EventFuzzer {
     }
   }
 
-  /// Generate a pseudo-random `u64` by hashing counter + seed with blake2.
-  fn next_u64(&mut self) -> u64 {
-    use blake2::{Blake2b256, Digest as _};
-    let hash =
-      Blake2b256::new().chain_update(self.seed).chain_update(self.counter.to_le_bytes()).finalize();
-    self.counter += 1;
-    u64::from_le_bytes(hash[0 .. 8].try_into().unwrap())
-  }
-
   /// Pick a random element from a slice.
   fn pick<'a, T>(&mut self, slice: &'a [T]) -> &'a T {
-    let idx = self.next_u64() % u64::try_from(slice.len()).unwrap();
-    &slice[usize::try_from(idx).unwrap()]
+    let i = OsRng.next_u64() % u64::try_from(slice.len()).unwrap();
+    &slice[usize::try_from(i).unwrap()]
   }
 
   /// Generate a random allocation event.
   fn random_allocation(&mut self) -> Event {
     let validator = *self.pick(&self.validators.clone());
     let network = *self.pick(&self.networks.clone());
-    let amount = (self.next_u64() % 10000) + 1; // 1..=10000
+    let amount = (OsRng.next_u64() % 10000) + 1; // 1..=10000
     if let Ok(ext) = ExternalNetworkId::try_from(network) {
       *self.stakes.entry((ext, validator)).or_default() += amount;
     }
@@ -406,9 +394,9 @@ impl EventFuzzer {
   /// Generate a random deallocation event. Returns `None` if no validator has stake.
   fn random_deallocation(&mut self) -> Option<Event> {
     // ~25% chance of generating a Serai deallocation (exercises the `continue` branch)
-    if self.next_u64() % 4 == 0 {
+    if OsRng.next_u64() % 4 == 0 {
       let validator = *self.pick(&self.validators.clone());
-      let amount = (self.next_u64() % 100) + 1;
+      let amount = (OsRng.next_u64() % 100) + 1;
       return Some(deallocation_event(validator, NetworkId::Serai, amount));
     }
 
@@ -417,9 +405,9 @@ impl EventFuzzer {
     if candidates.is_empty() {
       return None;
     }
-    let idx = self.next_u64() % u64::try_from(candidates.len()).unwrap();
-    let ((network, validator), current_stake) = candidates[usize::try_from(idx).unwrap()];
-    let amount = (self.next_u64() % current_stake) + 1; // 1..=current_stake
+    let i = OsRng.next_u64() % u64::try_from(candidates.len()).unwrap();
+    let ((network, validator), current_stake) = candidates[usize::try_from(i).unwrap()];
+    let amount = (OsRng.next_u64() % current_stake) + 1; // 1..=current_stake
     *self.stakes.entry((network, validator)).or_default() -= amount;
     Some(deallocation_event(validator, NetworkId::External(network), amount))
   }
@@ -441,14 +429,15 @@ impl EventFuzzer {
 
     // Pick 1..=min(3, validators.len()) random validators for this set
     let max_count = self.validators.len().min(3);
-    let count = usize::try_from((self.next_u64() % u64::try_from(max_count).unwrap()) + 1).unwrap();
+    let count =
+      usize::try_from((OsRng.next_u64() % u64::try_from(max_count).unwrap()) + 1).unwrap();
 
     // Shuffle-pick by swapping from a clone
     let mut pool = self.validators.clone();
     let mut chosen = Vec::with_capacity(count);
     for _ in 0 .. count {
-      let idx = usize::try_from(self.next_u64() % u64::try_from(pool.len()).unwrap()).unwrap();
-      chosen.push(pool.swap_remove(idx));
+      let i = usize::try_from(OsRng.next_u64() % u64::try_from(pool.len()).unwrap()).unwrap();
+      chosen.push(pool.swap_remove(i));
     }
 
     self.pending_keys.insert(set, chosen.clone());
@@ -469,8 +458,8 @@ impl EventFuzzer {
     }
 
     let keys: Vec<ExternalValidatorSet> = self.pending_keys.keys().copied().collect();
-    let idx = usize::try_from(self.next_u64() % u64::try_from(keys.len()).unwrap()).unwrap();
-    let set = keys[idx];
+    let i = usize::try_from(OsRng.next_u64() % u64::try_from(keys.len()).unwrap()).unwrap();
+    let set = keys[i];
     // Remove from pending — the task will Validators::take it
     self.pending_keys.remove(&set);
 
@@ -478,7 +467,7 @@ impl EventFuzzer {
     *self.next_session.entry(set.network).or_insert(0) += 1;
 
     let mut public = Public([0u8; 32]);
-    public.0[0 .. 8].copy_from_slice(&self.next_u64().to_le_bytes());
+    public.0[0 .. 8].copy_from_slice(&OsRng.next_u64().to_le_bytes());
     let external_key = ExternalKey(vec![1u8].try_into().unwrap());
     let key_pair = KeyPair(public, external_key);
 
@@ -488,13 +477,13 @@ impl EventFuzzer {
   /// Generate a random BurnWithInstruction event.
   fn random_burn(&mut self) -> Event {
     let mut burn_address = SeraiAddress([0u8; 32]);
-    burn_address.0[0 .. 8].copy_from_slice(&self.next_u64().to_le_bytes());
+    burn_address.0[0 .. 8].copy_from_slice(&OsRng.next_u64().to_le_bytes());
     burn_with_instruction_event(burn_address)
   }
 
   /// Generate random events for a single block.
   fn generate_block_events(&mut self) -> Vec<Vec<Event>> {
-    let num_events = self.next_u64() % 8; // 0..=7 events per block
+    let num_events = OsRng.next_u64() % 8; // 0..=7 events per block
     if num_events == 0 {
       return vec![];
     }
@@ -506,7 +495,7 @@ impl EventFuzzer {
     let mut burn_count = 0u64;
 
     for _ in 0 .. num_events {
-      match self.next_u64() % 100 {
+      match OsRng.next_u64() % 100 {
         0 ..= 35 => alloc_count += 1,
         36 ..= 55 => dealloc_count += 1,
         56 ..= 70 => set_decided_count += 1,
@@ -549,7 +538,7 @@ impl EventFuzzer {
 
     // Shuffle the events to test order-independence
     for i in (1 .. events.len()).rev() {
-      let j = usize::try_from(self.next_u64() % u64::try_from(i + 1).unwrap()).unwrap();
+      let j = usize::try_from(OsRng.next_u64() % u64::try_from(i + 1).unwrap()).unwrap();
       events.swap(i, j);
     }
 
