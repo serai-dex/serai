@@ -2,16 +2,24 @@
 #![doc = include_str!("./README.md")]
 #![deny(missing_docs)]
 
-use core::fmt::Write as _;
+use core::{str::FromStr as _, fmt::Write as _};
 use std::{
+  sync::OnceLock,
   io::Write as _,
+  collections::HashSet,
   path::{Component, PathBuf},
   env, fs,
   process::Command,
 };
 
+mod config;
+use config::*;
+
 mod rerun_if_changed;
 use rerun_if_changed::rerun_if_changed;
+
+/// A marker that this command was invoked from the build script.
+const BUILD_SCRIPT_MARKER: &str = "SERAI_RUNTIME_BUILD_RS";
 
 #[rustfmt::skip]
 /// Fetch an environment variable which `cargo` sets when building crates.
@@ -24,102 +32,93 @@ fn cargo_env(var: &str) -> String {
   })
 }
 
-/// Whether or not the WASM should be built in a `release` configuration.
-fn release_wasm() -> bool {
-  let profile = cargo_env("PROFILE");
-  match profile.as_str() {
-    "debug" | "test" => false,
-    "bench" | "release" => true,
-    _ => panic!("unexpected profile: {profile}"),
-  }
+/// Locate the workspace's directory.
+///
+/// This will return the workspace for the _current_ crate being compiled, not the original.
+fn workspace_dir() -> PathBuf {
+  let workspace = Command::new(cargo_env("CARGO"))
+    .arg("locate-project")
+    .arg("--workspace")
+    .arg("--message-format")
+    .arg("plain")
+    .output()
+    .unwrap();
+  assert!(workspace.status.success());
+  let mut workspace = PathBuf::from(String::from_utf8(workspace.stdout).unwrap().trim());
+  assert_eq!(workspace.file_name().unwrap(), "Cargo.toml");
+  assert!(workspace.pop(), "failed to pop item we know exists");
+  // We require the workspace be absolute because we use it as the basis for relative paths later
+  assert!(workspace.is_absolute());
+  workspace
 }
 
-/// The `RUSTFLAGS` to set when building the WASM.
-fn wasm_rustflags() -> String {
-  /// Compiler arguments required for a Substrate runtime making use of FRAME.
-  ///
-  /// Substrate's primitives, pallets make use of this `cfg` value to determine what context
-  /// they're being built within.
-  const REQUIRED_BY_SUBSTRATE: &str = "--cfg substrate_runtime";
-
-  /// Compiler arguments for WASM.
-  ///
-  /// `--export-table` causes the linker to export the function table from our artifact, allowing
-  /// out VM to identify what function we want to call by its name.
-  const WASM: &str = "-C link-arg=--export-table";
-  /// The compilation arguments required due to <https://github.com/rust-lang/rust/issues/145491>.
-  const ONE_45491: &str =
-    "-C link-arg=--mllvm=-mcpu=mvp -C link-arg=--mllvm=-mattr=+mutable-globals";
-
-  /// Compiler arguments employed for safety purpose.
-  ///
-  /// `panic=abort` is used as `unwind` is very difficult to be used safely, and any panic within
-  /// the runtime should propagate, causing the entire execution to panic, and the
-  /// transaction/block to be rejected. Note that
-  /// [`polkadot-sdk` itself builds runtimes with `abort`](
-  ///   https://github.com/paritytech/polkadot-sdk/issues/10533#issuecomment-3681125280
-  /// ) so this specification here is intended to be explicit and redundant for what should
-  /// _already_ be the build configuration.
-  ///
-  /// We set `overflow-checks=on` to ensure overflows do not silently occur.
-  const SAFETY: &str = "-C panic=abort -C overflow-checks=on";
-
-  /// Compiler arguments to increase the result's determinism.
-  ///
-  /// We explicitly set `symbol-mangling-version` to achieve a canonical definition of mangled
-  /// symbols.
-  ///
-  /// Instead of sorting [`codegen-source-order`](https://github.com/rust-lang/rust/pull/144722) as
-  /// it's inherently ordered, which may vary when the parallel frontend is invoked, we explicitly
-  /// sort it by the order the source code itself was defined in. This should be unnecessary, as we
-  /// simply do not use the parallel frontend, but it will become on-by-default in the future.
-  const DETERMINISM: &str = "-C symbol-mangling-version=v0 -Z codegen-source-order";
-
-  /// Compiler arguments regarding the compilation process itself.
-  ///
-  /// `embed-bitcode=false` is set as the bitcode is unnecessary yet takes notable time to compile.
-  ///
-  /// `linker-plugin-lto` is used as Rust's LTO requires bitcode, forcing us to defer to the
-  /// linker's LTO. While this would suggest we _should_ set `embed-bitcode=true`,
-  /// [Rust's documentation](
-  ///   https://doc.rust-lang.org/1.94.0/rustc/codegen-options/index.html#embed-bitcode
-  /// ) suggests that's likely not desired and should solely be done when compiling one library
-  /// with mixed methods of linking. When compiling and linking just once (as seen here), it's
-  /// suggested to use the linker's LTO instead.
-  const COMPILATION: &str = "-C embed-bitcode=false -C linker-plugin-lto=true";
-
-  /// Compilation arguments for optimizations.
-  ///
-  /// Reducing the amount of `codegen-units` allows more optimized code, which we maximize here by
-  /// using a minimal amount of codegen units (1). Potentially surprisingly, this is
-  /// [expected to be unrelated to determinism](https://github.com/rust-lang/rust/issues/128675)
-  /// and is solely here for the optimizations made possible.
-  const OPTIMIZE: &str = "-C debug-assertions=false -C opt-level=3 -C codegen-units=1";
-  /// Compilation arguments to strip the debug information.
-  ///
-  /// `strip=symbols` should have the pleasant effect of stripping mangled symbols. While we define
-  /// a canonical symbol mangling scheme, it's one less thing to have to consider.
-  ///
-  /// `force-unwind-tables=no` is used to disable `unwind` tables, which are still present with
-  /// `panic=abort` in order to provide the backtrace functionality.
-  ///
-  /// [`location-detail`](
-  ///   https://doc.rust-lang.org/nightly/unstable-book/compiler-flags/location-detail.html
-  /// ) is used to strip information about the source code's location, as used for debug messages
-  /// when panicking.
-  const STRIP_DEBUG: &str =
-    "-C debuginfo=none -C strip=symbols -C force-unwind-tables=no -Z location-detail=none";
-
-  let mut rustflags =
-    format!("{REQUIRED_BY_SUBSTRATE} {WASM} {ONE_45491} {SAFETY} {DETERMINISM} {COMPILATION}");
-  if release_wasm() {
-    write!(rustflags, " {OPTIMIZE} {STRIP_DEBUG}").unwrap();
-  }
-  rustflags
+/// The home directory which will be used for the nested invocation of `cargo`.
+fn cargo_home() -> PathBuf {
+  PathBuf::from(cargo_env("OUT_DIR")).join("cargo")
 }
 
-/// A marker that this command was invoked from the build script.
-const BUILD_SCRIPT_MARKER: &str = "SERAI_RUNTIME_BUILD_RS";
+/// The configuration to use for vendored sources.
+fn vendor_configuration(vendored_sources: &str) -> String {
+  let mut vendored_sources = format!(
+    r#"
+[source.vendored-sources]
+directory = "{}"
+
+[sources.crates-io]
+replace-with = "vendored-sources"
+"#,
+    vendored_sources.replace('"', "\\\"")
+  );
+
+  // Also replace all of the Git sources we use with the vendored sources
+  {
+    let mut git_sources = HashSet::new();
+
+    // Identify the in-use Git sources via parsing the `Cargo.lock` (a TOML file)
+    {
+      let lockfile = fs::read_to_string(workspace_dir().join("Cargo.lock"))
+        .expect("couldn't read workspace's `Cargo.lock`");
+      let lockfile = toml::Table::from_str(&lockfile).expect("`Cargo.lock` was not valid toml");
+
+      for package in lockfile["package"].as_array().expect("`package` wasn't an array") {
+        let Some(source) = package.get("source") else { continue };
+        let source = source.as_str().expect("package `source` wasn't a string");
+        if !source.starts_with("git+") {
+          continue;
+        }
+        let source_without_current_revision = source.split('#').next().unwrap();
+        git_sources.insert(source_without_current_revision.to_owned());
+      }
+    }
+
+    for source in git_sources {
+      write!(
+        &mut vendored_sources,
+        r#"
+[sources."{}"]
+git = "{}"
+replace-with = "vendored-sources"
+"#,
+        source.replace('"', "\\\""),
+        source.split('?').next().unwrap().replace('"', "\\\"")
+      )
+      .unwrap();
+
+      // If this was the source for a specific revision, add that field now
+      if let Some(rev) = source.split("?rev=").nth(1) {
+        write!(
+          &mut vendored_sources,
+          r#"
+rev = "{rev}"
+"#
+        )
+        .unwrap();
+      }
+    }
+  }
+
+  vendored_sources
+}
 
 /// A [`Command`] for the specified binary.
 ///
@@ -128,10 +127,24 @@ const BUILD_SCRIPT_MARKER: &str = "SERAI_RUNTIME_BUILD_RS";
 fn command(bin: &str) -> Command {
   let mut command = Command::new(bin);
 
+  /*
+    If this is a nested invocation, we have already sanitized the environment and do not do so
+    again (where any new sanitization may overwrite values set by `cargo` as part of the build
+    process).
+  */
+  match env::var(BUILD_SCRIPT_MARKER) {
+    Ok(_) => return command,
+    Err(env::VarError::NotPresent) => {}
+    Err(env::VarError::NotUnicode(_)) => panic!("`BUILD_SCRIPT_MARKER` we set wasn't UTF-8"),
+  }
+
   // Run this command from the location of the crate's `Cargo.toml`
   command.current_dir(cargo_env("CARGO_MANIFEST_DIR"));
   // Do not arbitrarily propagate the environment from the host to ensure this is uncontaminated
   command.env_clear();
+
+  // Mark this is invoked from the build script
+  command.env(BUILD_SCRIPT_MARKER, "1");
 
   // Propagate Window's `SystemRoot` environment variable as required for basic functioning
   // Notably, `git` for Windows won't function at all if this isn't set
@@ -139,9 +152,6 @@ fn command(bin: &str) -> Command {
   if let Ok(root) = env::var("SystemRoot") {
     command.env("SystemRoot", root);
   }
-
-  // Mark this is invoked from the build script
-  command.env(BUILD_SCRIPT_MARKER, "1");
 
   /*
     Normalize the locale, in case any tooling attempts to take it into consideration.
@@ -173,6 +183,43 @@ fn command(bin: &str) -> Command {
     if let Ok(value) = env::var(key) {
       command.env(key, value);
     }
+  }
+
+  /*
+    We use our own `cargo` directory to ensure we know where the `cargo` directory is.
+
+    This does limit the host's ability to have a differing `cargo` configuration, potentially
+    limiting contamination yet also potentially breaking systems for which `cargo` doesn't work
+    out-of-the-box and _must_ be configured.
+  */
+  {
+    let cargo_home = cargo_home();
+    command.env("CARGO_HOME", &cargo_home);
+
+    /*
+      This is declared as a static so it's only run once, as we don't need to create the
+      configuration file multiple times.
+    */
+    static CARGO_CONFIG: OnceLock<()> = OnceLock::new();
+    CARGO_CONFIG.get_or_init(|| {
+      if !fs::exists(&cargo_home).expect("couldn't check if our own `CARGO_HOME` already exists") {
+        fs::create_dir_all(&cargo_home).expect("couldn't create our own `CARGO_HOME`");
+      }
+
+      let config_path = cargo_home.join("config.toml");
+      // If there's an existing config, remove it so we can create the definitively correct one now
+      if fs::exists(&config_path)
+        .expect("couldn't check if `CARGO_HOME/config.toml` already exists")
+      {
+        fs::remove_file(&config_path).expect("couldn't remove existing `CARGO_HOME/config.toml`");
+      }
+
+      // If vendored sources were declared, ensure our `CARGO_HOME` has such configuration now
+      if let Ok(vendor) = env::var("SERAI_RUNTIME_VENDOR") {
+        fs::write(config_path, vendor_configuration(&vendor).as_bytes())
+          .expect("couldn't write config to use vendored sources");
+      }
+    });
   }
 
   /*
@@ -347,80 +394,40 @@ fn cargo_command() -> Command {
   command(&cargo_env("CARGO"))
 }
 
-/// Locate the workspace's directory.
-fn workspace_dir() -> PathBuf {
-  // Short-circuit to the explicitly-declared directory when recursively invoked
-  if env::var(BUILD_SCRIPT_MARKER).is_ok() {
-    return PathBuf::from(env::var("WORKSPACE_DIR").unwrap());
-  }
+/// Normalize a file within a crate's path to a host-independent definition.
+///
+/// This will normalize the path for the crate to `/{name}-{version}`, regardless of actual
+/// location. This identifies the crate as the parent of the relevant `Cargo.toml`, as determined
+/// with `cargo locate-project`.
+fn normalize_crate_path(file: PathBuf) -> PathBuf {
+  let file = fs::canonicalize(file).unwrap();
+  let directory = file.parent().expect("file was outside of any directory");
 
-  let workspace = cargo_command()
+  let package_toml = cargo_command()
+    .current_dir(directory)
     .arg("locate-project")
-    .arg("--workspace")
-    .arg("--message-format")
-    .arg("plain")
+    .args(["--message-format", "plain"])
+    .args(["--color", "never"])
     .output()
     .unwrap();
-  assert!(workspace.status.success());
-  let mut workspace = PathBuf::from(String::from_utf8(workspace.stdout).unwrap().trim());
-  assert_eq!(workspace.file_name().unwrap(), "Cargo.toml");
-  assert!(workspace.pop(), "failed to pop item we know exists");
-  // We require the workspace be absolute because we use it as the basis for relative paths later
-  assert!(workspace.is_absolute());
-  workspace
-}
+  assert!(package_toml.status.success());
+  let package_toml =
+    String::from_utf8(package_toml.stdout).expect("path to crate's `Cargo.toml` wasn't UTF-8");
+  let package_toml = PathBuf::from(package_toml.trim());
+  let package_toml = fs::canonicalize(package_toml).unwrap();
 
-/// Normalize a crate's path to a host-independent definition.
-///
-/// We detect if the crate is from the Rust sysroot (`std`), `git`, a registry, or a workspace,
-/// before replacing _where_ each of these folders were located with the folder alone.
-///
-/// Specifically,
-///   - The Rust sysroot is replaced with `/rust`.
-///   - `cargo`-managed dependencies have `CARGO_HOME` replaced with `/cargo`.
-///   - The workspace is replaced with `/workspace`.
-fn normalize_crate_path(rustc: &str, file: PathBuf) -> PathBuf {
-  let file = fs::canonicalize(file).unwrap();
-
-  let sysroot = {
-    let sysroot = Command::new(rustc).arg("--print").arg("sysroot").output().unwrap();
-    assert!(sysroot.status.success());
-    fs::canonicalize(PathBuf::from(String::from_utf8(sysroot.stdout).unwrap().trim())).unwrap()
+  let (name, version) = {
+    let toml = fs::read_to_string(&package_toml).expect("couldn't read `Cargo.toml` to string");
+    let toml = toml::Table::from_str(&toml).expect("`Cargo.toml` was not valid toml");
+    (
+      toml["package"]["name"].as_str().expect("package `name` wasn't a string").to_owned(),
+      toml["package"]["version"].as_str().expect("package `version` wasn't a string").to_owned(),
+    )
   };
-  let cargo = fs::canonicalize(PathBuf::from(
-    env::var("CARGO_HOME").expect("`CARGO_HOME` wasn't explicitly set, when we set it ourselves?"),
-  ))
-  .unwrap();
-  let workspace: PathBuf = workspace_dir();
 
-  /*
-    Make sure for the order we test these in, they won't be detected as one another.
-
-    Note we assume the sysroot to be in a separate directory, but we solely assume the workspace
-    is not under `cargo`'s directory (which it shouldn't be, as we create a fresh directory for
-    it). This is because we do assume `cargo` is under our workspace (in the form of
-    `workspace/target/cargo` or so), which we ensure is safe by testing for `cargo` (the more
-    specific case) before testing for the workspace (the more general case).
-  */
-  assert!(!workspace.starts_with(&sysroot), "workspace was under the `rustc` sysroot");
-  assert!(
-    !cargo.starts_with(&sysroot),
-    "`cargo` (part of the target directory) was under the `rustc` sysroot"
-  );
-  assert!(
-    !workspace.starts_with(&cargo),
-    "workspace was under the freshly created `cargo` directory?"
-  );
-
-  if let Ok(in_sysroot) = file.strip_prefix(sysroot) {
-    PathBuf::from("/rust").join(in_sysroot)
-  } else if let Ok(in_cargo) = file.strip_prefix(cargo) {
-    PathBuf::from("/cargo").join(in_cargo)
-  } else if let Ok(in_workspace) = file.strip_prefix(workspace) {
-    PathBuf::from("/workspace").join(in_workspace)
-  } else {
-    panic!("unrecognized origin for crate. not in workspace, sysroot, or `CARGO_HOME`");
-  }
+  let actual_crate_path = package_toml.parent().expect("`Cargo.toml` was outside of a directory");
+  let file_path_within_crate = file.strip_prefix(actual_crate_path).unwrap();
+  PathBuf::from(format!("/{name}-{version}")).join(file_path_within_crate)
 }
 
 /*
@@ -509,9 +516,9 @@ fn rustc_wrapper(mut args: impl Iterator<Item = String>) {
   */
   if added_metadata {
     let file = file.expect("`rustc` given metadata when it wasn't given a file to compile?");
-    let normalized = normalize_crate_path(&rustc, PathBuf::from(file));
+    let normalized = normalize_crate_path(PathBuf::from(file));
 
-    // Instead of using the platform-dependent `normalized.display()`, we impl our own `to_string`
+    // Instead of using the platform-dependent `normalized.to_str()`, we impl our own `to_string`
     let mut path_str = String::new();
     for component in normalized.components() {
       match component {
@@ -605,17 +612,6 @@ which will build the WASM as part of its build process, with the necessary confi
   let mut build_command = cargo_command();
 
   /*
-    Propagate the workspace directory.
-
-    When invoked as a `rustc` wrapper, we check if we're compiling a crate within our workspace,
-    requiring knowing the workspace's path. However, when invoked as a `rustc` wrapper, the
-    directory we're invoked from changes and prevents resolving the workspace.
-
-    To solve this, we explicitly declare the original workspace for our future calls.
-  */
-  build_command.env("WORKSPACE_DIR", workspace_dir());
-
-  /*
     Install ourselves as the `rustc` wrapper for the reasons described above.
 
     This would overwrite any system-provided `RUSTC_WRAPPER`, but that shouldn't be a problem here.
@@ -627,28 +623,22 @@ which will build the WASM as part of its build process, with the necessary confi
   );
   build_command.env("RUSTC_WRAPPER", std::env::current_exe().unwrap());
 
-  /*
-    We use a nested `cargo` directory to ensure we know where the `cargo` directory is.
-
-    This does limit the host's ability to have a differing `cargo` configuration, potentially
-    limiting contamination yet also potentially breaking systems for which `cargo` doesn't work
-    out-of-the-box and _must_ be configured.
-  */
-  build_command.env("CARGO_HOME", PathBuf::from(cargo_env("OUT_DIR")).join("cargo"));
-
-  /*
-    We use a nested `target` directory for building the WASM as the existing `target` directory
-    will be locked by the build process we're currently running.
-  */
-  let target_dir = PathBuf::from(cargo_env("OUT_DIR")).join("target");
-  if release_wasm() {
+  {
     /*
-      Remove the directory if it already exists, as this will be a non-incremental build so at best
-      it does nothing, and at worst it accumulates due to `cargo`'s lack-luster garbage collection.
+      We use a nested `target` directory for building the WASM as the existing `target` directory
+      will be locked by the build process we're currently running.
     */
-    let _ = fs::remove_dir_all(&target_dir);
+    let target_dir = PathBuf::from(cargo_env("OUT_DIR")).join("target");
+    if release_wasm() {
+      /*
+        Remove the directory if it already exists, as this will be a non-incremental build so at
+        best it does nothing, and at worst it accumulates due to `cargo`'s lack-luster garbage
+        collection.
+      */
+      let _ = fs::remove_dir_all(&target_dir);
+    }
+    build_command.env("CARGO_TARGET_DIR", &target_dir);
   }
-  build_command.env("CARGO_TARGET_DIR", &target_dir);
 
   /*
     `trim-paths` is an unstable flag to strip the build environment's paths, as would otherwise
@@ -662,9 +652,9 @@ which will build the WASM as part of its build process, with the necessary confi
 
   build_command.arg("rustc");
   build_command.arg("--locked");
-  build_command.arg("--package").arg(cargo_env("CARGO_PKG_NAME"));
-  build_command.arg("--target").arg("wasm32v1-none");
-  build_command.arg("--crate-type").arg("cdylib");
+  build_command.args(["--package", &cargo_env("CARGO_PKG_NAME")]);
+  build_command.args(["--target", "wasm32v1-none"]);
+  build_command.args(["--crate-type", "cdylib"]);
   build_command.arg("--no-default-features");
   build_command.arg(features_flag);
 
@@ -712,39 +702,41 @@ which will build the WASM as part of its build process, with the necessary confi
     Since the target directory format is unstable, we have to parse the build command's output to
     locate the artifact (hence why we required a structured output).
 
-    Reference: https://doc.rust-lang.org/1.94.0/cargo/reference/external-tools.html#json-messages.
+    Reference: https://doc.rust-lang.org/1.94.0/cargo/reference/external-tools.html#json-messages
   */
-  let wasm_filename = cargo_env("CARGO_PKG_NAME").replace('-', "_") + ".wasm";
-  let mut wasm_path = None;
   {
-    use core_json::{ConstStack, Deserializer};
+    let wasm_filename = cargo_env("CARGO_PKG_NAME").replace('-', "_") + ".wasm";
+    let mut wasm_path = None;
+    {
+      use core_json::{ConstStack, Deserializer};
 
-    for json_object in String::from_utf8(build_output.stdout).unwrap().lines() {
-      let mut deserializer = Deserializer::<_, ConstStack<32>>::new(json_object.as_bytes())
-        .expect("couldn't begin deserializing `cargo`'s JSON output as JSON");
-      let message = deserializer.value().unwrap();
+      for json_object in String::from_utf8(build_output.stdout).unwrap().lines() {
+        let mut deserializer = Deserializer::<_, ConstStack<32>>::new(json_object.as_bytes())
+          .expect("couldn't begin deserializing `cargo`'s JSON output as JSON");
+        let message = deserializer.value().unwrap();
 
-      let mut message = message.fields().expect("message wasn't a JSON object");
-      while let Some(field) = message.next() {
-        let mut field = field.unwrap();
-        let key = field.key().map(|char| char.unwrap()).collect::<String>();
-        if key == "filenames" {
-          let mut filenames = field.value().iterate().expect("`filenames` wasn't an array");
-          while let Some(filename) = filenames.next() {
-            let filename = filename
-              .unwrap()
-              .to_str()
-              .expect("entry of `filenames` wasn't a string")
-              .map(|char| char.unwrap())
-              .collect::<String>();
-            let filename = PathBuf::from(filename);
+        let mut message = message.fields().expect("message wasn't a JSON object");
+        while let Some(field) = message.next() {
+          let mut field = field.unwrap();
+          let key = field.key().map(|char| char.unwrap()).collect::<String>();
+          if key == "filenames" {
+            let mut filenames = field.value().iterate().expect("`filenames` wasn't an array");
+            while let Some(filename) = filenames.next() {
+              let filename = filename
+                .unwrap()
+                .to_str()
+                .expect("entry of `filenames` wasn't a string")
+                .map(|char| char.unwrap())
+                .collect::<String>();
+              let filename = PathBuf::from(filename);
 
-            if filename.file_name().unwrap() == wasm_filename.as_str() {
-              assert!(
-                wasm_path.is_none(),
-                "multiple `{wasm_filename}` found within `cargo`'s JSON output"
-              );
-              wasm_path = Some(filename);
+              if filename.file_name().unwrap() == wasm_filename.as_str() {
+                assert!(
+                  wasm_path.is_none(),
+                  "multiple `{wasm_filename}` found within `cargo`'s JSON output"
+                );
+                wasm_path = Some(filename);
+              }
             }
           }
         }

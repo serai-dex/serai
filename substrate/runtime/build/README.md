@@ -69,12 +69,19 @@ used as a general optimization pass, Serai doesn't employ it as:
 
 `serai-runtime` _MUST_ be built for a non-`wasm32v1-none` target. This build
 script will spawn a nested `cargo build` command to build `serai-runtime` for
-the `wasm32v1-none` target, with the desired configuration and options. As part
-of this, `cargo build` will be invoked with a _fresh_ `CARGO_HOME`. This means
-any host-specific `cargo` configuration will _NOT_ be propagated.
-Exceptionally, networking configuration from the host environment is propagated
-as it isn't expected to impact the result and may be necessary to download
-dependencies.
+the `wasm32v1-none` target, with the desired configuration and options.
+
+`cargo` will be invoked with a cleared environment, and only select variables
+propagated. It will also be invoked with a _fresh_ `CARGO_HOME`. This means any
+host-specific `cargo` configuration will _NOT_ be propagated. Exceptionally,
+networking configuration from the host is propagated when specified as
+environment variables, as it isn't expected to impact the result and may be
+necessary to download dependencies.
+
+`SERAI_RUNTIME_VENDOR` _MAY_ be specified to provide vendored sources to use,
+allowing building the runtime without connecting to the internet. The vendored
+sources _MUST_ be comprehensive to both the runtime itself _and_ the Rust
+standard library (which will presumably require setting `RUSTC_BOOTSTRAP=1`).
 
 The `SERAI_PROTOCOL_ID` environment variable will be propagated, if set, as
 intended for the runtime to know its protocol ID. The build script does not

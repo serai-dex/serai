@@ -19,6 +19,7 @@ ignored = ["scale"]
 workspace = true
 
 [build-dependencies]
+toml = { version = "0.9", default-features = false, features = ["serde", "parse"] }
 core-json = { version = "0.4", default-features = false }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]

@@ -33,11 +33,19 @@ pub(super) fn rerun_if_changed(features_flag: &str) {
 
   let tree_command = || {
     let mut command = cargo_command();
-    command.arg("tree").args(["--prefix", "none", "--color", "never", "--charset", "utf8"]);
+    command
+      .arg("tree")
+      .args(["--prefix", "none"])
+      .args(["--color", "never"])
+      .args(["--charset", "utf8"]);
     command
   };
 
   // Note this subtree includes `serai-runtime` itself, so this will be reran if this changes
+  let ran_from_directory = tree_command()
+    .get_current_dir()
+    .expect("`cargo_command` didn't set a canonical path to run from")
+    .to_owned();
   let runtime_subtree = tree_command()
     .args(["-p", "serai-runtime"])
     .args(["--edges", "no-dev"])
@@ -80,9 +88,9 @@ pub(super) fn rerun_if_changed(features_flag: &str) {
             .expect("contextual part of `cargo tree` omitted closing parentheses"),
         );
 
-        // `cargo tree` was invoked from `workspace_dir()`, so ensure that context is respected
+        // `cargo tree` was invoked from a specific directory, so ensure that context is respected
         if possible_folder.is_relative() {
-          possible_folder = workspace_dir().join(possible_folder);
+          possible_folder = ran_from_directory.join(possible_folder);
         }
         assert!(possible_folder.is_absolute());
 
@@ -128,6 +136,6 @@ pub(super) fn rerun_if_changed(features_flag: &str) {
     // We require this path be absolute so we aren't concerned about the working directory
     // `cargo` applies to `rerun-if-changed` directives (the crate itself's root)
     assert!(path.is_absolute());
-    println!("cargo::rerun-if-changed={}", path.display());
+    println!("cargo::rerun-if-changed={}", path.to_str().expect("path to dependency wasn't UTF-8"));
   }
 }

@@ -8979,6 +8979,7 @@ dependencies = [
  "sp-timestamp",
  "sp-transaction-pool",
  "sp-version",
+ "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]
