@@ -26,7 +26,14 @@ impl FieldElement {
     );
     let mut u256 = crypto_bigint::U256::from_words(*u256.as_words());
     loop {
-      let result = FieldElement::from_bytes(&u256.to_le_bytes());
+      let result = FieldElement::from_bytes(&{
+        // This is an `EncodedUint`
+        let encoded_uint = u256.to_le_bytes();
+        // The conversion to `[u8; 32]` is not provided in a `const` context, so we do it ourselves
+        let mut bytes = [0; 32];
+        bytes.copy_from_slice(encoded_uint.as_slice());
+        bytes
+      });
       if let Some(result) = result {
         return result;
       }

@@ -292,6 +292,20 @@ fn command(bin: &str) -> Command {
 
       https://doc.rust-lang.org/1.94.0/rustc/codegen-options/index.html#incremental
       https://doc.rust-lang.org/1.94.0/cargo/reference/profiles.html#incremental
+
+      Note that if `rustc` considers the `incremental` option as non-`None`, it will sample a
+      32-bit integer to prevent conflicts with.
+
+      https://github.com/rust-lang/rust/blob/655a7d20fefe23757ca9ecbbea01e4fe80208aaf
+        /compiler/rustc_session/src/session.rs#L1071-L1074
+
+      That would suggest this environment variable is required to achieve determinism, but while
+      this has been observed to impact static archives, it has yet to be observed to impact the
+      WASM blobs (the only item we require to be deterministic).
+
+      We also do set this on a release build (when we require determinism), and don't set it on a
+      debug build (when we don't guarantee determinism and practically need incremental builds for
+      the developer experience).
     */
     command.env("CARGO_INCREMENTAL", "false");
   }

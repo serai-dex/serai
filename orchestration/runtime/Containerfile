@@ -2,11 +2,8 @@
 # check=skip=FromPlatformFlagConstDisallowed;error=true
 # We want to explicitly set the platform to ensure a constant host environment
 
-# rust:1.94.0-alpine3.23 as of March 7th, 2026 (GMT)
-FROM --platform=linux/amd64 rust@sha256:161bc67c5f9fdcb704e002201f86868fca69a6c470cfca5f4ad38fd4336e70f7 AS builder
-
-# Add Rust's source, as necessary to `build-std` as we do for the WASM
-RUN rustup component add rust-src
+# stagex/pallet-rust (2026.03.0)
+FROM --platform=linux/amd64 stagex/pallet-rust@sha256:2fbe7b164dd92edb9c1096152f6d27592d8a69b1b8eb2fc907b5fadea7d11668 AS builder
 
 # Add files for build
 ADD patches /serai/patches
@@ -32,8 +29,9 @@ RUN cargo build --locked --release -p serai-runtime --no-default-features -vv
 RUN mv $(find /serai -name serai_runtime.wasm | head -n1) /serai.wasm
 
 # Copy the artifact to its own image which solely exists to further export it
-# We don't use a platform-pin here as we don't require reproducibility and want this to be native
-FROM alpine:latest
+# We don't use a StageX image here as we don't require reproducibility and want this to be native
+# (StageX images are currently only available for x86-64)
+FROM busybox:stable-musl
 # Copy the artifact itself
 COPY --from=builder /serai.wasm /
 # By default, copy the artifact to `/volume`, presumably a provided volume

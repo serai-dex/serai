@@ -6,7 +6,7 @@ protocol. The usage of a `Containerfile` is to ensure a deterministic build
 environment independent of the machine performing the build, which
 `serai-runtime`'s build script attempts but is insufficient to guarantee.
 
-It may be quite slow to execute due to running the x86-64 image, regardless of
+It may be quite slow to execute due to running an x86-64 image, regardless of
 the host architecture.
 
 ### `reproductions/`
