@@ -116,6 +116,11 @@ mod pallet {
         .checked_sub(&BlockNumberFor::<T>::from(BLOCKS_TO_ADD_PENDING_LIQUIDITY_OVER.max(1)));
 
       for coin in ExternalCoin::all() {
+        // If there isn't any pending liquidity, move on to the next coin
+        if PendingLiquidity::<T>::iter_key_prefix(coin).next().is_none() {
+          continue;
+        }
+
         // Add the prior block's pending liquidity to the rate at which pending liquidity is added
         if let Some(pending_liquidity_from_prior_block) =
           PendingLiquidity::<T>::get(coin, prior_block)
@@ -132,14 +137,12 @@ mod pallet {
                 .unwrap_or(0)))
             .expect(
               "pending liquidity per block exceeded supply (bound to be representable in `Amount`)",
-            ));
+            )).filter(|value| *value != Amount(0));
           });
         }
 
-        let Some(mut pending_liquidity_per_block) = PendingLiquidityPerBlock::<T>::get(coin) else {
-          // If there is no rate at which pending liquidity is added, meaning it's `0`, move on
-          continue;
-        };
+        let mut pending_liquidity_per_block =
+          PendingLiquidityPerBlock::<T>::get(coin).unwrap_or(Amount(0));
 
         /*
           If pending liquidity was added `BLOCKS_TO_ADD_PENDING_LIQUIDITY_OVER` blocks ago, it will
@@ -209,9 +212,12 @@ mod pallet {
           single update to the storage, than the fractions of liquidity added incrementally would
           be counted twice (as both pending liquidity and part of the pool's current balance).
         */
-        TotalPendingLiquidity::<T>::mutate(coin, |prior_total| {
-          *prior_total = ((*prior_total) - pending_liquidity_per_block)
-            .expect("more pending liquidity added with this block than pending from all blocks");
+        TotalPendingLiquidity::<T>::mutate_exists(coin, |prior_total| {
+          *prior_total = Some(
+            ((*prior_total).unwrap_or(Amount(0)) - pending_liquidity_per_block)
+              .expect("more pending liquidity added with this block than pending from all blocks"),
+          )
+          .filter(|value| *value != Amount(0));
         });
       }
     }
@@ -473,10 +479,12 @@ mod pallet {
           external_balance_in.into(),
         )?;
 
-        TotalPendingLiquidity::<T>::mutate(external_balance_in.coin, |existing_total| {
-          *existing_total = ((*existing_total) + external_balance_in.amount).expect(
-            "total pending liquidity exceeded supply (bound to be representable in `Amount`)",
-          );
+        TotalPendingLiquidity::<T>::mutate_exists(external_balance_in.coin, |existing_total| {
+          *existing_total =
+            Some(((*existing_total).unwrap_or(Amount(0)) + external_balance_in.amount).expect(
+              "total pending liquidity exceeded supply (bound to be representable in `Amount`)",
+            ))
+            .filter(|value| *value != Amount(0));
         });
 
         /*
