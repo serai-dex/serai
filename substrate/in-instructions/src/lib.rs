@@ -154,11 +154,6 @@ mod pallet {
           historical_block
             .and_then(|historical_block| PendingLiquidity::<T>::take(coin, historical_block))
         } {
-          TotalPendingLiquidity::<T>::mutate(coin, |prior_total| {
-            *prior_total = ((*prior_total) - pending_liquidity_resolving_this_block)
-              .expect("more pending liquidity from this block than from all blocks");
-          });
-
           let pending_liquidity_per_block_from_resolving = Amount(
             pending_liquidity_resolving_this_block
               .0
@@ -204,6 +199,20 @@ mod pallet {
         .expect(
           "expected pending liquidity for this block wasn't present in pending liquidity address",
         );
+
+        /*
+          Decrement the amount of pending liquidity as the sum of the pool's balance and
+          `TotalPendingLiquidity` MUST ALWAYS equal what the pool's balance will be once all
+          outstanding pending liquidity is added.
+
+          If we deferred this until the pending liquidity resolved, in order to only perform a
+          single update to the storage, than the fractions of liquidity added incrementally would
+          be counted twice (as both pending liquidity and part of the pool's current balance).
+        */
+        TotalPendingLiquidity::<T>::mutate(coin, |prior_total| {
+          *prior_total = ((*prior_total) - pending_liquidity_per_block)
+            .expect("more pending liquidity added with this block than pending from all blocks");
+        });
       }
     }
   }
