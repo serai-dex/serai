@@ -460,9 +460,40 @@ mod pallet {
         let genesis_liquidity_liquidity_tokens_after =
           Amount(u64::try_from(genesis_liquidity_liquidity_tokens_after).unwrap());
         // Because the amount of external coin increased, the liquidity tokens corresponding to
-        // this fixed amount would have decreased
+        // this fixed amount would have decreased, meaning this `unwrap` is safe
         let new_protocol_owned_liquidity =
           (genesis_liquidity_liquidity_tokens - genesis_liquidity_liquidity_tokens_after).unwrap();
+
+        /*
+          We calculated the amount of protocol-owned liquidity to form based entirely on the amount
+          of the external coin, expecting it to stay the same between now (before any interactions
+          occur) and after (once all interactions occur).
+
+          This isn't accurate however, as we are adding value to one side of a symmetric pool.
+          Presumably, this value will be distributed across both sides in order to maintain the
+          current quote. This means if we want the amount of the external coin to remain
+          consistent, assuming perfect efficiency everywhere else (no slippage, no fees), and a
+          lack of external factors (such as any changes to the value of either coin within the
+          pool), that only half of this amount of the external coin will be added to
+          _and actually remain within_ the pool.
+
+          Accordingly, we halve the amount of protocol-owned liquidity we're about to form. This
+          has the impact of causing the new protocol-owned liquidity to be of current value
+          equivalent to the value being swapped to staked SRI (or slightly less due to rounding
+          errors).
+
+          This favors the genesis liquidity positions in a few ways. This swap to staked SRI will
+          in fact effect a swap to SRI, raising the quote for SRI, which is not factored into this
+          calculation. This, combined with the rounding favoring the genesis liquidity (and not the
+          protocol-owned liquidity), when the SRI portion of the genesis liquidity was minted by
+          the protocol itself (currently still actively encumbered, allowing any (re)claiming
+          procedure to be enshrined as a further encumberance), can be debated. This is the best
+          approximation for the stated goal however: that the amount of the external coin in the
+          genesis liquidity position remains consistent before and after. While the genesis
+          liquidity may be favored at every step, other systems would not achieve this goal.
+        */
+        let new_protocol_owned_liquidity = Amount(new_protocol_owned_liquidity.0 / 2);
+
         // The pool's address is used to represent the holder of protocol-owned liquidity
         serai_dex_pallet::Pallet::<T>::transfer_liquidity(
           Some(genesis_liquidity_address).into(),
