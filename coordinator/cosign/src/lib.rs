@@ -32,7 +32,7 @@ mod evaluator;
 /// The task to delay acknowledgement of the cosigns.
 mod delay;
 pub use delay::BROADCAST_FREQUENCY;
-use delay::LatestCosignedBlockNumber;
+use delay::LatestAcknowledgedBlock;
 
 #[cfg(test)]
 /// Test helpers and fixtures.
@@ -228,13 +228,13 @@ impl<D: Db> Cosigning<D> {
     Self { db, _task_handles: vec![intend_task_handle, evaluator_task_handle, delay_task_handle] }
   }
 
-  /// The latest cosigned block number.
-  pub fn latest_cosigned_block_number(getter: &impl Get) -> Result<u64, Faulted> {
+  /// The latest acknowledged block number.
+  pub fn latest_acknowledged_block(getter: &impl Get) -> Result<u64, Faulted> {
     if FaultedSession::get(getter).is_some() {
       Err(Faulted)?;
     }
 
-    Ok(LatestCosignedBlockNumber::get(getter).unwrap_or(0))
+    Ok(LatestAcknowledgedBlock::get(getter).unwrap_or(0))
   }
 
   /// Fetch a cosigned Substrate block's hash by its block number.
@@ -242,7 +242,7 @@ impl<D: Db> Cosigning<D> {
     getter: &impl Get,
     block_number: u64,
   ) -> Result<Option<BlockHash>, Faulted> {
-    if block_number == 0 || block_number > Self::latest_cosigned_block_number(getter)? {
+    if block_number == 0 || block_number > Self::latest_acknowledged_block(getter)? {
       return Ok(None);
     }
 
@@ -357,10 +357,10 @@ impl<D: Db> Cosigning<D> {
 
     if !faulty {
       // If this is for a future global session, we don't acknowledge this cosign at this time
-      let latest_cosigned_block_number = LatestCosignedBlockNumber::get(&txn).unwrap_or(0);
+      let latest_evaluated_block = evaluator::LatestEvaluatedBlock::get(&txn).unwrap_or(0);
       // This global session starts the block *after* its declaration, so we want to check if the
-      // block declaring it was cosigned
-      if (global_session.start_block_number - 1) > latest_cosigned_block_number {
+      // block declaring it was evaluated
+      if (global_session.start_block_number - 1) > latest_evaluated_block {
         drop(txn);
         return Err(IntakeCosignError::FutureGlobalSession);
       }

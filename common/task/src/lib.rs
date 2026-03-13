@@ -106,8 +106,9 @@ pub trait ContinuallyRan: Sized + Send {
       let mut current_sleep_before_next_task = default_sleep_before_next_task;
       let increase_sleep_before_next_task = |current_sleep_before_next_task: &mut u64| {
         let new_sleep = *current_sleep_before_next_task + default_sleep_before_next_task;
-        // Set a limit of sleeping for two minutes
-        *current_sleep_before_next_task = new_sleep.max(Self::MAX_DELAY_BETWEEN_ITERATIONS);
+        // Set a limit of sleeping **at most** two minutes
+        // use min to get the smallest value: either new_sleep, or 2 minutes. Never greater
+        *current_sleep_before_next_task = new_sleep.min(Self::MAX_DELAY_BETWEEN_ITERATIONS);
       };
 
       loop {

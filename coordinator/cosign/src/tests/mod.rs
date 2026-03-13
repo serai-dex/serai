@@ -10,6 +10,9 @@ mod delay;
 #[cfg(test)]
 mod cosigning;
 
+#[cfg(test)]
+mod full_stack;
+
 use std::{
   sync::{
     Arc,

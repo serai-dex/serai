@@ -11,10 +11,10 @@ use serai_client_serai::{
   abi::{
     Event, coins,
     primitives::{
-      address::{ExternalAddress, SeraiAddress},
+      address::SeraiAddress,
       balance::{Amount, ExternalBalance},
       coin::ExternalCoin,
-      crypto::{ExternalKey, KeyPair, Public},
+      crypto::{ExternalKey, KeyPair},
       instructions::{OutInstruction, OutInstructionWithBalance},
       network_id::{ExternalNetworkId, NetworkId},
       validator_sets::{ExternalValidatorSet, KeyShares, Session, ValidatorSet},
@@ -22,14 +22,18 @@ use serai_client_serai::{
     validator_sets,
   },
 };
+use serai_primitives::test_helpers::{random_external_address, random_keypair};
 
 use crate::{intend::*, tests::*, *};
 
-fn set_decided_event(set: ValidatorSet, validators: Vec<(SeraiAddress, KeyShares)>) -> Event {
+pub(super) fn set_decided_event(
+  set: ValidatorSet,
+  validators: Vec<(SeraiAddress, KeyShares)>,
+) -> Event {
   Event::ValidatorSets(validator_sets::Event::SetDecided { set, validators })
 }
 
-fn allocation_event(validator: SeraiAddress, network: NetworkId, amount: u64) -> Event {
+pub(super) fn allocation_event(validator: SeraiAddress, network: NetworkId, amount: u64) -> Event {
   Event::ValidatorSets(validator_sets::Event::Allocation {
     validator,
     network,
@@ -46,13 +50,11 @@ fn deallocation_event(validator: SeraiAddress, network: NetworkId, amount: u64) 
   })
 }
 
-fn burn_with_instruction_event(from: SeraiAddress) -> Event {
+pub(super) fn burn_with_instruction_event(from: SeraiAddress) -> Event {
   Event::Coins(coins::Event::BurnWithInstruction {
     from,
     instruction: OutInstructionWithBalance {
-      instruction: OutInstruction::Transfer(
-        ExternalAddress::try_from(vec![1u8, 2u8, 3u8]).unwrap(),
-      ),
+      instruction: OutInstruction::Transfer(random_external_address(&mut OsRng)),
       balance: ExternalBalance { coin: ExternalCoin::Bitcoin, amount: Amount(1) },
     },
   })
@@ -331,11 +333,11 @@ mod errors {
 }
 
 /// Random event, state, and block generator.
-struct EventFuzzer {
+pub(super) struct EventFuzzer {
   /// Seed bytes.
-  seed: [u8; 32],
+  pub(super) seed: [u8; 32],
   /// Available validator addresses.
-  validators: Vec<SeraiAddress>,
+  pub(super) validators: Vec<SeraiAddress>,
   /// All networks.
   networks: Vec<NetworkId>,
   /// Running stake ledger: `(network, validator) -> accumulated_stake`.
@@ -343,11 +345,13 @@ struct EventFuzzer {
   /// Sets that have been decided but not yet keyed.
   pending_keys: HashMap<ExternalValidatorSet, Vec<SeraiAddress>>,
   /// Next session number per network.
-  next_session: HashMap<ExternalNetworkId, u32>,
+  pub(super) next_session: HashMap<ExternalNetworkId, u32>,
+  /// Keypairs indexed by public key bytes, for signing cosigns.
+  pub(super) keypairs: HashMap<[u8; 32], schnorrkel::Keypair>,
 }
 
 impl EventFuzzer {
-  fn new() -> Self {
+  pub(super) fn new() -> Self {
     let mut seed = [0u8; 32];
     OsRng.fill_bytes(&mut seed);
 
@@ -371,6 +375,7 @@ impl EventFuzzer {
       stakes: HashMap::new(),
       pending_keys: HashMap::new(),
       next_session: HashMap::new(),
+      keypairs: HashMap::new(),
     }
   }
 
@@ -380,11 +385,23 @@ impl EventFuzzer {
     &slice[usize::try_from(i).unwrap()]
   }
 
+  /// Generate a random amount using a weighted distribution:
+  /// ~25% tiny (1..=10), ~35% small (11..=1_000), ~25% medium (1_001..=100_000),
+  /// ~15% large (100_001..=10_000_000).
+  fn random_amount(&mut self) -> u64 {
+    match OsRng.next_u64() % 20 {
+      0 ..= 4 => (OsRng.next_u64() % 10) + 1,
+      5 ..= 11 => (OsRng.next_u64() % 990) + 11,
+      12 ..= 16 => (OsRng.next_u64() % 99_000) + 1_001,
+      _ => (OsRng.next_u64() % 9_900_000) + 100_001,
+    }
+  }
+
   /// Generate a random allocation event.
   fn random_allocation(&mut self) -> Event {
     let validator = *self.pick(&self.validators.clone());
     let network = *self.pick(&self.networks.clone());
-    let amount = (OsRng.next_u64() % 10000) + 1; // 1..=10000
+    let amount = self.random_amount();
     if let Ok(ext) = ExternalNetworkId::try_from(network) {
       *self.stakes.entry((ext, validator)).or_default() += amount;
     }
@@ -396,7 +413,7 @@ impl EventFuzzer {
     // ~25% chance of generating a Serai deallocation (exercises the `continue` branch)
     if OsRng.next_u64() % 4 == 0 {
       let validator = *self.pick(&self.validators.clone());
-      let amount = (OsRng.next_u64() % 100) + 1;
+      let amount = self.random_amount();
       return Some(deallocation_event(validator, NetworkId::Serai, amount));
     }
 
@@ -407,7 +424,8 @@ impl EventFuzzer {
     }
     let i = OsRng.next_u64() % u64::try_from(candidates.len()).unwrap();
     let ((network, validator), current_stake) = candidates[usize::try_from(i).unwrap()];
-    let amount = (OsRng.next_u64() % current_stake) + 1; // 1..=current_stake
+    // Use weighted amount, clamped to current_stake so we don't underflow
+    let amount = self.random_amount().min(current_stake).max(1);
     *self.stakes.entry((network, validator)).or_default() -= amount;
     Some(deallocation_event(validator, NetworkId::External(network), amount))
   }
@@ -466,8 +484,8 @@ impl EventFuzzer {
     // Advance session for this network so the next SetDecided gets session+1
     *self.next_session.entry(set.network).or_insert(0) += 1;
 
-    let mut public = Public([0u8; 32]);
-    public.0[0 .. 8].copy_from_slice(&OsRng.next_u64().to_le_bytes());
+    let (keypair, public) = random_keypair(&mut OsRng);
+    self.keypairs.insert(public.0, keypair);
     let external_key = ExternalKey(vec![1u8].try_into().unwrap());
     let key_pair = KeyPair(public, external_key);
 
@@ -550,7 +568,7 @@ impl EventFuzzer {
   }
 
   /// Generate multiple blocks of random events.
-  fn generate_blocks(&mut self, count: usize) -> Vec<Vec<Vec<Event>>> {
+  pub(super) fn generate_blocks(&mut self, count: usize) -> Vec<Vec<Vec<Event>>> {
     let mut blocks = Vec::with_capacity(count);
     for _ in 0 .. count {
       blocks.push(self.generate_block_events());

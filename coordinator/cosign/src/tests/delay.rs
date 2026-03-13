@@ -1,8 +1,12 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
+
+use rand::RngCore;
+use rand_core::OsRng;
+use serai_task::ContinuallyRan;
 
 use crate::{
-  LatestCosignedBlockNumber,
-  delay::{CosignDelayTask, now_timestamp},
+  LatestAcknowledgedBlock,
+  delay::{ACKNOWLEDGEMENT_DELAY, CosignDelayTask, now_timestamp},
   evaluator::CosignedBlocks,
   tests::{IntoTask, TaskTest},
 };
@@ -38,8 +42,8 @@ impl DelayTest {
     (Self::default(), start)
   }
 
-  async fn assert_task_iteration_completes_with(&self, latest_cosigned_block_number: u64) {
-    assert_eq!(LatestCosignedBlockNumber::get(&self.db), Some(latest_cosigned_block_number));
+  async fn assert_task_iteration_completes_with(&self, latest_acknowledged_block: u64) {
+    assert_eq!(LatestAcknowledgedBlock::get(&self.db), Some(latest_acknowledged_block));
     // Assert CosignedBlocks queue items have been consumed after task run
     assert_eq!(CosignedBlocks::peek(&self.db), None);
   }
@@ -52,12 +56,12 @@ async fn returns_false_with_no_messages() {
 
   TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
 
-  assert_eq!(LatestCosignedBlockNumber::get(&test.db), None);
+  assert_eq!(LatestAcknowledgedBlock::get(&test.db), None);
   assert_eq!(CosignedBlocks::peek(&test.db), None);
 }
 
 #[tokio::test]
-async fn updates_latest_cosigned_block_number_after_ack_delay() {
+async fn updates_latest_acknowledged_block_after_ack_delay() {
   let (mut test, start) = DelayTest::new();
 
   {
@@ -149,4 +153,41 @@ async fn does_not_regress_and_skips_if_not_a_later_block() {
   // made_progress returns false
   TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
   test.assert_task_iteration_completes_with(4).await;
+}
+
+#[tokio::test]
+async fn respects_acknowledgement_delay() {
+  let mut test = DelayTest::default();
+  let block_number = OsRng.next_u64();
+
+  let now = now_secs();
+  {
+    let mut txn = test.db.txn();
+    CosignedBlocks::send(&mut txn, &(block_number, now));
+    txn.commit();
+  }
+
+  let start = Instant::now();
+  let mut task = test.into_task();
+
+  // Run the task in the background (it will sleep internally for ACKNOWLEDGEMENT_DELAY)
+  let task_handle = tokio::spawn(async move { task.run_iteration().await });
+
+  // Well before ACKNOWLEDGEMENT_DELAY, the block must not be acknowledged
+  tokio::time::sleep(Duration::from_secs(ACKNOWLEDGEMENT_DELAY.as_secs().saturating_sub(2))).await;
+  assert!(LatestAcknowledgedBlock::get(&test.db).is_none());
+
+  // Wait for the task to complete
+  let made_progress = task_handle.await.unwrap().unwrap();
+  assert!(made_progress);
+
+  // Block is now acknowledged
+  assert_eq!(LatestAcknowledgedBlock::get(&test.db), Some(block_number));
+
+  // The elapsed time must be at least ACKNOWLEDGEMENT_DELAY
+  let elapsed = start.elapsed();
+  assert!(
+    elapsed >= ACKNOWLEDGEMENT_DELAY,
+    "completed in {elapsed:?}, expected at least {ACKNOWLEDGEMENT_DELAY:?}"
+  );
 }

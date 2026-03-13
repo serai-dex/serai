@@ -4,8 +4,11 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use blake2::{Blake2s256, Digest};
 
+use rand_core::OsRng;
 use serai_db::{Db as _, DbTxn, MemDb};
 
+use serai_primitives::test_helpers::random_keypair;
+use serai_cosign_types::tests::sign_cosign;
 use serai_task::Task;
 
 use serai_client_serai::abi::primitives::{
@@ -18,41 +21,9 @@ use serai_client_serai::abi::primitives::{
 use crate::{
   Cosign, CosignIntent, Cosigning, Faulted, FaultedSession, Faults, GlobalSession, GlobalSessions,
   GlobalSessionsLastBlock, IntakeCosignError, NetworksLatestCosignedBlock, SignedCosign,
-  SubstrateBlockHash, delay::LatestCosignedBlockNumber, evaluator::CurrentlyEvaluatedGlobalSession,
+  SubstrateBlockHash, delay::LatestAcknowledgedBlock, evaluator::CurrentlyEvaluatedGlobalSession,
   intend::IntendedCosigns, tests::TestRequest, tests::setup_shim_serai,
 };
-
-use serai_cosign_types::tests::{
-  fixture_public_key, public_key_from_seed, sign_cosign_with_fixture, sign_cosign_with_seed,
-};
-
-const FIXTURE_SEED: [u8; 32] = [0xff; 32];
-
-struct Sr25519Fixture {
-  seed: [u8; 32],
-}
-
-impl Sr25519Fixture {
-  fn public_bytes(&self) -> [u8; 32] {
-    if self.seed == FIXTURE_SEED {
-      fixture_public_key()
-    } else {
-      public_key_from_seed(self.seed)
-    }
-  }
-}
-
-fn sr25519_fixture() -> Sr25519Fixture {
-  Sr25519Fixture { seed: FIXTURE_SEED }
-}
-
-fn sign_cosign(cosign: Cosign, fixture: &Sr25519Fixture) -> SignedCosign {
-  if fixture.seed == FIXTURE_SEED {
-    sign_cosign_with_fixture(cosign)
-  } else {
-    sign_cosign_with_seed(cosign, fixture.seed)
-  }
-}
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 struct TestGlobalSession {
@@ -80,19 +51,21 @@ impl TestGlobalSession {
   }
 }
 
-fn session_fixture() -> TestGlobalSession {
+fn random_session() -> (TestGlobalSession, schnorrkel::Keypair) {
   let network = ExternalNetworkId::Bitcoin;
   let set = ExternalValidatorSet { network, session: Session(0) };
+
+  let (keypair, public) = random_keypair(&mut OsRng);
 
   let mut keys = HashMap::new();
   let mut stakes = HashMap::new();
 
-  let fixture = sr25519_fixture();
-  let pubkey = Public(fixture.public_bytes());
-  keys.insert(network, pubkey);
+  keys.insert(network, public);
   stakes.insert(network, 100);
 
-  TestGlobalSession { start_block_number: 1, sets: vec![set], keys, stakes, total_stake: 100 }
+  let session =
+    TestGlobalSession { start_block_number: 1, sets: vec![set], keys, stakes, total_stake: 100 };
+  (session, keypair)
 }
 
 fn seed_minimal_state(db: &mut MemDb, session: &TestGlobalSession) {
@@ -106,7 +79,7 @@ fn seed_minimal_state(db: &mut MemDb, session: &TestGlobalSession) {
   CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, session.to_global()));
 
   // Required for `intake_cosign` to not classify a session as "future".
-  LatestCosignedBlockNumber::set(&mut txn, &0u64);
+  LatestAcknowledgedBlock::set(&mut txn, &0u64);
 
   txn.commit();
 }
@@ -198,7 +171,7 @@ mod spawn {
 
     assert!(cosigning.cosigns_to_rebroadcast().is_empty());
 
-    let latest = Cosigning::<MemDb>::latest_cosigned_block_number(&db);
+    let latest = Cosigning::<MemDb>::latest_acknowledged_block(&db);
     assert!(latest.is_ok());
     assert_eq!(latest.unwrap(), 0);
   }
@@ -213,40 +186,74 @@ mod spawn {
 
     tokio::time::sleep(Duration::from_millis(10)).await;
 
-    let latest = Cosigning::<MemDb>::latest_cosigned_block_number(&db);
+    let latest = Cosigning::<MemDb>::latest_acknowledged_block(&db);
     assert!(latest.is_ok());
+  }
+
+  #[tokio::test]
+  async fn spawn_end_to_end() {
+    let db = MemDb::new();
+    let (shim_serai, serai) = setup_shim_serai().await;
+    let (request, _calls) = TestRequest::new(false);
+
+    // Create block 0 so the intend task has something to scan
+    shim_serai.make_block(0, vec![]).await;
+
+    // Spawn cosigning tasks in the background
+    let _cosigning = Cosigning::spawn(db.clone(), serai, request, vec![]);
+
+    // Keep adding new blocks while the background tasks process them
+    let total_blocks = 10u64;
+    for _ in 1 ..= total_blocks {
+      shim_serai.add_block_with_events(vec![]).await;
+      tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+
+    // Wait for the full pipeline to process in a polling loop:
+    // intend (indexes blocks) -> evaluator (passes HasEvents::No through) -> delay (waits
+    // ACKNOWLEDGEMENT_DELAY)
+    loop {
+      let latest = Cosigning::<MemDb>::latest_acknowledged_block(&db);
+      if latest.map(|n| n >= total_blocks).unwrap_or(false) {
+        break;
+      }
+      tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    let latest = Cosigning::<MemDb>::latest_acknowledged_block(&db).unwrap();
+    assert!(latest >= total_blocks);
   }
 }
 
-mod latest_cosigned_block_number {
+mod latest_acknowledged_block {
   use super::*;
 
   #[test]
-  fn latest_cosigned_block_number_defaults_to_zero() {
+  fn latest_acknowledged_block_defaults_to_zero() {
     let db = MemDb::new();
-    assert_eq!(Cosigning::<MemDb>::latest_cosigned_block_number(&db).unwrap(), 0);
+    assert_eq!(Cosigning::<MemDb>::latest_acknowledged_block(&db).unwrap(), 0);
   }
 
   #[test]
-  fn latest_cosigned_block_number_errors_when_faulted() {
+  fn latest_acknowledged_block_errors_when_faulted() {
     let mut db = MemDb::new();
     {
       let mut txn = db.txn();
       FaultedSession::set(&mut txn, &[1u8; 32]);
       txn.commit();
     }
-    assert!(matches!(Cosigning::<MemDb>::latest_cosigned_block_number(&db), Err(Faulted)));
+    assert!(matches!(Cosigning::<MemDb>::latest_acknowledged_block(&db), Err(Faulted)));
   }
 
   #[test]
-  fn latest_cosigned_block_number_returns_stored_value() {
+  fn latest_acknowledged_block_returns_stored_value() {
     let mut db = MemDb::new();
     {
       let mut txn = db.txn();
-      LatestCosignedBlockNumber::set(&mut txn, &42u64);
+      LatestAcknowledgedBlock::set(&mut txn, &42u64);
       txn.commit();
     }
-    assert_eq!(Cosigning::<MemDb>::latest_cosigned_block_number(&db).unwrap(), 42);
+    assert_eq!(Cosigning::<MemDb>::latest_acknowledged_block(&db).unwrap(), 42);
   }
 }
 
@@ -258,7 +265,7 @@ mod cosigned_block {
     let mut db = MemDb::new();
     {
       let mut txn = db.txn();
-      LatestCosignedBlockNumber::set(&mut txn, &5u64);
+      LatestAcknowledgedBlock::set(&mut txn, &5u64);
       txn.commit();
     }
     assert_eq!(Cosigning::<MemDb>::cosigned_block(&db, 6).unwrap(), None);
@@ -270,7 +277,7 @@ mod cosigned_block {
     let block_hash = BlockHash([9u8; 32]);
     {
       let mut txn = db.txn();
-      LatestCosignedBlockNumber::set(&mut txn, &5u64);
+      LatestAcknowledgedBlock::set(&mut txn, &5u64);
       SubstrateBlockHash::set(&mut txn, 3, &block_hash);
       txn.commit();
     }
@@ -298,7 +305,7 @@ mod cosigned_block {
       let mut txn = db.txn();
       SubstrateBlockHash::set(&mut txn, 5, &block_hash_5);
       SubstrateBlockHash::set(&mut txn, 10, &block_hash_10);
-      LatestCosignedBlockNumber::set(&mut txn, &10u64);
+      LatestAcknowledgedBlock::set(&mut txn, &10u64);
       txn.commit();
     }
 
@@ -328,9 +335,8 @@ mod notable_cosigns {
 
   #[test]
   fn notable_cosigns_returns_cosigns_for_session() {
-    let session = session_fixture();
+    let (session, keypair) = random_session();
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -363,9 +369,8 @@ mod cosigns_to_rebroadcast {
 
   #[test]
   fn cosigns_to_rebroadcast_excludes_cosigns_from_different_global_session() {
-    let session = session_fixture();
+    let (session, keypair) = random_session();
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -418,9 +423,8 @@ mod cosigns_to_rebroadcast {
 
   #[test]
   fn cosigns_to_rebroadcast_returns_latest_cosigns_when_not_faulted() {
-    let session = session_fixture();
+    let (session, keypair) = random_session();
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -448,9 +452,8 @@ mod cosigns_to_rebroadcast {
 
   #[test]
   fn cosigns_to_rebroadcast_returns_faults_and_honest_when_faulted() {
-    let session = session_fixture();
+    let (session, keypair) = random_session();
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -502,7 +505,7 @@ mod intake_cosign {
   #[test]
   fn intake_cosign_rejects_not_yet_indexed_block() {
     let db = MemDb::new();
-    let keypair = sr25519_fixture();
+    let (keypair, _) = random_keypair(&mut OsRng);
 
     let cosign = Cosign {
       global_session: [1u8; 32],
@@ -518,9 +521,8 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_accepts_valid_cosign() {
-    let session = session_fixture();
+    let (session, keypair) = random_session();
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -543,9 +545,8 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_stale_cosign() {
-    let session = session_fixture();
+    let (session, keypair) = random_session();
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -582,7 +583,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_unrecognized_global_session() {
-    let keypair = sr25519_fixture();
+    let (keypair, _) = random_keypair(&mut OsRng);
 
     let mut db = MemDb::new();
     let block_number = 1;
@@ -610,17 +611,16 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_before_global_session_start() {
-    let mut session = session_fixture();
+    let (mut session, keypair) = random_session();
     session.start_block_number = 10;
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     {
       let mut txn = db.txn();
       GlobalSessions::set(&mut txn, id, &session.to_global());
       CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, session.to_global()));
-      LatestCosignedBlockNumber::set(&mut txn, &10u64);
+      LatestAcknowledgedBlock::set(&mut txn, &10u64);
 
       SubstrateBlockHash::set(&mut txn, 5, &BlockHash([5u8; 32]));
       txn.commit();
@@ -643,9 +643,8 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_after_global_session_end() {
-    let session = session_fixture();
+    let (session, keypair) = random_session();
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -676,10 +675,10 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_invalid_signature() {
-    let session = session_fixture();
+    let (session, _keypair) = random_session();
     let id = session.id();
-    // Use a different keypair than the one in session_fixture
-    let wrong_keypair = Sr25519Fixture { seed: [99u8; 32] };
+    // Use a different keypair than the one in the session
+    let (wrong_keypair, _) = random_keypair(&mut OsRng);
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -702,10 +701,9 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_future_global_session() {
-    let mut session = session_fixture();
+    let (mut session, keypair) = random_session();
     session.start_block_number = 10;
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     {
@@ -713,7 +711,7 @@ mod intake_cosign {
       GlobalSessions::set(&mut txn, id, &session.to_global());
       CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, session.to_global()));
 
-      LatestCosignedBlockNumber::set(&mut txn, &5u64);
+      LatestAcknowledgedBlock::set(&mut txn, &5u64);
       SubstrateBlockHash::set(&mut txn, 10, &BlockHash([10u8; 32]));
       txn.commit();
     }
@@ -735,9 +733,8 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_handles_faulty_cosign() {
-    let session = session_fixture();
+    let (session, keypair) = random_session();
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -774,9 +771,8 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_accepts_newer_cosign_when_existing_is_older() {
-    let session = session_fixture();
+    let (session, keypair) = random_session();
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -815,9 +811,8 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_accepts_cosign_at_global_session_last_block() {
-    let session = session_fixture();
+    let (session, keypair) = random_session();
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -849,9 +844,8 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_ignores_duplicate_fault_from_same_network() {
-    let session = session_fixture();
+    let (session, keypair) = random_session();
     let id = session.id();
-    let keypair = sr25519_fixture();
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -902,10 +896,10 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_non_participating_network() {
-    let session = session_fixture();
+    let (session, _keypair) = random_session();
     let id = session.id();
 
-    let eth_keypair = Sr25519Fixture { seed: [77u8; 32] };
+    let (eth_keypair, _) = random_keypair(&mut OsRng);
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
@@ -940,14 +934,14 @@ mod intake_cosign {
     let set1 = ExternalValidatorSet { network: network1, session: Session(0) };
     let set2 = ExternalValidatorSet { network: network2, session: Session(0) };
 
-    let keypair1 = sr25519_fixture();
-    let keypair2 = Sr25519Fixture { seed: [88u8; 32] };
+    let (keypair1, public1) = random_keypair(&mut OsRng);
+    let (_, public2) = random_keypair(&mut OsRng);
 
     let mut keys = HashMap::new();
     let mut stakes = HashMap::new();
 
-    keys.insert(network1, Public(keypair1.public_bytes()));
-    keys.insert(network2, Public(keypair2.public_bytes()));
+    keys.insert(network1, public1);
+    keys.insert(network2, public2);
 
     stakes.insert(network1, 10);
     stakes.insert(network2, 90);

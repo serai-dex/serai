@@ -40,4 +40,7 @@ serai-shim-rpc = { path = "../../tests/shim-rpc" }
 serai-test-task = { path = "../../tests/task" }
 
 hex = { version = "0.4", default-features = false }
+schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
+rand = { version = "0.8", default-features = false }
 rand_core = { version = "0.6", default-features = false }
+serai-primitives = { path = "../../substrate/primitives", features = ["test-helpers"] }

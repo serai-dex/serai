@@ -103,7 +103,7 @@ impl<CD: DbTrait, TD: DbTrait, P: P2p> ContinuallyRan
         pending_notable_cosign = cosign.notable;
 
         // If we (Serai) haven't cosigned this block, break as this is still pending
-        let latest = match Cosigning::<CD>::latest_cosigned_block_number(&txn) {
+        let latest = match Cosigning::<CD>::latest_acknowledged_block(&txn) {
           Ok(latest) => latest,
           Err(Faulted) => {
             log::error!("cosigning faulted");

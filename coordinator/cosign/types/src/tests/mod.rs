@@ -1,44 +1,19 @@
 use crate::{COSIGN_CONTEXT, Cosign, SignedCosign};
 
-#[cfg(test)]
-use crate::{BlockHash, CosignIntent, ExternalNetworkId, Public};
-
-fn sr25519_fixture_from_seed(seed: [u8; 32]) -> schnorrkel::Keypair {
-  schnorrkel::MiniSecretKey::from_bytes(&seed)
-    .expect("seed should be valid")
-    .expand_to_keypair(schnorrkel::ExpansionMode::Ed25519)
-}
-
-fn sr25519_fixture() -> schnorrkel::Keypair {
-  sr25519_fixture_from_seed([0xff; 32])
-}
-
-fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosign {
+/// Sign a [`Cosign`] with a schnorrkel keypair, producing a [`SignedCosign`].
+pub fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosign {
   SignedCosign {
     cosign: cosign.clone(),
     signature: keypair.sign_simple(COSIGN_CONTEXT, &cosign.signature_message()).to_bytes(),
   }
 }
 
-/// Returns the public key bytes from the test fixture keypair (seed [0xff; 32])
-pub fn fixture_public_key() -> [u8; 32] {
-  sr25519_fixture().public.to_bytes()
-}
-
-/// Returns the public key bytes for a keypair with the given seed
-pub fn public_key_from_seed(seed: [u8; 32]) -> [u8; 32] {
-  sr25519_fixture_from_seed(seed).public.to_bytes()
-}
-
-/// Creates a SignedCosign using the test fixture keypair (seed [0xff; 32])
-pub fn sign_cosign_with_fixture(cosign: Cosign) -> SignedCosign {
-  sign_cosign(cosign, &sr25519_fixture())
-}
-
-/// Creates a SignedCosign using a keypair derived from the given seed
-pub fn sign_cosign_with_seed(cosign: Cosign, seed: [u8; 32]) -> SignedCosign {
-  sign_cosign(cosign, &sr25519_fixture_from_seed(seed))
-}
+#[cfg(test)]
+use rand_core::OsRng;
+#[cfg(test)]
+use serai_primitives::test_helpers::random_keypair;
+#[cfg(test)]
+use crate::{BlockHash, CosignIntent, ExternalNetworkId, Public};
 
 #[test]
 fn cosign_intent_into_cosign() {
@@ -74,7 +49,7 @@ fn deterministic_signature_message() {
 
 #[test]
 fn signed_cosign_verify_signature_valid() {
-  let keypair = sr25519_fixture();
+  let (keypair, public) = random_keypair(&mut OsRng);
   let cosign = Cosign {
     global_session: [1u8; 32],
     block_number: 5,
@@ -83,14 +58,14 @@ fn signed_cosign_verify_signature_valid() {
   };
 
   let signed = sign_cosign(cosign, &keypair);
-  let pubkey = Public(keypair.public.to_bytes());
 
-  assert!(signed.verify_signature(pubkey), "valid signature should verify");
+  assert!(signed.verify_signature(public), "valid signature should verify");
 }
 
 #[test]
 fn signed_cosign_verify_signature_invalid() {
-  let keypair1 = sr25519_fixture();
+  let (keypair1, _) = random_keypair(&mut OsRng);
+  let (_, wrong_public) = random_keypair(&mut OsRng);
 
   let cosign = Cosign {
     global_session: [1u8; 32],
@@ -100,14 +75,13 @@ fn signed_cosign_verify_signature_invalid() {
   };
 
   let signed = sign_cosign(cosign, &keypair1);
-  let wrong_pubkey = public_key_from_seed([0x01; 32]);
 
-  assert!(!signed.verify_signature(wrong_pubkey), "invalid signature should not verify");
+  assert!(!signed.verify_signature(wrong_public), "invalid signature should not verify");
 }
 
 #[test]
 fn signed_cosign_verify_signature_invalid_public_key_bytes() {
-  let keypair = sr25519_fixture();
+  let (keypair, _) = random_keypair(&mut OsRng);
   let cosign = Cosign {
     global_session: [1u8; 32],
     block_number: 5,
@@ -144,8 +118,7 @@ fn signed_cosign_verify_signature_invalid_signature_bytes() {
 
   let signed = SignedCosign { cosign, signature: invalid_sig_bytes };
 
-  let keypair = sr25519_fixture();
-  let valid_pubkey = Public(keypair.public.to_bytes());
+  let (_, valid_public) = random_keypair(&mut OsRng);
 
-  assert!(!signed.verify_signature(valid_pubkey), "invalid signature bytes should return false");
+  assert!(!signed.verify_signature(valid_public), "invalid signature bytes should return false");
 }

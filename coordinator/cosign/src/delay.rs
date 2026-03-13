@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime};
 use serai_db::*;
 use serai_task::{DoesNotError, ContinuallyRan};
 
-use crate::evaluator::CosignedBlocks;
+use crate::evaluator::{CosignedBlocks, LatestEvaluatedBlock};
 
 #[cfg(not(any(test)))]
 /// How often callers should broadcast the cosigns flagged for rebroadcasting.
@@ -27,8 +27,8 @@ pub(crate) fn now_timestamp() -> Duration {
 
 create_db!(
   SubstrateCosignDelay {
-    // The latest cosigned block number.
-    LatestCosignedBlockNumber: () -> u64,
+    // The latest block number acknowledged by the delay task.
+    LatestAcknowledgedBlock: () -> u64,
   }
 );
 
@@ -52,13 +52,13 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
           break;
         };
 
-        let latest_cosigned_block_number = LatestCosignedBlockNumber::get(&mut txn).unwrap_or(0);
+        let latest_acknowledged_block = LatestAcknowledgedBlock::get(&mut txn).unwrap_or(0);
 
         serai_log::debug!(
-          "beginning delay: block_number={block_number}, time_evaluated={time_evaluated}, latest_cosigned_block_number={latest_cosigned_block_number}",
+          "beginning delay: block_number={block_number}, time_evaluated={time_evaluated}, latest_acknowledged_block={latest_acknowledged_block}",
         );
 
-        if block_number <= latest_cosigned_block_number {
+        if block_number <= latest_acknowledged_block {
           // If we've already acknowledged a later block, consume and skip (don't sleep).
           txn.commit();
           continue;
@@ -74,17 +74,33 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         if time_valid_timestamp > now_timestamp {
           // Sleep until then
           let time_left = time_valid_timestamp - now_timestamp;
+          serai_log::debug!("beginning sleep: {time_left}s");
           tokio::time::sleep(Duration::from_secs(time_left)).await;
         }
 
         let mut txn = self.db.txn();
         // Consume block to continue
         CosignedBlocks::try_recv(&mut txn);
-        // Set the cosigned block
-        LatestCosignedBlockNumber::set(&mut txn, &block_number);
+        LatestAcknowledgedBlock::set(&mut txn, &block_number);
         txn.commit();
 
+        serai_log::debug!("LatestAcknowledgedBlock={block_number}");
+
         made_progress = true;
+      }
+
+      // Catch up to HasEvents::No blocks that don't go through CosignedBlocks
+      // they only advance LatestEvaluatedBlock. These blocks need no sleep delay.
+      // since no cosign means no need for equivocation prevention
+      if let Some(evaluated) = LatestEvaluatedBlock::get(&self.db) {
+        let acknowledged = LatestAcknowledgedBlock::get(&self.db).unwrap_or(0);
+        if evaluated > acknowledged {
+          let mut txn = self.db.txn();
+          LatestAcknowledgedBlock::set(&mut txn, &evaluated);
+          txn.commit();
+          serai_log::debug!("LatestAcknowledgedBlock={evaluated} (caught up to evaluator)");
+          made_progress = true;
+        }
       }
 
       Ok(made_progress)

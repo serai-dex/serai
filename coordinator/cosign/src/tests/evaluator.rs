@@ -18,7 +18,8 @@ use serai_task::ContinuallyRan;
 use crate::{
   Cosign, GlobalSession, HasEvents, NetworksLatestCosignedBlock,
   evaluator::{
-    CosignEvaluatorTask, CosignedBlocks, CurrentlyEvaluatedGlobalSession, REQUEST_COSIGNS_SPACING,
+    CosignEvaluatorTask, CosignedBlocks, CurrentlyEvaluatedGlobalSession, LatestEvaluatedBlock,
+    REQUEST_COSIGNS_SPACING,
   },
   intend::{BlockEventData, BlockEvents, GlobalSessionsChannel},
   tests::{IntoTask, TaskTest, TestRequest},
@@ -133,7 +134,13 @@ async fn processes_blocks_with_no_events() {
 
   let mut task = test.into_task();
   TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
-  verify_db_invariants(&mut test.db, Some((0, 2)));
+
+  assert!(BlockEvents::peek(&test.db).is_none(), "BlockEvents should be fully consumed");
+  assert!(
+    CosignedBlocks::peek(&test.db).is_none(),
+    "HasEvent::No blocks shouldn't produce CosignedBlocks"
+  );
+  assert_eq!(LatestEvaluatedBlock::get(&test.db), Some(2));
 }
 
 #[tokio::test]
@@ -324,7 +331,13 @@ async fn advances_global_session_at_start_block() {
 
   let mut task = test.into_task();
   TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
-  verify_db_invariants(&mut test.db, Some((1, 3)));
+
+  assert!(BlockEvents::peek(&test.db).is_none(), "BlockEvents should be fully consumed");
+  assert!(
+    CosignedBlocks::peek(&test.db).is_none(),
+    "HasEvent::No blocks shouldn't produce CosignedBlocks"
+  );
+  assert_eq!(LatestEvaluatedBlock::get(&test.db), Some(3));
 
   let current =
     CurrentlyEvaluatedGlobalSession::get(&test.db).expect("should have current session");

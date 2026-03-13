@@ -72,6 +72,11 @@ pub(crate) struct CosignIntendTask<D: Db> {
 }
 
 impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
+  #[cfg(test)]
+  const DELAY_BETWEEN_ITERATIONS: u64 = 1;
+  #[cfg(test)]
+  const MAX_DELAY_BETWEEN_ITERATIONS: u64 = 5;
+
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
@@ -143,7 +148,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         );
         BuildsUpon::set(&mut txn, &builds_upon);
 
-        serai_log::debug!("iterating over block_number={block_number}, hash={serai_block_hash:?}");
+        serai_log::debug!("iterating over block_number={block_number}");
 
         let mut has_events = HasEvents::No;
         let vset_events = serai_block_events.validator_sets();
@@ -287,6 +292,11 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             stakes,
             total_stake,
           };
+
+          serai_log::debug!(
+          "Notable block block_number={block_number}: new session created {next_global_session_info:?}"
+        );
+
           GlobalSessions::set(&mut txn, new_global_session, &next_global_session_info);
           if let Some(ending_global_session) = global_session_for_this_block {
             GlobalSessionsLastBlock::set(&mut txn, ending_global_session, &block_number);
@@ -316,7 +326,9 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
 
             // Tell each set of their expectation to cosign this block
             for set in ending_global_session_info.sets {
-              serai_log::debug!("set will cosign block: set={set:?}, block_number={block_number}");
+              serai_log::info!(
+                "set will cosign {has_events:?} block: set={set:?}, block_number={block_number}"
+              );
 
               IntendedCosigns::send(
                 &mut txn,
@@ -333,7 +345,9 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           HasEvents::No => {}
         }
 
-        serai_log::debug!("finished iterating: has_events={has_events:?}");
+        serai_log::debug!(
+          "finished iterating block_number={block_number}: has_events={has_events:?}"
+        );
 
         // Populate a singular feed with every block's status for the evaluator to work off of
         BlockEvents::send(&mut txn, &(BlockEventData { block_number, has_events }));
