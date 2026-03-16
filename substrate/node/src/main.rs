@@ -135,7 +135,24 @@ fn main() -> sc_cli::Result<()> {
         if let Some((_validator_identity, keystore)) = &validator_identity_and_keystore {
           let node_key_entropy = keystore.pair(sp_core::crypto::KeyTypeId(*b"p2ed"));
           let node_key_entropy = Zeroizing::new(node_key_entropy.to_raw_vec());
-          // This effects a hardened derivation, which shouldn't be necessary but is a bit stronger
+          /*
+            This effects a hardened derivation, which may or may not be necessary. Specifically,
+            the sr25519 VRF is premised on the computation of Diffie-Hellmans, and transports
+            frequently derive a symmetric encryption key from a Diffie-Hellman. If the P2P protocol
+            grants the adversary a DH oracle (they can provide an arbitrary point and receive the
+            DH for a validator's key and that point, such as if they open a transport, claim an
+            arbitrary point is in fact their own key (causing the validator to perform the DH), and
+            then somehow learn the symmetric key from there), then usage of a P2P key with a known
+            relation to the key used with BABE may break the security of BABE (due to granting the
+            adversary the ability to learn random numbers before everyone else).
+
+            Similar concerns exist any time we wish to provide keys of known relation for usage in
+            arbitrary protocols. The usage within the runtime itself is only safe as all the keys
+            are solely used for signing (as fine to compose) except for the singular usage for the
+            BABE VRF (which is fine to compose with signing). This has to be kept in mind when we
+            now start using keys, derived in any manner, with other protocols such as the P2P layer
+            however.
+          */
           let mut node_key = Zeroizing::new(sp_core::blake2_256(&node_key_entropy));
           // Perform a rejection sample such that this will keep sampling keys until it finds one
           loop {

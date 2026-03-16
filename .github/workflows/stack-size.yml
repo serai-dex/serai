@@ -38,8 +38,8 @@ jobs:
         shell: bash
         run: |
           # We explicitly download the Linux binary as this script executes over an ELF binary
-          wget https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.4.5.tar.bz2
-          tar -xvf monero-linux-x64-v0.18.4.5.tar.bz2
+          wget https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.4.6.tar.bz2
+          tar -xvf monero-linux-x64-v0.18.4.6.tar.bz2
           mv $(find . -name monerod) .
 
       - name: Verify expected behavior
@@ -73,10 +73,10 @@ jobs:
 
             # macOS also has the benefit of packaging (via MacPorts) `mrsh`,
             # which explicitly attempts to be be exactly POSIX, without any extensions.
-            # We first have to install MacPorts, the easiest method being via source.
-            curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.12.1.tar.bz2
-            tar xf MacPorts-2.12.2.tar.bz2
-            cd MacPorts-2.12.2
+            # We first have to install MacPorts, the easiest method being from source.
+            curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.12.3.tar.bz2
+            tar xf MacPorts-2.12.3.tar.bz2
+            cd MacPorts-2.12.3
             ./configure
             make
             sudo make install

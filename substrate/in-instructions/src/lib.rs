@@ -83,6 +83,12 @@ mod pallet {
       serai_abi::primitives::constants::TARGET_BLOCK_TIME.as_millis()) as u32;
 
   /// The total amount of pending liquidity for a coin.
+  ///
+  /// This is used to track how much liquidity is pending as the reclaiming of genesis liquidity
+  /// considers both the amount in the pool _and_ the amount which is known as will be added to
+  /// the pool. While that would suggest this value to be equivalent to the balance of the external
+  /// coin this module has, it is distinct as this module's address may be transferred to _without_
+  /// the coins being tracked as pending liquidity.
   #[pallet::storage]
   type TotalPendingLiquidity<T: Config> = StorageMap<_, Identity, ExternalCoin, Amount, ValueQuery>;
   /// A view of pending liquidity, indexed by the block on which it was queued.
@@ -90,28 +96,67 @@ mod pallet {
   type PendingLiquidity<T: Config> =
     StorageDoubleMap<_, Identity, ExternalCoin, Identity, BlockNumberFor<T>, Amount, OptionQuery>;
   /// The amount of pending liqudity to add with each block.
+  ///
+  /// This is updated, and entirely used within, `pre_inherents`.
   #[pallet::storage]
   type PendingLiquidityPerBlock<T: Config> =
     StorageMap<_, Identity, ExternalCoin, Amount, OptionQuery>;
 
   impl<T: Config> frame_support::traits::PreInherents for Pallet<T> {
     fn pre_inherents() {
-      for coin in ExternalCoin::all() {
-        let Some(mut pending_liquidity_per_block) = PendingLiquidityPerBlock::<T>::get(coin) else {
-          continue;
-        };
+      let current_block = frame_system::Pallet::<T>::block_number();
+      // This will not trap as `pre_inherents` is not executed on the genesis block
+      let prior_block = current_block - BlockNumberFor::<T>::one();
+      /*
+        The `max(1)` handles the edge case where `BLOCKS_TO_ADD_PENDING_LIQUIDITY_OVER = 0`,
+        which is presumably a misconfiguration but one we handle gracefully. This is discussed
+        in more detail here: https://github.com/serai-dex/serai/issues/759
+      */
+      let historical_block = current_block
+        .checked_sub(&BlockNumberFor::<T>::from(BLOCKS_TO_ADD_PENDING_LIQUIDITY_OVER.max(1)));
 
+      for coin in ExternalCoin::all() {
+        // If there isn't any pending liquidity, move on to the next coin
+        if PendingLiquidity::<T>::iter_key_prefix(coin).next().is_none() {
+          continue;
+        }
+
+        // Add the prior block's pending liquidity to the rate at which pending liquidity is added
+        if let Some(pending_liquidity_from_prior_block) =
+          PendingLiquidity::<T>::get(coin, prior_block)
+        {
+          PendingLiquidityPerBlock::<T>::mutate(coin, |pending_liquidity_per_block| {
+            let existing = (*pending_liquidity_per_block).unwrap_or(Amount(0));
+            // This uses a floor division where on the last block, the remainder is expected to be
+            // handled by the code which actually adds this pending liquidity to the liquidity pool
+            *pending_liquidity_per_block = Some((
+              existing +
+              Amount(pending_liquidity_from_prior_block
+                .0
+                .checked_div(u64::from(BLOCKS_TO_ADD_PENDING_LIQUIDITY_OVER))
+                .unwrap_or(0)))
+            .expect(
+              "pending liquidity per block exceeded supply (bound to be representable in `Amount`)",
+            )).filter(|value| *value != Amount(0));
+          });
+        }
+
+        let mut pending_liquidity_per_block =
+          PendingLiquidityPerBlock::<T>::get(coin).unwrap_or(Amount(0));
+
+        /*
+          If pending liquidity was added `BLOCKS_TO_ADD_PENDING_LIQUIDITY_OVER` blocks ago, it will
+          have been added in full by the end of this block. We remove the pending liquidity from
+          active consideration by removing its storage entry and decreasing the rate at which
+          liquidity is added.
+
+          Additionally, as the per-block rate used a floor division, we add the remainder into the
+          amount added with this block to ensure we add the entire amount.
+        */
         if let Some(pending_liquidity_resolving_this_block) = {
-          let historical_block = frame_system::Pallet::<T>::block_number()
-            .checked_sub(&BlockNumberFor::<T>::from(BLOCKS_TO_ADD_PENDING_LIQUIDITY_OVER.max(1)));
           historical_block
             .and_then(|historical_block| PendingLiquidity::<T>::take(coin, historical_block))
         } {
-          TotalPendingLiquidity::<T>::mutate(coin, |prior_total| {
-            *prior_total = ((*prior_total) - pending_liquidity_resolving_this_block)
-              .expect("more pending liquidity from this block than from all blocks");
-          });
-
           let pending_liquidity_per_block_from_resolving = Amount(
             pending_liquidity_resolving_this_block
               .0
@@ -119,8 +164,7 @@ mod pallet {
               .unwrap_or(0),
           );
 
-          // Because we have now (or will have at the end of this function) added this entire
-          // amount, reduce the rate at which we add liquidity to the pools
+          // Perform the rate reduction
           {
             let new_pending_liquidity_per_block = (pending_liquidity_per_block -
               pending_liquidity_per_block_from_resolving)
@@ -158,6 +202,23 @@ mod pallet {
         .expect(
           "expected pending liquidity for this block wasn't present in pending liquidity address",
         );
+
+        /*
+          Decrement the amount of pending liquidity as the sum of the pool's balance and
+          `TotalPendingLiquidity` MUST ALWAYS equal what the pool's balance will be once all
+          outstanding pending liquidity is added.
+
+          If we deferred this until the pending liquidity resolved, in order to only perform a
+          single update to the storage, than the fractions of liquidity added incrementally would
+          be counted twice (as both pending liquidity and part of the pool's current balance).
+        */
+        TotalPendingLiquidity::<T>::mutate_exists(coin, |prior_total| {
+          *prior_total = Some(
+            ((*prior_total).unwrap_or(Amount(0)) - pending_liquidity_per_block)
+              .expect("more pending liquidity added with this block than pending from all blocks"),
+          )
+          .filter(|value| *value != Amount(0));
+        });
       }
     }
   }
@@ -399,9 +460,40 @@ mod pallet {
         let genesis_liquidity_liquidity_tokens_after =
           Amount(u64::try_from(genesis_liquidity_liquidity_tokens_after).unwrap());
         // Because the amount of external coin increased, the liquidity tokens corresponding to
-        // this fixed amount would have decreased
+        // this fixed amount would have decreased, meaning this `unwrap` is safe
         let new_protocol_owned_liquidity =
           (genesis_liquidity_liquidity_tokens - genesis_liquidity_liquidity_tokens_after).unwrap();
+
+        /*
+          We calculated the amount of protocol-owned liquidity to form based entirely on the amount
+          of the external coin, expecting it to stay the same between now (before any interactions
+          occur) and after (once all interactions occur).
+
+          This isn't accurate however, as we are adding value to one side of a symmetric pool.
+          Presumably, this value will be distributed across both sides in order to maintain the
+          current quote. This means if we want the amount of the external coin to remain
+          consistent, assuming perfect efficiency everywhere else (no slippage, no fees), and a
+          lack of external factors (such as any changes to the value of either coin within the
+          pool), that only half of this amount of the external coin will be added to
+          _and actually remain within_ the pool.
+
+          Accordingly, we halve the amount of protocol-owned liquidity we're about to form. This
+          has the impact of causing the new protocol-owned liquidity to be of current value
+          equivalent to the value being swapped to staked SRI (or slightly less due to rounding
+          errors).
+
+          This favors the genesis liquidity positions in a few ways. This swap to staked SRI will
+          in fact effect a swap to SRI, raising the quote for SRI, which is not factored into this
+          calculation. This, combined with the rounding favoring the genesis liquidity (and not the
+          protocol-owned liquidity), when the SRI portion of the genesis liquidity was minted by
+          the protocol itself (currently still actively encumbered, allowing any (re)claiming
+          procedure to be enshrined as a further encumberance), can be debated. This is the best
+          approximation for the stated goal however: that the amount of the external coin in the
+          genesis liquidity position remains consistent before and after. While the genesis
+          liquidity may be favored at every step, other systems would not achieve this goal.
+        */
+        let new_protocol_owned_liquidity = Amount(new_protocol_owned_liquidity.0 / 2);
+
         // The pool's address is used to represent the holder of protocol-owned liquidity
         serai_dex_pallet::Pallet::<T>::transfer_liquidity(
           Some(genesis_liquidity_address).into(),
@@ -418,11 +510,34 @@ mod pallet {
           external_balance_in.into(),
         )?;
 
-        TotalPendingLiquidity::<T>::mutate(external_balance_in.coin, |existing_total| {
-          *existing_total = ((*existing_total) + external_balance_in.amount).expect(
-            "total pending liquidity exceeded supply (bound to be representable in `Amount`)",
-          );
+        TotalPendingLiquidity::<T>::mutate_exists(external_balance_in.coin, |existing_total| {
+          *existing_total =
+            Some(((*existing_total).unwrap_or(Amount(0)) + external_balance_in.amount).expect(
+              "total pending liquidity exceeded supply (bound to be representable in `Amount`)",
+            ))
+            .filter(|value| *value != Amount(0));
         });
+
+        /*
+          This does not update `PendingLiquidityPerBlock` as it is updated within `pre_inherents`,
+          at the start of the next block. This is because when this value is split into chunks,
+          specifically, the amount to add per block, it performs a floor division. If we perform
+          the floor division _per amount added_, their individual remainders may sum to exceed the
+          divisor. As we do not track the individual amounts added, only the sum amount added
+          within this block, we lose this information.
+
+          The solution is to not to perform the floor division per amount added but always perform
+          the floor division on the total amount added during the block, hence why updating
+          `PendingLiquidityPerBlock` is deferred until _after_ this block completes.
+
+          While `TotalPendingLiquidity` could be 'optimized' by also being deferred to
+          `pre_inherents`, as updating it once per block would be more efficient than updating it
+          once per amount added (which may happen multiple times within a block, hence the above
+          issue and deferrence of `PendingLiquidityPerBlock`). This would not work as
+          `TotalPendingLiquidity` _MUST_ be kept in sync with `PendingLiquidity` in order to
+          correctly calculate how much protocol-owned liquidity to form. In contrast,
+          `PendingLiquidityPerBlock` is solely and entirely used within `pre_inherents`.
+        */
         PendingLiquidity::<T>::mutate(
           external_balance_in.coin,
           frame_system::Pallet::<T>::block_number(),
@@ -431,24 +546,6 @@ mod pallet {
               (*pending_liquidity).unwrap_or(Amount(0)) + external_balance_in.amount
             ).expect(
               "pending liquidity from block exceeded supply (bound to be representable in `Amount`)"
-            ));
-          },
-        );
-        PendingLiquidityPerBlock::<T>::mutate(
-          external_balance_in.coin,
-          |pending_liquidity_per_block| {
-            let existing = (*pending_liquidity_per_block).unwrap_or(Amount(0));
-            // This uses a floor division where on the last block, the remainder is expected to be
-            // handled by whatever code actually adds this pending liquidity to the liquidity pool
-            *pending_liquidity_per_block = Some((
-              existing +
-              Amount(external_balance_in
-                .amount
-                .0
-                .checked_div(u64::from(BLOCKS_TO_ADD_PENDING_LIQUIDITY_OVER))
-                .unwrap_or(0)))
-            .expect(
-              "pending liquidity per block exceeded supply (bound to be representable in `Amount`)",
             ));
           },
         );

@@ -30,7 +30,7 @@ const G_Y: FieldElement = {
   let mut dest = [0; 57];
   let mut i = 0;
   while i < dest.len() {
-    dest[i] = bytes[i];
+    dest[i] = bytes.as_slice()[i];
     i += 1;
   }
   FieldElement::from_bytes(&dest).unwrap()
@@ -46,7 +46,7 @@ const G_X: FieldElement = {
   let mut dest = [0; 57];
   let mut i = 0;
   while i < dest.len() {
-    dest[i] = bytes[i];
+    dest[i] = bytes.as_slice()[i];
     i += 1;
   }
   FieldElement::from_bytes(&dest).unwrap()

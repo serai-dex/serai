@@ -2,9 +2,10 @@
 # check=error=true
 
 # StageX `pallet-rust` as built by `bootstrap.sh`
-FROM stagex/pallet-rust AS builder
+FROM stagex/pallet-rust AS source
 
-# Add files for build
+ENV SERAI_RUNTIME_VENDOR=/serai/vendor
+
 ADD patches /serai/patches
 ADD common /serai/common
 ADD crypto /serai/crypto
@@ -20,18 +21,47 @@ ADD Cargo.toml /serai
 ADD Cargo.lock /serai
 ADD AGPL-3.0 /serai
 
+FROM source AS vendor
+WORKDIR /serai
+RUN <<-'EOF'
+  set -eux
+
+  # Fetch the runtime's dependencies
+  mkdir .cargo
+  RUSTC_BOOTSTRAP=1 cargo vendor --versioned-dirs \
+    --manifest-path ./substrate/runtime/Cargo.toml \
+    --sync $(rustc --print sysroot)/lib/rustlib/src/rust/library/Cargo.toml \
+    $SERAI_RUNTIME_VENDOR > .cargo/config.toml
+
+  # Remove all binary artifacts from the runtime's dependencies
+  find $SERAI_RUNTIME_VENDOR -type f ! -name "Cargo.toml" ! -name "*.rs" ! -name "*.json" ! -name "*.md" -delete
+
+  # Remove all checksums as they've already been validated and will no longer match moving forward,
+  # since we've mutated the downloaded crates
+  grep -v "^checksum =" ./Cargo.lock > ./Cargo.lock.checksumless
+  mv ./Cargo.lock.checksumless ./Cargo.lock
+  for file in $(find $SERAI_RUNTIME_VENDOR -type f -name ".cargo-checksum.json"); do
+    echo "{ \"files\": {} }" > "$file"
+  done
+EOF
+
+FROM source AS build
+
 WORKDIR /serai
 
+COPY --from=vendor $SERAI_RUNTIME_VENDOR $SERAI_RUNTIME_VENDOR
+COPY --from=vendor /serai/.cargo/config.toml /serai/.cargo/config.toml
+COPY --from=vendor /serai/Cargo.lock /serai/Cargo.lock
+
 # Build the runtime
-RUN cargo build --locked --release -p serai-runtime --no-default-features -vv
+RUN --network=none cargo build --frozen --release -p serai-runtime --no-default-features -vv
 # Move it to the root
-RUN mv $(find /serai -name serai_runtime.wasm | head -n1) /serai.wasm
+RUN --network=none mv $(find /serai -name serai_runtime.wasm | head -n1) /serai.wasm
 
 # Copy the artifact to its own image which solely exists to further export it
-# We don't use a StageX here as we don't require reproducibility and want this to be native
-# (StageX images are currently only available for x86-64)
-FROM busybox:stable-musl
+# We build this image from an image with `busybox` so it has basic utilities available within itself
+FROM stagex/core-busybox
 # Copy the artifact itself
-COPY --from=builder /serai.wasm /
+COPY --from=build /serai.wasm /
 # By default, copy the artifact to `/volume`, presumably a provided volume
 CMD ["cp", "/serai.wasm", "/volume/"]

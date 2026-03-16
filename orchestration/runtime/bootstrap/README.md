@@ -18,17 +18,9 @@ This is comparable to
 its packages never outsource to binary blobs (while some Guix packages are
 allowed to when bootstrapping isn't possible).
 
-[The source distribution of StageX](https://codeberg.org/stagex/stagex) is
-needed to reproduce the canonical WASM blob. While StageX's latest release
-offers Rust 1.91.1, which satisfies the runtime's MSRV, it released with
-LLVM 20.1.8 while Rust's official release of 1.91.1 used LLVM 21.1.2. The
-source has updated StageX to LLVM 21.1.8 and Rust 1.94.0, as matching the
-official release of Rust 1.94.0, allowing it to achieve the expected
-reproduction. It also contains miscellaneous bug fixes and tweaks.
-
-The process is not contained to the `Containerfile` which CANNOT be used
+The process is not contained to the `Containerfile` which _MUST NOT_ be used
 independently. The process is defined by the `bootstrap.sh` script which builds
-the required container from StageX before building the `Containerfile` with the
+the required image from StageX before building the `Containerfile` with the
 required context. This build process is expected to take several hours, perhaps
 a day even with >16 threads, and require approximately 350 gigabytes of
 storage. Please be mindful accordingly.
@@ -38,7 +30,7 @@ storage. Please be mindful accordingly.
 The host is expected to have a POSIX `sh`, `git`, `cargo`, and `docker` with
 `buildx` and the `containerd` backend, along with any dependencies required by
 StageX (e.g. `make`, `python >= 3.11`). Bootstrapping will require executing
-x86-64 executables.
+i386 executables and is only confirmed to work from an x86-64 host.
 
 ### Building
 
@@ -49,5 +41,5 @@ x86-64 executables.
 The resulting image will have `busybox` available as a shell and the runtime
 located at `/serai.wasm`. Confirming it's a reproduction of the expected
 runtime is left to the user. They may export its filesystem to manually inspect
-it, derive their own image, or trust the included `busybox` (which is not
-guaranteed to be reproducible) to output its SHA-256 hash.
+it, derive their own image, or use the included `busybox` (which will also be
+bootstrapped and reproducible) to output its SHA-256 hash.
