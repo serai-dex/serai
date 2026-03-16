@@ -45,7 +45,6 @@ tributary-sdk = { path = "./tributary-sdk" }
 serai-client-serai = { path = "../substrate/client/serai", default-features = false }
 
 log = { version = "0.4", default-features = false, features = ["std"] }
-env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
 
 tokio = { version = "1", default-features = false, features = ["time", "sync", "macros", "rt-multi-thread"] }
 

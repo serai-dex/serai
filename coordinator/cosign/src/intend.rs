@@ -23,7 +23,7 @@ use serai_task::ContinuallyRan;
 
 use crate::*;
 
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub(crate) struct Set {
   pub(crate) session: Session,
   pub(crate) key: Public,
@@ -89,7 +89,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         // Ephemeral RPC Err: task to re-run and continue trying
         .map_err(|e| format!("RPC error fetching latest finalized block number: {e}"))?;
 
-      serai_log::debug!(
+      serai_env::debug!(
         "beginning scan: start={start_scan_block_number}, latest={latest_serai_block_number}"
       );
 
@@ -148,7 +148,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         );
         BuildsUpon::set(&mut txn, &builds_upon);
 
-        serai_log::debug!("iterating over block_number={block_number}");
+        serai_env::debug!("iterating over block_number={block_number}");
 
         let mut has_events = HasEvents::No;
         let vset_events = serai_block_events.validator_sets();
@@ -237,7 +237,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
               &Set { session: set.session, key: key_pair.0, stake: Amount(stake) },
             );
           } else {
-            serai_log::debug!(
+            serai_env::debug!(
               "skipped session {:?} with 0 stake from being selected for cosigns",
               set.session
             );
@@ -253,7 +253,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
 
         let global_session_for_this_block = LatestGlobalSessionIntended::get(&txn);
 
-        serai_log::debug!("type of has_events={has_events:?}");
+        serai_env::debug!("type of has_events={has_events:?}");
 
         // If this is notable, it creates a new global session, which we index into the database
         // now
@@ -293,7 +293,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             total_stake,
           };
 
-          serai_log::debug!(
+          serai_env::debug!(
           "Notable block block_number={block_number}: new session created {next_global_session_info:?}"
         );
 
@@ -326,7 +326,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
 
             // Tell each set of their expectation to cosign this block
             for set in ending_global_session_info.sets {
-              serai_log::info!(
+              serai_env::prod_info!(
                 "set will cosign {has_events:?} block: set={set:?}, block_number={block_number}"
               );
 
@@ -345,7 +345,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           HasEvents::No => {}
         }
 
-        serai_log::debug!(
+        serai_env::debug!(
           "finished iterating block_number={block_number}: has_events={has_events:?}"
         );
 

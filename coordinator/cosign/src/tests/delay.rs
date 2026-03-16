@@ -38,19 +38,23 @@ impl IntoTask for DelayTest {
 impl DelayTest {
   pub fn new() -> (Self, Instant) {
     let start = std::time::Instant::now();
-    let _ = env_logger::try_init();
     (Self::default(), start)
   }
 
   async fn assert_task_iteration_completes_with(&self, latest_acknowledged_block: u64) {
-    assert_eq!(LatestAcknowledgedBlock::get(&self.db), Some(latest_acknowledged_block));
-    // Assert CosignedBlocks queue items have been consumed after task run
-    assert_eq!(CosignedBlocks::peek(&self.db), None);
+    use serai_env::log::debug;
+    let actual = LatestAcknowledgedBlock::get(&self.db);
+    let cosigned_pending = CosignedBlocks::peek(&self.db).is_some();
+    debug!("LatestAcknowledgedBlock: {actual:?} (expected: Some({latest_acknowledged_block}))");
+    debug!("CosignedBlocks pending: {cosigned_pending}");
+    assert_eq!(actual, Some(latest_acknowledged_block));
+    assert!(!cosigned_pending, "CosignedBlocks queue items should have been consumed");
   }
 }
 
 #[tokio::test]
 async fn returns_false_with_no_messages() {
+  serai_env::init_logger();
   let test = DelayTest::default();
   let mut task = test.into_task();
 
@@ -80,7 +84,7 @@ async fn updates_latest_acknowledged_block_after_ack_delay() {
   TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
   test.assert_task_iteration_completes_with(2).await;
 
-  serai_log::log::info!("Blocks 0-2 processed after {:?}", start.elapsed());
+  serai_env::log::info!("Blocks 0-2 processed after {:?}", start.elapsed());
 
   {
     let mut txn = test.db.txn();
@@ -96,7 +100,7 @@ async fn updates_latest_acknowledged_block_after_ack_delay() {
   TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
   test.assert_task_iteration_completes_with(5).await;
 
-  serai_log::log::info!("Blocks 3-5 processed after {:?}", start.elapsed());
+  serai_env::log::info!("Blocks 3-5 processed after {:?}", start.elapsed());
 
   {
     let mut txn = test.db.txn();
@@ -112,11 +116,12 @@ async fn updates_latest_acknowledged_block_after_ack_delay() {
   TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
   test.assert_task_iteration_completes_with(8).await;
 
-  serai_log::log::info!("Blocks 6-8 processed after {:?}", start.elapsed());
+  serai_env::log::info!("Blocks 6-8 processed after {:?}", start.elapsed());
 }
 
 #[tokio::test]
 async fn does_not_regress_and_skips_if_not_a_later_block() {
+  serai_env::init_logger();
   let mut test = DelayTest::default();
 
   {
@@ -157,6 +162,7 @@ async fn does_not_regress_and_skips_if_not_a_later_block() {
 
 #[tokio::test]
 async fn respects_acknowledgement_delay() {
+  serai_env::init_logger();
   let mut test = DelayTest::default();
   let block_number = OsRng.next_u64();
 

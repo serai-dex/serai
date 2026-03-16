@@ -82,12 +82,15 @@ async fn setup_mock_test() -> (SeraiShimRpc, IntendTestStruct) {
 /// Verify all post-run DB invariants by replaying events from the Serai node.
 async fn verify_db_invariants(db: &MemDb, serai: &Serai, num_blocks: usize) {
   use serai_client_serai::abi::validator_sets::Event as VsEvent;
+  use serai_env::log::debug;
 
   let num_blocks_u64 = u64::try_from(num_blocks).unwrap();
 
   // ScanCosignFrom should point to the block after the last processed
+  let scan_from = ScanCosignFrom::get(db);
+  debug!("ScanCosignFrom: {scan_from:?}");
   assert_eq!(
-    ScanCosignFrom::get(db),
+    scan_from,
     Some(num_blocks_u64),
     "ScanCosignFrom should be {num_blocks} after processing blocks 0..={n}",
     n = num_blocks - 1
@@ -139,6 +142,7 @@ async fn verify_db_invariants(db: &MemDb, serai: &Serai, num_blocks: usize) {
   // Verify Stakes match the expected.
   for (&(network, validator), &expected_amount) in &expected_stakes {
     let db_stake = Stakes::get(db, network, validator);
+    debug!("Stakes[{network:?}, {validator:?}]: db={db_stake:?}, expected={expected_amount}");
     assert_eq!(
       db_stake,
       Some(Amount(expected_amount)),
@@ -149,6 +153,7 @@ async fn verify_db_invariants(db: &MemDb, serai: &Serai, num_blocks: usize) {
   // Verify LatestSet matches the expected.
   for (&network, &(session, stake)) in &expected_latest_set {
     let latest = LatestSet::get(db, network);
+    debug!("LatestSet[{network:?}]: db={latest:?}, expected=(session={session:?}, stake={stake})");
     assert!(latest.is_some(), "LatestSet should exist for {network:?}");
     let latest = latest.unwrap();
     assert_eq!(latest.session, session, "LatestSet session mismatch for {network:?}");
@@ -160,24 +165,40 @@ async fn verify_db_invariants(db: &MemDb, serai: &Serai, num_blocks: usize) {
     let session_num = next_session.get(&network).copied().unwrap_or(0);
     if session_num > 0 {
       let last_set = ExternalValidatorSet { network, session: Session(session_num - 1) };
+      let validators = Validators::get(db, last_set);
+      debug!("Validators[{last_set:?}]: {validators:?} (should be None)");
       assert_eq!(
-        Validators::get(db, last_set),
-        None,
+        validators, None,
         "Validators for {last_set:?} should have been consumed by SetKeys"
       );
     }
   }
 
+  // Log and verify LatestGlobalSessionIntended
+  let latest_session_id = LatestGlobalSessionIntended::get(db);
+  debug!("LatestGlobalSessionIntended: {:?}", latest_session_id.map(hex::encode));
+
   // If any SetKeys happened, a GlobalSession should exist with consistent total_stake
   if set_keys_count > 0 {
-    let session_id = LatestGlobalSessionIntended::get(db);
     assert!(
-      session_id.is_some(),
+      latest_session_id.is_some(),
       "LatestGlobalSessionIntended should exist after {set_keys_count} SetKeys events",
     );
-    let session = GlobalSessions::get(db, session_id.unwrap());
+    let session_id = latest_session_id.unwrap();
+    let session = GlobalSessions::get(db, session_id);
     assert!(session.is_some(), "GlobalSession should exist");
     let session = session.unwrap();
+
+    debug!(
+      "GlobalSession {}: start_block_number={}, total_stake={}, sets={:?}, stakes={:?}",
+      &hex::encode(session_id)[.. 16],
+      session.start_block_number,
+      session.total_stake,
+      session.sets,
+      session.stakes,
+    );
+    debug!("last_block: {:?}", GlobalSessionsLastBlock::get(db, session_id));
+
     let sum: u64 = session.stakes.values().sum();
     assert_eq!(
       session.total_stake, sum,
@@ -185,7 +206,18 @@ async fn verify_db_invariants(db: &MemDb, serai: &Serai, num_blocks: usize) {
     );
   }
 
-  serai_log::log::info!(
+  // SubstrateBlockHash index
+  let max_block = scan_from.unwrap_or(0);
+  if max_block > 0 {
+    debug!("SubstrateBlockHash index ({max_block} blocks):");
+    for b in 0 .. max_block {
+      if let Some(hash) = SubstrateBlockHash::get(db, b) {
+        debug!("  #{b}: {}…", &hex::encode(hash.0)[.. 16]);
+      }
+    }
+  }
+
+  debug!(
     "DB invariants verified: {} blocks, {} stake entries, {} LatestSets, {} SetKeys events",
     num_blocks,
     expected_stakes.len(),
@@ -199,6 +231,7 @@ mod errors {
 
   #[tokio::test]
   async fn errors_if_chain_is_not_linear() {
+    serai_env::init_logger();
     let (serai, task_test) = setup_mock_test().await;
 
     serai.make_block(0, vec![]).await;
@@ -222,6 +255,7 @@ mod errors {
 
   #[tokio::test]
   async fn errors_if_block_not_found() {
+    serai_env::init_logger();
     let (serai, task_test) = setup_mock_test().await;
 
     serai.make_block(0, vec![]).await;
@@ -247,6 +281,7 @@ mod errors {
 
   #[tokio::test]
   async fn handles_rpc_error_on_block_fetch() {
+    serai_env::init_logger();
     let (serai, task_test) = setup_mock_test().await;
 
     serai.make_block(0, vec![]).await;
@@ -268,6 +303,7 @@ mod errors {
 
   #[tokio::test]
   async fn handles_rpc_error_on_events_fetch() {
+    serai_env::init_logger();
     let (serai, task_test) = setup_mock_test().await;
 
     serai.make_block(0, vec![]).await;
@@ -289,6 +325,7 @@ mod errors {
 
   #[tokio::test]
   async fn errors_if_set_decided_has_empty_validators() {
+    serai_env::init_logger();
     let (serai, task_test) = setup_mock_test().await;
 
     serai.make_block(0, vec![]).await;
@@ -312,6 +349,7 @@ mod errors {
 
   #[tokio::test]
   async fn handles_rpc_error_on_latest_finalized() {
+    serai_env::init_logger();
     let (serai, task_test) = setup_mock_test().await;
 
     serai.make_block(0, vec![]).await;
@@ -321,7 +359,7 @@ mod errors {
     let mut task = task_test.into_task();
     TaskTest::task_runs_and_fails_with(&mut task, "RPC error fetching latest finalized").await;
 
-    // No blocks processed — error happened before scanning
+    // No blocks processed, error happened before scanning
     assert_eq!(ScanCosignFrom::get(&task_test.db), None);
 
     serai.clear_error("blockchain/latest_finalized_block_number").await;
@@ -334,8 +372,6 @@ mod errors {
 
 /// Random event, state, and block generator.
 pub(super) struct EventFuzzer {
-  /// Seed bytes.
-  pub(super) seed: [u8; 32],
   /// Available validator addresses.
   pub(super) validators: Vec<SeraiAddress>,
   /// All networks.
@@ -369,7 +405,6 @@ impl EventFuzzer {
     let networks: Vec<NetworkId> = NetworkId::all().collect();
 
     Self {
-      seed,
       validators,
       networks,
       stakes: HashMap::new(),
@@ -385,9 +420,7 @@ impl EventFuzzer {
     &slice[usize::try_from(i).unwrap()]
   }
 
-  /// Generate a random amount using a weighted distribution:
-  /// ~25% tiny (1..=10), ~35% small (11..=1_000), ~25% medium (1_001..=100_000),
-  /// ~15% large (100_001..=10_000_000).
+  /// Generate a random amount using a weighted distribution
   fn random_amount(&mut self) -> u64 {
     match OsRng.next_u64() % 20 {
       0 ..= 4 => (OsRng.next_u64() % 10) + 1,
@@ -410,7 +443,7 @@ impl EventFuzzer {
 
   /// Generate a random deallocation event. Returns `None` if no validator has stake.
   fn random_deallocation(&mut self) -> Option<Event> {
-    // ~25% chance of generating a Serai deallocation (exercises the `continue` branch)
+    // ~25% chance of generating a Serai deallocation
     if OsRng.next_u64() % 4 == 0 {
       let validator = *self.pick(&self.validators.clone());
       let amount = self.random_amount();
@@ -478,7 +511,7 @@ impl EventFuzzer {
     let keys: Vec<ExternalValidatorSet> = self.pending_keys.keys().copied().collect();
     let i = usize::try_from(OsRng.next_u64() % u64::try_from(keys.len()).unwrap()).unwrap();
     let set = keys[i];
-    // Remove from pending — the task will Validators::take it
+    // Remove from pending - the task will Validators::take it
     self.pending_keys.remove(&set);
 
     // Advance session for this network so the next SetDecided gets session+1
@@ -579,19 +612,14 @@ impl EventFuzzer {
 
 #[tokio::test]
 async fn fuzzed_event_processing() {
-  let _ = env_logger::try_init();
+  serai_env::init_logger();
 
   let num_blocks = 1000;
 
   let mut fuzzer = EventFuzzer::new();
   let blocks = fuzzer.generate_blocks(num_blocks);
 
-  serai_log::log::info!(
-    "Fuzz test: {} blocks, {} validators, seed={:?}",
-    num_blocks,
-    fuzzer.validators.len(),
-    hex::encode(fuzzer.seed)
-  );
+  serai_env::log::info!("Fuzz test: {} blocks, {} validators", num_blocks, fuzzer.validators.len(),);
 
   let (serai, task_test) = setup_mock_test().await;
   for (i, events) in blocks.into_iter().enumerate() {

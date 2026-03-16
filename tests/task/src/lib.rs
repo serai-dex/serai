@@ -13,13 +13,13 @@ impl TaskTest {
     task: &mut T,
     made_progress: bool,
   ) {
-    serai_log::log::debug!("running task once: {}", core::any::type_name::<T>());
+    serai_env::log::debug!("running task once: {}", core::any::type_name::<T>());
     assert_eq!(task.run_iteration().await.unwrap(), made_progress);
   }
 
   /// Assert that a task iteration fails with an error containing the given string.
   pub async fn task_runs_and_fails_with<T: ContinuallyRan>(task: &mut T, error: &str) {
-    serai_log::log::debug!("running task (expecting failure): {}", core::any::type_name::<T>());
+    serai_env::log::debug!("running task (expecting failure): {}", core::any::type_name::<T>());
     let err = task.run_iteration().await.unwrap_err();
     let err_str = format!("{err:?}");
     assert!(err_str.contains(error), "{err_str}");

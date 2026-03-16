@@ -216,7 +216,7 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
           }
         }
 
-        serai_log::log::debug!(
+        serai_env::log::debug!(
           "beginning evaluator: block_number={block_number}, has_events={:#?}",
           has_events
         );
@@ -313,10 +313,10 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
         // Roughly ~1 hour, no need for repetitive logging
         #[cfg(not(test))]
         if (block_number % 500) == 0 {
-          serai_log::debug!("marking block #{block_number} as cosigned");
+          serai_env::debug!("marking block #{block_number} as cosigned");
         }
         #[cfg(test)]
-        serai_log::info!("marking block #{block_number} as cosigned");
+        serai_env::debug!("marking block #{block_number} as cosigned");
 
         made_progress = true;
       }

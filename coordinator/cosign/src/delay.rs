@@ -54,7 +54,7 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
 
         let latest_acknowledged_block = LatestAcknowledgedBlock::get(&mut txn).unwrap_or(0);
 
-        serai_log::debug!(
+        serai_env::debug!(
           "beginning delay: block_number={block_number}, time_evaluated={time_evaluated}, latest_acknowledged_block={latest_acknowledged_block}",
         );
 
@@ -74,7 +74,7 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         if time_valid_timestamp > now_timestamp {
           // Sleep until then
           let time_left = time_valid_timestamp - now_timestamp;
-          serai_log::debug!("beginning sleep: {time_left}s");
+          serai_env::debug!("beginning sleep: {time_left}s");
           tokio::time::sleep(Duration::from_secs(time_left)).await;
         }
 
@@ -84,7 +84,7 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         LatestAcknowledgedBlock::set(&mut txn, &block_number);
         txn.commit();
 
-        serai_log::debug!("LatestAcknowledgedBlock={block_number}");
+        serai_env::debug!("LatestAcknowledgedBlock={block_number}");
 
         made_progress = true;
       }
@@ -98,7 +98,7 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
           let mut txn = self.db.txn();
           LatestAcknowledgedBlock::set(&mut txn, &evaluated);
           txn.commit();
-          serai_log::debug!("LatestAcknowledgedBlock={evaluated} (caught up to evaluator)");
+          serai_env::debug!("LatestAcknowledgedBlock={evaluated} (caught up to evaluator)");
           made_progress = true;
         }
       }

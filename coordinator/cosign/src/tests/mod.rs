@@ -13,12 +13,17 @@ mod cosigning;
 #[cfg(test)]
 mod full_stack;
 
-use std::{
-  sync::{
-    Arc,
-    atomic::{AtomicUsize, Ordering},
-  },
+use std::sync::{
+  Arc,
+  atomic::{AtomicUsize, Ordering},
 };
+
+pub(crate) fn random_global_session() -> [u8; 32] {
+  use rand::RngCore;
+  let mut id = [0u8; 32];
+  rand_core::OsRng.fill_bytes(&mut id);
+  id
+}
 
 use serai_shim_rpc::{SeraiShimRpc, ShimState};
 use serai_client_serai::Serai;

@@ -15,3 +15,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
+
+[dependencies]
+env_logger = { version = "0.10", default-features = false }
+log = { version = "0.4", default-features = false, features = ["std"] }

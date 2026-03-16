@@ -4,15 +4,16 @@ use std::{
   time::{Duration, Instant},
 };
 
+use rand_core::OsRng;
 use serai_cosign_types::SignedCosign;
 use serai_db::{Db as _, DbTxn, MemDb};
 use serai_client_serai::abi::primitives::{
-  BlockHash,
   crypto::Public,
   network_id::ExternalNetworkId,
   validator_sets::{ExternalValidatorSet, Session},
 };
 
+use serai_primitives::test_helpers::random_block_hash;
 use serai_task::ContinuallyRan;
 
 use crate::{
@@ -22,7 +23,7 @@ use crate::{
     REQUEST_COSIGNS_SPACING,
   },
   intend::{BlockEventData, BlockEvents, GlobalSessionsChannel},
-  tests::{IntoTask, TaskTest, TestRequest},
+  tests::{IntoTask, TaskTest, TestRequest, random_global_session},
 };
 
 pub(crate) struct EvaluatorTest {
@@ -45,9 +46,8 @@ impl IntoTask for EvaluatorTest {
 }
 
 impl EvaluatorTest {
-  const GLOBAL_SESSION: [u8; 32] = [1u8; 32];
-
   fn init_global_session(&mut self, start_block_number: u64) -> [u8; 32] {
+    let global_session = random_global_session();
     let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
 
     let mut keys = HashMap::new();
@@ -60,10 +60,10 @@ impl EvaluatorTest {
       GlobalSession { start_block_number, sets: vec![set], keys, stakes, total_stake: 1u64 };
 
     let mut txn = self.db.txn();
-    GlobalSessionsChannel::send(&mut txn, &(Self::GLOBAL_SESSION, info));
+    GlobalSessionsChannel::send(&mut txn, &(global_session, info));
     txn.commit();
 
-    Self::GLOBAL_SESSION
+    global_session
   }
 }
 
@@ -72,11 +72,28 @@ impl EvaluatorTest {
 /// After a successful task run, all input channels should be consumed and the
 /// `CosignedBlocks` output channel should contain exactly the expected block range.
 fn verify_db_invariants(db: &mut MemDb, expected_cosigned_range: Option<(u64, u64)>) {
-  // All input channels should be fully consumed
-  assert!(BlockEvents::peek(db).is_none(), "BlockEvents should be fully consumed");
-  assert!(GlobalSessionsChannel::peek(db).is_none(), "GlobalSessionsChannel should be consumed");
+  use serai_env::log::debug;
 
-  let has_session = CurrentlyEvaluatedGlobalSession::get(db).is_some();
+  let latest_evaluated = LatestEvaluatedBlock::get(db);
+  let current_session = CurrentlyEvaluatedGlobalSession::get(db);
+  let block_events_pending = BlockEvents::peek(db).is_some();
+  let sessions_pending = GlobalSessionsChannel::peek(db).is_some();
+  let cosigned_pending = CosignedBlocks::peek(db).is_some();
+
+  debug!("LatestEvaluatedBlock: {latest_evaluated:?}");
+  debug!(
+    "CurrentlyEvaluatedGlobalSession: {:?}",
+    current_session.as_ref().map(|(id, gs)| (hex::encode(id), gs.start_block_number))
+  );
+  debug!("BlockEvents pending: {block_events_pending}");
+  debug!("GlobalSessionsChannel pending: {sessions_pending}");
+  debug!("CosignedBlocks pending: {cosigned_pending}");
+
+  // All input channels should be fully consumed
+  assert!(!block_events_pending, "BlockEvents should be fully consumed");
+  assert!(!sessions_pending, "GlobalSessionsChannel should be consumed");
+
+  let has_session = current_session.is_some();
 
   let mut txn = db.txn();
 
@@ -88,6 +105,7 @@ fn verify_db_invariants(db: &mut MemDb, expected_cosigned_range: Option<(u64, u6
       for expected_block in start ..= end {
         let (block_number, _time) = CosignedBlocks::try_recv(&mut txn)
           .unwrap_or_else(|| panic!("expected cosigned block {expected_block}"));
+        debug!("CosignedBlock: block_number={block_number}");
         assert_eq!(block_number, expected_block, "cosigned block mismatch");
       }
       assert!(CosignedBlocks::try_recv(&mut txn).is_none(), "unexpected extra cosigned block");
@@ -106,7 +124,12 @@ fn signed_cosign(
   block_number: u64,
 ) -> SignedCosign {
   SignedCosign {
-    cosign: Cosign { global_session, block_number, block_hash: BlockHash([0u8; 32]), cosigner },
+    cosign: Cosign {
+      global_session,
+      block_number,
+      block_hash: random_block_hash(&mut OsRng),
+      cosigner,
+    },
     signature: [0u8; 64],
   }
 }
@@ -121,6 +144,7 @@ async fn returns_false_with_no_block_events() {
 
 #[tokio::test]
 async fn processes_blocks_with_no_events() {
+  serai_env::init_logger();
   let mut test = EvaluatorTest::default();
   test.init_global_session(0);
 
@@ -145,6 +169,7 @@ async fn processes_blocks_with_no_events() {
 
 #[tokio::test]
 async fn processes_notable_events_when_cosigned() {
+  serai_env::init_logger();
   let mut test = EvaluatorTest::default();
   let global_session = test.init_global_session(0);
 
@@ -170,6 +195,7 @@ async fn processes_notable_events_when_cosigned() {
 
 #[tokio::test]
 async fn non_notable_uses_cached_known_cosign() {
+  serai_env::init_logger();
   let mut test = EvaluatorTest::default();
   let global_session = test.init_global_session(0);
 
@@ -203,6 +229,7 @@ async fn non_notable_uses_cached_known_cosign() {
 
 #[tokio::test]
 async fn non_notable_with_cosign_returns_some() {
+  serai_env::init_logger();
   let mut test = EvaluatorTest::default();
   let global_session = test.init_global_session(0);
 
@@ -228,6 +255,7 @@ async fn non_notable_with_cosign_returns_some() {
 
 #[tokio::test]
 async fn non_notable_computes_lowest_common_block() {
+  serai_env::init_logger();
   let mut test = EvaluatorTest::default();
 
   let global_session = {
@@ -247,10 +275,11 @@ async fn non_notable_computes_lowest_common_block() {
     let info = GlobalSession { start_block_number: 0, sets, keys, stakes, total_stake: 100u64 };
 
     let mut txn = test.db.txn();
-    GlobalSessionsChannel::send(&mut txn, &(EvaluatorTest::GLOBAL_SESSION, info));
+    let id = random_global_session();
+    GlobalSessionsChannel::send(&mut txn, &(id, info));
     txn.commit();
 
-    EvaluatorTest::GLOBAL_SESSION
+    id
   };
 
   {
@@ -289,6 +318,7 @@ async fn non_notable_computes_lowest_common_block() {
 
 #[tokio::test]
 async fn advances_global_session_at_start_block() {
+  serai_env::init_logger();
   let mut test = EvaluatorTest::default();
 
   let session1 = [1u8; 32];
@@ -350,6 +380,7 @@ mod errors {
 
   #[tokio::test]
   async fn notable_events_without_cosign() {
+    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
     test.init_global_session(0);
 
@@ -391,6 +422,7 @@ mod errors {
 
   #[tokio::test]
   async fn notable_events_without_stakes() {
+    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
 
     let global_session = {
@@ -405,10 +437,11 @@ mod errors {
         GlobalSession { start_block_number: 0, sets: vec![set], keys, stakes, total_stake: 1u64 };
 
       let mut txn = test.db.txn();
-      GlobalSessionsChannel::send(&mut txn, &(EvaluatorTest::GLOBAL_SESSION, info));
+      let id = random_global_session();
+      GlobalSessionsChannel::send(&mut txn, &(id, info));
       txn.commit();
 
-      EvaluatorTest::GLOBAL_SESSION
+      id
     };
 
     {
@@ -432,6 +465,7 @@ mod errors {
 
   #[tokio::test]
   async fn non_notable_events_without_cosign() {
+    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
     test.init_global_session(0);
 
@@ -470,6 +504,7 @@ mod errors {
 
   #[tokio::test]
   async fn non_notable_events_without_stakes() {
+    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
 
     let global_session = {
@@ -484,10 +519,11 @@ mod errors {
         GlobalSession { start_block_number: 0, sets: vec![set], keys, stakes, total_stake: 1u64 };
 
       let mut txn = test.db.txn();
-      GlobalSessionsChannel::send(&mut txn, &(EvaluatorTest::GLOBAL_SESSION, info));
+      let id = random_global_session();
+      GlobalSessionsChannel::send(&mut txn, &(id, info));
       txn.commit();
 
-      EvaluatorTest::GLOBAL_SESSION
+      id
     };
 
     {
@@ -511,6 +547,7 @@ mod errors {
 
   #[tokio::test]
   async fn non_notable_cosign_too_low_does_not_add_weight() {
+    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
     let global_session = test.init_global_session(0);
 
@@ -535,6 +572,7 @@ mod errors {
 
   #[tokio::test]
   async fn request_notable_cosigns_failure() {
+    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
     test.init_global_session(0);
 
@@ -560,6 +598,7 @@ mod errors {
 
   #[tokio::test]
   async fn request_non_notable_cosigns_failure() {
+    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
     test.init_global_session(0);
 
@@ -586,6 +625,7 @@ mod errors {
   #[tokio::test]
   #[should_panic(expected = "candidate's start block number ")]
   async fn panics_when_session_starts_after_block() {
+    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
 
     {
@@ -601,7 +641,8 @@ mod errors {
         GlobalSession { start_block_number: 10, sets: vec![set], keys, stakes, total_stake: 1u64 };
 
       let mut txn = test.db.txn();
-      CurrentlyEvaluatedGlobalSession::set(&mut txn, &(EvaluatorTest::GLOBAL_SESSION, info));
+      let id = random_global_session();
+      CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, info));
       BlockEvents::send(&mut txn, &BlockEventData { block_number: 5, has_events: HasEvents::No });
       txn.commit();
     }
@@ -615,6 +656,7 @@ mod errors {
     expected = "currently_evaluated_global_session_strict wasn't called incrementally"
   )]
   async fn panics_when_called_non_incrementally() {
+    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
 
     {
@@ -658,6 +700,7 @@ mod errors {
   #[tokio::test]
   #[should_panic(expected = "attempt to add with overflow")]
   async fn weight_overflow_notable() {
+    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
 
     let global_session = {
@@ -677,10 +720,11 @@ mod errors {
       let info = GlobalSession { start_block_number: 0, sets, keys, stakes, total_stake: u64::MAX };
 
       let mut txn = test.db.txn();
-      GlobalSessionsChannel::send(&mut txn, &(EvaluatorTest::GLOBAL_SESSION, info));
+      let id = random_global_session();
+      GlobalSessionsChannel::send(&mut txn, &(id, info));
       txn.commit();
 
-      EvaluatorTest::GLOBAL_SESSION
+      id
     };
 
     {
@@ -711,6 +755,7 @@ mod errors {
   #[tokio::test]
   #[should_panic(expected = "attempt to add with overflow")]
   async fn weight_overflow_non_notable() {
+    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
 
     let global_session = {
@@ -730,10 +775,11 @@ mod errors {
       let info = GlobalSession { start_block_number: 0, sets, keys, stakes, total_stake: u64::MAX };
 
       let mut txn = test.db.txn();
-      GlobalSessionsChannel::send(&mut txn, &(EvaluatorTest::GLOBAL_SESSION, info));
+      let id = random_global_session();
+      GlobalSessionsChannel::send(&mut txn, &(id, info));
       txn.commit();
 
-      EvaluatorTest::GLOBAL_SESSION
+      id
     };
 
     {

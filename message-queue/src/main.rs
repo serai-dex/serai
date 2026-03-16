@@ -156,12 +156,7 @@ pub(crate) fn ack_message(from: Service, to: Service, id: u64, sig: SchnorrSigna
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-  env_logger::builder()
-    .filter_level(
-      log::LevelFilter::from_str(&serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
-        .expect("`RUST_LOG` environment variable had an invalid filter"),
-    )
-    .init();
+  serai_env::init_logger();
   log::info!("Starting message-queue service...");
 
   // Open the DB

@@ -86,6 +86,7 @@ fn seed_minimal_state(db: &mut MemDb, session: &TestGlobalSession) {
 
 #[test]
 fn global_session_id_generation() {
+  serai_env::init_logger();
   let network1 = ExternalNetworkId::Bitcoin;
   let set1 = ExternalValidatorSet { network: network1, session: Session(0) };
   let set2 = ExternalValidatorSet { network: ExternalNetworkId::Ethereum, session: Session(0) };
@@ -119,6 +120,7 @@ mod intake_cosign_error {
 
   #[test]
   fn temporal_returns_true_for_temporal_errors() {
+    serai_env::init_logger();
     assert!(IntakeCosignError::NotYetIndexedBlock.temporal());
     assert!(IntakeCosignError::StaleCosign.temporal());
     assert!(IntakeCosignError::UnrecognizedGlobalSession.temporal());
@@ -127,6 +129,7 @@ mod intake_cosign_error {
 
   #[test]
   fn temporal_returns_false_for_non_temporal_errors() {
+    serai_env::init_logger();
     assert!(!IntakeCosignError::BeforeGlobalSessionStart.temporal());
     assert!(!IntakeCosignError::AfterGlobalSessionEnd.temporal());
     assert!(!IntakeCosignError::NonParticipatingNetwork.temporal());
@@ -139,6 +142,7 @@ mod spawn {
 
   #[tokio::test]
   async fn spawn_creates_cosigning_instance() {
+    serai_env::init_logger();
     let db = MemDb::new();
     let (_shim_serai, serai) = setup_shim_serai().await;
     let (request, _calls) = TestRequest::new(false);
@@ -149,6 +153,7 @@ mod spawn {
 
   #[tokio::test]
   async fn spawn_with_tasks_to_run_upon_cosigning() {
+    serai_env::init_logger();
     let db = MemDb::new();
     let (_shim_serai, serai) = setup_shim_serai().await;
     let (request, _calls) = TestRequest::new(false);
@@ -163,6 +168,7 @@ mod spawn {
 
   #[tokio::test]
   async fn spawn_initializes_cosigning_instance_correctly() {
+    serai_env::init_logger();
     let db = MemDb::new();
     let (_shim_serai, serai) = setup_shim_serai().await;
     let (request, _calls) = TestRequest::new(false);
@@ -178,6 +184,7 @@ mod spawn {
 
   #[tokio::test]
   async fn spawn_tasks_chain_correctly() {
+    serai_env::init_logger();
     let db = MemDb::new();
     let (_shim_serai, serai) = setup_shim_serai().await;
     let (request, _calls) = TestRequest::new(false);
@@ -192,6 +199,7 @@ mod spawn {
 
   #[tokio::test]
   async fn spawn_end_to_end() {
+    serai_env::init_logger();
     let db = MemDb::new();
     let (shim_serai, serai) = setup_shim_serai().await;
     let (request, _calls) = TestRequest::new(false);
@@ -230,12 +238,14 @@ mod latest_acknowledged_block {
 
   #[test]
   fn latest_acknowledged_block_defaults_to_zero() {
+    serai_env::init_logger();
     let db = MemDb::new();
     assert_eq!(Cosigning::<MemDb>::latest_acknowledged_block(&db).unwrap(), 0);
   }
 
   #[test]
   fn latest_acknowledged_block_errors_when_faulted() {
+    serai_env::init_logger();
     let mut db = MemDb::new();
     {
       let mut txn = db.txn();
@@ -247,6 +257,7 @@ mod latest_acknowledged_block {
 
   #[test]
   fn latest_acknowledged_block_returns_stored_value() {
+    serai_env::init_logger();
     let mut db = MemDb::new();
     {
       let mut txn = db.txn();
@@ -262,6 +273,7 @@ mod cosigned_block {
 
   #[test]
   fn cosigned_block_returns_none_beyond_latest() {
+    serai_env::init_logger();
     let mut db = MemDb::new();
     {
       let mut txn = db.txn();
@@ -273,6 +285,7 @@ mod cosigned_block {
 
   #[test]
   fn cosigned_block_returns_hash_when_in_range() {
+    serai_env::init_logger();
     let mut db = MemDb::new();
     let block_hash = BlockHash([9u8; 32]);
     {
@@ -286,6 +299,7 @@ mod cosigned_block {
 
   #[test]
   fn cosigned_block_errors_when_faulted() {
+    serai_env::init_logger();
     let mut db = MemDb::new();
     {
       let mut txn = db.txn();
@@ -297,6 +311,7 @@ mod cosigned_block {
 
   #[tokio::test]
   async fn cosigning_cosigned_block_returns_correct_hash() {
+    serai_env::init_logger();
     let mut db = MemDb::new();
     let block_hash_5 = BlockHash([42u8; 32]);
     let block_hash_10 = BlockHash([43u8; 32]);
@@ -328,6 +343,7 @@ mod notable_cosigns {
 
   #[test]
   fn notable_cosigns_empty_without_cosigns() {
+    serai_env::init_logger();
     let db = MemDb::new();
     let cosigns = Cosigning::<MemDb>::notable_cosigns(&db, [1u8; 32]);
     assert!(cosigns.is_empty());
@@ -335,6 +351,7 @@ mod notable_cosigns {
 
   #[test]
   fn notable_cosigns_returns_cosigns_for_session() {
+    serai_env::init_logger();
     let (session, keypair) = random_session();
     let id = session.id();
 
@@ -369,6 +386,7 @@ mod cosigns_to_rebroadcast {
 
   #[test]
   fn cosigns_to_rebroadcast_excludes_cosigns_from_different_global_session() {
+    serai_env::init_logger();
     let (session, keypair) = random_session();
     let id = session.id();
 
@@ -423,6 +441,7 @@ mod cosigns_to_rebroadcast {
 
   #[test]
   fn cosigns_to_rebroadcast_returns_latest_cosigns_when_not_faulted() {
+    serai_env::init_logger();
     let (session, keypair) = random_session();
     let id = session.id();
 
@@ -452,6 +471,7 @@ mod cosigns_to_rebroadcast {
 
   #[test]
   fn cosigns_to_rebroadcast_returns_faults_and_honest_when_faulted() {
+    serai_env::init_logger();
     let (session, keypair) = random_session();
     let id = session.id();
 
@@ -504,6 +524,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_not_yet_indexed_block() {
+    serai_env::init_logger();
     let db = MemDb::new();
     let (keypair, _) = random_keypair(&mut OsRng);
 
@@ -521,6 +542,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_accepts_valid_cosign() {
+    serai_env::init_logger();
     let (session, keypair) = random_session();
     let id = session.id();
 
@@ -545,6 +567,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_stale_cosign() {
+    serai_env::init_logger();
     let (session, keypair) = random_session();
     let id = session.id();
 
@@ -583,6 +606,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_unrecognized_global_session() {
+    serai_env::init_logger();
     let (keypair, _) = random_keypair(&mut OsRng);
 
     let mut db = MemDb::new();
@@ -611,6 +635,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_before_global_session_start() {
+    serai_env::init_logger();
     let (mut session, keypair) = random_session();
     session.start_block_number = 10;
     let id = session.id();
@@ -643,6 +668,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_after_global_session_end() {
+    serai_env::init_logger();
     let (session, keypair) = random_session();
     let id = session.id();
 
@@ -675,6 +701,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_invalid_signature() {
+    serai_env::init_logger();
     let (session, _keypair) = random_session();
     let id = session.id();
     // Use a different keypair than the one in the session
@@ -701,6 +728,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_future_global_session() {
+    serai_env::init_logger();
     let (mut session, keypair) = random_session();
     session.start_block_number = 10;
     let id = session.id();
@@ -733,6 +761,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_handles_faulty_cosign() {
+    serai_env::init_logger();
     let (session, keypair) = random_session();
     let id = session.id();
 
@@ -771,6 +800,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_accepts_newer_cosign_when_existing_is_older() {
+    serai_env::init_logger();
     let (session, keypair) = random_session();
     let id = session.id();
 
@@ -811,6 +841,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_accepts_cosign_at_global_session_last_block() {
+    serai_env::init_logger();
     let (session, keypair) = random_session();
     let id = session.id();
 
@@ -844,6 +875,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_ignores_duplicate_fault_from_same_network() {
+    serai_env::init_logger();
     let (session, keypair) = random_session();
     let id = session.id();
 
@@ -896,6 +928,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_rejects_non_participating_network() {
+    serai_env::init_logger();
     let (session, _keypair) = random_session();
     let id = session.id();
 
@@ -929,6 +962,7 @@ mod intake_cosign {
 
   #[test]
   fn intake_cosign_records_fault_below_threshold() {
+    serai_env::init_logger();
     let network1 = ExternalNetworkId::Bitcoin;
     let network2 = ExternalNetworkId::Ethereum;
     let set1 = ExternalValidatorSet { network: network1, session: Session(0) };
@@ -988,6 +1022,7 @@ mod intended_cosigns {
 
   #[test]
   fn intended_cosigns_empty_returns_empty() {
+    serai_env::init_logger();
     let mut db = MemDb::new();
     let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
     let mut txn = db.txn();
@@ -997,6 +1032,7 @@ mod intended_cosigns {
 
   #[test]
   fn intended_cosigns_receives_sent_intent() {
+    serai_env::init_logger();
     let mut db = MemDb::new();
     let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
 
