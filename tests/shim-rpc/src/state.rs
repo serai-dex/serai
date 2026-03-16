@@ -39,9 +39,26 @@ pub struct ErrorInjection {
   pub block_number_errors: HashMap<(String, u64), String>,
   /// Fails for a specific block hash.
   pub block_hash_errors: HashMap<(String, BlockHash), String>,
+  /// Probability (0–100) that any request randomly fails. 0 = never, 100 = always.
+  pub failure_rate: u8,
 }
 
 impl ErrorInjection {
+  /// Check if this request should randomly fail based on the configured `failure_rate`.
+  pub fn check_random_failure(&self, method: &str) -> Option<String> {
+    if self.failure_rate == 0 {
+      return None;
+    }
+    use rand_core::RngCore;
+    let val = rand_core::OsRng.next_u32() % 100;
+    #[expect(clippy::as_conversions)]
+    if val < self.failure_rate as u32 {
+      Some(format!("fuzz: random failure on `{method}` (rate={}%)", self.failure_rate))
+    } else {
+      None
+    }
+  }
+
   /// Check if an error should be injected for this method call.
   pub fn check_method(&self, method: &str) -> Option<&String> {
     self.method_errors.get(method)

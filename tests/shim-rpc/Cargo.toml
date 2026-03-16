@@ -22,6 +22,7 @@ tokio = { version = "1", default-features = false }
 
 serai-abi = { path = "../../substrate/abi", default-features = false, features = ["std"] }
 
+rand_core = { version = "0.6", default-features = false }
 borsh = { version = "1", default-features = false, features = ["std", "derive"] }
 hex = { version = "0.4", default-features = false, features = ["std"] }
 blake2 = { version = "0.11.0-rc.0", default-features = false }

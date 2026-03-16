@@ -122,6 +122,11 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
       "blockchain/latest_finalized_block_number",
       async |_params, state, _ext| {
         let state = state.read().await;
+        if let Some(err) =
+          state.errors.check_random_failure("blockchain/latest_finalized_block_number")
+        {
+          return Err(Error::Internal(err));
+        }
         if let Some(err) = state.errors.check_method("blockchain/latest_finalized_block_number") {
           return Err(Error::Internal(err.to_owned()));
         }
@@ -133,6 +138,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("blockchain/is_finalized", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("blockchain/is_finalized") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("blockchain/is_finalized") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -149,6 +157,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("blockchain/block", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("blockchain/block") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("blockchain/block") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -177,6 +188,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("blockchain/events", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("blockchain/events") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("blockchain/events") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -204,6 +218,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("validator-sets/current_session", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("validator-sets/current_session") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("validator-sets/current_session") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -219,6 +236,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("validator-sets/current_stake", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("validator-sets/current_stake") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("validator-sets/current_stake") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -234,6 +254,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("validator-sets/keys", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("validator-sets/keys") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("validator-sets/keys") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -249,6 +272,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("validator-sets/current_validators", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("validator-sets/current_validators") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("validator-sets/current_validators") {
         return Err(Error::Internal(err.to_owned()));
       }

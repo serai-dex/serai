@@ -139,6 +139,18 @@ impl SeraiShimRpc {
     &self.state
   }
 
+  /// Set the probability (0–100) that any RPC request randomly fails.
+  ///
+  /// 0 disables fuzzing (the default), 100 fails every request.
+  pub async fn set_failure_rate(&self, percent: u8) {
+    self.state.write().await.errors.failure_rate = percent;
+  }
+
+  /// Disable random request failures.
+  pub async fn clear_failure_rate(&self) {
+    self.state.write().await.errors.failure_rate = 0;
+  }
+
   /// Stop the shim RPC node server.
   pub fn stop(&self) {
     self.handle.stop().expect("failed to stop shim RPC node");
