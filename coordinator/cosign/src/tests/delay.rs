@@ -5,7 +5,7 @@ use rand_core::OsRng;
 use serai_task::ContinuallyRan;
 
 use crate::{
-  LatestAcknowledgedBlock,
+  LatestCosignedBlockNumber,
   delay::{ACKNOWLEDGEMENT_DELAY, CosignDelayTask, now_timestamp},
   evaluator::CosignedBlocks,
   tests::{IntoTask, TaskTest},
@@ -41,13 +41,13 @@ impl DelayTest {
     (Self::default(), start)
   }
 
-  async fn assert_task_iteration_completes_with(&self, latest_acknowledged_block: u64) {
+  async fn assert_task_iteration_completes_with(&self, latest_finalized_block: u64) {
     use serai_env::log::debug;
-    let actual = LatestAcknowledgedBlock::get(&self.db);
+    let actual = LatestCosignedBlockNumber::get(&self.db);
     let cosigned_pending = CosignedBlocks::peek(&self.db).is_some();
-    debug!("LatestAcknowledgedBlock: {actual:?} (expected: Some({latest_acknowledged_block}))");
+    debug!("LatestFinalizedBlock: {actual:?} (expected: Some({latest_finalized_block}))");
     debug!("CosignedBlocks pending: {cosigned_pending}");
-    assert_eq!(actual, Some(latest_acknowledged_block));
+    assert_eq!(actual, Some(latest_finalized_block));
     assert!(!cosigned_pending, "CosignedBlocks queue items should have been consumed");
   }
 }
@@ -60,12 +60,12 @@ async fn returns_false_with_no_messages() {
 
   TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
 
-  assert_eq!(LatestAcknowledgedBlock::get(&test.db), None);
+  assert_eq!(LatestCosignedBlockNumber::get(&test.db), None);
   assert_eq!(CosignedBlocks::peek(&test.db), None);
 }
 
 #[tokio::test]
-async fn updates_latest_acknowledged_block_after_ack_delay() {
+async fn updates_latest_finalized_block_after_ack_delay() {
   let (mut test, start) = DelayTest::new();
 
   {
@@ -73,9 +73,9 @@ async fn updates_latest_acknowledged_block_after_ack_delay() {
     // blocks with the same timestamps
     // nothing unusual happens, the task follow block numbers
     let now = now_secs();
-    CosignedBlocks::send(&mut txn, &(0, now));
-    CosignedBlocks::send(&mut txn, &(1, now));
-    CosignedBlocks::send(&mut txn, &(2, now));
+    CosignedBlocks::send(&mut txn, &(0, now, true));
+    CosignedBlocks::send(&mut txn, &(1, now, true));
+    CosignedBlocks::send(&mut txn, &(2, now, true));
     txn.commit();
   }
 
@@ -91,9 +91,9 @@ async fn updates_latest_acknowledged_block_after_ack_delay() {
     // timestamps out of order
     // nothing unusual happens, the task stil follows block numbers
     let now = now_secs();
-    CosignedBlocks::send(&mut txn, &(3, now));
-    CosignedBlocks::send(&mut txn, &(4, now - 1));
-    CosignedBlocks::send(&mut txn, &(5, now - 2));
+    CosignedBlocks::send(&mut txn, &(3, now, true));
+    CosignedBlocks::send(&mut txn, &(4, now - 1, true));
+    CosignedBlocks::send(&mut txn, &(5, now - 2, true));
     txn.commit();
   }
 
@@ -107,9 +107,9 @@ async fn updates_latest_acknowledged_block_after_ack_delay() {
     // timestamps increasing in order
     // nothing unusual happens, the task stil follows block numbers
     let now = now_secs();
-    CosignedBlocks::send(&mut txn, &(6, now));
-    CosignedBlocks::send(&mut txn, &(7, now + 1));
-    CosignedBlocks::send(&mut txn, &(8, now + 2));
+    CosignedBlocks::send(&mut txn, &(6, now, true));
+    CosignedBlocks::send(&mut txn, &(7, now + 1, true));
+    CosignedBlocks::send(&mut txn, &(8, now + 2, true));
     txn.commit();
   }
 
@@ -126,13 +126,13 @@ async fn does_not_regress_and_skips_if_not_a_later_block() {
 
   {
     let mut txn = test.db.txn();
-    CosignedBlocks::send(&mut txn, &(1, now_secs()));
-    CosignedBlocks::send(&mut txn, &(2, now_secs()));
+    CosignedBlocks::send(&mut txn, &(1, now_secs(), true));
+    CosignedBlocks::send(&mut txn, &(2, now_secs(), true));
 
     // Sent out of order below
-    CosignedBlocks::send(&mut txn, &(4, now_secs()));
+    CosignedBlocks::send(&mut txn, &(4, now_secs(), true));
     // 3 will be skipped after 4 was processed
-    CosignedBlocks::send(&mut txn, &(3, now_secs()));
+    CosignedBlocks::send(&mut txn, &(3, now_secs(), true));
 
     txn.commit();
   }
@@ -148,7 +148,7 @@ async fn does_not_regress_and_skips_if_not_a_later_block() {
   {
     let mut txn = test.db.txn();
     // Sends the same previous block number
-    CosignedBlocks::send(&mut txn, &(4, now_secs()));
+    CosignedBlocks::send(&mut txn, &(4, now_secs(), true));
     txn.commit();
   }
 
@@ -169,7 +169,7 @@ async fn respects_acknowledgement_delay() {
   let now = now_secs();
   {
     let mut txn = test.db.txn();
-    CosignedBlocks::send(&mut txn, &(block_number, now));
+    CosignedBlocks::send(&mut txn, &(block_number, now, true));
     txn.commit();
   }
 
@@ -181,14 +181,14 @@ async fn respects_acknowledgement_delay() {
 
   // Well before ACKNOWLEDGEMENT_DELAY, the block must not be acknowledged
   tokio::time::sleep(Duration::from_secs(ACKNOWLEDGEMENT_DELAY.as_secs().saturating_sub(2))).await;
-  assert!(LatestAcknowledgedBlock::get(&test.db).is_none());
+  assert!(LatestCosignedBlockNumber::get(&test.db).is_none());
 
   // Wait for the task to complete
   let made_progress = task_handle.await.unwrap().unwrap();
   assert!(made_progress);
 
-  // Block is now acknowledged
-  assert_eq!(LatestAcknowledgedBlock::get(&test.db), Some(block_number));
+  // Block is now finalized
+  assert_eq!(LatestCosignedBlockNumber::get(&test.db), Some(block_number));
 
   // The elapsed time must be at least ACKNOWLEDGEMENT_DELAY
   let elapsed = start.elapsed();

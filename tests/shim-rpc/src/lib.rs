@@ -61,7 +61,10 @@ impl SeraiShimRpc {
   /// Returns the hash of the newly created block.
   pub async fn add_block_with_events(&self, events: Vec<Vec<Event>>) -> BlockHash {
     let mut state = self.state.write().await;
-    let number = state.latest_finalized_block_number() + 1;
+    let Some(latest_block) = state.blocks_by_number.keys().copied().max() else {
+      return state.make_block(0, events);
+    };
+    let number = latest_block + 1;
     state.make_block(number, events)
   }
 

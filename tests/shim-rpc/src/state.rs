@@ -147,22 +147,16 @@ impl ShimState {
   ///
   /// Unlike [`Self::make_block`], this does **not** advance the internal
   /// `builds_upon` state, so subsequent calls to `make_block` remain valid.
-  pub fn make_non_linear_block(
-    &mut self,
-    number: u64,
-    events: Vec<Vec<Event>>,
-  ) -> BlockHash {
+  pub fn make_non_linear_block(&mut self, number: u64, events: Vec<Vec<Event>>) -> BlockHash {
     let block = Block {
       header: Header::V1(HeaderV1 {
         number,
-        // Use an empty tree — this will NOT match what the task expects
+        // Use an empty tree: this will NOT match what the task expects
         builds_upon: IncrementalUnbalancedMerkleTree::new().calculate(BLOCK_BRANCH_TAG),
         proposer: SeraiAddress([0; 32]),
         #[expect(clippy::cast_possible_truncation, clippy::as_conversions)]
-        unix_time_in_millis: SystemTime::now()
-          .duration_since(UNIX_EPOCH)
-          .unwrap()
-          .as_millis() as u64,
+        unix_time_in_millis: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
+          as u64,
         transactions_commitment: UnbalancedMerkleTree::EMPTY,
         events_commitment: UnbalancedMerkleTree::EMPTY,
         consensus_commitment: [0; 32],

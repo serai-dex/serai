@@ -18,15 +18,16 @@ use std::sync::{
   atomic::{AtomicUsize, Ordering},
 };
 
-pub(crate) fn random_global_session() -> [u8; 32] {
-  use rand::RngCore;
-  let mut id = [0u8; 32];
-  rand_core::OsRng.fill_bytes(&mut id);
-  id
-}
+use rand::{CryptoRng, Rng, RngCore};
 
 use serai_shim_rpc::{SeraiShimRpc, ShimState};
-use serai_client_serai::Serai;
+use serai_client_serai::{
+  Serai,
+  abi::primitives::{
+    network_id::ExternalNetworkId,
+    validator_sets::{ExternalValidatorSet, Session},
+  },
+};
 pub(crate) use serai_test_task::{IntoTask, TaskTest};
 
 use crate::RequestNotableCosigns;
@@ -72,4 +73,25 @@ async fn setup_shim_serai() -> (SeraiShimRpc, Arc<Serai>) {
   let shim_serai = SeraiShimRpc::start(ShimState::default()).await;
   let serai = Arc::new(Serai::new(shim_serai.url()).unwrap());
   (shim_serai, serai)
+}
+
+pub(crate) fn random_global_session<R: RngCore + CryptoRng>(rng: &mut R) -> [u8; 32] {
+  let mut id = [0u8; 32];
+  rng.fill_bytes(&mut id);
+  id
+}
+
+/// For whe external validator set does not alter or affect the behavior of the functions being tested
+/// this can be used just as a default value any time
+pub(crate) fn default_test_validator_set() -> ExternalValidatorSet {
+  ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) }
+}
+pub(crate) fn random_validator_set<R: RngCore + CryptoRng>(rng: &mut R) -> ExternalValidatorSet {
+  let network = match rng.gen_range(0u8 ..= 2) {
+    0 => ExternalNetworkId::Bitcoin,
+    1 => ExternalNetworkId::Ethereum,
+    2 => ExternalNetworkId::Monero,
+    _ => unreachable!(),
+  };
+  ExternalValidatorSet { network, session: Session(rng.gen()) }
 }

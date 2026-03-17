@@ -1,15 +1,22 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+  collections::HashMap,
+  time::Duration,
+  sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+  },
+};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use blake2::{Blake2s256, Digest};
-
 use rand_core::OsRng;
+use rand::{Rng, RngCore};
+
 use serai_db::{Db as _, DbTxn, MemDb};
 
-use serai_primitives::test_helpers::random_keypair;
+use serai_primitives::test_helpers::{random_block_hash, random_keypair};
 use serai_cosign_types::tests::sign_cosign;
-use serai_task::Task;
+use serai_task::{Task, ContinuallyRan};
 
 use serai_client_serai::abi::primitives::{
   BlockHash,
@@ -21,8 +28,14 @@ use serai_client_serai::abi::primitives::{
 use crate::{
   Cosign, CosignIntent, Cosigning, Faulted, FaultedSession, Faults, GlobalSession, GlobalSessions,
   GlobalSessionsLastBlock, IntakeCosignError, NetworksLatestCosignedBlock, SignedCosign,
-  SubstrateBlockHash, delay::LatestAcknowledgedBlock, evaluator::CurrentlyEvaluatedGlobalSession,
-  intend::IntendedCosigns, tests::TestRequest, tests::setup_shim_serai,
+  SubstrateBlockHash,
+  delay::LatestCosignedBlockNumber,
+  evaluator::CurrentlyEvaluatedGlobalSession,
+  intend::IntendedCosigns,
+  tests::{
+    TestRequest, default_test_validator_set, random_global_session, random_validator_set,
+    setup_shim_serai,
+  },
 };
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
@@ -35,9 +48,7 @@ struct TestGlobalSession {
 }
 impl TestGlobalSession {
   fn id(&self) -> [u8; 32] {
-    let mut sets = self.sets.clone();
-    sets.sort_by_key(|a| borsh::to_vec(a).unwrap());
-    Blake2s256::digest(borsh::to_vec(&sets).unwrap()).into()
+    GlobalSession::id(self.sets.clone())
   }
 
   fn to_global(&self) -> GlobalSession {
@@ -51,68 +62,70 @@ impl TestGlobalSession {
   }
 }
 
-fn random_session() -> (TestGlobalSession, schnorrkel::Keypair) {
-  let network = ExternalNetworkId::Bitcoin;
-  let set = ExternalValidatorSet { network, session: Session(0) };
+fn random_test_session() -> (TestGlobalSession, schnorrkel::Keypair) {
+  let set = default_test_validator_set();
+  let network = set.network;
 
   let (keypair, public) = random_keypair(&mut OsRng);
 
   let mut keys = HashMap::new();
   let mut stakes = HashMap::new();
 
+  let total_stake = OsRng.gen_range(1u64 .. u64::MAX / 17);
   keys.insert(network, public);
-  stakes.insert(network, 100);
+  stakes.insert(network, total_stake);
 
-  let session =
-    TestGlobalSession { start_block_number: 1, sets: vec![set], keys, stakes, total_stake: 100 };
+  let session = TestGlobalSession {
+    start_block_number: u64::from(set.session.0) + 1,
+    sets: vec![set],
+    keys,
+    stakes,
+    total_stake,
+  };
   (session, keypair)
 }
 
-fn seed_minimal_state(db: &mut MemDb, session: &TestGlobalSession) {
+fn seed_minimal_state(db: &mut MemDb, random_test_session: &TestGlobalSession) {
   let mut txn = db.txn();
-  let id = session.id();
+  let id = random_test_session.id();
 
   // Required by `Cosigning::intake_cosign`.
-  GlobalSessions::set(&mut txn, id, &session.to_global());
+  GlobalSessions::set(&mut txn, id, &random_test_session.to_global());
 
   // Required by `Cosigning::cosigns_to_rebroadcast` in the non-faulted case.
-  CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, session.to_global()));
+  CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, random_test_session.to_global()));
 
   // Required for `intake_cosign` to not classify a session as "future".
-  LatestAcknowledgedBlock::set(&mut txn, &0u64);
+  LatestCosignedBlockNumber::set(&mut txn, &0u64);
 
   txn.commit();
 }
 
 #[test]
-fn global_session_id_generation() {
+fn fuzz_global_session_id() {
   serai_env::init_logger();
-  let network1 = ExternalNetworkId::Bitcoin;
-  let set1 = ExternalValidatorSet { network: network1, session: Session(0) };
-  let set2 = ExternalValidatorSet { network: ExternalNetworkId::Ethereum, session: Session(0) };
+  for _ in 0 .. 100 {
+    let num_sets = OsRng.gen_range(1u8 ..= 3);
+    let sets: Vec<_> = (0 .. num_sets).map(|_| random_validator_set(&mut OsRng)).collect();
 
-  // Create two vectors with the same sets but in different order
-  let cosigners1 = vec![set1, set2];
-  let cosigners2 = vec![set2, set1];
+    let id1 = GlobalSession::id(sets.clone());
+    let id2 = GlobalSession::id(sets.clone());
 
-  // Both should produce the same ID (order-independent)
-  let id1 = GlobalSession::id(cosigners1.clone());
-  let id2 = GlobalSession::id(cosigners2.clone());
-  assert_eq!(id1, id2, "IDs should be the same regardless of input order");
+    // Determinism: same input always produces same ID
+    assert_eq!(id1, id2);
 
-  // Same input should always produce the same ID (deterministic)
-  let id3 = GlobalSession::id(cosigners1.clone());
-  let id4 = GlobalSession::id(cosigners2.clone());
-  assert_eq!(id1, id3, "same input should produce the same ID");
-  assert_eq!(id2, id4, "same input should produce the same ID");
+    // Order-independence: any permutation produces the same ID
+    let mut reversed = sets.clone();
+    reversed.reverse();
+    assert_eq!(id1, GlobalSession::id(reversed));
 
-  // Different sets should produce different IDs
-  let set3 = ExternalValidatorSet { network: network1, session: Session(1) }; // same network as set1, different session
-  assert_ne!(
-    GlobalSession::id(vec![set1]),
-    GlobalSession::id(vec![set3]),
-    "different validator sets should produce different IDs"
-  );
+    // Collision resistance: changing any set should change the ID
+    let mut altered = sets.clone();
+    altered[0] = random_validator_set(&mut OsRng);
+    if altered != sets {
+      assert_ne!(id1, GlobalSession::id(altered));
+    }
+  }
 }
 
 mod intake_cosign_error {
@@ -120,7 +133,6 @@ mod intake_cosign_error {
 
   #[test]
   fn temporal_returns_true_for_temporal_errors() {
-    serai_env::init_logger();
     assert!(IntakeCosignError::NotYetIndexedBlock.temporal());
     assert!(IntakeCosignError::StaleCosign.temporal());
     assert!(IntakeCosignError::UnrecognizedGlobalSession.temporal());
@@ -129,7 +141,6 @@ mod intake_cosign_error {
 
   #[test]
   fn temporal_returns_false_for_non_temporal_errors() {
-    serai_env::init_logger();
     assert!(!IntakeCosignError::BeforeGlobalSessionStart.temporal());
     assert!(!IntakeCosignError::AfterGlobalSessionEnd.temporal());
     assert!(!IntakeCosignError::NonParticipatingNetwork.temporal());
@@ -137,237 +148,171 @@ mod intake_cosign_error {
   }
 }
 
-mod spawn {
-  use super::*;
+// More cases are tested in ./full_stack.rs with fuzzing for different event type blocks
+#[tokio::test]
+async fn spawn_end_to_end() {
+  serai_env::init_logger();
+  let db = MemDb::new();
+  let (shim_serai, serai) = setup_shim_serai().await;
+  let (request, _calls) = TestRequest::new(false);
 
-  #[tokio::test]
-  async fn spawn_creates_cosigning_instance() {
-    serai_env::init_logger();
-    let db = MemDb::new();
-    let (_shim_serai, serai) = setup_shim_serai().await;
-    let (request, _calls) = TestRequest::new(false);
-    let cosigning = Cosigning::spawn(db, serai, request, vec![]);
-
-    assert!(cosigning.cosigns_to_rebroadcast().is_empty());
+  /// Create a trivial task that logs and sets a flag when triggered whose handle is passed to the cosigning pipeline.
+  struct LogOnTrigger(Arc<AtomicBool>);
+  impl ContinuallyRan for LogOnTrigger {
+    type Error = std::convert::Infallible;
+    fn run_iteration(
+      &mut self,
+    ) -> impl Send + std::future::Future<Output = Result<bool, Self::Error>> {
+      async {
+        serai_env::info!("dependent task triggered by cosigning pipeline");
+        self.0.store(true, Ordering::SeqCst);
+        Ok(false)
+      }
+    }
   }
+  let (dependent_task, dependent_handle) = Task::new();
+  let triggered = Arc::new(AtomicBool::new(false));
+  tokio::spawn(LogOnTrigger(triggered.clone()).continually_run(dependent_task, vec![]));
 
-  #[tokio::test]
-  async fn spawn_with_tasks_to_run_upon_cosigning() {
-    serai_env::init_logger();
-    let db = MemDb::new();
-    let (_shim_serai, serai) = setup_shim_serai().await;
-    let (request, _calls) = TestRequest::new(false);
+  // Spawn cosigning tasks with the dependent task handle
+  let cosigning = Cosigning::spawn(db.clone(), serai, request, vec![dependent_handle]);
 
-    let (_task, task_handle) = Task::new();
-    let tasks_to_run = vec![task_handle];
-
-    let cosigning = Cosigning::spawn(db.clone(), serai, request, tasks_to_run);
-
+  // Just started: results are empty
+  {
     assert!(cosigning.cosigns_to_rebroadcast().is_empty());
-  }
-
-  #[tokio::test]
-  async fn spawn_initializes_cosigning_instance_correctly() {
-    serai_env::init_logger();
-    let db = MemDb::new();
-    let (_shim_serai, serai) = setup_shim_serai().await;
-    let (request, _calls) = TestRequest::new(false);
-
-    let cosigning = Cosigning::spawn(db.clone(), serai, request, vec![]);
-
-    assert!(cosigning.cosigns_to_rebroadcast().is_empty());
-
-    let latest = Cosigning::<MemDb>::latest_acknowledged_block(&db);
+    let latest = Cosigning::<MemDb>::latest_finalized_block(&db);
     assert!(latest.is_ok());
     assert_eq!(latest.unwrap(), 0);
   }
 
-  #[tokio::test]
-  async fn spawn_tasks_chain_correctly() {
-    serai_env::init_logger();
-    let db = MemDb::new();
-    let (_shim_serai, serai) = setup_shim_serai().await;
-    let (request, _calls) = TestRequest::new(false);
-
-    let _cosigning = Cosigning::spawn(db.clone(), serai, request, vec![]);
-
-    tokio::time::sleep(Duration::from_millis(10)).await;
-
-    let latest = Cosigning::<MemDb>::latest_acknowledged_block(&db);
-    assert!(latest.is_ok());
-  }
-
-  #[tokio::test]
-  async fn spawn_end_to_end() {
-    serai_env::init_logger();
-    let db = MemDb::new();
-    let (shim_serai, serai) = setup_shim_serai().await;
-    let (request, _calls) = TestRequest::new(false);
-
-    // Create block 0 so the intend task has something to scan
-    shim_serai.make_block(0, vec![]).await;
-
-    // Spawn cosigning tasks in the background
-    let _cosigning = Cosigning::spawn(db.clone(), serai, request, vec![]);
-
-    // Keep adding new blocks while the background tasks process them
-    let total_blocks = 10u64;
-    for _ in 1 ..= total_blocks {
-      shim_serai.add_block_with_events(vec![]).await;
-      tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-
-    // Wait for the full pipeline to process in a polling loop:
-    // intend (indexes blocks) -> evaluator (passes HasEvents::No through) -> delay (waits
-    // ACKNOWLEDGEMENT_DELAY)
-    loop {
-      let latest = Cosigning::<MemDb>::latest_acknowledged_block(&db);
-      if latest.map(|n| n >= total_blocks).unwrap_or(false) {
-        break;
+  // Run block production and pipeline polling concurrently
+  let total_blocks = 10;
+  tokio::join!(
+    // Produce blocks
+    async {
+      for _ in 0 ..= total_blocks {
+        shim_serai.add_block_with_events(vec![]).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
       }
-      tokio::time::sleep(Duration::from_millis(100)).await;
+    },
+    // Poll until the pipeline has processed all blocks
+    async {
+      loop {
+        let latest = Cosigning::<MemDb>::latest_finalized_block(&db);
+        if latest.map(|n| n >= total_blocks).unwrap_or(false) {
+          break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+      }
     }
+  );
 
-    let latest = Cosigning::<MemDb>::latest_acknowledged_block(&db).unwrap();
-    assert!(latest >= total_blocks);
-  }
+  let latest = Cosigning::<MemDb>::latest_finalized_block(&db).unwrap();
+  assert!(latest == total_blocks);
+
+  // Verify the dependent task was triggered by the pipeline
+  assert!(triggered.load(Ordering::SeqCst));
 }
 
-mod latest_acknowledged_block {
-  use super::*;
+#[test]
+fn latest_finalized_block() {
+  serai_env::init_logger();
 
-  #[test]
-  fn latest_acknowledged_block_defaults_to_zero() {
-    serai_env::init_logger();
+  // Defaults to zero
+  {
     let db = MemDb::new();
-    assert_eq!(Cosigning::<MemDb>::latest_acknowledged_block(&db).unwrap(), 0);
+    assert_eq!(Cosigning::<MemDb>::latest_finalized_block(&db).unwrap(), 0);
   }
 
-  #[test]
-  fn latest_acknowledged_block_errors_when_faulted() {
-    serai_env::init_logger();
+  // Errors when faulted session exists
+  {
     let mut db = MemDb::new();
-    {
-      let mut txn = db.txn();
-      FaultedSession::set(&mut txn, &[1u8; 32]);
-      txn.commit();
-    }
-    assert!(matches!(Cosigning::<MemDb>::latest_acknowledged_block(&db), Err(Faulted)));
+    let mut txn = db.txn();
+    FaultedSession::set(&mut txn, &random_global_session(&mut OsRng));
+    txn.commit();
+    assert!(matches!(Cosigning::<MemDb>::latest_finalized_block(&db), Err(Faulted)));
   }
 
-  #[test]
-  fn latest_acknowledged_block_returns_stored_value() {
-    serai_env::init_logger();
+  // Returns stored value
+  {
     let mut db = MemDb::new();
-    {
-      let mut txn = db.txn();
-      LatestAcknowledgedBlock::set(&mut txn, &42u64);
-      txn.commit();
-    }
-    assert_eq!(Cosigning::<MemDb>::latest_acknowledged_block(&db).unwrap(), 42);
+    let mut txn = db.txn();
+    let latest_finalized_block = OsRng.next_u64();
+    LatestCosignedBlockNumber::set(&mut txn, &latest_finalized_block);
+    txn.commit();
+    assert_eq!(Cosigning::<MemDb>::latest_finalized_block(&db).unwrap(), latest_finalized_block);
   }
 }
 
-mod cosigned_block {
-  use super::*;
+#[test]
+fn cosigned_block() {
+  serai_env::init_logger();
 
-  #[test]
-  fn cosigned_block_returns_none_beyond_latest() {
-    serai_env::init_logger();
+  // Returns None beyond latest finalized block
+  {
     let mut db = MemDb::new();
-    {
-      let mut txn = db.txn();
-      LatestAcknowledgedBlock::set(&mut txn, &5u64);
-      txn.commit();
-    }
-    assert_eq!(Cosigning::<MemDb>::cosigned_block(&db, 6).unwrap(), None);
+    assert_eq!(Cosigning::<MemDb>::cosigned_block(&db, 0).unwrap(), None);
+    let mut txn = db.txn();
+    let latest_finalized_block = OsRng.next_u64();
+    LatestCosignedBlockNumber::set(&mut txn, &latest_finalized_block);
+    txn.commit();
+    assert_eq!(Cosigning::<MemDb>::cosigned_block(&db, latest_finalized_block + 1).unwrap(), None);
   }
 
-  #[test]
-  fn cosigned_block_returns_hash_when_in_range() {
-    serai_env::init_logger();
+  // Returns hash when block is in range
+  {
     let mut db = MemDb::new();
-    let block_hash = BlockHash([9u8; 32]);
-    {
-      let mut txn = db.txn();
-      LatestAcknowledgedBlock::set(&mut txn, &5u64);
-      SubstrateBlockHash::set(&mut txn, 3, &block_hash);
-      txn.commit();
-    }
-    assert_eq!(Cosigning::<MemDb>::cosigned_block(&db, 3).unwrap(), Some(block_hash));
+    let block_hash = random_block_hash(&mut OsRng);
+    let latest_finalized_block = OsRng.next_u64();
+    let mut txn = db.txn();
+    LatestCosignedBlockNumber::set(&mut txn, &latest_finalized_block);
+    SubstrateBlockHash::set(&mut txn, latest_finalized_block - 1, &block_hash);
+    txn.commit();
+    assert_eq!(
+      Cosigning::<MemDb>::cosigned_block(&db, latest_finalized_block - 1).unwrap(),
+      Some(block_hash)
+    );
   }
 
-  #[test]
-  fn cosigned_block_errors_when_faulted() {
-    serai_env::init_logger();
+  // Errors when faulted session exists
+  {
     let mut db = MemDb::new();
-    {
-      let mut txn = db.txn();
-      FaultedSession::set(&mut txn, &[1u8; 32]);
-      txn.commit();
-    }
-    assert!(matches!(Cosigning::<MemDb>::cosigned_block(&db, 1), Err(Faulted)));
-  }
-
-  #[tokio::test]
-  async fn cosigning_cosigned_block_returns_correct_hash() {
-    serai_env::init_logger();
-    let mut db = MemDb::new();
-    let block_hash_5 = BlockHash([42u8; 32]);
-    let block_hash_10 = BlockHash([43u8; 32]);
-
-    {
-      let mut txn = db.txn();
-      SubstrateBlockHash::set(&mut txn, 5, &block_hash_5);
-      SubstrateBlockHash::set(&mut txn, 10, &block_hash_10);
-      LatestAcknowledgedBlock::set(&mut txn, &10u64);
-      txn.commit();
-    }
-
-    let result = Cosigning::<MemDb>::cosigned_block(&db, 5);
-    assert!(result.is_ok());
-    assert_eq!(result.unwrap(), Some(block_hash_5));
-
-    let result_10 = Cosigning::<MemDb>::cosigned_block(&db, 10);
-    assert!(result_10.is_ok());
-    assert_eq!(result_10.unwrap(), Some(block_hash_10));
-
-    let result_11 = Cosigning::<MemDb>::cosigned_block(&db, 11);
-    assert!(result_11.is_ok());
-    assert_eq!(result_11.unwrap(), None);
+    let mut txn = db.txn();
+    FaultedSession::set(&mut txn, &random_global_session(&mut OsRng));
+    txn.commit();
+    assert!(matches!(Cosigning::<MemDb>::cosigned_block(&db, OsRng.next_u64()), Err(Faulted)));
   }
 }
 
-mod notable_cosigns {
-  use super::*;
+#[test]
+fn notable_cosigns() {
+  serai_env::init_logger();
 
-  #[test]
-  fn notable_cosigns_empty_without_cosigns() {
-    serai_env::init_logger();
+  // Empty without cosigns
+  {
     let db = MemDb::new();
-    let cosigns = Cosigning::<MemDb>::notable_cosigns(&db, [1u8; 32]);
+    let cosigns = Cosigning::<MemDb>::notable_cosigns(&db, random_global_session(&mut OsRng));
     assert!(cosigns.is_empty());
   }
 
-  #[test]
-  fn notable_cosigns_returns_cosigns_for_session() {
-    serai_env::init_logger();
-    let (session, keypair) = random_session();
+  // Returns cosigns for session
+  {
+    let (session, keypair) = random_test_session();
     let id = session.id();
+    let network = session.sets[0].network;
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
 
-    let block_number = 1;
-    let block_hash = BlockHash([9u8; 32]);
+    let block_number = OsRng.next_u64();
+    let block_hash = random_block_hash(&mut OsRng);
     {
       let mut txn = db.txn();
       SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
       txn.commit();
     }
 
-    let cosign =
-      Cosign { global_session: id, block_number, block_hash, cosigner: ExternalNetworkId::Bitcoin };
+    let cosign = Cosign { global_session: id, block_number, block_hash, cosigner: network };
     let signed = sign_cosign(cosign, &keypair);
 
     let mut cosigning = Cosigning::new(db.clone());
@@ -377,87 +322,79 @@ mod notable_cosigns {
     assert_eq!(notable.len(), 1);
     assert_eq!(notable[0].cosign.block_number, block_number);
     assert_eq!(notable[0].cosign.block_hash, block_hash);
-    assert_eq!(notable[0].cosign.cosigner, ExternalNetworkId::Bitcoin);
+    assert_eq!(notable[0].cosign.cosigner, network);
   }
 }
 
-mod cosigns_to_rebroadcast {
-  use super::*;
+#[test]
+fn cosigns_to_rebroadcast() {
+  serai_env::init_logger();
 
-  #[test]
-  fn cosigns_to_rebroadcast_excludes_cosigns_from_different_global_session() {
-    serai_env::init_logger();
-    let (session, keypair) = random_session();
+  // Excludes cosigns from different global session
+  {
+    let (session, keypair) = random_test_session();
     let id = session.id();
+    let network = session.sets[0].network;
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
 
-    let block_number = 1;
-    let our_hash = BlockHash([1u8; 32]);
-    let faulty_hash = BlockHash([2u8; 32]);
+    let block_number = OsRng.next_u64();
+    let our_hash = random_block_hash(&mut OsRng);
+    let faulty_hash = random_block_hash(&mut OsRng);
     {
       let mut txn = db.txn();
       SubstrateBlockHash::set(&mut txn, block_number, &our_hash);
       txn.commit();
     }
 
-    let faulty_cosign = Cosign {
-      global_session: id,
-      block_number,
-      block_hash: faulty_hash,
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
+    let faulty_cosign =
+      Cosign { global_session: id, block_number, block_hash: faulty_hash, cosigner: network };
     let faulty_signed = sign_cosign(faulty_cosign, &keypair);
 
     let mut cosigning = Cosigning::new(db.clone());
     cosigning.intake_cosign(&faulty_signed).unwrap();
 
-    let different_session_id = [99u8; 32];
+    let different_session_id = random_global_session(&mut OsRng);
     let different_cosign = Cosign {
       global_session: different_session_id,
       block_number,
       block_hash: our_hash,
-      cosigner: ExternalNetworkId::Bitcoin,
+      cosigner: network,
     };
     let different_signed = sign_cosign(different_cosign, &keypair);
     {
       let mut txn = db.txn();
-      NetworksLatestCosignedBlock::set(&mut txn, id, ExternalNetworkId::Bitcoin, &different_signed);
+      NetworksLatestCosignedBlock::set(&mut txn, id, network, &different_signed);
       txn.commit();
     }
 
     let cosigning = Cosigning::new(db);
     let rebroadcast = cosigning.cosigns_to_rebroadcast();
 
-    assert_eq!(
-      rebroadcast.len(),
-      1,
-      "should only include faults, not cosigns from different sessions"
-    );
+    assert_eq!(rebroadcast.len(), 1,);
     assert_eq!(rebroadcast[0].cosign.block_hash, faulty_hash);
     assert_eq!(rebroadcast[0].cosign.global_session, id);
   }
 
-  #[test]
-  fn cosigns_to_rebroadcast_returns_latest_cosigns_when_not_faulted() {
-    serai_env::init_logger();
-    let (session, keypair) = random_session();
+  // Returns latest cosigns when not faulted
+  {
+    let (session, keypair) = random_test_session();
     let id = session.id();
+    let network = session.sets[0].network;
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
 
-    let block_number = 1;
-    let block_hash = BlockHash([9u8; 32]);
+    let block_number = OsRng.next_u64();
+    let block_hash = random_block_hash(&mut OsRng);
     {
       let mut txn = db.txn();
       SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
       txn.commit();
     }
 
-    let cosign =
-      Cosign { global_session: id, block_number, block_hash, cosigner: ExternalNetworkId::Bitcoin };
+    let cosign = Cosign { global_session: id, block_number, block_hash, cosigner: network };
     let signed = sign_cosign(cosign, &keypair);
 
     let mut cosigning = Cosigning::new(db.clone());
@@ -469,45 +406,37 @@ mod cosigns_to_rebroadcast {
     assert_eq!(rebroadcast[0].cosign.block_hash, block_hash);
   }
 
-  #[test]
-  fn cosigns_to_rebroadcast_returns_faults_and_honest_when_faulted() {
-    serai_env::init_logger();
-    let (session, keypair) = random_session();
+  // Returns faults and honest cosigns when faulted
+  {
+    let (session, keypair) = random_test_session();
     let id = session.id();
+    let network = session.sets[0].network;
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
 
-    let block_number = 1;
-    let our_hash = BlockHash([1u8; 32]);
-    let faulty_hash = BlockHash([2u8; 32]);
+    let block_number = OsRng.next_u64();
+    let our_hash = random_block_hash(&mut OsRng);
+    let faulty_hash = random_block_hash(&mut OsRng);
     {
       let mut txn = db.txn();
       SubstrateBlockHash::set(&mut txn, block_number, &our_hash);
       txn.commit();
     }
 
-    let faulty_cosign = Cosign {
-      global_session: id,
-      block_number,
-      block_hash: faulty_hash,
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
+    let faulty_cosign =
+      Cosign { global_session: id, block_number, block_hash: faulty_hash, cosigner: network };
     let faulty_signed = sign_cosign(faulty_cosign, &keypair);
 
     let mut cosigning = Cosigning::new(db.clone());
     cosigning.intake_cosign(&faulty_signed).unwrap();
 
-    let honest_cosign = Cosign {
-      global_session: id,
-      block_number,
-      block_hash: our_hash,
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
+    let honest_cosign =
+      Cosign { global_session: id, block_number, block_hash: our_hash, cosigner: network };
     let honest_signed = sign_cosign(honest_cosign, &keypair);
     {
       let mut txn = db.txn();
-      NetworksLatestCosignedBlock::set(&mut txn, id, ExternalNetworkId::Bitcoin, &honest_signed);
+      NetworksLatestCosignedBlock::set(&mut txn, id, network, &honest_signed);
       txn.commit();
     }
 
@@ -522,43 +451,259 @@ mod cosigns_to_rebroadcast {
 mod intake_cosign {
   use super::*;
 
-  #[test]
-  fn intake_cosign_rejects_not_yet_indexed_block() {
-    serai_env::init_logger();
-    let db = MemDb::new();
-    let (keypair, _) = random_keypair(&mut OsRng);
+  mod errors {
+    use super::*;
 
-    let cosign = Cosign {
-      global_session: [1u8; 32],
-      block_number: 1,
-      block_hash: BlockHash([9u8; 32]),
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
-    let signed = sign_cosign(cosign, &keypair);
+    #[test]
+    fn rejects_not_yet_indexed_block() {
+      serai_env::init_logger();
+      let db = MemDb::new();
+      let (keypair, _) = random_keypair(&mut OsRng);
 
-    let mut cosigning = Cosigning::new(db);
-    assert!(matches!(cosigning.intake_cosign(&signed), Err(IntakeCosignError::NotYetIndexedBlock)));
+      let cosign = Cosign {
+        global_session: random_global_session(&mut OsRng),
+        block_number: OsRng.next_u64(),
+        block_hash: random_block_hash(&mut OsRng),
+        cosigner: ExternalNetworkId::Bitcoin,
+      };
+      let signed = sign_cosign(cosign, &keypair);
+
+      let mut cosigning = Cosigning::new(db);
+      assert!(matches!(
+        cosigning.intake_cosign(&signed),
+        Err(IntakeCosignError::NotYetIndexedBlock)
+      ));
+    }
+
+    #[test]
+    fn rejects_stale_cosign() {
+      serai_env::init_logger();
+      let (session, keypair) = random_test_session();
+      let id = session.id();
+      let network = session.sets[0].network;
+
+      let mut db = MemDb::new();
+      seed_minimal_state(&mut db, &session);
+
+      let block_hash_1 = random_block_hash(&mut OsRng);
+      let block_hash_2 = random_block_hash(&mut OsRng);
+      {
+        let mut txn = db.txn();
+        SubstrateBlockHash::set(&mut txn, 1, &block_hash_1);
+        SubstrateBlockHash::set(&mut txn, 2, &block_hash_2);
+        txn.commit();
+      }
+
+      let first_cosign =
+        Cosign { global_session: id, block_number: 2, block_hash: block_hash_2, cosigner: network };
+      let first_signed = sign_cosign(first_cosign, &keypair);
+
+      let mut cosigning = Cosigning::new(db.clone());
+      cosigning.intake_cosign(&first_signed).unwrap();
+
+      let stale_cosign =
+        Cosign { global_session: id, block_number: 1, block_hash: block_hash_1, cosigner: network };
+      let stale_signed = sign_cosign(stale_cosign, &keypair);
+
+      assert!(matches!(
+        cosigning.intake_cosign(&stale_signed),
+        Err(IntakeCosignError::StaleCosign)
+      ));
+    }
+
+    #[test]
+    fn rejects_unrecognized_global_session() {
+      serai_env::init_logger();
+      let (keypair, _) = random_keypair(&mut OsRng);
+
+      let mut db = MemDb::new();
+      let block_number = OsRng.next_u64();
+      let block_hash = random_block_hash(&mut OsRng);
+      {
+        let mut txn = db.txn();
+        SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
+        txn.commit();
+      }
+
+      let cosign = Cosign {
+        global_session: random_global_session(&mut OsRng),
+        block_number,
+        block_hash,
+        cosigner: ExternalNetworkId::Bitcoin,
+      };
+      let signed = sign_cosign(cosign, &keypair);
+
+      let mut cosigning = Cosigning::new(db);
+      assert!(matches!(
+        cosigning.intake_cosign(&signed),
+        Err(IntakeCosignError::UnrecognizedGlobalSession)
+      ));
+    }
+
+    #[test]
+    fn rejects_before_global_session_start() {
+      serai_env::init_logger();
+      let (mut session, keypair) = random_test_session();
+      let network = session.sets[0].network;
+      session.start_block_number = 10;
+      let id = session.id();
+
+      let block_hash = random_block_hash(&mut OsRng);
+      let mut db = MemDb::new();
+      {
+        let mut txn = db.txn();
+        GlobalSessions::set(&mut txn, id, &session.to_global());
+        CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, session.to_global()));
+        LatestCosignedBlockNumber::set(&mut txn, &10u64);
+        SubstrateBlockHash::set(&mut txn, 5, &block_hash);
+        txn.commit();
+      }
+
+      let cosign = Cosign { global_session: id, block_number: 5, block_hash, cosigner: network };
+      let signed = sign_cosign(cosign, &keypair);
+
+      let mut cosigning = Cosigning::new(db);
+      assert!(matches!(
+        cosigning.intake_cosign(&signed),
+        Err(IntakeCosignError::BeforeGlobalSessionStart)
+      ));
+    }
+
+    #[test]
+    fn rejects_after_global_session_end() {
+      serai_env::init_logger();
+      let (session, keypair) = random_test_session();
+      let id = session.id();
+      let network = session.sets[0].network;
+
+      let mut db = MemDb::new();
+      seed_minimal_state(&mut db, &session);
+
+      let block_hash = random_block_hash(&mut OsRng);
+      {
+        let mut txn = db.txn();
+        GlobalSessionsLastBlock::set(&mut txn, id, &5u64);
+        SubstrateBlockHash::set(&mut txn, 10, &block_hash);
+        txn.commit();
+      }
+
+      let cosign = Cosign { global_session: id, block_number: 10, block_hash, cosigner: network };
+      let signed = sign_cosign(cosign, &keypair);
+
+      let mut cosigning = Cosigning::new(db);
+      assert!(matches!(
+        cosigning.intake_cosign(&signed),
+        Err(IntakeCosignError::AfterGlobalSessionEnd)
+      ));
+    }
+
+    #[test]
+    fn rejects_invalid_signature() {
+      serai_env::init_logger();
+      let (session, _keypair) = random_test_session();
+      let id = session.id();
+      let network = session.sets[0].network;
+      let (wrong_keypair, _) = random_keypair(&mut OsRng);
+
+      let mut db = MemDb::new();
+      seed_minimal_state(&mut db, &session);
+
+      let block_number = OsRng.next_u64();
+      let block_hash = random_block_hash(&mut OsRng);
+      {
+        let mut txn = db.txn();
+        SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
+        txn.commit();
+      }
+
+      let cosign = Cosign { global_session: id, block_number, block_hash, cosigner: network };
+      let signed = sign_cosign(cosign, &wrong_keypair);
+
+      let mut cosigning = Cosigning::new(db);
+      assert!(matches!(cosigning.intake_cosign(&signed), Err(IntakeCosignError::InvalidSignature)));
+    }
+
+    #[test]
+    fn rejects_future_global_session() {
+      serai_env::init_logger();
+      let (mut session, keypair) = random_test_session();
+      let network = session.sets[0].network;
+      session.start_block_number = 10;
+      let id = session.id();
+
+      let block_hash = random_block_hash(&mut OsRng);
+      let mut db = MemDb::new();
+      {
+        let mut txn = db.txn();
+        GlobalSessions::set(&mut txn, id, &session.to_global());
+        CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, session.to_global()));
+        LatestCosignedBlockNumber::set(&mut txn, &5u64);
+        SubstrateBlockHash::set(&mut txn, 10, &block_hash);
+        txn.commit();
+      }
+
+      let cosign = Cosign { global_session: id, block_number: 10, block_hash, cosigner: network };
+      let signed = sign_cosign(cosign, &keypair);
+
+      let mut cosigning = Cosigning::new(db);
+      assert!(matches!(
+        cosigning.intake_cosign(&signed),
+        Err(IntakeCosignError::FutureGlobalSession)
+      ));
+    }
+
+    #[test]
+    fn rejects_non_participating_network() {
+      serai_env::init_logger();
+      let (session, _keypair) = random_test_session();
+      let id = session.id();
+      let session_network = session.sets[0].network;
+
+      let non_participating = ExternalNetworkId::all().find(|n| *n != session_network).unwrap();
+      let (other_keypair, _) = random_keypair(&mut OsRng);
+
+      let mut db = MemDb::new();
+      seed_minimal_state(&mut db, &session);
+
+      let block_number = OsRng.next_u64();
+      let block_hash = random_block_hash(&mut OsRng);
+      {
+        let mut txn = db.txn();
+        SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
+        txn.commit();
+      }
+
+      let cosign =
+        Cosign { global_session: id, block_number, block_hash, cosigner: non_participating };
+      let signed = sign_cosign(cosign, &other_keypair);
+
+      let mut cosigning = Cosigning::new(db);
+      assert!(matches!(
+        cosigning.intake_cosign(&signed),
+        Err(IntakeCosignError::NonParticipatingNetwork)
+      ));
+    }
   }
 
   #[test]
-  fn intake_cosign_accepts_valid_cosign() {
+  fn accepts_valid_cosign() {
     serai_env::init_logger();
-    let (session, keypair) = random_session();
+    let (session, keypair) = random_test_session();
     let id = session.id();
+    let network = session.sets[0].network;
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
 
-    let block_number = 1;
-    let block_hash = BlockHash([9u8; 32]);
+    let block_number = OsRng.next_u64();
+    let block_hash = random_block_hash(&mut OsRng);
     {
       let mut txn = db.txn();
       SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
       txn.commit();
     }
 
-    let cosign =
-      Cosign { global_session: id, block_number, block_hash, cosigner: ExternalNetworkId::Bitcoin };
+    let cosign = Cosign { global_session: id, block_number, block_hash, cosigner: network };
     let signed = sign_cosign(cosign, &keypair);
 
     let mut cosigning = Cosigning::new(db);
@@ -566,227 +711,29 @@ mod intake_cosign {
   }
 
   #[test]
-  fn intake_cosign_rejects_stale_cosign() {
+  fn handles_faulty_cosign() {
     serai_env::init_logger();
-    let (session, keypair) = random_session();
+    let (session, keypair) = random_test_session();
     let id = session.id();
+    let network = session.sets[0].network;
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
 
-    let block_hash = BlockHash([9u8; 32]);
-    {
-      let mut txn = db.txn();
-      SubstrateBlockHash::set(&mut txn, 1, &block_hash);
-      SubstrateBlockHash::set(&mut txn, 2, &BlockHash([2u8; 32]));
-      txn.commit();
-    }
-
-    let first_cosign = Cosign {
-      global_session: id,
-      block_number: 2,
-      block_hash: BlockHash([2u8; 32]),
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
-    let first_signed = sign_cosign(first_cosign, &keypair);
-
-    let mut cosigning = Cosigning::new(db.clone());
-    cosigning.intake_cosign(&first_signed).unwrap();
-
-    let stale_cosign = Cosign {
-      global_session: id,
-      block_number: 1,
-      block_hash,
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
-    let stale_signed = sign_cosign(stale_cosign, &keypair);
-
-    assert!(matches!(cosigning.intake_cosign(&stale_signed), Err(IntakeCosignError::StaleCosign)));
-  }
-
-  #[test]
-  fn intake_cosign_rejects_unrecognized_global_session() {
-    serai_env::init_logger();
-    let (keypair, _) = random_keypair(&mut OsRng);
-
-    let mut db = MemDb::new();
-    let block_number = 1;
-    let block_hash = BlockHash([9u8; 32]);
-    {
-      let mut txn = db.txn();
-      SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
-      txn.commit();
-    }
-
-    let cosign = Cosign {
-      global_session: [99u8; 32],
-      block_number,
-      block_hash,
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
-    let signed = sign_cosign(cosign, &keypair);
-
-    let mut cosigning = Cosigning::new(db);
-    assert!(matches!(
-      cosigning.intake_cosign(&signed),
-      Err(IntakeCosignError::UnrecognizedGlobalSession)
-    ));
-  }
-
-  #[test]
-  fn intake_cosign_rejects_before_global_session_start() {
-    serai_env::init_logger();
-    let (mut session, keypair) = random_session();
-    session.start_block_number = 10;
-    let id = session.id();
-
-    let mut db = MemDb::new();
-    {
-      let mut txn = db.txn();
-      GlobalSessions::set(&mut txn, id, &session.to_global());
-      CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, session.to_global()));
-      LatestAcknowledgedBlock::set(&mut txn, &10u64);
-
-      SubstrateBlockHash::set(&mut txn, 5, &BlockHash([5u8; 32]));
-      txn.commit();
-    }
-
-    let cosign = Cosign {
-      global_session: id,
-      block_number: 5,
-      block_hash: BlockHash([5u8; 32]),
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
-    let signed = sign_cosign(cosign, &keypair);
-
-    let mut cosigning = Cosigning::new(db);
-    assert!(matches!(
-      cosigning.intake_cosign(&signed),
-      Err(IntakeCosignError::BeforeGlobalSessionStart)
-    ));
-  }
-
-  #[test]
-  fn intake_cosign_rejects_after_global_session_end() {
-    serai_env::init_logger();
-    let (session, keypair) = random_session();
-    let id = session.id();
-
-    let mut db = MemDb::new();
-    seed_minimal_state(&mut db, &session);
-
-    {
-      let mut txn = db.txn();
-
-      GlobalSessionsLastBlock::set(&mut txn, id, &5u64);
-
-      SubstrateBlockHash::set(&mut txn, 10, &BlockHash([10u8; 32]));
-      txn.commit();
-    }
-
-    let cosign = Cosign {
-      global_session: id,
-      block_number: 10,
-      block_hash: BlockHash([10u8; 32]),
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
-    let signed = sign_cosign(cosign, &keypair);
-
-    let mut cosigning = Cosigning::new(db);
-    assert!(matches!(
-      cosigning.intake_cosign(&signed),
-      Err(IntakeCosignError::AfterGlobalSessionEnd)
-    ));
-  }
-
-  #[test]
-  fn intake_cosign_rejects_invalid_signature() {
-    serai_env::init_logger();
-    let (session, _keypair) = random_session();
-    let id = session.id();
-    // Use a different keypair than the one in the session
-    let (wrong_keypair, _) = random_keypair(&mut OsRng);
-
-    let mut db = MemDb::new();
-    seed_minimal_state(&mut db, &session);
-
-    let block_number = 1;
-    let block_hash = BlockHash([9u8; 32]);
-    {
-      let mut txn = db.txn();
-      SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
-      txn.commit();
-    }
-
-    let cosign =
-      Cosign { global_session: id, block_number, block_hash, cosigner: ExternalNetworkId::Bitcoin };
-    let signed = sign_cosign(cosign, &wrong_keypair);
-
-    let mut cosigning = Cosigning::new(db);
-    assert!(matches!(cosigning.intake_cosign(&signed), Err(IntakeCosignError::InvalidSignature)));
-  }
-
-  #[test]
-  fn intake_cosign_rejects_future_global_session() {
-    serai_env::init_logger();
-    let (mut session, keypair) = random_session();
-    session.start_block_number = 10;
-    let id = session.id();
-
-    let mut db = MemDb::new();
-    {
-      let mut txn = db.txn();
-      GlobalSessions::set(&mut txn, id, &session.to_global());
-      CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, session.to_global()));
-
-      LatestAcknowledgedBlock::set(&mut txn, &5u64);
-      SubstrateBlockHash::set(&mut txn, 10, &BlockHash([10u8; 32]));
-      txn.commit();
-    }
-
-    let cosign = Cosign {
-      global_session: id,
-      block_number: 10,
-      block_hash: BlockHash([10u8; 32]),
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
-    let signed = sign_cosign(cosign, &keypair);
-
-    let mut cosigning = Cosigning::new(db);
-    assert!(matches!(
-      cosigning.intake_cosign(&signed),
-      Err(IntakeCosignError::FutureGlobalSession)
-    ));
-  }
-
-  #[test]
-  fn intake_cosign_handles_faulty_cosign() {
-    serai_env::init_logger();
-    let (session, keypair) = random_session();
-    let id = session.id();
-
-    let mut db = MemDb::new();
-    seed_minimal_state(&mut db, &session);
-
-    let block_number = 1;
-    let our_hash = BlockHash([1u8; 32]);
-    let faulty_hash = BlockHash([2u8; 32]);
+    let block_number = OsRng.next_u64();
+    let our_hash = random_block_hash(&mut OsRng);
+    let faulty_hash = random_block_hash(&mut OsRng);
     {
       let mut txn = db.txn();
       SubstrateBlockHash::set(&mut txn, block_number, &our_hash);
       txn.commit();
     }
 
-    let cosign = Cosign {
-      global_session: id,
-      block_number,
-      block_hash: faulty_hash,
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
+    let cosign =
+      Cosign { global_session: id, block_number, block_hash: faulty_hash, cosigner: network };
     let signed = sign_cosign(cosign, &keypair);
 
     let mut cosigning = Cosigning::new(db.clone());
-
     assert!(cosigning.intake_cosign(&signed).is_ok());
 
     let faults: Option<Vec<SignedCosign>> = Faults::get(&db, id);
@@ -799,60 +746,60 @@ mod intake_cosign {
   }
 
   #[test]
-  fn intake_cosign_accepts_newer_cosign_when_existing_is_older() {
+  fn accepts_newer_cosign_when_existing_is_older() {
     serai_env::init_logger();
-    let (session, keypair) = random_session();
+    let (session, keypair) = random_test_session();
     let id = session.id();
+    let network = session.sets[0].network;
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
 
+    let block_hash_1 = random_block_hash(&mut OsRng);
+    let block_hash_2 = random_block_hash(&mut OsRng);
     {
       let mut txn = db.txn();
-      SubstrateBlockHash::set(&mut txn, 1, &BlockHash([1u8; 32]));
-      SubstrateBlockHash::set(&mut txn, 2, &BlockHash([2u8; 32]));
+      SubstrateBlockHash::set(&mut txn, 1, &block_hash_1);
+      SubstrateBlockHash::set(&mut txn, 2, &block_hash_2);
       txn.commit();
     }
 
-    let first_cosign = Cosign {
-      global_session: id,
-      block_number: 1,
-      block_hash: BlockHash([1u8; 32]),
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
+    let first_cosign =
+      Cosign { global_session: id, block_number: 1, block_hash: block_hash_1, cosigner: network };
     let first_signed = sign_cosign(first_cosign, &keypair);
 
     let mut cosigning = Cosigning::new(db.clone());
     cosigning.intake_cosign(&first_signed).unwrap();
 
-    let newer_cosign = Cosign {
-      global_session: id,
-      block_number: 2,
-      block_hash: BlockHash([2u8; 32]),
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
+    let newer_cosign =
+      Cosign { global_session: id, block_number: 2, block_hash: block_hash_2, cosigner: network };
     let newer_signed = sign_cosign(newer_cosign, &keypair);
 
     assert!(cosigning.intake_cosign(&newer_signed).is_ok());
 
-    let latest = NetworksLatestCosignedBlock::get(&db, id, ExternalNetworkId::Bitcoin).unwrap();
+    let latest = NetworksLatestCosignedBlock::get(&db, id, network).unwrap();
     assert_eq!(latest.cosign.block_number, 2);
   }
 
   #[test]
-  fn intake_cosign_accepts_cosign_at_global_session_last_block() {
+  fn accepts_cosign_at_global_session_last_block() {
     serai_env::init_logger();
-    let (session, keypair) = random_session();
+    let (session, keypair) = random_test_session();
     let id = session.id();
+    let network = session.sets[0].network;
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
 
+    let last_block = 5u64;
+    let mut block_hashes = Vec::new();
     {
       let mut txn = db.txn();
-      GlobalSessionsLastBlock::set(&mut txn, id, &5u64);
-      for i in 1 ..= 5 {
-        SubstrateBlockHash::set(&mut txn, i, &BlockHash([i as u8; 32]));
+      GlobalSessionsLastBlock::set(&mut txn, id, &last_block);
+      for i in 1 ..= last_block {
+        let hash = random_block_hash(&mut OsRng);
+        SubstrateBlockHash::set(&mut txn, i, &hash);
+        block_hashes.push(hash);
       }
       txn.commit();
     }
@@ -861,43 +808,40 @@ mod intake_cosign {
 
     let cosign = Cosign {
       global_session: id,
-      block_number: 5,
-      block_hash: BlockHash([5u8; 32]),
-      cosigner: ExternalNetworkId::Bitcoin,
+      block_number: last_block,
+      block_hash: block_hashes[last_block as usize - 1],
+      cosigner: network,
     };
     let signed = sign_cosign(cosign, &keypair);
 
     assert!(cosigning.intake_cosign(&signed).is_ok());
 
-    let latest = NetworksLatestCosignedBlock::get(&db, id, ExternalNetworkId::Bitcoin).unwrap();
-    assert_eq!(latest.cosign.block_number, 5);
+    let latest = NetworksLatestCosignedBlock::get(&db, id, network).unwrap();
+    assert_eq!(latest.cosign.block_number, last_block);
   }
 
   #[test]
-  fn intake_cosign_ignores_duplicate_fault_from_same_network() {
+  fn ignores_duplicate_fault_from_same_network() {
     serai_env::init_logger();
-    let (session, keypair) = random_session();
+    let (session, keypair) = random_test_session();
     let id = session.id();
+    let network = session.sets[0].network;
 
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
 
-    let block_number = 1;
-    let our_hash = BlockHash([1u8; 32]);
-    let faulty_hash_1 = BlockHash([2u8; 32]);
-    let faulty_hash_2 = BlockHash([3u8; 32]);
+    let block_number = OsRng.next_u64();
+    let our_hash = random_block_hash(&mut OsRng);
+    let faulty_hash_1 = random_block_hash(&mut OsRng);
+    let faulty_hash_2 = random_block_hash(&mut OsRng);
     {
       let mut txn = db.txn();
       SubstrateBlockHash::set(&mut txn, block_number, &our_hash);
       txn.commit();
     }
 
-    let faulty_cosign_1 = Cosign {
-      global_session: id,
-      block_number,
-      block_hash: faulty_hash_1,
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
+    let faulty_cosign_1 =
+      Cosign { global_session: id, block_number, block_hash: faulty_hash_1, cosigner: network };
     let faulty_signed_1 = sign_cosign(faulty_cosign_1, &keypair);
 
     let mut cosigning = Cosigning::new(db.clone());
@@ -907,12 +851,8 @@ mod intake_cosign {
     assert_eq!(faults_after_first.len(), 1);
     assert_eq!(faults_after_first[0].cosign.block_hash, faulty_hash_1);
 
-    let faulty_cosign_2 = Cosign {
-      global_session: id,
-      block_number,
-      block_hash: faulty_hash_2,
-      cosigner: ExternalNetworkId::Bitcoin,
-    };
+    let faulty_cosign_2 =
+      Cosign { global_session: id, block_number, block_hash: faulty_hash_2, cosigner: network };
     let faulty_signed_2 = sign_cosign(faulty_cosign_2, &keypair);
 
     assert!(cosigning.intake_cosign(&faulty_signed_2).is_ok());
@@ -927,41 +867,7 @@ mod intake_cosign {
   }
 
   #[test]
-  fn intake_cosign_rejects_non_participating_network() {
-    serai_env::init_logger();
-    let (session, _keypair) = random_session();
-    let id = session.id();
-
-    let (eth_keypair, _) = random_keypair(&mut OsRng);
-
-    let mut db = MemDb::new();
-    seed_minimal_state(&mut db, &session);
-
-    let block_number = 1;
-    let block_hash = BlockHash([9u8; 32]);
-    {
-      let mut txn = db.txn();
-      SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
-      txn.commit();
-    }
-
-    let cosign = Cosign {
-      global_session: id,
-      block_number,
-      block_hash,
-      cosigner: ExternalNetworkId::Ethereum,
-    };
-    let signed = sign_cosign(cosign, &eth_keypair);
-
-    let mut cosigning = Cosigning::new(db);
-    assert!(matches!(
-      cosigning.intake_cosign(&signed),
-      Err(IntakeCosignError::NonParticipatingNetwork)
-    ));
-  }
-
-  #[test]
-  fn intake_cosign_records_fault_below_threshold() {
+  fn records_fault_below_threshold() {
     serai_env::init_logger();
     let network1 = ExternalNetworkId::Bitcoin;
     let network2 = ExternalNetworkId::Ethereum;
@@ -992,9 +898,9 @@ mod intake_cosign {
     let mut db = MemDb::new();
     seed_minimal_state(&mut db, &session);
 
-    let block_number = 1;
-    let our_hash = BlockHash([1u8; 32]);
-    let faulty_hash = BlockHash([2u8; 32]);
+    let block_number = OsRng.next_u64();
+    let our_hash = random_block_hash(&mut OsRng);
+    let faulty_hash = random_block_hash(&mut OsRng);
     {
       let mut txn = db.txn();
       SubstrateBlockHash::set(&mut txn, block_number, &our_hash);
@@ -1017,29 +923,28 @@ mod intake_cosign {
   }
 }
 
-mod intended_cosigns {
-  use super::*;
+#[test]
+fn intended_cosigns() {
+  serai_env::init_logger();
 
-  #[test]
-  fn intended_cosigns_empty_returns_empty() {
-    serai_env::init_logger();
+  // Empty returns empty
+  {
     let mut db = MemDb::new();
-    let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
+    let set = random_validator_set(&mut OsRng);
     let mut txn = db.txn();
     assert!(Cosigning::<MemDb>::intended_cosigns(&mut txn, set).is_empty());
     txn.commit();
   }
 
-  #[test]
-  fn intended_cosigns_receives_sent_intent() {
-    serai_env::init_logger();
+  // Receives sent intent
+  {
     let mut db = MemDb::new();
-    let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
+    let set = random_validator_set(&mut OsRng);
 
     let intent = CosignIntent {
-      global_session: [1u8; 32],
-      block_number: 5,
-      block_hash: BlockHash([5u8; 32]),
+      global_session: random_global_session(&mut OsRng),
+      block_number: OsRng.next_u64(),
+      block_hash: random_block_hash(&mut OsRng),
       notable: true,
     };
 

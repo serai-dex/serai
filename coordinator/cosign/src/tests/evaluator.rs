@@ -19,8 +19,7 @@ use serai_task::ContinuallyRan;
 use crate::{
   Cosign, GlobalSession, HasEvents, NetworksLatestCosignedBlock,
   evaluator::{
-    CosignEvaluatorTask, CosignedBlocks, CurrentlyEvaluatedGlobalSession, LatestEvaluatedBlock,
-    REQUEST_COSIGNS_SPACING,
+    CosignEvaluatorTask, CosignedBlocks, CurrentlyEvaluatedGlobalSession, REQUEST_COSIGNS_SPACING,
   },
   intend::{BlockEventData, BlockEvents, GlobalSessionsChannel},
   tests::{IntoTask, TaskTest, TestRequest, random_global_session},
@@ -47,7 +46,7 @@ impl IntoTask for EvaluatorTest {
 
 impl EvaluatorTest {
   fn init_global_session(&mut self, start_block_number: u64) -> [u8; 32] {
-    let global_session = random_global_session();
+    let global_session = random_global_session(&mut OsRng);
     let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
 
     let mut keys = HashMap::new();
@@ -74,13 +73,11 @@ impl EvaluatorTest {
 fn verify_db_invariants(db: &mut MemDb, expected_cosigned_range: Option<(u64, u64)>) {
   use serai_env::log::debug;
 
-  let latest_evaluated = LatestEvaluatedBlock::get(db);
   let current_session = CurrentlyEvaluatedGlobalSession::get(db);
   let block_events_pending = BlockEvents::peek(db).is_some();
   let sessions_pending = GlobalSessionsChannel::peek(db).is_some();
   let cosigned_pending = CosignedBlocks::peek(db).is_some();
 
-  debug!("LatestEvaluatedBlock: {latest_evaluated:?}");
   debug!(
     "CurrentlyEvaluatedGlobalSession: {:?}",
     current_session.as_ref().map(|(id, gs)| (hex::encode(id), gs.start_block_number))
@@ -103,7 +100,7 @@ fn verify_db_invariants(db: &mut MemDb, expected_cosigned_range: Option<(u64, u6
       assert!(has_session, "CurrentlyEvaluatedGlobalSession should exist after processing blocks");
 
       for expected_block in start ..= end {
-        let (block_number, _time) = CosignedBlocks::try_recv(&mut txn)
+        let (block_number, _time, _has_events) = CosignedBlocks::try_recv(&mut txn)
           .unwrap_or_else(|| panic!("expected cosigned block {expected_block}"));
         debug!("CosignedBlock: block_number={block_number}");
         assert_eq!(block_number, expected_block, "cosigned block mismatch");
@@ -160,11 +157,18 @@ async fn processes_blocks_with_no_events() {
   TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
   assert!(BlockEvents::peek(&test.db).is_none(), "BlockEvents should be fully consumed");
-  assert!(
-    CosignedBlocks::peek(&test.db).is_none(),
-    "HasEvent::No blocks shouldn't produce CosignedBlocks"
-  );
-  assert_eq!(LatestEvaluatedBlock::get(&test.db), Some(2));
+
+  // HasEvents::No blocks are sent through CosignedBlocks with has_events=false
+  {
+    let mut txn = test.db.txn();
+    for expected in 0 ..= 2 {
+      let (block_number, _time, has_events) = CosignedBlocks::try_recv(&mut txn).unwrap();
+      assert_eq!(block_number, expected);
+      assert_eq!(has_events, false);
+    }
+    assert!(CosignedBlocks::try_recv(&mut txn).is_none(), "no more blocks expected");
+    txn.commit();
+  }
 }
 
 #[tokio::test]
@@ -275,7 +279,7 @@ async fn non_notable_computes_lowest_common_block() {
     let info = GlobalSession { start_block_number: 0, sets, keys, stakes, total_stake: 100u64 };
 
     let mut txn = test.db.txn();
-    let id = random_global_session();
+    let id = random_global_session(&mut OsRng);
     GlobalSessionsChannel::send(&mut txn, &(id, info));
     txn.commit();
 
@@ -363,11 +367,18 @@ async fn advances_global_session_at_start_block() {
   TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
   assert!(BlockEvents::peek(&test.db).is_none(), "BlockEvents should be fully consumed");
-  assert!(
-    CosignedBlocks::peek(&test.db).is_none(),
-    "HasEvent::No blocks shouldn't produce CosignedBlocks"
-  );
-  assert_eq!(LatestEvaluatedBlock::get(&test.db), Some(3));
+  // HasEvents::No blocks are sent through CosignedBlocks with has_events=false
+  {
+    let mut txn = test.db.txn();
+    for expected in 1 ..= 3 {
+      let (block_number, _time, has_events) = CosignedBlocks::try_recv(&mut txn)
+        .unwrap_or_else(|| panic!("expected cosigned block {expected}"));
+      assert_eq!(block_number, expected);
+      assert!(!has_events, "HasEvents::No blocks should have has_events=false");
+    }
+    assert!(CosignedBlocks::try_recv(&mut txn).is_none(), "no more blocks expected");
+    txn.commit();
+  }
 
   let current =
     CurrentlyEvaluatedGlobalSession::get(&test.db).expect("should have current session");
@@ -437,7 +448,7 @@ mod errors {
         GlobalSession { start_block_number: 0, sets: vec![set], keys, stakes, total_stake: 1u64 };
 
       let mut txn = test.db.txn();
-      let id = random_global_session();
+      let id = random_global_session(&mut OsRng);
       GlobalSessionsChannel::send(&mut txn, &(id, info));
       txn.commit();
 
@@ -519,7 +530,7 @@ mod errors {
         GlobalSession { start_block_number: 0, sets: vec![set], keys, stakes, total_stake: 1u64 };
 
       let mut txn = test.db.txn();
-      let id = random_global_session();
+      let id = random_global_session(&mut OsRng);
       GlobalSessionsChannel::send(&mut txn, &(id, info));
       txn.commit();
 
@@ -641,7 +652,7 @@ mod errors {
         GlobalSession { start_block_number: 10, sets: vec![set], keys, stakes, total_stake: 1u64 };
 
       let mut txn = test.db.txn();
-      let id = random_global_session();
+      let id = random_global_session(&mut OsRng);
       CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, info));
       BlockEvents::send(&mut txn, &BlockEventData { block_number: 5, has_events: HasEvents::No });
       txn.commit();
@@ -720,7 +731,7 @@ mod errors {
       let info = GlobalSession { start_block_number: 0, sets, keys, stakes, total_stake: u64::MAX };
 
       let mut txn = test.db.txn();
-      let id = random_global_session();
+      let id = random_global_session(&mut OsRng);
       GlobalSessionsChannel::send(&mut txn, &(id, info));
       txn.commit();
 
@@ -775,7 +786,7 @@ mod errors {
       let info = GlobalSession { start_block_number: 0, sets, keys, stakes, total_stake: u64::MAX };
 
       let mut txn = test.db.txn();
-      let id = random_global_session();
+      let id = random_global_session(&mut OsRng);
       GlobalSessionsChannel::send(&mut txn, &(id, info));
       txn.commit();
 

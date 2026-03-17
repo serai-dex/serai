@@ -14,11 +14,7 @@ pub fn var(variable: &str) -> Option<String> {
 }
 
 pub fn init_logger() {
-  env_logger::builder()
-    .filter_level(
-      log::LevelFilter::from_str(&var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
-        .expect("`RUST_LOG` environment variable had an invalid filter"),
-    )
+  env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
     .try_init()
     .ok();
 }

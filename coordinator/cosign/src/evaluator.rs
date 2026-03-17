@@ -21,21 +21,19 @@ create_db!(
   SubstrateCosignEvaluator {
     // The global session currently being evaluated.
     CurrentlyEvaluatedGlobalSession: () -> ([u8; 32], GlobalSession),
-    // The latest block number the evaluator has processed.
-    LatestEvaluatedBlock: () -> u64,
   }
 );
 
 db_channel!(
   SubstrateCosignEvaluatorChannels {
-    // (cosigned block, time cosign was evaluated)
-    CosignedBlocks: () -> (u64, u64),
+    // (cosigned block, time cosign was evaluated, has_events)
+    CosignedBlocks: () -> (u64, u64, bool),
   }
 );
 
 /// Commit a block as evaluated without sending it for cosign delay.
-fn commit_evaluated_block(mut txn: impl DbTxn, block_number: u64) {
-  LatestEvaluatedBlock::set(&mut txn, &block_number);
+fn commit_evaluated_block(mut txn: impl DbTxn, block_number: u64, has_events: bool) {
+  CosignedBlocks::send(&mut txn, &(block_number, now_timestamp().as_secs(), has_events));
   txn.commit();
 }
 
@@ -195,19 +193,29 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
           break;
         };
 
+        serai_env::log::debug!(
+          "beginning evaluator: block_number={block_number}, has_events={:#?}",
+          has_events
+        );
+
         // If no session is being evaluated yet, check if this block can be processed
         if currently_evaluated_global_session(&txn).is_none() {
           match GlobalSessionsChannel::peek(&txn) {
             // No global session declared yet: this block predates all sessions, skip it
             // this means only HasEvents:No blocks have been consumed so far
             None => {
-              commit_evaluated_block(txn, block_number);
+              serai_env::log::debug!("No global session declared yet");
+              commit_evaluated_block(txn, block_number, false);
               made_progress = true;
               continue;
             }
             // Session queued but starts after this block, skip it
             Some(next) if next.1.start_block_number > block_number => {
-              commit_evaluated_block(txn, block_number);
+              serai_env::log::debug!(
+                "session {block_number} is queued for {}",
+                next.1.start_block_number
+              );
+              commit_evaluated_block(txn, block_number, false);
               made_progress = true;
               continue;
             }
@@ -215,11 +223,6 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
             _ => {}
           }
         }
-
-        serai_env::log::debug!(
-          "beginning evaluator: block_number={block_number}, has_events={:#?}",
-          has_events
-        );
 
         // Fetch the global session information
         let (global_session, global_session_info) =
@@ -300,15 +303,14 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
           // If this block has no events necessitating cosigning, we can immediately consider the
           // block cosigned (making this block a NOP)
           HasEvents::No => {
-            commit_evaluated_block(txn, block_number);
+            commit_evaluated_block(txn, block_number, false);
             made_progress = true;
             continue;
           }
         }
 
         // Since we checked we had the necessary cosigns, send it for delay before acknowledgement
-        CosignedBlocks::send(&mut txn, &(block_number, now_timestamp().as_secs()));
-        commit_evaluated_block(txn, block_number);
+        commit_evaluated_block(txn, block_number, true);
 
         // Roughly ~1 hour, no need for repetitive logging
         #[cfg(not(test))]

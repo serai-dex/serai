@@ -91,7 +91,7 @@ fn spawn_cosigning<D: serai_db::Db>(
     let last_cosign_rebroadcast = Instant::now();
     loop {
       // Intake our own cosigns
-      match Cosigning::<D>::latest_acknowledged_block(&db) {
+      match Cosigning::<D>::latest_finalized_block(&db) {
         Ok(latest_acknowledged_block) => {
           let mut txn = db.txn();
           // The cosigns we prior tried to intake yet failed to
