@@ -389,9 +389,9 @@ contract Router is IRouterWithoutCollisions {
       bytes4 selector;
       if (contractDestination) {
         /*
-          If this is an out of DestinationType::Contract, we only grant an approval. We don't
+          If this is an out of `DestinationType::Contract`, we only grant an approval, we don't
           perform a transfer. This allows the contract, or our expectation of the contract as far as
-          our obligation to it, to be borked and for Serai to potentially it accordingly.
+          our obligation to it, to be borked and for Serai to potentially adjust accordingly.
 
           Unfortunately, this isn't a feasible flow for Ether unless we set Ether approvals within
           our contract (for entities to collect later) which is of sufficient complexity to not be

@@ -24,7 +24,4 @@ serai-primitives = { path = "../../substrate/primitives", default-features = fal
 
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-log = { version = "0.4", default-features = false, features = ["std"] }
-tokio = { version = "1", default-features = false, features = ["macros", "sync", "time"] }
-
 serai-task = { path = "../../common/task", default-features = false }

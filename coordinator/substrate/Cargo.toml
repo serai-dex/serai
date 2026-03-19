@@ -24,8 +24,6 @@ dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] 
 
 serai-client-serai = { path = "../../substrate/client/serai", default-features = false }
 
-log = { version = "0.4", default-features = false, features = ["std"] }
-
 futures = { version = "0.3", default-features = false, features = ["std"] }
 
 serai-db = { path = "../../common/db", version = "0.1.1" }
