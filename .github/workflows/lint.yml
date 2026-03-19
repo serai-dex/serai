@@ -129,19 +129,19 @@ jobs:
         run: cargo +${{ steps.nightly.outputs.version }} fmt -- --check
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@50d5a8956f2e319df19e6b57539d7e2acb9f8c1e # 1.5.0
+        uses: foundry-rs/foundry-toolchain@8789b3e21e6c11b2697f5eb56eddae542f746c10 # 1.7.0
         with:
-          version: v1.5.0
+          version: v1.5.1
           cache: false
 
       - name: Run forge fmt
         shell: bash
         run: |
-          FOUNDRY_FMT_SORT_INPUTS=false
-          FOUNDRY_FMT_LINE_LENGTH=100
-          FOUNDRY_FMT_TAB_WIDTH=2
-          FOUNDRY_FMT_BRACKET_SPACING=true
-          FOUNDRY_FMT_INT_TYPES=preserve
+          export FOUNDRY_FMT_SORT_INPUTS=false
+          export FOUNDRY_FMT_LINE_LENGTH=100
+          export FOUNDRY_FMT_TAB_WIDTH=2
+          export FOUNDRY_FMT_BRACKET_SPACING=true
+          export FOUNDRY_FMT_INT_TYPES=preserve
 
           forge fmt --check $(find . -name "*.sol")
 
@@ -250,7 +250,7 @@ jobs:
           check_workspace
 
   slither:
-    runs-on: ubuntu-slim
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
@@ -260,6 +260,7 @@ jobs:
       - name: Slither
         shell: bash
         run: |
+          sudo apt install -y python3-pip
           python3 -m pip install slither-analyzer==0.11.3
 
           slither ./networks/ethereum/schnorr/contracts/Schnorr.sol

@@ -36,7 +36,8 @@ contract Router is IRouterWithoutCollisions {
   bytes32 constant ACCOUNT_WITHOUT_CODE_CODEHASH = keccak256("");
 
   /// @dev The address in transient storage used for the reentrancy guard
-  bytes32 constant REENTRANCY_GUARD_SLOT = bytes32(uint256(keccak256("ReentrancyGuard Router")) - 1);
+  bytes32 constant REENTRANCY_GUARD_SLOT =
+    bytes32(uint256(keccak256("ReentrancyGuard Router")) - 1);
 
   /**
    * @dev The amount of gas to use when interacting with ERC20s
@@ -313,9 +314,10 @@ contract Router is IRouterWithoutCollisions {
     if (coin == address(0)) {
       if (amount != msg.value) revert AmountMismatchesMsgValue();
     } else {
-      (bool success, bytes memory res) = address(coin).call(
-        abi.encodeWithSelector(IERC20.transferFrom.selector, msg.sender, address(this), amount)
-      );
+      (bool success, bytes memory res) = address(coin)
+        .call(
+          abi.encodeWithSelector(IERC20.transferFrom.selector, msg.sender, address(this), amount)
+        );
 
       /*
         Require there was nothing returned, which is done by some non-standard tokens, or that the
@@ -370,19 +372,18 @@ contract Router is IRouterWithoutCollisions {
       // This uses assembly to prevent return bombs
       // slither-disable-next-line assembly
       assembly {
-        success :=
-          call(
-            // explicit gas
-            0,
-            to,
-            amount,
-            // calldata
-            0,
-            0,
-            // return data
-            0,
-            0
-          )
+        success := call(
+          // explicit gas
+          0,
+          to,
+          amount,
+          // calldata
+          0,
+          0,
+          // return data
+          0,
+          0
+        )
       }
     } else {
       bytes4 selector;
@@ -476,17 +477,19 @@ contract Router is IRouterWithoutCollisions {
       // slither-disable-next-line divide-before-multiply
       uint256 rlpEncodingLen = 23 + (nonceIsString * bytesNeeded);
 
+      // forgefmt: disable-start
       uint256 rlpEncoding =
-      // The header, which does not include itself in its length, shifted into the first byte
-      ((0xc0 + (rlpEncodingLen - 1)) << 248)
-      // The address header, which is constant
-      | ADDRESS_HEADER
-      // Shift the address from bytes 12 .. 32 to 2 .. 22
-      | (uint256(uint160(address(this))) << 80)
-      // Shift the nonce (one byte) or the nonce's header from byte 31 to byte 22
-      | (((nonceIsNotString * nonce) + (nonceIsString * (0x80 + bytesNeeded))) << 72)
-      // Shift past the unnecessary bytes
-      | (nonce * nonceIsString) << (72 - bitsNeeded);
+        // The header, which does not include itself in its length, shifted into the first byte
+        ((0xc0 + (rlpEncodingLen - 1)) << 248)
+        // The address header, which is constant
+        | ADDRESS_HEADER
+        // Shift the address from bytes 12 .. 32 to 2 .. 22
+        | (uint256(uint160(address(this))) << 80)
+        // Shift the nonce (one byte) or the nonce's header from byte 31 to byte 22
+        | (((nonceIsNotString * nonce) + (nonceIsString * (0x80 + bytesNeeded))) << 72)
+        // Shift past the unnecessary bytes
+        | (nonce * nonceIsString) << (72 - bitsNeeded);
+      // forgefmt: disable-end
 
       // Store this to the scratch space
       bytes memory rlp;
