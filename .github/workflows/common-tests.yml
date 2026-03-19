@@ -27,12 +27,8 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run Tests
+        shell: bash
         run: |
-          cargo test --all-features \
-            -p std-shims \
-            -p zalloc \
-            -p patchable-async-sleep \
-            -p serai-db \
-            -p serai-env \
-            -p serai-task \
-            -p simple-request
+          find ./common -name "Cargo.toml" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done

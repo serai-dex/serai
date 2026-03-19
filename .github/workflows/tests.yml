@@ -80,23 +80,12 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run Tests
+        shell: bash
         run: |
-          cargo test --all-features \
-            -p serai-primitives \
-            -p serai-abi \
-            -p substrate-median \
-            -p serai-core-pallet \
-            -p serai-coins-pallet \
-            -p serai-validator-sets-pallet \
-            -p serai-signals-pallet \
-            -p serai-dex-pallet \
-            -p serai-genesis-liquidity-pallet \
-            -p serai-economic-security-pallet \
-            -p serai-emissions-pallet \
-            -p serai-in-instructions-pallet \
-            -p serai-runtime \
-            -p serai-node \
-            -p serai-substrate-tests
+          find ./substrate -name "Cargo.toml" ! -path "*client*" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done
+          cargo test --all-features -p serai-substrate-tests
 
   test-serai-client:
     runs-on: ubuntu-latest
@@ -107,10 +96,8 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run Tests
+        shell: bash
         run: |
-          cargo test --all-features \
-            -p serai-client-serai \
-            -p serai-client-bitcoin \
-            -p serai-client-ethereum \
-            -p serai-client-monero \
-            -p serai-client
+          find ./substrate -name "Cargo.toml" -path "*client*" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done

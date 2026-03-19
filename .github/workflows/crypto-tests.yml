@@ -29,24 +29,8 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run Tests
+        shell: bash
         run: |
-          cargo test --all-features \
-            -p flexible-transcript \
-            -p ff-group-tests \
-            -p dalek-ff-group \
-            -p minimal-ed448 \
-            -p ciphersuite \
-            -p ciphersuite-kp256 \
-            -p multiexp \
-            -p schnorr-signatures \
-            -p prime-field \
-            -p short-weierstrass \
-            -p secq256k1 \
-            -p embedwards25519 \
-            -p dkg \
-            -p dkg-recovery \
-            -p dkg-dealer \
-            -p dkg-musig \
-            -p dkg-evrf \
-            -p modular-frost \
-            -p frost-schnorrkel
+          find ./crypto -name "Cargo.toml" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done

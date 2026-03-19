@@ -46,9 +46,8 @@ jobs:
         uses: ./.github/actions/test-dependencies
 
       - name: Run Tests
+        shell: bash
         run: |
-          cargo test --all-features \
-            -p build-solidity-contracts \
-            -p ethereum-schnorr-contract \
-            -p alloy-simple-request-transport \
-            -p serai-ethereum-relayer
+          find ./networks/ethereum -name "Cargo.toml" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done
