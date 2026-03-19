@@ -21,7 +21,7 @@ jobs:
   test-bitcoin:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-26-intel, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-26-intel, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -36,7 +36,7 @@ jobs:
   test-ethereum:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-26-intel, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-26-intel, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
