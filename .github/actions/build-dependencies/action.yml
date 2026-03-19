@@ -40,7 +40,9 @@ runs:
         if [ "$RUNNER_OS" == "Linux" ]; then
           sudo apt install -y ca-certificates protobuf-compiler libclang-dev
         elif [ "$RUNNER_OS" == "Windows" ]; then
-          choco install protoc
+          # Use `-gnu` to avoid the installation and licensing headaches of `-msvc`
+          rustup set default-host x86_64-pc-windows-gnu
+          choco install llvm protoc
         elif [ "$RUNNER_OS" == "macOS" ]; then
           brew install protobuf llvm
           HOMEBREW_PREFIX=$(brew --prefix)
