@@ -67,8 +67,8 @@ impl Slash {
         // A Serai validator is allowed to be offline for an average of one day every two weeks
         // with no additional penalty. They'll solely not earn rewards for the time they were
         // offline.
-        const GRACE_WINDOW: Duration = Duration::from_secs(2 * 7 * 24 * 60 * 60);
-        const GRACE: Duration = Duration::from_secs(24 * 60 * 60);
+        const GRACE_WINDOW: Duration = crate::constants::WEEK.checked_mul(2).unwrap();
+        const GRACE: Duration = crate::constants::DAY;
 
         // `GRACE / GRACE_WINDOW` is the fraction of the time a validator is allowed to be offline
         // This means we want `SESSION_LENGTH * (GRACE / GRACE_WINDOW)`, but with the parentheses
