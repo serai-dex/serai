@@ -14,10 +14,10 @@ runs:
       id: cache-bitcoind
       uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # 4.2.4
       with:
-        path: bitcoin*
+        path: bitcoin-${{ inputs.version }}
         key: bitcoind-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
 
-    - name: Download the Bitcoin Daemon
+    - name: Download and Extract the Bitcoin Daemon
       if: steps.cache-bitcoind.outputs.cache-hit != 'true'
       shell: bash
       run: |
@@ -46,19 +46,19 @@ runs:
 
         FILE=bitcoin-${{ inputs.version }}-$ARCH$OS.$EXT
 
-        wget https://bitcoincore.org/bin/bitcoin-core-${{ inputs.version }}/$FILE
-        mv $FILE bitcoin.$EXT
+        curl -L https://bitcoincore.org/bin/bitcoin-core-${{ inputs.version }}/$FILE -o $FILE
 
-    - name: Extract the Bitcoin Daemon
-      shell: bash
-      run: |
         if [ "${{ runner.os }}" = "Windows" ]; then
-          unzip bitcoin.zip
+          unzip $FILE
           mv $(find . -name "bitcoind*") .
         else
-          tar -xf bitcoin.tar.gz
+          tar -xf $FILE
           cd bitcoin-${{ inputs.version }}
-          sudo mv bin/* /usr/bin && sudo mv lib/* /usr/lib
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            sudo mv bin/* /usr/local/bin/
+          else
+            sudo mv bin/* /usr/bin/
+          fi
         fi
 
     - name: Bitcoin Regtest Daemon
