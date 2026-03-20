@@ -14,7 +14,7 @@ use serai_client_serai::{
       address::SeraiAddress,
       balance::{Amount, ExternalBalance},
       coin::ExternalCoin,
-      crypto::{ExternalKey, KeyPair},
+      crypto::KeyPair,
       instructions::{OutInstruction, OutInstructionWithBalance},
       network_id::{ExternalNetworkId, NetworkId},
       validator_sets::{ExternalValidatorSet, KeyShares, Session, ValidatorSet},
@@ -22,7 +22,7 @@ use serai_client_serai::{
     validator_sets,
   },
 };
-use serai_primitives::test_helpers::{random_external_address, random_keypair};
+use serai_primitives::test_helpers::{random_external_address, random_external_key, random_keypair};
 
 use crate::{intend::*, tests::*, *};
 
@@ -519,7 +519,7 @@ impl EventFuzzer {
 
     let (keypair, public) = random_keypair(&mut OsRng);
     self.keypairs.insert(public.0, keypair);
-    let external_key = ExternalKey(vec![1u8].try_into().unwrap());
+    let external_key = random_external_key(&mut OsRng);
     let key_pair = KeyPair(public, external_key);
 
     Some(Event::ValidatorSets(validator_sets::Event::SetKeys { set, key_pair }))

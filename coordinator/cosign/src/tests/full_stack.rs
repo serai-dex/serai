@@ -1,74 +1,54 @@
-use std::{collections::HashSet, time::Duration};
+//! Full-stack integration tests for the cosign library's public API.
+//!
+//! While the individual components (intend, evaluate, delay) are unit-tested in their
+//! respective modules, these tests verify how they integrate together as a production
+//! pipeline. State is injected via the Serai node shim (`serai_shim_rpc`), exercising
+//! the same `pub` API surface a real coordinator would use.
 
+use std::time::Duration;
+
+use rand::{Rng, seq::SliceRandom};
+use rand_core::OsRng;
 use serai_db::{Db as _, DbTxn, MemDb};
 
-use serai_cosign_types::tests::sign_cosign;
-
+use serai_primitives::test_helpers::random_block_hash;
 use serai_client_serai::abi::primitives::{
   network_id::ExternalNetworkId,
   validator_sets::{ExternalValidatorSet, Session},
 };
+use serai_cosign_types::tests::sign_cosign;
 
 use crate::{
-  CosignIntent, Cosigning, GlobalSessions, IntakeCosignError,
+  Cosign, CosignIntent, Cosigning, Faulted, FaultedSession, GlobalSessions, IntakeCosignError,
+  SubstrateBlockHash,
+  delay::LatestCosignedBlockNumber,
+  evaluator::{cosign_threshold, currently_evaluated_global_session},
   tests::{TestRequest, setup_shim_serai},
 };
 
-#[tokio::test]
-async fn full_stack_fuzzed() {
-  use super::intend::EventFuzzer;
+use super::intend::EventFuzzer;
 
-  let _ = env_logger::try_init();
-
-  let num_blocks = 20;
-  let mut fuzzer = EventFuzzer::new();
-  let blocks = fuzzer.generate_blocks(num_blocks);
-
-  serai_log::log::info!(
-    "Full-stack fuzz: {} blocks, {} validators, seed={}",
-    num_blocks,
-    fuzzer.validators.len(),
-    hex::encode(fuzzer.seed),
-  );
-
-  let (shim, serai) = setup_shim_serai().await;
-  for (i, events) in blocks.into_iter().enumerate() {
-    shim.make_block(u64::try_from(i).unwrap(), events).await;
-  }
-
-  let mut db = MemDb::new();
-
-  let (request, _calls) = TestRequest::new(false);
-  let mut cosigning = Cosigning::spawn(db.clone(), serai, request, vec![]);
-
-  let target = u64::try_from(num_blocks - 1).unwrap();
-
-  // Buffer for intents whose cosigns were rejected as FutureGlobalSession.
-  // These are retried each iteration until the delay task catches up.
+/// Run the honest cosigning loop: drain intents from all keyed sessions, sign them
+/// with the EventFuzzer's keypairs, intake them, and repeat until `should_break` returns `true`.
+///
+/// `should_break` is called each iteration with the current `latest_cosigned_block_number`.
+async fn run_honest_cosigning(
+  db: &MemDb,
+  cosigning: &mut Cosigning<MemDb>,
+  event_fuzzer: &EventFuzzer,
+  mut should_break: impl FnMut(Option<u64>) -> bool,
+) {
   let mut pending_intents: Vec<(ExternalNetworkId, CosignIntent)> = Vec::new();
-  let mut seen_global_sessions: HashSet<[u8; 32]> = HashSet::new();
-
-  let deadline = tokio::time::Instant::now() + Duration::from_secs(300);
-
   loop {
-    assert!(
-      tokio::time::Instant::now() < deadline,
-      "timed out waiting for all blocks to be cosigned (target={target}, \
-       latest={:?}, pending_intents={})",
-      Cosigning::<MemDb>::latest_acknowledged_block(&db),
-      pending_intents.len(),
-    );
-
-    // Drain new intended cosigns for all validator sets that have had SetKeys
     {
+      let mut db = db.clone();
       let mut txn = db.txn();
       for network in ExternalNetworkId::all() {
-        let max_session = fuzzer.next_session.get(&network).copied().unwrap_or(0);
+        let max_session = event_fuzzer.next_session.get(&network).copied().unwrap_or(0);
         for session_num in 0 .. max_session {
           let set = ExternalValidatorSet { network, session: Session(session_num) };
           let intents = Cosigning::<MemDb>::intended_cosigns(&mut txn, set);
           for intent in intents {
-            seen_global_sessions.insert(intent.global_session);
             pending_intents.push((network, intent));
           }
         }
@@ -76,16 +56,15 @@ async fn full_stack_fuzzed() {
       txn.commit();
     }
 
-    // Try to intake all pending intents, keeping those that fail with temporal errors
     let mut still_pending = Vec::new();
     for (network, intent) in pending_intents.drain(..) {
       let cosign = intent.into_cosign(network);
-      let Some(gs) = GlobalSessions::get(&db, intent.global_session) else {
+      let Some(gs) = GlobalSessions::get(db, intent.global_session) else {
         still_pending.push((network, intent));
         continue;
       };
       let Some(public) = gs.keys.get(&network) else { continue };
-      let Some(keypair) = fuzzer.keypairs.get(&public.0) else { continue };
+      let Some(keypair) = event_fuzzer.keypairs.get(&public.0) else { continue };
       let signed = sign_cosign(cosign, keypair);
       match cosigning.intake_cosign(&signed) {
         Ok(()) => {}
@@ -94,10 +73,9 @@ async fn full_stack_fuzzed() {
         Err(IntakeCosignError::NotYetIndexedBlock) => {
           still_pending.push((network, intent));
         }
-        // StaleCosign means a newer cosign already exists; safe to drop
         Err(IntakeCosignError::StaleCosign) => {}
         Err(ref e) => {
-          serai_log::log::warn!(
+          serai_env::log::warn!(
             "intake_cosign dropped: block={}, network={:?}, err={:?}",
             intent.block_number,
             network,
@@ -108,18 +86,273 @@ async fn full_stack_fuzzed() {
     }
     pending_intents = still_pending;
 
-    match Cosigning::<MemDb>::latest_acknowledged_block(&db) {
-      Ok(n) if n >= target => break,
-      _ => {}
+    let latest = match Cosigning::<MemDb>::latest_cosigned_block_number(db) {
+      Ok(Some(n)) => Some(n),
+      _ => None,
+    };
+    if should_break(latest) {
+      break;
     }
 
     tokio::time::sleep(Duration::from_millis(50)).await;
   }
+}
 
-  let latest = Cosigning::<MemDb>::latest_acknowledged_block(&db).unwrap();
-  assert!(latest >= target, "expected latest cosigned block >= {target}, got {latest}");
+/// Full-stack fuzz test: intend -> evaluator -> delay pipeline with random events.
+///
+/// Uses the `EventFuzzer` to generate random blocks, spawns the full `Cosigning` pipeline,
+/// then simulates the cosigner role by draining intended cosigns, signing them, and feeding
+/// them back via `intake_cosign`. Waits for all blocks to be cosigned.
+///
+/// The shim RPC has a random failure rate enabled so that RPC calls from the intend task
+/// occasionally fail, exercising the `ContinuallyRan` error/retry paths.
+#[tokio::test]
+async fn full_stack_fuzzed() {
+  serai_env::init_logger();
 
-  serai_log::log::info!("Full-stack fuzz completed: all {num_blocks} blocks cosigned");
+  let iterations = 5;
+  for i in 1 .. iterations + 1 {
+    let num_blocks = OsRng.gen_range(5 .. 20);
+    let mut event_fuzzer = EventFuzzer::new();
+    let blocks = event_fuzzer.generate_blocks(num_blocks);
 
-  let session_ids: Vec<[u8; 32]> = seen_global_sessions.into_iter().collect();
+    serai_env::log::info!(
+      "Starting full-stack fuzz: 0..{} blocks, {} validators ({i}/{iterations})",
+      num_blocks - 1,
+      event_fuzzer.validators.len(),
+    );
+
+    let (shim, serai) = setup_shim_serai().await;
+    for (i, events) in blocks.into_iter().enumerate() {
+      shim.make_block(u64::try_from(i).unwrap(), events).await;
+    }
+
+    // Random RPC failure rate between 5% and 30%, unless disabled via env var
+    shim.set_failure_rate(OsRng.gen_range(5 ..= 30)).await;
+
+    let db = MemDb::new();
+
+    let (request, _calls) = TestRequest::new(false);
+    let mut cosigning = Cosigning::spawn(db.clone(), serai, request, vec![]);
+
+    let target = u64::try_from(num_blocks - 1).unwrap();
+
+    run_honest_cosigning(
+      &db,
+      &mut cosigning,
+      &event_fuzzer,
+      |latest| matches!(latest, Some(n) if n >= target),
+    )
+    .await;
+
+    let latest = Cosigning::<MemDb>::latest_cosigned_block_number(&db).unwrap().unwrap();
+    assert!(latest >= target, "expected latest cosigned block >= {target}, got {latest}");
+
+    serai_env::log::info!("Full-stack fuzz completed: all {num_blocks} blocks cosigned");
+  }
+}
+
+/// Fuzzed full-stack equivocation test.
+///
+/// Mirrors `full_stack_fuzzed`, random events via `EventFuzzer`, full `Cosigning` pipeline
+/// but at a random point during honest cosigning, one or more networks equivocate by signing
+/// a block with a different hash. Once the faulty stake reaches the 17% threshold the protocol
+/// must halt immediately, and all subsequent operations must reflect the fault.
+#[tokio::test]
+async fn equivocation_halts_protocol() {
+  serai_env::init_logger();
+
+  let iterations = 5;
+  for iteration in 1 ..= iterations {
+    let num_blocks = OsRng.gen_range(5 .. 20);
+    let mut event_fuzzer = EventFuzzer::new();
+    let blocks = event_fuzzer.generate_blocks(num_blocks);
+
+    serai_env::log::info!(
+      "equivocation fuzz: 0..{} blocks, {} validators ({iteration}/{iterations})",
+      num_blocks - 1,
+      event_fuzzer.validators.len(),
+    );
+
+    let (shim, serai) = setup_shim_serai().await;
+    for (i, events) in blocks.into_iter().enumerate() {
+      shim.make_block(u64::try_from(i).unwrap(), events).await;
+    }
+
+    let mut db = MemDb::new();
+    let (request, _calls) = TestRequest::new(false);
+    let mut cosigning = Cosigning::spawn(db.clone(), serai, request, vec![]);
+
+    let target = u64::try_from(num_blocks - 1).unwrap();
+
+    // Pick a random target for when to attempt equivocation: after cosigning block N.
+    // We pick from the lower half so there's room for honest progress first.
+    let equivocation_after_block: u64 = OsRng.gen_range(2 ..= target / 2);
+
+    let mut reached_equivocation_point = false;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(300);
+
+    // Step 1: run the honest pipeline until we've cosigned enough blocks to equivocate
+    // We need at least one global session to exist and at least one block cosigned under it.
+    run_honest_cosigning(&db, &mut cosigning, &event_fuzzer, |latest| {
+      assert!(
+        tokio::time::Instant::now() < deadline,
+        "timed out waiting to reach equivocation point (target cosigned block \
+         {equivocation_after_block}, latest={latest:?})",
+      );
+      match latest {
+        Some(n) if n >= equivocation_after_block => {
+          reached_equivocation_point = true;
+          true
+        }
+        Some(n) if n >= target => true,
+        _ => false,
+      }
+    })
+    .await;
+
+    if !reached_equivocation_point {
+      serai_env::log::info!(
+        "equivocation fuzz ({iteration}/{iterations}): no global session formed, skipping"
+      );
+      continue;
+    }
+
+    assert!(FaultedSession::get(&db).is_none(), "should not be faulted before equivocation");
+
+    // Step 2: inject equivocation
+
+    let equivocation_block = equivocation_after_block;
+    let indexed_hash = SubstrateBlockHash::get(&db, equivocation_block)
+      .expect("equivocation block should be indexed");
+
+    // Find the global session that covers this block via the evaluator's current session
+    let Some(global_session_id) = currently_evaluated_global_session(&db) else {
+      serai_env::log::info!(
+        "equivocation fuzz ({iteration}/{iterations}): no evaluated global session, skipping"
+      );
+      continue;
+    };
+    let global_session =
+      GlobalSessions::get(&db, global_session_id).expect("evaluated session should exist in DB");
+    if equivocation_block < global_session.start_block_number {
+      serai_env::log::info!(
+        "equivocation fuzz ({iteration}/{iterations}): equivocation block \
+         {equivocation_block} predates session start {}, skipping",
+        global_session.start_block_number,
+      );
+      continue;
+    }
+
+    // Pick which networks equivocate: 1 to all networks in this session
+    let session_networks: Vec<ExternalNetworkId> = global_session.keys.keys().copied().collect();
+    let num_faulty = OsRng.gen_range(1 ..= session_networks.len());
+    let faulty_networks: Vec<ExternalNetworkId> =
+      session_networks.choose_multiple(&mut OsRng, num_faulty).copied().collect();
+
+    let fault_threshold = (global_session.total_stake * 17) / 100;
+    let faulty_stake: u64 =
+      faulty_networks.iter().map(|n| global_session.stakes.get(n).copied().unwrap_or(0)).sum();
+
+    // Generate a hash that differs from the indexed one
+    let mut faulty_block_hash = random_block_hash(&mut OsRng);
+    if faulty_block_hash == indexed_hash {
+      faulty_block_hash = random_block_hash(&mut OsRng);
+    }
+
+    serai_env::log::info!(
+      "equivocation fuzz ({iteration}/{iterations}): block={equivocation_block}, \
+       faulty={faulty_networks:?}, faulty_stake={faulty_stake}, threshold={fault_threshold}, \
+       will_fault={}",
+      faulty_stake >= fault_threshold,
+    );
+
+    // Submit equivocating cosigns one at a time, tracking cumulative fault weight
+    let mut cumulative_faulty_stake: u64 = 0;
+    for (fi, &faulty_net) in faulty_networks.iter().enumerate() {
+      let faulty_cosign = Cosign {
+        global_session: global_session_id,
+        block_number: equivocation_block,
+        block_hash: faulty_block_hash,
+        cosigner: faulty_net,
+      };
+      let public =
+        global_session.keys.get(&faulty_net).expect("faulty network not in global session");
+      let keypair =
+        event_fuzzer.keypairs.get(&public.0).expect("missing keypair for faulty network");
+      let faulty_signed = sign_cosign(faulty_cosign, keypair);
+      cosigning.intake_cosign(&faulty_signed).unwrap();
+
+      let net_stake = global_session.stakes.get(&faulty_net).copied().unwrap_or(0);
+      cumulative_faulty_stake += net_stake;
+      let faulted_now = cumulative_faulty_stake >= fault_threshold;
+
+      serai_env::log::info!(
+        "faulty cosign {}/{num_faulty} from {faulty_net:?} (stake={net_stake}): \
+         cumulative={cumulative_faulty_stake}, threshold={fault_threshold}, faulted={faulted_now}",
+        fi + 1,
+      );
+
+      if faulted_now {
+        assert_eq!(
+          FaultedSession::get(&db),
+          Some(global_session_id),
+          "session should be faulted after {faulty_net:?}: cumulative stake \
+           {cumulative_faulty_stake} >= threshold {fault_threshold}"
+        );
+      } else {
+        assert!(
+          FaultedSession::get(&db).is_none(),
+          "session should NOT be faulted after {faulty_net:?}: cumulative stake \
+           {cumulative_faulty_stake} < threshold {fault_threshold}"
+        );
+      }
+    }
+
+    if faulty_stake < fault_threshold {
+      serai_env::log::info!(
+        "equivocation fuzz ({iteration}/{iterations}): faulty stake {faulty_stake} below \
+         threshold {fault_threshold}, verifying protocol continues"
+      );
+      assert!(FaultedSession::get(&db).is_none());
+      continue;
+    }
+
+    // Step 3: verify the protocol is halted
+
+    assert!(
+      matches!(Cosigning::<MemDb>::latest_cosigned_block_number(&db), Err(Faulted)),
+      "latest_cosigned_block_number should return Faulted"
+    );
+
+    // Verify cosigns_to_rebroadcast includes the faulty cosign(s)
+    let rebroadcast = cosigning.cosigns_to_rebroadcast();
+    assert!(
+      rebroadcast.iter().any(|c| c.cosign.block_hash == faulty_block_hash),
+      "rebroadcast should include the faulty cosign"
+    );
+
+    // Verify that the protocol remains permanently faulted: drain any remaining intents
+    // and confirm latest_cosigned_block_number is still Err(Faulted).
+    {
+      let mut txn = db.txn();
+      for network in ExternalNetworkId::all() {
+        let max_session = event_fuzzer.next_session.get(&network).copied().unwrap_or(0);
+        for session_num in 0 .. max_session {
+          let set = ExternalValidatorSet { network, session: Session(session_num) };
+          let _ = Cosigning::<MemDb>::intended_cosigns(&mut txn, set);
+        }
+      }
+      txn.commit();
+    }
+
+    assert!(
+      matches!(Cosigning::<MemDb>::latest_cosigned_block_number(&db), Err(Faulted)),
+      "latest_cosigned_block_number should remain Faulted after further operations"
+    );
+
+    serai_env::log::info!(
+      "equivocation fuzz ({iteration}/{iterations}): protocol halted as expected"
+    );
+  }
 }

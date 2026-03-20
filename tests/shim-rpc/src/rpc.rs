@@ -42,8 +42,8 @@ impl From<Error> for ErrorObjectOwned {
 /// Resolve a block hash from JSON-RPC params.
 ///
 /// Mirrors `substrate/node/src/rpc/utils.rs`:
-/// - `{ "block": "hex_hash" }` → lookup by hash
-/// - `{ "block": 123 }` → lookup by number
+/// - `{ "block": "hex_hash" }` = lookup by hash
+/// - `{ "block": 123 }` = lookup by number
 fn resolve_block_hash(
   params: &jsonrpsee::types::params::Params,
   state: &crate::state::ShimState,

@@ -89,15 +89,15 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         // Ephemeral RPC Err: task to re-run and continue trying
         .map_err(|e| format!("RPC error fetching latest finalized block number: {e}"))?;
 
-      serai_env::debug!(
-        "beginning scan: start={start_scan_block_number}, latest={latest_serai_block_number}"
-      );
-
       if latest_serai_block_number < start_scan_block_number {
         // made_progress = False
         // Skip block already indexed
         return Ok(false);
       }
+
+      serai_env::debug!(
+        "beginning scan: start={start_scan_block_number}, latest={latest_serai_block_number}"
+      );
 
       let mut made_progress = false;
 
@@ -294,8 +294,19 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           };
 
           serai_env::debug!(
-          "Notable block block_number={block_number}: new session created {next_global_session_info:?}"
-        );
+            "Notable block block_number={block_number}: new session created \
+           start_block_number={start_block}, sets={sets:?}, keys={{ {keys_hex} }}, \
+           stakes={stakes:?}, total_stake={total_stake}",
+            start_block = next_global_session_info.start_block_number,
+            sets = next_global_session_info.sets,
+            keys_hex = next_global_session_info
+              .keys
+              .iter()
+              .map(|(net, key)| format!("{net:?}: 0x{}", hex::encode(key.0)))
+              .collect::<Vec<_>>()
+              .join(", "),
+            stakes = next_global_session_info.stakes,
+          );
 
           GlobalSessions::set(&mut txn, new_global_session, &next_global_session_info);
           if let Some(ending_global_session) = global_session_for_this_block {
@@ -309,6 +320,9 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         // we flag it as not having any events requiring cosigning so we don't attempt to
         // sign/require a cosign for it
         if global_session_for_this_block.is_none() {
+          serai_env::debug!(
+            "no previous global session available to cosign, has_events = HasEvents::No"
+          );
           has_events = HasEvents::No;
         }
 

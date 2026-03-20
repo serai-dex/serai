@@ -145,8 +145,10 @@ impl SeraiShimRpc {
   /// Set the probability (0–100) that any RPC request randomly fails.
   ///
   /// 0 disables fuzzing (the default), 100 fails every request.
+  /// If the `RUST_TEST_NO_RPC_FUZZ` env var is set, the rate is forced to 0.
   pub async fn set_failure_rate(&self, percent: u8) {
-    self.state.write().await.errors.failure_rate = percent;
+    let effective = if std::env::var("RUST_TEST_NO_RPC_FUZZ").is_ok() { 0 } else { percent };
+    self.state.write().await.errors.failure_rate = effective;
   }
 
   /// Disable random request failures.
