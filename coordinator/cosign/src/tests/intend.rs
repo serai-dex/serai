@@ -22,7 +22,9 @@ use serai_client_serai::{
     validator_sets,
   },
 };
-use serai_primitives::test_helpers::{random_external_address, random_external_key, random_keypair};
+use serai_primitives::test_helpers::{
+  random_external_address, random_external_key, random_keypair, random_serai_address,
+};
 
 use crate::{intend::*, tests::*, *};
 
@@ -46,7 +48,7 @@ fn deallocation_event(validator: SeraiAddress, network: NetworkId, amount: u64) 
     validator,
     network,
     amount: Amount(amount),
-    timeline: validator_sets::DeallocationTimeline::Immediate,
+    timeline: serai_abi::primitives::validator_sets::DeallocationTimeline::Immediate,
   })
 }
 
@@ -388,19 +390,12 @@ pub(super) struct EventFuzzer {
 
 impl EventFuzzer {
   pub(super) fn new() -> Self {
-    let mut seed = [0u8; 32];
-    OsRng.fill_bytes(&mut seed);
-
+    // OsRng.next_u64() % 17 = 0..16
+    // _ + 4 = 4..20 validators per test
     let num_validators = usize::try_from((OsRng.next_u64() % 17) + 4).unwrap();
 
-    let validators: Vec<SeraiAddress> = (0 .. num_validators)
-      .map(|i| {
-        let mut bytes = [0u8; 32];
-        bytes[0 .. 8].copy_from_slice(&u64::try_from(i).unwrap().to_le_bytes());
-        bytes[8 .. 16].copy_from_slice(&seed[0 .. 8]);
-        SeraiAddress(bytes)
-      })
-      .collect();
+    let validators: Vec<SeraiAddress> =
+      (0 .. num_validators).map(|_| random_serai_address(&mut OsRng)).collect();
 
     let networks: Vec<NetworkId> = NetworkId::all().collect();
 
@@ -607,6 +602,44 @@ impl EventFuzzer {
       blocks.push(self.generate_block_events());
     }
     blocks
+  }
+}
+
+#[tokio::test]
+async fn deallocating_zero_is_a_noop() {
+  serai_env::init_logger();
+  let (serai, task_test) = setup_mock_test().await;
+
+  let validator = random_serai_address(&mut OsRng);
+  let network = NetworkId::External(ExternalNetworkId::Bitcoin);
+
+  {
+    // Block 0: allocate 0 stake to the validator
+    serai.make_block(0, vec![vec![allocation_event(validator, network, 0)]]).await;
+    // Block 1: deallocate 0 from the same validator
+    serai.make_block(1, vec![vec![deallocation_event(validator, network, 0)]]).await;
+
+    let mut task = task_test.into_task();
+    TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
+
+    // Verify it works and the stake is unchanged after the 0-deallocation
+    let stake = Stakes::get(&task_test.db, ExternalNetworkId::Bitcoin, validator);
+    assert_eq!(stake, Some(Amount(0)), "stake should be unchanged after deallocating 0");
+  }
+
+  {
+    let amount = OsRng.next_u64();
+    // Block 2: allocate stake to the validator
+    serai.make_block(2, vec![vec![allocation_event(validator, network, amount)]]).await;
+    // Block 3: deallocate 0 from the same validator
+    serai.make_block(3, vec![vec![deallocation_event(validator, network, 0)]]).await;
+
+    let mut task = task_test.into_task();
+    TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
+
+    // Verify the 0-deallocation works and the stake is unchanged after it
+    let stake = Stakes::get(&task_test.db, ExternalNetworkId::Bitcoin, validator);
+    assert_eq!(stake, Some(Amount(amount)), "stake should be unchanged after deallocating 0");
   }
 }
 

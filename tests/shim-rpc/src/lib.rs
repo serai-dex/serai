@@ -155,9 +155,4 @@ impl SeraiShimRpc {
   pub async fn clear_failure_rate(&self) {
     self.state.write().await.errors.failure_rate = 0;
   }
-
-  /// Stop the shim RPC node server.
-  pub fn stop(&self) {
-    self.handle.stop().expect("failed to stop shim RPC node");
-  }
 }

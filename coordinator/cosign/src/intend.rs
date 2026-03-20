@@ -89,14 +89,8 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         // Ephemeral RPC Err: task to re-run and continue trying
         .map_err(|e| format!("RPC error fetching latest finalized block number: {e}"))?;
 
-      if latest_serai_block_number < start_scan_block_number {
-        // made_progress = False
-        // Skip block already indexed
-        return Ok(false);
-      }
-
-      serai_env::debug!(
-        "beginning scan: start={start_scan_block_number}, latest={latest_serai_block_number}"
+      serai_env::trace!(
+        "beginning intend scan: start={start_scan_block_number}, latest={latest_serai_block_number}"
       );
 
       let mut made_progress = false;
@@ -148,7 +142,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         );
         BuildsUpon::set(&mut txn, &builds_upon);
 
-        serai_env::debug!("iterating over block_number={block_number}");
+        serai_env::trace!("iterating over block_number={block_number}");
 
         let mut has_events = HasEvents::No;
         let vset_events = serai_block_events.validator_sets();
@@ -183,7 +177,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             // this is a critical issue and will not be solved after re-tries,
             // missing Stakes from previous blocks will remain missing until re-indexed
             // if encountered halt the process
-            .expect("unable to deallocate with no prior existing stake");
+            .expect("unable to deallocate with no prior indexed Stake");
 
           Stakes::set(&mut txn, network, *validator, &Amount(existing.0 - amount.0));
         }
@@ -197,9 +191,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
 
           if validators.is_empty() {
-            // Maybe ephemeral: event blocks from RPC returned empty set list
-            // could resolve after retry. or will get forever stuck.
-            Err(format!("validator set from Event::SetDecided was empty"))?;
+            panic!("validator set from Event::SetDecided was empty");
           }
 
           Validators::set(
@@ -237,9 +229,10 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
               &Set { session: set.session, key: key_pair.0, stake: Amount(stake) },
             );
           } else {
-            serai_env::debug!(
-              "skipped session {:?} with 0 stake from being selected for cosigns",
-              set.session
+            serai_env::trace!(
+              "{block_number}: skipped session {:?} of {:?} with 0 stake from being selected for cosigns",
+              set.session,
+              set.network
             );
           }
         }
@@ -253,7 +246,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
 
         let global_session_for_this_block = LatestGlobalSessionIntended::get(&txn);
 
-        serai_env::debug!("type of has_events={has_events:?}");
+        serai_env::trace!("{block_number}: type of has_events={has_events:?}");
 
         // If this is notable, it creates a new global session, which we index into the database
         // now
@@ -293,18 +286,12 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             total_stake,
           };
 
-          serai_env::debug!(
-            "Notable block block_number={block_number}: new session created \
-           start_block_number={start_block}, sets={sets:?}, keys={{ {keys_hex} }}, \
+          serai_env::trace!(
+            "{block_number}: Notable block block_number={block_number}: new session created \
+           start_block_number={start_block}, sets={sets:?}, \
            stakes={stakes:?}, total_stake={total_stake}",
             start_block = next_global_session_info.start_block_number,
             sets = next_global_session_info.sets,
-            keys_hex = next_global_session_info
-              .keys
-              .iter()
-              .map(|(net, key)| format!("{net:?}: 0x{}", hex::encode(key.0)))
-              .collect::<Vec<_>>()
-              .join(", "),
             stakes = next_global_session_info.stakes,
           );
 
@@ -319,9 +306,9 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         // If there isn't anyone available to cosign this block, meaning it'll never be cosigned,
         // we flag it as not having any events requiring cosigning so we don't attempt to
         // sign/require a cosign for it
-        if global_session_for_this_block.is_none() {
-          serai_env::debug!(
-            "no previous global session available to cosign, has_events = HasEvents::No"
+        if (has_events != HasEvents::No) && global_session_for_this_block.is_none() {
+          serai_env::trace!(
+            "{block_number}: no previous global session available to cosign, has_events = HasEvents::No"
           );
           has_events = HasEvents::No;
         }
@@ -341,7 +328,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             // Tell each set of their expectation to cosign this block
             for set in ending_global_session_info.sets {
               serai_env::prod_info!(
-                "set will cosign {has_events:?} block: set={set:?}, block_number={block_number}"
+                "{block_number}: set will cosign {has_events:?} block: set={set:?}, block_number={block_number}"
               );
 
               IntendedCosigns::send(
@@ -359,7 +346,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           HasEvents::No => {}
         }
 
-        serai_env::debug!(
+        serai_env::trace!(
           "finished iterating block_number={block_number}: has_events={has_events:?}"
         );
 

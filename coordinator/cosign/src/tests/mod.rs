@@ -75,11 +75,7 @@ async fn setup_shim_serai() -> (SeraiShimRpc, Arc<Serai>) {
   (shim_serai, serai)
 }
 
-pub(crate) fn random_global_session<R: RngCore + CryptoRng>(rng: &mut R) -> [u8; 32] {
-  let mut id = [0u8; 32];
-  rng.fill_bytes(&mut id);
-  id
-}
+pub(crate) use serai_cosign_types::tests::random_global_session;
 
 /// For whe external validator set does not alter or affect the behavior of the functions being tested
 /// this can be used just as a default value any time

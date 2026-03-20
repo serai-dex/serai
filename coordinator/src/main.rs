@@ -30,7 +30,7 @@ use message_queue::{Service, client::MessageQueue};
 
 use serai_task::{Task, TaskHandle, ContinuallyRan as _};
 
-use serai_cosign::{COSIGN_LOOP_INTERVAL, Faulted, SignedCosign, Cosigning};
+use serai_cosign::{Faulted, SignedCosign, Cosigning};
 use serai_coordinator_substrate::{
   CanonicalEventStream, EphemeralEventStream, SignSlashReport, SetKeysTask, SignedBatches,
   PublishBatchTask, SlashReports, PublishSlashReportTask,
@@ -88,11 +88,13 @@ fn spawn_cosigning<D: serai_db::Db>(
 ) {
   let mut cosigning = Cosigning::spawn(db.clone(), serai, p2p.clone(), tasks_to_run_upon_cosigning);
   tokio::spawn(async move {
+    const COSIGN_LOOP_INTERVAL: Duration = Duration::from_secs(5);
+
     let last_cosign_rebroadcast = Instant::now();
     loop {
       // Intake our own cosigns
-      match Cosigning::<D>::latest_finalized_block(&db) {
-        Ok(latest_acknowledged_block) => {
+      match Cosigning::<D>::latest_cosigned_block_number(&db) {
+        Ok(Some(latest_acknowledged_block)) => {
           let mut txn = db.txn();
           // The cosigns we prior tried to intake yet failed to
           let mut cosigns = ErroneousCosigns::get(&txn).unwrap_or(vec![]);
@@ -124,6 +126,7 @@ fn spawn_cosigning<D: serai_db::Db>(
 
           txn.commit();
         }
+        Ok(None) => {}
         Err(Faulted) => {
           // We don't panic here as the following code rebroadcasts our cosigns which is
           // necessary to inform other coordinators of the faulty cosigns

@@ -27,8 +27,9 @@ pub(crate) fn now_timestamp() -> Duration {
 
 create_db!(
   SubstrateCosignDelay {
-    // The latest block number finalized by the delay task.
-    // Finalized after a delay if it has events, simply marked as finalized if the block has no events.
+    // The latest block number marked as cosigned by the delay task.
+    // Cosigned after a delay if it had events and cosigns,
+    // simply marked as cosigned if the block had no events and no cosigns.
     LatestCosignedBlockNumber: () -> u64,
   }
 );
@@ -45,7 +46,7 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
     async move {
       let mut made_progress = false;
       loop {
-        let latest_finalized = LatestCosignedBlockNumber::get(&self.db).unwrap_or(0);
+        let latest_cosigned_block_number = LatestCosignedBlockNumber::get(&self.db).unwrap_or(0);
 
         let mut txn = self.db.txn();
         let Some((block_number, time_evaluated, has_events)) = CosignedBlocks::try_recv(&mut txn)
@@ -53,22 +54,26 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
           break;
         };
 
-        serai_env::debug!(
-          "beginning delay: block_number={block_number}, time_evaluated={time_evaluated}, \
-           has_events={has_events}, latest_finalized={latest_finalized}",
+        serai_env::trace!(
+          "{block_number}: beginning delay: time_evaluated={time_evaluated}, \
+           has_events={has_events}, latest_cosigned={latest_cosigned_block_number}",
         );
 
-        if block_number <= latest_finalized {
-          // Already finalized a later block, consume and skip without sleeping.
+        // Defensive check, not likely to happen but does not allow regressing
+        if block_number <= latest_cosigned_block_number {
+          serai_env::warn!("Attempting to delay on an already cosigned block number ({block_number}, latest={latest_cosigned_block_number})");
+          // consume and skip without sleeping.
           txn.commit();
           continue;
         }
 
-        // No events means no cosigns to wait for, finalize immediately
+        // No events means no cosigns to wait for, mark as cosigned immediately
         if !has_events {
           LatestCosignedBlockNumber::set(&mut txn, &block_number);
           txn.commit();
-          serai_env::debug!("LatestFinalizedBlock={block_number} (no events, skipped delay)");
+          serai_env::trace!(
+            "{block_number}: LatestCosignedBlockNumber={block_number} (no events, skipped delay)"
+          );
           made_progress = true;
           continue;
         }
@@ -80,9 +85,8 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         // Drop txn during sleep
         drop(txn);
 
-        if time_valid_timestamp > now_timestamp {
-          let time_left = time_valid_timestamp - now_timestamp;
-          serai_env::debug!("beginning sleep: {time_left}s");
+        if let Some(time_left) = time_valid_timestamp.checked_sub(now_timestamp) {
+          serai_env::debug!("{block_number}: sleeping for {time_left}s");
           tokio::time::sleep(Duration::from_secs(time_left)).await;
         }
 
@@ -92,7 +96,7 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         LatestCosignedBlockNumber::set(&mut txn, &block_number);
         txn.commit();
 
-        serai_env::debug!("LatestFinalizedBlock={block_number}");
+        serai_env::trace!("{block_number}: LatestCosignedBlockNumber={block_number}");
         made_progress = true;
       }
 

@@ -2,7 +2,7 @@
 name = "serai-test-task"
 version = "0.1.0"
 description = "Common test utilities for serai-task ContinuallyRan tasks"
-license = "MIT"
+license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/tests/task"
 authors = ["Luke Parker <lukeparker5132@gmail.com>", "rafael_xmr <g.pi8ax@slmail.me>"]
 edition = "2021"

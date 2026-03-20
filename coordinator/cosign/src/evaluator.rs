@@ -62,7 +62,7 @@ fn currently_evaluated_global_session_strict(
     };
     assert!(
       existing.1.start_block_number <= block_number,
-      "candidate's start block number {:#?} exceeds our block number {block_number}",
+      "candidate's start block number ({:#?}) exceeds our block number ({block_number})",
       existing.1.start_block_number
     );
     existing
@@ -99,7 +99,7 @@ fn should_request_cosigns(last_request_for_cosigns: &mut Instant) -> bool {
 }
 
 //// Calculate the minimum threshold required for cosigning
-fn cosign_threshold(total_stake: u64) -> u64 {
+pub(crate) fn cosign_threshold(total_stake: u64) -> u64 {
   ((total_stake * COSIGN_COMMIT_THRESHOLD) / 100) + 1
 }
 
@@ -156,13 +156,20 @@ async fn ensure_cosigned(
     return Ok(());
   }
 
+  // For HasEvents::Notable request the superseding notable cosigns over the network
+  // If this session hasn't yet produced notable cosigns, then we presume we'll see
+  // the desired non-notable cosigns as part of normal operations, without needing to
+  // explicitly request them
+  //
+  // For HasEvents::NonNotable request the necessary cosigns over the network
   if should_request_cosigns(last_request_for_cosigns) {
     request
       .request_notable_cosigns(global_session)
       .await
-      .map_err(|e| format!("RPC error fetching notable cosigns: {e:?}"))?;
+      .map_err(|e| format!("Error fetching notable cosigns: {e:?}"))?;
   }
 
+  // We return an error so the delay before this task is run again increases
   Err(format!("{label} block (#{block_number}) wasn't yet cosigned. this should resolve shortly"))
 }
 
@@ -193,26 +200,23 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
           break;
         };
 
-        serai_env::log::debug!(
-          "beginning evaluator: block_number={block_number}, has_events={:#?}",
-          has_events
-        );
-
         // If no session is being evaluated yet, check if this block can be processed
         if currently_evaluated_global_session(&txn).is_none() {
           match GlobalSessionsChannel::peek(&txn) {
             // No global session declared yet: this block predates all sessions, skip it
             // this means only HasEvents:No blocks have been consumed so far
             None => {
-              serai_env::log::debug!("No global session declared yet");
+              serai_env::trace!(
+                "{block_number}: No global session declared yet. Ending evaluator."
+              );
               commit_evaluated_block(txn, block_number, false);
               made_progress = true;
               continue;
             }
             // Session queued but starts after this block, skip it
             Some(next) if next.1.start_block_number > block_number => {
-              serai_env::log::debug!(
-                "session {block_number} is queued for {}",
+              serai_env::trace!(
+                "{block_number}: Cannot cosign: GlobalSession is queued for block {}",
                 next.1.start_block_number
               );
               commit_evaluated_block(txn, block_number, false);
@@ -223,6 +227,8 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
             _ => {}
           }
         }
+
+        serai_env::trace!("{block_number}: beginning evaluator: has_events={:#?}", has_events);
 
         // Fetch the global session information
         let (global_session, global_session_info) =
@@ -236,7 +242,7 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
 
             for set in global_session_info.sets {
               // Check if we have the cosign from this set
-              if NetworksLatestCosignedBlock::get(&mut txn, global_session, set.network)
+              if NetworksLatestCosignedBlock::get(&txn, global_session, set.network)
                 .map(|signed_cosign| signed_cosign.cosign.block_number) ==
                 Some(block_number)
               {
@@ -312,11 +318,12 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
         // Since we checked we had the necessary cosigns, send it for delay before acknowledgement
         commit_evaluated_block(txn, block_number, true);
 
-        // Roughly ~1 hour, no need for repetitive logging
+        // INFOs roughly every ~1 hour, no need for repetitive logging on prod,
         #[cfg(not(test))]
         if (block_number % 500) == 0 {
-          serai_env::debug!("marking block #{block_number} as cosigned");
+          serai_env::prod_info!("marking block #{block_number} as cosigned");
         }
+        // for tests debug on every block
         #[cfg(test)]
         serai_env::debug!("marking block #{block_number} as cosigned");
 

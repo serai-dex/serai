@@ -12,8 +12,6 @@ use serai_primitives::{
   validator_sets::*,
 };
 
-pub use serai_primitives::validator_sets::DeallocationTimeline;
-
 /// The address used by the validator sets pallet.
 pub fn address() -> SeraiAddress {
   SeraiAddress::system(borsh::to_vec(b"ValidatorSets").unwrap())

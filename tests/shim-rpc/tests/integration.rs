@@ -58,7 +58,6 @@ async fn test_basic_block_and_number() {
   let none = client.block_by_number(999).await.unwrap();
   assert!(none.is_none());
 
-  sim.stop();
 }
 
 #[tokio::test]
@@ -79,7 +78,6 @@ async fn test_block_by_hash() {
   let finalized = client.finalized(hash).await.unwrap();
   assert!(finalized);
 
-  sim.stop();
 }
 
 #[tokio::test]
@@ -109,7 +107,6 @@ async fn test_events_round_trip() {
   // Verify second event is a SetDecided
   assert!(matches!(vs_events[1], vs_mod::Event::SetDecided { .. }));
 
-  sim.stop();
 }
 
 #[tokio::test]
@@ -138,7 +135,6 @@ async fn test_dynamic_block_addition() {
   let latest = client.latest_finalized_block_number().await.unwrap();
   assert_eq!(latest, 2);
 
-  sim.stop();
 }
 
 #[tokio::test]
@@ -167,7 +163,6 @@ async fn test_error_injection() {
   let latest = client.latest_finalized_block_number().await.unwrap();
   assert_eq!(latest, 1);
 
-  sim.stop();
 }
 
 #[tokio::test]
@@ -191,7 +186,6 @@ async fn test_clear_all_errors() {
   assert_eq!(client.latest_finalized_block_number().await.unwrap(), 1);
   assert!(client.block_by_number(1).await.unwrap().is_some());
 
-  sim.stop();
 }
 
 #[tokio::test]
@@ -218,7 +212,6 @@ async fn test_builds_upon_chain() {
   assert_ne!(block1.header.hash(), block2.header.hash());
   assert_ne!(block2.header.hash(), block3.header.hash());
 
-  sim.stop();
 }
 
 #[tokio::test]
@@ -243,7 +236,6 @@ async fn test_publish_transaction() {
     assert_eq!(state.published_transactions[0], vec![0xDE, 0xAD]);
   }
 
-  sim.stop();
 }
 
 #[tokio::test]
@@ -271,5 +263,4 @@ async fn test_validator_sets_state() {
     serai_state.current_stake(NetworkId::External(ExternalNetworkId::Bitcoin)).await.unwrap();
   assert_eq!(stake, Some(Amount(1_000_000)));
 
-  sim.stop();
 }

@@ -4,11 +4,7 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{fmt::Debug, future::Future};
-use std::{
-  collections::HashMap,
-  sync::Arc,
-  time::{Duration, Instant},
-};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use serai_client_serai::Serai;
 
@@ -37,13 +33,6 @@ use delay::LatestCosignedBlockNumber;
 #[cfg(test)]
 /// Test helpers and fixtures.
 pub mod tests;
-
-#[cfg(not(any(test)))]
-/// The interval at which the cosigning loop runs.
-pub const COSIGN_LOOP_INTERVAL: Duration = Duration::from_secs(5);
-#[cfg(any(test))]
-/// The interval at which the cosigning loop runs.
-pub const COSIGN_LOOP_INTERVAL: Duration = Duration::from_millis(10);
 
 /// A 'global session', defined as all validator sets used for cosigning at a given moment.
 ///
@@ -130,7 +119,7 @@ create_db! {
 }
 
 /// An object usable to request notable cosigns for a block.
-pub trait RequestNotableCosigns: 'static + Send {
+pub trait RequestNotableCosigns: 'static + Send + Sync {
   /// The error type which may be encountered when requesting notable cosigns.
   type Error: Debug;
 
@@ -185,7 +174,6 @@ impl IntakeCosignError {
 /// The interface to manage cosigning with.
 pub struct Cosigning<D: Db> {
   db: D,
-  _task_handles: Vec<TaskHandle>,
 }
 impl<D: Db> Cosigning<D> {
   #[cfg(test)]
@@ -193,20 +181,24 @@ impl<D: Db> Cosigning<D> {
   ///
   /// This does not spawn any background tasks; use `Cosigning::spawn` for the full service.
   pub fn new(db: D) -> Self {
-    Self { db, _task_handles: vec![] }
+    Self { db }
   }
 
   /// Spawn the tasks to intend and evaluate cosigns.
   ///
   /// The database specified must only be used with a singular instance of the Serai network, and
   /// only used once at any given time.
-  pub fn spawn<R: RequestNotableCosigns + Sync>(
+  pub fn spawn<R: RequestNotableCosigns>(
     db: D,
     serai: Arc<Serai>,
     request: R,
     tasks_to_run_upon_finalizing_blocks: Vec<TaskHandle>,
   ) -> Self {
     let (intend_task, intend_task_handle) = Task::new();
+    // Forget the intend task handle, as dropping the handle would stop the task
+    // keeps all cosign tasks running in the background
+    core::mem::forget(intend_task_handle);
+
     let (evaluator_task, evaluator_task_handle) = Task::new();
     let (delay_task, delay_task_handle) = Task::new();
     tokio::spawn(
@@ -225,16 +217,17 @@ impl<D: Db> Cosigning<D> {
       (delay::CosignDelayTask { db: db.clone() })
         .continually_run(delay_task, tasks_to_run_upon_finalizing_blocks),
     );
-    Self { db, _task_handles: vec![intend_task_handle, evaluator_task_handle, delay_task_handle] }
+
+    Self { db }
   }
 
   /// The latest acknowledged block number.
-  pub fn latest_finalized_block(getter: &impl Get) -> Result<u64, Faulted> {
+  pub fn latest_cosigned_block_number(getter: &impl Get) -> Result<Option<u64>, Faulted> {
     if FaultedSession::get(getter).is_some() {
       Err(Faulted)?;
     }
 
-    Ok(LatestCosignedBlockNumber::get(getter).unwrap_or(0))
+    Ok(LatestCosignedBlockNumber::get(getter))
   }
 
   /// Fetch a cosigned Substrate block's hash by its block number.
@@ -242,7 +235,10 @@ impl<D: Db> Cosigning<D> {
     getter: &impl Get,
     block_number: u64,
   ) -> Result<Option<BlockHash>, Faulted> {
-    if block_number == 0 || block_number > Self::latest_finalized_block(getter)? {
+    let Some(latest) = Self::latest_cosigned_block_number(getter)? else {
+      return Ok(None);
+    };
+    if block_number > latest {
       return Ok(None);
     }
 
