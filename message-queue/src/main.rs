@@ -1,6 +1,5 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use core::str::FromStr as _;
 pub(crate) use std::{
   sync::{Arc, RwLock},
   collections::HashMap,
@@ -156,11 +155,9 @@ pub(crate) fn ack_message(from: Service, to: Service, id: u64, sig: SchnorrSigna
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-  env_logger::builder()
-    .filter_level(
-      log::LevelFilter::from_str(&serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
-        .expect("`RUST_LOG` environment variable had an invalid filter"),
-    )
+  // TODO: `env_logger::Env` for `serai-env` and `Builder::from_env`?
+  env_logger::Builder::from_default_env()
+    .parse_filters(&serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
     .init();
   log::info!("Starting message-queue service...");
 
