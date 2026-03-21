@@ -1567,9 +1567,7 @@ version = "0.4.2"
 dependencies = [
  "digest 0.11.2",
  "ff",
- "ff-group-tests",
  "group",
- "hex",
  "std-shims 0.1.5",
  "subtle",
  "zeroize",
