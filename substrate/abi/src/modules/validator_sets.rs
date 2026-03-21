@@ -43,8 +43,16 @@ pub enum Slashes {
     /// representing an `EquivocationProof` not with [`SubstrateHeader`] but
     /// `(Header, Digest::new(substrate_header.digest().find(babe)))` which can be of bounded
     /// length even while the digest as a whole remains unbounded (its own sin).
-    #[expect(clippy::as_conversions)]
-    reason: BoundedVec<u8, ConstU32<{ u16::MAX as u32 }>>,
+    reason: BoundedVec<
+      u8,
+      ConstU32<
+        {
+          #[expect(clippy::as_conversions)]
+          const MAX_REASON_LEN: u32 = u16::MAX as u32;
+          MAX_REASON_LEN
+        },
+      >,
+    >,
   },
   /// A [`SlashReport`] from an external network.
   ExternalNetwork {
