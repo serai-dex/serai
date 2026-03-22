@@ -37,6 +37,15 @@ runs:
           exit 1
         fi
 
+    - name: Get the arguments to start Lima with
+      shell: bash
+      if: runner.os == 'macOS'
+      run: |
+        if [ $(uname -m) = "x86_64" ]; then
+          # On Intel CPUs, where we can use the Virtualization Framework, we do so
+          echo "LIMA_START_ARGS=--vm-type=vz --mount-type=virtiofs" >> "$GITHUB_ENV"
+        fi
+
     - name: Install Docker (macOS)
       uses: docker/setup-docker-action@1a6edb0ba9ac496f6850236981f15d8f9a82254d # 5.0.0
       if: runner.os == 'macOS'
