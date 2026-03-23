@@ -20,7 +20,7 @@ use serai_abi::{
 pub struct SeraiShimRpc {
   url: String,
   state: SharedState,
-  handle: ServerHandle,
+  _handle: ServerHandle,
 }
 
 impl SeraiShimRpc {
@@ -42,7 +42,7 @@ impl SeraiShimRpc {
     let addr = server.local_addr().expect("server should have a local address");
     let handle = server.start(rpc_module);
 
-    Self { url: format!("http://{addr}"), state, handle }
+    Self { url: format!("http://{addr}"), state, _handle: handle }
   }
 
   /// The HTTP URL this shim is listening on.

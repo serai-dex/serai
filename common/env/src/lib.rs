@@ -1,8 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-use std::str::FromStr;
-
 /// Re-export of `log` for direct access (e.g. `serai_env::log::Level`).
 pub use log;
 

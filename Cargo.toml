@@ -227,6 +227,7 @@ k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab
 p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
 
 [workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
 # https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html
 ambiguous_negative_literals = "warn"
 closure_returning_async_block = "warn"

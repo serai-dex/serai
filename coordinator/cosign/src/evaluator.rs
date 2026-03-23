@@ -15,7 +15,8 @@ pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_mins(1);
 #[cfg(any(test))]
 pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(6);
 
-const COSIGN_COMMIT_THRESHOLD: u64 = 83;
+const COSIGN_COMMIT_THRESHOLD_NUMERATOR: u128 = 83;
+const COSIGN_COMMIT_THRESHOLD_DENOMINATOR: u128 = 100;
 
 create_db!(
   SubstrateCosignEvaluator {
@@ -100,7 +101,12 @@ fn should_request_cosigns(last_request_for_cosigns: &mut Instant) -> bool {
 
 //// Calculate the minimum threshold required for cosigning
 pub(crate) fn cosign_threshold(total_stake: u64) -> u64 {
-  ((total_stake * COSIGN_COMMIT_THRESHOLD) / 100) + 1
+  u64::try_from(
+    (u128::from(total_stake) * COSIGN_COMMIT_THRESHOLD_NUMERATOR) /
+      COSIGN_COMMIT_THRESHOLD_DENOMINATOR,
+  )
+  .expect("threshold < 1") +
+    1
 }
 
 /// Evaluate non-notable cosigns, returning (weight_cosigned, lowest_common_block).

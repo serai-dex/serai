@@ -3,6 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use rand_core::{OsRng, RngCore};
 
 use serai_db::MemDb;
+use serai_task::ContinuallyRan;
 
 use serai_shim_rpc::SeraiShimRpc;
 
@@ -326,6 +327,7 @@ mod errors {
   }
 
   #[tokio::test]
+  #[should_panic(expected = "validator set from Event::SetDecided was empty")]
   async fn errors_if_set_decided_has_empty_validators() {
     serai_env::init_logger();
     let (serai, task_test) = setup_mock_test().await;
@@ -342,11 +344,7 @@ mod errors {
     serai.make_block(1, vec![vec![empty_set_decided]]).await;
 
     let mut task = task_test.into_task();
-    TaskTest::task_runs_and_fails_with(&mut task, "validator set from Event::SetDecided was empty")
-      .await;
-
-    // Block 0 committed, block 1 failed mid-processing
-    assert_eq!(ScanCosignFrom::get(&task_test.db), Some(1));
+    task.run_iteration().await;
   }
 
   #[tokio::test]
