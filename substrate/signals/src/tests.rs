@@ -22,7 +22,7 @@ use serai_abi::{
     validator_sets::{Session, ValidatorSet, KeyShares as KeySharesStruct},
     signals::Signal,
   },
-  signals::Event,
+  signals::{Halted as _, Event},
 };
 
 use crate::{

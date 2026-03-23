@@ -111,10 +111,33 @@ fn burn_with_instruction() {
       assert_eq!(
         {
           #[expect(clippy::disallowed_methods)]
-          LiquidityTokens::burn_with_instruction(Some(to).into(), out_instruction).unwrap_err()
+          LiquidityTokens::burn_with_instruction(Some(to).into(), out_instruction.clone())
+            .unwrap_err()
         },
         frame_support::pallet_prelude::DispatchError::from(
           crate::Error::<Test, LiquidityTokensInstance>::BurnWithInstructionNotAllowed
+        )
+      );
+
+      assert_eq!(sp_io::storage::root(state_version), root);
+    }
+
+    // Burning when halted should error, with no state changes
+    {
+      sp_io::storage::set(&("BurnWithInstruction", balance.coin.network()).encode(), &[]);
+
+      Coins::mint(to, balance.into()).unwrap();
+      state.mint::<CoinsInstance>(to, balance.into());
+
+      let root = sp_io::storage::root(state_version);
+
+      assert_eq!(
+        {
+          #[expect(clippy::disallowed_methods)]
+          Coins::burn_with_instruction(Some(to).into(), out_instruction).unwrap_err()
+        },
+        frame_support::pallet_prelude::DispatchError::from(
+          crate::Error::<Test, CoinsInstance>::BurnWithInstructionNotAllowed
         )
       );
 

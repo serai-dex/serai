@@ -493,6 +493,14 @@ mod pallet {
             Deciding sets SHOULD be regular, barring the inability to decide the next set.
             This means using the latest set provides a more consistent timeline for when a
             validator is earning rewards.
+
+          Halted networks do still have emissions distributed, ensuring the liquidity pool is
+          fairly emitted to. While this would suggest the entirety of the emissions should go to
+          the liquidity pool, doing so would allow halting a network to directly change how
+          emissions are distributed, adding a potential economic incentive. As such a incentive
+          still indirectly exists, as a halted network will not have swaps and therefore not yield
+          fees which qualify a network to receive emissions, we're left with the social policy of
+          halting those who halt others without sufficiently agreed upon cause.
         */
         let Some(latest_decided_session) = T::ValidatorSets::latest_decided_session(network.into())
         else {

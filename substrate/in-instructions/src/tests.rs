@@ -98,6 +98,7 @@ impl serai_core_pallet::Config for Test {
 
 impl serai_coins_pallet::Config<CoinsInstance> for Test {
   type AllowMint = serai_economic_security_pallet::CoinsInstanceAllowMint<Test>;
+  type AllowBurnWithInstruction = Signals;
   type Weights = ();
 }
 
@@ -125,12 +126,21 @@ impl serai_signals_pallet::Config for Test {
   type Weights = ();
 }
 
+pub struct AlwaysHalted;
+impl serai_abi::signals::Halted for AlwaysHalted {
+  fn halted(_network: ExternalNetworkId) -> bool {
+    true
+  }
+}
+
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Test {
   type AllowMint = serai_economic_security_pallet::LiquidityTokensInstanceAllowMint<Test>;
+  type AllowBurnWithInstruction = AlwaysHalted;
   type Weights = ();
 }
 
 impl serai_dex_pallet::Config for Test {
+  type AllowSwap = Signals;
   type Weights = ();
 }
 
@@ -164,6 +174,7 @@ impl serai_economic_security_pallet::Config for Test {
 
 impl serai_coins_pallet::Config<GenesisLiquidityTokensInstance> for Test {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type AllowBurnWithInstruction = AlwaysHalted;
   type Weights = ();
 }
 

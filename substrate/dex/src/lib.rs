@@ -29,6 +29,7 @@ mod pallet {
       prelude::*,
       dex::{Error as PrimitivesError, Reserves, Premise},
     },
+    signals::Halted,
     dex::Event,
   };
 
@@ -88,6 +89,8 @@ mod pallet {
     + serai_coins_pallet::Config<serai_coins_pallet::CoinsInstance>
     + serai_coins_pallet::Config<serai_coins_pallet::LiquidityTokensInstance>
   {
+    /// If swaps for coins associated with this network are halted or not.
+    type AllowSwap: Halted;
     /// The weights for this pallet.
     type Weights: Weights;
   }
@@ -493,6 +496,10 @@ mod pallet {
         if LiquidityTokens::<T>::supply(external_coin) == Amount(0) {
           Err(Error::<T>::InvalidLiquidity)?;
         }
+        if T::AllowSwap::halted(external_coin.network()) {
+          // If this liquidity's associated network is halted, consider it invalid
+          Err(Error::<T>::InvalidLiquidity)?;
+        }
 
         let pool = serai_abi::dex::address(external_coin);
 
@@ -567,6 +574,10 @@ mod pallet {
 
         let external_coin = swap.external_coin();
         if LiquidityTokens::<T>::supply(external_coin) == Amount(0) {
+          Err(Error::<T>::InvalidLiquidity)?;
+        }
+        if T::AllowSwap::halted(external_coin.network()) {
+          // If this liquidity's associated network is halted, consider it invalid
           Err(Error::<T>::InvalidLiquidity)?;
         }
 

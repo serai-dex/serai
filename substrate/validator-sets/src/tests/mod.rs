@@ -89,8 +89,16 @@ impl serai_core_pallet::Config for Test {
   type PreInherents = ();
 }
 
+pub struct NeverHalted;
+impl serai_abi::signals::Halted for NeverHalted {
+  fn halted(_network: ExternalNetworkId) -> bool {
+    false
+  }
+}
+
 impl serai_coins_pallet::Config<CoinsInstance> for Test {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type AllowBurnWithInstruction = NeverHalted;
   type Weights = ();
 }
 

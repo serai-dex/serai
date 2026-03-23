@@ -53,16 +53,26 @@ impl serai_core_pallet::Config for Test {
   type PreInherents = ();
 }
 
+pub struct NeverHalted;
+impl serai_abi::signals::Halted for NeverHalted {
+  fn halted(_network: serai_abi::primitives::network_id::ExternalNetworkId) -> bool {
+    false
+  }
+}
+
 impl serai_coins_pallet::Config<CoinsInstance> for Test {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type AllowBurnWithInstruction = NeverHalted;
   type Weights = ();
 }
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Test {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type AllowBurnWithInstruction = NeverHalted;
   type Weights = ();
 }
 
 impl crate::Config for Test {
+  type AllowSwap = NeverHalted; // TODO: Extend the swap tests with this
   type Weights = ();
 }
 

@@ -15,7 +15,7 @@ use serai_abi::{
   primitives::{
     constants::*,
     crypto::{Public, EmbeddedEllipticCurveKeys},
-    network_id::NetworkId,
+    network_id::{ExternalNetworkId, NetworkId},
     coin::Coin,
     balance::{Amount, Balance},
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
@@ -106,6 +106,7 @@ impl serai_core_pallet::Config for Runtime {
 
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
   type AllowMint = serai_economic_security_pallet::CoinsInstanceAllowMint<Self>;
+  type AllowBurnWithInstruction = serai_signals_pallet::Pallet<Self>;
   type Weights = (); // TODO
 }
 impl serai_validator_sets_pallet::Config for Runtime {
@@ -119,16 +120,27 @@ impl serai_signals_pallet::Config for Runtime {
   type ValidatorSets = ValidatorSets;
   type Weights = (); // TODO
 }
+
+#[doc(hidden)]
+pub struct NeverAllowBurnWithInstruction;
+impl serai_abi::signals::Halted for NeverAllowBurnWithInstruction {
+  fn halted(_network: ExternalNetworkId) -> bool {
+    true
+  }
+}
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
   type AllowMint = serai_economic_security_pallet::LiquidityTokensInstanceAllowMint<Self>;
+  type AllowBurnWithInstruction = NeverAllowBurnWithInstruction;
   // This does not have weights actually set as its call isn't exposed
   type Weights = ();
 }
 impl serai_dex_pallet::Config for Runtime {
+  type AllowSwap = Signals;
   type Weights = (); // TODO
 }
 impl serai_coins_pallet::Config<GenesisLiquidityTokensInstance> for Runtime {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type AllowBurnWithInstruction = NeverAllowBurnWithInstruction;
   // This does not have weights actually set as its call isn't exposed
   type Weights = ();
 }

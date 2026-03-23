@@ -137,3 +137,9 @@ pub enum Event {
     with_network: NetworkId,
   },
 }
+
+/// If a network is halted.
+pub trait Halted {
+  /// If this specified network is halted.
+  fn halted(network: ExternalNetworkId) -> bool;
+}

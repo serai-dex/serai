@@ -70,17 +70,29 @@ impl crate::AllowMint for StaticAllowMint {
   }
 }
 
+/// An [`serai_abi::signals::Halted`] implementation which uses the value within a storage slot
+/// of the same name.
+pub struct AllowBurnWithInstruction;
+impl serai_abi::signals::Halted for AllowBurnWithInstruction {
+  fn halted(network: serai_abi::primitives::network_id::ExternalNetworkId) -> bool {
+    sp_io::storage::get(&("BurnWithInstruction", network).encode()).is_some()
+  }
+}
+
 impl crate::Config<CoinsInstance> for Test {
   type AllowMint = crate::AlwaysAllowMint;
+  type AllowBurnWithInstruction = AllowBurnWithInstruction;
   type Weights = ();
 }
 impl crate::Config<LiquidityTokensInstance> for Test {
   type AllowMint = crate::AlwaysAllowMint;
+  type AllowBurnWithInstruction = AllowBurnWithInstruction;
   type Weights = ();
 }
 // We use `GenesisLiquidityTokens` to test `AllowMint`
 impl crate::Config<GenesisLiquidityTokensInstance> for Test {
   type AllowMint = StaticAllowMint;
+  type AllowBurnWithInstruction = AllowBurnWithInstruction;
   type Weights = ();
 }
 
