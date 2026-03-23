@@ -1,18 +1,12 @@
 #![expect(clippy::as_conversions, clippy::same_name_method)]
 
-use sp_core::{
-  Pair as _,
-  sr25519::{Public, Pair},
-};
+use sp_core::{Pair as _, sr25519::Pair};
 use sp_keyring::sr25519::Keyring;
 
 use frame_support::{weights::Weight, derive_impl, construct_runtime};
 
 use serai_abi::{
-  primitives::{
-    network_id::*, coin::*, balance::*, validator_sets::*, genesis_liquidity::GenesisValues,
-    address::*,
-  },
+  primitives::{network_id::*, coin::*, balance::*, genesis_liquidity::GenesisValues, address::*},
   economic_security::EconomicSecurity,
   genesis_liquidity::Event,
   TransactionContext as _,
@@ -106,7 +100,6 @@ static SET_ALLOCATION_PER_KEY_SHARE: LazyLock<
   Mutex<HashMap<(Option<Vec<u8>>, NetworkId), Amount>>,
 > = LazyLock::new(|| Mutex::new(HashMap::new()));
 
-#[expect(unused)]
 impl crate::ValidatorSets for () {
   fn set_allocation_per_key_share(network: NetworkId, allocation_per_key_share: Amount) {
     let mut set_allocation_per_key_share = SET_ALLOCATION_PER_KEY_SHARE.lock().unwrap();
@@ -114,39 +107,6 @@ impl crate::ValidatorSets for () {
     assert!(set_allocation_per_key_share
       .insert((test_id, network), allocation_per_key_share)
       .is_none());
-  }
-
-  fn current_session(network: NetworkId) -> Option<Session> {
-    Some(Session(0))
-  }
-
-  fn key_shares(set: ValidatorSet) -> Option<KeyShares> {
-    Some(KeyShares::try_from(4).unwrap())
-  }
-
-  fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (SeraiAddress, KeyShares)> {
-    [
-      (SeraiAddress(Keyring::AliceStash.pair().public().0), KeyShares::ONE),
-      (SeraiAddress(Keyring::BobStash.pair().public().0), KeyShares::ONE),
-      (SeraiAddress(Keyring::CharlieStash.pair().public().0), KeyShares::ONE),
-      (SeraiAddress(Keyring::DaveStash.pair().public().0), KeyShares::ONE),
-    ]
-    .into_iter()
-  }
-
-  fn serai_auxiliary_key(validator: SeraiAddress, set: ValidatorSet) -> Option<Public> {
-    assert_eq!(set.network, NetworkId::Serai);
-    Some(if validator == SeraiAddress(Keyring::AliceStash.pair().public().0) {
-      Keyring::Alice.pair().public()
-    } else if validator == SeraiAddress(Keyring::BobStash.pair().public().0) {
-      Keyring::Bob.pair().public()
-    } else if validator == SeraiAddress(Keyring::CharlieStash.pair().public().0) {
-      Keyring::Charlie.pair().public()
-    } else if validator == SeraiAddress(Keyring::DaveStash.pair().public().0) {
-      Keyring::Dave.pair().public()
-    } else {
-      unreachable!()
-    })
   }
 
   fn network_stake_requirement(network: ExternalNetworkId) -> Amount {
@@ -200,12 +160,24 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
       fees: ExternalCoin::all().map(|coin| (coin, 0)).collect(),
       _config: Default::default(),
     };
+    let genesis_liquidity = crate::GenesisConfig::<Test> {
+      genesis_validators_auxiliary_keys: vec![
+        Keyring::Alice.pair().public(),
+        Keyring::Bob.pair().public(),
+        Keyring::Charlie.pair().public(),
+        Keyring::Dave.pair().public(),
+      ]
+      .try_into()
+      .unwrap(),
+      _config: Default::default(),
+    };
     Core::genesis(&RuntimeGenesisConfig {
       system,
       coins,
       liquidity_tokens,
       genesis_liquidity_tokens,
       dex,
+      genesis_liquidity,
     });
   });
   externalities

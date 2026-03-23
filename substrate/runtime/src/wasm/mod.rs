@@ -176,6 +176,9 @@ type Executive =
 sp_api::impl_runtime_apis! {
   impl crate::GenesisApi<Block> for Runtime {
     fn build(genesis: crate::GenesisConfig) {
+      let validator_sets = ValidatorSetsConfig {
+        participants: genesis.validators,
+      };
       let config = RuntimeGenesisConfig {
         system: SystemConfig { _config: PhantomData },
 
@@ -204,9 +207,9 @@ sp_api::impl_runtime_apis! {
           _instance: PhantomData,
         },
 
-        validator_sets: ValidatorSetsConfig {
-          participants: genesis.validators,
-        },
+        validator_sets: validator_sets.clone(),
+
+        genesis_liquidity: validator_sets.try_into().unwrap(),
 
         signals: SignalsConfig::default(),
       };
