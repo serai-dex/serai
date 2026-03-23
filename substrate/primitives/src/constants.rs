@@ -30,6 +30,8 @@ pub const SESSION_LENGTH_IN_SLOTS: u64 = SESSION_LENGTH.as_secs() / TARGET_BLOCK
 pub const RETIREMENT_LOCK_IN_DURATION_IN_SLOTS: u64 =
   WEEK.checked_mul(4).unwrap().as_secs() / TARGET_BLOCK_TIME.as_secs();
 
+#[allow(unknown_lints)] // `clippy::duration_suboptimal_units` was added with 1.95
+#[expect(clippy::duration_suboptimal_units)]
 #[test]
 fn constants() {
   assert_eq!(MINUTE, Duration::from_secs(60));

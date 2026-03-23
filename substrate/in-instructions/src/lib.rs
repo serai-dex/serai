@@ -23,6 +23,7 @@ mod pallet {
 
   use serai_abi::{
     primitives::{prelude::*, crypto::Signature},
+    signals::Halted as _,
     in_instructions::Event,
   };
 
@@ -251,6 +252,12 @@ mod pallet {
       network: NetworkId,
       minimum: Amount,
     ) -> Result<(), DispatchError> {
+      if serai_signals_pallet::Pallet::<T>::halted(external_balance_in.coin.network()) {
+        // This is the same error `serai_dex_pallet` would raise if such a swap was attempted
+        // directly
+        Err(serai_dex_pallet::Error::<T>::InvalidLiquidity)?;
+      }
+
       // Check the network in question has yet to reach economic security
       if match network {
         NetworkId::Serai => ExternalNetworkId::all().all(<

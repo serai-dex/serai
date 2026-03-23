@@ -104,6 +104,14 @@ mod benchmarks {
 
   #[benchmark]
   fn swap(r: Linear<1, 2>) {
+    // TODO: Erasing of the _genesis state_ between trials seems like a bug upstream
+    if r == 2 {
+      frame_support::traits::BuildGenesisConfig::build(&crate::GenesisConfig {
+        fees: ExternalCoin::all().map(|coin| (coin, 1)).collect(),
+        _config: core::marker::PhantomData::<T>,
+      });
+    }
+
     let route_len = r;
     serai_core_pallet::Pallet::<T>::start_transaction(0);
     serai_coins_pallet::Pallet::<T, CoinsInstance>::mint(
@@ -154,6 +162,14 @@ mod benchmarks {
 
   #[benchmark]
   fn swap_for(r: Linear<1, 2>) {
+    // TODO: Erasing of the _genesis state_ between trials seems like a bug upstream
+    if r == 2 {
+      frame_support::traits::BuildGenesisConfig::build(&crate::GenesisConfig {
+        fees: ExternalCoin::all().map(|coin| (coin, 1)).collect(),
+        _config: core::marker::PhantomData::<T>,
+      });
+    }
+
     let route_len = r;
     serai_core_pallet::Pallet::<T>::start_transaction(0);
     serai_coins_pallet::Pallet::<T, CoinsInstance>::mint(

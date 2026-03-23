@@ -56,6 +56,7 @@ pub fn reproducibly_builds() {
       let mut command = Command::new("docker");
       command
         .current_dir(&path)
+        .arg("buildx")
         .arg("build")
         .arg("--no-cache")
         .arg(format!("--file={}", containerfile.display()))

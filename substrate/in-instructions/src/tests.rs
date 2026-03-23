@@ -98,6 +98,7 @@ impl serai_core_pallet::Config for Test {
 
 impl serai_coins_pallet::Config<CoinsInstance> for Test {
   type AllowMint = serai_economic_security_pallet::CoinsInstanceAllowMint<Test>;
+  type AllowBurnWithInstruction = Signals;
   type Weights = ();
 }
 
@@ -125,12 +126,21 @@ impl serai_signals_pallet::Config for Test {
   type Weights = ();
 }
 
+pub struct AlwaysHalted;
+impl serai_abi::signals::Halted for AlwaysHalted {
+  fn halted(_network: ExternalNetworkId) -> bool {
+    true
+  }
+}
+
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Test {
   type AllowMint = serai_economic_security_pallet::LiquidityTokensInstanceAllowMint<Test>;
+  type AllowBurnWithInstruction = AlwaysHalted;
   type Weights = ();
 }
 
 impl serai_dex_pallet::Config for Test {
+  type AllowSwap = Signals;
   type Weights = ();
 }
 
@@ -164,6 +174,7 @@ impl serai_economic_security_pallet::Config for Test {
 
 impl serai_coins_pallet::Config<GenesisLiquidityTokensInstance> for Test {
   type AllowMint = serai_coins_pallet::AlwaysAllowMint;
+  type AllowBurnWithInstruction = AlwaysHalted;
   type Weights = ();
 }
 
@@ -228,7 +239,7 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
       _instance: Default::default(),
     };
     let validator_sets =
-      serai_validator_sets_pallet::GenesisConfig { participants: validators.clone() };
+      serai_validator_sets_pallet::GenesisConfig::<Test> { participants: validators.clone() };
     let signals = serai_signals_pallet::GenesisConfig::default();
     let liquidity_tokens = serai_coins_pallet::GenesisConfig::<Test, LiquidityTokensInstance> {
       accounts: vec![],
@@ -243,6 +254,9 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
       fees: ExternalCoin::all().map(|coin| (coin, 0)).collect(),
       _config: Default::default(),
     };
+    let genesis_liquidity =
+      serai_genesis_liquidity_pallet::GenesisConfig::<Test>::try_from(validator_sets.clone())
+        .unwrap();
 
     Core::genesis(&RuntimeGenesisConfig {
       system,
@@ -254,6 +268,7 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
       liquidity_tokens,
       genesis_liquidity_tokens,
       dex,
+      genesis_liquidity,
     });
   });
   externalities

@@ -337,6 +337,9 @@ pub mod pallet {
 
     /// Tally support for a signal across all networks, weighted by stake.
     ///
+    /// This tallies for halted networks as else, a minority of validator sets could halt other
+    /// networks until they become a supermajority.
+    ///
     /// Returns `true` if the signal has sufficient support.
     fn tally_for_all_networks(signal: Signal) -> bool {
       let mut total_in_favor_stake = 0;
@@ -382,9 +385,10 @@ pub mod pallet {
 
       Ok(())
     }
+  }
 
-    /// Check if an external network was halted.
-    pub fn halted(network: ExternalNetworkId) -> bool {
+  impl<T: Config> serai_abi::signals::Halted for Pallet<T> {
+    fn halted(network: ExternalNetworkId) -> bool {
       Halted::<T>::contains_key(network)
     }
   }

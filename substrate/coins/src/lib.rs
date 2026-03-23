@@ -46,6 +46,7 @@ mod pallet {
     primitives::{
       address::SeraiAddress, coin::*, balance::*, instructions::OutInstructionWithBalance,
     },
+    signals::Halted,
     coins::Event,
   };
 
@@ -99,6 +100,8 @@ mod pallet {
   {
     /// What decides if mints are allowed.
     type AllowMint: AllowMint;
+    /// What decides if burning with instructions is allowed.
+    type AllowBurnWithInstruction: Halted;
     /// The weights for this pallet.
     type Weights: Weights;
   }
@@ -395,12 +398,18 @@ mod pallet {
         so this should be unreachable. Due to the severity of the idea of liquidity tokens being
         burnable as if they were coins, with instructions associated, it is explicitly guarded
         against however.
+
+        This could be merged into `AllowBurnWithInstruction` if we assume non-`CoinsInstance` will
+        set `AllowBurnWithInstruction` to a type which always returns `true`.
       */
       if TypeId::of::<I>() != TypeId::of::<CoinsInstance>() {
         Err(Error::<T, I>::BurnWithInstructionNotAllowed)?;
       }
 
       let from = ensure_signed(origin)?;
+      if T::AllowBurnWithInstruction::halted(instruction.balance.coin.network()) {
+        Err(Error::<T, I>::BurnWithInstructionNotAllowed)?;
+      }
       Self::burn_fn(from, instruction.balance.into())?;
       Self::emit_event(Event::BurnWithInstruction { from, instruction });
       Ok(())

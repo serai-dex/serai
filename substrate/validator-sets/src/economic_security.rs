@@ -147,8 +147,16 @@ mod mock {
     type PreInherents = ();
   }
 
+  pub struct NeverHalted;
+  impl serai_abi::signals::Halted for NeverHalted {
+    fn halted(_network: serai_abi::primitives::network_id::ExternalNetworkId) -> bool {
+      false
+    }
+  }
+
   impl serai_coins_pallet::Config<CoinsInstance> for Test {
     type AllowMint = AlwaysAllowMint;
+    type AllowBurnWithInstruction = NeverHalted;
     type Weights = ();
   }
 

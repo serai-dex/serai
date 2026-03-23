@@ -18,7 +18,14 @@ async fn test_deployer() {
   const LATEST: &str = "latest";
 
   for network in [CANCUN, LATEST] {
-    let anvil = Anvil::new().arg("--hardfork").arg(network).spawn();
+    let anvil = (if network == LATEST {
+      // If this is the latest network, it's inherently defaulted to when `anvil` is spawned
+      Anvil::new()
+    } else {
+      // Else, we explicitly specify the hardwork
+      Anvil::new().arg("--hardfork").arg(network)
+    })
+    .spawn();
 
     let provider = Arc::new(RootProvider::new(
       ClientBuilder::default().transport(SimpleRequest::new(anvil.endpoint()).unwrap(), true),

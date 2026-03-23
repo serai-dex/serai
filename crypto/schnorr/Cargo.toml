@@ -22,8 +22,8 @@ std-shims = { path = "../../common/std-shims", version = "^0.1.1", default-featu
 rand_core = { version = "0.6", default-features = false }
 
 zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
-digest = { version = "0.11", default-features = false, features = ["block-api"] }
 
+digest = { version = "0.11", default-features = false, features = ["block-api"], optional = true }
 transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false, optional = true }
 
 ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false }
@@ -40,7 +40,7 @@ dalek-ff-group = { path =  "../dalek-ff-group" }
 ciphersuite = { path = "../ciphersuite" }
 
 [features]
-alloc = ["zeroize/alloc", "digest/alloc", "ciphersuite/alloc", "multiexp/alloc", "multiexp/batch"]
-aggregate = ["alloc", "transcript"]
+alloc = ["zeroize/alloc", "digest?/alloc", "ciphersuite/alloc", "multiexp/alloc", "multiexp/batch"]
+aggregate = ["alloc", "digest", "transcript"]
 std = ["alloc", "std-shims/std", "rand_core/std", "zeroize/std", "transcript?/std", "ciphersuite/std", "multiexp/std"]
 default = ["std"]
