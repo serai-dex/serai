@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - next-polkadot-sdk
     paths:
       - "common/**"
       - "crypto/**"

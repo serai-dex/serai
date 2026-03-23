@@ -8,7 +8,6 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
 publish = false
-rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -23,8 +22,5 @@ group = { version = "0.13", default-features = false }
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
-
-log = { version = "0.4", default-features = false, features = ["std"] }
-tokio = { version = "1", default-features = false, features = ["macros", "sync", "time"] }
 
 serai-task = { path = "../../common/task", default-features = false }

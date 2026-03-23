@@ -145,9 +145,9 @@ interface IRouter is IRouterWithoutCollisions {
 
   /// @title A code destination
   /**
-   * @dev If transferring an ERC20 to this destination, it will be transferred to the address the
-   *   code will be deployed to. If transferring ETH, it will be transferred with the deployment of
-   *   the code. `code` is deployed with CREATE (calling its constructor). The entire deployment
+   * @dev If transferring an ERC20 to this destination, an allowance will be created for the address
+   *   the code will be deployed to. If transferring ETH, it will be transferred with the deployment
+   *   of the code. `code` is deployed with CREATE (calling its constructor). The entire deployment
    *   (and associated sandboxing) must consume less than `gasLimit` units of gas or it will revert.
    */
   struct CodeDestination {

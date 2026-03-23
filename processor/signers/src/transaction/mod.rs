@@ -215,7 +215,7 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
 
       // If it's been five minutes since the last publication, republish the transactions for all
       // active signing protocols
-      if Instant::now().duration_since(self.last_publication) > Duration::from_secs(5 * 60) {
+      if Instant::now().duration_since(self.last_publication) >= Duration::from_mins(5) {
         for tx in &self.active_signing_protocols {
           let Some(tx_buf) = SerializedTransactions::get(&self.db, *tx) else { continue };
           let mut tx_buf = tx_buf.as_slice();

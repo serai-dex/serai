@@ -150,7 +150,7 @@ mod pallet {
       }
       assert_eq!(
         set,
-        ExternalCoin::all().collect::<Vec<_>>().len(),
+        ExternalCoin::all().count(),
         "fee parameter for liquidity pool on genesis omitted"
       );
     }

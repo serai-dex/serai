@@ -22,31 +22,18 @@ jobs:
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
+      - name: Install QEMU
+        run: sudo apt update -y && sudo apt upgrade -y && sudo apt install -y qemu-system-x86
+
       - name: Run Tests for Libraries on Redoxer
+        shell: bash
         run: |
           cargo +1.94.0 install redoxer --version =0.2.62
-          redoxer toolchain
-          GITHUB_CI=true RUST_BACKTRACE=1 redoxer test -- --all-features \
-            -p std-shims \
-            -p zalloc \
-            -p patchable-async-sleep \
-            -p simple-request \
-            -p flexible-transcript \
-            -p ff-group-tests \
-            -p dalek-ff-group \
-            -p minimal-ed448 \
-            -p ciphersuite \
-            -p ciphersuite-kp256 \
-            -p multiexp \
-            -p schnorr-signatures \
-            -p prime-field \
-            -p short-weierstrass \
-            -p secq256k1 \
-            -p embedwards25519 \
-            -p dkg \
-            -p dkg-recovery \
-            -p dkg-dealer \
-            -p dkg-musig \
-            -p dkg-evrf \
-            -p modular-frost \
-            -p frost-schnorrkel
+          TARGET=x86_64-unknown-redox redoxer toolchain
+
+          find ./common ./crypto -name "Cargo.toml" | while IFS="\n" read -r manifest; do
+            if [ "$manifest" = "./common/db/Cargo.toml" ]; then
+              continue
+            fi
+            GITHUB_CI=true RUST_BACKTRACE=1 redoxer test -- --all-features --manifest-path $manifest
+          done

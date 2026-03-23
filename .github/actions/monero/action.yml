@@ -12,7 +12,7 @@ runs:
   steps:
     - name: Monero Daemon Cache
       id: cache-monerod
-      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # 4.2.4
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # 5.0.4
       with:
         path: monerod*
         key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}

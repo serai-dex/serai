@@ -61,7 +61,6 @@ signers = { package = "serai-processor-signers", path = "../signers" }
 ethereum-schnorr = { package = "ethereum-schnorr-contract", path = "../../networks/ethereum/schnorr" }
 ethereum-primitives = { package = "serai-processor-ethereum-primitives", path = "./primitives" }
 ethereum-router = { package = "serai-processor-ethereum-router", path = "./router" }
-ethereum-erc20 = { package = "serai-processor-ethereum-erc20", path = "./erc20" }
 
 bin = { package = "serai-processor-bin", path = "../bin" }
 

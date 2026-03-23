@@ -48,9 +48,11 @@ should be [submitted via GitHub](https://github.com/serai-dex/serai/issues).
 Serai is currently partially tested with [`podman`](https://podman.io) (aliased
 to `docker`) and a long-term goal is to fully test Serai with both `docker` and
 `podman` (https://github.com/serai-dex/serai/issues/709).
+`docker buildx build` is used by some tests which _require_ being built with
+[BuildKit](https://github.com/moby/buildkit).
 
-When building binaries, or running tests, via OCI containers, the user is
-expected to able to spawn/manage containers (as potentially obvious). This
+When building binaries, or running tests, via OCI containers, the user account
+is expected to able to spawn/manage containers (as potentially obvious). This
 implies the setup should be rootless
 ([as possible with Docker](https://docs.docker.com/engine/security/rootless/)
 and as inherent to `podman`'s architecture).
