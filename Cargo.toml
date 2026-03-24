@@ -190,7 +190,7 @@ rlp = { path = "patches/ethereum/rlp" }
 secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-0.30" }
 wit-bindgen-rust-macro = { path = "patches/wit-bindgen-rust-macro" }
 
-# Dependencies from monero-oxide which originate from within our own tree,  potentially shimmed to account for deviations since publishing
+# Dependencies from monero-oxide which originate from within our own tree, potentially shimmed to account for deviations since publishing
 std-shims = { path = "patches/std-shims" }
 simple-request = { path = "patches/simple-request" }
 multiexp = { path = "crypto/multiexp" }
@@ -202,6 +202,7 @@ modular-frost = { path = "crypto/frost" }
 
 # Patches due to `std` now including the required functionality
 is_terminal_polyfill = { path = "patches/is_terminal_polyfill" }
+once_cell_polyfill = { path = "patches/once_cell_polyfill" }
 lazy_static = { path = "patches/lazy_static" }
 # This has a non-deprecated `std` alternative since Rust's 2024 edition
 home = { path = "patches/home" }
@@ -222,9 +223,12 @@ thiserror = { path = "patches/thiserror" }
 option-ext = { path = "patches/option-ext" }
 directories-next = { path = "patches/directories-next" }
 
+# `keccak-asm` is liberal with 'use at your risk', yet API-compatible with `sha3`, so we prefer the latter
+keccak-asm = { path = "patches/keccak-asm" }
+
 # Patch to include `FromUniformBytes<64>` over `Scalar`
-k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
-p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
+k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "8293be3f9855eea0936523a9b100f1f69261ea4b" }
+p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "8293be3f9855eea0936523a9b100f1f69261ea4b" }
 
 [workspace.lints.rust]
 # https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html

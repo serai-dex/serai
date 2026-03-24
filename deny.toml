@@ -137,8 +137,6 @@ deny = [
 
   # Legacy which _no one_ should use anymore
   { name = "is-terminal", version = "*" },
-  # Stop introduction into the tree without realizing it
-  { name = "once_cell_polyfill", version = "*" },
 
   # Conflicts with our usage of mimalloc
   # https://github.com/serai-dex/serai/issues/690

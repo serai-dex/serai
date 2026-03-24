@@ -35,7 +35,7 @@ dalek-ff-group = { path = "../dalek-ff-group", version = "0.5", default-features
 minimal-ed448 = { path = "../ed448", version = "0.4", default-features = false, features = ["alloc"], optional = true }
 
 ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["alloc"] }
-sha2 = { version = "0.10.0", default-features = false, optional = true }
+sha2 = { version = "0.10", default-features = false, optional = true }
 elliptic-curve = { version = "0.13", default-features = false, features = ["hash2curve"], optional = true }
 ciphersuite-kp256 = { path = "../ciphersuite/kp256", version = "0.4", default-features = false, features = ["alloc"], optional = true }
 
