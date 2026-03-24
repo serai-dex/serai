@@ -348,7 +348,7 @@ impl<D: Db> Cosigning<D> {
       // If this is for a future global session, we don't acknowledge this cosign at this time
       let latest_cosigned_block_number = LatestCosignedBlockNumber::get(&txn).unwrap_or(0);
       // This global session starts the block *after* its declaration, so we want to check if the
-      // block declaring it was evaluated
+      // block declaring it was cosigned
       if (global_session.start_block_number - 1) > latest_cosigned_block_number {
         Err(IntakeCosignError::FutureGlobalSession)?;
       }

@@ -259,6 +259,8 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
               "notable",
             )
             .await?;
+
+            serai_env::debug!("marking notable block #{block_number} as cosigned");
           }
           // Since this block didn't have any notable events, we simply require a cosign for this
           // block or a greater block by the current validator sets
@@ -300,6 +302,8 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
               */
               known_cosign = lowest_common_block;
             }
+
+            serai_env::debug!("marking non-notable block #{block_number} as cosigned");
           }
           // If this block has no events necessitating cosigning, we can immediately consider the
           // block cosigned (making this block a NOP)
