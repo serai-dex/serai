@@ -35,7 +35,7 @@ serai-cosign-types = { path = "./types" }
 
 serai-cosign-types = { path = "./types", features = ["test-helpers"] }
 serai-shim-rpc = { path = "../../tests/shim-rpc" }
-serai-test-task = { path = "../../tests/task" }
+serai-task = { path = "../../common/task", features = ["test-helpers"] }
 serai-abi = { path = "../../substrate/abi", default-features = false, features = ["std"] }
 
 hex = { version = "0.4", default-features = false }

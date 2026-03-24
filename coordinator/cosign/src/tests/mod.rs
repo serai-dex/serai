@@ -28,7 +28,7 @@ use serai_client_serai::{
     validator_sets::{ExternalValidatorSet, Session},
   },
 };
-pub(crate) use serai_test_task::{IntoTask, TaskTest};
+pub(crate) use serai_task::test_helpers::{IntoTask, TaskTest};
 
 use crate::RequestNotableCosigns;
 

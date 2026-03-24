@@ -12,6 +12,10 @@ use tokio::sync::mpsc;
 
 mod type_name;
 
+/// Test helpers for asserting [`ContinuallyRan`] task iteration behavior.
+#[cfg(any(test, feature = "test-helpers"))]
+pub mod test_helpers;
+
 /// A handle for a task.
 ///
 /// The task will only stop running once all handles for it are dropped.
