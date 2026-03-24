@@ -89,10 +89,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         // Ephemeral RPC Err: task to re-run and continue trying
         .map_err(|e| format!("RPC error fetching latest finalized block number: {e}"))?;
 
-      serai_env::trace!(
-        "beginning intend scan: start={start_scan_block_number}, latest={latest_serai_block_number}"
-      );
-
       let mut made_progress = false;
 
       for block_number in start_scan_block_number ..= latest_serai_block_number {
@@ -131,7 +127,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             block_number - 1
           ))?;
         }
-
         SubstrateBlockHash::set(&mut txn, block_number, &serai_block_hash);
         builds_upon.append(
           serai_client_serai::abi::BLOCK_BRANCH_TAG,
@@ -141,8 +136,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             .into(),
         );
         BuildsUpon::set(&mut txn, &builds_upon);
-
-        serai_env::trace!("iterating over block_number={block_number}");
 
         let mut has_events = HasEvents::No;
         let vset_events = serai_block_events.validator_sets();
@@ -228,12 +221,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
               set.network,
               &Set { session: set.session, key: key_pair.0, stake: Amount(stake) },
             );
-          } else {
-            serai_env::trace!(
-              "{block_number}: skipped session {:?} of {:?} with 0 stake from being selected for cosigns",
-              set.session,
-              set.network
-            );
           }
         }
 
@@ -245,8 +232,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         }
 
         let global_session_for_this_block = LatestGlobalSessionIntended::get(&txn);
-
-        serai_env::trace!("{block_number}: type of has_events={has_events:?}");
 
         // If this is notable, it creates a new global session, which we index into the database
         // now
@@ -286,15 +271,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             total_stake,
           };
 
-          serai_env::trace!(
-            "{block_number}: Notable block block_number={block_number}: new session created \
-           start_block_number={start_block}, sets={sets:?}, \
-           stakes={stakes:?}, total_stake={total_stake}",
-            start_block = next_global_session_info.start_block_number,
-            sets = next_global_session_info.sets,
-            stakes = next_global_session_info.stakes,
-          );
-
           GlobalSessions::set(&mut txn, new_global_session, &next_global_session_info);
           if let Some(ending_global_session) = global_session_for_this_block {
             GlobalSessionsLastBlock::set(&mut txn, ending_global_session, &block_number);
@@ -307,9 +283,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         // we flag it as not having any events requiring cosigning so we don't attempt to
         // sign/require a cosign for it
         if (has_events != HasEvents::No) && global_session_for_this_block.is_none() {
-          serai_env::trace!(
-            "{block_number}: no previous global session available to cosign, has_events = HasEvents::No"
-          );
           has_events = HasEvents::No;
         }
 
@@ -346,15 +319,10 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           HasEvents::No => {}
         }
 
-        serai_env::trace!(
-          "finished iterating block_number={block_number}: has_events={has_events:?}"
-        );
-
         // Populate a singular feed with every block's status for the evaluator to work off of
         BlockEvents::send(&mut txn, &(BlockEventData { block_number, has_events }));
         // Mark this block as handled, meaning we should scan from the next block moving on
         ScanCosignFrom::set(&mut txn, &(block_number + 1));
-
         // Commit for every block that did progress, on failure restarts from the next block
         txn.commit();
         made_progress = true;

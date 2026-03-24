@@ -207,7 +207,7 @@ async fn spawn_end_to_end() {
   );
 
   let latest = Cosigning::<MemDb>::latest_cosigned_block_number(&db).unwrap();
-  assert!(latest == Some(total_blocks));
+  assert_eq!(latest, Some(total_blocks));
 
   // Verify the dependent task was triggered by the pipeline
   assert!(triggered.load(Ordering::SeqCst));

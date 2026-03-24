@@ -54,11 +54,6 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
           break;
         };
 
-        serai_env::trace!(
-          "{block_number}: beginning delay: time_evaluated={time_evaluated}, \
-           has_events={has_events}, latest_cosigned={latest_cosigned_block_number}",
-        );
-
         // Defensive check, not likely to happen but does not allow regressing
         if block_number <= latest_cosigned_block_number {
           serai_env::warn!("Attempting to delay on an already cosigned block number ({block_number}, latest={latest_cosigned_block_number})");
@@ -71,9 +66,6 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         if !has_events {
           LatestCosignedBlockNumber::set(&mut txn, &block_number);
           txn.commit();
-          serai_env::trace!(
-            "{block_number}: LatestCosignedBlockNumber={block_number} (no events, skipped delay)"
-          );
           made_progress = true;
           continue;
         }
@@ -96,7 +88,6 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         LatestCosignedBlockNumber::set(&mut txn, &block_number);
         txn.commit();
 
-        serai_env::trace!("{block_number}: LatestCosignedBlockNumber={block_number}");
         made_progress = true;
       }
 

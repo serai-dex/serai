@@ -155,7 +155,7 @@ async fn ensure_cosigned(
   block_number: u64,
   global_session: [u8; 32],
   last_request_for_cosigns: &mut Instant,
-  request: &(impl RequestNotableCosigns + Sync),
+  request: &impl RequestNotableCosigns,
   label: &str,
 ) -> Result<(), String> {
   if weight_cosigned >= cosign_threshold(total_stake) {
@@ -186,7 +186,7 @@ pub(crate) struct CosignEvaluatorTask<D: Db, R: RequestNotableCosigns> {
   pub(crate) last_request_for_cosigns: Instant,
 }
 
-impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorTask<D, R> {
+impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, R> {
   #[cfg(test)]
   const DELAY_BETWEEN_ITERATIONS: u64 = 1;
   #[cfg(test)]
@@ -198,7 +198,6 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
     async move {
       let mut known_cosign = None;
       let mut made_progress = false;
-
       loop {
         let mut txn = self.db.txn();
         let Some(BlockEventData { block_number, has_events }) = BlockEvents::try_recv(&mut txn)
@@ -212,19 +211,12 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
             // No global session declared yet: this block predates all sessions, skip it
             // this means only HasEvents:No blocks have been consumed so far
             None => {
-              serai_env::trace!(
-                "{block_number}: No global session declared yet. Ending evaluator."
-              );
               commit_evaluated_block(txn, block_number, false);
               made_progress = true;
               continue;
             }
             // Session queued but starts after this block, skip it
             Some(next) if next.1.start_block_number > block_number => {
-              serai_env::trace!(
-                "{block_number}: Cannot cosign: GlobalSession is queued for block {}",
-                next.1.start_block_number
-              );
               commit_evaluated_block(txn, block_number, false);
               made_progress = true;
               continue;
@@ -233,8 +225,6 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
             _ => {}
           }
         }
-
-        serai_env::trace!("{block_number}: beginning evaluator: has_events={:#?}", has_events);
 
         // Fetch the global session information
         let (global_session, global_session_info) =
@@ -245,7 +235,6 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
           // supermajority of the prior block's validator sets
           HasEvents::Notable => {
             let mut weight_cosigned = 0;
-
             for set in global_session_info.sets {
               // Check if we have the cosign from this set
               if NetworksLatestCosignedBlock::get(&txn, global_session, set.network)

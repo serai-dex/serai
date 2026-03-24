@@ -32,7 +32,6 @@ serai-task = { path = "../../common/task", version = "0.1" }
 serai-cosign-types = { path = "./types" }
 
 [dev-dependencies]
-
 serai-cosign-types = { path = "./types", features = ["test-helpers"] }
 serai-shim-rpc = { path = "../../tests/shim-rpc" }
 serai-task = { path = "../../common/task", features = ["test-helpers"] }

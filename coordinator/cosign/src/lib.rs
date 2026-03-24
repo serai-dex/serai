@@ -4,16 +4,17 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{fmt::Debug, future::Future};
-use std::{collections::HashMap, sync::Arc, time::Instant};
-
-use serai_client_serai::Serai;
+use std::{sync::Arc, collections::HashMap, time::Instant};
 
 use blake2::{Digest as _, Blake2s256};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client_serai::abi::primitives::{
-  BlockHash, crypto::Public, network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet,
+use serai_client_serai::{
+  abi::primitives::{
+    BlockHash, crypto::Public, network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet,
+  },
+  Serai,
 };
 
 use serai_db::*;
@@ -192,7 +193,7 @@ impl<D: Db> Cosigning<D> {
     db: D,
     serai: Arc<Serai>,
     request: R,
-    tasks_to_run_upon_finalizing_blocks: Vec<TaskHandle>,
+    tasks_to_run_upon_cosigning_blocks: Vec<TaskHandle>,
   ) -> Self {
     let (intend_task, intend_task_handle) = Task::new();
     // Forget the intend task handle, as dropping the handle would stop the task
@@ -203,7 +204,7 @@ impl<D: Db> Cosigning<D> {
     let (delay_task, delay_task_handle) = Task::new();
     tokio::spawn(
       (intend::CosignIntendTask { db: db.clone(), serai })
-        .continually_run(intend_task, vec![evaluator_task_handle.clone()]),
+        .continually_run(intend_task, vec![evaluator_task_handle]),
     );
     tokio::spawn(
       (evaluator::CosignEvaluatorTask {
@@ -211,17 +212,17 @@ impl<D: Db> Cosigning<D> {
         request,
         last_request_for_cosigns: Instant::now(),
       })
-      .continually_run(evaluator_task, vec![delay_task_handle.clone()]),
+      .continually_run(evaluator_task, vec![delay_task_handle]),
     );
     tokio::spawn(
       (delay::CosignDelayTask { db: db.clone() })
-        .continually_run(delay_task, tasks_to_run_upon_finalizing_blocks),
+        .continually_run(delay_task, tasks_to_run_upon_cosigning_blocks),
     );
 
     Self { db }
   }
 
-  /// The latest acknowledged block number.
+  /// The latest cosigned block number.
   pub fn latest_cosigned_block_number(getter: &impl Get) -> Result<Option<u64>, Faulted> {
     if FaultedSession::get(getter).is_some() {
       Err(Faulted)?;
@@ -345,10 +346,10 @@ impl<D: Db> Cosigning<D> {
 
     if !faulty {
       // If this is for a future global session, we don't acknowledge this cosign at this time
-      let latest_cosigned_block = delay::LatestCosignedBlockNumber::get(&txn).unwrap_or(0);
+      let latest_cosigned_block_number = LatestCosignedBlockNumber::get(&txn).unwrap_or(0);
       // This global session starts the block *after* its declaration, so we want to check if the
       // block declaring it was evaluated
-      if (global_session.start_block_number - 1) > latest_cosigned_block {
+      if (global_session.start_block_number - 1) > latest_cosigned_block_number {
         Err(IntakeCosignError::FutureGlobalSession)?;
       }
 
