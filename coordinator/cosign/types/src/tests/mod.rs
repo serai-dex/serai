@@ -9,38 +9,34 @@ pub fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosig
 }
 
 #[cfg(test)]
-use rand_core::{OsRng, RngCore};
-#[cfg(test)]
-use serai_primitives::test_helpers::{random_block_hash, random_keypair};
-#[cfg(test)]
-use crate::{CosignIntent, ExternalNetworkId, Public};
-
-/// Generate a random 32-byte array for testing.
+use rand_core::OsRng;
 #[cfg(any(test, feature = "test-helpers"))]
-pub fn random_bytes_32(rng: &mut (impl rand_core::RngCore + rand_core::CryptoRng)) -> [u8; 32] {
-  let mut bytes = [0u8; 32];
-  rng.fill_bytes(&mut bytes);
-  bytes
-}
-
-/// Generate a random global session ID for testing.
+use rand_core::RngCore;
 #[cfg(any(test, feature = "test-helpers"))]
-pub fn random_global_session(
-  rng: &mut (impl rand_core::RngCore + rand_core::CryptoRng),
-) -> [u8; 32] {
-  random_bytes_32(rng)
-}
-
+pub use serai_primitives::test_helpers::random_global_session;
+#[cfg(any(test, feature = "test-helpers"))]
+use serai_primitives::test_helpers::random_block_hash;
 #[cfg(test)]
-fn random_external_network_id(
+use serai_primitives::test_helpers::random_keypair;
+#[cfg(any(test, feature = "test-helpers"))]
+use crate::ExternalNetworkId;
+#[cfg(any(test, feature = "test-helpers"))]
+use crate::CosignIntent;
+#[cfg(test)]
+use crate::Public;
+
+/// Generate a random [`ExternalNetworkId`] for testing.
+#[cfg(any(test, feature = "test-helpers"))]
+pub fn random_external_network_id(
   rng: &mut (impl RngCore + rand_core::CryptoRng),
 ) -> ExternalNetworkId {
   let all: Vec<_> = ExternalNetworkId::all().collect();
   all[(rng.next_u32() as usize) % all.len()]
 }
 
-#[cfg(test)]
-fn random_cosign(rng: &mut (impl RngCore + rand_core::CryptoRng)) -> Cosign {
+/// Generate a random [`Cosign`] for testing.
+#[cfg(any(test, feature = "test-helpers"))]
+pub fn random_cosign(rng: &mut (impl RngCore + rand_core::CryptoRng)) -> Cosign {
   Cosign {
     global_session: random_global_session(rng),
     block_number: rng.next_u64(),
@@ -49,8 +45,9 @@ fn random_cosign(rng: &mut (impl RngCore + rand_core::CryptoRng)) -> Cosign {
   }
 }
 
-#[cfg(test)]
-fn random_cosign_intent(rng: &mut (impl RngCore + rand_core::CryptoRng)) -> CosignIntent {
+/// Generate a random [`CosignIntent`] for testing.
+#[cfg(any(test, feature = "test-helpers"))]
+pub fn random_cosign_intent(rng: &mut (impl RngCore + rand_core::CryptoRng)) -> CosignIntent {
   CosignIntent {
     global_session: random_global_session(rng),
     block_number: rng.next_u64(),

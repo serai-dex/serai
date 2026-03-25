@@ -5,18 +5,19 @@ use std::{
 };
 
 use blake2::{Blake2b256, Digest as _};
+use rand_core::{OsRng, RngCore};
 use tokio::sync::RwLock;
 
 use serai_abi::{
-  Block, Event, Header, HeaderV1, BLOCK_BRANCH_TAG, BLOCK_LEAF_TAG,
+  BLOCK_BRANCH_TAG, BLOCK_LEAF_TAG, Block, Event, Header, HeaderV1,
   primitives::{
     BlockHash,
+    address::SeraiAddress,
     balance::Amount,
     crypto::KeyPair,
     merkle::{IncrementalUnbalancedMerkleTree, UnbalancedMerkleTree},
     network_id::{ExternalNetworkId, NetworkId},
     validator_sets::{ExternalValidatorSet, Session},
-    address::SeraiAddress,
   },
 };
 
@@ -49,10 +50,8 @@ impl ErrorInjection {
     if self.failure_rate == 0 {
       return None;
     }
-    use rand_core::RngCore;
-    let val = rand_core::OsRng.next_u32() % 100;
-    #[expect(clippy::as_conversions)]
-    if val < self.failure_rate as u32 {
+    let val = OsRng.next_u32() % 100;
+    if val < u32::from(self.failure_rate) {
       Some(format!("fuzz: random failure on `{method}` (rate={}%)", self.failure_rate))
     } else {
       None
@@ -106,16 +105,17 @@ impl Default for ShimState {
 }
 
 impl ShimState {
-  /// Construct a block and register it. Mirrors `FakeSerai::make_block` from intend.rs.
+  /// Construct a block and register it.
   pub fn make_block(&mut self, number: u64, events: Vec<Vec<Event>>) -> BlockHash {
     let block = Block {
       header: Header::V1(HeaderV1 {
         number,
         builds_upon: self.builds_upon.clone().calculate(BLOCK_BRANCH_TAG),
         proposer: SeraiAddress([0; 32]),
-        #[expect(clippy::cast_possible_truncation, clippy::as_conversions)]
-        unix_time_in_millis: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
-          as u64,
+        unix_time_in_millis: u64::try_from(
+          SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(),
+        )
+        .unwrap(),
         transactions_commitment: UnbalancedMerkleTree::EMPTY,
         events_commitment: UnbalancedMerkleTree::EMPTY,
         consensus_commitment: [0; 32],
@@ -151,12 +151,12 @@ impl ShimState {
     let block = Block {
       header: Header::V1(HeaderV1 {
         number,
-        // Use an empty tree: this will NOT match what the task expects
         builds_upon: IncrementalUnbalancedMerkleTree::new().calculate(BLOCK_BRANCH_TAG),
         proposer: SeraiAddress([0; 32]),
-        #[expect(clippy::cast_possible_truncation, clippy::as_conversions)]
-        unix_time_in_millis: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis()
-          as u64,
+        unix_time_in_millis: u64::try_from(
+          SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(),
+        )
+        .unwrap(),
         transactions_commitment: UnbalancedMerkleTree::EMPTY,
         events_commitment: UnbalancedMerkleTree::EMPTY,
         consensus_commitment: [0; 32],
@@ -166,7 +166,7 @@ impl ShimState {
 
     let block_hash = block.header.hash();
 
-    // Register the block but do NOT update builds_upon
+    // Register the block but do not update builds_upon
     self.block_number_by_hash.insert(block_hash, number);
     self.blocks_by_number.insert(number, block);
     self.events_by_hash.insert(block_hash, events);

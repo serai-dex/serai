@@ -1,29 +1,4 @@
-use std::{
-  collections::HashMap,
-  sync::atomic::Ordering,
-  time::{Duration, Instant},
-};
-
-use rand_core::OsRng;
-use serai_cosign_types::SignedCosign;
-use serai_db::{Db as _, DbTxn, MemDb};
-use serai_client_serai::abi::primitives::{
-  crypto::Public,
-  network_id::ExternalNetworkId,
-  validator_sets::{ExternalValidatorSet, Session},
-};
-
-use serai_primitives::test_helpers::random_block_hash;
-use serai_task::ContinuallyRan;
-
-use crate::{
-  Cosign, GlobalSession, HasEvents, NetworksLatestCosignedBlock,
-  evaluator::{
-    CosignEvaluatorTask, CosignedBlocks, CurrentlyEvaluatedGlobalSession, REQUEST_COSIGNS_SPACING,
-  },
-  intend::{BlockEventData, BlockEvents, GlobalSessionsChannel},
-  tests::{IntoTask, TaskTest, TestRequest, random_global_session},
-};
+use crate::{evaluator::*, intend::*, tests::*, *};
 
 pub(crate) struct EvaluatorTest {
   pub(crate) db: MemDb,
@@ -45,28 +20,54 @@ impl IntoTask for EvaluatorTest {
 }
 
 impl EvaluatorTest {
-  fn init_global_session(&mut self, start_block_number: u64) -> [u8; 32] {
+  fn init_global_session(&mut self, start_block_number: u64) -> ([u8; 32], ExternalNetworkId) {
     let global_session = random_global_session(&mut OsRng);
-    let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
-
-    let mut keys = HashMap::new();
-    keys.insert(ExternalNetworkId::Bitcoin, Public([1u8; 32]));
-
-    let mut stakes = HashMap::new();
-    stakes.insert(ExternalNetworkId::Bitcoin, 1u64);
-
-    let info =
-      GlobalSession { start_block_number, sets: vec![set], keys, stakes, total_stake: 1u64 };
+    let set = random_validator_set(&mut OsRng);
+    let info = build_global_session(
+      set,
+      random_public(&mut OsRng),
+      OsRng.gen_range(1 ..= u64::MAX),
+      start_block_number,
+    );
 
     let mut txn = self.db.txn();
     GlobalSessionsChannel::send(&mut txn, &(global_session, info));
     txn.commit();
 
-    global_session
+    (global_session, set.network)
+  }
+
+  /// Like `init_global_session` but with empty stakes, for testing the "didn't have its stake" error.
+  fn init_stakeless_global_session(
+    &mut self,
+    start_block_number: u64,
+  ) -> ([u8; 32], ExternalNetworkId) {
+    let global_session = random_global_session(&mut OsRng);
+    let network = random_external_network_id(&mut OsRng);
+    let set = ExternalValidatorSet { network, session: Session(OsRng.gen()) };
+
+    let mut keys = HashMap::new();
+    keys.insert(network, random_public(&mut OsRng));
+
+    let info = GlobalSession {
+      start_block_number,
+      sets: vec![set],
+      keys,
+      stakes: HashMap::new(),
+      // total_stake is not important,
+      // the 0 stake test fails before it is used
+      total_stake: OsRng.next_u64(),
+    };
+
+    let mut txn = self.db.txn();
+    GlobalSessionsChannel::send(&mut txn, &(global_session, info));
+    txn.commit();
+
+    (global_session, network)
   }
 }
 
-/// Verify evaluator post-run DB invariants.
+/// Verify evaluator's post-run DB invariants.
 ///
 /// After a successful task run, all input channels should be consumed and the
 /// `CosignedBlocks` output channel should contain exactly the expected block range.
@@ -127,538 +128,390 @@ fn signed_cosign(
       block_hash: random_block_hash(&mut OsRng),
       cosigner,
     },
-    signature: [0u8; 64],
+    signature: random_bytes_64(&mut OsRng),
   }
 }
 
 #[tokio::test]
-async fn returns_false_with_no_block_events() {
-  let mut test = EvaluatorTest::default();
-  let mut task = test.into_task();
-  TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
-  verify_db_invariants(&mut test.db, None);
-}
-
-#[tokio::test]
 async fn processes_blocks_with_no_events() {
-  serai_env::init_logger();
   let mut test = EvaluatorTest::default();
+
+  // Returns false (made no progress) on no blocks to evaluate
+  {
+    let mut task = test.into_task();
+    TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
+    verify_db_invariants(&mut test.db, None);
+  }
+
   test.init_global_session(0);
 
+  // Sent BlockEvents progress and with no events are sent to CosignedBlocks
   {
     let mut txn = test.db.txn();
     BlockEvents::send(&mut txn, &BlockEventData { block_number: 0, has_events: HasEvents::No });
     BlockEvents::send(&mut txn, &BlockEventData { block_number: 1, has_events: HasEvents::No });
     BlockEvents::send(&mut txn, &BlockEventData { block_number: 2, has_events: HasEvents::No });
     txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
+    verify_db_invariants(&mut test.db, Some((0, 2)));
   }
 
-  let mut task = test.into_task();
-  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
-
-  assert!(BlockEvents::peek(&test.db).is_none(), "BlockEvents should be fully consumed");
-
-  // HasEvents::No blocks are sent through CosignedBlocks with has_events=false
+  // Advances to the next global session when blocks reach its start_block_number
   {
-    let mut txn = test.db.txn();
-    for expected in 0 ..= 2 {
-      let (block_number, _time, has_events) = CosignedBlocks::try_recv(&mut txn).unwrap();
-      assert_eq!(block_number, expected);
-      assert_eq!(has_events, false);
+    let (session2, _) = test.init_global_session(6);
+
+    {
+      let mut txn = test.db.txn();
+      for block_number in 3 ..= 6 {
+        BlockEvents::send(&mut txn, &BlockEventData { block_number, has_events: HasEvents::No });
+      }
+      txn.commit();
     }
-    assert!(CosignedBlocks::try_recv(&mut txn).is_none(), "no more blocks expected");
-    txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
+    verify_db_invariants(&mut test.db, Some((3, 6)));
+
+    let current =
+      CurrentlyEvaluatedGlobalSession::get(&test.db).expect("should have current session");
+    assert_eq!(current.0, session2, "should have transitioned to session 2");
+    assert_eq!(current.1.start_block_number, 6, "session 2 should start at block 6");
   }
 }
 
 #[tokio::test]
 async fn processes_notable_events_when_cosigned() {
-  serai_env::init_logger();
   let mut test = EvaluatorTest::default();
-  let global_session = test.init_global_session(0);
+  let (global_session, network) = test.init_global_session(0);
 
+  // Notable block with no NetworksLatestCosignedBlock set fails
+  {
+    let mut txn = test.db.txn();
+    BlockEvents::send(&mut txn, &BlockEventData { block_number: 0, has_events: HasEvents::No });
+    BlockEvents::send(
+      &mut txn,
+      &BlockEventData { block_number: 1, has_events: HasEvents::Notable },
+    );
+    txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
+    assert!(GlobalSessionsChannel::peek(&test.db).is_none(), "global session should be consumed");
+    assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
+
+    // Still fails on retry even with enough time elapsed to re-request cosigns
+    let mut task: CosignEvaluatorTask<MemDb, TestRequest> = test.into_task().into();
+    task.last_request_for_cosigns = Instant::now() - Duration::from_secs(5);
+    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
+    assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
+  }
+
+  // Same block succeeds once cosign is intake
   {
     let mut txn = test.db.txn();
     NetworksLatestCosignedBlock::set(
       &mut txn,
       global_session,
-      ExternalNetworkId::Bitcoin,
-      &signed_cosign(global_session, ExternalNetworkId::Bitcoin, 1),
+      network,
+      &signed_cosign(global_session, network, 1),
+    );
+    txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
+    verify_db_invariants(&mut test.db, Some((0, 1)));
+  }
+
+  // Cosign for a later block doesn't satisfy Notable (requires exact block_number match)
+  {
+    let mut txn = test.db.txn();
+    NetworksLatestCosignedBlock::set(
+      &mut txn,
+      global_session,
+      network,
+      &signed_cosign(global_session, network, 5),
+    );
+    BlockEvents::send(
+      &mut txn,
+      &BlockEventData { block_number: 2, has_events: HasEvents::Notable },
+    );
+    txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
+    assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
+  }
+
+  // Cosign for an earlier block doesn't satisfy Notable either
+  // (BlockEvents already had sent block 2 from the branch above
+  // but the cosign is for block 1)
+  {
+    let mut txn = test.db.txn();
+    NetworksLatestCosignedBlock::set(
+      &mut txn,
+      global_session,
+      network,
+      &signed_cosign(global_session, network, 1),
+    );
+    txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
+    assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
+  }
+
+  // Each Notable block succeeds when cosigned with its exact block number
+  {
+    for block_number in 2 .. 4 {
+      let mut txn = test.db.txn();
+      NetworksLatestCosignedBlock::set(
+        &mut txn,
+        global_session,
+        network,
+        &signed_cosign(global_session, network, block_number),
+      );
+      // (block 2 is already in BlockEvents)
+      if block_number > 2 {
+        BlockEvents::send(
+          &mut txn,
+          &BlockEventData { block_number, has_events: HasEvents::Notable },
+        );
+      }
+      txn.commit();
+
+      let mut task = test.into_task();
+      TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
+      verify_db_invariants(&mut test.db, Some((block_number, block_number)));
+    }
+  }
+
+  // Cosigned Notable block without stakes fails
+  {
+    let mut test = EvaluatorTest::default();
+    let (global_session, network) = test.init_stakeless_global_session(0);
+
+    let mut txn = test.db.txn();
+    NetworksLatestCosignedBlock::set(
+      &mut txn,
+      global_session,
+      network,
+      &signed_cosign(global_session, network, 1),
     );
     BlockEvents::send(
       &mut txn,
       &BlockEventData { block_number: 1, has_events: HasEvents::Notable },
     );
     txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_and_fails_with(&mut task, "didn't have its stake").await;
   }
 
-  let mut task = test.into_task();
-  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
-  verify_db_invariants(&mut test.db, Some((1, 1)));
+  // request_notable_cosigns failure propagates
+  {
+    let mut test = EvaluatorTest::default();
+    test.init_global_session(0);
+
+    let mut txn = test.db.txn();
+    BlockEvents::send(
+      &mut txn,
+      &BlockEventData { block_number: 1, has_events: HasEvents::Notable },
+    );
+    txn.commit();
+
+    let (request, calls) = TestRequest::new(true);
+    let mut task = CosignEvaluatorTask {
+      db: test.db.clone(),
+      request,
+      last_request_for_cosigns: Instant::now() - REQUEST_COSIGNS_SPACING - Duration::from_secs(5),
+    };
+
+    TaskTest::task_runs_and_fails_with(&mut task, "RequestError").await;
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "request_notable_cosigns should have been called");
+  }
 }
 
 #[tokio::test]
-async fn non_notable_uses_cached_known_cosign() {
-  serai_env::init_logger();
+async fn processes_non_notable_events_when_cosigned() {
   let mut test = EvaluatorTest::default();
-  let global_session = test.init_global_session(0);
+  let (global_session, network) = test.init_global_session(0);
 
+  // NonNotable block with no NetworksLatestCosignedBlock set fails
+  {
+    let mut txn = test.db.txn();
+    BlockEvents::send(&mut txn, &BlockEventData { block_number: 0, has_events: HasEvents::No });
+    BlockEvents::send(
+      &mut txn,
+      &BlockEventData { block_number: 1, has_events: HasEvents::NonNotable },
+    );
+    txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
+    assert!(GlobalSessionsChannel::peek(&test.db).is_none(), "global session should be consumed");
+    assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
+
+    // Still fails on retry even with enough time elapsed to re-request cosigns
+    let mut task: CosignEvaluatorTask<MemDb, TestRequest> = test.into_task().into();
+    task.last_request_for_cosigns = Instant::now() - Duration::from_secs(5);
+    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
+    assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
+  }
+
+  // Same block succeeds once cosign is present
   {
     let mut txn = test.db.txn();
     NetworksLatestCosignedBlock::set(
       &mut txn,
       global_session,
-      ExternalNetworkId::Bitcoin,
-      &signed_cosign(global_session, ExternalNetworkId::Bitcoin, 10),
+      network,
+      &signed_cosign(global_session, network, 1),
     );
-    BlockEvents::send(
+    txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
+    verify_db_invariants(&mut test.db, Some((0, 1)));
+  }
+
+  // Unlike Notable, a cosign for a later block satisfies NonNotable (uses >=)
+  {
+    let mut txn = test.db.txn();
+    NetworksLatestCosignedBlock::set(
       &mut txn,
-      &BlockEventData { block_number: 1, has_events: HasEvents::NonNotable },
+      global_session,
+      network,
+      &signed_cosign(global_session, network, 5),
     );
     BlockEvents::send(
       &mut txn,
       &BlockEventData { block_number: 2, has_events: HasEvents::NonNotable },
+    );
+    txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
+    verify_db_invariants(&mut test.db, Some((2, 2)));
+  }
+
+  // Cosign for an earlier block doesn't satisfy NonNotable (uses >=)
+  {
+    let mut txn = test.db.txn();
+    NetworksLatestCosignedBlock::set(
+      &mut txn,
+      global_session,
+      network,
+      &signed_cosign(global_session, network, 1),
     );
     BlockEvents::send(
       &mut txn,
       &BlockEventData { block_number: 3, has_events: HasEvents::NonNotable },
     );
     txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
+    assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
   }
 
-  let mut task = test.into_task();
-  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
-  verify_db_invariants(&mut test.db, Some((1, 3)));
-}
-
-#[tokio::test]
-async fn non_notable_with_cosign_returns_some() {
-  serai_env::init_logger();
-  let mut test = EvaluatorTest::default();
-  let global_session = test.init_global_session(0);
-
+  // Multiple NonNotable blocks in one run via cached known_cosign
+  // (block 3 is already in BlockEvents from the failed branch above)
   {
     let mut txn = test.db.txn();
     NetworksLatestCosignedBlock::set(
       &mut txn,
       global_session,
-      ExternalNetworkId::Bitcoin,
-      &signed_cosign(global_session, ExternalNetworkId::Bitcoin, 5),
+      network,
+      &signed_cosign(global_session, network, 10),
+    );
+    BlockEvents::send(
+      &mut txn,
+      &BlockEventData { block_number: 4, has_events: HasEvents::NonNotable },
+    );
+    BlockEvents::send(
+      &mut txn,
+      &BlockEventData { block_number: 5, has_events: HasEvents::NonNotable },
+    );
+    txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
+    verify_db_invariants(&mut test.db, Some((3, 5)));
+  }
+
+  // Cosigned NonNotable block without stakes fails
+  {
+    let mut test = EvaluatorTest::default();
+    let (global_session, network) = test.init_stakeless_global_session(0);
+
+    let mut txn = test.db.txn();
+    NetworksLatestCosignedBlock::set(
+      &mut txn,
+      global_session,
+      network,
+      &signed_cosign(global_session, network, 5),
     );
     BlockEvents::send(
       &mut txn,
       &BlockEventData { block_number: 1, has_events: HasEvents::NonNotable },
     );
     txn.commit();
+
+    let mut task = test.into_task();
+    TaskTest::task_runs_and_fails_with(&mut task, "didn't have its stake").await;
   }
 
-  let mut task = test.into_task();
-  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
-  verify_db_invariants(&mut test.db, Some((1, 1)));
-}
-
-#[tokio::test]
-async fn non_notable_computes_lowest_common_block() {
-  serai_env::init_logger();
-  let mut test = EvaluatorTest::default();
-
-  let global_session = {
-    let sets = vec![
-      ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) },
-      ExternalValidatorSet { network: ExternalNetworkId::Ethereum, session: Session(0) },
-    ];
-
-    let mut keys = HashMap::new();
-    keys.insert(ExternalNetworkId::Bitcoin, Public([1u8; 32]));
-    keys.insert(ExternalNetworkId::Ethereum, Public([2u8; 32]));
-
-    let mut stakes = HashMap::new();
-    stakes.insert(ExternalNetworkId::Bitcoin, 50u64);
-    stakes.insert(ExternalNetworkId::Ethereum, 50u64);
-
-    let info = GlobalSession { start_block_number: 0, sets, keys, stakes, total_stake: 100u64 };
-
-    let mut txn = test.db.txn();
-    let id = random_global_session(&mut OsRng);
-    GlobalSessionsChannel::send(&mut txn, &(id, info));
-    txn.commit();
-
-    id
-  };
-
+  // request_notable_cosigns failure propagates
   {
+    let mut test = EvaluatorTest::default();
+    test.init_global_session(0);
+
     let mut txn = test.db.txn();
-    NetworksLatestCosignedBlock::set(
-      &mut txn,
-      global_session,
-      ExternalNetworkId::Bitcoin,
-      &signed_cosign(global_session, ExternalNetworkId::Bitcoin, 10),
-    );
-    NetworksLatestCosignedBlock::set(
-      &mut txn,
-      global_session,
-      ExternalNetworkId::Ethereum,
-      &signed_cosign(global_session, ExternalNetworkId::Ethereum, 5),
-    );
     BlockEvents::send(
       &mut txn,
       &BlockEventData { block_number: 1, has_events: HasEvents::NonNotable },
     );
-    BlockEvents::send(
-      &mut txn,
-      &BlockEventData { block_number: 2, has_events: HasEvents::NonNotable },
-    );
-    BlockEvents::send(
-      &mut txn,
-      &BlockEventData { block_number: 3, has_events: HasEvents::NonNotable },
-    );
     txn.commit();
+
+    let (request, calls) = TestRequest::new(true);
+    let mut task = CosignEvaluatorTask {
+      db: test.db.clone(),
+      request,
+      last_request_for_cosigns: Instant::now() - REQUEST_COSIGNS_SPACING - Duration::from_secs(5),
+    };
+
+    TaskTest::task_runs_and_fails_with(&mut task, "RequestError").await;
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "request_notable_cosigns should have been called");
   }
-
-  let mut task = test.into_task();
-  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
-  verify_db_invariants(&mut test.db, Some((1, 3)));
-}
-
-#[tokio::test]
-async fn advances_global_session_at_start_block() {
-  serai_env::init_logger();
-  let mut test = EvaluatorTest::default();
-
-  let session1 = [1u8; 32];
-  {
-    let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
-    let mut keys = HashMap::new();
-    keys.insert(ExternalNetworkId::Bitcoin, Public([1u8; 32]));
-    let mut stakes = HashMap::new();
-    stakes.insert(ExternalNetworkId::Bitcoin, 1u64);
-    let info =
-      GlobalSession { start_block_number: 0, sets: vec![set], keys, stakes, total_stake: 1u64 };
-
-    let mut txn = test.db.txn();
-    GlobalSessionsChannel::send(&mut txn, &(session1, info));
-    txn.commit();
-  }
-
-  let session2 = [2u8; 32];
-  {
-    let set = ExternalValidatorSet { network: ExternalNetworkId::Ethereum, session: Session(0) };
-    let mut keys = HashMap::new();
-    keys.insert(ExternalNetworkId::Ethereum, Public([2u8; 32]));
-    let mut stakes = HashMap::new();
-    stakes.insert(ExternalNetworkId::Ethereum, 1u64);
-    let info =
-      GlobalSession { start_block_number: 3, sets: vec![set], keys, stakes, total_stake: 1u64 };
-
-    let mut txn = test.db.txn();
-    GlobalSessionsChannel::send(&mut txn, &(session2, info));
-    txn.commit();
-  }
-
-  {
-    let mut txn = test.db.txn();
-    BlockEvents::send(&mut txn, &BlockEventData { block_number: 1, has_events: HasEvents::No });
-    BlockEvents::send(&mut txn, &BlockEventData { block_number: 2, has_events: HasEvents::No });
-    BlockEvents::send(&mut txn, &BlockEventData { block_number: 3, has_events: HasEvents::No });
-    txn.commit();
-  }
-
-  let mut task = test.into_task();
-  TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
-
-  assert!(BlockEvents::peek(&test.db).is_none(), "BlockEvents should be fully consumed");
-  // HasEvents::No blocks are sent through CosignedBlocks with has_events=false
-  {
-    let mut txn = test.db.txn();
-    for expected in 1 ..= 3 {
-      let (block_number, _time, has_events) = CosignedBlocks::try_recv(&mut txn)
-        .unwrap_or_else(|| panic!("expected cosigned block {expected}"));
-      assert_eq!(block_number, expected);
-      assert!(!has_events, "HasEvents::No blocks should have has_events=false");
-    }
-    assert!(CosignedBlocks::try_recv(&mut txn).is_none(), "no more blocks expected");
-    txn.commit();
-  }
-
-  let current =
-    CurrentlyEvaluatedGlobalSession::get(&test.db).expect("should have current session");
-  assert_eq!(current.0, session2, "should have transitioned to session 2");
-  assert_eq!(current.1.start_block_number, 3, "session 2 should start at block 3");
 }
 
 mod errors {
   use super::*;
 
   #[tokio::test]
-  async fn notable_events_without_cosign() {
-    serai_env::init_logger();
-    let mut test = EvaluatorTest::default();
-    test.init_global_session(0);
-
-    {
-      let mut txn = test.db.txn();
-      BlockEvents::send(&mut txn, &BlockEventData { block_number: 0, has_events: HasEvents::No });
-      BlockEvents::send(&mut txn, &BlockEventData { block_number: 1, has_events: HasEvents::No });
-      BlockEvents::send(
-        &mut txn,
-        &BlockEventData { block_number: 2, has_events: HasEvents::Notable },
-      );
-      BlockEvents::send(&mut txn, &BlockEventData { block_number: 3, has_events: HasEvents::No });
-      txn.commit();
-    }
-
-    let mut task = test.into_task();
-    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
-    // On failure, global session was consumed but block events remain
-    assert!(GlobalSessionsChannel::peek(&test.db).is_none());
-    assert!(BlockEvents::peek(&test.db).is_some());
-
-    {
-      let mut txn = test.db.txn();
-      BlockEvents::send(&mut txn, &BlockEventData { block_number: 1, has_events: HasEvents::No });
-      BlockEvents::send(
-        &mut txn,
-        &BlockEventData { block_number: 2, has_events: HasEvents::Notable },
-      );
-      txn.commit();
-    }
-
-    let mut task: CosignEvaluatorTask<MemDb, TestRequest> = test.into_task().into();
-    task.last_request_for_cosigns = Instant::now() - Duration::from_secs(5);
-
-    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
-    assert!(GlobalSessionsChannel::peek(&test.db).is_none());
-    assert!(BlockEvents::peek(&test.db).is_some());
-  }
-
-  #[tokio::test]
-  async fn notable_events_without_stakes() {
-    serai_env::init_logger();
-    let mut test = EvaluatorTest::default();
-
-    let global_session = {
-      let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
-
-      let mut keys = HashMap::new();
-      keys.insert(ExternalNetworkId::Bitcoin, Public([1u8; 32]));
-
-      let stakes = HashMap::new();
-
-      let info =
-        GlobalSession { start_block_number: 0, sets: vec![set], keys, stakes, total_stake: 1u64 };
-
-      let mut txn = test.db.txn();
-      let id = random_global_session(&mut OsRng);
-      GlobalSessionsChannel::send(&mut txn, &(id, info));
-      txn.commit();
-
-      id
-    };
-
-    {
-      let mut txn = test.db.txn();
-      NetworksLatestCosignedBlock::set(
-        &mut txn,
-        global_session,
-        ExternalNetworkId::Bitcoin,
-        &signed_cosign(global_session, ExternalNetworkId::Bitcoin, 1),
-      );
-      BlockEvents::send(
-        &mut txn,
-        &BlockEventData { block_number: 1, has_events: HasEvents::Notable },
-      );
-      txn.commit();
-    }
-
-    let mut task = test.into_task();
-    TaskTest::task_runs_and_fails_with(&mut task, "didn't have its stake").await;
-  }
-
-  #[tokio::test]
-  async fn non_notable_events_without_cosign() {
-    serai_env::init_logger();
-    let mut test = EvaluatorTest::default();
-    test.init_global_session(0);
-
-    {
-      let mut txn = test.db.txn();
-      BlockEvents::send(&mut txn, &BlockEventData { block_number: 0, has_events: HasEvents::No });
-      BlockEvents::send(&mut txn, &BlockEventData { block_number: 1, has_events: HasEvents::No });
-      BlockEvents::send(
-        &mut txn,
-        &BlockEventData { block_number: 2, has_events: HasEvents::NonNotable },
-      );
-      BlockEvents::send(&mut txn, &BlockEventData { block_number: 3, has_events: HasEvents::No });
-      txn.commit();
-    }
-
-    let mut task = test.into_task();
-    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
-    assert!(GlobalSessionsChannel::peek(&test.db).is_none());
-    assert!(BlockEvents::peek(&test.db).is_some());
-
-    {
-      let mut txn = test.db.txn();
-      BlockEvents::send(&mut txn, &BlockEventData { block_number: 1, has_events: HasEvents::No });
-      BlockEvents::send(
-        &mut txn,
-        &BlockEventData { block_number: 2, has_events: HasEvents::NonNotable },
-      );
-      txn.commit();
-    }
-
-    let mut task: CosignEvaluatorTask<MemDb, TestRequest> = test.into_task().into();
-    task.last_request_for_cosigns = Instant::now() - Duration::from_secs(5);
-
-    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
-  }
-
-  #[tokio::test]
-  async fn non_notable_events_without_stakes() {
-    serai_env::init_logger();
-    let mut test = EvaluatorTest::default();
-
-    let global_session = {
-      let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
-
-      let mut keys = HashMap::new();
-      keys.insert(ExternalNetworkId::Bitcoin, Public([1u8; 32]));
-
-      let stakes = HashMap::new();
-
-      let info =
-        GlobalSession { start_block_number: 0, sets: vec![set], keys, stakes, total_stake: 1u64 };
-
-      let mut txn = test.db.txn();
-      let id = random_global_session(&mut OsRng);
-      GlobalSessionsChannel::send(&mut txn, &(id, info));
-      txn.commit();
-
-      id
-    };
-
-    {
-      let mut txn = test.db.txn();
-      NetworksLatestCosignedBlock::set(
-        &mut txn,
-        global_session,
-        ExternalNetworkId::Bitcoin,
-        &signed_cosign(global_session, ExternalNetworkId::Bitcoin, 5),
-      );
-      BlockEvents::send(
-        &mut txn,
-        &BlockEventData { block_number: 1, has_events: HasEvents::NonNotable },
-      );
-      txn.commit();
-    }
-
-    let mut task = test.into_task();
-    TaskTest::task_runs_and_fails_with(&mut task, "didn't have its stake").await;
-  }
-
-  #[tokio::test]
-  async fn non_notable_cosign_too_low_does_not_add_weight() {
-    serai_env::init_logger();
-    let mut test = EvaluatorTest::default();
-    let global_session = test.init_global_session(0);
-
-    {
-      let mut txn = test.db.txn();
-      NetworksLatestCosignedBlock::set(
-        &mut txn,
-        global_session,
-        ExternalNetworkId::Bitcoin,
-        &signed_cosign(global_session, ExternalNetworkId::Bitcoin, 1),
-      );
-      BlockEvents::send(
-        &mut txn,
-        &BlockEventData { block_number: 5, has_events: HasEvents::NonNotable },
-      );
-      txn.commit();
-    }
-
-    let mut task = test.into_task();
-    TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
-  }
-
-  #[tokio::test]
-  async fn request_notable_cosigns_failure() {
-    serai_env::init_logger();
-    let mut test = EvaluatorTest::default();
-    test.init_global_session(0);
-
-    {
-      let mut txn = test.db.txn();
-      BlockEvents::send(
-        &mut txn,
-        &BlockEventData { block_number: 1, has_events: HasEvents::Notable },
-      );
-      txn.commit();
-    }
-
-    let (request, calls) = TestRequest::new(true);
-    let mut task = CosignEvaluatorTask {
-      db: test.db.clone(),
-      request,
-      last_request_for_cosigns: Instant::now() - REQUEST_COSIGNS_SPACING - Duration::from_secs(5),
-    };
-
-    TaskTest::task_runs_and_fails_with(&mut task, "RequestError").await;
-    assert_eq!(calls.load(Ordering::SeqCst), 1, "request_notable_cosigns should have been called");
-  }
-
-  #[tokio::test]
-  async fn request_non_notable_cosigns_failure() {
-    serai_env::init_logger();
-    let mut test = EvaluatorTest::default();
-    test.init_global_session(0);
-
-    {
-      let mut txn = test.db.txn();
-      BlockEvents::send(
-        &mut txn,
-        &BlockEventData { block_number: 1, has_events: HasEvents::NonNotable },
-      );
-      txn.commit();
-    }
-
-    let (request, calls) = TestRequest::new(true);
-    let mut task = CosignEvaluatorTask {
-      db: test.db.clone(),
-      request,
-      last_request_for_cosigns: Instant::now() - REQUEST_COSIGNS_SPACING - Duration::from_secs(5),
-    };
-
-    TaskTest::task_runs_and_fails_with(&mut task, "RequestError").await;
-    assert_eq!(calls.load(Ordering::SeqCst), 1, "request_notable_cosigns should have been called");
-  }
-
-  #[tokio::test]
   #[should_panic(expected = "candidate's start block number ")]
   async fn panics_when_session_starts_after_block() {
-    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
+    let start_block_number: u64 = OsRng.gen_range(2 ..= 100);
+    test.init_global_session(start_block_number);
 
-    {
-      let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
-
-      let mut keys = HashMap::new();
-      keys.insert(ExternalNetworkId::Bitcoin, Public([1u8; 32]));
-
-      let mut stakes = HashMap::new();
-      stakes.insert(ExternalNetworkId::Bitcoin, 1u64);
-
-      let info =
-        GlobalSession { start_block_number: 10, sets: vec![set], keys, stakes, total_stake: 1u64 };
-
-      let mut txn = test.db.txn();
-      let id = random_global_session(&mut OsRng);
-      CurrentlyEvaluatedGlobalSession::set(&mut txn, &(id, info));
-      BlockEvents::send(&mut txn, &BlockEventData { block_number: 5, has_events: HasEvents::No });
-      txn.commit();
-    }
+    // Move the session from the channel into CurrentlyEvaluatedGlobalSession
+    let mut txn = test.db.txn();
+    let session = GlobalSessionsChannel::try_recv(&mut txn).unwrap();
+    CurrentlyEvaluatedGlobalSession::set(&mut txn, &session);
+    BlockEvents::send(
+      &mut txn,
+      &BlockEventData {
+        block_number: OsRng.gen_range(0 .. start_block_number),
+        has_events: HasEvents::No,
+      },
+    );
+    txn.commit();
 
     let mut task = test.into_task();
+    // will panic
     let _ = task.run_iteration().await;
   }
 
@@ -667,36 +520,9 @@ mod errors {
     expected = "currently_evaluated_global_session_strict wasn't called incrementally"
   )]
   async fn panics_when_called_non_incrementally() {
-    serai_env::init_logger();
     let mut test = EvaluatorTest::default();
-
-    {
-      let set = ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) };
-      let mut keys = HashMap::new();
-      keys.insert(ExternalNetworkId::Bitcoin, Public([1u8; 32]));
-      let mut stakes = HashMap::new();
-      stakes.insert(ExternalNetworkId::Bitcoin, 1u64);
-      let info =
-        GlobalSession { start_block_number: 0, sets: vec![set], keys, stakes, total_stake: 1u64 };
-
-      let mut txn = test.db.txn();
-      GlobalSessionsChannel::send(&mut txn, &([1u8; 32], info));
-      txn.commit();
-    }
-
-    {
-      let set = ExternalValidatorSet { network: ExternalNetworkId::Ethereum, session: Session(0) };
-      let mut keys = HashMap::new();
-      keys.insert(ExternalNetworkId::Ethereum, Public([2u8; 32]));
-      let mut stakes = HashMap::new();
-      stakes.insert(ExternalNetworkId::Ethereum, 1u64);
-      let info =
-        GlobalSession { start_block_number: 5, sets: vec![set], keys, stakes, total_stake: 1u64 };
-
-      let mut txn = test.db.txn();
-      GlobalSessionsChannel::send(&mut txn, &([2u8; 32], info));
-      txn.commit();
-    }
+    test.init_global_session(0);
+    test.init_global_session(5);
 
     {
       let mut txn = test.db.txn();
@@ -705,30 +531,41 @@ mod errors {
     }
 
     let mut task = test.into_task();
+    // will panic
     let _ = task.run_iteration().await;
   }
 
-  #[tokio::test]
-  #[should_panic(expected = "attempt to add with overflow")]
-  async fn weight_overflow_notable() {
-    serai_env::init_logger();
+  fn setup_weight_overflow(has_events: HasEvents) -> CosignEvaluatorTask<MemDb, TestRequest> {
     let mut test = EvaluatorTest::default();
+    let cosign_block = match has_events {
+      HasEvents::Notable => 1u64,
+      HasEvents::NonNotable => 5u64,
+      HasEvents::No => unreachable!(),
+    };
 
-    let global_session = {
+    let overflowing_stake_global_session = {
       let sets = vec![
         ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) },
         ExternalValidatorSet { network: ExternalNetworkId::Ethereum, session: Session(0) },
       ];
 
       let mut keys = HashMap::new();
-      keys.insert(ExternalNetworkId::Bitcoin, Public([1u8; 32]));
-      keys.insert(ExternalNetworkId::Ethereum, Public([2u8; 32]));
+      keys.insert(ExternalNetworkId::Bitcoin, random_public(&mut OsRng));
+      keys.insert(ExternalNetworkId::Ethereum, random_public(&mut OsRng));
 
       let mut stakes = HashMap::new();
       stakes.insert(ExternalNetworkId::Bitcoin, u64::MAX);
-      stakes.insert(ExternalNetworkId::Ethereum, 1u64);
+      stakes.insert(ExternalNetworkId::Ethereum, OsRng.next_u64());
 
-      let info = GlobalSession { start_block_number: 0, sets, keys, stakes, total_stake: u64::MAX };
+      let info = GlobalSession {
+        start_block_number: 0,
+        sets,
+        keys,
+        stakes,
+        // total_stake is not important,
+        // the overflow will panic before it is used
+        total_stake: u64::MAX,
+      };
 
       let mut txn = test.db.txn();
       let id = random_global_session(&mut OsRng);
@@ -738,83 +575,32 @@ mod errors {
       id
     };
 
-    {
-      let mut txn = test.db.txn();
+    let mut txn = test.db.txn();
+    for network in [ExternalNetworkId::Bitcoin, ExternalNetworkId::Ethereum] {
       NetworksLatestCosignedBlock::set(
         &mut txn,
-        global_session,
-        ExternalNetworkId::Bitcoin,
-        &signed_cosign(global_session, ExternalNetworkId::Bitcoin, 1),
+        overflowing_stake_global_session,
+        network,
+        &signed_cosign(overflowing_stake_global_session, network, cosign_block),
       );
-      NetworksLatestCosignedBlock::set(
-        &mut txn,
-        global_session,
-        ExternalNetworkId::Ethereum,
-        &signed_cosign(global_session, ExternalNetworkId::Ethereum, 1),
-      );
-      BlockEvents::send(
-        &mut txn,
-        &BlockEventData { block_number: 1, has_events: HasEvents::Notable },
-      );
-      txn.commit();
     }
+    BlockEvents::send(&mut txn, &BlockEventData { block_number: 1, has_events });
+    txn.commit();
 
-    let mut task = test.into_task();
+    test.into_task()
+  }
+
+  #[tokio::test]
+  #[should_panic(expected = "attempt to add with overflow")]
+  async fn panics_on_weight_overflow_notable() {
+    let mut task = setup_weight_overflow(HasEvents::Notable);
     TaskTest::task_runs_and_fails_with(&mut task, "weight_cosigned overflow").await;
   }
 
   #[tokio::test]
   #[should_panic(expected = "attempt to add with overflow")]
-  async fn weight_overflow_non_notable() {
-    serai_env::init_logger();
-    let mut test = EvaluatorTest::default();
-
-    let global_session = {
-      let sets = vec![
-        ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) },
-        ExternalValidatorSet { network: ExternalNetworkId::Ethereum, session: Session(0) },
-      ];
-
-      let mut keys = HashMap::new();
-      keys.insert(ExternalNetworkId::Bitcoin, Public([1u8; 32]));
-      keys.insert(ExternalNetworkId::Ethereum, Public([2u8; 32]));
-
-      let mut stakes = HashMap::new();
-      stakes.insert(ExternalNetworkId::Bitcoin, u64::MAX);
-      stakes.insert(ExternalNetworkId::Ethereum, 1u64);
-
-      let info = GlobalSession { start_block_number: 0, sets, keys, stakes, total_stake: u64::MAX };
-
-      let mut txn = test.db.txn();
-      let id = random_global_session(&mut OsRng);
-      GlobalSessionsChannel::send(&mut txn, &(id, info));
-      txn.commit();
-
-      id
-    };
-
-    {
-      let mut txn = test.db.txn();
-      NetworksLatestCosignedBlock::set(
-        &mut txn,
-        global_session,
-        ExternalNetworkId::Bitcoin,
-        &signed_cosign(global_session, ExternalNetworkId::Bitcoin, 5),
-      );
-      NetworksLatestCosignedBlock::set(
-        &mut txn,
-        global_session,
-        ExternalNetworkId::Ethereum,
-        &signed_cosign(global_session, ExternalNetworkId::Ethereum, 5),
-      );
-      BlockEvents::send(
-        &mut txn,
-        &BlockEventData { block_number: 1, has_events: HasEvents::NonNotable },
-      );
-      txn.commit();
-    }
-
-    let mut task = test.into_task();
+  async fn panics_on_weight_overflow_non_notable() {
+    let mut task = setup_weight_overflow(HasEvents::NonNotable);
     TaskTest::task_runs_and_fails_with(&mut task, "weight_cosigned overflow").await;
   }
 }

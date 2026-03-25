@@ -56,6 +56,8 @@ fn currently_evaluated_global_session_strict(
       Some(existing) => existing,
       None => {
         let first = GlobalSessionsChannel::try_recv(txn)
+          // Panic: invariant, this function should only be called if
+          // the global sessions channel is populated
           .expect("fetching latest global session yet none declared");
         CurrentlyEvaluatedGlobalSession::set(txn, &first);
         first

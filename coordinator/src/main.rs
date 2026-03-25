@@ -94,7 +94,7 @@ fn spawn_cosigning<D: serai_db::Db>(
     loop {
       // Intake our own cosigns
       match Cosigning::<D>::latest_cosigned_block_number(&db) {
-        Ok(Some(latest_acknowledged_block)) => {
+        Ok(Some(latest_cosigned_block_number)) => {
           let mut txn = db.txn();
           // The cosigns we prior tried to intake yet failed to
           let mut cosigns = ErroneousCosigns::get(&txn).unwrap_or(vec![]);
@@ -106,7 +106,7 @@ fn spawn_cosigning<D: serai_db::Db>(
           let mut erroneous = vec![];
           for cosign in cosigns {
             // If this cosign is stale, move on
-            if cosign.cosign.block_number <= latest_acknowledged_block {
+            if cosign.cosign.block_number <= latest_cosigned_block_number {
               continue;
             }
 

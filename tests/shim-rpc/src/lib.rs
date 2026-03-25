@@ -3,13 +3,20 @@
 pub mod state;
 pub mod rpc;
 pub mod builder;
+pub mod test_helpers;
+
+#[cfg(any(test, feature = "test-helpers"))]
+pub mod event_fuzzer;
 
 pub use state::*;
 pub use builder::SeraiShimRpcBuilder;
 
-use std::net::SocketAddr;
+use core::mem;
+use std::{env, net::SocketAddr, sync::Arc};
 
-use jsonrpsee::server::ServerHandle;
+use jsonrpsee::server::ServerBuilder;
+use tokio::sync::RwLock;
+
 use serai_abi::{
   primitives::{BlockHash, merkle::IncrementalUnbalancedMerkleTree},
   Event,
@@ -20,10 +27,12 @@ use serai_abi::{
 pub struct SeraiShimRpc {
   url: String,
   state: SharedState,
-  _handle: ServerHandle,
 }
 
 impl SeraiShimRpc {
+  /// The block number of the first block in the chain.
+  pub const STARTING_BLOCK_NUMBER: u64 = 0;
+
   /// Create a builder for configuring and starting a shim RPC node.
   pub fn builder() -> SeraiShimRpcBuilder {
     SeraiShimRpcBuilder::new()
@@ -31,18 +40,19 @@ impl SeraiShimRpc {
 
   /// Start a shim RPC node with the given initial state, binding to an ephemeral port.
   pub async fn start(initial_state: ShimState) -> Self {
-    let state = std::sync::Arc::new(tokio::sync::RwLock::new(initial_state));
+    let state = Arc::new(RwLock::new(initial_state));
     let rpc_module = rpc::build_rpc_module(state.clone()).expect("failed to build RPC module");
 
-    let server = jsonrpsee::server::ServerBuilder::default()
+    let server = ServerBuilder::default()
       .build(SocketAddr::from(([127, 0, 0, 1], 0)))
       .await
       .expect("failed to bind shim RPC node server");
 
     let addr = server.local_addr().expect("server should have a local address");
     let handle = server.start(rpc_module);
+    mem::forget(handle);
 
-    Self { url: format!("http://{addr}"), state, _handle: handle }
+    Self { url: format!("http://{addr}"), state }
   }
 
   /// The HTTP URL this shim is listening on.
@@ -62,7 +72,7 @@ impl SeraiShimRpc {
   pub async fn add_block_with_events(&self, events: Vec<Vec<Event>>) -> BlockHash {
     let mut state = self.state.write().await;
     let Some(latest_block) = state.blocks_by_number.keys().copied().max() else {
-      return state.make_block(0, events);
+      return state.make_block(Self::STARTING_BLOCK_NUMBER, events);
     };
     let number = latest_block + 1;
     state.make_block(number, events)
@@ -145,9 +155,9 @@ impl SeraiShimRpc {
   /// Set the probability (0–100) that any RPC request randomly fails.
   ///
   /// 0 disables fuzzing (the default), 100 fails every request.
-  /// If the `RUST_TEST_NO_RPC_FUZZ` env var is set, the rate is forced to 0.
+  /// If the `SERAI_SHIM_RPC_NO_ERROR` env var is set, the rate is forced to 0.
   pub async fn set_failure_rate(&self, percent: u8) {
-    let effective = if std::env::var("RUST_TEST_NO_RPC_FUZZ").is_ok() { 0 } else { percent };
+    let effective = if env::var("SERAI_SHIM_RPC_NO_ERROR").is_ok() { 0 } else { percent };
     self.state.write().await.errors.failure_rate = effective;
   }
 

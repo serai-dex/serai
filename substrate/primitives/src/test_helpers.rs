@@ -2,27 +2,39 @@
 
 use rand_core::{RngCore, CryptoRng};
 
-use crate::{BlockHash, address::{SeraiAddress, ExternalAddress}, crypto::{Public, ExternalKey}};
+use crate::{
+  BlockHash,
+  address::{SeraiAddress, ExternalAddress},
+  crypto::{Public, ExternalKey},
+};
+
+/// Generate a random 32-byte array.
+pub fn random_bytes_32<R: RngCore + CryptoRng>(rng: &mut R) -> [u8; 32] {
+  let mut bytes = [0u8; 32];
+  rng.fill_bytes(&mut bytes);
+  bytes
+}
+
+/// Generate a random 64-byte array.
+pub fn random_bytes_64<R: RngCore + CryptoRng>(rng: &mut R) -> [u8; 64] {
+  let mut bytes = [0u8; 64];
+  rng.fill_bytes(&mut bytes);
+  bytes
+}
 
 /// Generate a random [`ExternalAddress`].
 pub fn random_external_address<R: RngCore + CryptoRng>(rng: &mut R) -> ExternalAddress {
-  let mut key = [0; 32];
-  rng.fill_bytes(&mut key);
-  ExternalAddress::try_from(key.to_vec()).unwrap()
+  ExternalAddress::try_from(random_bytes_32(rng).to_vec()).unwrap()
 }
 
 /// Generate a random [`SeraiAddress`].
 pub fn random_serai_address<R: RngCore + CryptoRng>(rng: &mut R) -> SeraiAddress {
-  let mut key = [0; 32];
-  rng.fill_bytes(&mut key);
-  SeraiAddress(key)
+  SeraiAddress(random_bytes_32(rng))
 }
 
 /// Generate a random [`Public`].
 pub fn random_public<R: RngCore + CryptoRng>(rng: &mut R) -> Public {
-  let mut key = [0; 32];
-  rng.fill_bytes(&mut key);
-  Public(key)
+  Public(random_bytes_32(rng))
 }
 
 /// Generate a random schnorrkel keypair and its [`Public`] wrapper.
@@ -34,14 +46,15 @@ pub fn random_keypair<R: RngCore + CryptoRng>(rng: &mut R) -> (schnorrkel::Keypa
 
 /// Generate a random [`ExternalKey`].
 pub fn random_external_key<R: RngCore + CryptoRng>(rng: &mut R) -> ExternalKey {
-  let mut key = [0; 32];
-  rng.fill_bytes(&mut key);
-  ExternalKey(key.to_vec().try_into().unwrap())
+  ExternalKey(random_bytes_32(rng).to_vec().try_into().unwrap())
 }
 
 /// Generate a random [`BlockHash`].
 pub fn random_block_hash<R: RngCore + CryptoRng>(rng: &mut R) -> BlockHash {
-  let mut hash = [0; 32];
-  rng.fill_bytes(&mut hash);
-  BlockHash(hash)
+  BlockHash(random_bytes_32(rng))
+}
+
+/// Generate a random global session ID (`[u8; 32]`).
+pub fn random_global_session<R: RngCore + CryptoRng>(rng: &mut R) -> [u8; 32] {
+  random_bytes_32(rng)
 }
