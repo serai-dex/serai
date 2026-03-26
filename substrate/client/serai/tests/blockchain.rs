@@ -18,12 +18,7 @@ async fn blockchain() {
   );
   test.provide_container(
     composition
-      .replace_cmd(
-        ["serai-node", "--unsafe-rpc-external", "--rpc-cors", "all", "--dev"]
-          .into_iter()
-          .map(str::to_owned)
-          .collect(),
-      )
+      .replace_cmd(["serai-node", "--network", "solo"].into_iter().map(str::to_owned).collect())
       .replace_env([("RUST_LOG".to_owned(), "runtime=debug".to_owned())].into()),
   );
 

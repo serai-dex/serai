@@ -201,8 +201,6 @@ minimal-ed448 = { path = "crypto/ed448" }
 modular-frost = { path = "crypto/frost" }
 
 # Patches due to `std` now including the required functionality
-is_terminal_polyfill = { path = "patches/is_terminal_polyfill" }
-once_cell_polyfill = { path = "patches/once_cell_polyfill" }
 lazy_static = { path = "patches/lazy_static" }
 # This has a non-deprecated `std` alternative since Rust's 2024 edition
 home = { path = "patches/home" }
@@ -215,13 +213,8 @@ getrandom-03 = { package = "getrandom", path = "patches/getrandom-0.3" }
 ryu = { path = "patches/ryu" }
 thiserror = { path = "patches/thiserror" }
 
-# directories-next was created because directories was unmaintained
-# directories-next is now unmaintained while directories is maintained
-# The directories author pulls in ridiculously pointless crates and prefers
-# copyleft licenses
-# The following two patches resolve everything
+# `option-ext` is a copyleft library for a single one liner, which we provide ourselves
 option-ext = { path = "patches/option-ext" }
-directories-next = { path = "patches/directories-next" }
 
 # `keccak-asm` is liberal with 'use at your risk', yet API-compatible with `sha3`, so we prefer the latter
 keccak-asm = { path = "patches/keccak-asm" }

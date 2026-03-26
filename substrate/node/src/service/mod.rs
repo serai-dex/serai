@@ -131,7 +131,7 @@ pub(crate) fn new_partial(
       .build()
   };
 
-  let (client, backend, validator_identity, keystore, task_manager) = {
+  let (client, backend, validator_identity, keystore, mut task_manager) = {
     /*
       Traditionally, `new_full_parts_with_genesis_builder` would be used to obtain the keystore. We
       want to use the `keystore` this function was called with however, only falling back to the
@@ -244,13 +244,15 @@ pub(crate) fn new_partial(
       have a channel one could receive events over.
 
       Because we don't need it, and because we don't _have_ to poll it (for BABE to function/to
-      prevent an unbounded channel from serving as an effective memory leak), we simply forget it.
+      prevent an unbounded channel from serving as an effective memory leak), we simply 'forget'
+      it. We don't literally do so, as ASan would consider doing so a memleak, but we use
+      `sc_service::TaskManager::keep_alive` which has the same effect.
 
       TODO: Review how feasible it'd be to patch out, so we don't have to be concerned about if
       this has an unbounded channel added to it someday which we would have to spawn a task to
       actively drain or similar.
     */
-    std::mem::forget(babe_handle);
+    task_manager.keep_alive(babe_handle);
 
     import_queue
   };
