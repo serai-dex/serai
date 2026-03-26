@@ -29,14 +29,14 @@ fn random_test_session() -> (TestGlobalSession, schnorrkel::Keypair) {
   let set = default_test_validator_set();
   let (keypair, public) = random_keypair(&mut OsRng);
   let stake = OsRng.gen_range(1u64 .. u64::MAX / 17);
-  let gs = build_global_session(set, public, stake, u64::from(set.session.0) + 1);
+  let global_session = build_global_session(set, public, stake, u64::from(set.session.0) + 1);
 
   let session = TestGlobalSession {
-    start_block_number: gs.start_block_number,
-    sets: gs.sets,
-    keys: gs.keys,
-    stakes: gs.stakes,
-    total_stake: gs.total_stake,
+    start_block_number: global_session.start_block_number,
+    sets: global_session.sets,
+    keys: global_session.keys,
+    stakes: global_session.stakes,
+    total_stake: global_session.total_stake,
   };
   (session, keypair)
 }

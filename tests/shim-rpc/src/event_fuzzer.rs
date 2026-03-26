@@ -168,7 +168,7 @@ impl EventFuzzer {
   }
 
   /// Generate a random BurnWithInstruction event.
-  fn random_burn(&mut self) -> Event {
+  pub fn random_burn(&mut self) -> Event {
     burn_with_instruction_event(
       random_serai_address(&mut OsRng),
       random_external_address(&mut OsRng),
@@ -237,12 +237,62 @@ impl EventFuzzer {
     }
   }
 
-  /// Generate multiple blocks of random events.
+  /// Force a complete allocation of SetDecided -> SetKeys sequence for every external network,
+  /// guaranteeing a global session with multiple validator sets will form.
+  fn force_keygen(&mut self) -> [Vec<Vec<Event>>; 3] {
+    let external_networks: Vec<ExternalNetworkId> =
+      self.networks.iter().copied().filter_map(|n| ExternalNetworkId::try_from(n).ok()).collect();
+
+    let mut alloc_events = Vec::new();
+    let mut decided_events = Vec::new();
+    let mut keys_events = Vec::new();
+
+    for &network in &external_networks {
+      let validator = *self.pick(&self.validators.clone());
+      let amount = self.random_amount();
+
+      *self.stakes.entry((network, validator)).or_default() += amount;
+      alloc_events.push(allocation_event(validator, NetworkId::External(network), amount));
+
+      let session_num = *self.next_session.entry(network).or_insert(0);
+      let set = ExternalValidatorSet { network, session: Session(session_num) };
+      self.pending_keys.insert(set, vec![validator]);
+      decided_events.push(set_decided_event(
+        ValidatorSet { network: NetworkId::External(network), session: Session(session_num) },
+        vec![(validator, KeyShares::ONE)],
+      ));
+
+      self.pending_keys.remove(&set);
+      *self.next_session.entry(network).or_insert(0) += 1;
+      let (keypair, public) = random_keypair(&mut OsRng);
+      self.keypairs.insert(public.0, keypair);
+      let external_key = random_external_key(&mut OsRng);
+      keys_events.push(Event::ValidatorSets(validator_sets::Event::SetKeys {
+        set,
+        key_pair: KeyPair(public, external_key),
+      }));
+    }
+
+    [vec![alloc_events], vec![decided_events], vec![keys_events]]
+  }
+
+  /// Generate `count` blocks of random events.
   pub fn generate_blocks(&mut self, count: usize) -> Vec<Vec<Vec<Event>>> {
     let mut blocks = Vec::with_capacity(count);
     for _ in 0 .. count {
       blocks.push(self.generate_block_events());
     }
+    blocks
+  }
+
+  /// Generate `count` blocks, starting with a forced keygen sequence (3 blocks)
+  /// to guarantee at least one global session forms, followed by random blocks.
+  pub fn generate_blocks_with_keygen(&mut self, count: usize) -> Vec<Vec<Vec<Event>>> {
+    assert!(count >= 4, "need at least 4 blocks for forced keygen + one random block");
+
+    let [alloc, decided, keys] = self.force_keygen();
+    let mut blocks = vec![alloc, decided, keys];
+    blocks.extend(self.generate_blocks(count - 3));
     blocks
   }
 }

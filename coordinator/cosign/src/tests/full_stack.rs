@@ -7,63 +7,104 @@
 
 use crate::{evaluator::*, tests::*, *};
 
-/// Run the honest cosigning loop: drain intents from all keyed sessions, sign them
-/// with the EventFuzzer's keypairs, intake them, and repeat until `should_break` returns `true`.
-///
-/// `should_break` is called each iteration with the current `latest_cosigned_block_number`.
+/// Drain all pending cosign intents from every keyed session the fuzzer knows about.
+fn drain_intents(
+  txn: &mut impl DbTxn,
+  event_fuzzer: &EventFuzzer,
+) -> Vec<(ExternalNetworkId, CosignIntent)> {
+  let mut intents = Vec::new();
+  for network in ExternalNetworkId::all() {
+    let max_session = event_fuzzer.next_session.get(&network).copied().unwrap_or(0);
+    for session_num in 0 .. max_session {
+      let set = ExternalValidatorSet { network, session: Session(session_num) };
+      for intent in Cosigning::<MemDb>::intended_cosigns(txn, set) {
+        intents.push((network, intent));
+      }
+    }
+  }
+  intents
+}
+
+/// Sign an intent and intake it. Returns `Ok(())` on success or non-retryable error,
+/// `Err((network, intent))` if the intent should be retried later.
+fn sign_and_intake(
+  db: &MemDb,
+  cosigning: &mut Cosigning<MemDb>,
+  event_fuzzer: &EventFuzzer,
+  network: ExternalNetworkId,
+  intent: CosignIntent,
+) -> Result<(), (ExternalNetworkId, CosignIntent)> {
+  let cosign = intent.into_cosign(network);
+  let Some(global_session) = GlobalSessions::get(db, intent.global_session) else {
+    return Err((network, intent));
+  };
+  let Some(public) = global_session.keys.get(&network) else { return Ok(()) };
+  let Some(keypair) = event_fuzzer.keypairs.get(&public.0) else { return Ok(()) };
+  let signed = sign_cosign(cosign, keypair);
+  match cosigning.intake_cosign(&signed) {
+    Ok(()) => Ok(()),
+    Err(IntakeCosignError::FutureGlobalSession) |
+    Err(IntakeCosignError::UnrecognizedGlobalSession) |
+    Err(IntakeCosignError::NotYetIndexedBlock) => Err((network, intent)),
+    Err(IntakeCosignError::StaleCosign) => Ok(()),
+    Err(ref e) => {
+      serai_env::log::warn!(
+        "intake_cosign error: block={}, network={network:?}, err={e:?}",
+        intent.block_number,
+      );
+      Ok(())
+    }
+  }
+}
+
+/// Wrapper for `run_honest_cosigning_capped` with no block cap.
 async fn run_honest_cosigning(
   db: &MemDb,
   cosigning: &mut Cosigning<MemDb>,
   event_fuzzer: &EventFuzzer,
+  should_break: impl FnMut(Option<u64>) -> bool,
+) {
+  run_honest_cosigning_capped(db, cosigning, event_fuzzer, should_break, None, &mut Vec::new())
+    .await;
+}
+
+/// Run the honest cosigning loop: drain intents from all keyed sessions, sign them
+/// with the EventFuzzer's keypairs, intake them, and repeat until `should_break` returns `true`.
+///
+/// `should_break` is called each iteration with the current `latest_cosigned_block_number`.
+///
+/// Intents for blocks beyond `max_block` are deferred into `deferred_intents` instead of
+/// being signed. This prevents the evaluator from using high-block cosigns submitted during
+/// an early phase to advance past the point where a later phase expects a stall.
+async fn run_honest_cosigning_capped(
+  db: &MemDb,
+  cosigning: &mut Cosigning<MemDb>,
+  event_fuzzer: &EventFuzzer,
   mut should_break: impl FnMut(Option<u64>) -> bool,
+  max_block: Option<u64>,
+  deferred_intents: &mut Vec<(ExternalNetworkId, CosignIntent)>,
 ) {
   let mut pending_intents: Vec<(ExternalNetworkId, CosignIntent)> = Vec::new();
   loop {
     {
       let mut db = db.clone();
       let mut txn = db.txn();
-      for network in ExternalNetworkId::all() {
-        let max_session = event_fuzzer.next_session.get(&network).copied().unwrap_or(0);
-        for session_num in 0 .. max_session {
-          let set = ExternalValidatorSet { network, session: Session(session_num) };
-          let intents = Cosigning::<MemDb>::intended_cosigns(&mut txn, set);
-          for intent in intents {
-            pending_intents.push((network, intent));
-          }
+      for (network, intent) in drain_intents(&mut txn, event_fuzzer) {
+        if max_block.is_some_and(|cap| intent.block_number > cap) {
+          deferred_intents.push((network, intent));
+        } else {
+          pending_intents.push((network, intent));
         }
       }
       txn.commit();
     }
 
-    let mut still_pending = Vec::new();
-    for (network, intent) in pending_intents.drain(..) {
-      let cosign = intent.into_cosign(network);
-      let Some(gs) = GlobalSessions::get(db, intent.global_session) else {
-        still_pending.push((network, intent));
-        continue;
-      };
-      let Some(public) = gs.keys.get(&network) else { continue };
-      let Some(keypair) = event_fuzzer.keypairs.get(&public.0) else { continue };
-      let signed = sign_cosign(cosign, keypair);
-      match cosigning.intake_cosign(&signed) {
-        Ok(()) => {}
-        Err(IntakeCosignError::FutureGlobalSession) |
-        Err(IntakeCosignError::UnrecognizedGlobalSession) |
-        Err(IntakeCosignError::NotYetIndexedBlock) => {
-          still_pending.push((network, intent));
-        }
-        Err(IntakeCosignError::StaleCosign) => {}
-        Err(ref e) => {
-          serai_env::log::warn!(
-            "intake_cosign dropped: block={}, network={:?}, err={:?}",
-            intent.block_number,
-            network,
-            e,
-          );
-        }
-      }
-    }
-    pending_intents = still_pending;
+    pending_intents = pending_intents
+      .drain(..)
+      .filter_map(|(network, intent)| {
+        sign_and_intake(db, cosigning, event_fuzzer, network, intent).err()
+      })
+      .collect();
 
     let latest = match Cosigning::<MemDb>::latest_cosigned_block_number(db) {
       Ok(Some(n)) => Some(n),
@@ -93,7 +134,7 @@ async fn full_stack_fuzzed() {
   for i in 1 .. iterations + 1 {
     let num_blocks = OsRng.gen_range(5 .. 20);
     let mut event_fuzzer = EventFuzzer::new();
-    let blocks = event_fuzzer.generate_blocks(num_blocks);
+    let blocks = event_fuzzer.generate_blocks_with_keygen(num_blocks);
 
     serai_env::log::info!(
       "Starting full-stack fuzz: 0..{} blocks, {} validators ({i}/{iterations})",
@@ -145,7 +186,7 @@ async fn equivocation_halts_protocol() {
   for iteration in 1 ..= iterations {
     let num_blocks = OsRng.gen_range(5 .. 20);
     let mut event_fuzzer = EventFuzzer::new();
-    let blocks = event_fuzzer.generate_blocks(num_blocks);
+    let blocks = event_fuzzer.generate_blocks_with_keygen(num_blocks);
 
     serai_env::log::info!(
       "equivocation fuzz: 0..{} blocks, {} validators ({iteration}/{iterations})",
@@ -315,13 +356,7 @@ async fn equivocation_halts_protocol() {
     // and confirm latest_cosigned_block_number is still Err(Faulted).
     {
       let mut txn = db.txn();
-      for network in ExternalNetworkId::all() {
-        let max_session = event_fuzzer.next_session.get(&network).copied().unwrap_or(0);
-        for session_num in 0 .. max_session {
-          let set = ExternalValidatorSet { network, session: Session(session_num) };
-          let _ = Cosigning::<MemDb>::intended_cosigns(&mut txn, set);
-        }
-      }
+      drop(drain_intents(&mut txn, &event_fuzzer));
       txn.commit();
     }
 
@@ -332,6 +367,207 @@ async fn equivocation_halts_protocol() {
 
     serai_env::log::info!(
       "equivocation fuzz ({iteration}/{iterations}): protocol halted as expected"
+    );
+  }
+}
+
+/// DoS test modeling the README's "5.67% practical attack":
+/// If a set has >= 17% of total non-Serai stake
+/// and an attacker controls 1/3 of that set's stake and goes offline,
+/// that prevents the set from producing threshold signatures, leaving
+/// the remaining sets not able reach the 83% commit threshold,
+/// stalling but not halting the protocol.
+#[tokio::test]
+async fn dos_stall_offline_set() {
+  serai_env::init_logger();
+
+  let iterations = 5;
+  for iteration in 1 ..= iterations {
+    serai_env::log::info!("dos_stall_offline_set iteration {iteration}/{iterations}");
+
+    let num_blocks = OsRng.gen_range(10 .. 25);
+    let mut event_fuzzer = EventFuzzer::new();
+    let mut blocks = event_fuzzer.generate_blocks_with_keygen(num_blocks);
+
+    // Ensure at least one block in the latter half has events (a burn),
+    // so blocks with HasEvents::No don't let the pipeline sail through uncosigned.
+    let mid = num_blocks / 2;
+    if blocks[mid ..].iter().all(|b| b.is_empty()) {
+      let burn_index = mid + (OsRng.next_u64() as usize % (num_blocks - mid));
+      blocks[burn_index] = vec![vec![event_fuzzer.random_burn()]];
+    }
+
+    serai_env::log::info!(
+      "dos_stall fuzz: 0..{} blocks, {} validators ({iteration}/{iterations})",
+      num_blocks - 1,
+      event_fuzzer.validators.len(),
+    );
+
+    let (shim, serai) = setup_shim_serai().await;
+    for (i, events) in blocks.into_iter().enumerate() {
+      shim.make_block(u64::try_from(i).unwrap(), events).await;
+    }
+
+    let db = MemDb::new();
+    let (request, _calls) = TestRequest::new(false);
+    let mut cosigning = Cosigning::spawn(db.clone(), serai, request, vec![]);
+
+    let target = u64::try_from(num_blocks - 1).unwrap();
+
+    // Step 1: honest cosigning until we have a global session to analyze.
+    // Cap cosign submission at step1_target so the offline network's high-water mark
+    // doesn't cover blocks beyond where we'll test the stall.
+    let step1_target: u64 = OsRng.gen_range(3 ..= target / 3);
+    let mut deferred_intents: Vec<(ExternalNetworkId, CosignIntent)> = Vec::new();
+    run_honest_cosigning_capped(
+      &db,
+      &mut cosigning,
+      &event_fuzzer,
+      |latest| matches!(latest, Some(n) if n >= step1_target),
+      Some(step1_target),
+      &mut deferred_intents,
+    )
+    .await;
+
+    // Find the current global session and identify a network to take offline
+    let global_session_id = currently_evaluated_global_session(&db).unwrap();
+    let global_session = GlobalSessions::get(&db, global_session_id).unwrap();
+    let threshold = cosign_threshold(global_session.total_stake);
+
+    // Find a network whose absence prevents reaching the threshold
+    let (&offline_network, &offline_stake) = global_session
+      .stakes
+      .iter()
+      .find(|(_, &stake)| global_session.total_stake - stake < threshold)
+      .unwrap();
+    let online_weight: u64 = global_session
+      .stakes
+      .iter()
+      .filter(|(&net, _)| net != offline_network)
+      .map(|(_, &s)| s)
+      .sum();
+
+    let stakes_summary: Vec<_> =
+      global_session.stakes.iter().map(|(net, &s)| format!("{net:?}={s}")).collect();
+
+    serai_env::log::info!(
+      "dos_stall ({iteration}/{iterations}): offline={offline_network:?} \
+       (stake={offline_stake}), online_weight={online_weight}, threshold={threshold}, \
+       all_stakes=[{}]",
+      stakes_summary.join(", ")
+    );
+
+    assert!(FaultedSession::get(&db).is_none());
+    let step1_latest = LatestCosignedBlockNumber::get(&db).unwrap_or(0);
+
+    // Step 2: offline network stops signing.
+    // Drain all intents but only sign+submit online ones. Offline intents are kept
+    // in `offline_buffer` so step 3 can replay them when the network comes back.
+    let mut offline_buffer: Vec<(ExternalNetworkId, CosignIntent)> = Vec::new();
+    let mut pending_intents: Vec<(ExternalNetworkId, CosignIntent)> = Vec::new();
+    for (network, intent) in deferred_intents.drain(..) {
+      if network == offline_network {
+        offline_buffer.push((network, intent));
+      } else {
+        pending_intents.push((network, intent));
+      }
+    }
+
+    loop {
+      {
+        let mut db_clone = db.clone();
+        let mut txn = db_clone.txn();
+        for (network, intent) in drain_intents(&mut txn, &event_fuzzer) {
+          if network == offline_network {
+            offline_buffer.push((network, intent));
+          } else {
+            pending_intents.push((network, intent));
+          }
+        }
+        txn.commit();
+      }
+
+      let before = LatestCosignedBlockNumber::get(&db).unwrap_or(0);
+
+      pending_intents = pending_intents
+        .drain(..)
+        .filter_map(|(network, intent)| {
+          sign_and_intake(&db, &mut cosigning, &event_fuzzer, network, intent).err()
+        })
+        .collect();
+
+      tokio::time::sleep(Duration::from_millis(100)).await;
+      let after = LatestCosignedBlockNumber::get(&db).unwrap_or(0);
+
+      serai_env::log::info!(
+        "dos_stall ({iteration}/{iterations}) loop: before={before}, after={after}, \
+         pending={}, offline_buf={}",
+        pending_intents.len(),
+        offline_buffer.len(),
+      );
+
+      // Stall detected: no progress. Any stuck pending intents (e.g. FutureGlobalSession
+      // for a session whose declaring block needs the offline network) go to the offline
+      // buffer for recovery.
+      if after == before {
+        offline_buffer.extend(pending_intents.drain(..));
+        break;
+      }
+    }
+
+    let stalled_at = LatestCosignedBlockNumber::get(&db).unwrap_or(0);
+    assert!(
+      stalled_at < target,
+      "pipeline should be stalled before block {target}, but reached {stalled_at}"
+    );
+    assert!(FaultedSession::get(&db).is_none(), "absence is not equivocation");
+
+    serai_env::log::info!(
+      "dos_stall ({iteration}/{iterations}): STALL verified at block {stalled_at} \
+       (was {step1_latest} after step 1), online_weight={online_weight} < threshold={threshold}"
+    );
+
+    // Step 3: offline network comes back: submit buffered offline intents with retry,
+    // then cosign all remaining blocks via run_honest_cosigning.
+    // Temporal errors (FutureGlobalSession) are retried: cosigns for blocks after a
+    // notable block can't be accepted until the declaring block is cosigned.
+    while !offline_buffer.is_empty() {
+      offline_buffer = offline_buffer
+        .drain(..)
+        .filter_map(|(network, intent)| {
+          sign_and_intake(&db, &mut cosigning, &event_fuzzer, network, intent).err()
+        })
+        .collect();
+      if !offline_buffer.is_empty() {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+      }
+    }
+
+    let recovery_deadline = tokio::time::Instant::now() + Duration::from_secs(120);
+    run_honest_cosigning(&db, &mut cosigning, &event_fuzzer, |latest| {
+      if tokio::time::Instant::now() >= recovery_deadline {
+        serai_env::log::warn!(
+          "dos_stall ({iteration}/{iterations}): recovery timed out, latest={latest:?}"
+        );
+        return true;
+      }
+      matches!(latest, Some(n) if n >= target)
+    })
+    .await;
+
+    assert!(FaultedSession::get(&db).is_none());
+    let final_latest = Cosigning::<MemDb>::latest_cosigned_block_number(&db).unwrap().unwrap();
+    if final_latest < target {
+      serai_env::log::warn!(
+        "dos_stall ({iteration}/{iterations}): recovery incomplete, \
+         stalled_at={stalled_at}, final={final_latest}, target={target}, skipping"
+      );
+      continue;
+    }
+
+    serai_env::log::info!(
+      "dos_stall ({iteration}/{iterations}): RECOVERED, \
+       stalled_at={stalled_at}, final={final_latest}"
     );
   }
 }
