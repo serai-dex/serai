@@ -1,0 +1,18 @@
+[package]
+name = "wit-bindgen-rust-macro"
+version = "0.51.99"
+description = "Patch to an empty crate"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/wit-bindgen-rust-macro"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[features]
+async = []

@@ -2,11 +2,11 @@
 name = "serai-shim-rpc"
 version = "0.1.0"
 description = "A bespoke shim RPC node for testing Serai RPC clients without a real chain"
-license = "MIT"
+license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/tests/shim-rpc"
 authors = ["Luke Parker <lukeparker5132@gmail.com>", "rafael_xmr <g.pi8ax@slmail.me>"]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.91"
 publish = false
 
 [package.metadata.docs.rs]
@@ -16,17 +16,27 @@ rustdoc-args = ["--cfg", "docsrs"]
 [lints]
 workspace = true
 
+[features]
+test-helpers = ["schnorrkel", "serai-primitives"]
+
 [dependencies]
 jsonrpsee = { version = "0.24", default-features = false, features = ["server"] }
 tokio = { version = "1", default-features = false }
 
 serai-abi = { path = "../../substrate/abi", default-features = false, features = ["std"] }
 
+rand_core = { version = "0.6", default-features = false }
 borsh = { version = "1", default-features = false, features = ["std", "derive"] }
 hex = { version = "0.4", default-features = false, features = ["std"] }
 blake2 = { version = "0.11.0-rc.0", default-features = false }
 serde = { version = "1", default-features = false }
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 
+schnorrkel = { version = "0.11", default-features = false, features = ["std"], optional = true }
+serai-primitives = { path = "../../substrate/primitives", features = ["test-helpers"], optional = true }
+
 [dev-dependencies]
+rand = { version = "0.8", default-features = false }
+schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
+serai-primitives = { path = "../../substrate/primitives", features = ["test-helpers"] }
 serai-client-serai = { path = "../../substrate/client/serai" }

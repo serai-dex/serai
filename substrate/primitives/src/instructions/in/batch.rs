@@ -65,28 +65,44 @@ batch_struct!(#[derive(Clone, PartialEq, Eq, Debug, Zeroize, BorshSerialize)] pu
 
 impl BorshDeserialize for Batch {
   fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let mut size_limit_reader =
-      crate::sp_borsh::BoundedReader::<_, { Batch::MAX_SIZE }>::from(reader);
-    let BatchDeserialize {
-      encoded_size: _,
-      network,
-      id,
-      external_network_block_hash,
-      instructions,
-    } = <_>::deserialize_reader(&mut size_limit_reader)?;
-    Ok(Batch {
-      encoded_size: size_limit_reader.bytes_read(),
-      network,
-      id,
-      external_network_block_hash,
-      instructions,
-    })
+    let batch = {
+      let mut size_limit_reader =
+        crate::sp_borsh::BoundedReader::<_, { Batch::MAX_SIZE }>::from(reader);
+      let BatchDeserialize {
+        encoded_size: _,
+        network,
+        id,
+        external_network_block_hash,
+        instructions,
+      } = <_>::deserialize_reader(&mut size_limit_reader)?;
+      Batch {
+        encoded_size: size_limit_reader.bytes_read(),
+        network,
+        id,
+        external_network_block_hash,
+        instructions,
+      }
+    };
+
+    if batch
+      .instructions
+      .iter()
+      .any(|instruction| instruction.balance.coin.network() != batch.network)
+    {
+      Err(io::Error::other(
+        "batch contained instructions with coins associated to a distinct network",
+      ))?;
+    }
+
+    Ok(batch)
   }
 }
 
 /// An error incurred while pushing an instruction onto a `Batch`.
 #[derive(Debug)]
 pub enum PushInstructionError {
+  /// This instruction is for a coin with a distinct network.
+  DistinctNetwork,
   /// The Batch's max size was exceeded.
   MaxSizeExceeded,
 }
@@ -108,12 +124,18 @@ impl Batch {
     &mut self,
     instruction: InInstructionWithBalance,
   ) -> Result<(), PushInstructionError> {
+    if instruction.balance.coin.network() != self.network {
+      Err(PushInstructionError::DistinctNetwork)?;
+    }
+
     let new_size = self.encoded_size.saturating_add(borsh::object_length(&instruction).unwrap());
     if new_size > Self::MAX_SIZE {
       Err(PushInstructionError::MaxSizeExceeded)?;
     }
+
     self.encoded_size = new_size;
     self.instructions.push(instruction);
+
     Ok(())
   }
 
@@ -180,6 +202,7 @@ fn batch() {
 
   use crate::{prelude::*, crypto::RistrettoSignature};
 
+  let networks = NetworkId::all().collect::<Vec<_>>();
   let coins = Coin::all().collect::<Vec<_>>();
   let external_coins = ExternalCoin::all().collect::<Vec<_>>();
 
@@ -215,9 +238,11 @@ fn batch() {
         let address = SeraiAddress(address);
         let instruction = match OsRng.next_u64() % 7 {
           0 => InInstruction::GenesisLiquidity(address),
-          1 => {
-            InInstruction::SwapToStakedSri { validator: address, minimum: Amount(OsRng.next_u64()) }
-          }
+          1 => InInstruction::SwapToStakedSri {
+            validator: address,
+            network: networks[(OsRng.next_u64() as usize) % networks.len()],
+            minimum: Amount(OsRng.next_u64()),
+          },
           2 => InInstruction::TransferWithSwap {
             to: address,
             maximum_to_swap: Amount(OsRng.next_u64()),
@@ -226,7 +251,7 @@ fn batch() {
           3 => InInstruction::Transfer { to: address },
           4 => InInstruction::SwapAndAddLiquidity {
             address,
-            coin: Amount(OsRng.next_u64()),
+            external_coin_liquidity: Amount(OsRng.next_u64()),
             sri_minimum: Amount(OsRng.next_u64()),
             sri_for_fees: Amount(OsRng.next_u64()),
           },
@@ -252,7 +277,10 @@ fn batch() {
           _ => unreachable!(),
         };
         let balance = ExternalBalance {
-          coin: external_coins[(OsRng.next_u64() as usize) % external_coins.len()],
+          coin: {
+            let network_external_coins = network.coins().collect::<Vec<_>>();
+            network_external_coins[(OsRng.next_u64() as usize) % network_external_coins.len()]
+          },
           amount: Amount(OsRng.next_u64()),
         };
         InInstructionWithBalance { instruction, balance }

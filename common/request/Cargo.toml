@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/common/request"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["http", "https", "async", "request", "ssl"]
 edition = "2021"
-rust-version = "1.71"
+rust-version = "1.81"
 
 [package.metadata.docs.rs]
 all-features = true

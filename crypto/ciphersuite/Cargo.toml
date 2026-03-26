@@ -27,11 +27,6 @@ digest = { version = "0.11", default-features = false }
 ff = { version = "0.13", default-features = false, features = ["bits"] }
 group = { version = "0.13", default-features = false }
 
-[dev-dependencies]
-hex = { version = "0.4", default-features = false, features = ["std"] }
-
-ff-group-tests = { version = "0.13", path = "../ff-group-tests" }
-
 [features]
 alloc = ["zeroize/alloc", "digest/alloc", "ff/alloc"]
 std = [

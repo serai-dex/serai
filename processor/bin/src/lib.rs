@@ -47,12 +47,7 @@ pub type Db = serai_db::RocksDB;
 ///
 /// Yields the database.
 pub fn init() -> Db {
-  env_logger::builder()
-    .filter_level(
-      log::LevelFilter::from_str(&serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
-        .expect("`RUST_LOG` environment variable had an invalid filter"),
-    )
-    .init();
+  serai_env::init_logger();
   log::info!("Starting processor service...");
 
   #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]

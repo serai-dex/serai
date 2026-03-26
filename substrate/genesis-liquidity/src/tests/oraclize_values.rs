@@ -47,13 +47,8 @@ fn oraclize_values() {
 
     let mut total_required_stake = crate::GENESIS_SRI.0 * 3 / 2;
     total_required_stake += total_required_stake / 5;
-    let genesis_key_shares = u16::from(
-      <() as crate::ValidatorSets>::key_shares(ValidatorSet {
-        network: NetworkId::Serai,
-        session: Session(0),
-      })
-      .unwrap(),
-    );
+    // This is hard-coded to the length of the vector within the test environment's configuration
+    let genesis_key_shares = 4u16;
     let target_key_shares = (2 * genesis_key_shares) + 1;
 
     let allocation_per_key_share =

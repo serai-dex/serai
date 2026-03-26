@@ -15,7 +15,8 @@ pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_mins(1);
 #[cfg(any(test))]
 pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(6);
 
-const COSIGN_COMMIT_THRESHOLD: u64 = 83;
+const COSIGN_COMMIT_THRESHOLD_NUMERATOR: u128 = 83;
+const COSIGN_COMMIT_THRESHOLD_DENOMINATOR: u128 = 100;
 
 create_db!(
   SubstrateCosignEvaluator {
@@ -26,10 +27,16 @@ create_db!(
 
 db_channel!(
   SubstrateCosignEvaluatorChannels {
-    // (cosigned block, time cosign was evaluated)
-    CosignedBlocks: () -> (u64, u64),
+    // (cosigned block, time cosign was evaluated, has_events)
+    CosignedBlocks: () -> (u64, u64, bool),
   }
 );
+
+/// Commit a block as evaluated without sending it for cosign delay.
+fn commit_evaluated_block(mut txn: impl DbTxn, block_number: u64, has_events: bool) {
+  CosignedBlocks::send(&mut txn, &(block_number, now_timestamp().as_secs(), has_events));
+  txn.commit();
+}
 
 /// This is a strict function which won't panic, even with a malicious Serai node, so long as:
 /// - It's called incrementally (with an increment of 1)
@@ -49,6 +56,8 @@ fn currently_evaluated_global_session_strict(
       Some(existing) => existing,
       None => {
         let first = GlobalSessionsChannel::try_recv(txn)
+          // Panic: invariant, this function should only be called if
+          // the global sessions channel is populated
           .expect("fetching latest global session yet none declared");
         CurrentlyEvaluatedGlobalSession::set(txn, &first);
         first
@@ -56,7 +65,7 @@ fn currently_evaluated_global_session_strict(
     };
     assert!(
       existing.1.start_block_number <= block_number,
-      "candidate's start block number {:#?} exceeds our block number {block_number}",
+      "candidate's start block number ({:#?}) exceeds our block number ({block_number})",
       existing.1.start_block_number
     );
     existing
@@ -93,8 +102,13 @@ fn should_request_cosigns(last_request_for_cosigns: &mut Instant) -> bool {
 }
 
 //// Calculate the minimum threshold required for cosigning
-fn cosign_threshold(total_stake: u64) -> u64 {
-  ((total_stake * COSIGN_COMMIT_THRESHOLD) / 100) + 1
+pub(crate) fn cosign_threshold(total_stake: u64) -> u64 {
+  u64::try_from(
+    (u128::from(total_stake) * COSIGN_COMMIT_THRESHOLD_NUMERATOR) /
+      COSIGN_COMMIT_THRESHOLD_DENOMINATOR,
+  )
+  .expect("threshold < 1") +
+    1
 }
 
 /// Evaluate non-notable cosigns, returning (weight_cosigned, lowest_common_block).
@@ -143,20 +157,27 @@ async fn ensure_cosigned(
   block_number: u64,
   global_session: [u8; 32],
   last_request_for_cosigns: &mut Instant,
-  request: &(impl RequestNotableCosigns + Sync),
+  request: &impl RequestNotableCosigns,
   label: &str,
 ) -> Result<(), String> {
   if weight_cosigned >= cosign_threshold(total_stake) {
     return Ok(());
   }
 
+  // For HasEvents::Notable request the superseding notable cosigns over the network
+  // If this session hasn't yet produced notable cosigns, then we presume we'll see
+  // the desired non-notable cosigns as part of normal operations, without needing to
+  // explicitly request them
+  //
+  // For HasEvents::NonNotable request the necessary cosigns over the network
   if should_request_cosigns(last_request_for_cosigns) {
     request
       .request_notable_cosigns(global_session)
       .await
-      .map_err(|e| format!("RPC error fetching notable cosigns: {e:?}"))?;
+      .map_err(|e| format!("Error fetching notable cosigns: {e:?}"))?;
   }
 
+  // We return an error so the delay before this task is run again increases
   Err(format!("{label} block (#{block_number}) wasn't yet cosigned. this should resolve shortly"))
 }
 
@@ -167,34 +188,45 @@ pub(crate) struct CosignEvaluatorTask<D: Db, R: RequestNotableCosigns> {
   pub(crate) last_request_for_cosigns: Instant,
 }
 
-impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorTask<D, R> {
+impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, R> {
+  #[cfg(test)]
+  const DELAY_BETWEEN_ITERATIONS: u64 = 1;
+  #[cfg(test)]
+  const MAX_DELAY_BETWEEN_ITERATIONS: u64 = 5;
+
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let mut known_cosign = None;
       let mut made_progress = false;
-
       loop {
-        // This task requires the global sessions channel to be populated
-        // as the block declaring the session is indexed
-        if CurrentlyEvaluatedGlobalSession::get(&self.db).is_none() &&
-          GlobalSessionsChannel::peek(&self.db).is_none()
-        {
-          // no session has ever been declared
-          return Ok(false);
-        }
-
         let mut txn = self.db.txn();
         let Some(BlockEventData { block_number, has_events }) = BlockEvents::try_recv(&mut txn)
         else {
           break;
         };
 
-        serai_log::log::debug!(
-          "beginning evaluator: block_number={block_number}, has_events={:#?}",
-          has_events
-        );
+        // If no session is being evaluated yet, check if this block can be processed
+        if currently_evaluated_global_session(&txn).is_none() {
+          match GlobalSessionsChannel::peek(&txn) {
+            // No global session declared yet: this block predates all sessions, skip it
+            // this means only HasEvents:No blocks have been consumed so far
+            None => {
+              commit_evaluated_block(txn, block_number, false);
+              made_progress = true;
+              continue;
+            }
+            // Session queued but starts after this block, skip it
+            Some(next) if next.1.start_block_number > block_number => {
+              commit_evaluated_block(txn, block_number, false);
+              made_progress = true;
+              continue;
+            }
+            // Session covers this block: proceed normally
+            _ => {}
+          }
+        }
 
         // Fetch the global session information
         let (global_session, global_session_info) =
@@ -205,10 +237,9 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
           // supermajority of the prior block's validator sets
           HasEvents::Notable => {
             let mut weight_cosigned = 0;
-
             for set in global_session_info.sets {
               // Check if we have the cosign from this set
-              if NetworksLatestCosignedBlock::get(&mut txn, global_session, set.network)
+              if NetworksLatestCosignedBlock::get(&txn, global_session, set.network)
                 .map(|signed_cosign| signed_cosign.cosign.block_number) ==
                 Some(block_number)
               {
@@ -230,6 +261,8 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
               "notable",
             )
             .await?;
+
+            serai_env::debug!("marking notable block #{block_number} as cosigned");
           }
           // Since this block didn't have any notable events, we simply require a cosign for this
           // block or a greater block by the current validator sets
@@ -271,20 +304,29 @@ impl<D: Db, R: RequestNotableCosigns + Sync> ContinuallyRan for CosignEvaluatorT
               */
               known_cosign = lowest_common_block;
             }
+
+            serai_env::debug!("marking non-notable block #{block_number} as cosigned");
           }
           // If this block has no events necessitating cosigning, we can immediately consider the
           // block cosigned (making this block a NOP)
-          HasEvents::No => {}
+          HasEvents::No => {
+            commit_evaluated_block(txn, block_number, false);
+            made_progress = true;
+            continue;
+          }
         }
 
         // Since we checked we had the necessary cosigns, send it for delay before acknowledgement
-        CosignedBlocks::send(&mut txn, &(block_number, now_timestamp().as_secs()));
-        txn.commit();
+        commit_evaluated_block(txn, block_number, true);
 
-        // Roughly ~1 hour, no need for repetitive logging
+        // INFOs roughly every ~1 hour, no need for repetitive logging on prod,
+        #[cfg(not(test))]
         if (block_number % 500) == 0 {
-          serai_log::debug!("marking block #{block_number} as cosigned");
+          serai_env::prod_info!("marking block #{block_number} as cosigned");
         }
+        // for tests debug on every block
+        #[cfg(test)]
+        serai_env::debug!("marking block #{block_number} as cosigned");
 
         made_progress = true;
       }

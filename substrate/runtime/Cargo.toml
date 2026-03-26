@@ -6,6 +6,8 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/runtime"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
+build = "build/main.rs"
+publish = false
 
 [package.metadata.docs.rs]
 all-features = true
@@ -16,6 +18,10 @@ ignored = ["scale"]
 
 [lints]
 workspace = true
+
+[build-dependencies]
+toml = { version = "0.9", default-features = false, features = ["serde", "parse"] }
+core-json = { version = "0.4", default-features = false }
 
 [target.'cfg(not(target_family = "wasm"))'.dependencies]
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
@@ -34,12 +40,15 @@ sp-authority-discovery = { git = "https://github.com/serai-dex/patch-polkadot-sd
 serai-abi = { path = "../abi", default-features = false, features = ["substrate"], optional = true }
 
 [target.'cfg(any(target_family = "wasm", native_runtime))'.dependencies]
+const-hex = { version = "1", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 borsh = { version = "1", default-features = false }
 
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-version = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+sp-staking = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-session = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 

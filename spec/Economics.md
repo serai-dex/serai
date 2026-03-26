@@ -116,7 +116,8 @@ Emissions only start after genesis.
 
 ```
 INITIAL_PERIOD = 30 days
-INITIAL_REWARD_PER_BLOCK = 100,000 SRI / (1 day / TARGET_BLOCK_TIME)
+INITIAL_PERIOD_REWARDS = INITIAL_PERIOD * (100,000 SRI / 1 day)
+INITIAL_PERIOD_REWARD_PER_BLOCK = INITIAL_PERIOD_REWARDS / TARGET_BLOCK_TIME
 LITERAL_STAKE_REQUIRED = 1.5 * sri_in_pools()
 EXTERNAL_STAKE_BUFFER = 0.2
 EXTERNAL_STAKE_REQUIRED = LITERAL_STAKE_REQUIRED * (1 + EXTERNAL_STAKE_BUFFER)
@@ -126,22 +127,21 @@ SERAI_VALIDATORS_STAKE_DESIRED = SERAI_VALIDATORS_DESIRED_PERCENTAGE * STAKE_DES
 SECURE_BY = 365 days
 ```
 
-`CURRENT_STAKE` is the amount of stake from each external network, capped at the
-amount needed for each external network to be secure (so a validator set with
-unused capacity only counts for the amount required to be secure).
+During the pre-Economic Security era, the block reward from genesis till the
+end of `INITIAL_PERIOD` is fixed to `INITIAL_REWARD`. During this time, the
+Serai validators receive exactly
+`SERAI_VALIDATORS_DESIRED_PERCENTAGE * INITIAL_REWARD` while the validators for
+external networks split the rest proportional to their distance to economic
+security.
 
-The block reward from genesis till the end of `INITIAL_PERIOD` is fixed to
-`INITIAL_REWARD`. Afterwards, the block reward is
-`(STAKE_DESIRED - CURRENT_STAKE) / blocks_until(SECURE_BY)`.
-
-This ensures economic security by the specified date. As economic security by
-printing SRI is undesirable, the amount of economic security so achieved is a
-function of necessity due to lack of interest in staking.
-
-Emissions are distributed to each validator set as a function of their distance
-from economic security. For the Serai validator set, which does not have a
-literal evaluation of this, `SERAI_VALIDATORS_STAKE_DESIRED` is used as the
-value required to be considered economically secure.
+After the initial period, the block reward is defined as
+`DISTANCE_TO_ECONOMIC_SECURITY / blocks_until(SECURE_BY)`. This intends to
+ensure economic security by (approximately) the specified date. While achieving
+economic security by minting SRI as emissions is undesirable, the amount so
+minted is a function of the (lack of) interested in staking. For the Serai
+validator set, which does not have a literal evaluation of
+`DISTANCE_TO_ECONOMIC_SECURITY` available, `SERAI_VALIDATORS_STAKE_DESIRED` is
+used as the value required to be considered economically secure.
 
 ## Post-economic Security
 

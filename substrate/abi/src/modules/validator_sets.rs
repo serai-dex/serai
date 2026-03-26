@@ -12,8 +12,6 @@ use serai_primitives::{
   validator_sets::*,
 };
 
-pub use serai_primitives::validator_sets::DeallocationTimeline;
-
 /// The address used by the validator sets pallet.
 pub fn address() -> SeraiAddress {
   SeraiAddress::system(borsh::to_vec(b"ValidatorSets").unwrap())
@@ -24,8 +22,6 @@ pub fn address() -> SeraiAddress {
 pub enum Slashes {
   /// A single slash for a specific validator of the Serai network.
   Serai {
-    /// The session the misbehavior occurred during.
-    session: Session,
     /// The validator being slashed.
     validator: SeraiAddress,
     /// The reason for the slash, represented as an opaque byte blob.
@@ -47,8 +43,16 @@ pub enum Slashes {
     /// representing an `EquivocationProof` not with [`SubstrateHeader`] but
     /// `(Header, Digest::new(substrate_header.digest().find(babe)))` which can be of bounded
     /// length even while the digest as a whole remains unbounded (its own sin).
-    #[expect(clippy::as_conversions)]
-    reason: BoundedVec<u8, ConstU32<{ u16::MAX as u32 }>>,
+    reason: BoundedVec<
+      u8,
+      ConstU32<
+        {
+          #[expect(clippy::as_conversions)]
+          const MAX_REASON_LEN: u32 = u16::MAX as u32;
+          MAX_REASON_LEN
+        },
+      >,
+    >,
   },
   /// A [`SlashReport`] from an external network.
   ExternalNetwork {
@@ -70,8 +74,8 @@ pub enum Slashes {
 impl BorshSerialize for Slashes {
   fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
     match self {
-      Slashes::Serai { session, validator, reason } => {
-        (NetworkId::Serai, session, validator).serialize(writer)?;
+      Slashes::Serai { validator, reason } => {
+        (NetworkId::Serai, validator).serialize(writer)?;
         serai_primitives::sp_borsh::borsh_serialize_bounded_vec(reason, writer)
       }
       Slashes::ExternalNetwork { set, slashes, signature } => {
@@ -85,7 +89,6 @@ impl BorshDeserialize for Slashes {
   fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     Ok(match NetworkId::deserialize_reader(reader)? {
       NetworkId::Serai => Slashes::Serai {
-        session: <_>::deserialize_reader(reader)?,
         validator: <_>::deserialize_reader(reader)?,
         reason: serai_primitives::sp_borsh::borsh_deserialize_bounded_vec(reader)?,
       },
@@ -161,6 +164,38 @@ impl Call {
   }
 }
 
+/// A summary of the slashes reported.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub enum ReportedSlashes {
+  /// A single Serai validator was fatally slashed.
+  SeraiValidator(SeraiAddress),
+  /// A slash report was published for an external network's validator set.
+  ExternalValidatorSet(ExternalValidatorSet),
+}
+
+impl BorshSerialize for ReportedSlashes {
+  fn serialize<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    match self {
+      ReportedSlashes::SeraiValidator(address) => (NetworkId::Serai, address).serialize(writer),
+      ReportedSlashes::ExternalValidatorSet(set) => set.serialize(writer),
+    }
+  }
+}
+
+impl BorshDeserialize for ReportedSlashes {
+  fn deserialize_reader<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    Ok(match NetworkId::deserialize_reader(reader)? {
+      NetworkId::Serai => {
+        ReportedSlashes::SeraiValidator(SeraiAddress::deserialize_reader(reader)?)
+      }
+      NetworkId::External(network) => ReportedSlashes::ExternalValidatorSet(ExternalValidatorSet {
+        network,
+        session: Session::deserialize_reader(reader)?,
+      }),
+    })
+  }
+}
+
 /// An event from the validator sets module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Event {
@@ -183,18 +218,8 @@ pub enum Event {
     /// The set which accepted responsibility from the prior set.
     set: ValidatorSet,
   },
-  /// A marker event for slashes having occured for a validator set.
-  ///
-  /// In the case of `set.network == NetworkId::Serai`, this signifies a single validator was
-  /// slashed. In the case of `matches!(set.network, NetworkId::External(_))`, this signals the
-  /// set published a slash report _or_ a default slash report was used due to the publication
-  /// window timing out. This means every external validator set will trigger this event, as useful
-  /// for determining if a validator set has any outstanding operations (as reporting slashes will
-  /// be its final act).
-  Slashes {
-    /// The set for which slashes have occurred.
-    set: ValidatorSet,
-  },
+  /// A marker event for a slash or slashes having occured.
+  Slashes(ReportedSlashes),
   /// A validator set their keys on an embedded elliptic curve for a network.
   SetEmbeddedEllipticCurveKeys {
     /// The validator which set their keys.
@@ -241,22 +266,30 @@ fn serialize_slashes() {
 
   for _ in 0 .. 1000 {
     {
-      #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
-      let session = Session(OsRng.next_u64() as u32);
-
       let mut validator = [0; 32];
       OsRng.fill_bytes(&mut validator);
       let validator = SeraiAddress(validator);
 
-      let mut reason = vec![0u8; usize::try_from(OsRng.next_u64() % u64::from(u16::MAX)).unwrap()];
-      OsRng.fill_bytes(&mut reason);
+      {
+        let mut reason =
+          vec![0u8; usize::try_from(OsRng.next_u64() % u64::from(u16::MAX)).unwrap()];
+        OsRng.fill_bytes(&mut reason);
 
-      let slashes = Slashes::Serai { session, validator, reason: reason.try_into().unwrap() };
+        let slashes = Slashes::Serai { validator, reason: reason.try_into().unwrap() };
 
-      assert_eq!(
-        slashes,
-        Slashes::deserialize_reader(&mut borsh::to_vec(&slashes).unwrap().as_slice()).unwrap()
-      );
+        assert_eq!(
+          slashes,
+          Slashes::deserialize_reader(&mut borsh::to_vec(&slashes).unwrap().as_slice()).unwrap()
+        );
+      }
+      {
+        let reported = ReportedSlashes::SeraiValidator(validator);
+        assert_eq!(
+          reported,
+          ReportedSlashes::deserialize_reader(&mut borsh::to_vec(&reported).unwrap().as_slice())
+            .unwrap()
+        );
+      }
     }
 
     {
@@ -264,32 +297,39 @@ fn serialize_slashes() {
       let network = external_networks[(OsRng.next_u64() as usize) % external_networks.len()];
       #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
       let session = Session(OsRng.next_u64() as u32);
+      let set = ExternalValidatorSet { network, session };
 
-      let mut slashes = vec![];
-      for _ in 0 .. (OsRng.next_u64() % KeyShares::MAX_PER_SET_U64) {
-        if (OsRng.next_u64() & 1) == 1 {
-          slashes.push(Slash::Fatal);
-        } else {
-          #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
-          slashes.push(Slash::Points(OsRng.next_u64() as u32));
+      {
+        let mut slashes = vec![];
+        for _ in 0 .. (OsRng.next_u64() % KeyShares::MAX_PER_SET_U64) {
+          if (OsRng.next_u64() & 1) == 1 {
+            slashes.push(Slash::Fatal);
+          } else {
+            #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+            slashes.push(Slash::Points(OsRng.next_u64() as u32));
+          }
         }
+        let slashes = SlashReport(slashes.try_into().unwrap());
+
+        let mut signature = [0; 64];
+        OsRng.fill_bytes(&mut signature);
+        let signature = Signature::from(RistrettoSignature(signature));
+
+        let slashes = Slashes::ExternalNetwork { set, slashes, signature };
+
+        assert_eq!(
+          slashes,
+          Slashes::deserialize_reader(&mut borsh::to_vec(&slashes).unwrap().as_slice()).unwrap()
+        );
       }
-      let slashes = SlashReport(slashes.try_into().unwrap());
-
-      let mut signature = [0; 64];
-      OsRng.fill_bytes(&mut signature);
-      let signature = Signature::from(RistrettoSignature(signature));
-
-      let slashes = Slashes::ExternalNetwork {
-        set: ExternalValidatorSet { network, session },
-        slashes,
-        signature,
-      };
-
-      assert_eq!(
-        slashes,
-        Slashes::deserialize_reader(&mut borsh::to_vec(&slashes).unwrap().as_slice()).unwrap()
-      );
+      {
+        let reported = ReportedSlashes::ExternalValidatorSet(set);
+        assert_eq!(
+          reported,
+          ReportedSlashes::deserialize_reader(&mut borsh::to_vec(&reported).unwrap().as_slice())
+            .unwrap()
+        );
+      }
     }
   }
 }

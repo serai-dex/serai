@@ -110,7 +110,7 @@ impl<CD: DbTrait, TD: DbTrait, P: P2p> ContinuallyRan
             Err("cosigning faulted")?
           }
         };
-        if latest < cosign.block_number {
+        if latest < Some(cosign.block_number) {
           break;
         }
 

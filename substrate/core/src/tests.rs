@@ -433,13 +433,12 @@ fn block_flow() {
             session: Session(OsRng.next_u64() as u32),
           },
         }),
-        serai_abi::Event::ValidatorSets(serai_abi::validator_sets::Event::Slashes {
-          set: (ExternalValidatorSet {
+        serai_abi::Event::ValidatorSets(serai_abi::validator_sets::Event::Slashes(
+          serai_abi::validator_sets::ReportedSlashes::ExternalValidatorSet(ExternalValidatorSet {
             network: ExternalNetworkId::Bitcoin,
             session: Session(OsRng.next_u64() as u32),
-          })
-          .into(),
-        }),
+          }),
+        )),
       ]
     };
     events[(OsRng.next_u64() as usize) % events.len()].clone()

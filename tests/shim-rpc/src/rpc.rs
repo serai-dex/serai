@@ -1,15 +1,19 @@
-use jsonrpsee::{types::error::ErrorObjectOwned, RpcModule};
+use jsonrpsee::{
+  RpcModule,
+  types::{error::ErrorObjectOwned, params::Params},
+};
+use serde::Deserialize;
 
 use serai_abi::{
   Event,
   primitives::{
     BlockHash,
     network_id::{ExternalNetworkId, NetworkId},
-    validator_sets::{ExternalValidatorSet, Session},
+    validator_sets::{ExternalValidatorSet, Session, ValidatorSet},
   },
 };
 
-use crate::state::SharedState;
+use crate::state::{SharedState, ShimState};
 
 /// Typed RPC errors mirroring `substrate/node/src/rpc/utils.rs`.
 enum Error {
@@ -42,17 +46,14 @@ impl From<Error> for ErrorObjectOwned {
 /// Resolve a block hash from JSON-RPC params.
 ///
 /// Mirrors `substrate/node/src/rpc/utils.rs`:
-/// - `{ "block": "hex_hash" }` → lookup by hash
-/// - `{ "block": 123 }` → lookup by number
-fn resolve_block_hash(
-  params: &jsonrpsee::types::params::Params,
-  state: &crate::state::ShimState,
-) -> Result<Option<BlockHash>, Error> {
-  #[derive(sp_core::serde::Deserialize)]
+/// - `{ "block": "hex_hash" }` = lookup by hash
+/// - `{ "block": 123 }` = lookup by number
+fn resolve_block_hash(params: &Params, state: &ShimState) -> Result<Option<BlockHash>, Error> {
+  #[derive(Deserialize)]
   struct BlockByHash {
     block: String,
   }
-  #[derive(sp_core::serde::Deserialize)]
+  #[derive(Deserialize)]
   struct BlockByNumber {
     block: u64,
   }
@@ -86,8 +87,8 @@ fn network_from_str(network: &str) -> Result<NetworkId, Error> {
   })
 }
 
-fn parse_network(params: &jsonrpsee::types::params::Params) -> Result<NetworkId, Error> {
-  #[derive(sp_core::serde::Deserialize)]
+fn parse_network(params: &Params) -> Result<NetworkId, Error> {
+  #[derive(Deserialize)]
   struct Network {
     network: String,
   }
@@ -96,8 +97,8 @@ fn parse_network(params: &jsonrpsee::types::params::Params) -> Result<NetworkId,
   network_from_str(&network.network)
 }
 
-fn parse_set(params: &jsonrpsee::types::params::Params) -> Result<ExternalValidatorSet, Error> {
-  #[derive(sp_core::serde::Deserialize)]
+fn parse_set(params: &Params) -> Result<ExternalValidatorSet, Error> {
+  #[derive(Deserialize)]
   struct Set {
     network: String,
     session: u32,
@@ -106,11 +107,9 @@ fn parse_set(params: &jsonrpsee::types::params::Params) -> Result<ExternalValida
     .parse()
     .map_err(|_| Error::InvalidRequest(r#"missing "network"/"session" fields"#.to_owned()))?;
   let network = network_from_str(&set.network)?;
-  ExternalValidatorSet::try_from(serai_abi::primitives::validator_sets::ValidatorSet {
-    network,
-    session: Session(set.session),
-  })
-  .map_err(|()| Error::InvalidRequest("requested keys for a non-external validator set".to_owned()))
+  ExternalValidatorSet::try_from(ValidatorSet { network, session: Session(set.session) }).map_err(
+    |()| Error::InvalidRequest("requested keys for a non-external validator set".to_owned()),
+  )
 }
 
 /// Build the RPC module with all method handlers matching the real Serai node.
@@ -122,6 +121,11 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
       "blockchain/latest_finalized_block_number",
       async |_params, state, _ext| {
         let state = state.read().await;
+        if let Some(err) =
+          state.errors.check_random_failure("blockchain/latest_finalized_block_number")
+        {
+          return Err(Error::Internal(err));
+        }
         if let Some(err) = state.errors.check_method("blockchain/latest_finalized_block_number") {
           return Err(Error::Internal(err.to_owned()));
         }
@@ -133,6 +137,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("blockchain/is_finalized", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("blockchain/is_finalized") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("blockchain/is_finalized") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -149,6 +156,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("blockchain/block", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("blockchain/block") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("blockchain/block") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -177,6 +187,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("blockchain/events", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("blockchain/events") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("blockchain/events") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -204,6 +217,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("validator-sets/current_session", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("validator-sets/current_session") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("validator-sets/current_session") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -219,6 +235,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("validator-sets/current_stake", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("validator-sets/current_stake") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("validator-sets/current_stake") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -234,6 +253,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("validator-sets/keys", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("validator-sets/keys") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("validator-sets/keys") {
         return Err(Error::Internal(err.to_owned()));
       }
@@ -249,6 +271,9 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
   module
     .register_async_method("validator-sets/current_validators", async |params, state, _ext| {
       let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("validator-sets/current_validators") {
+        return Err(Error::Internal(err));
+      }
       if let Some(err) = state.errors.check_method("validator-sets/current_validators") {
         return Err(Error::Internal(err.to_owned()));
       }

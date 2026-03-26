@@ -22,6 +22,4 @@ let serai = Serai::new(shim_serai.url()).unwrap();
 
 let latest = serai.latest_finalized_block_number().await.unwrap();
 assert_eq!(latest, 1);
-
-shim_serai.stop();
 ```

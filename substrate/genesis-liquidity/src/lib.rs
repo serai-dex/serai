@@ -26,10 +26,11 @@ type GenesisLiquidityTokens<T> =
 )]
 #[frame_support::pallet]
 mod pallet {
-  use core::time::Duration;
+  use core::{marker::PhantomData, time::Duration};
 
-  use alloc::vec;
+  use alloc::{vec, vec::Vec};
 
+  use sp_core::sr25519::Public;
   use sp_application_crypto::RuntimePublic as _;
 
   use frame_support::{sp_runtime, pallet_prelude::*, dispatch::RawOrigin};
@@ -39,8 +40,8 @@ mod pallet {
     primitives::{
       prelude::*,
       BitVec,
-      crypto::{RistrettoSignature, EmbeddedEllipticCurveKeys},
-      validator_sets::KeyShares,
+      crypto::RistrettoSignature,
+      validator_sets::{MusigKeyError, KeyShares},
       genesis_liquidity::GenesisValues,
     },
     economic_security::EconomicSecurity,
@@ -58,21 +59,6 @@ mod pallet {
     /// Set the allocation required per key share.
     fn set_allocation_per_key_share(network: NetworkId, allocation_per_key_share: Amount);
 
-    /// The current session for a network.
-    fn current_session(network: NetworkId) -> Option<Session>;
-
-    /// The amount of key shares a validator set has.
-    fn key_shares(set: ValidatorSet) -> Option<KeyShares>;
-
-    /// The validators selected for a validator set.
-    fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (SeraiAddress, KeyShares)>;
-
-    /// The auxiliary keys for a validator.
-    fn auxiliary_keys(
-      validator: SeraiAddress,
-      network: NetworkId,
-    ) -> Option<EmbeddedEllipticCurveKeys>;
-
     /// The required amount of SRI which must be allocated as stake for a network to be considered
     /// economically secure.
     fn network_stake_requirement(network: ExternalNetworkId) -> Amount;
@@ -86,25 +72,6 @@ mod pallet {
         network,
         allocation_per_key_share,
       )
-    }
-
-    fn current_session(network: NetworkId) -> Option<Session> {
-      serai_validator_sets_pallet::Pallet::<T>::current_session(network)
-    }
-
-    fn key_shares(set: ValidatorSet) -> Option<KeyShares> {
-      serai_validator_sets_pallet::Pallet::<T>::key_shares(set)
-    }
-
-    fn selected_validators(set: ValidatorSet) -> impl Iterator<Item = (SeraiAddress, KeyShares)> {
-      serai_validator_sets_pallet::Pallet::<T>::selected_validators(set)
-    }
-
-    fn auxiliary_keys(
-      validator: SeraiAddress,
-      network: NetworkId,
-    ) -> Option<EmbeddedEllipticCurveKeys> {
-      serai_validator_sets_pallet::Pallet::<T>::auxiliary_keys(validator, network)
     }
 
     fn network_stake_requirement(network: ExternalNetworkId) -> Amount {
@@ -162,6 +129,13 @@ mod pallet {
     type Weights: Weights;
   }
 
+  /// The auxiliary keys for the genesis validators of the network.
+  ///
+  /// Each will be considered to have one key share.
+  #[expect(clippy::as_conversions)]
+  #[pallet::storage]
+  pub(crate) type GenesisValidatorsAuxiliaryKeys<T: Config> =
+    StorageValue<_, BoundedVec<Public, ConstU32<{ u16::MAX as u32 }>>, ValueQuery>;
   /// The first (non-genesis) block's timestamp.
   #[pallet::storage]
   pub(crate) type GenesisTimestamp<T: Config> = StorageValue<_, u64, OptionQuery>;
@@ -171,6 +145,61 @@ mod pallet {
   /// When economic security was achieved, represented in milliseconds since the epoch.
   #[pallet::storage]
   pub(crate) type EconomicSecurityAchieved<T: Config> = StorageValue<_, u64, OptionQuery>;
+
+  #[pallet::genesis_config]
+  #[derive(Clone, Debug)]
+  pub struct GenesisConfig<T: Config> {
+    /// The Serai auxiliary keys for the validator.
+    pub genesis_validators_auxiliary_keys: BoundedVec<Public, ConstU32<{ u16::MAX as u32 }>>,
+    /// The `PhantomData` used to bind the `Config`.
+    pub _config: PhantomData<T>,
+  }
+  impl<T: Config> Default for GenesisConfig<T> {
+    fn default() -> Self {
+      Self { genesis_validators_auxiliary_keys: Default::default(), _config: PhantomData }
+    }
+  }
+  /// This assumes the [`serai_validator_sets_pallet::GenesisConfig`] is sane, lacking edge cases.
+  /// As this configuration is static, and will presumably be validated by
+  /// `serai_validator_sets_pallet`, this is fine.
+  impl<T: serai_validator_sets_pallet::Config + Config>
+    TryFrom<serai_validator_sets_pallet::GenesisConfig<T>> for GenesisConfig<T>
+  {
+    type Error = ();
+    fn try_from(config: serai_validator_sets_pallet::GenesisConfig<T>) -> Result<Self, ()> {
+      config
+        .participants
+        .into_iter()
+        .map(|(participant, signed_embedded_elliptic_curve_keys)| {
+          // Technically, this uses the first `EmbeddedEllipticCurveKeys::Serai` and not
+          // THE `EmbeddedEllipticCurveKeys::Serai`, lacking any check it's singular
+          signed_embedded_elliptic_curve_keys.into_iter().find_map(|keys| {
+            keys.verify(participant).and_then(|keys| {
+              if let serai_abi::primitives::crypto::EmbeddedEllipticCurveKeys::Serai(key) = keys {
+                Some(Public::from(key))
+              } else {
+                None
+              }
+            })
+          })
+        })
+        .collect::<Option<Vec<_>>>()
+        .and_then(|genesis_validators_auxiliary_keys| {
+          Some(Self {
+            genesis_validators_auxiliary_keys: genesis_validators_auxiliary_keys.try_into().ok()?,
+            _config: PhantomData,
+          })
+        })
+        .ok_or(())
+    }
+  }
+
+  #[pallet::genesis_build]
+  impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
+    fn build(&self) {
+      GenesisValidatorsAuxiliaryKeys::<T>::put(&self.genesis_validators_auxiliary_keys);
+    }
+  }
 
   /// An error incurred.
   #[pallet::error]
@@ -327,17 +356,9 @@ mod pallet {
 
       // Initialize the validator sets
       {
-        // Use the current Serai set, as this _should_ represent the genesis validators
-        let set = ValidatorSet {
-          network: NetworkId::Serai,
-          session: T::ValidatorSets::current_session(NetworkId::Serai)
-            .expect("oraclizing values yet never genesis'd Serai"),
-        };
-
-        let amount_of_genesis_key_shares = u16::from(
-          T::ValidatorSets::key_shares(set)
-            .expect("validator set is current but doesn't have its key shares defined"),
-        );
+        let amount_of_genesis_key_shares =
+          u16::try_from(GenesisValidatorsAuxiliaryKeys::<T>::get().len())
+            .expect("amount of genesis validators exceeded `u16::MAX`");
 
         // Even if all non-genesis validators are malicious, integrity should hold until economic
         // security so long as a single genesis validator is honest
@@ -398,7 +419,7 @@ mod pallet {
       genesis_liquidity: ExternalBalance,
     ) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      GenesisLiquidityTokens::<T>::transfer_fn(from, to, genesis_liquidity.into())?;
+      GenesisLiquidityTokens::<T>::transfer_internal(from, to, genesis_liquidity.into())?;
       Self::emit_event(Event::GenesisLiquidityTransferred { from, to, genesis_liquidity });
       Ok(())
     }
@@ -554,8 +575,9 @@ mod pallet {
         // Calculate the amount of the external coin to consider yielding for this liquidity
         let yieldable_external_coin = {
           /*
-            Calculate how much of this external coin is additional to the initial liquidity. This is
-            premised on how the genesis liquidity tokens are 1:1 with the amount originally added.
+            Calculate how much of this external coin is additional to the initial liquidity. This
+            is premised on how the genesis liquidity tokens are 1:1 with the amount originally
+            added.
           */
           let additional_external_coin =
             (liquidity_position_external_coin - genesis_liquidity.amount).unwrap_or(Amount(0));
@@ -693,10 +715,10 @@ mod pallet {
         representing Protocol-Owned Liquidity. This ensures these coins will remain available via
         the pool and able to be swapped.
       */
-      LiquidityTokens::<T>::transfer_fn(
-        our_address,
+      Dex::<T>::transfer_liquidity(
+        Some(our_address).into(),
         pool_address,
-        (ExternalBalance { coin: genesis_liquidity.coin, amount: difference_in_liquidity }).into(),
+        ExternalBalance { coin: genesis_liquidity.coin, amount: difference_in_liquidity },
       )?;
 
       // Burn the SRI which is from the incomplete trickle feed
@@ -762,46 +784,27 @@ mod pallet {
 
           // Verify the signature
           {
-            // Use the current Serai set, as this _should_ represent the genesis validators. The
-            // exact reasoning on this assumption is documented in this crate's README.
-            let set = ValidatorSet {
-              network: NetworkId::Serai,
-              session: T::ValidatorSets::current_session(NetworkId::Serai)
-                .expect("oraclizing values yet never genesis'd Serai"),
-            };
-
             let mut signature_participants = signature_participants.into_iter();
-            let mut selected_validators = T::ValidatorSets::selected_validators(set);
+            let mut genesis_validators_auxiliary_keys =
+              GenesisValidatorsAuxiliaryKeys::<T>::get().into_iter();
 
             let mut total_key_shares = 0;
             let mut participating_key_shares = 0;
             let mut participating_keys = vec![];
-            for (participating, (validator, key_shares)) in
-              (&mut signature_participants).zip(&mut selected_validators)
+            for (participating, auxiliary_key) in
+              (&mut signature_participants).zip(&mut genesis_validators_auxiliary_keys)
             {
-              total_key_shares += u16::from(key_shares);
+              total_key_shares += 1;
               if *participating {
-                participating_key_shares += u16::from(key_shares);
-                participating_keys.push(
-                  match T::ValidatorSets::auxiliary_keys(validator, NetworkId::Serai) {
-                    Some(serai_abi::primitives::crypto::EmbeddedEllipticCurveKeys::Serai(key)) => {
-                      sp_core::sr25519::Public::from(key)
-                    }
-                    Some(_) => {
-                      panic!(
-                        "`ValidatorSets` yielded auxiliary key for XYZ despite requesting `Serai`"
-                      )
-                    }
-                    None => {
-                      panic!("validator missing auxiliary keys for network they were selected for")
-                    }
-                  },
-                );
+                participating_key_shares += 1;
+                participating_keys.push(auxiliary_key);
               }
             }
 
             // Check these iterators were of the same length
-            if signature_participants.next().is_some() || selected_validators.next().is_some() {
+            if signature_participants.next().is_some() ||
+              genesis_validators_auxiliary_keys.next().is_some()
+            {
               Err(InvalidTransaction::BadProof)?;
             }
 
@@ -821,8 +824,18 @@ mod pallet {
               detail.
             */
             let public_key: sp_core::sr25519::Public =
-              (ValidatorSet { network: NetworkId::Serai, session: Session(0) })
-                .musig_key(&participating_keys);
+              match (ValidatorSet { network: NetworkId::Serai, session: Session(0) })
+                .musig_key(&participating_keys)
+              {
+                Ok(key) => key,
+                Err(MusigKeyError::InvalidKey) => panic!("invalid auxiliary key on-chain"),
+                Err(MusigKeyError::NoKeysProvided) => {
+                  panic!("participants had sufficient key shares but no keys")
+                }
+                Err(MusigKeyError::TooManyKeysProvided) => {
+                  panic!("more validators in set than allowed by `dkg` (`u16::MAX`)")
+                }
+              };
             if !public_key.verify(
               &values.oraclize_values_message(),
               &sp_core::sr25519::Signature::from(*signature),
@@ -851,6 +864,6 @@ mod pallet {
   }
 }
 
-pub use pallet::{Weights, Config, Error, Pallet, Call};
+pub use pallet::{Weights, Config, GenesisConfig, Error, Pallet, Call};
 #[doc(hidden)]
 pub use pallet::*;

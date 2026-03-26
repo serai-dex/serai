@@ -97,19 +97,25 @@ Any historical Serai validator set may trigger a chain halt by producing an
 equivocation after their retiry. This requires 67% to be malicious. 34% of the
 active Serai validator set may also trigger a chain halt.
 
-17% of non-Serai validator sets equivocating causing a halt means 5.67% of
-non-Serai validator sets' stake may cause a halt (in an asynchronous
-environment fully controlled by the adversary). In a synchronous environment
-where the honest stake cannot be split across two candidates, 11.33% of
-non-Serai validator sets' stake is required.
+17% of non-Serai validator sets equivocating causing a halt means that,
+in an asynchronous environment fully controlled by the adversary, 1/3 of
+a validator set's stake being malicious may cause a halt, so 1/3 of
+17% meaning 5.67% of non-Serai validator sets' stake. In a synchronous
+environment where the honest stake cannot be split across two candidates,
+2/3 of 17%, or 11.33% of non-Serai validator sets' stake, is required.
 
-The more practical attack is for one to obtain 5.67% of non-Serai validator
-sets' stake, under any network conditions, and simply go offline. This will
-take 17% of validator sets offline with it, preventing any cosign commits
-from being performed. A fallback protocol where validators individually produce
-cosigns, removing the network's horizontal scalability but ensuring liveness,
-prevents this, restoring the additional requirements for control of an
-asynchronous network or 11.33% of non-Serai validator sets' stake.
+The more practical attack is for one to obtain 1/3 of the stake of a
+validator set which holds at most 17% of the total cosigning weight,
+meaning it would require at a minimum 5.67% of non-Serai validator sets'
+stake under any network conditions, and simply go offline. By making 1/3
+of the keys not available to sign, this ends up taking the whole validator
+set's 17% of weight offline, thus preventing any cosign commits from being
+performed as the threshold cannot be reached. Note: this does not halt the
+protocol, it only stalls it until the set comes back online. A fallback
+protocol where validators individually produce cosigns, removing the
+network's horizontal scalability but ensuring liveness, prevents this,
+restoring the additional requirements for control of an asynchronous
+network or 11.33% of non-Serai validator sets' stake.
 
 ### TODO
 

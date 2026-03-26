@@ -3,6 +3,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 
 use crate::{
   address::{SeraiAddress, ExternalAddress},
+  network_id::NetworkId,
   balance::{Amount, ExternalBalance, Balance},
   instructions::OutInstruction,
 };
@@ -19,6 +20,8 @@ pub enum InInstruction {
   SwapToStakedSri {
     /// The validator to allocate the stake to.
     validator: SeraiAddress,
+    /// The network to allocate the stake for.
+    network: NetworkId,
     /// The minimum amount of staked SRI to swap to.
     minimum: Amount,
   },
@@ -41,10 +44,13 @@ pub enum InInstruction {
     /// The recipient to-be of the added liquidity.
     address: SeraiAddress,
     /// The amount of the coin to add within the liquidity position.
-    coin: Amount,
+    external_coin_liquidity: Amount,
     /// The minimum amount of SRI to add as liquidity.
     sri_minimum: Amount,
-    /// The amount of SRI to swap to and send to the owner to-be to pay for transactions on Serai.
+    /// The amount of SRI to swap to and send to the recipient for transactions on Serai.
+    ///
+    /// This doesn't exclusively have to be used for fees but that is the presumed usage and the
+    /// intent of offering this here.
     sri_for_fees: Amount,
   },
   /// Swap the coins.

@@ -2,9 +2,10 @@ use super::*;
 
 /// The runtime version.
 pub struct Version;
-// TODO: Are we reasonably able to prune `RuntimeVersion` from Substrate?
+// TODO(never): Are we reasonably able to prune `RuntimeVersion` from Substrate?
 impl Get<RuntimeVersion> for Version {
   fn get() -> RuntimeVersion {
+    /// The literal `const` definition for `Version`.
     #[sp_version::runtime_version]
     pub const VERSION: RuntimeVersion = RuntimeVersion {
       spec_name: Cow::Borrowed("serai"),
@@ -57,13 +58,13 @@ impl frame_system::Config for Runtime {
   type Version = Version;
   type BlockLength = serai_core_pallet::Limits;
   type BlockWeights = serai_core_pallet::Limits;
-  // We assume `serai-node` will be run using the RocksDB backend
-  type DbWeight = frame_support::weights::constants::RocksDbWeight;
   /*
     Serai does not expose `frame_system::Call`. We accordingly have no consequence to using the
-    default weights for these accordingly.
+    default (potentially only for testing) weights for these accordingly.
   */
   type SystemWeightInfo = ();
+  // Similarly, we do not rely on `DbWeight` within our definition of weights.
+  type DbWeight = ();
 
   // We also don't use `frame_system`'s account system at all, leaving us to bottom these out.
   type AccountData = ();

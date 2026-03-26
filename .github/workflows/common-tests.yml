@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - next-polkadot-sdk
     paths:
       - "common/**"
 
@@ -17,7 +18,7 @@ jobs:
   test-common:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-15-intel, macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-26-intel, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -27,12 +28,8 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run Tests
+        shell: bash
         run: |
-          cargo test --all-features \
-            -p std-shims \
-            -p zalloc \
-            -p patchable-async-sleep \
-            -p serai-db \
-            -p serai-env \
-            -p serai-task \
-            -p simple-request
+          find ./common -name "Cargo.toml" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done

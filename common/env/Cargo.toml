@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/common/env"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
-rust-version = "1.64"
+rust-version = "1.71"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -15,3 +15,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [lints]
 workspace = true
+
+[dependencies]
+env_logger = { version = "0.10", default-features = false }
+log = { version = "0.4", default-features = false, features = ["std"] }

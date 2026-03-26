@@ -6,7 +6,7 @@ protocol. The usage of a `Containerfile` is to ensure a deterministic build
 environment independent of the machine performing the build, which
 `serai-runtime`'s build script attempts but is insufficient to guarantee.
 
-It may be quite slow to execute due to running the x86-64 image, regardless of
+It may be quite slow to execute due to running an x86-64 image, regardless of
 the host architecture.
 
 ### `reproductions/`
@@ -23,13 +23,14 @@ Currently, the following reproductions are available:
 - Rust Debian (official image)
 - Rust Alpine (official image)
 
-They are verified to produce an identical WASM blob in our CI but are not
-guaranteed to nor endorsed as an alternative method of production.
+They are verified to produce an identical WASM blob in our CI, across certain
+CPU architectures, but are not guaranteed to nor are they endorsed as an
+alternative method of production.
 
 ### `bootstrap/`
 
-To completely demonstrate the supply chain and allow full inspection of the
-entire process used to build `serai-runtime`, a bootstrap from a minimal binary
-seed is present in the `bootstrap/` folder. This is again not canonical nor
-endorsed, but it would be if not for the practical issue of it taking several
-hours.
+To be extensively comprehensive to the supply chain and allow near full
+inspection of the entire process used to build `serai-runtime`, a bootstrap
+from a minimal amount of binaries is present in the `bootstrap/` folder. This
+is again not canonical nor endorsed, but it would be if not for the practical
+issue of it taking several hours.

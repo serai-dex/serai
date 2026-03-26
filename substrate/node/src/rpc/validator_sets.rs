@@ -1,74 +1,14 @@
-use core::{convert::AsRef, str::FromStr as _};
-use std::sync::Arc;
+use super::*;
 
-use sp_blockchain::{Error as BlockchainError, HeaderMetadata, HeaderBackend};
-use sp_api::ProvideRuntimeApi;
-use sc_client_api::BlockBackend;
-
-use serai_abi::{primitives::prelude::*, SubstrateBlock as Block};
-
-use serai_runtime::SeraiApi;
-
-use jsonrpsee::RpcModule;
-
-use super::utils::{Error, block_hash};
-
-fn network_from_str(network: impl AsRef<str>) -> Result<NetworkId, Error> {
-  Ok(match network.as_ref().to_lowercase().as_str() {
-    "serai" => NetworkId::Serai,
-    "bitcoin" => NetworkId::External(ExternalNetworkId::Bitcoin),
-    "ethereum" => NetworkId::External(ExternalNetworkId::Ethereum),
-    "monero" => NetworkId::External(ExternalNetworkId::Monero),
-    _ => Err(Error::InvalidRequest("unrecognized network requested"))?,
-  })
-}
-
-pub(super) fn network(params: &jsonrpsee::types::params::Params) -> Result<NetworkId, Error> {
-  #[derive(sp_core::serde::Deserialize)]
-  #[serde(crate = "sp_core::serde")]
-  struct Network {
-    network: String,
-  }
-
-  let Ok(network) = params.parse::<Network>() else {
-    Err(Error::InvalidRequest(r#"missing `string` "network" field"#))?
-  };
-
-  network_from_str(network.network)
-}
-
-pub(super) fn set(params: &jsonrpsee::types::params::Params) -> Result<ValidatorSet, Error> {
-  #[derive(sp_core::serde::Deserialize)]
-  #[serde(crate = "sp_core::serde")]
-  struct Set {
-    network: String,
-    session: u32,
-  }
-
-  let Ok(set) = params.parse::<Set>() else {
-    Err(Error::InvalidRequest(r#"missing `object` "set" field"#))?
-  };
-
-  Ok(ValidatorSet { network: network_from_str(set.network)?, session: Session(set.session) })
-}
-
-pub(crate) fn module<
-  C: 'static
-    + Send
-    + Sync
-    + HeaderMetadata<Block, Error = BlockchainError>
-    + HeaderBackend<Block>
-    + BlockBackend<Block>
-    + ProvideRuntimeApi<Block, Api: SeraiApi<Block>>,
->(
-  client: Arc<C>,
+pub(crate) fn module(
+  client: Arc<FullClient>,
 ) -> Result<RpcModule<impl 'static + Send + Sync>, Box<dyn std::error::Error + Send + Sync>> {
   let mut module = RpcModule::new(client);
 
   module.register_method(
     "validator-sets/current_session",
     |params, client, _ext| -> Result<_, Error> {
-      let Some(block_hash) = block_hash(&**client, &params)? else {
+      let Some(block_hash) = block_hash(client, &params)? else {
         Err(Error::InvalidStateReference)?
       };
       let network = network(&params)?;
@@ -82,7 +22,7 @@ pub(crate) fn module<
   module.register_method(
     "validator-sets/current_stake",
     |params, client, _ext| -> Result<_, Error> {
-      let Some(block_hash) = block_hash(&**client, &params)? else {
+      let Some(block_hash) = block_hash(client, &params)? else {
         Err(Error::InvalidStateReference)?
       };
       let network = network(&params)?;
@@ -94,9 +34,7 @@ pub(crate) fn module<
   )?;
 
   module.register_method("validator-sets/keys", |params, client, _ext| -> Result<_, Error> {
-    let Some(block_hash) = block_hash(&**client, &params)? else {
-      Err(Error::InvalidStateReference)?
-    };
+    let Some(block_hash) = block_hash(client, &params)? else { Err(Error::InvalidStateReference)? };
     let set = set(&params)?;
     let Ok(set) = ExternalValidatorSet::try_from(set) else {
       Err(Error::InvalidRequest("requested keys for a non-external validator set"))?
@@ -110,7 +48,7 @@ pub(crate) fn module<
   module.register_method(
     "validator-sets/current_validators",
     |params, client, _ext| -> Result<_, Error> {
-      let Some(block_hash) = block_hash(&**client, &params)? else {
+      let Some(block_hash) = block_hash(client, &params)? else {
         Err(Error::InvalidStateReference)?
       };
       let network = network(&params)?;
@@ -126,7 +64,7 @@ pub(crate) fn module<
   module.register_method(
     "validator-sets/pending_slash_report",
     |params, client, _ext| -> Result<_, Error> {
-      let Some(block_hash) = block_hash(&**client, &params)? else {
+      let Some(block_hash) = block_hash(client, &params)? else {
         Err(Error::InvalidStateReference)?
       };
       let Ok(set) = ExternalValidatorSet::try_from(set(&params)?) else {
@@ -144,7 +82,7 @@ pub(crate) fn module<
   module.register_method(
     "validator-sets/embedded_elliptic_curve_keys",
     |params, client, _ext| -> Result<_, Error> {
-      let Some(block_hash) = block_hash(&**client, &params)? else {
+      let Some(block_hash) = block_hash(client, &params)? else {
         Err(Error::InvalidStateReference)?
       };
 

@@ -6,10 +6,13 @@ consume our libraries, people who wish to test Serai and give feedback, and
 people who share Serai via word of mouth. All can be valuable ways to
 contribute.
 
+All places to contribute, and spaces in general, are governed by our
+[Code of Conduct](/Code of Conduct.md).
+
 This document will specifically focus on contributions to this repository and
 the files present here however, in the form of writing code. For contributions
-to this repository regarding documentation, we have no guidelines currently
-other than the sections of this document which remain relevant.
+to this repository regarding documentation, we don't currently have specific
+guidelines other than the sections of this document which remain relevant.
 
 ### Dependencies
 
@@ -45,9 +48,11 @@ should be [submitted via GitHub](https://github.com/serai-dex/serai/issues).
 Serai is currently partially tested with [`podman`](https://podman.io) (aliased
 to `docker`) and a long-term goal is to fully test Serai with both `docker` and
 `podman` (https://github.com/serai-dex/serai/issues/709).
+`docker buildx build` is used by some tests which _require_ being built with
+[BuildKit](https://github.com/moby/buildkit).
 
-When building binaries, or running tests, via OCI containers, the user is
-expected to able to spawn/manage containers (as potentially obvious). This
+When building binaries, or running tests, via OCI containers, the user account
+is expected to able to spawn/manage containers (as potentially obvious). This
 implies the setup should be rootless
 ([as possible with Docker](https://docs.docker.com/engine/security/rootless/)
 and as inherent to `podman`'s architecture).
@@ -104,12 +109,12 @@ cargo clippy --all-features --all-targets
 
 should not yield any warnings nor errors due to your changes.
 
-Opening a pull request will be considered as the opener agreeing to license
-their code under the license(s) of the file(s) modified/interacted with, unless
-explicitly stated otherwise.
+All contributions _MUST_ follow the terms within our
+[licensing policies](/LICENSE.md).
 
 ### Discussing Development
 
 Serai organizes via [Discord](https://discord.gg/mpEUtJR3vz) and
-[Matrix](https://matrix.to/#/#serai:matrix.org). If you have any questions or
-comments, or need help, please join and ask.
+[Matrix](https://matrix.to/#/#serai:matrix.org) (the two being bridged to each
+other). If you have any questions or comments, or need help, please join and
+ask. We welcome people to learn more about the project and contribute.

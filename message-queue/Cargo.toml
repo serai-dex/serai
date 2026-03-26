@@ -33,7 +33,6 @@ schnorr-signatures = { path = "../crypto/schnorr", default-features = false, fea
 
 # Application
 log = { version = "0.4", default-features = false, features = ["std"] }
-env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
 
 # Uses a single threaded runtime since this shouldn't ever be CPU-bound
 tokio = { version = "1", default-features = false, features = ["rt", "time", "io-util", "net", "macros"] }

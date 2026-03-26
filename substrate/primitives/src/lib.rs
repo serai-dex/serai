@@ -53,6 +53,10 @@ pub mod instructions;
 /// Merkle trees.
 pub mod merkle;
 
+#[cfg(any(test, feature = "test-helpers"))]
+/// Test helpers for generating random instances of primitive types.
+pub mod test_helpers;
+
 /// The type used to identify block numbers.
 ///
 /// A block's number is its zero-indexed position on the list of blocks which form a blockchain.

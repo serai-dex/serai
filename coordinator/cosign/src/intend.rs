@@ -23,7 +23,7 @@ use serai_task::ContinuallyRan;
 
 use crate::*;
 
-#[derive(BorshSerialize, BorshDeserialize)]
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub(crate) struct Set {
   pub(crate) session: Session,
   pub(crate) key: Public,
@@ -72,6 +72,11 @@ pub(crate) struct CosignIntendTask<D: Db> {
 }
 
 impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
+  #[cfg(test)]
+  const DELAY_BETWEEN_ITERATIONS: u64 = 1;
+  #[cfg(test)]
+  const MAX_DELAY_BETWEEN_ITERATIONS: u64 = 5;
+
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
@@ -83,16 +88,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         .await
         // Ephemeral RPC Err: task to re-run and continue trying
         .map_err(|e| format!("RPC error fetching latest finalized block number: {e}"))?;
-
-      serai_log::debug!(
-        "beginning scan: start={start_scan_block_number}, latest={latest_serai_block_number}"
-      );
-
-      if latest_serai_block_number < start_scan_block_number {
-        // made_progress = False
-        // Skip block already indexed
-        return Ok(false);
-      }
 
       let mut made_progress = false;
 
@@ -132,7 +127,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             block_number - 1
           ))?;
         }
-
         SubstrateBlockHash::set(&mut txn, block_number, &serai_block_hash);
         builds_upon.append(
           serai_client_serai::abi::BLOCK_BRANCH_TAG,
@@ -142,8 +136,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             .into(),
         );
         BuildsUpon::set(&mut txn, &builds_upon);
-
-        serai_log::debug!("iterating over block_number={block_number}, hash={serai_block_hash:?}");
 
         let mut has_events = HasEvents::No;
         let vset_events = serai_block_events.validator_sets();
@@ -178,7 +170,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             // this is a critical issue and will not be solved after re-tries,
             // missing Stakes from previous blocks will remain missing until re-indexed
             // if encountered halt the process
-            .expect("unable to deallocate with no prior existing stake");
+            .expect("unable to deallocate with no prior indexed Stake");
 
           Stakes::set(&mut txn, network, *validator, &Amount(existing.0 - amount.0));
         }
@@ -192,9 +184,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
 
           if validators.is_empty() {
-            // Maybe ephemeral: event blocks from RPC returned empty set list
-            // could resolve after retry. or will get forever stuck.
-            Err(format!("validator set from Event::SetDecided was empty"))?;
+            panic!("validator set from Event::SetDecided was empty");
           }
 
           Validators::set(
@@ -231,11 +221,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
               set.network,
               &Set { session: set.session, key: key_pair.0, stake: Amount(stake) },
             );
-          } else {
-            serai_log::debug!(
-              "skipped session {:?} with 0 stake from being selected for cosigns",
-              set.session
-            );
           }
         }
 
@@ -247,8 +232,6 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         }
 
         let global_session_for_this_block = LatestGlobalSessionIntended::get(&txn);
-
-        serai_log::debug!("type of has_events={has_events:?}");
 
         // If this is notable, it creates a new global session, which we index into the database
         // now
@@ -287,6 +270,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
             stakes,
             total_stake,
           };
+
           GlobalSessions::set(&mut txn, new_global_session, &next_global_session_info);
           if let Some(ending_global_session) = global_session_for_this_block {
             GlobalSessionsLastBlock::set(&mut txn, ending_global_session, &block_number);
@@ -298,7 +282,7 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
         // If there isn't anyone available to cosign this block, meaning it'll never be cosigned,
         // we flag it as not having any events requiring cosigning so we don't attempt to
         // sign/require a cosign for it
-        if global_session_for_this_block.is_none() {
+        if (has_events != HasEvents::No) && global_session_for_this_block.is_none() {
           has_events = HasEvents::No;
         }
 
@@ -316,7 +300,9 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
 
             // Tell each set of their expectation to cosign this block
             for set in ending_global_session_info.sets {
-              serai_log::debug!("set will cosign block: set={set:?}, block_number={block_number}");
+              serai_env::prod_info!(
+                "{block_number}: set will cosign {has_events:?} block: set={set:?}, block_number={block_number}"
+              );
 
               IntendedCosigns::send(
                 &mut txn,
@@ -333,13 +319,10 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
           HasEvents::No => {}
         }
 
-        serai_log::debug!("finished iterating: has_events={has_events:?}");
-
         // Populate a singular feed with every block's status for the evaluator to work off of
         BlockEvents::send(&mut txn, &(BlockEventData { block_number, has_events }));
         // Mark this block as handled, meaning we should scan from the next block moving on
         ScanCosignFrom::set(&mut txn, &(block_number + 1));
-
         // Commit for every block that did progress, on failure restarts from the next block
         txn.commit();
         made_progress = true;

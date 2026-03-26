@@ -21,18 +21,16 @@ name = "serai-node"
 [dependencies]
 rand_core = "0.6"
 zeroize = "1"
+base16ct = { version = "1", default-features = false, features = ["alloc"] }
 hex = "0.4"
 log = "0.4"
 
 schnorrkel = "0.11"
 
 ciphersuite = { path = "../../crypto/ciphersuite" }
-ciphersuite-kp256 = { path = "../../crypto/ciphersuite/kp256" }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group" }
 embedwards25519 = { path = "../../crypto/embedwards25519" }
 secq256k1 = { path = "../../crypto/secq256k1" }
-
-libp2p = "0.56"
 
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sp-inherents = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
@@ -44,7 +42,6 @@ sp-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sp-keystore = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
-sp-block-builder = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sp-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 
 frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
@@ -79,10 +76,6 @@ sc-chain-spec = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sc-cli = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 
 serai-env = { path = "../../common/env" }
-
-curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "zeroize"] }
-bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["std", "hazmat"] }
-monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "c8be5d3d1287669946a83fbfcb296ce2a8852e47", default-features = false, features = ["std"] }
 
 [features]
 default = []

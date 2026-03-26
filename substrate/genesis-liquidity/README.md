@@ -23,12 +23,9 @@ liquidity design of Serai's DEX implementation.
 This will call the `set_allocation_per_key_share` method provided by
 [`serai-validator-sets-pallet`] when values are oraclized during Serai's
 genesis. It will verify the message against a public key the result of
-performing MuSig aggregation against the Serai validator set's auxiliary keys
-for the Serai network. It assumes the current Serai validator set _is_ the
-genesis validators to fulfill the expectation the genesis validators are the
-ones who oraclize the values, an invariant immediate to hold _if_ no one else
-sets the allocation per key shares (enabling selecting non-genesis validators
-who allocated stake as validators) first.
+performing a MuSig aggregation for a sufficient threshold of the genesis
+validators' auxiliary keys for the Serai network. Each genesis validator will
+be considered to have a single key share.
 
 In order to ensure no allocation per key share is insane, a minimum of 0.01% of
 the amount distributed to the pools is set. This may cause even a single

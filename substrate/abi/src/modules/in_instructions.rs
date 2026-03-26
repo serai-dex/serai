@@ -1,13 +1,18 @@
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{
-  BitVec, BlockHash, network_id::ExternalNetworkId, validator_sets::Session, address::SeraiAddress,
-  instructions::SignedBatch,
+  BitVec, BlockHash, network_id::ExternalNetworkId, coin::ExternalCoin, validator_sets::Session,
+  address::SeraiAddress, instructions::SignedBatch,
 };
 
 /// The address used for executing `InInstruction`s.
 pub fn address() -> SeraiAddress {
   SeraiAddress::system(borsh::to_vec(b"InInstructions").unwrap())
+}
+
+/// The address used to hold pending liquidity.
+pub fn pending_liquidity_address(coin: ExternalCoin) -> SeraiAddress {
+  SeraiAddress::system(borsh::to_vec(&(b"PendingLiquidity", coin)).unwrap())
 }
 
 /// A call to the `InInstruction`s' module.

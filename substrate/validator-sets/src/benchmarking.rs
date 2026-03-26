@@ -152,7 +152,7 @@ mod benchmarks {
     );
 
     #[extrinsic_call]
-    _(T::RuntimeOrigin::from(None), Session(0), validator);
+    _(T::RuntimeOrigin::from(None), validator);
   }
 
   #[benchmark]

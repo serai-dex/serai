@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/primitives"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.91"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -42,6 +42,7 @@ rand_core = { version = "0.6", default-features = false, features = ["std"] }
 bech32 = { version = "0.11", default-features = false, features = ["alloc"] }
 
 [features]
+test-helpers = ["std"]
 std = [
   "rand_core/std",
 

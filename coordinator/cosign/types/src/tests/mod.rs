@@ -1,151 +1,167 @@
 use crate::{COSIGN_CONTEXT, Cosign, SignedCosign};
 
-#[cfg(test)]
-use crate::{BlockHash, CosignIntent, ExternalNetworkId, Public};
-
-fn sr25519_fixture_from_seed(seed: [u8; 32]) -> schnorrkel::Keypair {
-  schnorrkel::MiniSecretKey::from_bytes(&seed)
-    .expect("seed should be valid")
-    .expand_to_keypair(schnorrkel::ExpansionMode::Ed25519)
-}
-
-fn sr25519_fixture() -> schnorrkel::Keypair {
-  sr25519_fixture_from_seed([0xff; 32])
-}
-
-fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosign {
+/// Sign a [`Cosign`] with a schnorrkel keypair, producing a [`SignedCosign`].
+pub fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosign {
   SignedCosign {
     cosign: cosign.clone(),
     signature: keypair.sign_simple(COSIGN_CONTEXT, &cosign.signature_message()).to_bytes(),
   }
 }
 
-/// Returns the public key bytes from the test fixture keypair (seed [0xff; 32])
-pub fn fixture_public_key() -> [u8; 32] {
-  sr25519_fixture().public.to_bytes()
+#[cfg(test)]
+use rand_core::OsRng;
+#[cfg(any(test, feature = "test-helpers"))]
+use rand_core::RngCore;
+#[cfg(any(test, feature = "test-helpers"))]
+pub use serai_primitives::test_helpers::random_global_session;
+#[cfg(any(test, feature = "test-helpers"))]
+use serai_primitives::test_helpers::random_block_hash;
+#[cfg(test)]
+use serai_primitives::test_helpers::random_keypair;
+#[cfg(any(test, feature = "test-helpers"))]
+use crate::ExternalNetworkId;
+#[cfg(any(test, feature = "test-helpers"))]
+use crate::CosignIntent;
+#[cfg(test)]
+use crate::Public;
+
+/// Generate a random [`ExternalNetworkId`] for testing.
+#[cfg(any(test, feature = "test-helpers"))]
+pub fn random_external_network_id(
+  rng: &mut (impl RngCore + rand_core::CryptoRng),
+) -> ExternalNetworkId {
+  let all: Vec<_> = ExternalNetworkId::all().collect();
+  all[(rng.next_u32() as usize) % all.len()]
 }
 
-/// Returns the public key bytes for a keypair with the given seed
-pub fn public_key_from_seed(seed: [u8; 32]) -> [u8; 32] {
-  sr25519_fixture_from_seed(seed).public.to_bytes()
+/// Generate a random [`Cosign`] for testing.
+#[cfg(any(test, feature = "test-helpers"))]
+pub fn random_cosign(rng: &mut (impl RngCore + rand_core::CryptoRng)) -> Cosign {
+  Cosign {
+    global_session: random_global_session(rng),
+    block_number: rng.next_u64(),
+    block_hash: random_block_hash(rng),
+    cosigner: random_external_network_id(rng),
+  }
 }
 
-/// Creates a SignedCosign using the test fixture keypair (seed [0xff; 32])
-pub fn sign_cosign_with_fixture(cosign: Cosign) -> SignedCosign {
-  sign_cosign(cosign, &sr25519_fixture())
-}
-
-/// Creates a SignedCosign using a keypair derived from the given seed
-pub fn sign_cosign_with_seed(cosign: Cosign, seed: [u8; 32]) -> SignedCosign {
-  sign_cosign(cosign, &sr25519_fixture_from_seed(seed))
+/// Generate a random [`CosignIntent`] for testing.
+#[cfg(any(test, feature = "test-helpers"))]
+pub fn random_cosign_intent(rng: &mut (impl RngCore + rand_core::CryptoRng)) -> CosignIntent {
+  CosignIntent {
+    global_session: random_global_session(rng),
+    block_number: rng.next_u64(),
+    block_hash: random_block_hash(rng),
+    notable: rng.next_u32() % 2 == 0,
+  }
 }
 
 #[test]
 fn cosign_intent_into_cosign() {
-  let intent = CosignIntent {
-    global_session: [1u8; 32],
-    block_number: 5,
-    block_hash: BlockHash([5u8; 32]),
-    notable: true,
-  };
+  let intent = random_cosign_intent(&mut OsRng);
+  let network = random_external_network_id(&mut OsRng);
+  let Cosign { global_session, block_number, block_hash, cosigner } = intent.into_cosign(network);
 
-  let cosign = intent.into_cosign(ExternalNetworkId::Bitcoin);
-
-  assert_eq!(cosign.global_session, [1u8; 32]);
-  assert_eq!(cosign.block_number, 5);
-  assert_eq!(cosign.block_hash, BlockHash([5u8; 32]));
-  assert_eq!(cosign.cosigner, ExternalNetworkId::Bitcoin);
+  assert_eq!(intent.global_session, global_session);
+  assert_eq!(intent.block_number, block_number);
+  assert_eq!(intent.block_hash, block_hash);
+  assert_eq!(cosigner, network);
 }
 
 #[test]
-fn deterministic_signature_message() {
-  let cosign = Cosign {
-    global_session: [1u8; 32],
-    block_number: 5,
-    block_hash: BlockHash([5u8; 32]),
-    cosigner: ExternalNetworkId::Bitcoin,
-  };
+fn deterministic_and_comprehensive_signature_message() {
+  let cosign = random_cosign(&mut OsRng);
+  let Cosign { global_session, block_number, block_hash, cosigner } = cosign;
 
   let msg1 = cosign.signature_message();
   let msg2 = cosign.signature_message();
 
+  // Deterministic
   assert_eq!(msg1, msg2, "signature_message should be deterministic");
+
+  // Comprehensive
+  {
+    let mut expected = Vec::new();
+    expected.extend(borsh::to_vec(&(global_session, block_number, block_hash, cosigner)).unwrap());
+    assert_eq!(msg1, expected, "signature_message should include all fields in Borsh order");
+  }
+
+  // Changing any single field must produce a different message
+  {
+    let mut other_session = global_session;
+    other_session[0] ^= 1;
+    let other = Cosign { global_session: other_session, ..cosign.clone() };
+    assert_ne!(msg1, other.signature_message(), "different global_session must change message");
+  }
+  {
+    let other = Cosign { block_number: block_number.wrapping_add(1), ..cosign.clone() };
+    assert_ne!(msg1, other.signature_message(), "different block_number must change message");
+  }
+  {
+    let mut other_hash = block_hash;
+    other_hash.0[0] ^= 1;
+    let other = Cosign { block_hash: other_hash, ..cosign.clone() };
+    assert_ne!(msg1, other.signature_message(), "different block_hash must change message");
+  }
+  {
+    let other_cosigner = ExternalNetworkId::all().find(|n| *n != cosigner).unwrap();
+    let other = Cosign { cosigner: other_cosigner, ..cosign.clone() };
+    assert_ne!(msg1, other.signature_message(), "different cosigner must change message");
+  }
 }
 
 #[test]
-fn signed_cosign_verify_signature_valid() {
-  let keypair = sr25519_fixture();
-  let cosign = Cosign {
-    global_session: [1u8; 32],
-    block_number: 5,
-    block_hash: BlockHash([5u8; 32]),
-    cosigner: ExternalNetworkId::Bitcoin,
-  };
+fn signed_cosign_verify_signature() {
+  {
+    let (keypair, public) = random_keypair(&mut OsRng);
+    let cosign = random_cosign(&mut OsRng);
+    let signed = sign_cosign(cosign, &keypair);
+    assert!(signed.verify_signature(public), "valid signature should verify");
+  }
 
-  let signed = sign_cosign(cosign, &keypair);
-  let pubkey = Public(keypair.public.to_bytes());
+  {
+    let (keypair1, _) = random_keypair(&mut OsRng);
+    let (_, public2) = random_keypair(&mut OsRng);
+    let cosign = random_cosign(&mut OsRng);
+    let signed = sign_cosign(cosign, &keypair1);
+    assert_eq!(signed.verify_signature(public2), false, "invalid signature should not verify");
+  }
 
-  assert!(signed.verify_signature(pubkey), "valid signature should verify");
-}
+  {
+    let (keypair, _) = random_keypair(&mut OsRng);
+    let cosign = random_cosign(&mut OsRng);
+    let signed = sign_cosign(cosign, &keypair);
+    let invalid_bytes = [255u8; 32];
+    assert!(
+      schnorrkel::PublicKey::from_bytes(&invalid_bytes).is_err(),
+      "test precondition: bytes should be invalid for schnorrkel"
+    );
 
-#[test]
-fn signed_cosign_verify_signature_invalid() {
-  let keypair1 = sr25519_fixture();
+    let invalid_pubkey = Public(invalid_bytes);
+    assert_eq!(
+      signed.verify_signature(invalid_pubkey),
+      false,
+      "invalid public key bytes should return false"
+    );
+  }
 
-  let cosign = Cosign {
-    global_session: [1u8; 32],
-    block_number: 5,
-    block_hash: BlockHash([5u8; 32]),
-    cosigner: ExternalNetworkId::Bitcoin,
-  };
+  {
+    let cosign = random_cosign(&mut OsRng);
 
-  let signed = sign_cosign(cosign, &keypair1);
-  let wrong_pubkey = public_key_from_seed([0x01; 32]);
+    let invalid_sig_bytes = [255u8; 64];
+    assert!(
+      schnorrkel::Signature::from_bytes(&invalid_sig_bytes).is_err(),
+      "test precondition: signature bytes should be invalid for schnorrkel"
+    );
 
-  assert!(!signed.verify_signature(wrong_pubkey), "invalid signature should not verify");
-}
+    let signed = SignedCosign { cosign, signature: invalid_sig_bytes };
 
-#[test]
-fn signed_cosign_verify_signature_invalid_public_key_bytes() {
-  let keypair = sr25519_fixture();
-  let cosign = Cosign {
-    global_session: [1u8; 32],
-    block_number: 5,
-    block_hash: BlockHash([5u8; 32]),
-    cosigner: ExternalNetworkId::Bitcoin,
-  };
+    let (_, valid_public) = random_keypair(&mut OsRng);
 
-  let signed = sign_cosign(cosign, &keypair);
-
-  let invalid_bytes = [255u8; 32];
-  assert!(
-    schnorrkel::PublicKey::from_bytes(&invalid_bytes).is_err(),
-    "test precondition: bytes should be invalid for schnorrkel"
-  );
-
-  let invalid_pubkey = Public(invalid_bytes);
-  assert!(!signed.verify_signature(invalid_pubkey), "invalid public key bytes should return false");
-}
-
-#[test]
-fn signed_cosign_verify_signature_invalid_signature_bytes() {
-  let cosign = Cosign {
-    global_session: [1u8; 32],
-    block_number: 5,
-    block_hash: BlockHash([5u8; 32]),
-    cosigner: ExternalNetworkId::Bitcoin,
-  };
-
-  let invalid_sig_bytes = [255u8; 64];
-  assert!(
-    schnorrkel::Signature::from_bytes(&invalid_sig_bytes).is_err(),
-    "test precondition: signature bytes should be invalid for schnorrkel"
-  );
-
-  let signed = SignedCosign { cosign, signature: invalid_sig_bytes };
-
-  let keypair = sr25519_fixture();
-  let valid_pubkey = Public(keypair.public.to_bytes());
-
-  assert!(!signed.verify_signature(valid_pubkey), "invalid signature bytes should return false");
+    assert_eq!(
+      signed.verify_signature(valid_public),
+      false,
+      "invalid signature bytes should return false"
+    );
+  }
 }

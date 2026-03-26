@@ -162,7 +162,7 @@ The following POSIX shell script is suggested to detect inadvertent usage of
 the `pallet::hooks` attribute:
 
 ```sh
-find ./substrate -iname "*.rs" | while read -r file; do
+find ./substrate -name "*.rs" | while IFS="\n" read -r file; do
   hooks=$(grep -F "pallet::hooks" "$file" | grep -v -F "serai-core-pallet: allow" | wc -l)
   if [ $hooks -ne 0 ]; then
     echo "\`pallet::hooks\` (without \`serai-core-pallet: allow\`) found in $file"

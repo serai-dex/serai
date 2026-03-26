@@ -2,45 +2,63 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
 
+//! `spec/Emissions.md` details itself in terms of block rewards. Here, it should be noted that
+//! the Serai validators earn a reward per slot (in order to cause those who are offline and don't
+//! propose blocks to not receive rewards), but the external validator sets operate on the amount
+//! of _time_ which has passed. This achieves a more stable stream of emissions for those
+//! independent of responsibilty for producing blocks on a regular schedule. Regardless, when
+//! considering the block reward as emissions per slot, the total emissions should still be as
+//! expected.
+
+use core::time::Duration;
 extern crate alloc;
+use alloc::{vec, vec::Vec};
+
+use serai_abi::primitives::{constants, coin::Coin, balance::Amount};
+
+mod post_economic_security;
+
+#[cfg(test)]
+mod tests;
+
+const DAYS_365: Duration = constants::DAY.checked_mul(365).unwrap();
+
+const INITIAL_PERIOD: Duration = constants::DAY.checked_mul(30).unwrap();
+const INITIAL_PERIOD_REWARDS_PER_DAY: Amount = Amount(100_000 * 10u64.pow(Coin::Serai.decimals()));
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+const INITIAL_PERIOD_REWARDS: Amount = Amount(
+  (((INITIAL_PERIOD_REWARDS_PER_DAY.0 as u128) * INITIAL_PERIOD.as_millis()) /
+    constants::DAY.as_millis()) as u64,
+);
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+const INITIAL_PERIOD_REWARD_PER_BLOCK: Amount = Amount(
+  (((INITIAL_PERIOD_REWARDS.0 as u128) * constants::TARGET_BLOCK_TIME.as_millis()) /
+    INITIAL_PERIOD.as_millis()) as u64,
+);
+const SECURE_BY: Duration = DAYS_365;
+
+const POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS: Amount =
+  Amount(20_000_000 * 10u64.pow(Coin::Serai.decimals()));
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+const POST_ECONOMIC_SECURITY_REWARD_PER_BLOCK: Amount = Amount(
+  (((POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS.0 as u128) *
+    constants::TARGET_BLOCK_TIME.as_millis()) /
+    DAYS_365.as_millis()) as u64,
+);
 
 #[expect(let_underscore_drop)]
 #[frame_support::pallet]
 mod pallet {
-  use core::time::Duration;
-
   use frame_support::{pallet_prelude::*, traits::PreInherents};
+  use frame_system::pallet_prelude::BlockNumberFor;
 
   use serai_abi::{
-    primitives::{
-      constants,
-      network_id::*,
-      coin::{ExternalCoin, Coin},
-      balance::{Amount, Balance},
-      validator_sets::*,
-    },
+    primitives::{network_id::*, coin::ExternalCoin, balance::Balance, validator_sets::*},
     economic_security::EconomicSecurity,
     TransactionContext as _,
   };
 
-  const DAYS_365: Duration = constants::DAY.checked_mul(365).unwrap();
-
-  const INITIAL_PERIOD: Duration = constants::DAY.checked_mul(30).unwrap();
-  const INITIAL_PERIOD_REWARDS: Amount = Amount(100_000 * 10u64.pow(Coin::Serai.decimals()));
-  #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
-  const INITIAL_PERIOD_REWARD_PER_BLOCK: Amount = Amount(
-    (((INITIAL_PERIOD_REWARDS.0 as u128) * constants::TARGET_BLOCK_TIME.as_millis()) /
-      INITIAL_PERIOD.as_millis()) as u64,
-  );
-  const SECURE_BY: Duration = DAYS_365;
-
-  const POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS: Amount =
-    Amount(20_000_000 * 10u64.pow(Coin::Serai.decimals()));
-  #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
-  const BLOCKS_PER_365_DAYS: u64 =
-    DAYS_365.as_millis().checked_div(constants::TARGET_BLOCK_TIME.as_millis()).unwrap() as u64;
-  const POST_ECONOMIC_SECURITY_REWARD_PER_BLOCK: Amount =
-    Amount(POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS.0 / BLOCKS_PER_365_DAYS);
+  use super::*;
 
   /// Methods from [`serai_validator_sets_pallet::Pallet`] which [`Pallet`] requires.
   ///
@@ -53,6 +71,11 @@ mod pallet {
     fn total_allocated_stake_for_network(network: NetworkId) -> Amount;
     /// The stake for the latest decided validator set for a network.
     fn stake_for_latest_decided_validator_set(network: NetworkId) -> Option<Amount>;
+    /// If a validator set's rewards have been distributed.
+    ///
+    /// This is not present directly in `serai_validator_sets_pallet` and is bespoke to this
+    /// interface.
+    fn rewards_distributed_for_set(set: ExternalValidatorSet) -> bool;
   }
 
   impl<T: serai_validator_sets_pallet::Config> ValidatorSets
@@ -66,6 +89,20 @@ mod pallet {
     }
     fn stake_for_latest_decided_validator_set(network: NetworkId) -> Option<Amount> {
       Self::stake_for_latest_decided_validator_set(network)
+    }
+    fn rewards_distributed_for_set(set: ExternalValidatorSet) -> bool {
+      /*
+        `serai-validator-sets-pallet` distributes rewards for an external validator set upon
+        publication of its slash report. We require the set be retired, and therefore eligible to
+        publish a slash report, and to no longer have its slash report pending, implying
+        distribution of rewards, to satisfy the API here.
+
+        Note that internally to `serai-validator-sets-pallet`, failure to submit a slash report in
+        a timely fashion will effect no rewards to be distributed. For the purposes of the API
+        here, no rewards being distributed is functionally equivalent to distributing `0`.
+      */
+      (Self::current_session(set.network.into()) > Some(set.session)) &&
+        (!Self::pending_slash_report(set))
     }
   }
 
@@ -84,363 +121,400 @@ mod pallet {
     type EconomicSecurity: EconomicSecurity;
   }
 
-  /// The time from the first block after the pools were initialized.
-  #[pallet::storage]
-  type PostGenesisTimestamp<T: Config> = StorageValue<_, u64, OptionQuery>;
-  /// The first sessions for external networks after achieving Economic Security.
-  ///
-  /// If Economic Security has yet to be reached, this will be the latest decided sessions.
-  ///
-  /// We use this to track the first sessions to exist post-Economic Security. After Economic
-  /// Security is reached, we no longer need this so we stop updating it. That leaves its values in
-  /// the state as described.
-  #[pallet::storage]
-  type FirstSessionsAfterEconomicSecurity<T: Config> =
-    StorageMap<_, Identity, ExternalNetworkId, Session, OptionQuery>;
   /// If a prior validator set for every network has achieved economic set.
   #[pallet::storage]
   type PriorAchievedEconomicSecurity<T: Config> = StorageValue<_, (), OptionQuery>;
-  /// The time of the last block.
+
+  /// Determine if we've reached economic security.
   ///
-  /// This is set to the time of the current block within [`PreInherents::pre_inherents`], not at
-  /// the end of the current block. It is only accurate as described before then.
-  #[pallet::storage]
-  type TimeOfLastBlock<T: Config> = StorageValue<_, u64, OptionQuery>;
-  /// Rewards for an external validator set.
-  #[pallet::storage]
-  type ExternalValidatorSetRewards<T: Config> =
-    StorageMap<_, Identity, ExternalValidatorSet, Amount, ValueQuery>;
-
-  /// The fraction of rewards which should go to an external network's validators, per the
-  /// post-Economic Security policy.
-  ///
-  /// This is programmed to never panic. The fraction will be within the range `0 ..= 1`. The
-  /// numerator and denominator will fit within `u192`, enabling further scaling by a `u64`, and
-  /// the denominator will be non-zero, ensuring it can be divided by.
-  /*
-    This can be hard to immediately understand. It's calculating the ratio of two values themselves
-    represented as fractions to calculate the specified ratio, before returning not the ratio but
-    the fraction of the total one side of the ratio represents.
-
-    In order to understand this, the following walkthrough on the premise is recommended.
-
-    ```py
-    DESIRED_UNUSED_CAPACITY = 0.1
-    DESIRED_DISTRIBUTION = 1 - DESIRED_UNUSED_CAPACITY
-    def ratio(CURRENT_DISTRIBUTION):
-      print(
-        str(DESIRED_UNUSED_CAPACITY) +
-          ':' +
-          str(((1 - CURRENT_DISTRIBUTION) * DESIRED_DISTRIBUTION) / CURRENT_DISTRIBUTION)
-      )
-    ```
-
-    For `CURRENT_DISTRIBUTION`, a number in range `0 ..= 1` representing the percentage of capacity
-    actively consumed by requirements, this will print the ratio specified in the Economics
-    specification.
-
-    ```
-    >>> ratio(0.9)
-    0.1:0.09999999999999998
-    ```
-
-    When 90% of the current capacity is consumed, as is our target, the ratio is effectively
-    `1 : 1`. Note the literal numeric values are `0.1 : 0.1` but that doesn't matter as all that
-    matters is their relation to each other.
-
-    ```
-    >>> ratio(0.95)
-    0.1:0.04736842105263162
-    ```
-
-    When 95% of capacity is consumed, as over our target, validators receive more than
-    _twice as much_ of the rewards than the liquidity pools.
-
-    ```
-    >>> ratio(0.85)
-    0.1:0.15882352941176475
-    ```
-
-    But when only 85% of capacity is consumed, as under our target, liquidity pools receive more
-    than 50% more of the rewards than the validators.
-
-    ```
-    >>> ratio(1)
-    0.1:0.0
-    ```
-
-    And of course, if the entire capacity is consumed, all rewards go to the validators as the
-    ratio becomes infinite.
-
-    This function computes the ratio before computing what fraction of the total the validators,
-    the left-hand term of the ratio, represent. For a ratio `2 : 3` (as approximate to the case
-    when 85% of capacity is consumed), this will yield `2 / 5`, saying the validators should
-    receive 40% of the rewards (and the liquidity pools the rest, the 60%).
-
-    The complexity is that this function does so while avoiding floating point numbers, requiring
-    keeping track of all fractions as their numerator/denominators, making sure to note the bounds
-    as needed to prevent over/underflows, and while not dividing by zero.
-  */
-  fn post_economic_security_external_network_validator_rewards_fraction(
-    used_capacity: Amount,
-    capacity_of_network: Amount,
-  ) -> (sp_core::U256, sp_core::U256) {
-    use sp_core::U256;
-
-    /*
-      `DESIRED_UNUSED_CAPACITY = 0.1`
-
-      This fraction has to be any non-zero accurate representation where it should be irreducible
-      to minimize the risks of overflows.
-    */
-    const DESIRED_UNUSED_CAPACITY: (u8, u8) = (1, 10);
-    /*
-      `DESIRED_DISTRIBUTION = 1 - DESIRED_UNUSED_CAPACITY`
-
-      This is `(1 / 1) - DESIRED_UNUSED_CAPACITY`, with `1 / 1` represented as
-      `DESIRED_UNUSED_CAPACITY_DENOM / DESIRED_UNUSED_CAPACITY_DENOM` to allow us to
-      perform the subtraction.
-    */
-    const DESIRED_DISTRIBUTION: (u8, u8) =
-      (DESIRED_UNUSED_CAPACITY.1 - DESIRED_UNUSED_CAPACITY.0, DESIRED_UNUSED_CAPACITY.1);
-
-    // There cannot be more capacity used than in existence, even if we _require_ more than exists
-    let used_capacity = used_capacity.min(capacity_of_network);
-
-    // If this network lacks capacity, state it should receive `1/1` of the rewards
-    if capacity_of_network == Amount(0) {
-      return (sp_core::U256::one(), sp_core::U256::one());
-    } else if used_capacity == Amount(0) {
-      // If this network has capacity but none is used, say the validators should get `0/1`
-      // (so the pools receive `1/1`)
-      return (sp_core::U256::zero(), sp_core::U256::one());
+  /// This will return `true` if we have and `false` if we haven't. This will also prepare the
+  /// relevant storage for post-Economic Security upon determining we've reached economic security.
+  fn determine_if_post_economic_security<T: Config>() -> bool {
+    if PriorAchievedEconomicSecurity::<T>::get().is_some() {
+      return true;
     }
 
-    let current_distribution = (used_capacity.0, capacity_of_network.0);
+    if ExternalNetworkId::all().all(T::EconomicSecurity::achieved_economic_security) {
+      PriorAchievedEconomicSecurity::<T>::set(Some(()));
+      for coin in ExternalCoin::all() {
+        // Drop the tally of all fees burnt pre-Economic Security
+        let _ = serai_dex_pallet::Pallet::<T>::take_burnt_fees(coin);
+      }
+      return true;
+    }
 
-    // These values are bounded `0 ..= u8::MAX`
-    let ratio_term_for_validators = DESIRED_UNUSED_CAPACITY;
+    false
+  }
 
-    // `((1 - CURRENT_DISTRIBUTION) * DESIRED_DISTRIBUTION) / CURRENT_DISTRIBUTION`
-    let ratio_term_for_pools = {
-      let one_minus_current_distribution_times_desired_distribution = {
-        // This won't trap as `current_distribution <= 1`
-        // These values are bounded `0 ..= u64::MAX`
-        let one_minus_current_distribution =
-          (current_distribution.1 - current_distribution.0, current_distribution.1);
-        // These values are bounded `0 ..= u72::MAX`
-        (
-          u128::from(one_minus_current_distribution.0) *
-            u128::from(u16::from(DESIRED_DISTRIBUTION.0)),
-          u128::from(one_minus_current_distribution.1) *
-            u128::from(u16::from(DESIRED_DISTRIBUTION.1)),
-        )
-      };
-      // These values are bounded `0 ..= u136::MAX`
-      (
-        U256::from(one_minus_current_distribution_times_desired_distribution.0) *
-          U256::from(u128::from(current_distribution.1)),
-        U256::from(one_minus_current_distribution_times_desired_distribution.1) *
-          U256::from(u128::from(current_distribution.0)),
-      )
+  /// The time of the last block.
+  #[pallet::storage]
+  type TimeOfLastBlock<T: Config> = StorageValue<_, u64, OptionQuery>;
+
+  #[pallet::hooks] // serai-core-pallet: allow
+  impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
+    fn on_finalize(_block_number: BlockNumberFor<T>) {
+      TimeOfLastBlock::<T>::set(Some(serai_core_pallet::Pallet::<T>::current_time()));
+    }
+  }
+
+  /// The time from the block where the pools were initialized.
+  #[pallet::storage]
+  pub(crate) type EndOfGenesisTimestamp<T: Config> = StorageValue<_, u64, OptionQuery>;
+  /// Rewards for an external validator set.
+  #[pallet::storage]
+  pub(crate) type ExternalValidatorSetRewards<T: Config> =
+    StorageMap<_, Identity, ExternalValidatorSet, Amount, ValueQuery>;
+  /// Historical rewards for external validator sets.
+  #[pallet::storage]
+  pub(crate) type HistoricalExternalValidatorSetRewards<T: Config> =
+    StorageMap<_, Identity, ExternalValidatorSet, Amount, ValueQuery>;
+
+  /// Calculate a network's distance to economic security.
+  ///
+  /// `None` signifies the network having not decided a session or an overflow having occurred. In
+  /// either case, we cannot represent the distance as an `Amount` as it's either `null` or out of
+  /// range.
+  pub(crate) fn distance_to_economic_security<T: Config>(
+    network: ExternalNetworkId,
+  ) -> Option<Amount> {
+    if T::EconomicSecurity::achieved_economic_security(network) {
+      return Some(Amount(0));
+    }
+
+    let achieved = {
+      // If this validator set hasn't had a session decided, we say it has no distance
+      let latest_decided_session = T::ValidatorSets::latest_decided_session(network.into())?;
+
+      // The achieved stake is the sum of the allocated stake _and queued rewards_
+      let mut achieved = Some(T::ValidatorSets::total_allocated_stake_for_network(network.into()));
+      // We check _all historical sessions_ for rewards which may have yet to be distributed
+      for session in latest_decided_session.0.saturating_sub(4) ..= latest_decided_session.0 {
+        let set = ExternalValidatorSet { network, session: Session(session) };
+        // If the rewards _have_ been distributed, clean up the storage entry
+        if T::ValidatorSets::rewards_distributed_for_set(set) {
+          HistoricalExternalValidatorSetRewards::<T>::remove(set);
+          continue;
+        }
+        /*
+          Append pending rewards to the amount of stake this set has achieved.
+
+          Note these values may not be set, yet the usage of a `ValueQuery` will cause this to get
+          `Amount(0)` in such cases, which is fine. We also will only have one of these, if either,
+          set at any moment within the pallet.
+        */
+        achieved = achieved
+          .and_then(|achieved| achieved + HistoricalExternalValidatorSetRewards::<T>::get(set));
+        achieved =
+          achieved.and_then(|achieved| achieved + ExternalValidatorSetRewards::<T>::get(set));
+      }
+      achieved?
+    };
+    let stake_required =
+      serai_validator_sets_pallet::network_stake_requirement::<T, T::EconomicSecurity>(network);
+    // If this overflowed, return `None`
+    if stake_required == Amount(u64::MAX) {
+      None?;
+    }
+    Some(Amount(stake_required.0.saturating_sub(achieved.0)))
+  }
+
+  pub(crate) fn calculate_pre_economic_security_external_set_rewards<T: Config>(
+    network: ExternalNetworkId,
+  ) -> Amount {
+    let Some(end_of_genesis) = EndOfGenesisTimestamp::<T>::get() else {
+      // No rewards are emitted during the genesis period
+      return Amount(0);
     };
 
-    // `ratio_term_for_validators / ratio_term_for_pools`
-    // These values are bounded `0 ..= u144::MAX`
-    let ratio = (
-      U256::from(u16::from(ratio_term_for_validators.0)) * ratio_term_for_pools.1,
-      U256::from(u16::from(ratio_term_for_validators.1)) * ratio_term_for_pools.0,
-    );
+    // If the requirement overflowed, we NOP here and issue a `0` reward
+    let Some(our_distance) = distance_to_economic_security::<T>(network) else { return Amount(0) };
 
-    // Now that we have the ratio, we convert to the validators' fraction, as useful by consumers.
-    // These values are bounded `0 ..= u145::MAX` which is a subset of `0 ..= u192::MAX`, the
-    // documented bound for the returned values from this function
-    (ratio.0, ratio.0 + ratio.1)
+    let current_time = serai_core_pallet::Pallet::<T>::current_time();
+    let time_of_last_block =
+      TimeOfLastBlock::<T>::get().expect("genesis ended on the very first block?");
+    let time_to_consider_rewards_for =
+      current_time.checked_sub(time_of_last_block).expect("Serai timestamps are monotonic");
+
+    // If this is within the initial period, the block reward is fixed
+    if u128::from(current_time) < (u128::from(end_of_genesis) + INITIAL_PERIOD.as_millis()) {
+      /*
+        This inlines the literal `SERAI_VALIDATORS_DESIRED_PERCENTAGE` to determine the rewards
+        which will go to the Serai validators, and from there, the rewards for the external
+        networks.
+
+        `time_to_consider_rewards_for` MUST be less than `INITIAL_PERIOD` as else we wouldn't be
+        in the initial period. `INITIAL_PERIOD` MUST be non-zero as else, again, we wouldn't be
+        in the initial period.
+
+        The result will fit in a `u64` as `INITIAL_PERIOD_REWARDS` does and we scaled by a
+        fraction less than or equal to `1`.
+      */
+      let external_network_rewards = Amount(
+        u64::try_from(
+          (u128::from(INITIAL_PERIOD_REWARDS.0 - (INITIAL_PERIOD_REWARDS.0 / 5)) *
+            u128::from(time_to_consider_rewards_for)) /
+            INITIAL_PERIOD.as_millis(),
+        )
+        .unwrap(),
+      );
+
+      // We distribute to each set based on their relative distances to security
+      let mut total_distance = Amount(0);
+      for network in ExternalNetworkId::all() {
+        // NOP due to overflow
+        let Some(this_distance) = distance_to_economic_security::<T>(network) else {
+          return Amount(0);
+        };
+        // NOP due to overflow
+        let Some(new_total_distance) = total_distance + this_distance else { return Amount(0) };
+        total_distance = new_total_distance;
+      }
+
+      let Some(reward) = (u128::from(external_network_rewards.0) * u128::from(our_distance.0))
+        .checked_div(u128::from(total_distance.0))
+      else {
+        // if the total distance is `0`, yield a reward of `0`
+        return Amount(0);
+      };
+      // our distance will be a fraction of the total, and the reward itself fit in a `u64`
+      return Amount(u64::try_from(reward).unwrap());
+    }
+
+    // This defines `time_since_genesis` relative to `time_of_last_block` as we want to know, for
+    // the amount of time which has passed since the last block, what fraction of remaining time
+    // has passed and how much of the distance we should close accordingly.
+    let time_since_genesis =
+      time_of_last_block.checked_sub(end_of_genesis).expect("Serai timestamps are monotonic");
+    let time_until_secure_by = SECURE_BY.as_millis().saturating_sub(u128::from(time_since_genesis));
+    if time_until_secure_by == 0 {
+      /*
+        If `time_until_secure_by == 0`, in that the `SECURE_BY` deadline has passed but we have
+        yet to achieve economic security (due to an unstable clock, slashes, other misc behavior),
+        we set the rewards to the remainder of the distance.
+      */
+      return our_distance;
+    }
+
+    /*
+      If the rewards calculated exceed the distance, minimize to the distance, which ensures the
+      result fits within an `Amount` (as our distance does).
+
+      We use a `div_ceil` to ensure our emitted rewards _will_ achieve security by the stated
+      deadline, so long as its perfectly polled.
+    */
+    Amount(
+      u64::try_from(
+        (u128::from(our_distance.0) * u128::from(time_to_consider_rewards_for))
+          .div_ceil(time_until_secure_by)
+          .min(u128::from(our_distance.0)),
+      )
+      .unwrap(),
+    )
+  }
+
+  /// Effect the post-Economic Security rewards for external networks.
+  ///
+  /// This will _return_ the list of amounts to reward the validator sets with. These amounts will
+  /// be ordered corresponding to [`ExternalNetworkId::all`]'s order of iteration.
+  #[must_use]
+  pub(crate) fn effect_post_economic_security_external_network_rewards<T: Config>() -> Vec<Amount> {
+    let mut total_burnt_fees = 0u128;
+    let mut burnt_fees_by_network = vec![];
+    for network in ExternalNetworkId::all() {
+      let mut burnt_fees_for_network = 0u128;
+      let mut burnt_fees_by_coin = vec![];
+      for coin in network.coins() {
+        let burnt_fees_for_coin: u128 = serai_dex_pallet::Pallet::<T>::take_burnt_fees(coin);
+        // This won't overflow as individual fee burns are `u64` but this accumulator is a
+        // `u128`, requiring `2**64` fee burns to occur in a single block to overflow
+        total_burnt_fees += burnt_fees_for_coin;
+        burnt_fees_by_coin.push(burnt_fees_for_coin);
+        burnt_fees_for_network += burnt_fees_for_coin;
+      }
+      burnt_fees_by_network.push((burnt_fees_for_network, burnt_fees_by_coin));
+    }
+
+    let current_time = serai_core_pallet::Pallet::<T>::current_time();
+    let time_of_last_block =
+      TimeOfLastBlock::<T>::get().expect("post-Economic Security on the very first block?");
+    let time_to_consider_rewards_for =
+      current_time.checked_sub(time_of_last_block).expect("Serai timestamps are monotonic");
+    /*
+      This inlines `SERAI_VALIDATORS_DESIRED_PERCENTAGE` in order to calculate what percentage of
+      the block rewards go to Serai validators, and from there, how much go to the validators for
+      external networks.
+
+      This will itself fit in a `u64` if the time between two blocks is less than a year, which can
+      be assumed without issue as else the network has much larger problems. Even then, it'd have
+      to be `u64::MAX / POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS` years...
+    */
+    let external_network_rewards = u64::try_from(
+      (u128::from(
+        POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS.0 -
+          (POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS.0 / 5),
+      ) * u128::from(time_to_consider_rewards_for)) /
+        DAYS_365.as_millis(),
+    )
+    .expect("time between blocks exceeded one year");
+
+    let mut result = vec![];
+    for (network, (burnt_fees_for_network, burnt_fees_by_coin)) in
+      ExternalNetworkId::all().zip(burnt_fees_by_network)
+    {
+      /*
+        Note this methodology actually enables a form of arbitrage such that if the cost to burn
+        fees within a pool is sufficiently low, it can be worth more by the increased amount of
+        rewards which will be distributed to the pool. This is actually beneficial for Serai as if
+        Serai is distributing too much SRI in rewards, 'adversaries' have incentive to
+        _perform burns themselves for their profit_, reducing the overall SRI supply compared to if
+        they did nothing.
+
+        While it is arguably hostile to other pools, all users within a pool are still treated
+        equally and any pool can have an entity perform this arbitrage for it, so it's as level a
+        playing field as Serai inherently is.
+      */
+      let rewards_for_network = (sp_core::U256::from(u128::from(external_network_rewards)) *
+        sp_core::U256::from(burnt_fees_for_network))
+      .checked_div(sp_core::U256::from(total_burnt_fees))
+      .map(|amount| u64::try_from(amount).expect("`burnt_fees_for_network > total_burnt_fees`?"))
+      .unwrap_or(0);
+
+      let validators_fraction = {
+        /*
+          Note this may be `u64::MAX` if an overflow occurred. In that case, we still use it as-is
+          because the methodology within
+          `post_economic_security::external_network_validator_rewards_fraction` will bound it to be
+          at most `capacity_of_network` (used capacity is `<=` actual capacity).
+        */
+        let used_capacity =
+          serai_validator_sets_pallet::network_stake_requirement::<T, T::EconomicSecurity>(network);
+        /*
+          We use the capacity of the latest decided set as:
+          - It will take over, so its economic security we primarily care about.
+          - The latest decided set will receive these fees, for reasons described below.
+          Note this doesn't include any pending rewards which is because while during pre-Economic
+          Security, validators cannot deallocate stake and can be presumed to continue their
+          operation, that property does not hold true here and rewarded validators may leave.
+        */
+        let capacity_of_network =
+          T::ValidatorSets::stake_for_latest_decided_validator_set(network.into())
+            .unwrap_or(Amount(0));
+        post_economic_security::external_network_validator_rewards_fraction(
+          used_capacity,
+          capacity_of_network,
+        )
+      };
+      /*
+        This won't overflow as the fraction's components are bounded to be `<= u192::MAX` and
+        we're scaling it by a `u64` while using a `U256`. The fraction is guaranteed to have a
+        non-zero denominator, ensuring this division won't trap. The quotient will be
+        `< u64::MAX` as `rewards_for_network` is and the fraction is `<= 1`.
+
+        This `div_ceil` favors the validators for rewards, not the pools. Because the fraction
+        is `<= 1`, even with a `div_ceil`, at most this rounds a number such as `0.999` to `1`
+        where `1` is still `<= 1`. This ensures all desired bounds are still respected and the
+        result is at not at risk of exceeding the intended rewards for the network.
+      */
+      let rewards_for_validators = {
+        let (quotient, remainder) = (sp_core::U256::from(u128::from(rewards_for_network)) *
+          validators_fraction.0)
+          .div_mod(validators_fraction.1);
+        u64::try_from(quotient)
+          .expect("validators' fraction `> 1` or more than a year between blocks") +
+          u64::from(u8::from(!remainder.is_zero()))
+      };
+      // The fraction is guaranteed to be `<= 1`, meaning this subtraction won't underflow.
+      let rewards_for_pools = rewards_for_network
+        .checked_sub(rewards_for_validators)
+        .expect("validators' fraction `> 1`");
+
+      result.push(Amount(rewards_for_validators));
+
+      // Distribute the rewards for the liquidity pools, to the liquidity pools
+      for (coin, burnt_fees_for_coin) in network.coins().zip(burnt_fees_by_coin) {
+        // `rewards_for_pools` fits within a `u64` and
+        // `burnt_fees_for_coin <= burnt_fees_for_network`.
+        let rewards_for_pool = Amount(
+          (sp_core::U256::from(rewards_for_pools) * sp_core::U256::from(burnt_fees_for_coin))
+            .checked_div(sp_core::U256::from(burnt_fees_for_network))
+            .map(|rewards_for_pool| u64::try_from(rewards_for_pool).unwrap())
+            .unwrap_or(0),
+        );
+        // Mint directly to the liquidity pool, raising the value of all LP present
+        // If the SRI supply somehow hits `u64::MAX`, NOP instead of stalling the chain
+        let _ = serai_coins_pallet::Pallet::<T, serai_coins_pallet::CoinsInstance>::mint(
+          serai_abi::dex::address(coin),
+          Balance { coin: Coin::Serai, amount: rewards_for_pool },
+        );
+      }
+    }
+
+    result
   }
 
   impl<T: Config> PreInherents for Pallet<T> {
     fn pre_inherents() {
-      let current_time = serai_core_pallet::Pallet::<T>::current_time();
-
-      // This uses if the `Bitcoin` liquidity pool was initialized as a flag for if genesis is over
-      if PostGenesisTimestamp::<T>::get().is_none() &&
-        (serai_coins_pallet::Pallet::<T, serai_coins_pallet::LiquidityTokensInstance>::supply(
+      if EndOfGenesisTimestamp::<T>::get().is_none() {
+        // Use if the `Bitcoin` pool was initialized as a flag for if the genesis era is over
+        if serai_coins_pallet::Pallet::<T, serai_coins_pallet::LiquidityTokensInstance>::supply(
           ExternalCoin::Bitcoin,
-        ) != Amount(0))
-      {
-        PostGenesisTimestamp::<T>::set(Some(current_time));
-      }
-
-      /*
-        If a new external validator set has been declared, decide if it's the first external
-        validator set declared such that for all external networks, a prior validator set had
-        achieved economic security. If so, we transition to the post-Economic Security rewards
-        specification for all current and future validator sets.
-      */
-      if PriorAchievedEconomicSecurity::<T>::get().is_none() {
-        let mut new_external_set = false;
-        for network in ExternalNetworkId::all() {
-          let latest_decided_session = T::ValidatorSets::latest_decided_session(network.into());
-          if latest_decided_session > FirstSessionsAfterEconomicSecurity::<T>::get(network) {
-            new_external_set = true;
-            FirstSessionsAfterEconomicSecurity::<T>::set(network, latest_decided_session);
-          }
-        }
-        if new_external_set &&
-          ExternalNetworkId::all().all(T::EconomicSecurity::achieved_economic_security)
+        ) != Amount(0)
         {
-          PriorAchievedEconomicSecurity::<T>::set(Some(()));
-          for coin in ExternalCoin::all() {
-            // Drop the tally of all fees burnt pre-Economic Security
-            let _ = serai_dex_pallet::Pallet::<T>::take_burnt_fees(coin);
-          }
-        }
-      } else {
-        // If we're handling sets which are post-Economic Security, calculate the post-ES rewards
-        let mut total_burnt_fees = 0u128;
-        let mut burnt_fees_by_coin = alloc::collections::BTreeMap::new();
-        let mut burnt_fees_by_network = alloc::collections::BTreeMap::new();
-        for network in ExternalNetworkId::all() {
-          for coin in network.coins() {
-            let burnt_fees_for_coin: u128 = serai_dex_pallet::Pallet::<T>::take_burnt_fees(coin);
-            // This won't overflow as individual fee burns are `u64` but this accumulator is a
-            // `u128`, requiring `2**64` fee burns to occur in a single block to overflow
-            total_burnt_fees += burnt_fees_for_coin;
-            burnt_fees_by_coin.insert(coin, burnt_fees_for_coin);
-            let burnt_fees_for_network =
-              burnt_fees_by_network.get(&network).copied().unwrap_or(0) + burnt_fees_for_coin;
-            burnt_fees_by_network.insert(network, burnt_fees_for_network);
-          }
-        }
-
-        let time_of_last_block = TimeOfLastBlock::<T>::get()
-          .expect("prior achieved economic security on the very first block");
-        let time_to_consider_rewards_for =
-          current_time.checked_sub(time_of_last_block).expect("Serai timestamps are monotonic");
-        /*
-          This will itself fit in a `u64` if the time between two blocks is less than a year,
-          which can be assumed without issue. Even then, it'd have to be
-          `u64::MAX / POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS` years, in which case the
-          network has much larger problems.
-        */
-        let rewards = u64::try_from(
-          (u128::from(POST_ECONOMIC_SECURITY_REWARDS_PER_365_DAYS.0) *
-            u128::from(time_to_consider_rewards_for)) /
-            DAYS_365.as_millis(),
-        )
-        .expect("time between blocks exceeded one year");
-
-        for (network, burnt_fees_for_network) in burnt_fees_by_network {
-          /*
-            Note this methodology actually enables a form of arbitrage such that if the cost to
-            burn fees within a pool is sufficiently low, it can be worth more by the increased
-            amount of rewards which will be distributed to the pool. This is actually beneficial
-            for Serai as if Serai is distributing too much SRI in rewards, 'adversaries' have
-            incentive to _perform burns themselves for their profit_, reducing the overall SRI
-            supply compared to if they did nothing.
-
-            While it is arguably hostile to other pools, all users within a pool are still treated
-            equally and any pool can have an entity perform this arbitrage for it, so it's as level
-            a playing field as Serai inherently is.
-          */
-          let rewards_for_network = (sp_core::U256::from(u128::from(rewards)) *
-            sp_core::U256::from(burnt_fees_for_network))
-          .checked_div(sp_core::U256::from(total_burnt_fees))
-          .map(|amount| {
-            u64::try_from(amount).expect("`burnt_fees_for_network > total_burnt_fees`?")
-          })
-          .unwrap_or(0);
-
-          let validators_fraction = {
-            // Note this may be `u64::MAX` if an overflow occurred. In that case, we still use it
-            // as-is as because the methodology within
-            // `post_economic_security_external_network_validator_rewards_fraction` will bound it
-            // to be at most `capacity_of_network` (used capacity is `<=` actual capacity).
-            let used_capacity = serai_validator_sets_pallet::network_stake_requirement::<
-              T,
-              T::EconomicSecurity,
-            >(network);
-            /*
-              We use the capacity of the latest decided set as:
-              - It will take over, so its economic security we primarily care about.
-              - The latest decided set will receive these fees, for reasons described below.
-            */
-            let capacity_of_network =
-              T::ValidatorSets::stake_for_latest_decided_validator_set(network.into())
-                .unwrap_or(Amount(0));
-            post_economic_security_external_network_validator_rewards_fraction(
-              used_capacity,
-              capacity_of_network,
-            )
-          };
-          /*
-            This won't overflow as the fraction's components are bounded to be `<= u192::MAX` and
-            we're scaling it by a `u64` while using a `U256`. The fraction is guaranteed to have a
-            non-zero denominator, ensuring this division won't trap. The quotient will be
-            `< u64::MAX` as `rewards_for_network` is and the fraction is `<= 1`.
-
-            This `div_ceil` favors the validators for rewards, not the pools. Because the fraction
-            is `<= 1`, even with a `div_ceil`, at most this rounds a number such as `0.999` to `1`
-            where `1` is still `<= 1`. This ensures all desired bounds are still respected and the
-            result is at not at risk of exceeding the intended rewards for the network.
-          */
-          let rewards_for_validators = {
-            let (quotient, remainder) = (sp_core::U256::from(u128::from(rewards_for_network)) *
-              validators_fraction.0)
-              .div_mod(validators_fraction.1);
-            u64::try_from(quotient)
-              .expect("validators' fraction `> 1` or more than a year between blocks") +
-              u64::from(u8::from(!remainder.is_zero()))
-          };
-          // The fraction is guaranteed to be `<= 1`, meaning this subtraction won't underflow.
-          let rewards_for_pools = rewards_for_network
-            .checked_sub(rewards_for_validators)
-            .expect("validators' fraction `> 1`");
-
-          /*
-            Update the queued rewards for a validator set.
-
-            We save these to the latest decided set, not the current set, as:
-            - Both should be active at this time
-            - While the current set no longer earns fees, they used to be the latest decided set
-              which caused a prior current set to no longer earn fees
-            - The current set transition is not regular due to the timeline for the handover.
-              Deciding sets SHOULD be regular, barring the inability to decide the next set
-          */
-          ExternalValidatorSetRewards::<T>::mutate(
-            ExternalValidatorSet {
-              network,
-              session: T::ValidatorSets::latest_decided_session(network.into())
-                .expect("post-economic security but network without session"),
-            },
-            |existing| {
-              *existing = ((*existing) + Amount(rewards_for_validators))
-                .expect("lifetime of a session exceeded one year");
-            },
-          );
-
-          // Distribute the rewards for the liquidity pools, to the liquidity pools
-          for coin in network.coins() {
-            let burnt_fees_for_coin = burnt_fees_by_coin[&coin];
-            // `rewards_for_pools` fits within a `u64` and
-            // `burnt_fees_for_coin <= burnt_fees_for_network`.
-            let rewards_for_pool = Amount(
-              (sp_core::U256::from(rewards_for_pools) * sp_core::U256::from(burnt_fees_for_coin))
-                .checked_div(sp_core::U256::from(burnt_fees_for_network))
-                .map(|rewards_for_pool| u64::try_from(rewards_for_pool).unwrap())
-                .unwrap_or(0),
-            );
-            // Mint directly to the liquidity pool, raising the value of all LP present
-            // If the SRI supply somehow hits `u64::MAX`, NOP instead of stalling the chain
-            let _ = serai_coins_pallet::Pallet::<T, serai_coins_pallet::CoinsInstance>::mint(
-              serai_abi::dex::address(coin),
-              Balance { coin: Coin::Serai, amount: rewards_for_pool },
-            );
-          }
+          // Because the genesis era ends with
+          // [`serai_abi::genesis_liquidity::Call::oraclize_values`], it ended in the prior block
+          EndOfGenesisTimestamp::<T>::set(Some(
+            TimeOfLastBlock::<T>::get().expect("pools initialized on very first block"),
+          ));
+        } else {
+          // There are no rewards during the genesis era
+          return;
         }
       }
 
-      TimeOfLastBlock::<T>::set(Some(current_time));
+      let rewards = if !determine_if_post_economic_security::<T>() {
+        let mut rewards = vec![];
+        for network in ExternalNetworkId::all() {
+          rewards.push(calculate_pre_economic_security_external_set_rewards::<T>(network));
+        }
+        rewards
+      } else {
+        effect_post_economic_security_external_network_rewards::<T>()
+      };
+
+      for (network, reward) in ExternalNetworkId::all().zip(rewards) {
+        /*
+          Update the queued rewards for a validator set.
+
+          We save these to the latest decided set, not the current set, as:
+          - Both should be active at this time
+          - While the current set no longer earns fees, they used to be the latest decided set
+            which caused a prior current set to no longer earn fees
+          - The current set transition is not regular due to the timeline for the handover.
+            Deciding sets SHOULD be regular, barring the inability to decide the next set.
+            This means using the latest set provides a more consistent timeline for when a
+            validator is earning rewards.
+
+          Halted networks do still have emissions distributed, ensuring the liquidity pool is
+          fairly emitted to. While this would suggest the entirety of the emissions should go to
+          the liquidity pool, doing so would allow halting a network to directly change how
+          emissions are distributed, adding a potential economic incentive. As such a incentive
+          still indirectly exists, as a halted network will not have swaps and therefore not yield
+          fees which qualify a network to receive emissions, we're left with the social policy of
+          halting those who halt others without sufficiently agreed upon cause.
+        */
+        let Some(latest_decided_session) = T::ValidatorSets::latest_decided_session(network.into())
+        else {
+          continue;
+        };
+        ExternalValidatorSetRewards::<T>::mutate(
+          ExternalValidatorSet { network, session: latest_decided_session },
+          |existing| {
+            if let Some(updated) = (*existing) + reward {
+              *existing = updated;
+            }
+          },
+        );
+      }
     }
   }
 
@@ -450,109 +524,72 @@ mod pallet {
 
   impl<T: Config> serai_validator_sets_pallet::Emissions for Pallet<T> {
     fn block_reward() -> Amount {
-      let Some(end_of_genesis) = PostGenesisTimestamp::<T>::get() else {
+      let Some(end_of_genesis) = EndOfGenesisTimestamp::<T>::get() else {
         // No rewards are emitted during the genesis period
         return Amount(0);
       };
 
+      // If this is post-Economic Security, the block reward is fixed
+      // This inlines the literal `SERAI_VALIDATORS_DESIRED_PERCENTAGE`
+      if ExternalNetworkId::all().all(T::EconomicSecurity::achieved_economic_security) {
+        return Amount(POST_ECONOMIC_SECURITY_REWARD_PER_BLOCK.0 / 5);
+      }
+
       // If this is within the initial period, the block reward is fixed
       let current_time = serai_core_pallet::Pallet::<T>::current_time();
-      if (u128::from(end_of_genesis) + INITIAL_PERIOD.as_millis()) < u128::from(current_time) {
-        return INITIAL_PERIOD_REWARD_PER_BLOCK;
+      if u128::from(current_time) < (u128::from(end_of_genesis) + INITIAL_PERIOD.as_millis()) {
+        // This inlines the literal `SERAI_VALIDATORS_DESIRED_PERCENTAGE`
+        return Amount(INITIAL_PERIOD_REWARD_PER_BLOCK.0 / 5);
       }
 
       // If this is pre-Economic Security, we reward the Serai validators according to the distance
       // to the desired amount of economic security
-      if !ExternalNetworkId::all().all(T::EconomicSecurity::achieved_economic_security) {
-        let time_since_genesis =
-          current_time.checked_sub(end_of_genesis).expect("Serai timestamps are monotonic");
-        let time_until_secure_by =
-          SECURE_BY.as_millis().saturating_sub(u128::from(time_since_genesis));
-        let blocks_until_secure_by =
-          time_until_secure_by / constants::TARGET_BLOCK_TIME.as_millis();
-        // Ensure `blocks_until_secure_by` is non-zero as we are in a block and aren't secure yet
-        let blocks_until_secure_by = blocks_until_secure_by.max(1);
+      let time_since_genesis =
+        current_time.checked_sub(end_of_genesis).expect("Serai timestamps are monotonic");
+      let time_until_secure_by =
+        SECURE_BY.as_millis().saturating_sub(u128::from(time_since_genesis));
+      let blocks_until_secure_by = time_until_secure_by / constants::TARGET_BLOCK_TIME.as_millis();
+      // Ensure `blocks_until_secure_by` is non-zero as we are in a block and aren't secure yet
+      let blocks_until_secure_by = blocks_until_secure_by.max(1);
 
-        let mut external_stake = Amount(0);
-        let mut external_stake_required = Some(Amount(0));
-        for network in ExternalNetworkId::all() {
-          if T::EconomicSecurity::achieved_economic_security(network) {
-            continue;
-          }
-
-          external_stake = (external_stake +
-            T::ValidatorSets::total_allocated_stake_for_network(network.into()))
-          .expect("stake exceed SRI supply (bounded to `u64::MAX`)");
-          external_stake_required = external_stake_required.and_then(|external_stake_required| {
-            external_stake_required +
-              serai_validator_sets_pallet::network_stake_requirement::<T, T::EconomicSecurity>(
-                network,
-              )
-          });
+      let mut external_stake_required = Some(Amount(0));
+      for network in ExternalNetworkId::all() {
+        if T::EconomicSecurity::achieved_economic_security(network) {
+          continue;
         }
 
-        // If the stake requirement exceeds the possible supply, and is unreachable, NOP
-        let Some(external_stake_required) = external_stake_required else { return Amount(0) };
-        // We do the same for `u64::MAX` as `u64::MAX` is allowed to be used to symbolize overflow
-        if external_stake_required == Amount(u64::MAX) {
-          return Amount(0);
-        }
-        // `SERAI_VALIDATORS_STAKE_DESIRED` with an inlined formula derived from the literal
-        // `SERAI_VALIDATORS_DESIRED_PERCENTAGE`
-        let serai_validators_stake_desired = external_stake_required.0 / 4;
-
-        let distance = serai_validators_stake_desired
-          .saturating_sub(T::ValidatorSets::total_allocated_stake_for_network(NetworkId::Serai).0);
-        // This uses a `div_ceil` to _ensure_ the set will be considered secure by this point
-        // (barring behavior such as slashes)
-        return Amount(
-          u64::try_from(u128::from(distance).div_ceil(blocks_until_secure_by))
-            .expect("numerator fit within a `u64::MAX` so quotient will"),
-        );
+        external_stake_required = external_stake_required.and_then(|external_stake_required| {
+          external_stake_required +
+            serai_validator_sets_pallet::network_stake_requirement::<T, T::EconomicSecurity>(
+              network,
+            )
+        });
       }
 
-      // If this is post-Economic Security, the reward is fixed
-      // This inlines the literal `SERAI_VALIDATORS_DESIRED_PERCENTAGE`
-      Amount(POST_ECONOMIC_SECURITY_REWARD_PER_BLOCK.0 / 5)
+      // If the stake requirement exceeds the possible supply, and is unreachable, NOP
+      let Some(external_stake_required) = external_stake_required else { return Amount(0) };
+      // We do the same for `u64::MAX` as `u64::MAX` is allowed to be used to symbolize overflow
+      if external_stake_required == Amount(u64::MAX) {
+        return Amount(0);
+      }
+      // `SERAI_VALIDATORS_STAKE_DESIRED` with an inlined formula derived from the literal
+      // `SERAI_VALIDATORS_DESIRED_PERCENTAGE`
+      let serai_validators_stake_desired = external_stake_required.0 / 4;
+
+      let distance = serai_validators_stake_desired
+        .saturating_sub(T::ValidatorSets::total_allocated_stake_for_network(NetworkId::Serai).0);
+      // This uses a `div_ceil` to _ensure_ the set will be considered secure by this point
+      // (barring behavior such as slashes)
+      Amount(
+        u64::try_from(u128::from(distance).div_ceil(blocks_until_secure_by))
+          .expect("numerator fit within a `u64::MAX` so quotient will"),
+      )
     }
 
     fn take_set_reward(set: ExternalValidatorSet) -> Amount {
-      let Some(end_of_genesis) = PostGenesisTimestamp::<T>::get() else {
-        // No rewards are emitted during the genesis period
-        return Amount(0);
-      };
-
-      if !ExternalNetworkId::all().all(T::EconomicSecurity::achieved_economic_security) {
-        if T::EconomicSecurity::achieved_economic_security(set.network) {
-          return Amount(0);
-        }
-
-        let current_time = serai_core_pallet::Pallet::<T>::current_time();
-        let time_since_genesis =
-          current_time.checked_sub(end_of_genesis).expect("Serai timestamps are monotonic");
-        let time_until_secure_by =
-          SECURE_BY.as_millis().saturating_sub(u128::from(time_since_genesis));
-        let sessions_until_secure_by = time_until_secure_by / constants::SESSION_LENGTH.as_millis();
-        let sessions_until_secure_by = sessions_until_secure_by.max(1);
-
-        let stake = T::ValidatorSets::total_allocated_stake_for_network(set.network.into());
-        let stake_required = serai_validator_sets_pallet::network_stake_requirement::<
-          T,
-          T::EconomicSecurity,
-        >(set.network);
-        // If the amount of stake required has overflowed and is unreachable, NOP
-        if stake_required == Amount(u64::MAX) {
-          return Amount(0);
-        }
-
-        let distance = stake_required.0.saturating_sub(stake.0);
-        return Amount(
-          u64::try_from(u128::from(distance).div_ceil(sessions_until_secure_by))
-            .expect("numerator fit within a `u64::MAX` so quotient will"),
-        );
-      }
-
-      ExternalValidatorSetRewards::<T>::take(set)
+      let rewards = ExternalValidatorSetRewards::<T>::take(set);
+      HistoricalExternalValidatorSetRewards::<T>::insert(set, rewards);
+      rewards
     }
   }
 }

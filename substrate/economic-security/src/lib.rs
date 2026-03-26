@@ -434,6 +434,42 @@ mod pallet {
     }
   }
 
+  impl<T: Config> Pallet<T> {
+    /// This will return the observed median quote for a pool if and only if it is healthy.
+    ///
+    /// The window of time over which the median is measured and the definition of health is
+    /// entirely decided by parameters internal to this pallet.
+    pub fn healthy_median_quote(coin: ExternalCoin) -> Option<u128> {
+      /*
+        If the median wasn't populated with at least one block per two expected blocks,
+        we consider it unhealthy.
+
+        We also require the median not have any stale quotes, as that would cause the `length` to
+        be larger than the amount of _relevant_ samples, and we want to determine health as having
+        a sufficient amount of _relevant_ samples. If there are _any_ stale quotes, as there could
+        be an unbounded amount of stale quotes, we immediately decide the median is unhealthy.
+      */
+      if !({
+        const LENGTH_OF_MEDIAN_IN_SLOTS: u128 =
+          MEDIAN_LENGTH.as_millis() / TARGET_BLOCK_TIME.as_millis();
+        #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+        const SUFFICIENT_SAMPLES: u64 = LENGTH_OF_MEDIAN_IN_SLOTS.div_ceil(2) as u64;
+        Median::<T>::length(coin) >= SUFFICIENT_SAMPLES
+      } || {
+        let historical_values = find_historical_values::<_, _, PastQuotes<T>>(
+          coin,
+          Core::<T>::current_time(),
+          MEDIAN_LENGTH,
+          1,
+        );
+        historical_values.is_empty()
+      }) {
+        None?;
+      }
+      Median::<T>::median(coin)
+    }
+  }
+
   impl<T: Config> EconomicSecurity for Pallet<T> {
     fn achieved_economic_security(network: ExternalNetworkId) -> bool {
       AchievedEconomicSecurity::<T>::get(network).is_some()
@@ -448,8 +484,10 @@ mod pallet {
         // If there's no quote available, there is no SRI valuation for these coins
         return Amount(0);
       };
-      let quote_for_balance = (u128::from(balance.amount.0) * quote_per_unit) /
-        u128::from(10u64.pow(balance.coin.decimals()));
+
+      use sp_core::U256;
+      let quote_for_balance = (U256::from(balance.amount.0) * U256::from(quote_per_unit)) /
+        U256::from(10u64.pow(balance.coin.decimals()));
       Amount(u64::try_from(quote_for_balance).unwrap_or(u64::MAX))
     }
   }
@@ -487,6 +525,7 @@ mod pallet {
       }
     }
   }
+
   /// The `AllowMint` for `serai_coins_pallet::Pallet<T, LiquidityTokensInstance>`.
   ///
   /// This will only allow a mint of liquidity tokens if the coins in the pool are valued at

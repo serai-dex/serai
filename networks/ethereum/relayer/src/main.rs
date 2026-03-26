@@ -9,12 +9,7 @@ use serai_db::{Get as _, DbTxn as _, Db as _};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-  env_logger::builder()
-    .filter_level(
-      log::LevelFilter::from_str(&serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
-        .expect("`RUST_LOG` environment variable had an invalid filter"),
-    )
-    .init();
+  serai_env::init_logger();
   log::info!("Starting Ethereum relayer server...");
 
   // Open the DB

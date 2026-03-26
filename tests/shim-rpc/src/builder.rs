@@ -28,14 +28,13 @@ impl SeraiShimRpcBuilder {
 
   /// Build and start the shim RPC node.
   pub async fn build(self) -> SeraiShimRpc {
-    let mut sim_state = ShimState::default();
+    let mut shim_state = ShimState::default();
     for (i, events) in self.blocks.into_iter().enumerate() {
-      #[expect(clippy::as_conversions)]
-      let number = (i as u64) + 1;
-      sim_state.make_block(number, events);
+      let number = u64::try_from(i).unwrap() + 1;
+      shim_state.make_block(number, events);
     }
 
-    SeraiShimRpc::start(sim_state).await
+    SeraiShimRpc::start(shim_state).await
   }
 }
 

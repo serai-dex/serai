@@ -27,7 +27,9 @@ pub(crate) fn now_timestamp() -> Duration {
 
 create_db!(
   SubstrateCosignDelay {
-    // The latest cosigned block number.
+    // The latest block number marked as cosigned by the delay task.
+    // Cosigned after a delay if it had events and cosigns,
+    // simply marked as cosigned if the block had no events and no cosigns.
     LatestCosignedBlockNumber: () -> u64,
   }
 );
@@ -43,24 +45,28 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let mut made_progress = false;
-
       loop {
-        let mut txn = self.db.txn();
+        let latest_cosigned_block_number = LatestCosignedBlockNumber::get(&self.db).unwrap_or(0);
 
-        // Peek the next block to mark as cosigned, without consuming yet
-        let Some((block_number, time_evaluated)) = CosignedBlocks::try_recv(&mut txn) else {
+        let mut txn = self.db.txn();
+        let Some((block_number, time_evaluated, has_events)) = CosignedBlocks::try_recv(&mut txn)
+        else {
           break;
         };
 
-        let latest_cosigned_block_number = LatestCosignedBlockNumber::get(&mut txn).unwrap_or(0);
-
-        serai_log::debug!(
-          "beginning delay: block_number={block_number}, time_evaluated={time_evaluated}, latest_cosigned_block_number={latest_cosigned_block_number}",
-        );
-
+        // Defensive check, not likely to happen but does not allow regressing
         if block_number <= latest_cosigned_block_number {
-          // If we've already acknowledged a later block, consume and skip (don't sleep).
+          serai_env::warn!("Attempting to delay on an already cosigned block number ({block_number}, latest={latest_cosigned_block_number})");
+          // consume and skip without sleeping.
           txn.commit();
+          continue;
+        }
+
+        // No events means no cosigns to wait for, mark as cosigned immediately
+        if !has_events {
+          LatestCosignedBlockNumber::set(&mut txn, &block_number);
+          txn.commit();
+          made_progress = true;
           continue;
         }
 
@@ -68,19 +74,17 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         let now_timestamp = now_timestamp().as_secs();
         let time_valid_timestamp = time_evaluated + ACKNOWLEDGEMENT_DELAY.as_secs();
 
-        // drop txn during sleep
+        // Drop txn during sleep
         drop(txn);
 
-        if time_valid_timestamp > now_timestamp {
-          // Sleep until then
-          let time_left = time_valid_timestamp - now_timestamp;
+        if let Some(time_left) = time_valid_timestamp.checked_sub(now_timestamp) {
+          serai_env::debug!("{block_number}: sleeping for {time_left}s");
           tokio::time::sleep(Duration::from_secs(time_left)).await;
         }
 
         let mut txn = self.db.txn();
         // Consume block to continue
         CosignedBlocks::try_recv(&mut txn);
-        // Set the cosigned block
         LatestCosignedBlockNumber::set(&mut txn, &block_number);
         txn.commit();
 

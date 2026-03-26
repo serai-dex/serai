@@ -46,6 +46,7 @@ mod pallet {
     primitives::{
       address::SeraiAddress, coin::*, balance::*, instructions::OutInstructionWithBalance,
     },
+    signals::Halted,
     coins::Event,
   };
 
@@ -99,6 +100,8 @@ mod pallet {
   {
     /// What decides if mints are allowed.
     type AllowMint: AllowMint;
+    /// What decides if burning with instructions is allowed.
+    type AllowBurnWithInstruction: Halted;
     /// The weights for this pallet.
     type Weights: Weights;
   }
@@ -288,13 +291,17 @@ mod pallet {
 
     /// Transfer `coins` from `from` to `to`.
     ///
+    /// This function is suffixed "internal", despite being `pub`, as it MUST only be called to
+    /// _implement_ `transfer` functions. It MUST NOT be called by a caller wanting to effect a
+    /// transfer.
+    ///
     /// This will emit an event when, and only when, `I = CoinsInstance`.
     ///
     /// This function will error if the sender does not have a sufficient balance.
     ///
     /// This function is atomic. It will either error with no changes to the state or succeed with
     /// all expected effects.
-    pub fn transfer_fn(
+    pub fn transfer_internal(
       from: SeraiAddress,
       to: SeraiAddress,
       coins: Balance,
@@ -321,6 +328,19 @@ mod pallet {
     }
   }
 
+  impl<T: Config<CoinsInstance>> Pallet<T, CoinsInstance> {
+    /// The transfer function for `serai_coins_pallet::Pallet<T, CoinsInstance>`.
+    ///
+    /// This is functionally equivalent to using the associated call.
+    pub fn transfer_fn(
+      from: SeraiAddress,
+      to: SeraiAddress,
+      coins: Balance,
+    ) -> Result<(), DispatchError> {
+      Self::transfer(frame_system::RawOrigin::Signed(from).into(), to, coins)
+    }
+  }
+
   /*
     The calls corresponding to [`serai_abi::coins::Call`], with the [`CoinsInstance`].
 
@@ -344,7 +364,7 @@ mod pallet {
     #[pallet::weight((T::Weights::transfer(), DispatchClass::Normal))]
     pub fn transfer(origin: OriginFor<T>, to: SeraiAddress, coins: Balance) -> DispatchResult {
       let from = ensure_signed(origin)?;
-      Self::transfer_fn(from, to, coins)?;
+      Self::transfer_internal(from, to, coins)?;
       Ok(())
     }
 
@@ -378,12 +398,18 @@ mod pallet {
         so this should be unreachable. Due to the severity of the idea of liquidity tokens being
         burnable as if they were coins, with instructions associated, it is explicitly guarded
         against however.
+
+        This could be merged into `AllowBurnWithInstruction` if we assume non-`CoinsInstance` will
+        set `AllowBurnWithInstruction` to a type which always returns `true`.
       */
       if TypeId::of::<I>() != TypeId::of::<CoinsInstance>() {
         Err(Error::<T, I>::BurnWithInstructionNotAllowed)?;
       }
 
       let from = ensure_signed(origin)?;
+      if T::AllowBurnWithInstruction::halted(instruction.balance.coin.network()) {
+        Err(Error::<T, I>::BurnWithInstructionNotAllowed)?;
+      }
       Self::burn_fn(from, instruction.balance.into())?;
       Self::emit_event(Event::BurnWithInstruction { from, instruction });
       Ok(())

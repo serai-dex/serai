@@ -1,5 +1,9 @@
 #!/bin/sh
 set -e
 
-${SERAI_NAME:?} # Ensure this is present in the environment
+# Ensure this is present in the environment
+if [ "${SERAI_NAME:?}" = "" ]; then
+  echo "\`SERAI_NAME\` environment variable wasn't set"
+  exit 1
+fi
 serai-node --unsafe-rpc-external --rpc-cors all --chain local --"$SERAI_NAME"

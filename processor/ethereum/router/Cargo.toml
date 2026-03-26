@@ -7,7 +7,6 @@ repository = "https://github.com/serai-dex/serai/tree/develop/processor/ethereum
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
 publish = false
-rust-version = "1.88"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -33,7 +32,7 @@ alloy-rpc-types-eth = { version = "1", default-features = false }
 alloy-transport = { version = "1", default-features = false }
 alloy-provider = { version = "1", default-features = false }
 
-revm = { version = "34", default-features = false }
+revm = { version = "36", default-features = false }
 
 ethereum-schnorr = { package = "ethereum-schnorr-contract", path = "../../../networks/ethereum/schnorr", default-features = false, features = ["std"] }
 

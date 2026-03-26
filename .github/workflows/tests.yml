@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - next-polkadot-sdk
     paths:
       - "common/**"
       - "crypto/**"
@@ -31,8 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
-      - name: Build Dependencies
-        uses: ./.github/actions/build-dependencies
+      - name: Test Dependencies
+        uses: ./.github/actions/test-dependencies
 
       - name: Run Tests
         run: |
@@ -53,7 +54,7 @@ jobs:
             -p serai-processor-bin \
             -p serai-bitcoin-processor \
             -p serai-processor-ethereum-primitives \
-            -p serai-processor-ethereum-test-primitives \
+            -p serai-ethereum-test-primitives \
             -p serai-processor-ethereum-deployer \
             -p serai-processor-ethereum-router \
             -p serai-processor-ethereum-erc20 \
@@ -80,23 +81,12 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run Tests
+        shell: bash
         run: |
-          cargo test --all-features \
-            -p serai-primitives \
-            -p serai-abi \
-            -p substrate-median \
-            -p serai-core-pallet \
-            -p serai-coins-pallet \
-            -p serai-validator-sets-pallet \
-            -p serai-signals-pallet \
-            -p serai-dex-pallet \
-            -p serai-genesis-liquidity-pallet \
-            -p serai-economic-security-pallet \
-            -p serai-emissions-pallet \
-            -p serai-in-instructions-pallet \
-            -p serai-runtime \
-            -p serai-node \
-            -p serai-substrate-tests
+          find ./substrate -name "Cargo.toml" ! -path "*client*" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done
+          cargo test --all-features -p serai-substrate-tests
 
   test-serai-client:
     runs-on: ubuntu-latest
@@ -107,10 +97,8 @@ jobs:
         uses: ./.github/actions/build-dependencies
 
       - name: Run Tests
+        shell: bash
         run: |
-          cargo test --all-features \
-            -p serai-client-serai \
-            -p serai-client-bitcoin \
-            -p serai-client-ethereum \
-            -p serai-client-monero \
-            -p serai-client
+          find ./substrate -name "Cargo.toml" -path "*client*" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done

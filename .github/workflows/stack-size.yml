@@ -16,7 +16,7 @@ jobs:
   stack_size:
     strategy:
       matrix:
-        os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04, macos-15-intel, macos-latest]
+        os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04, macos-26-intel, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
@@ -28,7 +28,7 @@ jobs:
 
       - name: Monero Daemon Cache
         id: cache-monerod
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # 4.2.4
+        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # 5.0.4
         with:
           path: monerod
           key: stack-size-monerod
@@ -38,8 +38,8 @@ jobs:
         shell: bash
         run: |
           # We explicitly download the Linux binary as this script executes over an ELF binary
-          wget https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.4.5.tar.bz2
-          tar -xvf monero-linux-x64-v0.18.4.5.tar.bz2
+          wget https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.4.6.tar.bz2
+          tar -xvf monero-linux-x64-v0.18.4.6.tar.bz2
           mv $(find . -name monerod) .
 
       - name: Verify expected behavior
@@ -73,10 +73,10 @@ jobs:
 
             # macOS also has the benefit of packaging (via MacPorts) `mrsh`,
             # which explicitly attempts to be be exactly POSIX, without any extensions.
-            # We first have to install MacPorts, the easiest method being via source.
-            curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.12.1.tar.bz2
-            tar xf MacPorts-2.12.1.tar.bz2
-            cd MacPorts-2.12.1
+            # We first have to install MacPorts, the easiest method being from source.
+            curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.12.4.tar.bz2
+            tar xf MacPorts-2.12.4.tar.bz2
+            cd MacPorts-2.12.4
             ./configure
             make
             sudo make install
