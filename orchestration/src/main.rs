@@ -121,11 +121,12 @@ WORKDIR /home/{user}
     Os::Debian => {
       let asan = if !release {
         /*
-          We disable leak detection as it's only reported on termination, making it annoying to
-          actually view the output from, and reports on small leaks (a few bytes) from programs
-          included with the distribution.
+          `detect_stack_use_after_return` is on by default on some platforms, such as Linux (which
+          this should qualify as), according to ASan's documentation. Rust notes it as a check to
+          enable. We explicitly enable it to be sure it is on. While this incurs the risk of false
+          positives, its usage within solely test environments makes this acceptable.
         */
-        const ASAN_OPTS: &str = "ENV ASAN_OPTIONS=detect_stack_use_after_return=1,detect_leaks=0";
+        const ASAN_OPTS: &str = "ENV ASAN_OPTIONS=detect_stack_use_after_return=1";
 
         // `libasan` is dynamically linked, so we install it now
         // As we didn't explicitly link to it, we load it via `LD_PRELOAD`
@@ -145,17 +146,17 @@ FROM debian:stable-slim AS image
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
 
-{asan}
-
-COPY --from=mimalloc-debian libmimalloc.so /usr/lib
-RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
-
 RUN useradd --system --user-group --create-home --shell /sbin/nologin {user}
 
 # Make the /volume directory and transfer it to the user
 RUN mkdir /volume && chown {user}:{user} /volume
 
 {additional_root}
+
+{asan}
+
+COPY --from=mimalloc-debian libmimalloc.so /usr/lib
+RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
 
 # Switch to a non-root user
 USER {user}
