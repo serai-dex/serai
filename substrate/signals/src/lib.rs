@@ -3,6 +3,8 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 
+extern crate alloc;
+
 mod registered_retirement_signal;
 
 #[cfg(test)]
@@ -173,9 +175,11 @@ pub mod pallet {
   >;
 
   /// The validator sets in favor of a signal.
+  ///
+  /// The value is the Serai session this favor is valid until (inclusive).
   #[pallet::storage]
   type ValidatorSetsInFavor<T: Config> =
-    StorageMap<_, Blake2_128Concat, (Signal, ValidatorSet), (), OptionQuery>;
+    StorageMap<_, Blake2_128Concat, (Signal, ValidatorSet), Session, OptionQuery>;
 
   /// The locked-in retirement signal.
   ///
@@ -289,8 +293,8 @@ pub mod pallet {
 
       /*
         The following uses key shares, not allocations, as key shares are static while allocations
-        fluctuate during the duration of a validator set. It also is still representative of the
-        validators proportionality to each other.
+        fluctuate during the duration of a validator set. It also is still generally representative
+        of the validators as proportional to each other.
       */
 
       let mut needed_favor = Self::required_threshold(
@@ -300,39 +304,69 @@ pub mod pallet {
             .expect("latest validator set without key shares set"),
         )),
       );
-      for (validator, key_shares) in T::ValidatorSets::selected_validators(validator_set) {
-        let Some(favor_until_serai_session) = Favors::<T>::get((signal, network), validator) else {
-          continue;
-        };
-        if favor_until_serai_session < serai_session {
-          continue;
-        }
 
-        let Some(still_needed_favor) = needed_favor.checked_sub(u64::from(u16::from(key_shares)))
-        else {
+      /*
+        For all validators within this set, find those with active favor for this signal.
+
+        Then, sum the favor by the session it's valid until.
+      */
+      let favor_by_serai_session_valid_until = T::ValidatorSets::selected_validators(validator_set)
+        .filter_map(|(validator, key_shares)| {
+          let Some(favor_until_serai_session) = Favors::<T>::get((signal, network), validator)
+          else {
+            None?
+          };
+          if favor_until_serai_session < serai_session {
+            None?;
+          }
+          Some((favor_until_serai_session, u16::from(key_shares)))
+        })
+        .fold(
+          alloc::collections::BTreeMap::new(),
+          |mut map, (favor_until_serai_session, key_shares)| {
+            map
+              .entry(favor_until_serai_session)
+              .and_modify(|existing| *existing += key_shares)
+              .or_insert(key_shares);
+            map
+          },
+        );
+
+      // Iterate from the highest session to the lowest session, allowing us to identify the
+      // highest session for which enough favor is valid until to carry this vote
+      let mut favor_until_serai_session = None;
+      for (this_favor_until_serai_session, key_shares) in
+        favor_by_serai_session_valid_until.into_iter().rev()
+      {
+        debug_assert!(
+          favor_until_serai_session.is_none() ||
+            (Some(this_favor_until_serai_session) < favor_until_serai_session),
+          "`BTreeMap::iter().rev()` didn't iterate from high to low"
+        );
+        favor_until_serai_session = Some(this_favor_until_serai_session);
+        // A `saturating_sub`, except if tripped, we also `break`
+        let Some(still_needed_favor) = needed_favor.checked_sub(u64::from(key_shares)) else {
           needed_favor = 0;
           break;
         };
         needed_favor = still_needed_favor;
       }
-
-      let now_in_favor = needed_favor == 0;
+      let favor_until_serai_session = favor_until_serai_session.filter(|_| needed_favor == 0);
 
       // Update the storage and emit an event, if appropriate
-      if now_in_favor {
+      if let Some(favor_until_serai_session) = favor_until_serai_session {
         let prior_in_favor = ValidatorSetsInFavor::<T>::contains_key((signal, validator_set));
-        ValidatorSetsInFavor::<T>::set((signal, validator_set), Some(()));
+        ValidatorSetsInFavor::<T>::set((signal, validator_set), Some(favor_until_serai_session));
         if !prior_in_favor {
           Core::<T>::emit_event(Event::ValidatorSetInFavor { signal, set: validator_set });
         }
+        true
       } else {
-        #[expect(clippy::collapsible_else_if)]
         if ValidatorSetsInFavor::<T>::take((signal, validator_set)).is_some() {
           Core::<T>::emit_event(Event::ValidatorSetNoLongerInFavor { signal, set: validator_set });
         }
+        false
       }
-
-      now_in_favor
     }
 
     /// Tally support for a signal across all networks, weighted by stake.
@@ -342,6 +376,7 @@ pub mod pallet {
     ///
     /// Returns `true` if the signal has sufficient support.
     fn tally_for_all_networks(signal: Signal) -> bool {
+      let serai_session = Self::current_serai_session();
       let mut total_in_favor_stake = 0;
       let mut total_allocated_stake = 0;
       for network in NetworkId::all() {
@@ -353,7 +388,10 @@ pub mod pallet {
         let network_stake =
           T::ValidatorSets::stake_for_current_validator_set(validator_set.network)
             .unwrap_or(Amount(0));
-        if ValidatorSetsInFavor::<T>::contains_key((signal, validator_set)) {
+        if ValidatorSetsInFavor::<T>::get((signal, validator_set))
+          .map(|favor_until_serai_session| favor_until_serai_session >= serai_session)
+          .unwrap_or(false)
+        {
           total_in_favor_stake += network_stake.0;
         }
         total_allocated_stake += network_stake.0;

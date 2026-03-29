@@ -621,6 +621,7 @@ fn favor_lifetime() {
   });
 }
 
+// TODO: Extend `fuzz` with random session advancements
 #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
 #[test]
 fn fuzz() {
