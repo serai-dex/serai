@@ -215,9 +215,13 @@ thiserror = { path = "patches/thiserror" }
 
 # `option-ext` is a copyleft library for a single one liner, which we provide ourselves
 option-ext = { path = "patches/option-ext" }
-
 # `keccak-asm` is liberal with 'use at your risk', yet API-compatible with `sha3`, so we prefer the latter
 keccak-asm = { path = "patches/keccak-asm" }
+
+# `hickory-resolver` uses `moka`, which is obscene with LLM use and frequently has critical bugs
+# This is a version patched to use `lru-slab` for its LRU cache instead
+hickory-proto = { git = "https://github.com/kayabaNerve/hickory-dns", rev = "265df12bc084df83f67733ab99b9fb17ad48bf7a" }
+hickory-resolver = { git = "https://github.com/kayabaNerve/hickory-dns", rev = "265df12bc084df83f67733ab99b9fb17ad48bf7a" }
 
 # Patch to include `FromUniformBytes<64>` over `Scalar`
 k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "8293be3f9855eea0936523a9b100f1f69261ea4b" }
