@@ -215,6 +215,10 @@ thiserror = { path = "patches/thiserror" }
 
 # `option-ext` is a copyleft library for a single one liner, which we provide ourselves
 option-ext = { path = "patches/option-ext" }
+
+# This is a trivial third-party crate which over-scopes its dependencies
+aurora-engine-modexp = { path = "patches/ethereum/aurora-engine-modexp" }
+
 # `keccak-asm` is liberal with 'use at your risk', yet API-compatible with `sha3`, so we prefer the latter
 keccak-asm = { path = "patches/keccak-asm" }
 
