@@ -94,6 +94,13 @@ impl Default for Signed {
   }
 }
 
+/// The type used for preprocesses in the signing protocol.
+pub type Preprocess = [u8; 64];
+/// The type used for shares in the signing protocol.
+pub type Share = [u8; 32];
+/// The type used for either shares or preprocesses in the signing protocol.
+pub type GenericDataset = Vec<Vec<u8>>;
+
 /// The Tributary transaction definition used by Serai
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Transaction {
@@ -117,7 +124,7 @@ pub enum Transaction {
     /// The attempt number of this signing protocol
     attempt: u32,
     /// The preprocess
-    preprocess: [u8; 64],
+    preprocess: Preprocess,
     /// The transaction's signer and signature
     signed: Signed,
   },
@@ -126,7 +133,7 @@ pub enum Transaction {
     /// The attempt number of this signing protocol
     attempt: u32,
     /// The signature share
-    share: [u8; 32],
+    share: Share,
     /// The transaction's signer and signature
     signed: Signed,
   },

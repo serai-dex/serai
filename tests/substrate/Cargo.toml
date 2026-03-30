@@ -25,7 +25,6 @@ dockertest = "0.5"
 serai-docker-tests = { path = "../docker" }
 
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
-serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 
 [dev-dependencies]
 rand = { version = "0.8", default-features = false, features = ["std"] }

@@ -91,17 +91,6 @@ pub(crate) async fn setup_shim_serai() -> (SeraiShimRpc, Arc<Serai>) {
   (shim_serai, serai)
 }
 
-pub use serai_cosign_types::tests::random_external_network_id;
-
-/// For whe external validator set does not alter or affect the behavior of the functions being tested
-/// this can be used just as a default value any time
-pub(crate) fn default_test_validator_set() -> ExternalValidatorSet {
-  ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) }
-}
-pub(crate) fn random_validator_set<R: RngCore + CryptoRng>(rng: &mut R) -> ExternalValidatorSet {
-  ExternalValidatorSet { network: random_external_network_id(rng), session: Session(rng.gen()) }
-}
-
 /// Build a single-network [`GlobalSession`] from the given components.
 pub(crate) fn build_global_session(
   set: ExternalValidatorSet,

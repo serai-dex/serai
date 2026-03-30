@@ -51,8 +51,8 @@ pub(crate) enum Participating {
   Everyone,
 }
 
-pub(crate) fn required_participation(n: u16) -> Option<u16> {
-  n.checked_mul(2)?.checked_div(3)?.checked_add(1)
+pub(crate) fn required_participation(n: u16) -> Result<u16, &'static str> {
+  Ok(n.checked_mul(2).ok_or("total_weight * 2 overflows u16")? / 3 + 1)
 }
 
 impl Topic {
@@ -278,6 +278,16 @@ db_channel!(
   }
 );
 
+// 5 minutes
+#[cfg(not(feature = "longer-reattempts"))]
+const BASE_REATTEMPT_DELAY: u32 =
+  (5u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
+
+// 10 minutes, intended for latent environments like the GitHub CI
+#[cfg(feature = "longer-reattempts")]
+const BASE_REATTEMPT_DELAY: u32 =
+  (10u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
+
 pub(crate) struct TributaryDb;
 impl TributaryDb {
   pub(crate) fn last_handled_tributary_block(
@@ -403,7 +413,7 @@ impl TributaryDb {
     validator: SeraiAddress,
     #[cfg_attr(coverage, allow(unused_variables))] reason: &str,
   ) {
-    serai_log::warn!("{validator} fatally slashed: {reason}");
+    serai_env::warn!("{validator} fatally slashed: {reason}");
     SlashPoints::set(txn, set, validator, &u32::MAX);
   }
 
@@ -458,8 +468,12 @@ impl TributaryDb {
       }
     }
 
-    let Some(required_participation) = required_participation(total_weight) else {
-      return DataSet::None;
+    let required_participation = match required_participation(total_weight) {
+      Ok(val) => val,
+      Err(e) => {
+        serai_env::error!("required_participation({total_weight}) failed: {e}");
+        return DataSet::None;
+      }
     };
 
     // The complete lack of validation on the data by these NOPs opens the potential for spam here
@@ -485,16 +499,6 @@ impl TributaryDb {
       // Queue this for re-attempt after enough time passes
       let reattempt_topic = topic.reattempt_topic();
       if let Some((attempt, reattempt_topic)) = reattempt_topic {
-        // 5 minutes
-        #[cfg(not(feature = "longer-reattempts"))]
-        const BASE_REATTEMPT_DELAY: u32 =
-          (5u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
-
-        // 10 minutes, intended for latent environments like the GitHub CI
-        #[cfg(feature = "longer-reattempts")]
-        const BASE_REATTEMPT_DELAY: u32 =
-          (10u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
-
         // Linearly scale the time for the protocol with the attempt number
         let blocks_till_reattempt = u64::from(attempt * BASE_REATTEMPT_DELAY);
 
