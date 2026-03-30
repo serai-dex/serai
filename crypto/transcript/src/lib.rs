@@ -143,7 +143,8 @@ where
     fn mark_read<D: Send + Clone + Digest + HashMarker>(transcript: &DigestTranscript<D>) {
       // Just get a challenge from the state
       let mut challenge = core::hint::black_box(transcript.0.clone().finalize());
-      challenge.as_mut().zeroize();
+      let challenge: &mut [u8] = challenge.as_mut();
+      challenge.zeroize();
     }
 
     mark_read(self);

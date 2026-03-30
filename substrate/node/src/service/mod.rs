@@ -314,9 +314,10 @@ pub(crate) fn new_full(
     sc_service::build_network(BuildNetworkParams {
       config: &config,
       net_config,
+      spawn_essential_handle: task_manager.spawn_essential_handle(),
+      spawn_handle: task_manager.spawn_handle(),
       client: client.clone(),
       transaction_pool: transaction_pool.clone(),
-      spawn_handle: task_manager.spawn_handle(),
       import_queue,
       block_announce_validator_builder: None,
       warp_sync_config: None,
