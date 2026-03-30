@@ -1,20 +1,34 @@
 use std_shims::prelude::*;
 
-use rand_core::OsRng;
+use rand_core::{RngCore as _, OsRng};
 
-use group::ff::Field as _;
+use group::ff::{Field as _, PrimeField as _};
 use k256::Scalar;
 
 use crate::Signature;
 
 #[test]
 fn test_zero_challenge() {
-  assert!(Signature::new(Scalar::ZERO, Scalar::random(&mut OsRng)).is_none());
+  assert!(Signature::new([0; 32], Scalar::random(&mut OsRng)).is_none());
+
+  // Test the modulus, which is congruent to zero modulo itself
+  assert!(Signature::new(
+    {
+      let modulus_minus_one = (-Scalar::ONE).to_repr();
+      let mut modulus = modulus_minus_one;
+      modulus[31] = modulus_minus_one[31].checked_add(1).unwrap();
+      modulus.into()
+    },
+    Scalar::random(&mut OsRng)
+  )
+  .is_none());
 }
 
 #[test]
 fn test_signature_serialization() {
-  let c = Scalar::random(&mut OsRng);
+  let mut c = [0; 32];
+  OsRng.fill_bytes(&mut c);
+  let c = c;
   let s = Scalar::random(&mut OsRng);
   let sig = Signature::new(c, s).unwrap();
   assert_eq!(sig.c(), c);

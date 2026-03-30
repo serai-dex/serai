@@ -13,26 +13,36 @@ use crate::PublicKey;
 /// A signature for the Schnorr Solidity library.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Signature {
-  c: Scalar,
+  c: [u8; 32],
   s: Scalar,
 }
 
 impl Signature {
+  fn c_scalar(&self) -> Scalar {
+    <Scalar as Reduce<KU256>>::reduce_bytes(&self.c.into())
+  }
+
   /// Construct a new `Signature`.
   #[must_use]
-  pub fn new(c: Scalar, s: Scalar) -> Option<Signature> {
-    if bool::from(c.is_zero()) {
+  pub fn new(c: [u8; 32], s: Scalar) -> Option<Signature> {
+    let signature = Signature { c, s };
+    if bool::from(signature.c_scalar().is_zero()) {
       None?;
     }
-    Some(Signature { c, s })
+    Some(signature)
   }
 
   /// The challenge for a signature.
   ///
-  /// With negligible probability, this MAY return 0 which will create an invalid/unverifiable
-  /// signature.
+  /// This returns a `[u8; 32]` as the Schnorr verifier contract considers the challenge a hash,
+  /// not a hash reduced into a scalar. Given the order of secp256k1, these values will be
+  /// equivalent except with negligible probability, but this is still the technically correct
+  /// representation.
+  ///
+  /// With negligible probability, this MAY return a value congruent to `0` modulo the order of
+  /// secp256k1, which will create an invalid/unverifiable signature.
   #[must_use]
-  pub fn challenge(R: ProjectivePoint, key: &PublicKey, message: &[u8]) -> Scalar {
+  pub fn challenge(R: ProjectivePoint, key: &PublicKey, message: &[u8]) -> [u8; 32] {
     // H(R || A || m)
     let mut hash = Keccak256::new();
     // We transcript the nonce as an address since ecrecover yields an address
@@ -45,20 +55,20 @@ impl Signature {
     });
     hash.update(key.eth_repr());
     hash.update(Keccak256::digest(message));
-    <Scalar as Reduce<KU256>>::reduce_bytes(&hash.finalize())
+    hash.finalize().into()
   }
 
   /// Verify a signature.
   #[must_use]
   pub fn verify(&self, key: &PublicKey, message: &[u8]) -> bool {
     // Recover the nonce
-    let R = (ProjectivePoint::GENERATOR * self.s) - (key.point() * self.c);
+    let R = (ProjectivePoint::GENERATOR * self.s) - (key.point() * self.c_scalar());
     // Check the challenge
     Self::challenge(R, key, message) == self.c
   }
 
   /// The challenge present within this signature.
-  pub fn c(&self) -> Scalar {
+  pub fn c(&self) -> [u8; 32] {
     self.c
   }
 
@@ -71,7 +81,7 @@ impl Signature {
   #[must_use]
   pub fn to_bytes(&self) -> [u8; 64] {
     let mut res = [0; 64];
-    res[.. 32].copy_from_slice(self.c.to_repr().as_ref());
+    res[.. 32].copy_from_slice(&self.c);
     res[32 ..].copy_from_slice(self.s.to_repr().as_ref());
     res
   }
@@ -84,14 +94,15 @@ impl Signature {
 
   /// Read a signature.
   pub fn read(reader: &mut impl io::Read) -> io::Result<Self> {
-    let mut read_F = || -> io::Result<Scalar> {
-      let mut bytes = [0; 32];
-      reader.read_exact(&mut bytes)?;
-      Option::<Scalar>::from(Scalar::from_repr(bytes.into()))
-        .ok_or_else(|| io::Error::other("invalid scalar"))
-    };
-    let c = read_F()?;
-    let s = read_F()?;
+    let mut c = [0; 32];
+    reader.read_exact(&mut c)?;
+    let c = c;
+
+    let mut s = [0; 32];
+    reader.read_exact(&mut s)?;
+    let s = Option::<Scalar>::from(Scalar::from_repr(s.into()))
+      .ok_or_else(|| io::Error::other("invalid scalar"))?;
+
     Ok(Signature { c, s })
   }
 

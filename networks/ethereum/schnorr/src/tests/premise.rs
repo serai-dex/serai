@@ -69,7 +69,8 @@ fn nonce_recovery_via_ecrecover() {
   OsRng.fill_bytes(&mut message);
 
   let c = Signature::challenge(R, &public_key, &message);
-  let s = nonce + (c * key);
+  let c_scalar = <Scalar as Reduce<U256>>::reduce_bytes(&c.into());
+  let s = nonce + (c_scalar * key);
 
   /*
     An ECDSA signature is `(r, s)` with `s = (m + (r * x)) / k`, where:
@@ -97,7 +98,7 @@ fn nonce_recovery_via_ecrecover() {
   */
   let x_scalar = <Scalar as Reduce<U256>>::reduce_bytes(&public_key.point().to_affine().x());
   let sa = -(s * x_scalar);
-  let ca = -(c * x_scalar);
+  let ca = -(c_scalar * x_scalar);
 
   let q = ecrecover(sa, false, x_scalar, ca).unwrap();
   assert_eq!(q, Address::from_raw_public_key(&R.to_encoded_point(false).as_ref()[1 ..]));
