@@ -12,9 +12,9 @@ In order for a network to be considered in favor of a signal, the required
 percentage of the network's validators' key shares (or weight in the consensus
 process, in the case of Serai) must be considered in favor. In order for Serai
 as a whole to express a signal, the required percentage of _all_ networks (by
-allocated stake) must be in favor. To retire the protocol, 80% is required. To
-halt an external network, 34% is required, respecting the bounds on Byzantine
-Fault Tolerance.
+allocated stake) must be in favor. To retire the protocol, more than 80% is
+required. To halt an external network, the `f` such that `n >= 3 f + 1` no
+longer holds is required, respecting the bounds on Byzantine Fault Tolerance.
 
 Once the Serai protocol expresses it will be retired, an end time will be set
 four weeks into the future. After this point in time, no new blocks will be
