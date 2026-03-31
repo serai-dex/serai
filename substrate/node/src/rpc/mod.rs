@@ -23,6 +23,7 @@ mod utils;
 use utils::*;
 
 mod dex;
+mod system;
 mod coins;
 mod blockchain;
 mod validator_sets;
@@ -51,6 +52,7 @@ pub(crate) fn create_full<P: 'static + TransactionPool<Block = Block>>(
   root.merge(liquidity_tokens::module(client.clone())?)?;
   root.merge(genesis_liquidity::module(client.clone())?)?;
   root.merge(dex::module(client.clone())?)?;
+  root.merge(system::module(client.clone())?)?;
   if let Some(authority_discovery) = authority_discovery {
     root.merge(p2p_validators::module(&bootnodes, client, authority_discovery)?)?;
   }

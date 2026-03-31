@@ -22,7 +22,8 @@ use serai_abi::{
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
     address::SeraiAddress,
   },
-  SubstrateHeader as Header, SubstrateBlock as Block, LazySubstrateBlock as LazyBlock,
+  TransactionContext as _, SubstrateHeader as Header, SubstrateBlock as Block,
+  LazySubstrateBlock as LazyBlock,
 };
 
 use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance, GenesisLiquidityTokensInstance};
@@ -538,6 +539,10 @@ sp_api::impl_runtime_apis! {
         sri: Coins::balance(pool, Coin::Serai),
         external_coin: Coins::balance(pool, coin),
       }
+    }
+
+    fn account_nonce(of: SeraiAddress) -> u32 {
+      Core::next_nonce(&of)
     }
   }
 }

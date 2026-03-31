@@ -202,5 +202,9 @@ sp_api::impl_runtime_apis! {
     fn pool_reserves(coin:ExternalCoin) -> Reserves {
       unimplemented!("runtime is only implemented when WASM")
     }
+
+    fn account_nonce(of: SeraiAddress) -> u32 {
+      unimplemented!("runtime is only implemented when WASM")
+    }
   }
 }

@@ -18,6 +18,7 @@ use abi::{
     BlockHash,
     network_id::ExternalNetworkId,
     coin::{Coin, ExternalCoin},
+    address::SeraiAddress,
   },
   Transaction, Block, Event,
 };
@@ -278,5 +279,10 @@ impl State<'_> {
     params: &str,
   ) -> Result<ResponseValue, RpcError> {
     self.serai.call(method, &format!(r#"{{ "block": "{}" {params} }}"#, self.block)).await
+  }
+
+  /// Returns the next nonce to be used for this account.
+  pub async fn account_nonce(&self, of: &SeraiAddress) -> Result<u32, RpcError> {
+    self.call::<u32>("system/next-nonce", &format!(r#", "address": "{of}" "#)).await
   }
 }

@@ -82,5 +82,8 @@ sp_api::decl_runtime_apis! {
 
     /// Total pool reserves for a given coin.
     fn pool_reserves(coin: ExternalCoin) -> Reserves;
+
+    /// Next nonce to be used for this account.
+    fn account_nonce(of: SeraiAddress) -> u32;
   }
 }
