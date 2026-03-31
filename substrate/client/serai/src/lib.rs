@@ -14,18 +14,36 @@ use simple_request::{hyper, TokioClient};
 use borsh::BorshDeserialize as _;
 pub use serai_abi as abi;
 use abi::{
-  primitives::{BlockHash, network_id::ExternalNetworkId},
+  primitives::{
+    BlockHash,
+    network_id::ExternalNetworkId,
+    coin::{Coin, ExternalCoin},
+  },
   Transaction, Block, Event,
 };
 
 mod coins;
 pub use coins::Coins;
 
+mod dex;
+mod liquidity_tokens;
+mod genesis_liquidity;
+
 mod validator_sets;
 pub use validator_sets::ValidatorSets;
 
 mod in_instructions;
 pub use in_instructions::InInstructions;
+
+pub(crate) fn rpc_coin(network: impl Into<Coin>) -> &'static str {
+  match network.into() {
+    Coin::Serai => r#""SRI""#,
+    Coin::External(ExternalCoin::Bitcoin) => r#""BTC""#,
+    Coin::External(ExternalCoin::Ether) => r#""ETH""#,
+    Coin::External(ExternalCoin::Dai) => r#""DAI""#,
+    Coin::External(ExternalCoin::Monero) => r#""XMR""#,
+  }
+}
 
 /// An error from the RPC.
 #[derive(Debug, Error)]

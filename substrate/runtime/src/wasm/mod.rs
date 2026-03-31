@@ -16,8 +16,9 @@ use serai_abi::{
     constants::*,
     crypto::{Public, EmbeddedEllipticCurveKeys},
     network_id::{ExternalNetworkId, NetworkId},
-    coin::Coin,
+    coin::{Coin, ExternalCoin},
     balance::{Amount, Balance},
+    dex::Reserves,
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
     address::SeraiAddress,
   },
@@ -505,6 +506,38 @@ sp_api::impl_runtime_apis! {
       network: NetworkId,
     ) -> Option<EmbeddedEllipticCurveKeys> {
       ValidatorSets::auxiliary_keys(validator, network)
+    }
+
+    fn balance(of: SeraiAddress, coin: Coin) -> Amount {
+      Coins::balance(of, coin)
+    }
+    fn liquidity_balance(of: SeraiAddress, coin: ExternalCoin) -> Amount {
+      LiquidityTokens::balance(of, coin)
+    }
+    fn genesis_liquidity_balance(of: SeraiAddress, coin: ExternalCoin) -> Amount {
+      GenesisLiquidityTokens::balance(of, coin)
+    }
+
+    fn supply(coin: Coin) -> Amount {
+      Coins::supply(coin)
+    }
+    fn liquidity_supply(coin: ExternalCoin) -> Amount {
+      LiquidityTokens::supply(coin)
+    }
+    fn genesis_liquidity_supply(coin: ExternalCoin) -> Amount {
+      GenesisLiquidityTokens::supply(coin)
+    }
+
+    fn genesis_completed() -> bool {
+      GenesisLiquidity::completed()
+    }
+
+    fn pool_reserves(coin: ExternalCoin) -> Reserves {
+      let pool = serai_abi::dex::address(coin);
+      Reserves {
+        sri: Coins::balance(pool, Coin::Serai),
+        external_coin: Coins::balance(pool, coin),
+      }
     }
   }
 }

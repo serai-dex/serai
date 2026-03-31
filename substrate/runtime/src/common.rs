@@ -3,7 +3,8 @@ use serai_abi::primitives::{
   crypto::{EmbeddedEllipticCurveKeys, SignedEmbeddedEllipticCurveKeys, KeyPair},
   network_id::NetworkId,
   validator_sets::{Session, ExternalValidatorSet},
-  coin::ExternalCoin,
+  coin::{Coin, ExternalCoin},
+  dex::Reserves,
   balance::{Amount, Balance},
   address::SeraiAddress,
 };
@@ -61,5 +62,25 @@ sp_api::decl_runtime_apis! {
       validator: SeraiAddress,
       network: NetworkId,
     ) -> Option<EmbeddedEllipticCurveKeys>;
+
+    /// Coin balance of a given serai account.
+    fn balance(of: SeraiAddress, coin: Coin) -> Amount;
+    /// Liquidity tokens balance of a given serai account for a given coin.
+    fn liquidity_balance(of: SeraiAddress, coin: ExternalCoin) -> Amount;
+    /// Genesis liquidity coin balance of a given serai account.
+    fn genesis_liquidity_balance(of: SeraiAddress, coin: ExternalCoin) -> Amount;
+
+    /// Supply of a coin,
+    fn supply(coin: Coin) -> Amount;
+    /// Liquidity supply of a coin.
+    fn liquidity_supply(coin: ExternalCoin) -> Amount;
+    /// Genesis liquidity supply of a coin.
+    fn genesis_liquidity_supply(coin: ExternalCoin) -> Amount;
+
+    /// Returns `true` if genesis period is completed, `false` otherwise.
+    fn genesis_completed() -> bool;
+
+    /// Total pool reserves for a given coin.
+    fn pool_reserves(coin: ExternalCoin) -> Reserves;
   }
 }
