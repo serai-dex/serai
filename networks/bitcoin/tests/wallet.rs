@@ -127,48 +127,48 @@ async_sequential! {
     let addr = || address(key).unwrap();
     let payments = vec![(addr(), 1000)];
 
-    SignableTransaction::new(inputs.clone(), &payments, None, None, FEE).unwrap();
+    SignableTransaction::new(&inputs, &payments, None, None, FEE).unwrap();
 
     assert_eq!(
-      SignableTransaction::new(vec![], &payments, None, None, FEE),
+      SignableTransaction::new(&[], &payments, None, None, FEE),
       Err(TransactionError::NoInputs)
     );
 
     // No change
-    SignableTransaction::new(inputs.clone(), &[(addr(), 1000)], None, None, FEE).unwrap();
+    SignableTransaction::new(&inputs, &[(addr(), 1000)], None, None, FEE).unwrap();
     // Consolidation TX
-    SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, FEE).unwrap();
+    SignableTransaction::new(&inputs, &[], Some(addr()), None, FEE).unwrap();
     // Data
-    SignableTransaction::new(inputs.clone(), &[], None, Some(vec![]), FEE).unwrap();
+    SignableTransaction::new(&inputs, &[], None, Some(vec![]), FEE).unwrap();
     // No outputs
     assert_eq!(
-      SignableTransaction::new(inputs.clone(), &[], None, None, FEE),
+      SignableTransaction::new(&inputs, &[], None, None, FEE),
       Err(TransactionError::NoOutputs),
     );
 
     assert_eq!(
-      SignableTransaction::new(inputs.clone(), &[(addr(), 1)], None, None, FEE),
+      SignableTransaction::new(&inputs, &[(addr(), 1)], None, None, FEE),
       Err(TransactionError::DustPayment),
     );
 
-    SignableTransaction::new(inputs.clone(), &payments, None, Some(vec![0; 80]), FEE).unwrap();
+    SignableTransaction::new(&inputs, &payments, None, Some(vec![0; 80]), FEE).unwrap();
     assert_eq!(
-      SignableTransaction::new(inputs.clone(), &payments, None, Some(vec![0; 81]), FEE),
+      SignableTransaction::new(&inputs, &payments, None, Some(vec![0; 81]), FEE),
       Err(TransactionError::TooMuchData),
     );
 
     assert_eq!(
-      SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, 0),
+      SignableTransaction::new(&inputs, &[], Some(addr()), None, 0),
       Err(TransactionError::TooLowFee),
     );
 
     assert!(matches!(
-      SignableTransaction::new(inputs.clone(), &[(addr(), inputs[0].value() * 2)], None, None, FEE),
+      SignableTransaction::new(&inputs, &[(addr(), inputs[0].value() * 2)], None, None, FEE),
       Err(TransactionError::NotEnoughFunds { .. }),
     ));
 
     assert_eq!(
-      SignableTransaction::new(inputs, &vec![(addr(), 1000); 10000], None, None, FEE),
+      SignableTransaction::new(&inputs, &vec![(addr(), 1000); 10000], None, None, FEE),
       Err(TransactionError::TooLargeTransaction),
     );
   }
@@ -202,7 +202,7 @@ async_sequential! {
 
     // Create and sign the TX
     let tx = SignableTransaction::new(
-      vec![output.clone(), offset_output.clone()],
+      &[output.clone(), offset_output.clone()],
       &payments,
       Some(change_addr.clone()),
       None,
@@ -272,7 +272,7 @@ async_sequential! {
     let tx = sign(
       &keys,
       &SignableTransaction::new(
-        vec![output],
+        &[output],
         &[],
         Some(address(key).unwrap()),
         Some(data.clone()),

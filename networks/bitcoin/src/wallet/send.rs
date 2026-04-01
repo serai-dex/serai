@@ -39,6 +39,8 @@ pub enum TransactionError {
   DustPayment,
   #[error("too much data was specified")]
   TooMuchData,
+  #[error("an overflow occurred when evaluating this transaction")]
+  Overflow,
   #[error("fee was too low to pass the default minimum fee rate")]
   TooLowFee,
   #[error("not enough funds for these payments")]
@@ -57,13 +59,9 @@ pub struct SignableTransaction {
 }
 
 impl SignableTransaction {
-  fn calculate_weight_vbytes(
-    inputs: usize,
-    payments: &[(ScriptBuf, u64)],
-    change: Option<&ScriptBuf>,
-  ) -> (u64, u64) {
-    // Expand this a full transaction in order to use the bitcoin library's weight function
-    let mut tx = Transaction {
+  fn calculate_weight_vbytes(inputs: usize, tx_outs: Vec<TxOut>) -> (u64, u64) {
+    // Expand this a full transaction in order to use the `bitcoin` library's `weight` function
+    let weight = (Transaction {
       version: Version(2),
       lock_time: LockTime::ZERO,
       input: vec![
@@ -80,23 +78,9 @@ impl SignableTransaction {
         };
         inputs
       ],
-      output: payments
-        .iter()
-        // The payment is a fixed size so we don't have to use it here
-        // The script pub key is not of a fixed size and does have to be used here
-        .map(|payment| TxOut {
-          value: Amount::from_sat(payment.1),
-          script_pubkey: payment.0.clone(),
-        })
-        .collect(),
-    };
-    if let Some(change) = change {
-      // Use a 0 value since we're currently unsure what the change amount will be, and since
-      // the value is fixed size (so any value could be used here)
-      tx.output.push(TxOut { value: Amount::ZERO, script_pubkey: change.clone() });
-    }
-
-    let weight = tx.weight();
+      output: tx_outs,
+    })
+    .weight();
 
     // Now calculate the size in vbytes
 
@@ -138,15 +122,15 @@ impl SignableTransaction {
       self.tx.output.iter().map(|prevout| prevout.value.to_sat()).sum::<u64>()
   }
 
-  /// Create a new SignableTransaction.
+  /// Create a new [`SignableTransaction`].
   ///
   /// If a change address is specified, any leftover funds will be sent to it if the leftover funds
-  /// exceed the minimum output amount. If a change address isn't specified, all leftover funds
-  /// will become part of the paid fee.
+  /// exceed the minimum output amount ([`DUST`]). If a change address isn't specified, all
+  /// leftover funds will become part of the paid fee.
   ///
-  /// If data is specified, an OP_RETURN output will be added with it.
+  /// If data is specified, an `OP_RETURN` output will be added with it.
   pub fn new(
-    mut inputs: Vec<ReceivedOutput>,
+    inputs: &[ReceivedOutput],
     payments: &[(ScriptBuf, u64)],
     change: Option<ScriptBuf>,
     data: Option<Vec<u8>>,
@@ -156,39 +140,33 @@ impl SignableTransaction {
       Err(TransactionError::NoInputs)?;
     }
 
-    if payments.is_empty() && change.is_none() && data.is_none() {
-      Err(TransactionError::NoOutputs)?;
-    }
-
     for (_, amount) in payments {
       if *amount < DUST {
         Err(TransactionError::DustPayment)?;
       }
     }
 
-    if data.as_ref().map_or(0, Vec::len) > 80 {
+    if data.as_ref().map(Vec::len).unwrap_or(0) > 80 {
       Err(TransactionError::TooMuchData)?;
     }
 
-    let input_sat = inputs.iter().map(|input| input.output.value.to_sat()).sum::<u64>();
-    let offsets = inputs.iter().map(|input| input.offset).collect();
-    let tx_ins = inputs
-      .iter()
-      .map(|input| TxIn {
-        previous_output: input.outpoint,
-        script_sig: ScriptBuf::new(),
-        sequence: Sequence::MAX,
-        witness: Witness::new(),
-      })
-      .collect::<Vec<_>>();
+    let Some(input_sat) =
+      inputs.iter().map(|input| input.output.value.to_sat()).try_fold(0u64, u64::checked_add)
+    else {
+      Err(TransactionError::Overflow)?
+    };
 
-    let payment_sat = payments.iter().map(|payment| payment.1).sum::<u64>();
+    let Some(payment_sat) =
+      payments.iter().map(|payment| payment.1).try_fold(0u64, u64::checked_add)
+    else {
+      Err(TransactionError::Overflow)?
+    };
     let mut tx_outs = payments
       .iter()
       .map(|payment| TxOut { value: Amount::from_sat(payment.1), script_pubkey: payment.0.clone() })
       .collect::<Vec<_>>();
 
-    // Add the OP_RETURN output
+    // Add the `OP_RETURN` output, if specified
     if let Some(data) = data {
       tx_outs.push(TxOut {
         value: Amount::ZERO,
@@ -199,36 +177,50 @@ impl SignableTransaction {
       });
     }
 
-    let (mut weight, vbytes) = Self::calculate_weight_vbytes(tx_ins.len(), payments, None);
-
-    let mut needed_fee = fee_per_vbyte * vbytes;
-    // Technically, if there isn't change, this TX may still pay enough of a fee to pass the
-    // minimum fee. Such edge cases aren't worth programming when they go against intent, as the
-    // specified fee rate is too low to be valid
-    // bitcoin::policy::DEFAULT_MIN_RELAY_TX_FEE is in sats/kilo-vbyte
-    if needed_fee < ((u64::from(bitcoin::policy::DEFAULT_MIN_RELAY_TX_FEE) * vbytes) / 1000) {
-      Err(TransactionError::TooLowFee)?;
+    /*
+      We first check the length of inputs, outputs isn't absurd to ensure we can represent the
+      weight. This works so long as the size per input/output structuring is less than
+      `usize::MAX / MAX_STANDARD_TX_WEIGHT`, which is reasonably true.
+    */
+    #[expect(clippy::as_conversions)]
+    const {
+      let max_weight: u32 = bitcoin::policy::MAX_STANDARD_TX_WEIGHT;
+      assert!(usize::BITS >= u32::BITS);
+      // `1024` is assumed to be greater than the size of a Taproot input and an output's structure
+      assert!((usize::MAX / (max_weight as usize)) > 1024);
     }
-
-    if input_sat < (payment_sat + needed_fee) {
-      Err(TransactionError::NotEnoughFunds {
-        inputs: input_sat,
-        payments: payment_sat,
-        fee: needed_fee,
-      })?;
+    if inputs.len().saturating_add(
+      payments
+        .iter()
+        .map(|payment| &payment.0)
+        .chain(change.as_ref())
+        .fold(0usize, |accum, script| accum.saturating_add(script.as_bytes().len())),
+    ) >= usize::try_from(bitcoin::policy::MAX_STANDARD_TX_WEIGHT).unwrap()
+    {
+      // This may be slightly overzealous if a change output which would be unused causes us to
+      // pass the limit, but always erroring on a change output which would always error is fine
+      Err(TransactionError::TooLargeTransaction)?;
     }
 
     // If there's a change address, check if there's change to give it
     if let Some(change) = change {
-      let (weight_with_change, vbytes_with_change) =
-        Self::calculate_weight_vbytes(tx_ins.len(), payments, Some(&change));
-      let fee_with_change = fee_per_vbyte * vbytes_with_change;
-      if let Some(value) = input_sat.checked_sub(payment_sat + fee_with_change) {
-        if value >= DUST {
-          tx_outs.push(TxOut { value: Amount::from_sat(value), script_pubkey: change });
-          weight = weight_with_change;
-          needed_fee = fee_with_change;
-        }
+      let (_, vbytes_with_change) = Self::calculate_weight_vbytes(inputs.len(), {
+        let mut tx_outs = tx_outs.clone();
+        // Use a 0 value since we're currently unsure what the change amount will be, and since
+        // the value is fixed size (so any value could be used here)
+        tx_outs.push(TxOut { value: Amount::ZERO, script_pubkey: change.clone() });
+        tx_outs
+      });
+
+      // Update the fee
+      let fee_with_change =
+        fee_per_vbyte.checked_mul(vbytes_with_change).ok_or(TransactionError::Overflow)?;
+      if let Some(value) = input_sat
+        .checked_sub(payment_sat)
+        .and_then(|remaining| remaining.checked_sub(fee_with_change))
+        .filter(|value| *value >= DUST)
+      {
+        tx_outs.push(TxOut { value: Amount::from_sat(value), script_pubkey: change });
       }
     }
 
@@ -236,19 +228,58 @@ impl SignableTransaction {
       Err(TransactionError::NoOutputs)?;
     }
 
+    let (weight, vbytes) = Self::calculate_weight_vbytes(inputs.len(), tx_outs.clone());
     if weight > u64::from(bitcoin::policy::MAX_STANDARD_TX_WEIGHT) {
       Err(TransactionError::TooLargeTransaction)?;
+    }
+
+    let needed_fee = fee_per_vbyte.checked_mul(vbytes).ok_or(TransactionError::Overflow)?;
+
+    if input_sat
+      .checked_sub(payment_sat)
+      .and_then(|remaining| remaining.checked_sub(needed_fee))
+      .is_none()
+    {
+      Err(TransactionError::NotEnoughFunds {
+        inputs: input_sat,
+        payments: payment_sat,
+        fee: needed_fee,
+      })?;
+    }
+
+    /*
+      If this transaction is too large to effect a sufficient fee rate, and we added a change
+      output, it may be possible to achieve the necessary fee rate by dropping the change output.
+      We don't include support for such an edge case as it goes against the caller's intent by
+      dropping the specified change output to force a too-low specified fee to be usable.
+    */
+    // `bitcoin::policy::DEFAULT_MIN_RELAY_TX_FEE` is in sats/kilo-vbyte
+    if needed_fee <
+      ((u64::from(bitcoin::policy::DEFAULT_MIN_RELAY_TX_FEE)
+        .checked_mul(vbytes)
+        .ok_or(TransactionError::Overflow))? /
+        1000)
+    {
+      Err(TransactionError::TooLowFee)?;
     }
 
     Ok(SignableTransaction {
       tx: Transaction {
         version: Version(2),
         lock_time: LockTime::ZERO,
-        input: tx_ins,
+        input: inputs
+          .iter()
+          .map(|input| TxIn {
+            previous_output: input.outpoint,
+            script_sig: ScriptBuf::new(),
+            sequence: Sequence::MAX,
+            witness: Witness::new(),
+          })
+          .collect(),
         output: tx_outs,
       },
-      offsets,
-      prevouts: inputs.drain(..).map(|input| input.output).collect(),
+      offsets: inputs.iter().map(|input| input.offset).collect(),
+      prevouts: inputs.iter().map(|input| input.output.clone()).collect(),
       needed_fee,
     })
   }

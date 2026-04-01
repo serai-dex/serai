@@ -79,7 +79,7 @@ fn signable_transaction<D: Db>(
     .map(<Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::change_address);
 
   BSignableTransaction::new(
-    inputs.clone(),
+    &inputs,
     &payments,
     change.clone().map(ScriptBuf::from),
     None,
@@ -142,6 +142,7 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
         Err(
           TransactionError::TooMuchData |
           TransactionError::TooLowFee |
+          TransactionError::Overflow |
           TransactionError::TooLargeTransaction,
         ) => unreachable!(),
         Err(TransactionError::NotEnoughFunds { fee, .. }) => Amount(fee),
@@ -197,6 +198,7 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
         Err(
           TransactionError::TooMuchData |
           TransactionError::TooLowFee |
+          TransactionError::Overflow |
           TransactionError::TooLargeTransaction,
         ) => unreachable!(),
         Err(TransactionError::NotEnoughFunds { .. }) => {
