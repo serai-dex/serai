@@ -85,12 +85,24 @@ impl SignerTrait for Signer {
   /// Sign a signature with the current validator's private key.
   fn sign(&self, msg: &[u8]) -> impl Send + Future<Output = Self::Signature> {
     async move {
-      let mut nonce =
-        Zeroizing::new(RecommendedTranscript::new(b"Tributary Chain Tendermint Nonce"));
-      nonce.append_message(b"genesis", self.genesis);
-      nonce.append_message(b"key", Zeroizing::new(self.key.deref().to_repr()).as_ref());
-      nonce.append_message(b"message", msg);
-      let mut nonce = nonce.challenge(b"nonce");
+      let mut nonce = {
+        let mut nonce_transcript = RecommendedTranscript::new(b"Tributary Chain Tendermint Nonce");
+        nonce_transcript.append_message(b"genesis", self.genesis);
+        nonce_transcript
+          .append_message(b"key", Zeroizing::new(self.key.deref().to_repr()).as_ref());
+        nonce_transcript.append_message(b"message", msg);
+        let nonce = nonce_transcript.challenge(b"nonce");
+
+        // Ensure this will be zeroized (via the type contract) and ensure it happens now
+        {
+          fn drop_zeroize_on_drop(value: impl zeroize::ZeroizeOnDrop) {
+            drop(value);
+          }
+          drop_zeroize_on_drop(nonce_transcript);
+        }
+
+        nonce
+      };
 
       let mut nonce_arr = [0; 64];
       nonce_arr.copy_from_slice(nonce.as_ref());
