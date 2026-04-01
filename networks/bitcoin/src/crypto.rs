@@ -184,7 +184,7 @@ fn algorithm() {
       // `x` coordinate regardless of these keys' `y` coordinate
       if tweak_keys {
         for keys in keys.values_mut() {
-          *keys = crate::wallet::tweak_keys(keys.clone());
+          *keys = crate::wallet::tweak_with_unspendable_script_path(keys.clone());
         }
       }
       let group_key = keys[&Participant::new(1).unwrap()].group_key();

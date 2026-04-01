@@ -5,7 +5,7 @@ use ciphersuite_kp256::Secp256k1;
 
 use bitcoin_serai::{
   bitcoin::ScriptBuf,
-  wallet::{TransactionError, SignableTransaction as BSignableTransaction, p2tr_script_buf},
+  wallet::{TransactionError, SignableTransaction as BSignableTransaction},
 };
 
 use serai_primitives::{coin::ExternalCoin, balance::Amount};
@@ -27,7 +27,7 @@ use crate::{
 fn address_from_serai_key(key: <Secp256k1 as WrappedGroup>::G, kind: OutputType) -> Address {
   let offset = <Secp256k1 as WrappedGroup>::G::GENERATOR * OFFSETS[&kind];
   Address::new(
-    p2tr_script_buf(key + offset)
+    bitcoin_serai::wallet::address(key + offset)
       .expect("creating address from Serai key which wasn't properly tweaked"),
   )
   .expect("couldn't create Serai-representable address for P2TR script")
@@ -69,8 +69,7 @@ fn signable_transaction<D: Db>(
     getting the transaction unstuck (via CPFP).
   */
   payments.push((
-    // The generator is even so this is valid
-    p2tr_script_buf(<Secp256k1 as WrappedGroup>::G::GENERATOR).unwrap(),
+    bitcoin_serai::wallet::address(<Secp256k1 as WrappedGroup>::G::GENERATOR).unwrap(),
     // This uses the minimum output value allowed, as defined as a constant in bitcoin-serai
     // TODO: Add a test for this comparing to bitcoin's `minimal_non_dust`
     bitcoin_serai::wallet::DUST,

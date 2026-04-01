@@ -19,9 +19,7 @@ use bitcoin_serai::{
     script::{PushBytesBuf, Instruction, Instructions, Script},
     OutPoint, Amount, TxOut, Transaction, Network, Address,
   },
-  wallet::{
-    tweak_keys, p2tr_script_buf, ReceivedOutput, Scanner, TransactionError, SignableTransaction,
-  },
+  wallet::{ReceivedOutput, Scanner, TransactionError, SignableTransaction, address},
   rpc::Rpc,
 };
 
@@ -38,7 +36,7 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
       "generatetoaddress",
       &format!(
         r#"[1, "{}"]"#,
-        Address::from_script(&p2tr_script_buf(key).unwrap(), Network::Regtest).unwrap()
+        Address::from_script(&address(key).unwrap(), Network::Regtest).unwrap()
       ),
     )
     .await
@@ -71,10 +69,7 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
 }
 
 fn keys() -> (HashMap<Participant, ThresholdKeys<Secp256k1>>, ProjectivePoint) {
-  let mut keys = key_gen(&mut OsRng);
-  for keys in keys.values_mut() {
-    *keys = tweak_keys(keys.clone());
-  }
+  let keys = key_gen(&mut OsRng);
   let key = keys.values().next().unwrap().group_key();
   (keys, key)
 }
@@ -129,7 +124,7 @@ async_sequential! {
     assert_eq!(output.offset(), Scalar::ZERO);
 
     let inputs = vec![output];
-    let addr = || p2tr_script_buf(key).unwrap();
+    let addr = || address(key).unwrap();
     let payments = vec![(addr(), 1000)];
 
     SignableTransaction::new(inputs.clone(), &payments, None, None, FEE).unwrap();
@@ -196,14 +191,14 @@ async_sequential! {
 
     // Declare payments, change, fee
     let payments = [
-      (p2tr_script_buf(key).unwrap(), 1005),
-      (p2tr_script_buf(offset_key).unwrap(), 1007)
+      (address(key).unwrap(), 1005),
+      (address(offset_key).unwrap(), 1007)
     ];
 
     let change_offset = Scalar::random(&mut OsRng);
     let () = scanner.register_offset(change_offset).unwrap();
     let change_key = key + (ProjectivePoint::GENERATOR * change_offset);
-    let change_addr = p2tr_script_buf(change_key).unwrap();
+    let change_addr = address(change_key).unwrap();
 
     // Create and sign the TX
     let tx = SignableTransaction::new(
@@ -279,7 +274,7 @@ async_sequential! {
       &SignableTransaction::new(
         vec![output],
         &[],
-        Some(p2tr_script_buf(key).unwrap()),
+        Some(address(key).unwrap()),
         Some(data.clone()),
         FEE
       ).unwrap()

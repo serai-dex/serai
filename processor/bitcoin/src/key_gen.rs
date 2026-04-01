@@ -12,8 +12,7 @@ impl key_gen::KeyGenParams for KeyGenParams {
   fn tweak_keys(
     keys: &mut ThresholdKeys<<Self::ExternalNetworkCiphersuite as Curves>::ToweringCurve>,
   ) {
-    *keys = bitcoin_serai::wallet::tweak_keys(keys.clone());
-    // Also create a scanner to assert these keys, and all expected paths, are usable
+    // Create a scanner to assert these keys, and all expected paths, are usable
     scanner(keys.group_key());
   }
 

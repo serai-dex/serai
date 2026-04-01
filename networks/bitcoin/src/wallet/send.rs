@@ -20,10 +20,7 @@ use bitcoin::{
   OutPoint, Sequence, Witness, TxIn, Amount, TxOut,
 };
 
-use crate::{
-  crypto::Schnorr,
-  wallet::{ReceivedOutput, p2tr_script_buf},
-};
+use crate::{crypto::Schnorr, wallet::ReceivedOutput};
 
 #[rustfmt::skip]
 // https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.cpp#L26-L63
@@ -274,12 +271,16 @@ impl SignableTransaction {
   pub fn multisig(self, keys: &ThresholdKeys<Secp256k1>) -> Option<TransactionMachine> {
     let mut sigs = vec![];
     for i in 0 .. self.tx.input.len() {
+      // TODO: `ThresholdKeys` -> `struct WithUnspendableScriptPath(ThresholdKeys)`
+      //   -> `WithUnspendableScriptPath::address(&self)` to ensure the following never deviates
       let offset = keys.clone().offset(self.offsets[i]);
-      if p2tr_script_buf(offset.group_key())? != self.prevouts[i].script_pubkey {
+      if super::address(offset.group_key())? != self.prevouts[i].script_pubkey {
         None?;
       }
-
-      sigs.push(AlgorithmMachine::new(Schnorr::new(), keys.clone().offset(self.offsets[i])));
+      sigs.push(AlgorithmMachine::new(
+        Schnorr::new(),
+        super::tweak_with_unspendable_script_path(offset),
+      ));
     }
 
     Some(TransactionMachine { tx: self, sigs })
