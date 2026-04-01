@@ -193,7 +193,6 @@ wit-bindgen-rust-macro = { path = "patches/wit-bindgen-rust-macro" }
 # Dependencies from monero-oxide which originate from within our own tree, potentially shimmed to account for deviations since publishing
 std-shims = { path = "patches/std-shims" }
 simple-request = { path = "patches/simple-request" }
-multiexp = { path = "crypto/multiexp" }
 flexible-transcript = { path = "crypto/transcript" }
 ciphersuite = { path = "patches/ciphersuite" }
 dalek-ff-group = { path = "patches/dalek-ff-group" }

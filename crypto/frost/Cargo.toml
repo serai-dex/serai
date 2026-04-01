@@ -39,7 +39,7 @@ sha2 = { version = "0.10", default-features = false, optional = true }
 elliptic-curve = { version = "0.13", default-features = false, features = ["hash2curve"], optional = true }
 ciphersuite-kp256 = { path = "../ciphersuite/kp256", version = "0.4", default-features = false, features = ["alloc"], optional = true }
 
-multiexp = { path = "../multiexp", version = "0.4", default-features = false, features = ["alloc", "batch"] }
+multiexp = { path = "../multiexp", version = "0.5", default-features = false, features = ["alloc", "batch"] }
 
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false, features = ["alloc"] }
 
