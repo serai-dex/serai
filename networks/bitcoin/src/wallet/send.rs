@@ -270,7 +270,7 @@ impl SignableTransaction {
 
   /// Create a multisig machine for this transaction.
   ///
-  /// Returns None if the wrong keys are used.
+  /// This will return [`None`] if the wrong keys are used.
   pub fn multisig(self, keys: &ThresholdKeys<Secp256k1>) -> Option<TransactionMachine> {
     let mut sigs = vec![];
     for i in 0 .. self.tx.input.len() {
@@ -288,8 +288,8 @@ impl SignableTransaction {
 
 /// A FROST signing machine to produce a Bitcoin transaction.
 ///
-/// This does not support caching its preprocess. When sign is called, the message must be empty.
-/// This will panic if either `cache`, `from_cache` is called or the message isn't empty.
+/// This does not support caching its preprocess. When `sign` is called, `message` must be empty.
+/// This will panic if either `cache`, `from_cache` is called or `message` isn't empty.
 pub struct TransactionMachine {
   tx: SignableTransaction,
   sigs: Vec<AlgorithmMachine<Secp256k1, Schnorr>>,

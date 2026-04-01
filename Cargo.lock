@@ -1141,7 +1141,6 @@ dependencies = [
  "k256",
  "modular-frost",
  "rand_core 0.6.4",
- "secp256k1 0.29.1",
  "simple-request 0.3.0",
  "std-shims 0.1.5",
  "subtle",

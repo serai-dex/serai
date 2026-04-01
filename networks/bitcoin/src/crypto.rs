@@ -1,19 +1,18 @@
 use core::fmt::Debug;
 use std_shims::{prelude::*, io};
 
-use subtle::{Choice, ConstantTimeEq as _, ConditionallySelectable as _};
+use subtle::ConditionallySelectable as _;
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
 use k256::{
-  elliptic_curve::{ops::Reduce as _, sec1::ToEncodedPoint as _},
+  elliptic_curve::{
+    ops::Reduce as _, group::prime::PrimeCurveAffine as _, point::AffineCoordinates as _,
+  },
   U256, Scalar, ProjectivePoint,
 };
 
-use bitcoin::{
-  hashes::{HashEngine as _, Hash as _, sha256::Hash as Sha256},
-  key::XOnlyPublicKey,
-};
+use bitcoin::hashes::{HashEngine as _, Hash as _, sha256::Hash as Sha256};
 
 use frost::{
   curve::{WrappedGroup, Secp256k1},
@@ -21,34 +20,26 @@ use frost::{
   algorithm::{Hram as HramTrait, Algorithm, IetfSchnorr as FrostSchnorr},
 };
 
-/// Get the x coordinate of a non-infinity point.
+/// Get the `x` coordinate of a non-infinity point.
 ///
-/// Panics on invalid input.
-fn x(key: &ProjectivePoint) -> [u8; 32] {
-  let encoded = key.to_encoded_point(true);
-  (*encoded.x().expect("point at infinity")).into()
+/// Panics if the point is the point at infinity.
+fn x(point: &ProjectivePoint) -> [u8; 32] {
+  let point = point.to_affine();
+  assert!(!bool::from(point.is_identity()));
+  point.x().into()
 }
 
-/// Convert a non-infinity point to a XOnlyPublicKey (dropping its sign).
+/// A somewhat-BIP-340-compatible HRAm for use with [`modular_frost::algorithm::Schnorr`].
 ///
-/// Panics on invalid input.
-pub(crate) fn x_only(key: &ProjectivePoint) -> XOnlyPublicKey {
-  XOnlyPublicKey::from_slice(&x(key)).expect("x_only was passed a point which was infinity or odd")
-}
-
-/// Return if a point must be negated to have an even Y coordinate and be eligible for use.
-pub(crate) fn needs_negation(key: &ProjectivePoint) -> Choice {
-  use k256::elliptic_curve::sec1::Tag;
-  u8::from(key.to_encoded_point(true).tag()).ct_eq(&u8::from(Tag::CompressedOddY))
-}
-
-/// A BIP-340 compatible HRAm for use with the modular-frost Schnorr Algorithm.
+/// This will transcript the `x` coordinates of the nonce commitment, public key, but not their
+/// `y` coordinates (as per BIP-340).
 ///
-/// If passed an odd nonce, the challenge will be negated.
+/// If the `y` coordinates of `R, A` have different parities, the returned challenge will NOT be
+/// the BIP-340-defined challenge but its negative.
 ///
-/// If either `R` or `A` is the point at infinity, this will panic.
+/// If either `R` or `A` is the point at infinity, this may panic.
 #[derive(Clone, Copy, Debug)]
-pub struct Hram;
+pub(crate) struct Hram;
 #[expect(non_snake_case)]
 impl HramTrait<Secp256k1> for Hram {
   fn hram(R: &ProjectivePoint, A: &ProjectivePoint, m: &[u8]) -> Scalar {
@@ -62,26 +53,27 @@ impl HramTrait<Secp256k1> for Hram {
     data.input(m);
 
     let c = Scalar::reduce(U256::from_be_slice(Sha256::from_engine(data).as_ref()));
-    // If the nonce was odd, sign `r - cx` instead of `r + cx`, allowing us to negate `s` at the
-    // end to sign as `-r + cx`
-    <_>::conditional_select(&c, &-c, needs_negation(R))
+    <_>::conditional_select(&c, &-c, R.to_affine().y_is_odd() ^ A.to_affine().y_is_odd())
   }
 }
 
 /// BIP-340 Schnorr signature algorithm.
 ///
+/// This will sign for the Taproot public key represented by the `x` coordinate of the group key.
+///
 /// This may panic if called with nonces/a group key which are the point at infinity (which have
 /// a negligible probability for a well-reasoned caller, even with malicious participants
 /// present).
 ///
-/// `verify`, `verify_share` MUST be called after `sign_share` is called. Otherwise, this library
-/// MAY panic.
+/// The functions within this `Algorithm` are intended to be called per the timeline and structure
+/// provided by the various machines within [`modular-frost`]. These functions may panic if called
+/// in any other context or by any other method. No safety guarantees are provided if called
+/// directly.
 #[derive(Clone)]
-pub struct Schnorr(FrostSchnorr<Secp256k1, Hram>);
+pub(crate) struct Schnorr(FrostSchnorr<Secp256k1, Hram>);
 impl Schnorr {
   /// Construct a Schnorr algorithm continuing the specified transcript.
-  #[expect(clippy::new_without_default)]
-  pub fn new() -> Schnorr {
+  pub(crate) fn new() -> Schnorr {
     Schnorr(FrostSchnorr::ietf())
   }
 }
@@ -120,6 +112,8 @@ impl Algorithm<Secp256k1> for Schnorr {
     self.0.process_addendum(view, i, addendum)
   }
 
+  // Because FROST rejects nonce commitments which are the identity point, these nonce commitments
+  // won't be the identity point except with negligible probability
   fn sign_share(
     &mut self,
     params: &ThresholdView<Secp256k1>,
@@ -137,7 +131,23 @@ impl Algorithm<Secp256k1> for Schnorr {
     sum: Scalar,
   ) -> Option<Self::Signature> {
     self.0.verify(group_key, nonces, sum).map(|mut sig| {
-      sig.s = <_>::conditional_select(&sum, &-sum, needs_negation(&sig.R));
+      /*
+        If $R.y \cong A.y \mod 2$, then the challenge will have been the BIP-340 challenge.
+
+        If $R.y, A.y$ are even, the signature will be valid as-is.
+
+        If $R.y$ is even but $A.y$ is odd, the private key will need to be negated, but the
+        challenge would have been, so the signature is valid as-is.
+
+        If $R.y$ is odd but $A.y$ is even, we will have `r - c x` when we want `(-r) + c x`. We
+        can achieve this by negating the `s` value.
+
+        If $R.y, A.y$ are odd, we will have `r + c x` when we want `(-r) - c x`, which we can again
+        achieve by negating the `s` value.
+
+        This summarizes as we need to negate `s` if `R.y` is odd.
+      */
+      sig.s = <_>::conditional_select(&sum, &-sum, sig.R.to_affine().y_is_odd());
       // Convert to a Bitcoin signature by dropping the byte for the point's sign bit
       sig.serialize()[1 ..].try_into().unwrap()
     })
@@ -150,5 +160,53 @@ impl Algorithm<Secp256k1> for Schnorr {
     share: Scalar,
   ) -> Result<Vec<(Scalar, ProjectivePoint)>, ()> {
     self.0.verify_share(verification_share, nonces, share)
+  }
+}
+
+#[test]
+fn algorithm() {
+  use core::str::FromStr as _;
+  use rand_core::OsRng;
+  use bitcoin::{
+    key::{XOnlyPublicKey, Secp256k1 as Context},
+    TapSighash,
+  };
+  use frost::tests::{algorithm_machines, key_gen, sign};
+
+  let secp256k1 = Context::verification_only();
+
+  for tweak_keys in [false, true] {
+    for _ in 0 .. 100 {
+      let mut keys = key_gen::<_, Secp256k1>(&mut OsRng);
+      const MESSAGE: &[u8] = b"Hello, World!";
+
+      // Tweaking keys is not strictly required, as this will sign for the key represented by the
+      // `x` coordinate regardless of these keys' `y` coordinate
+      if tweak_keys {
+        for keys in keys.values_mut() {
+          *keys = crate::wallet::tweak_keys(keys.clone());
+        }
+      }
+      let group_key = keys[&Participant::new(1).unwrap()].group_key();
+
+      let algo = Schnorr::new();
+      let sig = sign(
+        &mut OsRng,
+        &algo,
+        keys.clone(),
+        algorithm_machines(&mut OsRng, &algo, &keys),
+        TapSighash::hash(MESSAGE).as_ref(),
+      );
+
+      let () = XOnlyPublicKey::from_slice(&x(&group_key))
+        .unwrap()
+        .verify(
+          &secp256k1,
+          &TapSighash::hash(MESSAGE).into(),
+          &<_>::from_str(&hex::encode(sig))
+            .expect("couldn't convert produced signature to `secp256k1::Signature`"),
+        )
+        .unwrap();
+    }
   }
 }

@@ -18,14 +18,14 @@ use utxo_scheduler::{PlannedTransaction, TransactionPlanner};
 use transaction_chaining_scheduler::{EffectedReceivedOutputs, Scheduler as GenericScheduler};
 
 use crate::{
-  scan::{offsets_for_key, scanner},
+  scan::{OFFSETS, scanner},
   output::Output,
   transaction::{SignableTransaction, Eventuality},
   rpc::Rpc,
 };
 
 fn address_from_serai_key(key: <Secp256k1 as WrappedGroup>::G, kind: OutputType) -> Address {
-  let offset = <Secp256k1 as WrappedGroup>::G::GENERATOR * offsets_for_key(key)[&kind];
+  let offset = <Secp256k1 as WrappedGroup>::G::GENERATOR * OFFSETS[&kind];
   Address::new(
     p2tr_script_buf(key + offset)
       .expect("creating address from Serai key which wasn't properly tweaked"),
@@ -181,7 +181,6 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
             let mut res = vec![];
             for output in scanner.scan_transaction(tx) {
               res.push(Output::new_with_presumed_origin(
-                key,
                 tx,
                 // It shouldn't matter if this is wrong as we should never try to return these
                 // We still provide an accurate value to ensure a lack of discrepancies

@@ -3,10 +3,7 @@ use std::collections::HashMap;
 use rand_core::{RngCore as _, OsRng};
 
 use k256::{
-  elliptic_curve::{
-    group::{ff::Field as _, Group as _},
-    sec1::{Tag, ToEncodedPoint as _},
-  },
+  elliptic_curve::group::{ff::Field as _, Group as _},
   Scalar, ProjectivePoint,
 };
 use frost::{
@@ -32,10 +29,6 @@ mod runner;
 use runner::rpc;
 
 const FEE: u64 = 20;
-
-fn is_even(key: ProjectivePoint) -> bool {
-  key.to_encoded_point(true).tag() == Tag::CompressedEvenY
-}
 
 async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint) -> ReceivedOutput {
   let block_number = rpc.get_latest_block_number().await.unwrap() + 1;
@@ -99,33 +92,13 @@ fn sign(
 
 async_sequential! {
   async fn test_scanner() {
-    // Test Scanners are creatable for even keys.
-    for _ in 0 .. 128 {
-      let key = ProjectivePoint::random(&mut OsRng);
-      assert_eq!(Scanner::new(key).is_some(), is_even(key));
-    }
-
-    let mut key = ProjectivePoint::random(&mut OsRng);
-    while !is_even(key) {
-      key += ProjectivePoint::GENERATOR;
-    }
-
+    let key = ProjectivePoint::random(&mut OsRng);
     {
       let mut scanner = Scanner::new(key).unwrap();
       for _ in 0 .. 128 {
-        let mut offset = Scalar::random(&mut OsRng);
-        let registered = scanner.register_offset(offset).unwrap();
+        let offset = Scalar::random(&mut OsRng);
+        let () = scanner.register_offset(offset).unwrap();
         // Registering this again should return None
-        assert!(scanner.register_offset(offset).is_none());
-
-        // We can only register offsets resulting in even keys
-        // Make this even
-        while !is_even(key + (ProjectivePoint::GENERATOR * offset)) {
-          offset += Scalar::ONE;
-        }
-        // Ensure it matches the registered offset
-        assert_eq!(registered, offset);
-        // Assert registering this again fails
         assert!(scanner.register_offset(offset).is_none());
       }
     }
@@ -136,7 +109,8 @@ async_sequential! {
     assert_eq!(send_and_get_output(&rpc, &scanner, key).await.offset(), Scalar::ZERO);
 
     // Register an offset and test receiving to it
-    let offset = scanner.register_offset(Scalar::random(&mut OsRng)).unwrap();
+    let offset = Scalar::random(&mut OsRng);
+    let () = scanner.register_offset(offset).unwrap();
     assert_eq!(
       send_and_get_output(&rpc, &scanner, key + (ProjectivePoint::GENERATOR * offset))
         .await
@@ -214,7 +188,8 @@ async_sequential! {
     let output = send_and_get_output(&rpc, &scanner, key).await;
     assert_eq!(output.offset(), Scalar::ZERO);
 
-    let offset = scanner.register_offset(Scalar::random(&mut OsRng)).unwrap();
+    let offset = Scalar::random(&mut OsRng);
+    let () = scanner.register_offset(offset).unwrap();
     let offset_key = key + (ProjectivePoint::GENERATOR * offset);
     let offset_output = send_and_get_output(&rpc, &scanner, offset_key).await;
     assert_eq!(offset_output.offset(), offset);
@@ -225,7 +200,8 @@ async_sequential! {
       (p2tr_script_buf(offset_key).unwrap(), 1007)
     ];
 
-    let change_offset = scanner.register_offset(Scalar::random(&mut OsRng)).unwrap();
+    let change_offset = Scalar::random(&mut OsRng);
+    let () = scanner.register_offset(change_offset).unwrap();
     let change_key = key + (ProjectivePoint::GENERATOR * change_offset);
     let change_addr = p2tr_script_buf(change_key).unwrap();
 
