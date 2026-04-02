@@ -6,7 +6,7 @@ use ciphersuite_kp256::Secp256k1;
 
 use bitcoin_serai::bitcoin::block::{Header, Block as BBlock};
 
-use serai_client::networks::bitcoin::Address;
+use serai_client_bitcoin::Address;
 
 use serai_db::Db;
 use primitives::{ReceivedOutput, EventualityTracker};
@@ -55,13 +55,12 @@ impl<D: Db> primitives::Block for Block<D> {
     // We skip the coinbase transaction as its burdened by maturity
     for tx in &self.1.txdata[1 ..] {
       for output in scanner.scan_transaction(tx) {
-        res.push(Output::new(&self.0, key, tx, output));
+        res.push(Output::new(&self.0, tx, output));
       }
     }
     res
   }
 
-  #[allow(clippy::type_complexity)]
   fn check_for_eventuality_resolutions(
     &self,
     eventualities: &mut EventualityTracker<Self::Eventuality>,

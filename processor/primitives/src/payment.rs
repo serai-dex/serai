@@ -1,10 +1,11 @@
 use std::io;
 
-use scale::{Encode, Decode, IoReader};
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::ExternalBalance;
-use serai_coins_primitives::OutInstructionWithBalance;
+use serai_primitives::{
+  balance::ExternalBalance,
+  instructions::{OutInstruction, OutInstructionWithBalance},
+};
 
 use crate::Address;
 
@@ -18,9 +19,11 @@ pub struct Payment<A: Address> {
 impl<A: Address> TryFrom<OutInstructionWithBalance> for Payment<A> {
   type Error = ();
   fn try_from(out_instruction_with_balance: OutInstructionWithBalance) -> Result<Self, ()> {
-    Ok(Payment {
-      address: out_instruction_with_balance.instruction.address.try_into().map_err(|_| ())?,
-      balance: out_instruction_with_balance.balance,
+    Ok(match out_instruction_with_balance.instruction {
+      OutInstruction::Transfer(address) => Payment {
+        address: address.try_into().map_err(|_| ())?,
+        balance: out_instruction_with_balance.balance,
+      },
     })
   }
 }
@@ -43,14 +46,12 @@ impl<A: Address> Payment<A> {
   /// Read a Payment.
   pub fn read(reader: &mut impl io::Read) -> io::Result<Self> {
     let address = A::deserialize_reader(reader)?;
-    let reader = &mut IoReader(reader);
-    let balance = ExternalBalance::decode(reader).map_err(io::Error::other)?;
+    let balance = ExternalBalance::deserialize_reader(reader).map_err(io::Error::other)?;
     Ok(Self { address, balance })
   }
   /// Write the Payment.
   pub fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
     self.address.serialize(writer)?;
-    self.balance.encode_to(writer);
-    Ok(())
+    self.balance.serialize(writer)
   }
 }

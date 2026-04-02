@@ -1,10 +1,21 @@
 use core::future::Future;
 use std::{sync::Arc, collections::HashMap};
 
-use serai_client::{
-  primitives::{SeraiAddress, Amount},
-  validator_sets::primitives::ExternalValidatorSet,
-  Serai,
+use blake2::{Digest as _, Blake2b256};
+
+use serai_client_serai::{
+  abi::{
+    primitives::{
+      network_id::ExternalNetworkId,
+      balance::Amount,
+      crypto::Public,
+      validator_sets::{Session, ExternalValidatorSet},
+      address::SeraiAddress,
+      merkle::IncrementalUnbalancedMerkleTree,
+    },
+    validator_sets::Event,
+  },
+  Serai, Events,
 };
 
 use serai_db::*;
@@ -12,9 +23,20 @@ use serai_task::ContinuallyRan;
 
 use crate::*;
 
+#[derive(BorshSerialize, BorshDeserialize)]
+struct Set {
+  session: Session,
+  key: Public,
+  stake: Amount,
+}
+
 create_db!(
   CosignIntend {
     ScanCosignFrom: () -> u64,
+    BuildsUpon: () -> IncrementalUnbalancedMerkleTree,
+    Stakes: (network: ExternalNetworkId, validator: SeraiAddress) -> Amount,
+    Validators: (set: ExternalValidatorSet) -> Vec<SeraiAddress>,
+    LatestSet: (network: ExternalNetworkId) -> Set,
   }
 );
 
@@ -35,23 +57,38 @@ db_channel! {
 async fn block_has_events_justifying_a_cosign(
   serai: &Serai,
   block_number: u64,
-) -> Result<(Block, HasEvents), String> {
+) -> Result<(Block, Events, HasEvents), String> {
   let block = serai
-    .finalized_block_by_number(block_number)
+    .block_by_number(block_number)
     .await
     .map_err(|e| format!("{e:?}"))?
-    .ok_or_else(|| "couldn't get block which should've been finalized".to_string())?;
-  let serai = serai.as_of(block.hash());
+    .ok_or_else(|| "couldn't get block which should've been finalized".to_owned())?;
+  let events = serai.events(block.header.hash()).await.map_err(|e| format!("{e:?}"))?;
 
-  if !serai.validator_sets().key_gen_events().await.map_err(|e| format!("{e:?}"))?.is_empty() {
-    return Ok((block, HasEvents::Notable));
+  if events.validator_sets().set_keys_events().next().is_some() {
+    return Ok((block, events, HasEvents::Notable));
   }
 
-  if !serai.coins().burn_with_instruction_events().await.map_err(|e| format!("{e:?}"))?.is_empty() {
-    return Ok((block, HasEvents::NonNotable));
+  if events.coins().burn_with_instruction_events().next().is_some() {
+    return Ok((block, events, HasEvents::NonNotable));
   }
 
-  Ok((block, HasEvents::No))
+  Ok((block, events, HasEvents::No))
+}
+
+// Fetch the `ExternalValidatorSet`s, and their associated keys, used for cosigning as of this
+// block.
+fn cosigning_sets(getter: &impl Get) -> Vec<(ExternalValidatorSet, Public, Amount)> {
+  let mut sets = vec![];
+  for network in ExternalNetworkId::all() {
+    let Some(Set { session, key, stake }) = LatestSet::get(getter, network) else {
+      // If this network doesn't have usable keys, move on
+      continue;
+    };
+
+    sets.push((ExternalValidatorSet { network, session }, key, stake));
+  }
+  sets
 }
 
 /// A task to determine which blocks we should intend to cosign.
@@ -67,56 +104,108 @@ impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
     async move {
       let start_block_number = ScanCosignFrom::get(&self.db).unwrap_or(1);
       let latest_block_number =
-        self.serai.latest_finalized_block().await.map_err(|e| format!("{e:?}"))?.number();
+        self.serai.latest_finalized_block_number().await.map_err(|e| format!("{e:?}"))?;
 
       for block_number in start_block_number ..= latest_block_number {
         let mut txn = self.db.txn();
 
-        let (block, mut has_events) =
+        let (block, events, mut has_events) =
           block_has_events_justifying_a_cosign(&self.serai, block_number)
             .await
             .map_err(|e| format!("{e:?}"))?;
 
+        let mut builds_upon =
+          BuildsUpon::get(&txn).unwrap_or(IncrementalUnbalancedMerkleTree::new());
+
         // Check we are indexing a linear chain
-        if (block_number > 1) &&
-          (<[u8; 32]>::from(block.header.parent_hash) !=
-            SubstrateBlockHash::get(&txn, block_number - 1)
-              .expect("indexing a block but haven't indexed its parent"))
+        if block.header.builds_upon() !=
+          builds_upon.clone().calculate(serai_client_serai::abi::BLOCK_BRANCH_TAG)
         {
           Err(format!(
             "node's block #{block_number} doesn't build upon the block #{} prior indexed",
             block_number - 1
           ))?;
         }
-        let block_hash = block.hash();
+        let block_hash = block.header.hash();
         SubstrateBlockHash::set(&mut txn, block_number, &block_hash);
+        builds_upon.append(
+          serai_client_serai::abi::BLOCK_BRANCH_TAG,
+          Blake2b256::new_with_prefix([serai_client_serai::abi::BLOCK_LEAF_TAG])
+            .chain_update(block_hash.0)
+            .finalize()
+            .into(),
+        );
+        BuildsUpon::set(&mut txn, &builds_upon);
+
+        // Update the stakes
+        for event in events.validator_sets().allocation_events() {
+          let Event::Allocation { validator, network, amount } = event else {
+            panic!("event from `allocation_events` wasn't `Event::Allocation`")
+          };
+          let Ok(network) = ExternalNetworkId::try_from(*network) else { continue };
+          let existing = Stakes::get(&txn, network, *validator).unwrap_or(Amount(0));
+          Stakes::set(&mut txn, network, *validator, &Amount(existing.0 + amount.0));
+        }
+        for event in events.validator_sets().deallocation_events() {
+          let Event::Deallocation { validator, network, amount, timeline: _ } = event else {
+            panic!("event from `deallocation_events` wasn't `Event::Deallocation`")
+          };
+          let Ok(network) = ExternalNetworkId::try_from(*network) else { continue };
+          let existing = Stakes::get(&txn, network, *validator).unwrap_or(Amount(0));
+          Stakes::set(&mut txn, network, *validator, &Amount(existing.0 - amount.0));
+        }
+
+        // Handle decided sets
+        for event in events.validator_sets().set_decided_events() {
+          let Event::SetDecided { set, validators } = event else {
+            panic!("event from `set_decided_events` wasn't `Event::SetDecided`")
+          };
+
+          let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
+          Validators::set(
+            &mut txn,
+            set,
+            &validators.iter().map(|(validator, _key_shares)| *validator).collect(),
+          );
+        }
+
+        // Handle declarations of the latest set
+        for event in events.validator_sets().set_keys_events() {
+          let Event::SetKeys { set, key_pair } = event else {
+            panic!("event from `set_keys_events` wasn't `Event::SetKeys`")
+          };
+          let mut stake = 0;
+          for validator in
+            Validators::take(&mut txn, *set).expect("set which wasn't decided set keys")
+          {
+            stake += Stakes::get(&txn, set.network, validator).unwrap_or(Amount(0)).0;
+          }
+          LatestSet::set(
+            &mut txn,
+            set.network,
+            &Set { session: set.session, key: key_pair.0, stake: Amount(stake) },
+          );
+        }
 
         let global_session_for_this_block = LatestGlobalSessionIntended::get(&txn);
 
         // If this is notable, it creates a new global session, which we index into the database
         // now
         if has_events == HasEvents::Notable {
-          let serai = self.serai.as_of(block_hash);
-          let sets_and_keys = cosigning_sets(&serai).await?;
-          let global_session =
-            GlobalSession::id(sets_and_keys.iter().map(|(set, _key)| *set).collect());
+          let sets_and_keys_and_stakes = cosigning_sets(&txn);
+          let global_session = GlobalSession::id(
+            sets_and_keys_and_stakes.iter().map(|(set, _key, _stake)| *set).collect(),
+          );
 
-          let mut sets = Vec::with_capacity(sets_and_keys.len());
-          let mut keys = HashMap::with_capacity(sets_and_keys.len());
-          let mut stakes = HashMap::with_capacity(sets_and_keys.len());
+          let mut sets = Vec::with_capacity(sets_and_keys_and_stakes.len());
+          let mut keys = HashMap::with_capacity(sets_and_keys_and_stakes.len());
+          let mut stakes = HashMap::with_capacity(sets_and_keys_and_stakes.len());
           let mut total_stake = 0;
-          for (set, key) in &sets_and_keys {
-            sets.push(*set);
-            keys.insert(set.network, SeraiAddress::from(*key));
-            let stake = serai
-              .validator_sets()
-              .total_allocated_stake(set.network.into())
-              .await
-              .map_err(|e| format!("{e:?}"))?
-              .unwrap_or(Amount(0))
-              .0;
-            stakes.insert(set.network, stake);
-            total_stake += stake;
+          for (set, key, stake) in sets_and_keys_and_stakes {
+            sets.push(set);
+            keys.insert(set.network, key);
+            stakes.insert(set.network, stake.0);
+            total_stake += stake.0;
           }
           if total_stake == 0 {
             Err(format!("cosigning sets for block #{block_number} had 0 stake in total"))?;

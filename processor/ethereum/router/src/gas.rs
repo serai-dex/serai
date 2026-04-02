@@ -3,7 +3,7 @@ use core::convert::Infallible;
 use k256::{Scalar, ProjectivePoint};
 
 use alloy_core::primitives::{Address, U256, Bytes};
-use alloy_sol_types::SolCall;
+use alloy_sol_types::SolCall as _;
 
 use revm::{
   primitives::hardfork::SpecId,
@@ -25,7 +25,7 @@ use revm::{
     evm::Evm,
     *,
   },
-  inspector::{Inspector, InspectorHandler},
+  inspector::{Inspector, InspectorHandler as _},
 };
 
 use ethereum_schnorr::{PublicKey, Signature};
@@ -41,7 +41,7 @@ const CHAIN_ID: U256 = U256::from_be_slice(&[1]);
 type RevmContext = Context<BlockEnv, TxEnv, CfgEnv, InMemoryDB, Journal<InMemoryDB>, ()>;
 
 fn precompiles() -> EthPrecompiles {
-  let mut precompiles = EthPrecompiles::default();
+  let mut precompiles = EthPrecompiles::new(SPEC_ID);
   PrecompileProvider::<RevmContext>::set_spec(&mut precompiles, SPEC_ID);
   precompiles
 }
@@ -184,16 +184,14 @@ impl Router {
 
       let mut db = InMemoryDB::new(EmptyDB::new());
       // Insert the Router into the state
-      db.insert_account_info(
-        self.address,
-        AccountInfo {
-          balance: U256::from(0),
-          // Per EIP-161
-          nonce: 1,
-          code_hash: bytecode.hash_slow(),
-          code: Some(bytecode),
-        },
-      );
+      db.insert_account_info(self.address, {
+        let balance = U256::from(0);
+        // Per EIP-161
+        let nonce = 1;
+        let code_hash = bytecode.hash_slow();
+        let code = bytecode;
+        AccountInfo::new(balance, nonce, code_hash, code)
+      });
 
       // Insert the value for _smartContractNonce set in the constructor
       // All operations w.r.t. execute in constant-time, making the actual value irrelevant
@@ -234,7 +232,7 @@ impl Router {
         unused_gas: 0,
         override_immediate_call_return_value: false,
       },
-      EthInstructions::default(),
+      EthInstructions::new_mainnet_with_spec(SPEC_ID),
       precompiles(),
     )
   }
@@ -272,15 +270,19 @@ impl Router {
     };
 
     // Sign a dummy signature
-    let (private_key, public_key) = Self::gas_estimation_key();
-    let c = Signature::challenge(
-      // Use a nonce of 1
-      ProjectivePoint::GENERATOR,
-      &public_key,
-      &Self::execute_message(CHAIN_ID, self.address, 1, coin, shimmed_fee, outs.clone()),
-    );
-    let s = Scalar::ONE + (c * private_key);
-    let sig = Signature::new(c, s).unwrap();
+    let sig = {
+      let (private_key, public_key) = Self::gas_estimation_key();
+      let c = Signature::challenge(
+        // Use a nonce of 1
+        ProjectivePoint::GENERATOR,
+        &public_key,
+        &Self::execute_message(CHAIN_ID, self.address, 1, coin, shimmed_fee, outs.clone()),
+      );
+      let c_scalar =
+        <Scalar as k256::elliptic_curve::ops::Reduce<k256::U256>>::reduce_bytes(&c.into());
+      let s = Scalar::ONE + (c_scalar * private_key);
+      Signature::new(c, s).unwrap()
+    };
 
     // Write the current transaction
     /*
@@ -321,11 +323,13 @@ impl Router {
         .inspect_run(&mut gas_estimator)
         .unwrap()
       {
-        ExecutionResult::Success { gas_used, gas_refunded, .. } => {
-          assert_eq!(gas_refunded, 0);
-          gas_used
+        ExecutionResult::Success { gas, .. } => {
+          assert_eq!(gas.final_refunded(), 0);
+          gas.used()
         }
-        res => panic!("estimated execute transaction failed: {res:?}"),
+        res @ (ExecutionResult::Revert { .. } | ExecutionResult::Halt { .. }) => {
+          panic!("estimated execute transaction failed: {res:?}")
+        }
       };
     gas += gas_estimator.into_inspector().unused_gas;
 
@@ -385,7 +389,6 @@ impl Router {
     coin: Coin,
     instruction: abi::OutInstruction,
   ) -> u64 {
-    #[allow(clippy::map_entry)] // clippy doesn't realize the multiple mutable borrows
     if !self.empty_execute_gas.contains_key(&coin) {
       // This can't be de-duplicated across ERC20s due to the zero bytes in the address
       let (gas, _fee) = self.execute_gas_and_fee(coin, U256::from(0), &OutInstructions(vec![]));

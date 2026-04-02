@@ -5,12 +5,12 @@ inputs:
   monero-version:
     description: "Monero version to download and run as a regtest node"
     required: false
-    default: v0.18.4.3
+    default: v0.18.4.6
 
   bitcoin-version:
     description: "Bitcoin version to download and run as a regtest node"
     required: false
-    default: "30.0"
+    default: "30.2"
 
 runs:
   using: "composite"
@@ -19,9 +19,9 @@ runs:
       uses: ./.github/actions/build-dependencies
 
     - name: Install Foundry
-      uses: foundry-rs/foundry-toolchain@8f1998e9878d786675189ef566a2e4bf24869773
+      uses: foundry-rs/foundry-toolchain@8789b3e21e6c11b2697f5eb56eddae542f746c10 # 1.7.0
       with:
-        version: nightly-f625d0fa7c51e65b4bf1e8f7931cd1c6e2e285e9
+        version: v1.5.1
         cache: false
 
     - name: Run a Monero Regtest Node
@@ -33,6 +33,3 @@ runs:
       uses: ./.github/actions/bitcoin
       with:
         version: ${{ inputs.bitcoin-version }}
-
-    - name: Run a Monero Wallet-RPC
-      uses: ./.github/actions/monero-wallet-rpc

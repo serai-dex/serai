@@ -1,17 +1,18 @@
 use std::io;
 
-use ciphersuite::{group::GroupEncoding, *};
+use ciphersuite::{group::GroupEncoding as _, *};
 use ciphersuite_kp256::Secp256k1;
 
 use alloy_core::primitives::U256;
 
-use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{
-  primitives::{ExternalNetworkId, ExternalCoin, Amount, ExternalBalance},
-  networks::ethereum::Address,
+use serai_primitives::{
+  network_id::ExternalNetworkId,
+  coin::ExternalCoin,
+  balance::{Amount, ExternalBalance},
 };
+use serai_client_ethereum::Address;
 
 use primitives::{OutputType, ReceivedOutput};
 use ethereum_router::{Coin as EthereumCoin, InInstruction as EthereumInInstruction};
@@ -39,9 +40,7 @@ fn amount_to_serai_amount(coin: ExternalCoin, amount: U256) -> Amount {
   Amount(u64::try_from(amount / divisor).unwrap())
 }
 
-#[derive(
-  Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode, BorshSerialize, BorshDeserialize,
-)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub(crate) struct OutputId(pub(crate) [u8; 40]);
 impl Default for OutputId {
   fn default() -> Self {

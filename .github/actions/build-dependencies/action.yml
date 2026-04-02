@@ -40,30 +40,43 @@ runs:
         if [ "$RUNNER_OS" == "Linux" ]; then
           sudo apt install -y ca-certificates protobuf-compiler libclang-dev
         elif [ "$RUNNER_OS" == "Windows" ]; then
-          choco install protoc
+          # Use `-gnu` to avoid the installation and licensing headaches of `-msvc`
+          rustup set default-host x86_64-pc-windows-gnu
+          choco install llvm protoc
         elif [ "$RUNNER_OS" == "macOS" ]; then
           brew install protobuf llvm
-          HOMEBREW_ROOT_PATH=/opt/homebrew # Apple Silicon
-          if [ $(uname -m) = "x86_64" ]; then HOMEBREW_ROOT_PATH=/usr/local; fi # Intel
-          ls $HOMEBREW_ROOT_PATH/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
-          echo "DYLD_LIBRARY_PATH=$HOMEBREW_ROOT_PATH/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          HOMEBREW_PREFIX=$(brew --prefix)
+          ls $HOMEBREW_PREFIX/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
+          echo "DYLD_LIBRARY_PATH=$HOMEBREW_PREFIX/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
         fi
 
     - name: Install solc
       shell: bash
       run: |
-        cargo +1.91 install svm-rs --version =0.5.19
-        svm install 0.8.29
-        svm use 0.8.29
+        cargo install svm-rs --version =0.5.23
 
-    - name: Remove preinstalled Docker
-      shell: bash
-      run: |
-        docker system prune -a --volumes
-        sudo apt remove -y *docker*
-        # Install uidmap which will be required for the explicitly installed Docker
-        sudo apt install uidmap
-      if: runner.os == 'Linux'
+        solc_version() {
+          # Install the version of `solc` specified in the contracts
+          # This also checks the specified version is consistent across contracts
+          cat $(find . -name "*.sol") | grep "pragma solidity" | while read -r line; do
+            THIS_SOLC_VERSION=$(printf "%s" "$line" | cut -d'^' -f2 | cut -d';' -f1)
+            if [ "$SOLC_VERSION" = "" ]; then
+              SOLC_VERSION="$THIS_SOLC_VERSION"
+              echo $SOLC_VERSION
+            fi
+            if [ ! "$line" = "pragma solidity ^$SOLC_VERSION;" ]; then
+              echo "Inconsistent Solidity requirement in \`.sol\` files"
+              exit 1
+            fi
+          done
+        }
+
+        svm install $(solc_version)
+        svm use $(solc_version)
+
+    # This is a build dependency, not a test dependency, due to being used to build the runtime
+    - name: Install `docker`
+      uses: ./.github/actions/docker
 
     - name: Update system dependencies
       shell: bash
@@ -71,15 +84,21 @@ runs:
         sudo apt update -y
         sudo apt upgrade -y
         sudo apt autoremove -y
-        sudo apt clean
+        sudo apt clean -y
       if: runner.os == 'Linux'
 
-    - name: Install rootless Docker
-      uses: docker/setup-docker-action@b60f85385d03ac8acfca6d9996982511d8620a19
-      with:
-        rootless: true
-        set-host: true
-      if: runner.os == 'Linux'
+    - name: Update system dependencies
+      shell: bash
+      run: |
+        brew upgrade
+        rm -rf $(brew --cache)
+      if: runner.os == 'macOS'
 
-    # - name: Cache Rust
-    #   uses: Swatinem/rust-cache@a95ba195448af2da9b00fb742d14ffaaf3c21f43
+    - name: Set GitHub CI Environment Variables
+      shell: bash
+      run: |
+        # These tweak the amount of iterations performed as approprtiate for GitHub's CI
+        echo 'GITHUB_CI=true' >> "$GITHUB_ENV"
+        echo RUSTFLAGS="$RUSTFLAGS --cfg github_ci" >> "$GITHUB_ENV"
+        # We always appreciate backtraces in the CI
+        echo 'RUST_BACKTRACE=1' >> "$GITHUB_ENV"

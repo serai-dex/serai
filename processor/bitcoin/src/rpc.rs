@@ -2,7 +2,7 @@ use core::future::Future;
 
 use bitcoin_serai::rpc::{RpcError, Rpc as BRpc};
 
-use serai_client::primitives::{ExternalNetworkId, ExternalCoin, Amount};
+use serai_primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount};
 
 use serai_db::Db;
 use scanner::ScannerFeed;
@@ -59,7 +59,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
           timestamps
             .push(self.rpc.get_block(&self.rpc.get_block_hash(i).await?).await?.header.time);
         }
-        timestamps.sort();
+        timestamps.sort_unstable();
         timestamps[timestamps.len() / 2]
       };
 

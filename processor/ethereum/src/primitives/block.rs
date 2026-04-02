@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ciphersuite::*;
 use ciphersuite_kp256::Secp256k1;
 
-use serai_client::networks::ethereum::Address;
+use serai_client_ethereum::Address;
 
 use primitives::{ReceivedOutput, EventualityTracker};
 
@@ -88,7 +88,6 @@ impl primitives::Block for FullEpoch {
     outputs
   }
 
-  #[allow(clippy::type_complexity)]
   fn check_for_eventuality_resolutions(
     &self,
     eventualities: &mut EventualityTracker<Self::Eventuality>,
@@ -109,7 +108,7 @@ impl primitives::Block for FullEpoch {
       if let (Executed::Batch { results, .. }, Executed::Batch { results: expected_results, .. }) =
         (executed, &mut expected.0)
       {
-        *expected_results = results.clone();
+        expected_results.clone_from(results);
       }
       assert_eq!(
         executed,

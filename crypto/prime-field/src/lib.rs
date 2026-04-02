@@ -70,11 +70,11 @@ pub mod __prime_field_private {
     reconstruction
   }
 
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   pub const fn calculate_S<const LIMBS: usize, P: ConstMontyParams<LIMBS>>() -> u32 {
     let mut i = 0;
     loop {
-      let bit = P::MODULUS.as_ref().wrapping_sub(&Uint::<LIMBS>::ONE).bit_vartime(i);
+      let bit = P::PARAMS.modulus().as_ref().wrapping_sub(&Uint::<LIMBS>::ONE).bit_vartime(i);
       if !bit {
         i += 1;
         continue;
@@ -121,9 +121,10 @@ macro_rules! odd_prime_field_with_specific_repr {
           ff::*,
           __prime_field_private::{
             crypto_bigint::{
+              ctutils::{self, CtEq as _, CtSelect as _, CtNeg as _},
               Limb, Encoding, Integer, Uint,
               modular::{ConstMontyParams, ConstMontyForm},
-              impl_modulus,
+              const_monty_params,
             },
             *,
           },
@@ -176,10 +177,10 @@ macro_rules! odd_prime_field_with_specific_repr {
           }
         };
 
-        impl_modulus!(Params, UnderlyingUint, PADDED_MODULUS_WITHOUT_PREFIX);
+        const_monty_params!(Params, UnderlyingUint, PADDED_MODULUS_WITHOUT_PREFIX);
         type Underlying = ConstMontyForm<Params, { UnderlyingUint::LIMBS }>;
 
-        const MODULUS: &UnderlyingUint = Params::MODULUS.as_ref();
+        const MODULUS: &UnderlyingUint = Params::PARAMS.modulus().as_ref();
         const MODULUS_MINUS_ONE: UnderlyingUint = MODULUS.wrapping_sub(&UnderlyingUint::ONE);
         const MODULUS_MINUS_TWO: UnderlyingUint = MODULUS.wrapping_sub(&UnderlyingUint::from_u8(2));
         const T: UnderlyingUint = MODULUS_MINUS_ONE.shr_vartime($name::S);
@@ -196,6 +197,7 @@ macro_rules! odd_prime_field_with_specific_repr {
 
         impl $name {
           /// Create a `$name` from the `Uint` type underlying it.
+          #[expect(clippy::same_name_method)]
           const fn from(value: &UnderlyingUint) -> Self {
             $name(Underlying::new(value))
           }
@@ -229,7 +231,7 @@ macro_rules! odd_prime_field_with_specific_repr {
             // Ensure the representations match
             let mut i = 0;
             while i < expanded_repr.len() {
-              if repr[i] != expanded_repr[i] {
+              if repr.as_slice()[i] != expanded_repr[i] {
                 return None;
               }
               i += 1;
@@ -261,7 +263,7 @@ macro_rules! odd_prime_field_with_specific_repr {
 
         impl ConstantTimeEq for $name {
           fn ct_eq(&self, other: &Self) -> Choice {
-            self.0.ct_eq(&other.0)
+            self.0.ct_eq(&other.0).into()
           }
         }
         impl PartialEq for $name {
@@ -272,12 +274,12 @@ macro_rules! odd_prime_field_with_specific_repr {
 
         impl ConditionallySelectable for $name {
           fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
-            Self(<_>::conditional_select(&a.0, &b.0, choice))
+            Self(<_>::ct_select(&a.0, &b.0, choice.into()))
           }
         }
         impl ConditionallyNegatable for $name {
           fn conditional_negate(&mut self, negate: Choice) {
-            self.0.conditional_negate(negate)
+            self.0 = <_>::ct_select(&self.0, &-self.0, negate.into());
           }
         }
 
@@ -412,7 +414,7 @@ macro_rules! odd_prime_field_with_specific_repr {
             Self(self.0.double())
           }
           fn invert(&self) -> CtOption<Self> {
-            CtOption::from(self.0.inv()).map(Self)
+            self.0.invert().map(Self).into()
           }
           fn sqrt(&self) -> CtOption<Self> {
             const THREE_MOD_FOUR: bool = (MODULUS.as_words()[0] % 4) == 3;
@@ -453,7 +455,7 @@ macro_rules! odd_prime_field_with_specific_repr {
             // `let ()` is used to assert how `conditional_negate` operates in-place
             let () = sqrt.conditional_negate(sqrt.is_odd());
 
-            CtOption::new(sqrt, sqrt.square().ct_eq(self))
+            CtOption::new(sqrt, sqrt.square().ct_eq(self).into())
           }
           fn sqrt_ratio(num: &Self, div: &Self) -> (Choice, Self) {
             helpers::sqrt_ratio_generic(num, div)
@@ -505,11 +507,12 @@ macro_rules! odd_prime_field_with_specific_repr {
             {
               let res: &mut [u8] = res.as_mut();
               if $big_endian {
+                let be_bytes = self.0.retrieve().to_be_bytes();
                 res.copy_from_slice(
-                  &self.0.retrieve().to_be_bytes()[(UnderlyingUint::BYTES - MODULUS_BYTES) ..]
+                  &be_bytes.as_slice()[(UnderlyingUint::BYTES - MODULUS_BYTES) ..]
                 );
               } else {
-                res.copy_from_slice(&self.0.retrieve().to_le_bytes()[.. MODULUS_BYTES]);
+                res.copy_from_slice(&self.0.retrieve().to_le_bytes().as_slice()[.. MODULUS_BYTES]);
               }
             }
             res
@@ -519,25 +522,25 @@ macro_rules! odd_prime_field_with_specific_repr {
             let repr: &[u8] = repr.as_ref();
             let result = Self(if $big_endian {
               expanded_repr[(UnderlyingUint::BYTES - MODULUS_BYTES) .. ].copy_from_slice(repr);
-              Underlying::new(&UnderlyingUint::from_be_bytes(expanded_repr))
+              Underlying::new(&UnderlyingUint::from_be_bytes(expanded_repr.into()))
             } else {
               expanded_repr[.. MODULUS_BYTES].copy_from_slice(repr);
-              Underlying::new(&UnderlyingUint::from_le_bytes(expanded_repr))
+              Underlying::new(&UnderlyingUint::from_le_bytes(expanded_repr.into()))
             });
-            CtOption::new(result, repr.ct_eq(&result.to_repr().as_ref()))
+            CtOption::new(result, ctutils::CtEq::ct_eq(repr, &result.to_repr().as_ref()).into())
           }
           fn is_odd(&self) -> Choice {
-            self.0.retrieve().is_odd()
+            self.0.retrieve().is_odd().into()
           }
         }
 
         impl PrimeFieldBits for $name {
           type ReprBits = [u8; UnderlyingUint::BYTES];
           fn to_le_bits(&self) -> FieldBits<Self::ReprBits> {
-            self.0.retrieve().to_le_bytes().into()
+            Self::ReprBits::from(self.0.retrieve().to_le_bytes()).into()
           }
           fn char_le_bits() -> FieldBits<Self::ReprBits> {
-            MODULUS.to_le_bytes().into()
+            Self::ReprBits::from(MODULUS.to_le_bytes()).into()
           }
         }
 

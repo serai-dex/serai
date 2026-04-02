@@ -49,7 +49,7 @@ pub(crate) async fn key_gen(coordinators: &mut [Coordinator]) -> KeyPair {
   }
   // This takes forever on debug, as we use in these tests
   let ci_scaling_factor =
-    1 + u64::from(u8::from(std::env::var("GITHUB_CI") == Ok("true".to_string())));
+    1 + u64::from(u8::from(std::env::var("GITHUB_CI") == Ok("true".to_owned())));
   tokio::time::sleep(core::time::Duration::from_secs(600 * ci_scaling_factor)).await;
   interact_with_all(coordinators, |participant, msg| match msg {
     messages::key_gen::ProcessorMessage::Participation { session: this_session, participation } => {
@@ -125,7 +125,7 @@ fn key_gen_test() {
   for network in EXTERNAL_NETWORKS {
     let (coordinators, test) = new_test(network);
 
-    test.run(|ops| async move {
+    test.run(async move |ops| {
       // Sleep for a second for the message-queue to boot
       // It isn't an error to start immediately, it just silences an error
       tokio::time::sleep(core::time::Duration::from_secs(1)).await;

@@ -1,9 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
-
-#[allow(unused_imports)]
-use std_shims::prelude::*;
+#![no_std]
 
 use sha2::digest::array::{typenum::U33, Array};
 use k256::elliptic_curve::{
@@ -27,7 +24,9 @@ use short_weierstrass::{ShortWeierstrass, Affine, Projective};
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Secq256k1;
 impl Zeroize for Secq256k1 {
-  fn zeroize(&mut self) {}
+  fn zeroize(&mut self) {
+    let Self = self;
+  }
 }
 
 impl ShortWeierstrass for Secq256k1 {

@@ -44,9 +44,12 @@ dkg-evrf = { path = "../../crypto/dkg/evrf", default-features = false, features 
 modular-frost = { path = "../../crypto/frost", default-features = false, optional = true }
 frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false, optional = true }
 
-bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, features = ["hazmat"], optional = true }
+bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, optional = true }
 
 ethereum-schnorr-contract = { path = "../../networks/ethereum/schnorr", default-features = false }
+
+serai-client-bitcoin = { path = "../../substrate/client/bitcoin", default-features = false, optional = true }
+serai-client-ethereum = { path = "../../substrate/client/ethereum", default-features = false, optional = true }
 
 [features]
 alloc = [
@@ -79,4 +82,7 @@ alloc = [
   "bitcoin-serai",
 
   "ethereum-schnorr-contract/alloc",
+
+  "serai-client-bitcoin",
+  "serai-client-ethereum",
 ]

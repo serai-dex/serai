@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
+#![allow(clippy::alloc_instead_of_core, clippy::std_instead_of_core, clippy::std_instead_of_alloc)]
 
 #[cfg(not(feature = "alloc"))]
 pub use core::*;
@@ -21,6 +22,8 @@ pub use core::error;
 extern crate alloc as extern_alloc;
 #[cfg(all(feature = "alloc", not(feature = "std")))]
 pub use extern_alloc::{alloc, borrow, boxed, ffi, fmt, rc, slice, str, string, task, vec, format};
+#[cfg(feature = "std")]
+extern crate std;
 #[cfg(feature = "std")]
 pub use std::{alloc, borrow, boxed, error, ffi, fmt, rc, slice, str, string, task, vec, format};
 

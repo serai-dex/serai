@@ -1,0 +1,128 @@
+use alloc::vec::Vec;
+
+use borsh::{BorshSerialize, BorshDeserialize};
+
+use serai_primitives::{
+  address::SeraiAddress,
+  coin::ExternalCoin,
+  balance::{Amount, ExternalBalance, Balance},
+};
+
+/// The address used for a liquidity pool by the DEX.
+pub fn address(coin: ExternalCoin) -> SeraiAddress {
+  SeraiAddress::system(borsh::to_vec(&(b"DEX", coin)).unwrap())
+}
+
+/// A call to the DEX.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+pub enum Call {
+  /// Add liquidity.
+  add_liquidity {
+    /// The pool to add liquidity to, specified by its external coin.
+    external_coin: ExternalCoin,
+    /// The intended amount of SRI to add as liquidity.
+    sri_intended: Amount,
+    /// The intended amount of the coin to add as liquidity.
+    external_coin_intended: Amount,
+    /// The minimum amount of SRI to add as liquidity.
+    sri_minimum: Amount,
+    /// The minimum amount of the coin to add as liquidity.
+    external_coin_minimum: Amount,
+  },
+  /// Transfer these liquidity tokens to the specified address.
+  transfer_liquidity {
+    /// The address to transfer to.
+    to: SeraiAddress,
+    /// The liquidity tokens to transfer.
+    liquidity_tokens: ExternalBalance,
+  },
+  /// Remove liquidity.
+  remove_liquidity {
+    /// The liquidity tokens to burn, removing the underlying liquidity from the pool.
+    ///
+    /// The `coin` within the balance is the coin to remove liquidity for.
+    liquidity_tokens: ExternalBalance,
+    /// The minimum amount of SRI to receive.
+    sri_minimum: Amount,
+    /// The minimum amount of the coin to receive.
+    external_coin_minimum: Amount,
+  },
+  /// Swap an exact amount of coins.
+  swap {
+    /// The coins to swap.
+    coins_to_swap: Balance,
+    /// The minimum balance to receive.
+    minimum_to_receive: Balance,
+  },
+  /// Swap for an exact amount of coins.
+  swap_for {
+    /// The coins to receive.
+    coins_to_receive: Balance,
+    /// The maximum amount to swap.
+    maximum_to_swap: Balance,
+  },
+}
+
+impl Call {
+  pub(crate) fn is_signed(&self) -> bool {
+    match self {
+      Call::add_liquidity { .. } |
+      Call::transfer_liquidity { .. } |
+      Call::remove_liquidity { .. } |
+      Call::swap { .. } |
+      Call::swap_for { .. } => true,
+    }
+  }
+}
+
+/// An event from the DEX.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+pub enum Event {
+  /// Liquidity was added to a pool.
+  LiquidityAddition {
+    /// The account which received the minted liquidity tokens.
+    recipient: SeraiAddress,
+    /// The liquidity tokens which were minted.
+    liquidity_tokens: ExternalBalance,
+    /// The amount of SRI which was added to the pool's liquidity.
+    sri_amount: Amount,
+    /// The amount of the coin which was added to the pool's liquidity.
+    external_coin_amount: Amount,
+  },
+
+  /// The specified liquidity tokens were transferred.
+  LiquidityTransfer {
+    /// The address transferred from.
+    from: SeraiAddress,
+    /// The address transferred to.
+    to: SeraiAddress,
+    /// The liquidity tokens transferred.
+    liquidity_tokens: ExternalBalance,
+  },
+
+  /// Liquidity was removed from a pool.
+  LiquidityRemoval {
+    /// The account which removed the liquidity.
+    from: SeraiAddress,
+    /// The liquidity tokens which were burnt.
+    liquidity_tokens: ExternalBalance,
+    /// The amount of SRI which was removed from the pool's liquidity.
+    sri_amount: Amount,
+    /// The amount of the coin which was removed from the pool's liquidity.
+    external_coin_amount: Amount,
+  },
+
+  /// A swap through the liquidity pools occurred.
+  Swap {
+    /// The account which made the swap.
+    from: SeraiAddress,
+    /// The deltas incurred by the pools.
+    ///
+    /// For a swap of sriABC to sriDEF, this would be
+    /// `[Balance { sriABC, 1 }, Balance { SRI, 2 }, Balance { sriDEF, 3 }]`, where
+    /// `Balance { sriABC, 1 }` was added to the `sriABC-SRI` pool, `Balance { SRI, 2 }` was
+    /// removed from the `sriABC-SRI` pool and added to the `sriDEF-SRI` pool, and
+    /// `Balance { sriDEF, 3 }` was removed from the `sriDEF-SRI` pool.
+    deltas: Vec<Balance>,
+  },
+}

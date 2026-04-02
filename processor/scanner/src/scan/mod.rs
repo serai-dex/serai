@@ -1,14 +1,14 @@
 use core::future::Future;
 use std::collections::HashMap;
 
-use scale::Decode;
+use borsh::BorshDeserialize as _;
+
 use serai_db::{Get, DbTxn, Db};
 
-use serai_in_instructions_primitives::{
-  Shorthand, RefundableInInstruction, InInstruction, InInstructionWithBalance,
-};
+#[rustfmt::skip]
+use serai_primitives::instructions::{RefundableInInstruction, InInstruction, InInstructionWithBalance};
 
-use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput, Block};
+use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput as _, Block as _};
 
 use crate::{
   lifetime::LifetimeStage,
@@ -16,7 +16,7 @@ use crate::{
     OutputWithInInstruction, Returnable, SenderScanData, ScannerGlobalDb, InInstructionData,
     ScanToBatchDb, ScanToEventualityDb,
   },
-  BlockExt, ScannerFeed, AddressFor, OutputFor, Return, sort_outputs,
+  BlockExt as _, ScannerFeed, AddressFor, OutputFor, Return, sort_outputs,
   eventuality::latest_scannable_block,
 };
 
@@ -41,7 +41,7 @@ pub(crate) fn queue_output_until_block<S: ScannerFeed>(
         .expect("queueing an output despite no next-to-scan-for-outputs block"),
     "queueing an output for a block already scanned"
   );
-  ScanDb::<S>::queue_output_until_block(txn, queue_for_block, output)
+  ScanDb::<S>::queue_output_until_block(txn, queue_for_block, output);
 }
 
 // Construct an InInstruction from an external output.
@@ -55,26 +55,22 @@ fn in_instruction_from_output<S: ScannerFeed>(
   let presumed_origin = output.presumed_origin();
 
   let mut data = output.data();
-  let shorthand = match Shorthand::decode(&mut data) {
-    Ok(shorthand) => shorthand,
-    Err(e) => {
-      log::info!("data in output {} wasn't valid shorthand: {e:?}", hex::encode(output.id()));
-      return (presumed_origin, None);
-    }
-  };
-  let instruction = match RefundableInInstruction::try_from(shorthand) {
+  let instruction = match RefundableInInstruction::deserialize_reader(&mut data) {
     Ok(instruction) => instruction,
     Err(e) => {
       log::info!(
-        "shorthand in output {} wasn't convertible to a RefundableInInstruction: {e:?}",
-        hex::encode(output.id())
+        "data in output {} wasn't a valid `RefundableInInstruction`: {e:?}",
+        hex::encode(output.id()),
       );
       return (presumed_origin, None);
     }
   };
 
   (
-    instruction.origin.and_then(|addr| AddressFor::<S>::try_from(addr).ok()).or(presumed_origin),
+    instruction
+      .return_address
+      .and_then(|addr| AddressFor::<S>::try_from(addr).ok())
+      .or(presumed_origin),
     Some(instruction.instruction),
   )
 }
@@ -241,8 +237,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
                   )
                 })?);
               }
-              let cost_to_aggregate = costs_to_aggregate[&balance.coin];
-              balance.amount.0 -= 2 * cost_to_aggregate.0;
+              balance.amount.0 -= 2 * costs_to_aggregate[&balance.coin].0;
 
               // Now, check it's still past the dust threshold
               if balance.amount.0 < S::dust(balance.coin).0 {
@@ -279,7 +274,6 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
 
             // Drop External outputs if they're to a multisig which won't report them
             // This means we should report any External output we save to disk here
-            #[allow(clippy::match_same_arms)]
             match key.stage {
               // This multisig isn't yet reporting its External outputs to avoid a DoS
               // Queue the output to be reported when this multisig starts reporting
@@ -323,7 +317,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
 
         // Sort the InInstructions by the output ID
         in_instructions.sort_by(|(output_id_a, _), (output_id_b, _)| {
-          use core::cmp::{Ordering, Ord};
+          use core::cmp::{Ordering, Ord as _};
           let res = output_id_a.as_ref().cmp(output_id_b.as_ref());
           assert!(res != Ordering::Equal, "two outputs within a collection had the same ID");
           res

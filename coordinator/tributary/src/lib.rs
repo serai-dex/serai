@@ -1,16 +1,18 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{marker::PhantomData, future::Future};
 use std::collections::HashMap;
 
-use ciphersuite::group::GroupEncoding;
+use ciphersuite::group::GroupEncoding as _;
 use dkg::Participant;
 
-use serai_client::{
-  primitives::SeraiAddress,
-  validator_sets::primitives::{ExternalValidatorSet, Slash},
+use serai_primitives::{
+  BlockHash,
+  validator_sets::{ExternalValidatorSet, Slash},
+  address::SeraiAddress,
 };
 
 use serai_db::*;
@@ -21,11 +23,11 @@ use tributary_sdk::{
     tx::{TendermintTx, Evidence, decode_signed_message},
     TendermintNetwork,
   },
-  Signed as TributarySigned, TransactionKind, TransactionTrait,
+  Signed as TributarySigned, TransactionKind, TransactionTrait as _,
   Transaction as TributaryTransaction, Block, TributaryReader, P2p,
 };
 
-use serai_cosign::CosignIntent;
+use serai_cosign_types::CosignIntent;
 use serai_coordinator_substrate::NewSetInformation;
 
 use messages::sign::{VariantSignId, SignId};
@@ -79,7 +81,7 @@ impl CosignIntents {
   fn take(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
   ) -> Option<CosignIntent> {
     db::CosignIntents::take(txn, set, substrate_block_hash)
   }
@@ -113,7 +115,7 @@ impl SubstrateBlockPlans {
   pub fn set(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
     plans: &Vec<[u8; 32]>,
   ) {
     db::SubstrateBlockPlans::set(txn, set, substrate_block_hash, plans);
@@ -121,7 +123,7 @@ impl SubstrateBlockPlans {
   fn take(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
   ) -> Option<Vec<[u8; 32]>> {
     db::SubstrateBlockPlans::take(txn, set, substrate_block_hash)
   }
@@ -283,7 +285,7 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
               "voted to remove",
             );
           }
-        };
+        }
       }
 
       // Send the participation to the processor
@@ -463,7 +465,7 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
             // Perform the amortization
             for slash_points in &mut median_slash_report {
               *slash_points =
-                slash_points.saturating_sub(worst_validator_in_supermajority_slash_points)
+                slash_points.saturating_sub(worst_validator_in_supermajority_slash_points);
             }
             let amortized_slash_report = median_slash_report;
 
@@ -499,7 +501,7 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
               },
             );
           }
-        };
+        }
       }
 
       Transaction::Sign { id: _, attempt: _, round, data, signed } => {
@@ -553,7 +555,7 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
                   messages::sign::CoordinatorMessage::Shares { id, shares: data_set }
                 }
               },
-            )
+            );
           }
         }
       }
@@ -574,14 +576,9 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
           };
           let msgs = (
             decode_signed_message::<TendermintNetwork<TD, Transaction, P>>(&data.0).unwrap(),
-            if data.1.is_some() {
-              Some(
-                decode_signed_message::<TendermintNetwork<TD, Transaction, P>>(&data.1.unwrap())
-                  .unwrap(),
-              )
-            } else {
-              None
-            },
+            data.1.as_ref().map(|data| {
+              decode_signed_message::<TendermintNetwork<TD, Transaction, P>>(data).unwrap()
+            }),
           );
 
           // Since anything with evidence is fundamentally faulty behavior, not just temporal

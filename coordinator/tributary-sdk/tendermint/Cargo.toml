@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/tendermint"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -21,7 +21,7 @@ thiserror = { version = "2", default-features = false, features = ["std"] }
 hex = { version = "0.4", default-features = false, features = ["std"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 
-parity-scale-codec = { version = "3", default-features = false, features = ["std", "derive"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 futures-util = { version = "0.3", default-features = false, features = ["std", "async-await-macro", "sink", "channel"] }
 futures-channel = { version = "0.3", default-features = false, features = ["std", "sink"] }

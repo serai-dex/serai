@@ -4,9 +4,9 @@ use std::{
   time::{Duration, Instant},
 };
 
-use borsh::BorshDeserialize;
+use borsh::BorshDeserialize as _;
 
-use serai_client::validator_sets::primitives::ExternalValidatorSet;
+use serai_client_serai::abi::primitives::validator_sets::ExternalValidatorSet;
 
 use tokio::sync::{mpsc, oneshot, RwLock};
 
@@ -14,7 +14,7 @@ use serai_task::TaskHandle;
 
 use serai_cosign::SignedCosign;
 
-use futures_util::StreamExt;
+use futures_util::StreamExt as _;
 use libp2p::{
   identity::PeerId,
   request_response::{InboundRequestId, OutboundRequestId, ResponseChannel},
@@ -31,7 +31,7 @@ use crate::{
   gossip,
 };
 
-const TIME_BETWEEN_REBUILD_PEERS: Duration = Duration::from_secs(10 * 60);
+const TIME_BETWEEN_REBUILD_PEERS: Duration = Duration::from_mins(10);
 
 /*
   `SwarmTask` handles everything we need the `Swarm` object for. The goal is to minimize the
@@ -215,7 +215,7 @@ impl SwarmTask {
                 should dial more). This is accepted as the dial task will eventually run on its
                 natural timer.
               */
-              const MINIMUM_TIME_SINCE_LAST_EXPLICIT_DIAL: Duration = Duration::from_secs(60);
+              const MINIMUM_TIME_SINCE_LAST_EXPLICIT_DIAL: Duration = Duration::from_mins(1);
               let now = Instant::now();
               if (self.last_dial_task_run + MINIMUM_TIME_SINCE_LAST_EXPLICIT_DIAL) < now {
                 self.dial_task.run_now();
@@ -308,7 +308,7 @@ impl SwarmTask {
     }
   }
 
-  #[allow(clippy::too_many_arguments)]
+  #[expect(clippy::too_many_arguments)]
   pub(crate) fn spawn(
     dial_task: TaskHandle,
     to_dial: mpsc::UnboundedReceiver<DialOpts>,

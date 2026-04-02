@@ -1,3 +1,5 @@
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+
 pub(crate) use std::{
   sync::{Arc, RwLock},
   collections::HashMap,
@@ -7,14 +9,14 @@ use dalek_ff_group::Ristretto;
 pub(crate) use ciphersuite::{group::GroupEncoding, WrappedGroup, GroupCanonicalEncoding};
 pub(crate) use schnorr_signatures::SchnorrSignature;
 
-pub(crate) use serai_primitives::ExternalNetworkId;
+pub(crate) use serai_primitives::network_id::ExternalNetworkId;
 
 pub(crate) use tokio::{
-  io::{AsyncReadExt, AsyncWriteExt},
+  io::{AsyncReadExt as _, AsyncWriteExt as _},
   net::TcpListener,
 };
 
-use serai_db::{Get, DbTxn, Db as DbTrait};
+use serai_db::{Get, DbTxn, Db as _};
 
 pub(crate) use crate::messages::*;
 
@@ -25,14 +27,14 @@ pub(crate) type Db = Arc<serai_db::ParityDb>;
 #[cfg(feature = "rocksdb")]
 pub(crate) type Db = serai_db::RocksDB;
 
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 mod clippy {
+  use std::sync::LazyLock;
   use super::*;
-  use once_cell::sync::Lazy;
-  pub(crate) static KEYS: Lazy<Arc<RwLock<HashMap<Service, <Ristretto as WrappedGroup>::G>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
-  pub(crate) static QUEUES: Lazy<Arc<RwLock<HashMap<(Service, Service), RwLock<Queue<Db>>>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+  pub(crate) static KEYS: LazyLock<Arc<RwLock<HashMap<Service, <Ristretto as WrappedGroup>::G>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
+  pub(crate) static QUEUES: LazyLock<Arc<RwLock<HashMap<(Service, Service), RwLock<Queue<Db>>>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 }
 pub(crate) use self::clippy::*;
 
@@ -148,32 +150,19 @@ pub(crate) fn ack_message(from: Service, to: Service, id: u64, sig: SchnorrSigna
 
   log::info!("Acknowledging From: {from:?} To: {to:?} ID: {id}");
 
-  QUEUES.read().unwrap()[&(from, to)].write().unwrap().ack_message(id)
+  QUEUES.read().unwrap()[&(from, to)].write().unwrap().ack_message(id);
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-  // Override the panic handler with one which will panic if any tokio task panics
-  {
-    let existing = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic| {
-      existing(panic);
-      const MSG: &str = "exiting the process due to a task panicking";
-      println!("{MSG}");
-      log::error!("{MSG}");
-      std::process::exit(1);
-    }));
-  }
-
-  if std::env::var("RUST_LOG").is_err() {
-    std::env::set_var("RUST_LOG", serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_string()));
-  }
-  env_logger::init();
-
+  // TODO: `env_logger::Env` for `serai-env` and `Builder::from_env`?
+  env_logger::Builder::from_default_env()
+    .parse_filters(&serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
+    .init();
   log::info!("Starting message-queue service...");
 
   // Open the DB
-  #[allow(unused_variables, unreachable_code)]
+  #[expect(unused_variables, unreachable_code)]
   let db = {
     #[cfg(all(feature = "parity-db", feature = "rocksdb"))]
     panic!("built with parity-db and rocksdb");
@@ -198,7 +187,7 @@ async fn main() {
     KEYS.write().unwrap().insert(service, key);
     let mut queues = QUEUES.write().unwrap();
     if service == Service::Coordinator {
-      for network in serai_primitives::EXTERNAL_NETWORKS {
+      for network in ExternalNetworkId::all() {
         queues.insert(
           (service, Service::Processor(network)),
           RwLock::new(Queue(db.clone(), service, Service::Processor(network))),
@@ -213,7 +202,7 @@ async fn main() {
   };
 
   // Make queues for each ExternalNetworkId
-  for network in serai_primitives::EXTERNAL_NETWORKS {
+  for network in ExternalNetworkId::all() {
     // Use a match so we error if the list of NetworkIds changes
     let Some(key) = read_key(match network {
       ExternalNetworkId::Bitcoin => "BITCOIN_KEY",

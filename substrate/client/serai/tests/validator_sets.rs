@@ -1,0 +1,186 @@
+use serai_abi::{
+  primitives::{
+    address::SeraiAddress,
+    network_id::{ExternalNetworkId, NetworkId},
+    balance::Amount,
+    validator_sets::{Session, ExternalValidatorSet, ValidatorSet, KeyShares},
+  },
+  validator_sets::Event,
+};
+
+#[tokio::test]
+async fn validator_sets() {
+  let mut test = dockertest::DockerTest::new();
+  let (composition, handle) = serai_substrate_tests::composition(
+    "alice",
+    serai_docker_tests::fresh_logs_folder(true, "serai-client/validator_sets"),
+  );
+  test.provide_container(
+    composition
+      .replace_cmd(["serai-node", "--network", "solo"].into_iter().map(str::to_owned).collect())
+      .replace_env([("RUST_LOG".to_owned(), "runtime=debug".to_owned())].into()),
+  );
+
+  test
+    .run_async(async |ops| {
+      let serai = serai_substrate_tests::rpc(&ops, handle).await;
+
+      'outer: {
+        for _ in 0 .. (5 * 10) {
+          tokio::time::sleep(core::time::Duration::from_secs(6)).await;
+
+          let latest_finalized = serai.latest_finalized_block_number().await.unwrap();
+          if latest_finalized > 0 {
+            break 'outer;
+          }
+        }
+        panic!("finalized block remained the genesis block for over five minutes");
+      };
+
+      // The genesis block should have the expected events
+      {
+        use sp_core::{Pair as _, sr25519::Pair};
+        let genesis_validators = vec![(
+          SeraiAddress::from(Pair::from_seed(&sp_core::blake2_256(b"//Alice")).public()),
+          KeyShares::ONE,
+        )];
+
+        {
+          let events = serai
+            .events(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
+            .await
+            .unwrap()
+            .validator_sets()
+            .set_embedded_elliptic_curve_keys_events()
+            .cloned()
+            .collect::<Vec<_>>();
+          assert_eq!(events.len(), NetworkId::all().collect::<Vec<_>>().len());
+
+          let state = serai.state().await.unwrap();
+          for (event, network) in events.into_iter().zip(NetworkId::all()) {
+            assert_eq!(
+              event,
+              Event::SetEmbeddedEllipticCurveKeys {
+                validator: genesis_validators[0].0,
+                keys: state
+                  .embedded_elliptic_curve_keys(genesis_validators[0].0, network)
+                  .await
+                  .unwrap()
+                  .unwrap(),
+              }
+            );
+          }
+        }
+
+        {
+          assert_eq!(
+            serai
+              .events(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
+              .await
+              .unwrap()
+              .validator_sets()
+              .set_decided_events()
+              .cloned()
+              .collect::<Vec<_>>(),
+            vec![
+              Event::SetDecided {
+                set: ValidatorSet { network: NetworkId::Serai, session: Session(0) },
+                validators: genesis_validators.clone(),
+              },
+              Event::SetDecided {
+                set: ValidatorSet {
+                  network: NetworkId::External(ExternalNetworkId::Bitcoin),
+                  session: Session(0)
+                },
+                validators: genesis_validators.clone(),
+              },
+              Event::SetDecided {
+                set: ValidatorSet {
+                  network: NetworkId::External(ExternalNetworkId::Ethereum),
+                  session: Session(0)
+                },
+                validators: genesis_validators.clone(),
+              },
+              Event::SetDecided {
+                set: ValidatorSet {
+                  network: NetworkId::External(ExternalNetworkId::Monero),
+                  session: Session(0)
+                },
+                validators: genesis_validators.clone(),
+              },
+              Event::SetDecided {
+                set: ValidatorSet { network: NetworkId::Serai, session: Session(1) },
+                validators: genesis_validators.clone(),
+              },
+            ]
+          );
+        }
+
+        assert_eq!(
+          serai
+            .events(serai.block_by_number(0).await.unwrap().unwrap().header.hash())
+            .await
+            .unwrap()
+            .validator_sets()
+            .accepted_handover_events()
+            .cloned()
+            .collect::<Vec<_>>(),
+          vec![Event::AcceptedHandover {
+            set: ValidatorSet { network: NetworkId::Serai, session: Session(0) }
+          }]
+        );
+      }
+
+      // The next block should not have these events
+      {
+        assert_eq!(
+          serai
+            .events(serai.block_by_number(1).await.unwrap().unwrap().header.hash())
+            .await
+            .unwrap()
+            .validator_sets()
+            .set_decided_events()
+            .cloned()
+            .collect::<Vec<_>>(),
+          vec![],
+        );
+        assert_eq!(
+          serai
+            .events(serai.block_by_number(1).await.unwrap().unwrap().header.hash())
+            .await
+            .unwrap()
+            .validator_sets()
+            .accepted_handover_events()
+            .cloned()
+            .collect::<Vec<_>>(),
+          vec![],
+        );
+      }
+
+      {
+        let serai = serai.state().await.unwrap();
+        for network in NetworkId::all() {
+          match network {
+            NetworkId::Serai => {
+              assert_eq!(serai.current_session(network).await.unwrap(), Some(Session(0)));
+              assert_eq!(serai.current_stake(network).await.unwrap(), Some(Amount(0)));
+            }
+            NetworkId::External(external) => {
+              assert!(serai.current_session(network).await.unwrap().is_none());
+              assert!(serai.current_stake(network).await.unwrap().is_none());
+              assert_eq!(
+                serai
+                  .keys(ExternalValidatorSet { network: external, session: Session(0) })
+                  .await
+                  .unwrap(),
+                None
+              );
+            }
+          }
+        }
+      }
+
+      println!("Finished `serai-client/validator_sets` test");
+    })
+    .await;
+}

@@ -3,15 +3,15 @@ use std::sync::{LazyLock, Arc, Mutex};
 
 use tokio::sync::mpsc;
 
-use serai_client::{
-  primitives::Signature,
-  validator_sets::primitives::{Session, SlashReport},
-  in_instructions::primitives::SignedBatch,
+use serai_primitives::{
+  crypto::Signature,
+  validator_sets::{Session, SlashReport},
+  instructions::SignedBatch,
 };
 
 use serai_cosign::SignedCosign;
 
-use serai_db::{Get, DbTxn, Db, create_db, db_channel};
+use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
 
 use scanner::ScannerFeed;
 
@@ -34,7 +34,7 @@ static SEND_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
 db_channel! {
   ProcessorBinCoordinator {
-    SentCoordinatorMessages: () -> Vec<u8>,
+    SentCoordinatorMessages: () -> messages::ProcessorMessage,
   }
 }
 
@@ -45,10 +45,10 @@ pub(crate) struct CoordinatorSend {
 }
 
 impl CoordinatorSend {
-  fn send(&mut self, msg: &messages::ProcessorMessage) {
+  fn send_internal(&mut self, msg: &messages::ProcessorMessage) {
     let _lock = SEND_LOCK.lock().unwrap();
     let mut txn = self.db.txn();
-    SentCoordinatorMessages::send(&mut txn, &borsh::to_vec(msg).unwrap());
+    SentCoordinatorMessages::send(&mut txn, msg);
     txn.commit();
     self
       .sent_message
@@ -114,12 +114,9 @@ impl Coordinator {
           let mut txn = db.txn();
           match SentCoordinatorMessages::try_recv(&mut txn) {
             Some(msg) => {
-              let metadata = Metadata {
-                from: service,
-                to: Service::Coordinator,
-                intent: borsh::from_slice::<messages::ProcessorMessage>(&msg).unwrap().intent(),
-              };
-              message_queue.queue_with_retry(metadata, msg).await;
+              let metadata =
+                Metadata { from: service, to: Service::Coordinator, intent: msg.intent() };
+              message_queue.queue_with_retry(metadata, borsh::to_vec(&msg).unwrap()).await;
               txn.commit();
             }
             None => {
@@ -156,7 +153,7 @@ impl Coordinator {
         }
         None => {
           let _ =
-            tokio::time::timeout(core::time::Duration::from_secs(60), self.received_message.recv())
+            tokio::time::timeout(core::time::Duration::from_mins(1), self.received_message.recv())
               .await;
         }
       }
@@ -164,7 +161,7 @@ impl Coordinator {
   }
 
   pub(crate) fn send_message(&mut self, msg: &messages::ProcessorMessage) {
-    self.send.send(msg);
+    self.send.send_internal(msg);
   }
 }
 
@@ -176,7 +173,7 @@ impl signers::Coordinator for CoordinatorSend {
     msg: messages::sign::ProcessorMessage,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
     async move {
-      self.send(&messages::ProcessorMessage::Sign(msg));
+      self.send_internal(&messages::ProcessorMessage::Sign(msg));
       Ok(())
     }
   }
@@ -186,7 +183,7 @@ impl signers::Coordinator for CoordinatorSend {
     cosign: SignedCosign,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
     async move {
-      self.send(&messages::ProcessorMessage::Coordinator(
+      self.send_internal(&messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::CosignedBlock { cosign },
       ));
       Ok(())
@@ -198,7 +195,7 @@ impl signers::Coordinator for CoordinatorSend {
     batch: SignedBatch,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
     async move {
-      self.send(&messages::ProcessorMessage::Coordinator(
+      self.send_internal(&messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::SignedBatch { batch },
       ));
       Ok(())
@@ -212,11 +209,11 @@ impl signers::Coordinator for CoordinatorSend {
     signature: Signature,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
     async move {
-      self.send(&messages::ProcessorMessage::Coordinator(
+      self.send_internal(&messages::ProcessorMessage::Coordinator(
         messages::coordinator::ProcessorMessage::SignedSlashReport {
           session,
           slash_report,
-          signature: signature.0,
+          signature,
         },
       ));
       Ok(())

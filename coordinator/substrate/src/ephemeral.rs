@@ -1,11 +1,16 @@
 use core::future::Future;
 use std::sync::Arc;
 
-use futures::stream::{StreamExt, FuturesOrdered};
+use futures::stream::{StreamExt as _, FuturesOrdered};
 
-use serai_client::{
-  primitives::{SeraiAddress, EmbeddedEllipticCurve},
-  validator_sets::primitives::{MAX_KEY_SHARES_PER_SET, ExternalValidatorSet},
+use serai_client_serai::{
+  abi::primitives::{
+    BlockHash,
+    crypto::EmbeddedEllipticCurveKeys as EmbeddedEllipticCurveKeysStruct,
+    network_id::{ExternalNetworkId, NetworkId},
+    validator_sets::{KeyShares, ExternalValidatorSet},
+    address::SeraiAddress,
+  },
   Serai,
 };
 
@@ -19,6 +24,10 @@ use crate::NewSetInformation;
 create_db!(
   CoordinatorSubstrateEphemeral {
     NextBlock: () -> u64,
+    EmbeddedEllipticCurveKeys: (
+      network: ExternalNetworkId,
+      validator: SeraiAddress
+    ) -> EmbeddedEllipticCurveKeysStruct,
   }
 );
 
@@ -49,10 +58,11 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
 
       // These are all the events which generate canonical messages
       struct EphemeralEvents {
-        block_hash: [u8; 32],
+        block_hash: BlockHash,
         time: u64,
-        new_set_events: Vec<serai_client::validator_sets::ValidatorSetsEvent>,
-        accepted_handover_events: Vec<serai_client::validator_sets::ValidatorSetsEvent>,
+        embedded_elliptic_curve_keys_events: Vec<serai_client_serai::abi::validator_sets::Event>,
+        set_decided_events: Vec<serai_client_serai::abi::validator_sets::Event>,
+        accepted_handover_events: Vec<serai_client_serai::abi::validator_sets::Event>,
       }
 
       // For a cosigned block, fetch all relevant events
@@ -68,34 +78,34 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
               Ok(None) => {
                 panic!("iterating to latest cosigned block but couldn't get cosigned block")
               }
-              Err(serai_cosign::Faulted) => return Err("cosigning process faulted".to_string()),
+              Err(serai_cosign::Faulted) => return Err("cosigning process faulted".to_owned()),
             };
 
-            let temporal_serai = serai.as_of(block_hash);
-            let temporal_serai_validators = temporal_serai.validator_sets();
-            let (block, new_set_events, accepted_handover_events) = tokio::try_join!(
-              serai.block(block_hash),
-              temporal_serai_validators.new_set_events(),
-              temporal_serai_validators.accepted_handover_events(),
-            )
-            .map_err(|e| format!("{e:?}"))?;
-            let Some(block) = block else {
+            let events = serai.events(block_hash).await.map_err(|e| format!("{e}"))?;
+            let embedded_elliptic_curve_keys_events = events
+              .validator_sets()
+              .set_embedded_elliptic_curve_keys_events()
+              .cloned()
+              .collect::<Vec<_>>();
+            let set_decided_events =
+              events.validator_sets().set_decided_events().cloned().collect::<Vec<_>>();
+            let accepted_handover_events =
+              events.validator_sets().accepted_handover_events().cloned().collect::<Vec<_>>();
+            let Some(block) = serai.block(block_hash).await.map_err(|e| format!("{e:?}"))? else {
               Err(format!("Serai node didn't have cosigned block #{block_number}"))?
             };
 
-            let time = if block_number == 0 {
-              block.time().unwrap_or(0)
-            } else {
-              // Serai's block time is in milliseconds
-              block
-                .time()
-                .ok_or_else(|| "non-genesis Serai block didn't have a time".to_string())? /
-                1000
-            };
-
+            // We use time in seconds, not milliseconds, here
+            let time = block.header.unix_time_in_millis() / 1000;
             Ok((
               block_number,
-              EphemeralEvents { block_hash, time, new_set_events, accepted_handover_events },
+              EphemeralEvents {
+                block_hash,
+                time,
+                embedded_elliptic_curve_keys_events,
+                set_decided_events,
+                accepted_handover_events,
+              },
             ))
           }
         }
@@ -126,105 +136,96 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
 
         let mut txn = self.db.txn();
 
-        for new_set in block.new_set_events {
-          let serai_client::validator_sets::ValidatorSetsEvent::NewSet { set } = &new_set else {
-            panic!("NewSet event wasn't a NewSet event: {new_set:?}");
+        for event in block.embedded_elliptic_curve_keys_events {
+          let serai_client_serai::abi::validator_sets::Event::SetEmbeddedEllipticCurveKeys {
+            validator,
+            keys,
+          } = &event
+          else {
+            panic!(
+              "{}: {event:?}",
+              "`SetEmbeddedEllipticCurveKeys` event wasn't a `SetEmbeddedEllipticCurveKeys` event"
+            );
           };
+
+          match keys.network() {
+            NetworkId::Serai => {}
+            NetworkId::External(network) => {
+              EmbeddedEllipticCurveKeys::set(&mut txn, network, *validator, keys);
+            }
+          }
+        }
+
+        for set_decided in block.set_decided_events {
+          let serai_client_serai::abi::validator_sets::Event::SetDecided { set, validators } =
+            &set_decided
+          else {
+            panic!("`SetDecided` event wasn't a `SetDecided` event: {set_decided:?}");
+          };
+
           // We only coordinate over external networks
           let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
-
-          let serai = self.serai.as_of(block.block_hash);
-          let serai = serai.validator_sets();
-          let Some(validators) =
-            serai.participants(set.network.into()).await.map_err(|e| format!("{e:?}"))?
-          else {
-            Err(format!(
-              "block #{block_number} declared a new set but didn't have the participants"
-            ))?
-          };
           let validators = validators
-            .into_iter()
-            .map(|(validator, weight)| (SeraiAddress::from(validator), weight))
+            .iter()
+            .map(|(validator, weight)| (*validator, u16::from(*weight)))
             .collect::<Vec<_>>();
+
           let in_set = validators.iter().any(|(validator, _)| *validator == self.validator);
           if in_set {
             if u16::try_from(validators.len()).is_err() {
               Err("more than u16::MAX validators sent")?;
             }
 
-            let Ok(validators) = validators
-              .into_iter()
-              .map(|(validator, weight)| u16::try_from(weight).map(|weight| (validator, weight)))
-              .collect::<Result<Vec<_>, _>>()
-            else {
-              Err("validator's weight exceeded u16::MAX".to_string())?
-            };
-
             // Do the summation in u32 so we don't risk a u16 overflow
             let total_weight = validators.iter().map(|(_, weight)| u32::from(*weight)).sum::<u32>();
-            if total_weight > u32::from(MAX_KEY_SHARES_PER_SET) {
+            if total_weight > u32::from(KeyShares::MAX_PER_SET) {
               Err(format!(
-                "{set:?} has {total_weight} key shares when the max is {MAX_KEY_SHARES_PER_SET}"
+                "{set:?} has {total_weight} key shares when the max is {}",
+                KeyShares::MAX_PER_SET
               ))?;
             }
-            let total_weight = u16::try_from(total_weight).unwrap();
+            let total_weight = u16::try_from(total_weight)
+              .expect("value smaller than `u16` constant but doesn't fit in `u16`");
 
             // Fetch all of the validators' embedded elliptic curve keys
-            let mut embedded_elliptic_curve_keys = FuturesOrdered::new();
-            for (validator, _) in &validators {
-              let validator = *validator;
-              // try_join doesn't return a future so we need to wrap it in this additional async
-              // block
-              embedded_elliptic_curve_keys.push_back(async move {
-                tokio::try_join!(
-                  // One future to fetch the substrate embedded key
-                  serai.embedded_elliptic_curve_key(
-                    validator.into(),
-                    EmbeddedEllipticCurve::Embedwards25519
-                  ),
-                  // One future to fetch the external embedded key, if there is a distinct curve
-                  async {
-                    // `embedded_elliptic_curves` is documented to have the second entry be the
-                    // network-specific curve (if it exists and is distinct from Embedwards25519)
-                    if let Some(curve) = set.network.embedded_elliptic_curves().get(1) {
-                      serai.embedded_elliptic_curve_key(validator.into(), *curve).await.map(Some)
-                    } else {
-                      Ok(None)
-                    }
-                  }
-                )
-                .map(|(substrate_embedded_key, external_embedded_key)| {
-                  (validator, substrate_embedded_key, external_embedded_key)
-                })
-              });
-            }
-
             let mut evrf_public_keys = Vec::with_capacity(usize::from(total_weight));
             for (validator, weight) in &validators {
-              let (future_validator, substrate_embedded_key, external_embedded_key) =
-                embedded_elliptic_curve_keys.next().await.unwrap().map_err(|e| format!("{e:?}"))?;
-              assert_eq!(*validator, future_validator);
-              let external_embedded_key =
-                external_embedded_key.unwrap_or(substrate_embedded_key.clone());
-              match (substrate_embedded_key, external_embedded_key) {
-                (Some(substrate_embedded_key), Some(external_embedded_key)) => {
-                  let substrate_embedded_key = <[u8; 32]>::try_from(substrate_embedded_key)
-                    .map_err(|_| "Embedwards25519 key wasn't 32 bytes".to_string())?;
-                  for _ in 0 .. *weight {
-                    evrf_public_keys.push((substrate_embedded_key, external_embedded_key.clone()));
-                  }
+              let keys = match EmbeddedEllipticCurveKeys::get(&txn, set.network, *validator)
+                .expect("selected validator lacked embedded elliptic curve keys")
+              {
+                EmbeddedEllipticCurveKeysStruct::Serai(_) => {
+                  panic!(
+                    "
+                    requested embedded elliptic curve keys for external network yet received `Serai`
+                  "
+                  )
                 }
-                _ => Err("NewSet with validator missing an embedded key".to_string())?,
+                EmbeddedEllipticCurveKeysStruct::Bitcoin(substrate, external) => {
+                  assert_eq!(set.network, ExternalNetworkId::Bitcoin);
+                  (substrate, external.to_vec())
+                }
+                EmbeddedEllipticCurveKeysStruct::Ethereum(substrate, external) => {
+                  assert_eq!(set.network, ExternalNetworkId::Ethereum);
+                  (substrate, external.to_vec())
+                }
+                EmbeddedEllipticCurveKeysStruct::Monero(substrate) => {
+                  assert_eq!(set.network, ExternalNetworkId::Monero);
+                  (substrate, substrate.to_vec())
+                }
+              };
+              for _ in 0 .. *weight {
+                evrf_public_keys.push(keys.clone());
               }
             }
 
             let mut new_set = NewSetInformation {
               set,
-              serai_block: block.block_hash,
+              serai_block: block.block_hash.0,
               declaration_time: block.time,
               // TODO: This should be inlined into the Processor's key gen code
               // It's legacy from when we removed participants from the key gen
               threshold: ((total_weight * 2) / 3) + 1,
+              // TODO: Why are `validators` and `evrf_public_keys` two separate fields?
               validators,
               evrf_public_keys,
               participant_indexes: Default::default(),
@@ -238,7 +239,7 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
         }
 
         for accepted_handover in block.accepted_handover_events {
-          let serai_client::validator_sets::ValidatorSetsEvent::AcceptedHandover { set } =
+          let serai_client_serai::abi::validator_sets::Event::AcceptedHandover { set } =
             &accepted_handover
           else {
             panic!("AcceptedHandover event wasn't a AcceptedHandover event: {accepted_handover:?}");

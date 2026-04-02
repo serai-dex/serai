@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - next
     paths:
       - "common/**"
       - "crypto/**"
@@ -29,14 +30,14 @@ jobs:
   test-infra:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
-      - name: Build Dependencies
-        uses: ./.github/actions/build-dependencies
+      - name: Test Dependencies
+        uses: ./.github/actions/test-dependencies
 
       - name: Run Tests
         run: |
-          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
+          cargo test --all-features \
             -p serai-message-queue \
             -p serai-processor-messages \
             -p serai-processor-key-gen \
@@ -53,7 +54,7 @@ jobs:
             -p serai-processor-bin \
             -p serai-bitcoin-processor \
             -p serai-processor-ethereum-primitives \
-            -p serai-processor-ethereum-test-primitives \
+            -p serai-ethereum-test-primitives \
             -p serai-processor-ethereum-deployer \
             -p serai-processor-ethereum-router \
             -p serai-processor-ethereum-erc20 \
@@ -61,6 +62,7 @@ jobs:
             -p serai-monero-processor \
             -p tendermint-machine \
             -p tributary-sdk \
+            -p serai-cosign-types \
             -p serai-cosign \
             -p serai-coordinator-substrate \
             -p serai-coordinator-tributary \
@@ -73,41 +75,30 @@ jobs:
   test-substrate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
 
       - name: Run Tests
+        shell: bash
         run: |
-          GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features \
-            -p substrate-median \
-            -p serai-primitives \
-            -p serai-coins-primitives \
-            -p serai-coins-pallet \
-            -p serai-dex-pallet \
-            -p serai-validator-sets-primitives \
-            -p serai-validator-sets-pallet \
-            -p serai-genesis-liquidity-primitives \
-            -p serai-genesis-liquidity-pallet \
-            -p serai-emissions-primitives \
-            -p serai-emissions-pallet \
-            -p serai-economic-security-pallet \
-            -p serai-in-instructions-primitives \
-            -p serai-in-instructions-pallet \
-            -p serai-signals-primitives \
-            -p serai-signals-pallet \
-            -p serai-abi \
-            -p serai-runtime \
-            -p serai-node
+          find ./substrate -name "Cargo.toml" ! -path "*client*" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done
+          cargo test --all-features -p serai-substrate-tests
 
   test-serai-client:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
 
       - name: Run Tests
-        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p serai-client
+        shell: bash
+        run: |
+          find ./substrate -name "Cargo.toml" -path "*client*" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done

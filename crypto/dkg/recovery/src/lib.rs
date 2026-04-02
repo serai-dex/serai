@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
 
-use core::ops::{Deref, DerefMut};
+use core::ops::{Deref as _, DerefMut as _};
 extern crate alloc;
 use alloc::vec::Vec;
 

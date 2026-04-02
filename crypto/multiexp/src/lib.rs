@@ -1,11 +1,14 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 
 use zeroize::Zeroize;
+use subtle::ConditionallySelectable;
 
 use ff::PrimeFieldBits;
 use group::Group;
@@ -39,7 +42,7 @@ mod underlying {
     let bit_ref = black_box(bit_ref);
 
     let mut bit = black_box(*bit_ref);
-    #[allow(clippy::cast_lossless)]
+    #[expect(clippy::cast_lossless, clippy::as_conversions)]
     let res = black_box(bit as u8);
     bit.zeroize();
     debug_assert!((res | 1) == 1);
@@ -132,7 +135,9 @@ mod underlying {
 
   /// Performs a multiexponentiation, automatically selecting the optimal algorithm based on the
   /// amount of pairs.
-  pub fn multiexp<G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>(
+  pub fn multiexp<
+    G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
+  >(
     pairs: &[(G::Scalar, G)],
   ) -> G {
     match algorithm(pairs.len()) {
@@ -162,7 +167,9 @@ mod underlying {
 
   /// Performs a multiexponentiation, automatically selecting the optimal algorithm based on the
   /// amount of pairs.
-  pub fn multiexp<G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>(
+  pub fn multiexp<
+    G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
+  >(
     pairs: &[(G::Scalar, G)],
   ) -> G {
     pairs.iter().map(|(scalar, point)| *point * scalar).sum()

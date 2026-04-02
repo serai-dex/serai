@@ -37,11 +37,10 @@ impl Service<RequestPacket> for SimpleRequest {
   fn call(&mut self, req: RequestPacket) -> Self::Future {
     let inner = self.clone();
     Box::pin(async move {
-      let packet = req.serialize().map_err(TransportError::SerError)?;
       let request = Request::from(
         hyper::Request::post(&inner.url)
           .header("Content-Type", "application/json")
-          .body(serde_json::to_vec(&packet).map_err(TransportError::SerError)?.into())
+          .body(serde_json::to_vec(&req).map_err(TransportError::SerError)?.into())
           .unwrap(),
       );
 

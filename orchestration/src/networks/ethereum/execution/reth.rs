@@ -9,11 +9,11 @@ FROM alpine:latest AS reth
 
 ENV RETH_VERSION=0.2.0-beta.6
 
-RUN apk --no-cache add wget git gnupg
+RUN apk --no-cache add git gnupg
 
 # Download reth
-RUN wget -4 https://github.com/paradigmxyz/reth/releases/download/v${RETH_VERSION}/reth-v${RETH_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz
-RUN wget -4 https://github.com/paradigmxyz/reth/releases/download/v${RETH_VERSION}/reth-v${RETH_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz.asc
+RUN wget https://github.com/paradigmxyz/reth/releases/download/v${RETH_VERSION}/reth-v${RETH_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz
+RUN wget https://github.com/paradigmxyz/reth/releases/download/v${RETH_VERSION}/reth-v${RETH_VERSION}-$(uname -m)-unknown-linux-gnu.tar.gz.asc
 
 # Verify the signature
 gpg --keyserver keyserver.ubuntu.com --recv-keys A3AE097C89093A124049DF1F5391A3C4100530B4
@@ -34,5 +34,5 @@ ADD /orchestration/{}/networks/ethereum/execution/reth/run.sh /execution_layer.s
     network.label()
   );
 
-  (DOWNLOAD_RETH.to_string(), String::new(), run_reth)
+  (DOWNLOAD_RETH.to_owned(), String::new(), run_reth)
 }

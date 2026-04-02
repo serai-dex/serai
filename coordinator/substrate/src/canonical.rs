@@ -1,9 +1,12 @@
 use core::future::Future;
 use std::sync::Arc;
 
-use futures::stream::{StreamExt, FuturesOrdered};
+use futures::stream::{StreamExt as _, FuturesOrdered};
 
-use serai_client::{validator_sets::primitives::ExternalValidatorSet, Serai};
+use serai_client_serai::{
+  abi::{self, primitives::network_id::ExternalNetworkId, validator_sets::ReportedSlashes},
+  Serai,
+};
 
 use messages::substrate::{InInstructionResult, ExecutedBatch, CoordinatorMessage};
 
@@ -15,6 +18,7 @@ use serai_cosign::Cosigning;
 create_db!(
   CoordinatorSubstrateCanonical {
     NextBlock: () -> u64,
+    LastIndexedBatchId: (network: ExternalNetworkId) -> u32,
   }
 );
 
@@ -45,10 +49,10 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
       // These are all the events which generate canonical messages
       struct CanonicalEvents {
         time: u64,
-        key_gen_events: Vec<serai_client::validator_sets::ValidatorSetsEvent>,
-        set_retired_events: Vec<serai_client::validator_sets::ValidatorSetsEvent>,
-        batch_events: Vec<serai_client::in_instructions::InInstructionsEvent>,
-        burn_events: Vec<serai_client::coins::CoinsEvent>,
+        set_keys_events: Vec<abi::validator_sets::Event>,
+        slash_report_events: Vec<abi::validator_sets::Event>,
+        batch_events: Vec<abi::in_instructions::Event>,
+        burn_events: Vec<abi::coins::Event>,
       }
 
       // For a cosigned block, fetch all relevant events
@@ -64,42 +68,25 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
               Ok(None) => {
                 panic!("iterating to latest cosigned block but couldn't get cosigned block")
               }
-              Err(serai_cosign::Faulted) => return Err("cosigning process faulted".to_string()),
+              Err(serai_cosign::Faulted) => return Err("cosigning process faulted".to_owned()),
             };
-            let temporal_serai = serai.as_of(block_hash);
-            let temporal_serai_validators = temporal_serai.validator_sets();
-            let temporal_serai_instructions = temporal_serai.in_instructions();
-            let temporal_serai_coins = temporal_serai.coins();
-
-            let (block, key_gen_events, set_retired_events, batch_events, burn_events) =
-              tokio::try_join!(
-                serai.block(block_hash),
-                temporal_serai_validators.key_gen_events(),
-                temporal_serai_validators.set_retired_events(),
-                temporal_serai_instructions.batch_events(),
-                temporal_serai_coins.burn_with_instruction_events(),
-              )
-              .map_err(|e| format!("{e:?}"))?;
-            let Some(block) = block else {
+            let events = serai.events(block_hash).await.map_err(|e| format!("{e}"))?;
+            let set_keys_events = events.validator_sets().set_keys_events().cloned().collect();
+            let slash_report_events = events.validator_sets().slashes_events().cloned().collect();
+            let batch_events = events.in_instructions().batch_events().cloned().collect();
+            let burn_events = events.coins().burn_with_instruction_events().cloned().collect();
+            let Some(block) = serai.block(block_hash).await.map_err(|e| format!("{e:?}"))? else {
               Err(format!("Serai node didn't have cosigned block #{block_number}"))?
             };
 
-            let time = if block_number == 0 {
-              block.time().unwrap_or(0)
-            } else {
-              // Serai's block time is in milliseconds
-              block
-                .time()
-                .ok_or_else(|| "non-genesis Serai block didn't have a time".to_string())? /
-                1000
-            };
-
+            // We use time in seconds, not milliseconds, here
+            let time = block.header.unix_time_in_millis() / 1000;
             Ok((
               block_number,
               CanonicalEvents {
                 time,
-                key_gen_events,
-                set_retired_events,
+                set_keys_events,
+                slash_report_events,
                 batch_events,
                 burn_events,
               },
@@ -131,10 +118,9 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
 
         let mut txn = self.db.txn();
 
-        for key_gen in block.key_gen_events {
-          let serai_client::validator_sets::ValidatorSetsEvent::KeyGen { set, key_pair } = &key_gen
-          else {
-            panic!("KeyGen event wasn't a KeyGen event: {key_gen:?}");
+        for set_keys in block.set_keys_events {
+          let abi::validator_sets::Event::SetKeys { set, key_pair } = &set_keys else {
+            panic!("`SetKeys` event wasn't a `SetKeys` event: {set_keys:?}");
           };
           crate::Canonical::send(
             &mut txn,
@@ -147,23 +133,30 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
           );
         }
 
-        for set_retired in block.set_retired_events {
-          let serai_client::validator_sets::ValidatorSetsEvent::SetRetired { set } = &set_retired
-          else {
-            panic!("SetRetired event wasn't a SetRetired event: {set_retired:?}");
+        for slash_report in block.slash_report_events {
+          // TODO: This assumes this is always reported on set close but that isn't the case. We
+          // need to shim this event if the report isn't published in a timely fashion.
+          let abi::validator_sets::Event::Slashes(reported_slashes) = &slash_report else {
+            panic!("`Slashes` event wasn't a `Slashes` event: {slash_report:?}");
           };
-          let Ok(set) = ExternalValidatorSet::try_from(*set) else { continue };
-          crate::Canonical::send(
-            &mut txn,
-            set.network,
-            &CoordinatorMessage::SlashesReported { session: set.session },
-          );
+          match reported_slashes {
+            ReportedSlashes::SeraiValidator(_) => {}
+            ReportedSlashes::ExternalValidatorSet(set) => {
+              crate::Canonical::send(
+                &mut txn,
+                set.network,
+                &CoordinatorMessage::SlashesReported { session: set.session },
+              );
+            }
+          }
         }
 
-        for network in serai_client::primitives::EXTERNAL_NETWORKS {
+        for network in ExternalNetworkId::all() {
           let mut batch = None;
           for this_batch in &block.batch_events {
-            let serai_client::in_instructions::InInstructionsEvent::Batch {
+            // Only irrefutable as this is the only member of the enum at this time
+            #[expect(irrefutable_let_patterns)]
+            let abi::in_instructions::Event::Batch {
               network: batch_network,
               publishing_session,
               id,
@@ -176,7 +169,7 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
             };
             if network == *batch_network {
               if batch.is_some() {
-                Err("Serai block had multiple batches for the same network".to_string())?;
+                Err("Serai block had multiple batches for the same network".to_owned())?;
               }
               batch = Some(ExecutedBatch {
                 id: *id,
@@ -194,14 +187,19 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
                   })
                   .collect(),
               });
+
+              assert_eq!(
+                LastIndexedBatchId::get(&txn, network),
+                id.checked_sub(1),
+                "next batch from Serai's ID was not an increment of the last indexed batch's ID"
+              );
+              LastIndexedBatchId::set(&mut txn, network, id);
             }
           }
 
           let mut burns = vec![];
           for burn in &block.burn_events {
-            let serai_client::coins::CoinsEvent::BurnWithInstruction { from: _, instruction } =
-              &burn
-            else {
+            let abi::coins::Event::BurnWithInstruction { from: _, instruction } = &burn else {
               panic!("BurnWithInstruction event wasn't a BurnWithInstruction event: {burn:?}");
             };
             if instruction.balance.coin.network() == network {
@@ -222,4 +220,8 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
       Ok(next_block <= latest_finalized_block)
     }
   }
+}
+
+pub(crate) fn last_indexed_batch_id(txn: &impl DbTxn, network: ExternalNetworkId) -> Option<u32> {
+  LastIndexedBatchId::get(txn, network)
 }

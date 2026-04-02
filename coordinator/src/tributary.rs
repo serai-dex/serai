@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
-use blake2::{digest::typenum::U32, Digest, Blake2s};
+use blake2::{digest::typenum::U32, Digest as _, Blake2s};
 use ciphersuite::*;
 use dalek_ff_group::Ristretto;
 
@@ -11,10 +11,11 @@ use tokio::sync::mpsc;
 
 use serai_db::{Get, DbTxn, Db as DbTrait, create_db, db_channel};
 
-use scale::Encode;
-use serai_client::validator_sets::primitives::ExternalValidatorSet;
+use serai_client_serai::abi::primitives::validator_sets::ExternalValidatorSet;
 
-use tributary_sdk::{TransactionKind, TransactionError, ProvidedError, TransactionTrait, Tributary};
+use tributary_sdk::{
+  TransactionKind, TransactionError, ProvidedError, TransactionTrait as _, Tributary,
+};
 
 use serai_task::{Task, TaskHandle, DoesNotError, ContinuallyRan};
 
@@ -71,7 +72,7 @@ async fn provide_transaction<TD: DbTrait, P: P2p>(
         "Tributary {set:?} was supposed to provide {tx:?} but peers disagree, halting Tributary",
       );
       // Print this every five minutes as this does need to be handled
-      tokio::time::sleep(Duration::from_secs(5 * 60)).await;
+      tokio::time::sleep(Duration::from_mins(5)).await;
     },
   }
 }
@@ -444,11 +445,13 @@ async fn scan_on_new_block<CD: DbTrait, TD: DbTrait, P: P2p>(
     }
 
     // Have the tributary scanner run as soon as there's a new block
-    match tributary.next_block_notification().await.await {
-      Ok(()) => scan_tributary_task.run_now(),
-      // unreachable since this owns the tributary object and doesn't drop it
-      Err(_) => panic!("tributary was dropped causing notification to error"),
-    }
+    // This `expect` is unreachable since this owns the tributary object and doesn't drop it
+    tributary
+      .next_block_notification()
+      .await
+      .await
+      .expect("tributary was dropped causing notification to error");
+    scan_tributary_task.run_now();
   }
 }
 
@@ -479,7 +482,8 @@ pub(crate) async fn spawn_tributary<P: P2p>(
     return;
   }
 
-  let genesis = <[u8; 32]>::from(Blake2s::<U32>::digest((set.serai_block, set.set).encode()));
+  let genesis =
+    <[u8; 32]>::from(Blake2s::<U32>::digest(borsh::to_vec(&(set.serai_block, set.set)).unwrap()));
 
   // Since the Serai block will be finalized, then cosigned, before we handle this, this time will
   // be a couple of minutes stale. While the Tributary will still function with a start time in the

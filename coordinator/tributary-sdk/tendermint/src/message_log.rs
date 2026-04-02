@@ -1,7 +1,5 @@
 use std::{sync::Arc, collections::HashMap};
 
-use parity_scale_codec::Encode;
-
 use crate::{ext::*, RoundNumber, Step, DataFor, SignedMessageFor, Evidence};
 
 type RoundLog<N> = HashMap<<N as Network>::ValidatorId, HashMap<Step, SignedMessageFor<N>>>;
@@ -39,7 +37,10 @@ impl<N: Network> MessageLog<N> {
           target: "tendermint",
           "Validator sent multiple messages for the same block + round + step"
         );
-        Err(Evidence::ConflictingMessages(existing.encode(), signed.encode()))?;
+        Err(Evidence::ConflictingMessages(
+          borsh::to_vec(&existing).unwrap(),
+          borsh::to_vec(&signed).unwrap(),
+        ))?;
       }
       return Ok(false);
     }

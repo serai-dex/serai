@@ -2,10 +2,10 @@ use core::future::Future;
 
 use bitcoin_serai::bitcoin::ScriptBuf;
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get, DbTxn as _, Db};
 
 use primitives::task::ContinuallyRan;
-use scanner::ScannerFeed;
+use scanner::ScannerFeed as _;
 
 use crate::{db, rpc::Rpc, hash_bytes};
 

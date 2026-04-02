@@ -1,10 +1,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("lib.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
 use core::fmt::Debug;
-#[allow(unused_imports)]
-use std_shims::prelude::*;
 use std_shims::io::{self, Read};
 
 use subtle::{CtOption, ConstantTimeEq, ConditionallySelectable};
@@ -86,7 +84,7 @@ pub trait WithPreferredHash:
 >
 {
   type H: Send + Clone + Digest + HashMarker;
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   fn hash_to_F(data: &[u8]) -> Self::F {
     Self::F::from_uniform_bytes(&Self::H::digest(data).into())
   }
@@ -110,7 +108,7 @@ pub trait GroupCanonicalEncoding: WrappedGroup {
 }
 
 /// `std::io` extensions for `GroupCanonicalEncoding.`
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub trait GroupIo: GroupCanonicalEncoding {
   /// Read a canonical field element from something implementing `std::io::Read`.
   fn read_F<R: Read>(reader: &mut R) -> io::Result<Self::F> {

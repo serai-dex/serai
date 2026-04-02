@@ -8,7 +8,6 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
 publish = false
-rust-version = "1.87"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -23,13 +22,13 @@ async-trait = { version = "0.1", default-features = false }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
 zeroize = { version = "^1.5", default-features = false, features = ["std"] }
-blake2 = { version = "0.11.0-rc.0", default-features = false, features = ["alloc"] }
+blake2 = { version = "0.11.0-rc.5", default-features = false, features = ["alloc"] }
 schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-serai-client = { path = "../../../substrate/client", default-features = false, features = ["serai", "borsh"] }
+serai-client-serai = { path = "../../../substrate/client/serai", default-features = false }
 serai-cosign = { path = "../../cosign" }
 tributary-sdk = { path = "../../tributary-sdk" }
 

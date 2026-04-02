@@ -1,0 +1,24 @@
+[package]
+name = "serai-cosign-types"
+version = "0.1.0"
+description = "Evaluator of cosigns for the Serai network"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/cosign"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
+
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+
+serai-primitives = { path = "../../../substrate/primitives", default-features = false, features = ["std"] }

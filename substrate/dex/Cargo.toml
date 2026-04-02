@@ -1,0 +1,76 @@
+[package]
+name = "serai-dex-pallet"
+version = "0.1.0"
+description = "DEX pallet for Serai"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/dex"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+ignored = ["scale"]
+
+[lints]
+workspace = true
+
+[dependencies]
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+
+serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
+serai-core-pallet = { path = "../core", default-features = false }
+serai-coins-pallet = { path = "../coins", default-features = false }
+
+frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+
+[dev-dependencies]
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+
+pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+
+[features]
+std = [
+  "scale/std",
+
+  "sp-core/std",
+
+  "frame-support/std",
+  "frame-system/std",
+
+  "serai-abi/std",
+  "serai-core-pallet/std",
+  "serai-coins-pallet/std",
+
+  "frame-benchmarking?/std",
+]
+
+try-runtime = [
+  "frame-support/try-runtime",
+  "frame-system/try-runtime",
+
+  "serai-abi/try-runtime",
+  "serai-core-pallet/try-runtime",
+  "serai-coins-pallet/try-runtime",
+]
+
+runtime-benchmarks = [
+  "frame-support/runtime-benchmarks",
+  "frame-system/runtime-benchmarks",
+
+  "serai-core-pallet/runtime-benchmarks",
+  "serai-coins-pallet/runtime-benchmarks",
+
+  "frame-benchmarking/runtime-benchmarks",
+]
+
+default = ["std"]

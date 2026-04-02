@@ -7,7 +7,7 @@ use frost::{dkg::ThresholdKeys, sign::PreprocessMachine};
 
 use bitcoin_serai::{
   bitcoin::{
-    consensus::{Encodable, Decodable},
+    consensus::{Encodable as _, Decodable as _},
     ScriptBuf, Transaction as BTransaction,
   },
   wallet::{
@@ -18,7 +18,7 @@ use bitcoin_serai::{
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::networks::bitcoin::Address;
+use serai_client_bitcoin::Address;
 
 use crate::output::OutputId;
 
@@ -56,7 +56,7 @@ pub(crate) struct SignableTransaction {
 impl SignableTransaction {
   fn signable(self) -> Result<BSignableTransaction, TransactionError> {
     BSignableTransaction::new(
-      self.inputs,
+      &self.inputs,
       &self.payments,
       self.change.map(ScriptBuf::from),
       None,

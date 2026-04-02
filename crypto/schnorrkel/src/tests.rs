@@ -1,6 +1,6 @@
 use rand_core::OsRng;
 
-use ciphersuite::group::GroupEncoding;
+use ciphersuite::group::GroupEncoding as _;
 use frost::{
   Participant,
   tests::{key_gen, algorithm_machines, sign},
@@ -22,5 +22,5 @@ fn test() {
   let signature = sign(&mut OsRng, &algorithm, keys, machines, MSG);
 
   let key = PublicKey::from_bytes(key.to_bytes().as_ref()).unwrap();
-  key.verify(&mut SigningContext::new(CONTEXT).bytes(MSG), &signature).unwrap()
+  key.verify(&mut SigningContext::new(CONTEXT).bytes(MSG), &signature).unwrap();
 }

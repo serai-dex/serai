@@ -1,123 +1,144 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(not(feature = "std"), no_std)]
-#![allow(non_camel_case_types)]
-#![expect(clippy::cast_possible_truncation)]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![no_std]
+#![expect(non_camel_case_types)]
+// `parity-scale-codec` generates these
+#![cfg_attr(
+  feature = "substrate",
+  expect(
+    clippy::as_conversions,
+    clippy::cast_possible_truncation,
+    clippy::semicolon_if_nothing_returned
+  )
+)]
 
 extern crate alloc;
+#[cfg(any(feature = "std", test))]
+extern crate std;
+
+use borsh::{BorshSerialize, BorshDeserialize};
 
 pub use serai_primitives as primitives;
 
-pub mod system;
+mod modules;
+pub use modules::*;
 
-pub mod timestamp;
+mod transaction;
+pub use transaction::*;
 
-pub mod coins;
-pub mod liquidity_tokens;
-pub mod dex;
+mod block;
+pub use block::*;
 
-pub mod validator_sets;
-
-pub mod genesis_liquidity;
-pub mod emissions;
-
-pub mod economic_security;
-
-pub mod in_instructions;
-
-pub mod signals;
-
-pub mod babe;
-pub mod grandpa;
-
-pub mod tx;
-
-#[derive(
-  Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
-)]
+/// All calls.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+#[borsh(use_discriminant = true)]
+#[repr(u8)]
 pub enum Call {
-  #[codec(index = 1)]
-  Timestamp(timestamp::Call),
-  #[codec(index = 3)]
-  Coins(coins::Call),
-  #[codec(index = 4)]
-  LiquidityTokens(liquidity_tokens::Call),
-  #[codec(index = 5)]
-  Dex(dex::Call),
-  #[codec(index = 6)]
-  ValidatorSets(validator_sets::Call),
-  #[codec(index = 7)]
-  GenesisLiquidity(genesis_liquidity::Call),
-  #[codec(index = 10)]
-  InInstructions(in_instructions::Call),
-  #[codec(index = 11)]
-  Signals(signals::Call),
-  #[codec(index = 12)]
-  Babe(babe::Call),
-  #[codec(index = 13)]
-  Grandpa(grandpa::Call),
+  /// The call for coins.
+  Coins(coins::Call) = 0,
+  /// The call for validator sets.
+  ValidatorSets(validator_sets::Call) = 1,
+  /// The call for signals.
+  Signals(signals::Call) = 2,
+  /// The call for the DEX.
+  Dex(dex::Call) = 3,
+  /// The call for genesis liquidity.
+  GenesisLiquidity(genesis_liquidity::Call) = 4,
+  /// The call for `InInstruction`s.
+  InInstructions(in_instructions::Call) = 5,
 }
 
-// TODO: Remove this
-#[derive(
-  Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
-)]
-pub enum TransactionPaymentEvent {
-  TransactionFeePaid { who: serai_primitives::SeraiAddress, actual_fee: u64, tip: u64 },
+impl From<coins::Call> for Call {
+  fn from(call: coins::Call) -> Self {
+    Self::Coins(call)
+  }
+}
+impl From<validator_sets::Call> for Call {
+  fn from(call: validator_sets::Call) -> Self {
+    Self::ValidatorSets(call)
+  }
+}
+impl From<signals::Call> for Call {
+  fn from(call: signals::Call) -> Self {
+    Self::Signals(call)
+  }
+}
+impl From<dex::Call> for Call {
+  fn from(call: dex::Call) -> Self {
+    Self::Dex(call)
+  }
+}
+impl From<genesis_liquidity::Call> for Call {
+  fn from(call: genesis_liquidity::Call) -> Self {
+    Self::GenesisLiquidity(call)
+  }
+}
+impl From<in_instructions::Call> for Call {
+  fn from(call: in_instructions::Call) -> Self {
+    Self::InInstructions(call)
+  }
 }
 
-#[derive(
-  Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
-)]
+impl Call {
+  pub(crate) fn is_signed(&self) -> bool {
+    match self {
+      Call::Coins(call) => call.is_signed(),
+      Call::ValidatorSets(call) => call.is_signed(),
+      Call::Signals(call) => call.is_signed(),
+      Call::Dex(call) => call.is_signed(),
+      Call::GenesisLiquidity(call) => call.is_signed(),
+      Call::InInstructions(call) => call.is_signed(),
+    }
+  }
+}
+
+/// All events.
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+#[borsh(use_discriminant = true)]
+#[repr(u8)]
 pub enum Event {
-  #[codec(index = 0)]
-  System(system::Event),
-  #[codec(index = 2)]
-  TransactionPayment(TransactionPaymentEvent),
-  #[codec(index = 3)]
-  Coins(coins::Event),
-  #[codec(index = 4)]
-  LiquidityTokens(liquidity_tokens::Event),
-  #[codec(index = 5)]
-  Dex(dex::Event),
-  #[codec(index = 6)]
-  ValidatorSets(validator_sets::Event),
-  #[codec(index = 7)]
-  GenesisLiquidity(genesis_liquidity::Event),
-  #[codec(index = 9)]
-  EconomicSecurity(economic_security::Event),
-  #[codec(index = 10)]
-  InInstructions(in_instructions::Event),
-  #[codec(index = 11)]
-  Signals(signals::Event),
-  #[codec(index = 13)]
-  Grandpa(grandpa::Event),
+  /// The event for coins.
+  Coins(coins::Event) = 0,
+  /// The event for validator sets.
+  ValidatorSets(validator_sets::Event) = 1,
+  /// The event for signals.
+  Signals(signals::Event) = 2,
+  /// The event for the DEX.
+  Dex(dex::Event) = 3,
+  /// The event for genesis liquidity.
+  GenesisLiquidity(genesis_liquidity::Event) = 4,
+  /// The event for `InInstruction`s.
+  InInstructions(in_instructions::Event) = 5,
 }
 
-#[derive(
-  Clone, Copy, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
-)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
-pub struct Extra {
-  pub era: sp_runtime::generic::Era,
-  #[codec(compact)]
-  pub nonce: u32,
-  #[codec(compact)]
-  pub tip: u64,
+impl From<coins::Event> for Event {
+  fn from(event: coins::Event) -> Self {
+    Self::Coins(event)
+  }
 }
-
-#[derive(
-  Clone, PartialEq, Eq, Debug, scale::Encode, scale::Decode, scale::DecodeWithMemTracking,
-)]
-#[cfg_attr(feature = "borsh", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-#[cfg_attr(feature = "serde", derive(serde::Serialize))]
-#[cfg_attr(all(feature = "std", feature = "serde"), derive(serde::Deserialize))]
-pub struct SignedPayloadExtra {
-  pub spec_version: u32,
-  pub tx_version: u32,
-  pub genesis: [u8; 32],
-  pub mortality_checkpoint: [u8; 32],
+impl From<validator_sets::Event> for Event {
+  fn from(event: validator_sets::Event) -> Self {
+    Self::ValidatorSets(event)
+  }
 }
-
-pub type Transaction = tx::Transaction<Call, Extra>;
+impl From<signals::Event> for Event {
+  fn from(event: signals::Event) -> Self {
+    Self::Signals(event)
+  }
+}
+impl From<dex::Event> for Event {
+  fn from(event: dex::Event) -> Self {
+    Self::Dex(event)
+  }
+}
+impl From<genesis_liquidity::Event> for Event {
+  fn from(event: genesis_liquidity::Event) -> Self {
+    Self::GenesisLiquidity(event)
+  }
+}
+impl From<in_instructions::Event> for Event {
+  fn from(event: in_instructions::Event) -> Self {
+    Self::InInstructions(event)
+  }
+}

@@ -12,7 +12,7 @@ use bitcoin_serai::{
   wallet::Scanner,
 };
 
-use serai_client::networks::bitcoin::Address;
+use serai_client_bitcoin::Address;
 
 use serai_db::Get;
 use primitives::OutputType;
@@ -20,41 +20,20 @@ use primitives::OutputType;
 use crate::hash_bytes;
 
 // TODO: Bitcoin HD derivation, instead of these bespoke labels?
-static BRANCH_BASE_OFFSET: LazyLock<<Secp256k1 as WrappedGroup>::F> =
-  LazyLock::new(|| Secp256k1::hash_to_F(b"branch"));
-static CHANGE_BASE_OFFSET: LazyLock<<Secp256k1 as WrappedGroup>::F> =
-  LazyLock::new(|| Secp256k1::hash_to_F(b"change"));
-static FORWARD_BASE_OFFSET: LazyLock<<Secp256k1 as WrappedGroup>::F> =
-  LazyLock::new(|| Secp256k1::hash_to_F(b"forward"));
-
-// Unfortunately, we have per-key offsets as it's the root key plus the base offset may not be
-// even. While we could tweak the key until all derivations are even, that'd require significantly
-// more tweaking. This algorithmic complexity is preferred.
-pub(crate) fn offsets_for_key(
-  key: <Secp256k1 as WrappedGroup>::G,
-) -> HashMap<OutputType, <Secp256k1 as WrappedGroup>::F> {
-  let mut offsets = HashMap::from([(OutputType::External, <Secp256k1 as WrappedGroup>::F::ZERO)]);
-
-  // We create an actual Bitcoin scanner as upon adding an offset, it yields the tweaked offset
-  // actually used
-  let mut scanner = Scanner::new(key).unwrap();
-  let mut register = |kind, offset| {
-    let tweaked_offset = scanner.register_offset(offset).expect("offset collision");
-    offsets.insert(kind, tweaked_offset);
-  };
-
-  register(OutputType::Branch, *BRANCH_BASE_OFFSET);
-  register(OutputType::Change, *CHANGE_BASE_OFFSET);
-  register(OutputType::Forwarded, *FORWARD_BASE_OFFSET);
-
-  offsets
-}
+pub(crate) static OFFSETS: LazyLock<HashMap<OutputType, <Secp256k1 as WrappedGroup>::F>> =
+  LazyLock::new(|| {
+    HashMap::from([
+      (OutputType::External, <Secp256k1 as WrappedGroup>::F::ZERO),
+      (OutputType::Branch, Secp256k1::hash_to_F(b"branch")),
+      (OutputType::Change, Secp256k1::hash_to_F(b"change")),
+      (OutputType::Forwarded, Secp256k1::hash_to_F(b"forward")),
+    ])
+  });
 
 pub(crate) fn scanner(key: <Secp256k1 as WrappedGroup>::G) -> Scanner {
   let mut scanner = Scanner::new(key).unwrap();
-  for (_, offset) in offsets_for_key(key) {
-    let tweaked_offset = scanner.register_offset(offset).unwrap();
-    assert_eq!(tweaked_offset, offset);
+  for offset in OFFSETS.values() {
+    let () = scanner.register_offset(*offset).unwrap();
   }
   scanner
 }

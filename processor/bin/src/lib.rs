@@ -1,6 +1,8 @@
-use core::cmp::Ordering;
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use zeroize::{Zeroize, Zeroizing};
+use core::{cmp::Ordering, str::FromStr as _};
+
+use zeroize::{Zeroize as _, Zeroizing};
 
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
@@ -8,10 +10,10 @@ use ciphersuite::{
 };
 use dkg::Curves;
 
-use serai_client::validator_sets::primitives::Session;
+use serai_primitives::validator_sets::Session;
 
 use serai_env as env;
-use serai_db::{Get, DbTxn, Db as DbTrait, create_db, db_channel};
+use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
 
 use primitives::EncodableG;
 use ::key_gen::{Ristretto, KeyGenParams, KeyGen};
@@ -44,24 +46,14 @@ pub type Db = serai_db::RocksDB;
 /// Initialize the processor.
 ///
 /// Yields the database.
-#[allow(unused_variables, unreachable_code)]
 pub fn init() -> Db {
-  // Override the panic handler with one which will panic if any tokio task panics
-  {
-    let existing = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic| {
-      existing(panic);
-      const MSG: &str = "exiting the process due to a task panicking";
-      println!("{MSG}");
-      log::error!("{MSG}");
-      std::process::exit(1);
-    }));
-  }
-
-  if std::env::var("RUST_LOG").is_err() {
-    std::env::set_var("RUST_LOG", serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_string()));
-  }
-  env_logger::init();
+  env_logger::builder()
+    .filter_level(
+      log::LevelFilter::from_str(&serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
+        .expect("`RUST_LOG` environment variable had an invalid filter"),
+    )
+    .init();
+  log::info!("Starting processor service...");
 
   #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
   let db =
@@ -76,7 +68,7 @@ pub fn url() -> String {
   let login = env::var("NETWORK_RPC_LOGIN").expect("network RPC login wasn't specified");
   let hostname = env::var("NETWORK_RPC_HOSTNAME").expect("network RPC hostname wasn't specified");
   let port = env::var("NETWORK_RPC_PORT").expect("network port domain wasn't specified");
-  "http://".to_string() + &login + "@" + &hostname + ":" + &port
+  "http://".to_owned() + &login + "@" + &hostname + ":" + &port
 }
 
 fn key_gen<K: KeyGenParams>() -> KeyGen<K> {
@@ -88,9 +80,7 @@ fn key_gen<K: KeyGenParams>() -> KeyGen<K> {
     );
 
     let mut repr = <C::F as PrimeField>::Repr::default();
-    if repr.as_ref().len() != bytes.len() {
-      panic!("{label} wasn't the correct length");
-    }
+    assert_eq!(repr.as_ref().len(), bytes.len(), "{label} wasn't the correct length");
     repr.as_mut().copy_from_slice(bytes.as_slice());
     let res = Zeroizing::new(
       Option::from(<C::F as PrimeField>::from_repr(repr))
@@ -204,7 +194,7 @@ pub async fn main_loop<
         // This is a computationally expensive call yet it happens infrequently
         for msg in key_gen.handle(txn, msg) {
           if let messages::key_gen::ProcessorMessage::GeneratedKeyPair { session, .. } = &msg {
-            new_key = Some(*session)
+            new_key = Some(*session);
           }
           coordinator.send_message(&messages::ProcessorMessage::KeyGen(msg));
         }
@@ -220,19 +210,19 @@ pub async fn main_loop<
       // These are cheap calls which are fine to be here in this loop
       messages::CoordinatorMessage::Sign(msg) => {
         let txn = txn.as_mut().unwrap();
-        signers.queue_message(txn, &msg)
+        signers.queue_message(txn, &msg);
       }
       messages::CoordinatorMessage::Coordinator(
         messages::coordinator::CoordinatorMessage::CosignSubstrateBlock { session, cosign },
       ) => {
         let txn = txn.take().unwrap();
-        signers.cosign_block(txn, session, &cosign)
+        signers.cosign_block(txn, session, &cosign);
       }
       messages::CoordinatorMessage::Coordinator(
         messages::coordinator::CoordinatorMessage::SignSlashReport { session, slash_report },
       ) => {
         let txn = txn.take().unwrap();
-        signers.sign_slash_report(txn, session, &slash_report)
+        signers.sign_slash_report(txn, session, &slash_report);
       }
 
       messages::CoordinatorMessage::Substrate(msg) => match msg {
@@ -266,7 +256,7 @@ pub async fn main_loop<
           let key = ExternalKeyForSessionForSigners::<KeyFor<S>>::take(txn, session).unwrap().0;
 
           // This is a cheap call
-          signers.retire_session(txn, session, &key)
+          signers.retire_session(txn, session, &key);
         }
         messages::substrate::CoordinatorMessage::Block {
           serai_block_number: _,
@@ -290,7 +280,7 @@ pub async fn main_loop<
                 is equally valid unless we want to start introspecting (and should be our only
                 Batch anyways).
               */
-              std::mem::take(&mut burns),
+              core::mem::take(&mut burns),
               key_to_activate,
             );
           }
@@ -301,7 +291,7 @@ pub async fn main_loop<
           }
         }
       },
-    };
+    }
     // If the txn wasn't already consumed and committed, commit it
     if let Some(txn) = txn {
       txn.commit();

@@ -1,0 +1,25 @@
+[package]
+name = "serai-substrate-tests"
+version = "0.1.0"
+description = "Tests for Serai's node"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/tests/substrate"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+serai-client-serai = { path = "../../substrate/client/serai" }
+
+tokio = { version = "1", features = ["time"] }
+
+dockertest = "0.5"
+serai-docker-tests = { path = "../docker" }

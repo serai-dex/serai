@@ -1,18 +1,23 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use std::collections::HashMap;
 
-use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use dkg::Participant;
 
-use serai_client::{
-  primitives::{ExternalNetworkId, SeraiAddress, Signature},
-  validator_sets::primitives::{Session, ExternalValidatorSet, KeyPair, SlashReport},
-  in_instructions::primitives::SignedBatch,
+use serai_client_serai::abi::{
+  primitives::{
+    BitVec,
+    network_id::ExternalNetworkId,
+    validator_sets::{Session, ExternalValidatorSet, KeyShares, SlashReport},
+    crypto::{Signature, KeyPair},
+    address::SeraiAddress,
+    instructions::SignedBatch,
+  },
   Transaction,
 };
 
@@ -20,6 +25,7 @@ use serai_db::*;
 
 mod canonical;
 pub use canonical::CanonicalEventStream;
+use canonical::last_indexed_batch_id;
 mod ephemeral;
 pub use ephemeral::EphemeralEventStream;
 
@@ -38,7 +44,7 @@ pub struct NewSetInformation {
   pub set: ExternalValidatorSet,
   /// The Serai block which declared it.
   pub serai_block: [u8; 32],
-  /// The time of the block which declared it, in seconds.
+  /// The time of the block which declared it, in seconds since the epoch.
   pub declaration_time: u64,
   /// The threshold to use.
   pub threshold: u16,
@@ -97,9 +103,9 @@ mod _public_db {
   create_db!(
     CoordinatorSubstrate {
       // Keys to set on the Serai network
-      Keys: (network: ExternalNetworkId) -> (Session, Vec<u8>),
+      Keys: (network: ExternalNetworkId) -> (Session, Transaction),
       // Slash reports to publish onto the Serai network
-      SlashReports: (network: ExternalNetworkId) -> (Session, Vec<u8>),
+      SlashReports: (network: ExternalNetworkId) -> (Session, Transaction),
     }
   );
 }
@@ -162,7 +168,7 @@ impl Keys {
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
     key_pair: KeyPair,
-    signature_participants: bitvec::vec::BitVec<u8, bitvec::order::Lsb0>,
+    signature_participants: BitVec<{ KeyShares::MAX_PER_SET_U64 }>,
     signature: Signature,
   ) {
     // If we have a more recent pair of keys, don't write this historic one
@@ -172,20 +178,19 @@ impl Keys {
       }
     }
 
-    let tx = serai_client::validator_sets::SeraiValidatorSets::set_keys(
+    let tx = serai_client_serai::ValidatorSets::set_keys(
       set.network,
       key_pair,
       signature_participants,
       signature,
     );
-    _public_db::Keys::set(txn, set.network, &(set.session, tx.encode()));
+    _public_db::Keys::set(txn, set.network, &(set.session, tx));
   }
   pub(crate) fn take(
     txn: &mut impl DbTxn,
     network: ExternalNetworkId,
   ) -> Option<(Session, Transaction)> {
-    let (session, tx) = _public_db::Keys::take(txn, network)?;
-    Some((session, <_>::decode(&mut tx.as_slice()).unwrap()))
+    _public_db::Keys::take(txn, network)
   }
 }
 
@@ -194,7 +199,7 @@ pub struct SignedBatches;
 impl SignedBatches {
   /// Send a `SignedBatch` to publish onto Serai.
   pub fn send(txn: &mut impl DbTxn, batch: &SignedBatch) {
-    _public_db::SignedBatches::send(txn, batch.batch.network, batch);
+    _public_db::SignedBatches::send(txn, batch.batch.network(), batch);
   }
   pub(crate) fn try_recv(txn: &mut impl DbTxn, network: ExternalNetworkId) -> Option<SignedBatch> {
     _public_db::SignedBatches::try_recv(txn, network)
@@ -221,18 +226,13 @@ impl SlashReports {
       }
     }
 
-    let tx = serai_client::validator_sets::SeraiValidatorSets::report_slashes(
-      set.network,
-      slash_report,
-      signature,
-    );
-    _public_db::SlashReports::set(txn, set.network, &(set.session, tx.encode()));
+    let tx = serai_client_serai::ValidatorSets::report_slashes(set, slash_report, signature);
+    _public_db::SlashReports::set(txn, set.network, &(set.session, tx));
   }
   pub(crate) fn take(
     txn: &mut impl DbTxn,
     network: ExternalNetworkId,
   ) -> Option<(Session, Transaction)> {
-    let (session, tx) = _public_db::SlashReports::take(txn, network)?;
-    Some((session, <_>::decode(&mut tx.as_slice()).unwrap()))
+    _public_db::SlashReports::take(txn, network)
   }
 }

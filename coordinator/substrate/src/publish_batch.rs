@@ -1,8 +1,10 @@
 use core::future::Future;
 use std::sync::Arc;
 
-#[rustfmt::skip]
-use serai_client::{primitives::ExternalNetworkId, in_instructions::primitives::SignedBatch, SeraiError, Serai};
+use serai_client_serai::{
+  abi::primitives::{network_id::ExternalNetworkId, instructions::SignedBatch},
+  RpcError, Serai,
+};
 
 use serai_db::{Get, DbTxn, Db, create_db};
 use serai_task::ContinuallyRan;
@@ -31,7 +33,7 @@ impl<D: Db> PublishBatchTask<D> {
 }
 
 impl<D: Db> ContinuallyRan for PublishBatchTask<D> {
-  type Error = SeraiError;
+  type Error = RpcError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
@@ -43,8 +45,8 @@ impl<D: Db> ContinuallyRan for PublishBatchTask<D> {
         };
 
         // If this is a Batch not yet published, save it into our unordered mapping
-        if LastPublishedBatch::get(&txn, self.network) < Some(batch.batch.id) {
-          BatchesToPublish::set(&mut txn, self.network, batch.batch.id, &batch);
+        if LastPublishedBatch::get(&txn, self.network) < Some(batch.batch.id()) {
+          BatchesToPublish::set(&mut txn, self.network, batch.batch.id(), &batch);
         }
 
         txn.commit();
@@ -52,12 +54,8 @@ impl<D: Db> ContinuallyRan for PublishBatchTask<D> {
 
       // Synchronize our last published batch with the Serai network's
       let next_to_publish = {
-        // This uses the latest finalized block, not the latest cosigned block, which should be
-        // fine as in the worst case, the only impact is no longer attempting TX publication
-        let serai = self.serai.as_of_latest_finalized_block().await?;
-        let last_batch = serai.in_instructions().last_batch_for_network(self.network).await?;
-
         let mut txn = self.db.txn();
+        let last_batch = crate::last_indexed_batch_id(&txn, self.network);
         let mut our_last_batch = LastPublishedBatch::get(&txn, self.network);
         while our_last_batch < last_batch {
           let next_batch = our_last_batch.map(|batch| batch + 1).unwrap_or(0);
@@ -68,6 +66,7 @@ impl<D: Db> ContinuallyRan for PublishBatchTask<D> {
         if let Some(last_batch) = our_last_batch {
           LastPublishedBatch::set(&mut txn, self.network, &last_batch);
         }
+        txn.commit();
         last_batch.map(|batch| batch + 1).unwrap_or(0)
       };
 
@@ -75,7 +74,7 @@ impl<D: Db> ContinuallyRan for PublishBatchTask<D> {
         if let Some(batch) = BatchesToPublish::get(&self.db, self.network, next_to_publish) {
           self
             .serai
-            .publish(&serai_client::in_instructions::SeraiInInstructions::execute_batch(batch))
+            .publish_transaction(&serai_client_serai::InInstructions::execute_batch(batch))
             .await?;
           true
         } else {

@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{future::Future, time::Duration};
 use std::{
@@ -8,20 +9,21 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
 use zeroize::Zeroizing;
 use schnorrkel::Keypair;
 
-use serai_client::{
-  primitives::{ExternalNetworkId, PublicKey},
-  validator_sets::primitives::ExternalValidatorSet,
+use serai_client_serai::{
+  abi::primitives::{
+    crypto::Public, network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet,
+  },
   Serai,
 };
 
 use tokio::sync::{mpsc, oneshot, Mutex, RwLock};
 
-use serai_task::{Task, ContinuallyRan};
+use serai_task::{Task, ContinuallyRan as _};
 
 use serai_cosign::SignedCosign;
 
@@ -66,7 +68,7 @@ use dial::DialTask;
 
 const PORT: u16 = 30563; // 5132 ^ (('c' << 8) | 'o')
 
-fn peer_id_from_public(public: PublicKey) -> PeerId {
+fn peer_id_from_public(public: Public) -> PeerId {
   // 0 represents the identity Multihash, that no hash was performed
   // It's an internal constant so we can't refer to the constant inside libp2p
   PeerId::from_multihash(Multihash::wrap(0, &public.0).unwrap()).unwrap()
@@ -123,7 +125,6 @@ struct Behavior {
   gossip: gossip::Behavior,
 }
 
-#[allow(clippy::type_complexity)]
 struct Libp2pInner {
   peers: Peers,
 

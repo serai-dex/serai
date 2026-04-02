@@ -1,23 +1,30 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{fmt::Debug, future::Future};
 use std::{sync::Arc, collections::HashMap, time::Instant};
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
-use scale::{Encode, Decode};
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{
-  primitives::{ExternalNetworkId, SeraiAddress},
-  validator_sets::primitives::{Session, ExternalValidatorSet, KeyPair},
-  Public, Block, Serai, TemporalSerai,
+use serai_client_serai::{
+  abi::{
+    primitives::{
+      BlockHash, crypto::Public, network_id::ExternalNetworkId,
+      validator_sets::ExternalValidatorSet,
+    },
+    Block,
+  },
+  Serai,
 };
 
 use serai_db::*;
 use serai_task::*;
+
+pub use serai_cosign_types::*;
 
 /// The cosigns which are intended to be performed.
 mod intend;
@@ -27,9 +34,6 @@ mod evaluator;
 mod delay;
 pub use delay::BROADCAST_FREQUENCY;
 use delay::LatestCosignedBlockNumber;
-
-/// The schnorrkel context to used when signing a cosign.
-pub const COSIGN_CONTEXT: &[u8] = b"/serai/coordinator/cosign";
 
 /// A 'global session', defined as all validator sets used for cosigning at a given moment.
 ///
@@ -53,7 +57,7 @@ pub const COSIGN_CONTEXT: &[u8] = b"/serai/coordinator/cosign";
 pub(crate) struct GlobalSession {
   pub(crate) start_block_number: u64,
   pub(crate) sets: Vec<ExternalValidatorSet>,
-  pub(crate) keys: HashMap<ExternalNetworkId, SeraiAddress>,
+  pub(crate) keys: HashMap<ExternalNetworkId, Public>,
   pub(crate) stakes: HashMap<ExternalNetworkId, u64>,
   pub(crate) total_stake: u64,
 }
@@ -78,74 +82,12 @@ enum HasEvents {
   No,
 }
 
-/// An intended cosign.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
-pub struct CosignIntent {
-  /// The global session this cosign is being performed under.
-  pub global_session: [u8; 32],
-  /// The number of the block to cosign.
-  pub block_number: u64,
-  /// The hash of the block to cosign.
-  pub block_hash: [u8; 32],
-  /// If this cosign must be handled before further cosigns are.
-  pub notable: bool,
-}
-
-/// A cosign.
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode, BorshSerialize, BorshDeserialize)]
-pub struct Cosign {
-  /// The global session this cosign is being performed under.
-  pub global_session: [u8; 32],
-  /// The number of the block to cosign.
-  pub block_number: u64,
-  /// The hash of the block to cosign.
-  pub block_hash: [u8; 32],
-  /// The actual cosigner.
-  pub cosigner: ExternalNetworkId,
-}
-
-impl CosignIntent {
-  /// Convert this into a `Cosign`.
-  pub fn into_cosign(self, cosigner: ExternalNetworkId) -> Cosign {
-    let CosignIntent { global_session, block_number, block_hash, notable: _ } = self;
-    Cosign { global_session, block_number, block_hash, cosigner }
-  }
-}
-
-impl Cosign {
-  /// The message to sign to sign this cosign.
-  ///
-  /// This must be signed with schnorrkel, the context set to `COSIGN_CONTEXT`.
-  pub fn signature_message(&self) -> Vec<u8> {
-    // We use a schnorrkel context to domain-separate this
-    self.encode()
-  }
-}
-
-/// A signed cosign.
-#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-pub struct SignedCosign {
-  /// The cosign.
-  pub cosign: Cosign,
-  /// The signature for the cosign.
-  pub signature: [u8; 64],
-}
-
-impl SignedCosign {
-  fn verify_signature(&self, signer: serai_client::Public) -> bool {
-    let Ok(signer) = schnorrkel::PublicKey::from_bytes(&signer.0) else { return false };
-    let Ok(signature) = schnorrkel::Signature::from_bytes(&self.signature) else { return false };
-
-    signer.verify_simple(COSIGN_CONTEXT, &self.cosign.signature_message(), &signature).is_ok()
-  }
-}
-
 create_db! {
   Cosign {
     // The following are populated by the intend task and used throughout the library
 
     // An index of Substrate blocks
-    SubstrateBlockHash: (block_number: u64) -> [u8; 32],
+    SubstrateBlockHash: (block_number: u64) -> BlockHash,
     // A mapping from a global session's ID to its relevant information.
     GlobalSessions: (global_session: [u8; 32]) -> GlobalSession,
     // The last block to be cosigned by a global session.
@@ -175,60 +117,6 @@ create_db! {
     // The global session which faulted.
     FaultedSession: () -> [u8; 32],
   }
-}
-
-/// Fetch the keys used for cosigning by a specific network.
-async fn keys_for_network(
-  serai: &TemporalSerai<'_>,
-  network: ExternalNetworkId,
-) -> Result<Option<(Session, KeyPair)>, String> {
-  let Some(latest_session) =
-    serai.validator_sets().session(network.into()).await.map_err(|e| format!("{e:?}"))?
-  else {
-    // If this network hasn't had a session declared, move on
-    return Ok(None);
-  };
-
-  // Get the keys for the latest session
-  if let Some(keys) = serai
-    .validator_sets()
-    .keys(ExternalValidatorSet { network, session: latest_session })
-    .await
-    .map_err(|e| format!("{e:?}"))?
-  {
-    return Ok(Some((latest_session, keys)));
-  }
-
-  // If the latest session has yet to set keys, use the prior session
-  if let Some(prior_session) = latest_session.0.checked_sub(1).map(Session) {
-    if let Some(keys) = serai
-      .validator_sets()
-      .keys(ExternalValidatorSet { network, session: prior_session })
-      .await
-      .map_err(|e| format!("{e:?}"))?
-    {
-      return Ok(Some((prior_session, keys)));
-    }
-  }
-
-  Ok(None)
-}
-
-/// Fetch the `ExternalValidatorSet`s, and their associated keys, used for cosigning as of this
-/// block.
-async fn cosigning_sets(
-  serai: &TemporalSerai<'_>,
-) -> Result<Vec<(ExternalValidatorSet, Public)>, String> {
-  let mut sets = Vec::with_capacity(serai_client::primitives::EXTERNAL_NETWORKS.len());
-  for network in serai_client::primitives::EXTERNAL_NETWORKS {
-    let Some((session, keys)) = keys_for_network(serai, network).await? else {
-      // If this network doesn't have usable keys, move on
-      continue;
-    };
-
-    sets.push((ExternalValidatorSet { network, session }, keys.0));
-  }
-  Ok(sets)
 }
 
 /// An object usable to request notable cosigns for a block.
@@ -331,7 +219,10 @@ impl<D: Db> Cosigning<D> {
   }
 
   /// Fetch a cosigned Substrate block's hash by its block number.
-  pub fn cosigned_block(getter: &impl Get, block_number: u64) -> Result<Option<[u8; 32]>, Faulted> {
+  pub fn cosigned_block(
+    getter: &impl Get,
+    block_number: u64,
+  ) -> Result<Option<BlockHash>, Faulted> {
     if block_number > Self::latest_cosigned_block_number(getter)? {
       return Ok(None);
     }
@@ -346,8 +237,8 @@ impl<D: Db> Cosigning<D> {
   /// If this global session hasn't produced any notable cosigns, this will return the latest
   /// cosigns for this session.
   pub fn notable_cosigns(getter: &impl Get, global_session: [u8; 32]) -> Vec<SignedCosign> {
-    let mut cosigns = Vec::with_capacity(serai_client::primitives::EXTERNAL_NETWORKS.len());
-    for network in serai_client::primitives::EXTERNAL_NETWORKS {
+    let mut cosigns = vec![];
+    for network in ExternalNetworkId::all() {
       if let Some(cosign) = NetworksLatestCosignedBlock::get(getter, global_session, network) {
         cosigns.push(cosign);
       }
@@ -364,7 +255,7 @@ impl<D: Db> Cosigning<D> {
       let mut cosigns = Faults::get(&self.db, faulted).expect("faulted with no faults");
       // Also include all of our recognized-as-honest cosigns in an attempt to induce fault
       // identification in those who see the faulty cosigns as honest
-      for network in serai_client::primitives::EXTERNAL_NETWORKS {
+      for network in ExternalNetworkId::all() {
         if let Some(cosign) = NetworksLatestCosignedBlock::get(&self.db, faulted, network) {
           if cosign.cosign.global_session == faulted {
             cosigns.push(cosign);
@@ -376,8 +267,8 @@ impl<D: Db> Cosigning<D> {
       let Some(global_session) = evaluator::currently_evaluated_global_session(&self.db) else {
         return vec![];
       };
-      let mut cosigns = Vec::with_capacity(serai_client::primitives::EXTERNAL_NETWORKS.len());
-      for network in serai_client::primitives::EXTERNAL_NETWORKS {
+      let mut cosigns = vec![];
+      for network in ExternalNetworkId::all() {
         if let Some(cosign) = NetworksLatestCosignedBlock::get(&self.db, global_session, network) {
           cosigns.push(cosign);
         }
@@ -432,13 +323,8 @@ impl<D: Db> Cosigning<D> {
 
     // Check the cosign's signature
     {
-      let key = Public::from({
-        let Some(key) = global_session.keys.get(&network) else {
-          Err(IntakeCosignError::NonParticipatingNetwork)?
-        };
-        *key
-      });
-
+      let key =
+        *global_session.keys.get(&network).ok_or(IntakeCosignError::NonParticipatingNetwork)?;
       if !signed_cosign.verify_signature(key) {
         Err(IntakeCosignError::InvalidSignature)?;
       }

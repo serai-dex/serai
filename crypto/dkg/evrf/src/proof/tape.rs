@@ -1,6 +1,6 @@
 use core::marker::PhantomData;
 
-use generic_array::{sequence::GenericSequence, ArrayLength, GenericArray};
+use generic_array::{sequence::GenericSequence as _, ArrayLength, GenericArray};
 
 use generalized_bulletproofs_circuit_abstraction::Variable;
 use generalized_bulletproofs_ec_gadgets::{DiscreteLogParameter, Divisor, PointWithDlog};
@@ -52,12 +52,12 @@ impl Tape {
     let dlog =
       self.read_from_tape::<<C::EmbeddedCurveParameters as DiscreteLogParameter>::ScalarBits>();
 
-    struct PointIterator<'a, C: Curves>(
-      &'a mut Tape,
+    struct PointIterator<'tape, C: Curves>(
+      &'tape mut Tape,
       GenericArray<Variable, <C::EmbeddedCurveParameters as DiscreteLogParameter>::ScalarBits>,
       PhantomData<C>,
     );
-    impl<'a, C: Curves> Iterator for PointIterator<'a, C> {
+    impl<C: Curves> Iterator for PointIterator<'_, C> {
       type Item = PointWithDlog<C::EmbeddedCurveParameters>;
       fn next(&mut self) -> Option<Self::Item> {
         let divisor = {

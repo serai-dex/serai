@@ -1,7 +1,7 @@
 use core::future::Future;
 
-use serai_db::{Get, DbTxn, Db};
-use primitives::{task::ContinuallyRan, BlockHeader};
+use serai_db::{Get, DbTxn as _, Db};
+use primitives::{task::ContinuallyRan, BlockHeader as _};
 
 use crate::ScannerFeed;
 
@@ -70,7 +70,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexTask<D, S> {
         Err(e) => Err(format!("couldn't fetch the latest finalized block number: {e:?}"))?,
       };
 
-      #[allow(clippy::uninlined_format_args)]
+      #[expect(clippy::uninlined_format_args)]
       if latest_finalized < our_latest_finalized {
         // Explicitly log this as an error as returned ephemeral errors are logged with debug
         // This doesn't panic as the node should sync along our indexed chain, and if it doesn't,
@@ -80,7 +80,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexTask<D, S> {
           latest_finalized,
           our_latest_finalized
         );
-        Err("node is out of sync".to_string())?;
+        Err("node is out of sync".to_owned())?;
       }
 
       // Index the hashes of all blocks until the latest finalized block
@@ -94,14 +94,14 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexTask<D, S> {
         {
           let expected_parent =
             IndexDb::block_id(&self.db, b - 1).expect("didn't have the ID of the prior block");
-          if block.parent() != expected_parent {
-            panic!(
-              "current finalized block (#{b}, {}) doesn't build off finalized block (#{}, {})",
-              hex::encode(block.parent()),
-              b - 1,
-              hex::encode(expected_parent)
-            );
-          }
+          assert_eq!(
+            block.parent(),
+            expected_parent,
+            "current finalized block (#{b}, {}) doesn't build off finalized block (#{}, {})",
+            hex::encode(block.parent()),
+            b - 1,
+            hex::encode(expected_parent)
+          );
         }
 
         // Update the latest finalized block

@@ -5,7 +5,7 @@ use group::GroupEncoding;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::{ExternalAddress, ExternalBalance};
+use serai_primitives::{address::ExternalAddress, balance::ExternalBalance};
 
 use crate::Id;
 

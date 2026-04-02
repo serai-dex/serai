@@ -23,7 +23,7 @@ pub const ETH_PORT: u32 = 8545;
 pub const XMR_PORT: u32 = 18081;
 
 pub fn bitcoin_instance() -> (TestBodySpecification, u32) {
-  serai_docker_tests::build("bitcoin".to_string());
+  serai_docker_tests::build("bitcoin".to_owned());
 
   let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-bitcoin").pull_policy(PullPolicy::Never),
@@ -33,7 +33,7 @@ pub fn bitcoin_instance() -> (TestBodySpecification, u32) {
 }
 
 pub fn ethereum_instance() -> (TestBodySpecification, u32) {
-  serai_docker_tests::build("ethereum".to_string());
+  serai_docker_tests::build("ethereum".to_owned());
 
   let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-ethereum").pull_policy(PullPolicy::Never),
@@ -44,7 +44,7 @@ pub fn ethereum_instance() -> (TestBodySpecification, u32) {
 }
 
 pub fn monero_instance() -> (TestBodySpecification, u32) {
-  serai_docker_tests::build("monero".to_string());
+  serai_docker_tests::build("monero".to_owned());
 
   let composition = TestBodySpecification::with_image(
     Image::with_repository("serai-dev-monero").pull_policy(PullPolicy::Never),

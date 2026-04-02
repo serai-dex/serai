@@ -1,13 +1,14 @@
+use core::fmt::Write as _;
 use std::path::Path;
 
 use zeroize::Zeroizing;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::ff::PrimeField, WrappedGroup};
+use ciphersuite::{group::ff::PrimeField as _, WrappedGroup};
 
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
-#[allow(clippy::needless_pass_by_value)]
+#[expect(clippy::needless_pass_by_value)]
 pub fn coordinator(
   orchestration_path: &Path,
   network: Network,
@@ -16,7 +17,7 @@ pub fn coordinator(
 ) {
   let db = network.db();
   let longer_reattempts = if network == Network::Dev { "longer-reattempts" } else { "" };
-  let setup = mimalloc(Os::Debian).to_string() +
+  let setup = mimalloc(Os::Debian, network.release()) +
     &build_serai_service(
       "",
       Os::Debian,
@@ -36,14 +37,14 @@ RUN apt install -y ca-certificates
   let env_vars = [
     ("MESSAGE_QUEUE_RPC", format!("serai-{}-message-queue", network.label())),
     ("MESSAGE_QUEUE_KEY", hex::encode(coordinator_key.to_repr())),
-    ("DB_PATH", "/volume/coordinator-db".to_string()),
+    ("DB_PATH", "/volume/coordinator-db".to_owned()),
     ("SERAI_KEY", hex::encode(serai_key.to_repr())),
     ("SERAI_HOSTNAME", format!("serai-{}-serai", network.label())),
-    ("RUST_LOG", DEFAULT_RUST_LOG.to_string()),
+    ("RUST_LOG", DEFAULT_RUST_LOG.to_owned()),
   ];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {
-    env_vars_str += &format!(r#"{env_var}=${{{env_var}:="{value}"}} "#);
+    write!(&mut env_vars_str, r#"{env_var}=${{{env_var}:="{value}"}} "#).unwrap();
   }
 
   let run_coordinator = format!(
@@ -57,7 +58,7 @@ CMD {env_vars_str} serai-coordinator
 "#
   );
 
-  let run = os(Os::Debian, ADDITIONAL_ROOT, "coordinator") + &run_coordinator;
+  let run = os(Os::Debian, network.release(), ADDITIONAL_ROOT, "coordinator") + &run_coordinator;
   let res = setup + &run;
 
   let mut coordinator_path = orchestration_path.to_path_buf();

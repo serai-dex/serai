@@ -5,42 +5,68 @@ inputs:
   version:
     description: "Version to download and run"
     required: false
-    default: v0.18.4.3
+    default: v0.18.4.6
 
 runs:
   using: "composite"
   steps:
     - name: Monero Daemon Cache
       id: cache-monerod
-      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809
+      uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # 5.0.4
       with:
-        path: /usr/bin/monerod
+        path: monerod*
         key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
 
     - name: Download the Monero Daemon
       if: steps.cache-monerod.outputs.cache-hit != 'true'
-      # Calculates OS/ARCH to demonstrate it, yet then locks to linux-x64 due
-      # to the contained folder not following the same naming scheme and
-      # requiring further expansion not worth doing right now
       shell: bash
       run: |
-        RUNNER_OS=${{ runner.os }}
-        RUNNER_ARCH=${{ runner.arch }}
+        OS=${{ runner.os }}
+        ARCH=${{ runner.arch }}
 
-        RUNNER_OS=${RUNNER_OS,,}
-        RUNNER_ARCH=${RUNNER_ARCH,,}
+        OS=$(echo "$OS" | tr "[:upper:]" "[:lower:]")
+        ARCH=$(echo "$ARCH" | tr "[:upper:]" "[:lower:]")
+        EXT="tar.bz2"
 
-        RUNNER_OS=linux
-        RUNNER_ARCH=x64
+        if [ "$OS" = "windows" ]; then
+          OS="win"
+          EXT="zip"
+        fi
+        if [ "$ARCH" = "arm64" ]; then
+          ARCH="armv8"
+        fi
+        if [ "$OS" = "macos" ]; then
+          OS="mac"
+          # If this is an ARM macOS downloading a historic version, download x64 to run via Rosetta
+          if [ $(echo "${{ inputs.version }}" | cut -d'.' -f2) -lt 18 ]; then
+            ARCH="x64"
+          fi
+        fi
 
-        FILE=monero-$RUNNER_OS-$RUNNER_ARCH-${{ inputs.version }}.tar.bz2
-        wget https://downloads.getmonero.org/cli/$FILE
-        tar -xvf $FILE
+        FILE=monero-$OS-$ARCH-${{ inputs.version }}.$EXT
+        mkdir monero-tmp
+        cd monero-tmp
+        curl -L https://downloads.getmonero.org/cli/$FILE -o $FILE
+        if [ "$EXT" = "tar.bz2" ]; then
+          tar -xf $FILE
+        fi
+        if [ "$EXT" = "zip" ]; then
+          unzip $FILE
+        fi
+        cd ..
 
-        sudo mv monero-x86_64-linux-gnu-${{ inputs.version }}/monerod /usr/bin/monerod
-        sudo chmod 777 /usr/bin/monerod
-        sudo chmod +x /usr/bin/monerod
+        mv $(find . -type f -name "monerod*") .
+        rm -rf monero-tmp
 
     - name: Monero Regtest Daemon
       shell: bash
-      run: PATH=$PATH:/usr/bin ./orchestration/dev/networks/monero/run.sh --detach
+      run: |
+        PATH="$PATH:$(pwd)"
+        COMMAND="./orchestration/dev/networks/monero/run.sh"
+
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          $COMMAND --install-service
+          $COMMAND --start-service
+        else
+          $COMMAND --detach
+        fi

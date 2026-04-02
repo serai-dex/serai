@@ -24,7 +24,7 @@ mod type_name;
 #[derive(Clone)]
 pub struct TaskHandle {
   run_now: mpsc::Sender<()>,
-  #[allow(dead_code)] // This is used to track if all handles have been dropped
+  #[expect(dead_code)] // This is used to track if all handles have been dropped
   close: mpsc::Sender<()>,
 }
 
@@ -52,7 +52,7 @@ impl Task {
 impl TaskHandle {
   /// Tell the task to run now (and not whenever its next iteration on a timer is).
   pub fn run_now(&self) {
-    #[allow(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
     match self.run_now.try_send(()) {
       Ok(()) => {}
       // NOP on full, as this task will already be ran as soon as possible

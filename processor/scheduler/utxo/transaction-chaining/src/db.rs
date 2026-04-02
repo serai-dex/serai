@@ -1,8 +1,8 @@
 use core::marker::PhantomData;
 
-use group::GroupEncoding;
+use group::GroupEncoding as _;
 
-use serai_primitives::{ExternalCoin, Amount};
+use serai_primitives::{coin::ExternalCoin, balance::Amount};
 
 use serai_db::{Get, DbTxn, create_db};
 
@@ -26,7 +26,7 @@ impl<S: ScannerFeed> Db<S> {
     OperatingCosts::get(getter, coin).unwrap_or(Amount(0))
   }
   pub(crate) fn set_operating_costs(txn: &mut impl DbTxn, coin: ExternalCoin, amount: Amount) {
-    OperatingCosts::set(txn, coin, &amount)
+    OperatingCosts::set(txn, coin, &amount);
   }
 
   pub(crate) fn outputs(

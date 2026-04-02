@@ -1,4 +1,5 @@
 use core::cmp::Ord;
+use alloc::vec::Vec;
 
 use scale::FullCodec;
 
@@ -51,7 +52,7 @@ impl<V: LexicographicEncoding> scale::Encode for LexicographicReverse<V> {
     self.0.size_hint()
   }
   fn encode_to<T: scale::Output + ?Sized>(&self, dest: &mut T) {
-    self.0.encode_to(dest)
+    self.0.encode_to(dest);
   }
   fn encode(&self) -> Vec<u8> {
     self.0.encode()
@@ -66,6 +67,14 @@ impl<V: LexicographicEncoding> scale::Encode for LexicographicReverse<V> {
 
 impl<V: LexicographicEncoding> scale::EncodeLike for LexicographicReverse<V> {}
 
+impl<V: LexicographicEncoding<Encoding: scale::MaxEncodedLen>> scale::MaxEncodedLen
+  for LexicographicReverse<V>
+{
+  fn max_encoded_len() -> usize {
+    V::Encoding::max_encoded_len()
+  }
+}
+
 /// This is a bijective mapping such that `reverse(reverse(encoding)) == encoding`.
 fn reverse<E: AsMut<[u8]>>(mut encoding: E) -> E {
   for byte in encoding.as_mut().iter_mut() {
@@ -78,17 +87,19 @@ impl<V: LexicographicEncoding> LexicographicReverse<V> {
   pub(super) fn from_encoding(encoding: V::Encoding) -> Self {
     Self(reverse(encoding))
   }
-  pub(super) fn from(value: &V) -> Self {
+  /// Wrap a value with [`LexicographicReverse`].
+  pub fn from(value: &V) -> Self {
     Self::from_encoding(value.lexicographic_encode())
   }
-  pub(super) fn into(self) -> V {
+  /// Consume a [`LexicographicReverse`] into the value encoded with a reversed ordering.
+  pub fn into(self) -> V {
     V::lexicographic_decode(reverse(self.0))
   }
 }
 
 #[test]
 fn lexicographic_uint() {
-  use rand_core::{RngCore, OsRng};
+  use rand_core::{RngCore as _, OsRng};
 
   // Basic sanity checks
   {
@@ -115,7 +126,7 @@ fn lexicographic_uint() {
 
 #[test]
 fn lexicographic_reverse() {
-  use rand_core::{RngCore, OsRng};
+  use rand_core::{RngCore as _, OsRng};
 
   for _ in 0 .. 100 {
     let a = OsRng.next_u64();
@@ -125,8 +136,8 @@ fn lexicographic_reverse() {
         break b;
       }
     };
-    let mut a_enc = a.lexicographic_encode();
-    let mut b_enc = b.lexicographic_encode();
+    let a_enc = a.lexicographic_encode();
+    let b_enc = b.lexicographic_encode();
     assert_eq!(a_enc, a_enc);
     assert_eq!(a.cmp(&b), a_enc.cmp(&b_enc));
 

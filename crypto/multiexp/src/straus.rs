@@ -1,6 +1,7 @@
 use alloc::{vec, vec::Vec};
 
 use zeroize::Zeroize;
+use subtle::{ConstantTimeEq as _, ConditionallySelectable};
 
 use ff::PrimeFieldBits;
 use group::Group;
@@ -24,7 +25,7 @@ fn prep_tables<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<G>> {
 
 // Straus's algorithm for multiexponentiation, as published in The American Mathematical Monthly
 // DOI: 10.2307/2310929
-pub(crate) fn straus<G: Zeroize + Group<Scalar: PrimeFieldBits>>(
+pub(crate) fn straus<G: Zeroize + ConditionallySelectable + Group<Scalar: PrimeFieldBits>>(
   pairs: &[(G::Scalar, G)],
   window: u8,
 ) -> G {
@@ -40,7 +41,11 @@ pub(crate) fn straus<G: Zeroize + Group<Scalar: PrimeFieldBits>>(
     }
 
     for s in 0 .. tables.len() {
-      res += tables[s][usize::from(groupings[s][b])];
+      let mut elem_to_add = G::identity();
+      for (i, elem) in tables[s].iter().enumerate() {
+        elem_to_add.conditional_assign(elem, i.ct_eq(&usize::from(groupings[s][b])));
+      }
+      res += elem_to_add;
     }
   }
 

@@ -1,23 +1,22 @@
-use core::ops::Deref;
-
-use std_shims::collections::HashMap;
+use core::ops::Deref as _;
 #[cfg(test)]
-use core::str::FromStr;
+use core::str::FromStr as _;
+use std_shims::{prelude::*, collections::HashMap};
 
 use zeroize::Zeroizing;
 
-use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng as _};
 use rand_chacha::ChaCha20Rng;
 
-use ciphersuite::group::{ff::PrimeField, GroupEncoding};
+use ciphersuite::group::{ff::PrimeField as _, GroupEncoding as _};
 
 use crate::{
   curve::Curve,
   Participant, ThresholdKeys,
   algorithm::{Hram, IetfSchnorr},
   sign::{
-    Writable, Nonce, GeneratorCommitments, NonceCommitments, Commitments, Preprocess,
-    PreprocessMachine, SignMachine, SignatureMachine, AlgorithmMachine,
+    Writable as _, Nonce, GeneratorCommitments, NonceCommitments, Commitments, Preprocess,
+    PreprocessMachine as _, SignMachine as _, SignatureMachine as _, AlgorithmMachine,
   },
   tests::{clone_without, recover_key, test_ciphersuite},
 };
@@ -48,7 +47,7 @@ pub struct Vectors {
 #[cfg(test)]
 impl From<serde_json::Value> for Vectors {
   fn from(value: serde_json::Value) -> Vectors {
-    let to_str = |value: &serde_json::Value| value.as_str().unwrap().to_string();
+    let to_str = |value: &serde_json::Value| value.as_str().unwrap().to_owned();
     Vectors {
       threshold: u16::from_str(value["config"]["NUM_PARTICIPANTS"].as_str().unwrap()).unwrap(),
 
@@ -263,7 +262,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       unimplemented!()
     }
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-      dest.copy_from_slice(&self.0.remove(0))
+      dest.copy_from_slice(&self.0.remove(0));
     }
     fn try_fill_bytes(&mut self, _: &mut [u8]) -> Result<(), rand_core::Error> {
       unimplemented!()

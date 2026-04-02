@@ -21,7 +21,7 @@ zeroize = { version = "^1.5", default-features = false, features = ["std"] }
 bitvec = { version = "1", default-features = false, features = ["std"] }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
-blake2 = { version = "0.11.0-rc.0", default-features = false, features = ["alloc"] }
+blake2 = { version = "0.11.0-rc.5", default-features = false, features = ["alloc"] }
 schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
 
 dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"] }
@@ -31,7 +31,6 @@ frost = { package = "modular-frost", path = "../crypto/frost" }
 frost-schnorrkel = { path = "../crypto/schnorrkel" }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive", "bit-vec"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 zalloc = { path = "../common/zalloc" }
@@ -43,7 +42,7 @@ messages = { package = "serai-processor-messages", path = "../processor/messages
 message-queue = { package = "serai-message-queue", path = "../message-queue" }
 tributary-sdk = { path = "./tributary-sdk" }
 
-serai-client = { path = "../substrate/client", default-features = false, features = ["serai", "borsh"] }
+serai-client-serai = { path = "../substrate/client/serai", default-features = false }
 
 log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"] }

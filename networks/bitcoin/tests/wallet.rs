@@ -1,12 +1,9 @@
 use std::collections::HashMap;
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
 use k256::{
-  elliptic_curve::{
-    group::{ff::Field, Group},
-    sec1::{Tag, ToEncodedPoint},
-  },
+  elliptic_curve::group::{ff::Field as _, Group as _},
   Scalar, ProjectivePoint,
 };
 use frost::{
@@ -17,14 +14,12 @@ use frost::{
 
 use bitcoin_serai::{
   bitcoin::{
-    hashes::Hash as HashTrait,
+    hashes::Hash as _,
     blockdata::opcodes::all::OP_RETURN,
     script::{PushBytesBuf, Instruction, Instructions, Script},
     OutPoint, Amount, TxOut, Transaction, Network, Address,
   },
-  wallet::{
-    tweak_keys, p2tr_script_buf, ReceivedOutput, Scanner, TransactionError, SignableTransaction,
-  },
+  wallet::{ReceivedOutput, Scanner, TransactionError, SignableTransaction, address},
   rpc::Rpc,
 };
 
@@ -32,10 +27,6 @@ mod runner;
 use runner::rpc;
 
 const FEE: u64 = 20;
-
-fn is_even(key: ProjectivePoint) -> bool {
-  key.to_encoded_point(true).tag() == Tag::CompressedEvenY
-}
 
 async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint) -> ReceivedOutput {
   let block_number = rpc.get_latest_block_number().await.unwrap() + 1;
@@ -45,7 +36,7 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
       "generatetoaddress",
       &format!(
         r#"[1, "{}"]"#,
-        Address::from_script(&p2tr_script_buf(key).unwrap(), Network::Regtest).unwrap()
+        Address::from_script(&address(key).unwrap(), Network::Regtest).unwrap()
       ),
     )
     .await
@@ -78,10 +69,7 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
 }
 
 fn keys() -> (HashMap<Participant, ThresholdKeys<Secp256k1>>, ProjectivePoint) {
-  let mut keys = key_gen(&mut OsRng);
-  for keys in keys.values_mut() {
-    *keys = tweak_keys(keys.clone());
-  }
+  let keys = key_gen(&mut OsRng);
   let key = keys.values().next().unwrap().group_key();
   (keys, key)
 }
@@ -99,33 +87,13 @@ fn sign(
 
 async_sequential! {
   async fn test_scanner() {
-    // Test Scanners are creatable for even keys.
-    for _ in 0 .. 128 {
-      let key = ProjectivePoint::random(&mut OsRng);
-      assert_eq!(Scanner::new(key).is_some(), is_even(key));
-    }
-
-    let mut key = ProjectivePoint::random(&mut OsRng);
-    while !is_even(key) {
-      key += ProjectivePoint::GENERATOR;
-    }
-
+    let key = ProjectivePoint::random(&mut OsRng);
     {
       let mut scanner = Scanner::new(key).unwrap();
       for _ in 0 .. 128 {
-        let mut offset = Scalar::random(&mut OsRng);
-        let registered = scanner.register_offset(offset).unwrap();
+        let offset = Scalar::random(&mut OsRng);
+        let () = scanner.register_offset(offset).unwrap();
         // Registering this again should return None
-        assert!(scanner.register_offset(offset).is_none());
-
-        // We can only register offsets resulting in even keys
-        // Make this even
-        while !is_even(key + (ProjectivePoint::GENERATOR * offset)) {
-          offset += Scalar::ONE;
-        }
-        // Ensure it matches the registered offset
-        assert_eq!(registered, offset);
-        // Assert registering this again fails
         assert!(scanner.register_offset(offset).is_none());
       }
     }
@@ -136,7 +104,8 @@ async_sequential! {
     assert_eq!(send_and_get_output(&rpc, &scanner, key).await.offset(), Scalar::ZERO);
 
     // Register an offset and test receiving to it
-    let offset = scanner.register_offset(Scalar::random(&mut OsRng)).unwrap();
+    let offset = Scalar::random(&mut OsRng);
+    let () = scanner.register_offset(offset).unwrap();
     assert_eq!(
       send_and_get_output(&rpc, &scanner, key + (ProjectivePoint::GENERATOR * offset))
         .await
@@ -155,53 +124,51 @@ async_sequential! {
     assert_eq!(output.offset(), Scalar::ZERO);
 
     let inputs = vec![output];
-    let addr = || p2tr_script_buf(key).unwrap();
+    let addr = || address(key).unwrap();
     let payments = vec![(addr(), 1000)];
 
-    assert!(SignableTransaction::new(inputs.clone(), &payments, None, None, FEE).is_ok());
+    SignableTransaction::new(&inputs, &payments, None, None, FEE).unwrap();
 
     assert_eq!(
-      SignableTransaction::new(vec![], &payments, None, None, FEE),
+      SignableTransaction::new(&[], &payments, None, None, FEE),
       Err(TransactionError::NoInputs)
     );
 
     // No change
-    assert!(SignableTransaction::new(inputs.clone(), &[(addr(), 1000)], None, None, FEE).is_ok());
+    SignableTransaction::new(&inputs, &[(addr(), 1000)], None, None, FEE).unwrap();
     // Consolidation TX
-    assert!(SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, FEE).is_ok());
+    SignableTransaction::new(&inputs, &[], Some(addr()), None, FEE).unwrap();
     // Data
-    assert!(SignableTransaction::new(inputs.clone(), &[], None, Some(vec![]), FEE).is_ok());
+    SignableTransaction::new(&inputs, &[], None, Some(vec![]), FEE).unwrap();
     // No outputs
     assert_eq!(
-      SignableTransaction::new(inputs.clone(), &[], None, None, FEE),
+      SignableTransaction::new(&inputs, &[], None, None, FEE),
       Err(TransactionError::NoOutputs),
     );
 
     assert_eq!(
-      SignableTransaction::new(inputs.clone(), &[(addr(), 1)], None, None, FEE),
+      SignableTransaction::new(&inputs, &[(addr(), 1)], None, None, FEE),
       Err(TransactionError::DustPayment),
     );
 
-    assert!(
-      SignableTransaction::new(inputs.clone(), &payments, None, Some(vec![0; 80]), FEE).is_ok()
-    );
+    SignableTransaction::new(&inputs, &payments, None, Some(vec![0; 80]), FEE).unwrap();
     assert_eq!(
-      SignableTransaction::new(inputs.clone(), &payments, None, Some(vec![0; 81]), FEE),
+      SignableTransaction::new(&inputs, &payments, None, Some(vec![0; 81]), FEE),
       Err(TransactionError::TooMuchData),
     );
 
     assert_eq!(
-      SignableTransaction::new(inputs.clone(), &[], Some(addr()), None, 0),
+      SignableTransaction::new(&inputs, &[], Some(addr()), None, 0),
       Err(TransactionError::TooLowFee),
     );
 
     assert!(matches!(
-      SignableTransaction::new(inputs.clone(), &[(addr(), inputs[0].value() * 2)], None, None, FEE),
+      SignableTransaction::new(&inputs, &[(addr(), inputs[0].value() * 2)], None, None, FEE),
       Err(TransactionError::NotEnoughFunds { .. }),
     ));
 
     assert_eq!(
-      SignableTransaction::new(inputs, &vec![(addr(), 1000); 10000], None, None, FEE),
+      SignableTransaction::new(&inputs, &vec![(addr(), 1000); 10000], None, None, FEE),
       Err(TransactionError::TooLargeTransaction),
     );
   }
@@ -216,24 +183,26 @@ async_sequential! {
     let output = send_and_get_output(&rpc, &scanner, key).await;
     assert_eq!(output.offset(), Scalar::ZERO);
 
-    let offset = scanner.register_offset(Scalar::random(&mut OsRng)).unwrap();
+    let offset = Scalar::random(&mut OsRng);
+    let () = scanner.register_offset(offset).unwrap();
     let offset_key = key + (ProjectivePoint::GENERATOR * offset);
     let offset_output = send_and_get_output(&rpc, &scanner, offset_key).await;
     assert_eq!(offset_output.offset(), offset);
 
     // Declare payments, change, fee
     let payments = [
-      (p2tr_script_buf(key).unwrap(), 1005),
-      (p2tr_script_buf(offset_key).unwrap(), 1007)
+      (address(key).unwrap(), 1005),
+      (address(offset_key).unwrap(), 1007)
     ];
 
-    let change_offset = scanner.register_offset(Scalar::random(&mut OsRng)).unwrap();
+    let change_offset = Scalar::random(&mut OsRng);
+    let () = scanner.register_offset(change_offset).unwrap();
     let change_key = key + (ProjectivePoint::GENERATOR * change_offset);
-    let change_addr = p2tr_script_buf(change_key).unwrap();
+    let change_addr = address(change_key).unwrap();
 
     // Create and sign the TX
     let tx = SignableTransaction::new(
-      vec![output.clone(), offset_output.clone()],
+      &[output.clone(), offset_output.clone()],
       &payments,
       Some(change_addr.clone()),
       None,
@@ -303,9 +272,9 @@ async_sequential! {
     let tx = sign(
       &keys,
       &SignableTransaction::new(
-        vec![output],
+        &[output],
         &[],
-        Some(p2tr_script_buf(key).unwrap()),
+        Some(address(key).unwrap()),
         Some(data.clone()),
         FEE
       ).unwrap()

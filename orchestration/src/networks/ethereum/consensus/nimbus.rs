@@ -25,10 +25,8 @@ FROM alpine:latest AS nimbus
 ENV NIMBUS_VERSION=24.3.0
 ENV NIMBUS_COMMIT=dc19b082
 
-RUN apk --no-cache add wget
-
 # Download nimbus
-RUN wget -4 https://github.com/status-im/nimbus-eth2/releases/download/v${{NIMBUS_VERSION}}/nimbus-eth2_Linux_{platform}_${{NIMBUS_VERSION}}_${{NIMBUS_COMMIT}}.tar.gz
+RUN wget https://github.com/status-im/nimbus-eth2/releases/download/v${{NIMBUS_VERSION}}/nimbus-eth2_Linux_{platform}_${{NIMBUS_VERSION}}_${{NIMBUS_COMMIT}}.tar.gz
 
 # Extract nimbus
 RUN tar xvf nimbus-eth2_Linux_{platform}_${{NIMBUS_VERSION}}_${{NIMBUS_COMMIT}}.tar.gz

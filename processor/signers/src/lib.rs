@@ -10,9 +10,11 @@ use zeroize::Zeroizing;
 use ciphersuite::{group::GroupEncoding, *};
 use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
-use serai_primitives::Signature;
-use serai_validator_sets_primitives::{Session, SlashReport};
-use serai_in_instructions_primitives::SignedBatch;
+use serai_primitives::{
+  crypto::Signature,
+  validator_sets::{Session, SlashReport},
+  instructions::SignedBatch,
+};
 
 use serai_db::{DbTxn, Db};
 
@@ -20,7 +22,7 @@ use serai_cosign::{Cosign, SignedCosign};
 
 use messages::sign::{VariantSignId, ProcessorMessage, CoordinatorMessage};
 
-use primitives::task::{Task, TaskHandle, ContinuallyRan};
+use primitives::task::{Task, TaskHandle, ContinuallyRan as _};
 use scheduler::{Transaction, SignableTransaction, TransactionFor};
 use scanner::{ScannerFeed, Scheduler};
 
@@ -105,7 +107,7 @@ struct Tasks {
 }
 
 /// The signers used by a processor.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub struct Signers<
   D: Db,
   S: ScannerFeed,

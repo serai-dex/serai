@@ -1,16 +1,16 @@
-use core::{ops::Deref, future::Future};
+use core::{ops::Deref as _, future::Future};
 use std::{sync::Arc, collections::HashMap};
 
-use subtle::ConstantTimeEq;
-use zeroize::{Zeroize, Zeroizing};
+use subtle::ConstantTimeEq as _;
+use zeroize::{Zeroize as _, Zeroizing};
 
-use rand::{SeedableRng, seq::SliceRandom};
+use rand::{SeedableRng as _, seq::SliceRandom as _};
 use rand_chacha::ChaCha12Rng;
 
-use transcript::{Transcript, RecommendedTranscript};
+use transcript::{Transcript as _, RecommendedTranscript};
 
 use ciphersuite::{
-  group::{ff::PrimeField, GroupEncoding},
+  group::{ff::PrimeField as _, GroupEncoding as _},
   *,
 };
 use dalek_ff_group::Ristretto;
@@ -21,7 +21,7 @@ use schnorr::{
 
 use serai_db::Db;
 
-use scale::{Encode, Decode};
+use borsh::{BorshSerialize, BorshDeserialize};
 use tendermint::{
   SignedMessageFor,
   ext::{
@@ -34,7 +34,8 @@ use tendermint::{
 use tokio::sync::RwLock;
 
 use crate::{
-  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, ReadWrite, transaction::Transaction as TransactionTrait,
+  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, ReadWrite as _,
+  transaction::{TransactionError, Transaction as TransactionTrait},
   Transaction, BlockHeader, Block, BlockError, Blockchain, P2p,
 };
 
@@ -84,12 +85,24 @@ impl SignerTrait for Signer {
   /// Sign a signature with the current validator's private key.
   fn sign(&self, msg: &[u8]) -> impl Send + Future<Output = Self::Signature> {
     async move {
-      let mut nonce =
-        Zeroizing::new(RecommendedTranscript::new(b"Tributary Chain Tendermint Nonce"));
-      nonce.append_message(b"genesis", self.genesis);
-      nonce.append_message(b"key", Zeroizing::new(self.key.deref().to_repr()).as_ref());
-      nonce.append_message(b"message", msg);
-      let mut nonce = nonce.challenge(b"nonce");
+      let mut nonce = {
+        let mut nonce_transcript = RecommendedTranscript::new(b"Tributary Chain Tendermint Nonce");
+        nonce_transcript.append_message(b"genesis", self.genesis);
+        nonce_transcript
+          .append_message(b"key", Zeroizing::new(self.key.deref().to_repr()).as_ref());
+        nonce_transcript.append_message(b"message", msg);
+        let nonce = nonce_transcript.challenge(b"nonce");
+
+        // Ensure this will be zeroized (via the type contract) and ensure it happens now
+        {
+          fn drop_zeroize_on_drop(value: impl zeroize::ZeroizeOnDrop) {
+            drop(value);
+          }
+          drop_zeroize_on_drop(nonce_transcript);
+        }
+
+        nonce
+      };
 
       let mut nonce_arr = [0; 64];
       nonce_arr.copy_from_slice(nonce.as_ref());
@@ -248,7 +261,7 @@ impl Weights for Validators {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct TendermintBlock(pub Vec<u8>);
 impl BlockTrait for TendermintBlock {
   type Id = [u8; 32];
@@ -300,8 +313,8 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
   fn broadcast(&mut self, msg: SignedMessageFor<Self>) -> impl Send + Future<Output = ()> {
     async move {
       let mut to_broadcast = vec![TENDERMINT_MESSAGE];
-      to_broadcast.extend(msg.encode());
-      self.p2p.broadcast(self.genesis, to_broadcast).await
+      msg.serialize(&mut to_broadcast).unwrap();
+      self.p2p.broadcast(self.genesis, to_broadcast).await;
     }
   }
 
@@ -360,9 +373,28 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
         .verify_block::<Self>(&block, &self.signature_scheme(), false)
         .map_err(|e| match e {
           BlockError::NonLocalProvided(_) => TendermintBlockError::Temporal,
-          _ => {
+          BlockError::TooLargeBlock |
+          BlockError::InvalidParent |
+          BlockError::InvalidTransactions |
+          BlockError::UnsignedAlreadyIncluded |
+          BlockError::ProvidedAlreadyIncluded |
+          BlockError::WrongTransactionOrder |
+          BlockError::DistinctProvided |
+          BlockError::TransactionError(
+            TransactionError::TooLargeTransaction |
+            TransactionError::InvalidSigner |
+            TransactionError::InvalidNonce |
+            TransactionError::InvalidSignature |
+            TransactionError::InvalidContent,
+          ) => {
             log::warn!("Tributary Tendermint validate returning BlockError::Fatal due to {e:?}");
             TendermintBlockError::Fatal
+          }
+          BlockError::TransactionError(TransactionError::ProvidedAddedToMempool) => {
+            unreachable!("system transaction routed to mempool")
+          }
+          BlockError::TransactionError(TransactionError::TooManyInMempool) => {
+            unreachable!("transaction in block was checked against mempool limits")
           }
         })
     }
@@ -390,7 +422,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
         return invalid_block();
       };
 
-      let encoded_commit = commit.encode();
+      let encoded_commit = borsh::to_vec(&commit).unwrap();
       loop {
         let block_res = self.blockchain.write().await.add_block::<Self>(
           &block,

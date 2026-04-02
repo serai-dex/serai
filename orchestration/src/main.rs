@@ -1,28 +1,28 @@
 // TODO: Generate randomized RPC credentials for all services
 // TODO: Generate keys for a validator and the infra
 
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std::{
   collections::{HashSet, HashMap},
   env,
   path::PathBuf,
-  io::Write,
+  io::Write as _,
   fs,
   process::{Stdio, Command},
 };
 
 use zeroize::Zeroizing;
 
-use rand_core::{RngCore, SeedableRng, OsRng};
+use rand_core::{RngCore as _, SeedableRng as _, OsRng};
 use rand_chacha::ChaCha20Rng;
 
-use transcript::{Transcript, RecommendedTranscript};
+use transcript::{Transcript as _, RecommendedTranscript};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField},
-    GroupEncoding,
+    ff::{Field as _, PrimeField},
+    GroupEncoding as _,
   },
   WrappedGroup,
 };
@@ -91,7 +91,7 @@ enum Os {
   Debian,
 }
 
-fn os(os: Os, additional_root: &str, user: &str) -> String {
+fn os(os: Os, release: bool, additional_root: &str, user: &str) -> String {
   match os {
     Os::Alpine => format!(
       r#"
@@ -118,12 +118,31 @@ WORKDIR /home/{user}
 "#
     ),
 
-    Os::Debian => format!(
-      r#"
-FROM debian:trixie-slim AS image
+    Os::Debian => {
+      let asan = if !release {
+        /*
+          `detect_stack_use_after_return` is on by default on some platforms, such as Linux (which
+          this should qualify as), according to ASan's documentation. Rust notes it as a check to
+          enable. We explicitly enable it to be sure it is on. While this incurs the risk of false
+          positives, its usage within solely test environments makes this acceptable.
+        */
+        const ASAN_OPTS: &str = "ENV ASAN_OPTIONS=detect_stack_use_after_return=1";
 
-COPY --from=mimalloc-debian libmimalloc.so /usr/lib
-RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
+        // `libasan` is dynamically linked, so we install it now
+        // As we didn't explicitly link to it, we load it via `LD_PRELOAD`
+        format!(
+          r#"
+RUN apt install -y libatomic1 libasan8
+{ASAN_OPTS}
+RUN echo "$(find /usr/lib -name libasan.so.8 | head -n1)" >> /etc/ld.so.preload
+"#
+        )
+      } else {
+        String::new()
+      };
+      format!(
+        r#"
+FROM debian:stable-slim AS image
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
 
@@ -134,12 +153,18 @@ RUN mkdir /volume && chown {user}:{user} /volume
 
 {additional_root}
 
+{asan}
+
+COPY --from=mimalloc-debian libmimalloc.so /usr/lib
+RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
+
 # Switch to a non-root user
 USER {user}
 
 WORKDIR /home/{user}
 "#
-    ),
+      )
+    }
   }
 }
 
@@ -153,43 +178,193 @@ fn build_serai_service(
   let profile = if release { "release" } else { "debug" };
   let profile_flag = if release { "--release" } else { "" };
 
+  // We optimize for the current CPU since we aren't expected to generate portable containers
+  let mut rustflags = "-C target-cpu=native -C opt-level=3".to_owned();
+
+  /*
+    We enable `-C stack-protector=all` (https://github.com/rust-lang/pull/146369) in its
+    pre-stablized form. Per discussion on how to stablize it, we use `=all` as it's the option with
+    well-defined semantics when considered within the context of Rust.
+  */
+  rustflags += " -Z stack-protector=all";
+
+  /*
+    TODO: Ideally, we would support CFI and even use it in production, but this seems to always
+    report "illegal instruction" when ran. The following block is only here as if uncommented, it
+    does compile and successfully produce a binary. It's solely that the binary doesn't work.
+
+    https://github.com/serai-dex/serai/issues/737
+
+  /*
+    We enable LLVM's ControlFlowIntegrity, which requires enabling LTO.
+
+    Some of the best-stated advocacy for this policy may be Android's documentation of it:
+    https://source.android.com/docs/security/test/cfi
+    The reasoning has the benefiting of connecting to the real-world impact while demonstrating
+    this has been adopted, in production, by a major entity without notable issue or complaints (at
+    least today, after the decade of time it's been since this hill was first climbed).
+
+    `sanitizer=cfi` _requires_ `lto` or `linker-plugin-lto`, the latter not working out of the box.
+    `lto` requires `embed-bitcode=yes` (changed from the default of `embed-bitcode=no`) _and_
+    `codegen-units=1`.
+  */
+  rustflags += " -Z sanitizer=cfi -C lto -C embed-bitcode=yes -C codegen-units=1";
+  */
+
+  /*
+    We want to enable LLVM's SafeStack sanitizer, which is recommended for usage even with
+    production binaries. It only supports the `x86_64-unknown-linux-gnu` target however.
+
+    We also want to enable LLVM's ASan as it's not expected to have false positives, errors upon
+    detection (so we'll notice it even within CI-instrumented containers which shut down once the
+    test is already considered to have passed), but it's only recommended for non-production
+    use-cases. For `linux` targets, it only supports `linux-gnu` though and only for certain hosts.
+
+    Unfortunately, these are incompatible, so we detect which are eligible in this environment and
+    ensure we choose a valid (non-conflicting) configuration.
+
+    This assumes the container architecture will equal the current host's architecture, as allowed
+    by how this tool does not produce portable containers.
+  */
+  {
+    let (safestack, asan) = {
+      #[allow(unused)]
+      let mut supports_safestack = false;
+      #[cfg(target_arch = "x86_64")]
+      {
+        supports_safestack = os == Os::Debian;
+      }
+
+      #[allow(unused)]
+      let mut supports_asan = false;
+      #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+      {
+        supports_asan = (!release) && os == Os::Debian;
+      }
+
+      if supports_safestack && supports_asan {
+        /*
+          If both are supported, randomly choose one. This ensures both variants are tested with,
+          despite how we only intend to use one in production (not leaving a gap where we don't
+          test with SafeStack as desired in a production deployment).
+
+          TODO: Instead of passing around `Network, Os`, design and develop a `Profile` system
+          which consistently yields the configurations for all of these specific knobs. Right now,
+          we frequently re-decide whether or not to enable ASan. We should also replace `bool` with
+          `enum` for clairty.
+        */
+        supports_safestack = (OsRng.next_u64() & 1) == 1;
+        supports_asan = !supports_safestack;
+      }
+
+      (supports_safestack, supports_asan)
+    };
+    if safestack {
+      rustflags += " -Z sanitizer=safestack";
+    } else if asan {
+      /*
+        We use the system's ASan runtime, not the one Rust will want to link in, due to
+        instrumenting the allocator along with the Serai services themselves.
+
+        This does dynamically link to _all_ sanitizer runtimes, but the only sanitizer we
+        potentially use which requires a runtime is this one.
+      */
+      rustflags += " -Z sanitizer=address -Z external-clangrt -lasan";
+    }
+  }
+
+  // x86(-64)-specific hardening
+  #[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+  {
+    /*
+      Retpolines: https://support.google.com/faqs/answer/7625886
+
+      These are tracked within `rustc` with: https://github.com/rust-lang/rust/issues/116852
+    */
+    rustflags += " -Z retpoline";
+  }
+
+  // AArch64-specific hardening.
+  #[cfg(target_arch = "aarch64")]
+  {
+    /*
+      Harden against straight-line speculation.
+
+      https://github.com/rust-lang/rust/pull/136597 would allow us to specify `-Z harden-sls=all`
+      and replace direct specification of these target features.
+    */
+    rustflags += " -C target-feature=+harden-sls-ijmp -C target-feature=+harden-sls-ret";
+
+    /*
+      Hardware-backed pointer authentication.
+
+      `pac-ret,leaf` requires ARMv8.3-A to function, but are NOPs on older chips (so binaries
+      remain portable).
+
+      `bti` requires ARMv8.5-A, yet again is portable even to older chips.
+    */
+    rustflags += " -Z branch-protection=pac-ret,leaf,bti";
+
+    // LLVM's MemTagSanitizer
+    #[cfg(target_feature = "mte")]
+    {
+      rustflags += " -C target-feature=+mte -Z sanitizer=memtag";
+    }
+  }
+
+  /*
+    We explicitly enable debug assertions on debug, allowing us to independently tune the
+    optimization level (as required for `serai-node`).
+
+    We also enable `ub-checks`, considering them an extension of `debug-assertions`. While they
+    produce aborting panics, which cannot be caught via unwinding, we do not make use of unwinding.
+
+    When not compiling for production, we test randomized layouts. While ideally, we would enable
+    this for security purposes (hardening), the feature is unstable and the risk of programmers who
+    have assumed a layout is real. Instead of enabling it in a situation where we may have unsafe
+    behavior, with critical effects, we solely enable it when debugging. This achieves its
+    secondary purpose of helping to detect unsafe expectations about layouts.
+  */
+  if !release {
+    rustflags += " -C debug-assertions=on -Z ub-checks=on -Z randomize-layout";
+  }
+
+  let image;
   (match os {
     Os::Debian => {
-      r#"
-FROM rust:1.91-slim-trixie AS builder
-
-COPY --from=mimalloc-debian libmimalloc.so /usr/lib
-RUN echo "/usr/lib/libmimalloc.so" >> /etc/ld.so.preload
+      image = "rust:slim-trixie";
+      format!(
+        r#"
+FROM {image} AS builder
 
 RUN apt update && apt upgrade -y && apt autoremove -y && apt clean
 
 # Add dev dependencies
-RUN apt install -y pkg-config libclang-dev clang
+RUN apt install -y libclang-dev clang
 
 # Dependencies for the Serai node
-RUN apt install -y make protobuf-compiler
+RUN apt install -y protobuf-compiler
+
+# Dependencies for `debug` builds
+RUN apt install -y libasan8
 "#
+      )
     }
     Os::Alpine => {
-      r#"
-FROM rust:1.91-alpine AS builder
-
-COPY --from=mimalloc-alpine libmimalloc.so /usr/lib
-ENV LD_PRELOAD=libmimalloc.so
+      image = "rust:alpine";
+      format!(
+        r#"
+FROM {image} AS builder
 
 RUN apk update && apk upgrade
 
 # Add dev dependencies
 RUN apk add clang-dev
 "#
+      )
     }
-  })
-  .to_owned() +
-    &format!(
-      r#"
-# Add the wasm toolchain
-RUN rustup target add wasm32v1-none
-
+  }) + &format!(
+    r#"
 {prelude}
 
 # Add files for build
@@ -210,16 +385,47 @@ ADD AGPL-3.0 /serai
 
 WORKDIR /serai
 
-# Mount the caches and build
-RUN --mount=type=cache,target=/root/.cargo \
-  --mount=type=cache,target=/usr/local/cargo/registry \
-  --mount=type=cache,target=/usr/local/cargo/git \
-  --mount=type=cache,target=/serai/target \
-  mkdir /serai/bin && \
-  cargo build {profile_flag} --features "{features}" -p {package} && \
-  mv /serai/target/{profile}/{package} /serai/bin
+# `RUSTC_BOOTSTRAP` is required due to our use of nightly features
+ENV RUSTC_BOOTSTRAP=1
+
+RUN mkdir /serai/bin
+
+# Mount the caches
+RUN --mount=type=cache,from={image},source=/usr/local/rustup,target=/usr/local/rustup           \
+  --mount=type=cache,from={image},source=/usr/local/cargo,target=/usr/local/cargo               \
+  --mount=type=cache,target=/serai/target                                                       \
+  <<EOF
+  set -e
+
+  # Add `rust-src` so we may compile the standard library with our desired configuration
+  rustup component add rust-src
+
+  # We require LTO, yet `rustc` doesn't understand LTO in `RUSTFLAGS` when a crate _may not_ be
+  # compiled for the purposes of building an executable. To do this, we patch all our dependencies
+  # to solely declare themselves as standard libraries via removing their `crate-type` entries.
+  cargo fetch
+  for path in $(find /usr/local/cargo -name "Cargo.toml"); do
+    file=$(cat $path)
+    if [ "$(grep "^crate-type" $path || true)" = "" ]; then continue; fi
+    start=$(grep -n "^crate-type" $path | head -n1 | cut -f1 -d':')
+    len=$(echo "$file" | tail -n+$start | grep -n "^\]$" | head -n1 | cut -f1 -d':')
+    echo "$file" | head -n$(($start - 1)) > $path
+    echo "$file" | tail -n+$(($start + len)) >> $path
+  done
+
+  # We disable `target-applies-to-host` due to Rust attempting weird `build-std`/sanitizer
+  # configurations for build scripts otherwise.
+  RUSTFLAGS="$RUSTFLAGS {rustflags}"                                                            \
+  cargo build --locked                                                                          \
+    -Z target-applies-to-host --config "target-applies-to-host=false"                           \
+    -Z build-std=panic_abort,compiler_builtins,core,alloc,std,std_detect -Z build-std-features= \
+    {profile_flag} --features "{features}" -p {package}
+
+  # Copy out of the cached `target` directory to a stable location
+  cp /serai/target/{profile}/{package} /serai/bin/
+EOF
 "#
-    )
+  )
 }
 
 pub fn write_dockerfile(path: PathBuf, dockerfile: &str) {
@@ -228,7 +434,12 @@ pub fn write_dockerfile(path: PathBuf, dockerfile: &str) {
       return;
     }
   }
-  fs::File::create(path).unwrap().write_all(dockerfile.as_bytes()).unwrap();
+
+  let mut file = fs::File::create(path).unwrap();
+  file.write_all("# syntax=docker/dockerfile:1\r\n".as_bytes()).unwrap();
+  // We frequently use the legacy `CMD` syntax
+  file.write_all("# check=skip=JSONArgsRecommended;error=true\r\n".as_bytes()).unwrap();
+  file.write_all(dockerfile.as_bytes()).unwrap();
 }
 
 fn orchestration_path(network: Network) -> PathBuf {
@@ -351,9 +562,6 @@ fn dockerfiles(network: Network) {
   bitcoin(&orchestration_path, network);
   ethereum(&orchestration_path, network);
   monero(&orchestration_path, network);
-  if network == Network::Dev {
-    monero_wallet_rpc(&orchestration_path);
-  }
 
   let mut infrastructure_keys = infrastructure_keys(network);
   let coordinator_key = infrastructure_keys.remove("coordinator").unwrap();
@@ -459,7 +667,6 @@ fn start(network: Network, services: HashSet<String>) {
       "bitcoin-processor" => "bitcoin-processor",
       "monero-daemon" => "monero",
       "monero-processor" => "monero-processor",
-      "monero-wallet-rpc" => "monero-wallet-rpc",
       _ => panic!("starting unrecognized service"),
     };
 
@@ -498,11 +705,11 @@ fn start(network: Network, services: HashSet<String>) {
         if !Command::new("docker")
           .current_dir(&repo_path)
           .arg("build")
-          .arg("-f")
-          .arg("orchestration/runtime/Dockerfile")
-          .arg(".")
-          .arg("-t")
+          .arg("--no-cache")
+          .arg("--file=./orchestration/runtime/Containerfile")
+          .arg("--tag")
           .arg(format!("serai-{}-runtime-img", network.label()))
+          .arg(".")
           .spawn()
           .unwrap()
           .wait()
@@ -519,6 +726,8 @@ fn start(network: Network, services: HashSet<String>) {
           Command::new("docker").arg("rm").arg("-f").arg(&container_name).spawn().unwrap().wait();
         let _ = Command::new("docker")
           .arg("run")
+          .arg("--pull")
+          .arg("never")
           .arg("--name")
           .arg(container_name)
           .arg("--volume")
@@ -529,11 +738,9 @@ fn start(network: Network, services: HashSet<String>) {
         // Wait until its built
         let mut ticks = 0;
         while !built() {
-          std::thread::sleep(core::time::Duration::from_secs(60));
+          std::thread::sleep(core::time::Duration::from_mins(1));
           ticks += 1;
-          if ticks > 6 * 60 {
-            panic!("couldn't build the runtime after 6 hours")
-          }
+          assert!(ticks < (24 * 60), "couldn't build the runtime after 24 hours");
         }
       }
     }
@@ -591,11 +798,6 @@ fn start(network: Network, services: HashSet<String>) {
           } else {
             command
           }
-        }
-        "monero-wallet-rpc" => {
-          assert_eq!(network, Network::Dev, "monero-wallet-rpc is only for dev");
-          // Expose the RPC for tests
-          command.arg("-p").arg("18082:18082")
         }
         "coordinator" => {
           if network == Network::Dev {
@@ -655,7 +857,6 @@ Commands:
     - `ethereum-relayer`
     - `monero-daemon`
     - `monero-processor`
-    - `monero-wallet-rpc` (if "dev")
 
     are valid services.
 
@@ -686,10 +887,10 @@ Commands:
       let mut services = HashSet::new();
       for arg in args {
         if arg == "ethereum-processor" {
-          services.insert("ethereum-relayer".to_string());
+          services.insert("ethereum-relayer".to_owned());
         }
         if let Some(ext_network) = arg.strip_suffix("-processor") {
-          services.insert(ext_network.to_string() + "-daemon");
+          services.insert(ext_network.to_owned() + "-daemon");
         }
         services.insert(arg);
       }

@@ -1,13 +1,16 @@
-use std_shims::io::{self, Read};
+use std_shims::{
+  prelude::*,
+  io::{self, Read},
+};
 
 use zeroize::Zeroizing;
 
-use rand_core::{RngCore, CryptoRng, SeedableRng};
+use rand_core::{RngCore, CryptoRng, SeedableRng as _};
 use rand_chacha::ChaCha20Rng;
 
-use transcript::{Transcript, RecommendedTranscript};
+use transcript::{Transcript as _, RecommendedTranscript};
 
-use ciphersuite::group::{ff::Field, Group, GroupEncoding};
+use ciphersuite::group::{ff::Field as _, Group as _, GroupEncoding as _};
 
 use crate::{
   Curve, Participant, ThresholdView, ThresholdKeys, FrostError,

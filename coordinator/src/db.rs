@@ -5,9 +5,10 @@ use serai_db::{create_db, db_channel};
 
 use dkg::Participant;
 
-use serai_client::{
-  primitives::ExternalNetworkId,
-  validator_sets::primitives::{Session, ExternalValidatorSet, KeyPair},
+use serai_client_serai::abi::primitives::{
+  crypto::KeyPair,
+  network_id::ExternalNetworkId,
+  validator_sets::{Session, ExternalValidatorSet},
 };
 
 use serai_cosign::SignedCosign;
@@ -19,7 +20,7 @@ pub(crate) type Db = std::sync::Arc<serai_db::ParityDb>;
 #[cfg(feature = "rocksdb")]
 pub(crate) type Db = serai_db::RocksDB;
 
-#[allow(unused_variables, unreachable_code)]
+#[expect(unreachable_code)]
 fn db(path: &str) -> Db {
   {
     let path: &Path = path.as_ref();

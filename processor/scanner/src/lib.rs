@@ -7,11 +7,13 @@ use std::{io, collections::HashMap};
 
 use group::GroupEncoding;
 
-use borsh::{BorshSerialize, BorshDeserialize};
+use borsh::{BorshSerialize as _, BorshDeserialize as _};
 use serai_db::{Get, DbTxn, Db};
 
-use serai_primitives::{ExternalNetworkId, ExternalCoin, Amount};
-use serai_coins_primitives::OutInstructionWithBalance;
+use serai_primitives::{
+  network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount,
+  instructions::OutInstructionWithBalance,
+};
 
 use messages::substrate::ExecutedBatch;
 use primitives::{task::*, Address, ReceivedOutput, Block, Payment};
@@ -41,7 +43,7 @@ pub(crate) fn sort_outputs<K: GroupEncoding, A: Address, O: ReceivedOutput<K, A>
   a: &O,
   b: &O,
 ) -> core::cmp::Ordering {
-  use core::cmp::{Ordering, Ord};
+  use core::cmp::{Ordering, Ord as _};
   let res = a.id().as_ref().cmp(b.id().as_ref());
   assert!(res != Ordering::Equal, "two outputs within a collection had the same ID");
   res
@@ -157,14 +159,14 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
       // Check the ID of this block is the expected ID
       {
         let expected = crate::index::block_id(getter, number);
-        if block.id() != expected {
-          panic!(
-            "finalized chain reorganized from {} to {} at {}",
-            hex::encode(expected),
-            hex::encode(block.id()),
-            number,
-          );
-        }
+        assert_eq!(
+          block.id(),
+          expected,
+          "finalized chain reorganized from {} to {} at {}",
+          hex::encode(expected),
+          hex::encode(block.id()),
+          number,
+        );
       }
 
       Ok(block)
@@ -365,7 +367,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
 }
 
 /// A representation of a scanner.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub struct Scanner<S: ScannerFeed> {
   substrate_handle: TaskHandle,
   _S: PhantomData<S>,

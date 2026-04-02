@@ -5,7 +5,7 @@ use async_trait::async_trait;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use futures_util::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures_util::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _};
 
 use libp2p::request_response::{
   self, Codec as CodecTrait, Event as GenericEvent, Config, Behaviour, ProtocolSupport,

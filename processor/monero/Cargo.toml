@@ -21,7 +21,6 @@ rand_core = { version = "0.6", default-features = false }
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 zeroize = { version = "1", default-features = false, features = ["std"] }
 
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
@@ -29,10 +28,11 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = fals
 dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std", "ed25519"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
 
-monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "4b7191e3da20e42f839bfd6d706f75364004a4b8", default-features = false, features = ["std", "multisig"] }
-monero-simple-request-rpc = { git = "https://github.com/monero-oxide/monero-oxide", rev = "4b7191e3da20e42f839bfd6d706f75364004a4b8", default-features = false }
+monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "c8be5d3d1287669946a83fbfcb296ce2a8852e47", default-features = false, features = ["std", "multisig"] }
+monero-simple-request-rpc = { git = "https://github.com/monero-oxide/monero-oxide", rev = "c8be5d3d1287669946a83fbfcb296ce2a8852e47", default-features = false }
 
-serai-client = { path = "../../substrate/client", default-features = false, features = ["monero"] }
+serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
+serai-client-monero = { path = "../../substrate/client/monero", default-features = false }
 
 zalloc = { path = "../../common/zalloc" }
 log = { version = "0.4", default-features = false, features = ["std"] }

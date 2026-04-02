@@ -1,8 +1,8 @@
 use core::{marker::PhantomData, future::Future};
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
-use serai_validator_sets_primitives::Session;
+use serai_primitives::validator_sets::Session;
 
 use primitives::task::{DoesNotError, ContinuallyRan};
 use crate::{
@@ -14,7 +14,7 @@ mod db;
 use db::BatchDb;
 
 // This task begins reporting Batches for signing once the pre-requisities are met.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub(crate) struct ReportTask<D: Db, S: ScannerFeed> {
   db: D,
   _S: PhantomData<S>,
@@ -70,12 +70,12 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
           // Because this boolean was expanded, we lose short-circuiting. That's fine
           let handover_batch = last_session != session_to_sign_batch;
           let batch_after_handover_batch =
-            (last_session == session_to_sign_batch) && ((first_batch + 1) == batch.id);
+            (last_session == session_to_sign_batch) && ((first_batch + 1) == batch.id());
           if handover_batch || batch_after_handover_batch {
             let verified_prior_batch = substrate::last_acknowledged_batch::<S>(&txn)
-              // Since `batch.id = 0` in the Session(0)-never-published-a-Batch case, we don't
-              // check `last_acknowledged_batch >= (batch.id - 1)` but instead this
-              .map(|last_acknowledged_batch| (last_acknowledged_batch + 1) >= batch.id)
+              // Since `batch.id() = 0` in the Session(0)-never-published-a-Batch case, we don't
+              // check `last_acknowledged_batch >= (batch.id() - 1)` but instead this
+              .map(|last_acknowledged_batch| (last_acknowledged_batch + 1) >= batch.id())
               // We've never verified any Batches
               .unwrap_or(false);
             if !verified_prior_batch {
@@ -90,7 +90,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
             BatchDb::set_last_session_to_sign_batch_and_first_batch(
               &mut txn,
               session_to_sign_batch,
-              batch.id,
+              batch.id(),
             );
           }
         }

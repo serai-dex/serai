@@ -7,7 +7,7 @@ use serai_task::{DoesNotError, ContinuallyRan};
 use crate::evaluator::CosignedBlocks;
 
 /// How often callers should broadcast the cosigns flagged for rebroadcasting.
-pub const BROADCAST_FREQUENCY: Duration = Duration::from_secs(60);
+pub const BROADCAST_FREQUENCY: Duration = Duration::from_mins(1);
 const SYNCHRONY_EXPECTATION: Duration = Duration::from_secs(10);
 const ACKNOWLEDGEMENT_DELAY: Duration =
   Duration::from_secs(BROADCAST_FREQUENCY.as_secs() + SYNCHRONY_EXPECTATION.as_secs());

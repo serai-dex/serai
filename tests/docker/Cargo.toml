@@ -18,3 +18,4 @@ workspace = true
 
 [dependencies]
 chrono = "0.4"
+dockertest = "0.5"

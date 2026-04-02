@@ -25,7 +25,7 @@ use crate::tests::*;
 // stack tests
 #[tokio::test]
 async fn mint_and_burn_test() {
-  new_test(|ops, handles: Vec<Handles>| async move {
+  new_test(async move |ops, handles: Vec<Handles>| {
     let ops = Arc::new(ops);
     let serai = handles[0].serai(&ops).await;
 
@@ -188,7 +188,7 @@ async fn mint_and_burn_test() {
     let (bitcoin_key_pair, monero_key_pair) = {
       let key_pair = {
         let serai = &serai;
-        move |additional, network| async move {
+        async move |additional, network| {
           // If this is an additional key pair, it should've completed with the first barring
           // misc latency, so only sleep up to 5 minutes
           // If this is the first key pair, wait up to 10 minutes
@@ -280,7 +280,7 @@ async fn mint_and_burn_test() {
       let rpc = handles[0].bitcoin(&ops).await;
       let tx =
         rpc.get_block(&rpc.get_block_hash(1).await.unwrap()).await.unwrap().txdata.swap_remove(0);
-      #[allow(clippy::inconsistent_digit_grouping)]
+      #[expect(clippy::inconsistent_digit_grouping)]
       let mut tx = Transaction {
         version: Version(2),
         lock_time: LockTime::ZERO,
@@ -409,7 +409,7 @@ async fn mint_and_burn_test() {
     {
       let wait_for_batch = {
         let serai = &serai;
-        move |additional, network| async move {
+        async move |additional, network| {
           let halt_at = if additional { 5 * 10 } else { 10 * 10 };
           let print_at = halt_at / 2;
           for i in 0 .. halt_at {
@@ -494,7 +494,7 @@ async fn mint_and_burn_test() {
       let burn = {
         let serai = &serai;
         let serai_pair = &serai_pair;
-        move |nonce, coin, amount, address| async move {
+        async move |nonce, coin, amount, address| {
           let out_instruction = OutInstructionWithBalance {
             balance: Balance { coin, amount: Amount(amount) },
             instruction: OutInstruction { address },
@@ -512,7 +512,7 @@ async fn mint_and_burn_test() {
         }
       };
 
-      #[allow(clippy::inconsistent_digit_grouping)]
+      #[expect(clippy::inconsistent_digit_grouping)]
       burn(
         0,
         ExternalCoin::Bitcoin,
@@ -539,7 +539,7 @@ async fn mint_and_burn_test() {
     // TODO: Verify the burns
 
     // Verify the received Bitcoin TX
-    #[allow(clippy::inconsistent_digit_grouping)]
+    #[expect(clippy::inconsistent_digit_grouping)]
     {
       let rpc = handles[0].bitcoin(&ops).await;
 

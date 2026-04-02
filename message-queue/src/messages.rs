@@ -1,10 +1,11 @@
-use transcript::{Transcript, DigestTranscript};
+use transcript::{Transcript as _, DigestTranscript};
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::GroupEncoding, FromUniformBytes, WrappedGroup, WithPreferredHash};
+#[rustfmt::skip]
+use ciphersuite::{group::GroupEncoding as _, FromUniformBytes as _, WrappedGroup, WithPreferredHash};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::ExternalNetworkId;
+use serai_primitives::network_id::ExternalNetworkId;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Service {

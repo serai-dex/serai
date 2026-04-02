@@ -1,19 +1,17 @@
-use core::ops::Deref;
+use core::ops::Deref as _;
 use std::{sync::Arc, io};
 
 use zeroize::Zeroizing;
 use rand::{RngCore, CryptoRng, rngs::OsRng};
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;
 use schnorr::SchnorrSignature;
 
-use scale::Encode;
-
 use ::tendermint::{
-  ext::{Network, Signer as SignerTrait, SignatureScheme, BlockNumber, RoundNumber},
+  ext::{Network, Signer as _, SignatureScheme, BlockNumber, RoundNumber},
   SignedMessageFor, DataFor, Message, SignedMessage, Data, Evidence,
 };
 
@@ -200,7 +198,7 @@ pub async fn signed_from_data<N: Network>(
     round: RoundNumber(round_number),
     data,
   };
-  let sig = signer.sign(&msg.encode()).await;
+  let sig = signer.sign(&borsh::to_vec(&msg).unwrap()).await;
   SignedMessage { msg, sig }
 }
 
@@ -213,5 +211,5 @@ pub async fn random_evidence_tx<N: Network>(
   let data = Data::Proposal(Some(RoundNumber(0)), b);
   let signer_id = signer.validator_id().await.unwrap();
   let signed = signed_from_data::<N>(signer, signer_id, 0, 0, data).await;
-  TendermintTx::SlashEvidence(Evidence::InvalidValidRound(signed.encode()))
+  TendermintTx::SlashEvidence(Evidence::InvalidValidRound(borsh::to_vec(&signed).unwrap()))
 }

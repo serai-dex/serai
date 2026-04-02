@@ -1,20 +1,20 @@
-use core::{ops::Deref, future::Future};
+use core::{ops::Deref as _, future::Future};
 use std::{boxed::Box, collections::HashMap};
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
-use ciphersuite::{group::GroupEncoding, *};
+use ciphersuite::{group::GroupEncoding as _, *};
 use dkg::{Participant, musig};
 use frost_schnorrkel::{
   frost::{curve::Ristretto, FrostError, sign::*},
   Schnorrkel,
 };
 
-use serai_db::{DbTxn, Db as DbTrait};
+use serai_db::{DbTxn as _, Db as DbTrait};
 
-use serai_client::{
-  primitives::SeraiAddress,
-  validator_sets::primitives::{ExternalValidatorSet, musig_context, set_keys_message},
+use serai_client_serai::abi::primitives::{
+  validator_sets::{ExternalValidatorSet, ValidatorSet},
+  address::SeraiAddress,
 };
 
 use serai_task::{DoesNotError, ContinuallyRan};
@@ -160,7 +160,7 @@ impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
     let (machine, preprocess) = AlgorithmMachine::new(
       schnorrkel(),
       // We use a 1-of-1 Musig here as we don't know who will actually be in this Musig yet
-      musig(musig_context(set.into()), key, &[public_key]).unwrap(),
+      musig(ValidatorSet::from(set).musig_context(), key, &[public_key]).unwrap(),
     )
     .preprocess(&mut OsRng);
     // We take the preprocess so we can use it in a distinct machine with the actual Musig
@@ -260,9 +260,12 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                 })
                 .collect::<Vec<_>>();
 
-              let keys =
-                musig(musig_context(self.set.set.into()), self.key.clone(), &musig_public_keys)
-                  .unwrap();
+              let keys = musig(
+                ValidatorSet::from(self.set.set).musig_context(),
+                self.key.clone(),
+                &musig_public_keys,
+              )
+              .unwrap();
 
               // Rebuild the machine
               let (machine, preprocess_from_cache) =
@@ -296,9 +299,10 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
               };
 
               // Calculate our share
-              let (machine, share) = match handle_frost_error(
-                machine.sign(preprocesses, &set_keys_message(&self.set.set, &key_pair)),
-              ) {
+              let (machine, share) = match handle_frost_error(machine.sign(
+                preprocesses,
+                &ExternalValidatorSet::set_keys_message(&self.set.set, &key_pair),
+              )) {
                 Ok((machine, share)) => (machine, share),
                 // This yields the *musig participant index*
                 Err(participant) => {
@@ -391,7 +395,9 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                     &mut txn,
                     self.set.set,
                     key_pair.clone(),
-                    signature_participants,
+                    signature_participants
+                      .try_into()
+                      .expect("created signature with more participants than allowed"),
                     signature.into(),
                   );
                   txn.commit();

@@ -1,16 +1,19 @@
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+
 use core::{marker::PhantomData, fmt::Debug, future::Future};
 use std::{sync::Arc, io};
 
 use zeroize::Zeroizing;
 
+use borsh::BorshDeserialize as _;
+
 use ciphersuite::*;
 use dalek_ff_group::Ristretto;
 
-use scale::Decode;
 use futures_channel::mpsc::UnboundedReceiver;
-use futures_util::{StreamExt, SinkExt};
+use futures_util::{StreamExt as _, SinkExt as _};
 use ::tendermint::{
-  ext::{BlockNumber, Commit, Block as BlockTrait, Network},
+  ext::{BlockNumber, Commit, Block as _, Network as _},
   SignedMessageFor, SyncedBlock, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
   TendermintMachine, TendermintHandle,
 };
@@ -64,7 +67,6 @@ pub const BLOCK_SIZE_LIMIT: usize = 2_001_000;
 pub(crate) const TENDERMINT_MESSAGE: u8 = 0;
 pub(crate) const TRANSACTION_MESSAGE: u8 = 1;
 
-#[allow(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Transaction<T: TransactionTrait> {
   Tendermint(TendermintTx),
@@ -177,7 +179,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     let block_number = BlockNumber(blockchain.block_number());
 
     let start_time = if let Some(commit) = blockchain.commit(&blockchain.tip()) {
-      Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time
+      Commit::<Validators>::deserialize_reader(&mut commit.as_slice()).unwrap().end_time
     } else {
       start_time
     };
@@ -276,8 +278,8 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     }
 
     let block = TendermintBlock(block.serialize());
-    let mut commit_ref = commit.as_ref();
-    let Ok(commit) = Commit::<Arc<Validators>>::decode(&mut commit_ref) else {
+    let mut commit_ref = commit.as_slice();
+    let Ok(commit) = Commit::<Arc<Validators>>::deserialize_reader(&mut commit_ref) else {
       log::error!("sent an invalidly serialized commit");
       return false;
     };
@@ -327,7 +329,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
 
       Some(&TENDERMINT_MESSAGE) => {
         let Ok(msg) =
-          SignedMessageFor::<TendermintNetwork<D, T, P>>::decode::<&[u8]>(&mut &msg[1 ..])
+          SignedMessageFor::<TendermintNetwork<D, T, P>>::deserialize_reader(&mut &msg[1 ..])
         else {
           log::error!("received invalid tendermint message");
           return false;
@@ -344,7 +346,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
   /// Get a Future which will resolve once the next block has been added.
   pub async fn next_block_notification(
     &self,
-  ) -> impl Send + Sync + core::future::Future<Output = Result<(), impl Send + Sync>> {
+  ) -> impl Send + Sync + Future<Output = Result<(), impl Send + Sync + core::fmt::Debug>> {
     let (tx, rx) = tokio::sync::oneshot::channel();
     self.network.blockchain.write().await.next_block_notifications.push_back(tx);
     rx
@@ -367,15 +369,17 @@ impl<D: Db, T: TransactionTrait> TributaryReader<D, T> {
     Blockchain::<D, T>::commit_from_db(&self.0, self.1, hash)
   }
   pub fn parsed_commit(&self, hash: &[u8; 32]) -> Option<Commit<Validators>> {
-    self.commit(hash).map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap())
+    self
+      .commit(hash)
+      .map(|commit| Commit::<Validators>::deserialize_reader(&mut commit.as_slice()).unwrap())
   }
   pub fn block_after(&self, hash: &[u8; 32]) -> Option<[u8; 32]> {
     Blockchain::<D, T>::block_after(&self.0, self.1, hash)
   }
   pub fn time_of_block(&self, hash: &[u8; 32]) -> Option<u64> {
-    self
-      .commit(hash)
-      .map(|commit| Commit::<Validators>::decode(&mut commit.as_ref()).unwrap().end_time)
+    self.commit(hash).map(|commit| {
+      Commit::<Validators>::deserialize_reader(&mut commit.as_slice()).unwrap().end_time
+    })
   }
 
   pub fn locally_provided_txs_in_block(&self, hash: &[u8; 32], order: &str) -> bool {

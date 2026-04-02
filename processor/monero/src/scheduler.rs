@@ -1,20 +1,18 @@
 use core::future::Future;
 
 use zeroize::Zeroizing;
-use rand_core::SeedableRng;
+use rand_core::SeedableRng as _;
 use rand_chacha::ChaCha20Rng;
 
 use ciphersuite::*;
 use dalek_ff_group::Ed25519;
 
-use monero_wallet::interface::prelude::*;
+use monero_wallet::{ed25519::CompressedPoint, interface::prelude::*};
 
-use serai_client::{
-  primitives::{ExternalCoin, Amount},
-  networks::monero::Address,
-};
+use serai_primitives::{coin::ExternalCoin, balance::Amount};
+use serai_client_monero::Address;
 
-use primitives::{OutputType, ReceivedOutput, Payment};
+use primitives::{OutputType, ReceivedOutput as _, Payment};
 use scanner::{KeyFor, AddressFor, OutputFor, BlockFor};
 use utxo_scheduler::{PlannedTransaction, TransactionPlanner};
 
@@ -92,7 +90,12 @@ async fn signable_transaction(
         match rct_type {
           RctType::ClsagBulletproof => 11,
           RctType::ClsagBulletproofPlus => 16,
-          _ => panic!("selecting decoys for an unsupported RctType"),
+          RctType::AggregateMlsagBorromean |
+          RctType::MlsagBorromean |
+          RctType::MlsagBulletproofs |
+          RctType::MlsagBulletproofsCompactAmount => {
+            panic!("selecting decoys for an unsupported RctType")
+          }
         },
         reference_block.0.block.number() + 1,
         input.0.clone(),
@@ -118,8 +121,8 @@ async fn signable_transaction(
       MoneroAddress::new(
         Network::Mainnet,
         AddressType::Legacy,
-        <Ed25519 as WrappedGroup>::generator().0,
-        <Ed25519 as WrappedGroup>::generator().0,
+        CompressedPoint::G.decompress().unwrap(),
+        CompressedPoint::G.decompress().unwrap(),
       ),
       0,
     ));
@@ -185,7 +188,12 @@ impl TransactionPlanner<Rpc, ()> for Planner {
         Err(SendError::UnsupportedRctType) => {
           panic!("tried to use an RctType monero-wallet doesn't support")
         }
-        Err(SendError::NoInputs | SendError::NoOutputs | SendError::TooManyOutputs) => {
+        Err(
+          SendError::NoInputs |
+          SendError::NoOutputs |
+          SendError::InvalidInputs |
+          SendError::TooManyOutputs,
+        ) => {
           panic!("malformed plan passed to calculate_fee")
         }
         Err(SendError::InvalidDecoyQuantity) => panic!("selected the wrong amount of decoys"),
@@ -244,7 +252,12 @@ impl TransactionPlanner<Rpc, ()> for Planner {
         Err(SendError::UnsupportedRctType) => {
           panic!("tried to use an RctType monero-wallet doesn't support")
         }
-        Err(SendError::NoInputs | SendError::NoOutputs | SendError::TooManyOutputs) => {
+        Err(
+          SendError::NoInputs |
+          SendError::NoOutputs |
+          SendError::InvalidInputs |
+          SendError::TooManyOutputs,
+        ) => {
           panic!("malformed plan passed to calculate_fee")
         }
         Err(SendError::InvalidDecoyQuantity) => panic!("selected the wrong amount of decoys"),

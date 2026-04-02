@@ -1,21 +1,20 @@
-use core::{ops::Deref, fmt::Debug};
+use core::{ops::Deref as _, fmt::Debug};
 use std::io;
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
-use blake2::{digest::typenum::U32, Digest, Blake2b};
+use blake2::{digest::typenum::U32, Digest as _, Blake2b};
 use ciphersuite::{
-  group::{Group, GroupEncoding},
+  group::{Group as _, GroupEncoding as _},
   *,
 };
 use dalek_ff_group::Ristretto;
 use schnorr::SchnorrSignature;
 
-use scale::Encode;
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_client::{primitives::SeraiAddress, validator_sets::primitives::MAX_KEY_SHARES_PER_SET};
+use serai_primitives::{BlockHash, validator_sets::KeyShares, address::SeraiAddress};
 
 use messages::sign::VariantSignId;
 
@@ -29,7 +28,7 @@ use tributary_sdk::{
 use crate::db::Topic;
 
 /// The round this data is for, within a signing protocol.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum SigningProtocolRound {
   /// A preprocess.
   Preprocess,
@@ -38,7 +37,7 @@ pub enum SigningProtocolRound {
 }
 
 impl SigningProtocolRound {
-  fn nonce(&self) -> u32 {
+  fn nonce(self) -> u32 {
     match self {
       SigningProtocolRound::Preprocess => 0,
       SigningProtocolRound::Share => 1,
@@ -138,7 +137,7 @@ pub enum Transaction {
   /// be the one selected to be cosigned.
   Cosign {
     /// The hash of the Substrate block to cosign
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
   },
 
   /// Note an intended-to-be-cosigned Substrate block as cosigned
@@ -176,7 +175,7 @@ pub enum Transaction {
   /// cosigning the block in question, it'd be safe to provide this and move on to the next cosign.
   Cosigned {
     /// The hash of the Substrate block which was cosigned
-    substrate_block_hash: [u8; 32],
+    substrate_block_hash: BlockHash,
   },
 
   /// Acknowledge a Substrate block
@@ -187,7 +186,7 @@ pub enum Transaction {
   /// resulting from its handling.
   SubstrateBlock {
     /// The hash of the Substrate block
-    hash: [u8; 32],
+    hash: BlockHash,
   },
 
   /// Acknowledge a Batch
@@ -242,19 +241,20 @@ impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind {
     match self {
       Transaction::RemoveParticipant { participant, signed } => TransactionKind::Signed(
-        (b"RemoveParticipant", participant).encode(),
+        borsh::to_vec(&(b"RemoveParticipant".as_slice(), participant)).unwrap(),
         signed.to_tributary_signed(0),
       ),
 
-      Transaction::DkgParticipation { signed, .. } => {
-        TransactionKind::Signed(b"DkgParticipation".encode(), signed.to_tributary_signed(0))
-      }
+      Transaction::DkgParticipation { signed, .. } => TransactionKind::Signed(
+        borsh::to_vec(b"DkgParticipation".as_slice()).unwrap(),
+        signed.to_tributary_signed(0),
+      ),
       Transaction::DkgConfirmationPreprocess { attempt, signed, .. } => TransactionKind::Signed(
-        (b"DkgConfirmation", attempt).encode(),
+        borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
         signed.to_tributary_signed(0),
       ),
       Transaction::DkgConfirmationShare { attempt, signed, .. } => TransactionKind::Signed(
-        (b"DkgConfirmation", attempt).encode(),
+        borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
         signed.to_tributary_signed(1),
       ),
 
@@ -264,13 +264,14 @@ impl TransactionTrait for Transaction {
       Transaction::Batch { .. } => TransactionKind::Provided("Batch"),
 
       Transaction::Sign { id, attempt, round, signed, .. } => TransactionKind::Signed(
-        (b"Sign", id, attempt).encode(),
+        borsh::to_vec(&(b"Sign".as_slice(), id, attempt)).unwrap(),
         signed.to_tributary_signed(round.nonce()),
       ),
 
-      Transaction::SlashReport { signed, .. } => {
-        TransactionKind::Signed(b"SlashReport".encode(), signed.to_tributary_signed(0))
-      }
+      Transaction::SlashReport { signed, .. } => TransactionKind::Signed(
+        borsh::to_vec(b"SlashReport".as_slice()).unwrap(),
+        signed.to_tributary_signed(0),
+      ),
     }
   }
 
@@ -285,7 +286,7 @@ impl TransactionTrait for Transaction {
 
   // This is a stateless verification which we use to enforce some size limits.
   fn verify(&self) -> Result<(), TransactionError> {
-    #[allow(clippy::match_same_arms)]
+    #[expect(clippy::match_same_arms)]
     match self {
       // Fixed-length TX
       Transaction::RemoveParticipant { .. } => {}
@@ -302,15 +303,15 @@ impl TransactionTrait for Transaction {
       Transaction::Batch { .. } => {}
 
       Transaction::Sign { data, .. } => {
-        if data.len() > usize::from(MAX_KEY_SHARES_PER_SET) {
-          Err(TransactionError::InvalidContent)?
+        if data.len() > usize::from(KeyShares::MAX_PER_SET) {
+          Err(TransactionError::InvalidContent)?;
         }
         // TODO: MAX_SIGN_LEN
       }
 
       Transaction::SlashReport { slash_points, .. } => {
-        if slash_points.len() > usize::from(MAX_KEY_SHARES_PER_SET) {
-          Err(TransactionError::InvalidContent)?
+        if slash_points.len() > usize::from(KeyShares::MAX_PER_SET) {
+          Err(TransactionError::InvalidContent)?;
         }
       }
     };
@@ -321,7 +322,7 @@ impl TransactionTrait for Transaction {
 impl Transaction {
   /// The topic in the database for this transaction.
   pub fn topic(&self) -> Option<Topic> {
-    #[allow(clippy::match_same_arms)] // This doesn't make semantic sense here
+    #[expect(clippy::match_same_arms)] // This doesn't make semantic sense here
     match self {
       Transaction::RemoveParticipant { participant, .. } => {
         Some(Topic::RemoveParticipant { participant: *participant })
@@ -359,7 +360,7 @@ impl Transaction {
     key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   ) {
     fn signed(tx: &mut Transaction) -> &mut Signed {
-      #[allow(clippy::match_same_arms)] // This doesn't make semantic sense here
+      #[expect(clippy::match_same_arms)] // This doesn't make semantic sense here
       match tx {
         Transaction::RemoveParticipant { ref mut signed, .. } |
         Transaction::DkgParticipation { ref mut signed, .. } |

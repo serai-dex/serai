@@ -4,11 +4,11 @@
 
 use ::borsh::{BorshSerialize, BorshDeserialize};
 
-use group::ff::PrimeField;
+use group::ff::PrimeField as _;
 use k256::Scalar;
 
 use alloy_primitives::Signature;
-use alloy_consensus::{SignableTransaction, Signed, TxLegacy};
+use alloy_consensus::{SignableTransaction as _, Signed, TxLegacy};
 
 mod borsh;
 pub use borsh::*;
@@ -80,7 +80,7 @@ fn test_deterministically_sign() {
   let tx = TxLegacy { chain_id: None, ..Default::default() };
   let signed = deterministically_sign(tx.clone());
 
-  assert!(signed.recover_signer().is_ok());
+  signed.recover_signer().unwrap();
   let one = alloy_primitives::U256::from(1u64);
   assert_eq!(signed.signature().r(), one);
   assert_eq!(signed.signature().s(), one);

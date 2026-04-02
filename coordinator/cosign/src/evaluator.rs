@@ -85,7 +85,7 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     let should_request_cosigns = |last_request_for_cosigns: &mut Instant| {
-      const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(60);
+      const REQUEST_COSIGNS_SPACING: Duration = Duration::from_mins(1);
       if Instant::now() < (*last_request_for_cosigns + REQUEST_COSIGNS_SPACING) {
         return false;
       }
@@ -121,7 +121,7 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                 // Since have this cosign, add the set's weight to the weight which has cosigned
                 weight_cosigned +=
                   global_session_info.stakes.get(&set.network).ok_or_else(|| {
-                    "ValidatorSet in global session yet didn't have its stake".to_string()
+                    "ValidatorSet in global session yet didn't have its stake".to_owned()
                   })?;
               }
             }
@@ -175,7 +175,7 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
                 if cosign.cosign.block_number >= block_number {
                   weight_cosigned +=
                     global_session_info.stakes.get(&set.network).ok_or_else(|| {
-                      "ValidatorSet in global session yet didn't have its stake".to_string()
+                      "ValidatorSet in global session yet didn't have its stake".to_owned()
                     })?;
                 }
 

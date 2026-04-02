@@ -1,12 +1,13 @@
-use core::{str::FromStr, fmt::Debug};
-use std::{io::Read, collections::HashSet};
+use core::{str::FromStr as _, fmt::Debug};
+use std::{io::Read as _, collections::HashSet};
+use std_shims::prelude::*;
 
 use thiserror::Error;
 
 use simple_request::{hyper, Request, TokioClient as Client};
 
 use bitcoin::{
-  hashes::{Hash, hex::FromHex},
+  hashes::{Hash as _, hex::FromHex},
   consensus::encode,
   Txid, Transaction, BlockHash, Block,
 };
@@ -14,6 +15,7 @@ use bitcoin::{
 #[derive(Clone, Debug)]
 pub struct Error {
   code: isize,
+  #[expect(dead_code)] // We only want the `Debug` implementation for this
   message: String,
 }
 
@@ -87,7 +89,7 @@ impl Rpc {
     }
     if !expected_methods.is_empty() {
       Err(RpcError::MissingMethods(expected_methods))?;
-    };
+    }
 
     Ok(rpc)
   }
@@ -155,6 +157,7 @@ impl Rpc {
         Err(RpcError::RequestError(Error { code, message }))
       }
       // `invalidateblock` yields this edge case
+      // TODO: https://github.com/core-json/core-json/issues/18
       RpcResponse { result: None, error: None } => {
         if core::any::TypeId::of::<Response>() == core::any::TypeId::of::<()>() {
           Ok(Default::default())

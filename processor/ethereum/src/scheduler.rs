@@ -2,10 +2,8 @@ use std::collections::HashMap;
 
 use alloy_core::primitives::U256;
 
-use serai_client::{
-  primitives::{ExternalNetworkId, ExternalCoin, ExternalBalance},
-  networks::ethereum::Address,
-};
+use serai_primitives::{network_id::ExternalNetworkId, coin::ExternalCoin, balance::ExternalBalance};
+use serai_client_ethereum::Address;
 
 use serai_db::Db;
 
@@ -22,7 +20,7 @@ fn coin_to_ethereum_coin(coin: ExternalCoin) -> EthereumCoin {
   match coin {
     ExternalCoin::Ether => EthereumCoin::Ether,
     ExternalCoin::Dai => EthereumCoin::Erc20(DAI),
-    _ => unreachable!(),
+    ExternalCoin::Bitcoin | ExternalCoin::Monero => unreachable!(),
   }
 }
 
@@ -87,7 +85,7 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
         ExternalCoin::Dai => {
           U256::try_from(30u64).unwrap() * alloy_core::primitives::utils::Unit::TWEI.wei()
         }
-        _ => unreachable!(),
+        ExternalCoin::Bitcoin | ExternalCoin::Monero => unreachable!(),
       };
 
       // The gas required to perform any interaction with the Router.

@@ -1,15 +1,15 @@
 use core::marker::PhantomData;
-use std::io::{self, Read, Write};
+use std::io::{self, Read as _, Write as _};
 
 use group::GroupEncoding;
 
-use scale::{Encode, Decode, IoReader};
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db, db_channel};
 
-use serai_coins_primitives::OutInstructionWithBalance;
-use serai_validator_sets_primitives::Session;
-use serai_in_instructions_primitives::{InInstructionWithBalance, Batch};
+use serai_primitives::{
+  validator_sets::Session,
+  instructions::{InInstructionWithBalance, Batch, OutInstructionWithBalance},
+};
 
 use primitives::{EncodableG, ReceivedOutput};
 
@@ -56,7 +56,7 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
       (opt[0] == 1).then(|| AddressFor::<S>::deserialize_reader(reader)).transpose()?
     };
     let in_instruction =
-      InInstructionWithBalance::decode(&mut IoReader(reader)).map_err(io::Error::other)?;
+      InInstructionWithBalance::deserialize_reader(reader).map_err(io::Error::other)?;
     Ok(Self { output, return_address, in_instruction })
   }
   pub(crate) fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
@@ -67,7 +67,7 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
     } else {
       writer.write_all(&[0])?;
     }
-    self.in_instruction.encode_to(writer);
+    self.in_instruction.serialize(writer)?;
     Ok(())
   }
 }
@@ -76,10 +76,10 @@ create_db!(
   ScannerGlobal {
     StartBlock: () -> u64,
 
-    QueuedKey: <K: Encode>(key: K) -> (),
+    QueuedKey: <K: BorshSerialize>(key: K) -> (),
 
     ActiveKeys: <K: Borshy>() -> Vec<SeraiKeyDbEntry<K>>,
-    RetireAt: <K: Encode>(key: K) -> u64,
+    RetireAt: <K: BorshSerialize>(key: K) -> u64,
 
     // Highest acknowledged block
     HighestAcknowledgedBlock: () -> u64,
@@ -114,7 +114,7 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     StartBlock::get(getter)
   }
   pub(crate) fn set_start_block(txn: &mut impl DbTxn, block: u64) {
-    StartBlock::set(txn, &block)
+    StartBlock::set(txn, &block);
   }
 
   fn tidy_keys(txn: &mut impl DbTxn) {
@@ -294,7 +294,7 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     assert!((opt[0] == 0) || (opt[0] == 1));
 
     let address = (opt[0] == 1).then(|| AddressFor::<S>::deserialize_reader(&mut buf).unwrap());
-    Some((address, InInstructionWithBalance::decode(&mut IoReader(buf)).unwrap()))
+    Some((address, InInstructionWithBalance::deserialize_reader(&mut buf).unwrap()))
   }
 }
 
@@ -357,7 +357,7 @@ impl<S: ScannerFeed> ScanToEventualityDb<S> {
       } else {
         buf.write_all(&[0]).unwrap();
       }
-      forward.in_instruction.encode_to(&mut buf);
+      forward.in_instruction.serialize(&mut buf).unwrap();
 
       SerializedForwardedOutput::set(txn, forward.output.id().as_ref(), &buf);
     }
@@ -454,7 +454,7 @@ impl<S: ScannerFeed> Returnable<S> {
       (opt[0] == 1).then(|| AddressFor::<S>::deserialize_reader(reader)).transpose()?;
 
     let in_instruction =
-      InInstructionWithBalance::decode(&mut IoReader(reader)).map_err(io::Error::other)?;
+      InInstructionWithBalance::deserialize_reader(reader).map_err(io::Error::other)?;
     Ok(Returnable { return_address, in_instruction })
   }
   fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
@@ -464,7 +464,7 @@ impl<S: ScannerFeed> Returnable<S> {
     } else {
       writer.write_all(&[0])?;
     }
-    self.in_instruction.encode_to(writer);
+    self.in_instruction.serialize(writer)?;
     Ok(())
   }
 }
@@ -494,7 +494,7 @@ impl<S: ScannerFeed> ScanToBatchDb<S> {
     block_number: u64,
     data: &InInstructionData<S>,
   ) {
-    let mut buf = data.session_to_sign_batch.encode();
+    let mut buf = borsh::to_vec(&data.session_to_sign_batch).unwrap();
     buf.extend(data.external_key_for_session_to_sign_batch.to_bytes().as_ref());
     for returnable_in_instruction in &data.returnable_in_instructions {
       returnable_in_instruction.write(&mut buf).unwrap();
@@ -517,7 +517,7 @@ impl<S: ScannerFeed> ScanToBatchDb<S> {
     );
     let mut buf = data.returnable_in_instructions.as_slice();
 
-    let session_to_sign_batch = Session::decode(&mut buf).unwrap();
+    let session_to_sign_batch = Session::deserialize_reader(&mut buf).unwrap();
     let external_key_for_session_to_sign_batch = {
       let mut external_key_for_session_to_sign_batch =
         <KeyFor<S> as GroupEncoding>::Repr::default();
@@ -595,7 +595,7 @@ impl SubstrateToEventualityDb {
 }
 
 mod _public_db {
-  use serai_in_instructions_primitives::Batch;
+  use serai_primitives::instructions::Batch;
 
   use serai_db::{Get, DbTxn, create_db, db_channel};
 

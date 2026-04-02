@@ -1,9 +1,13 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 #![deny(missing_docs)]
 
 use core::cmp::Ordering;
+
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 
 use scale::{EncodeLike, FullCodec};
 use frame_support::storage::*;
@@ -116,11 +120,12 @@ fn update_median<
       next_value_first_pos <= target_median_pos
     } {
       median_pos = next_value_first_pos;
+      #[cfg_attr(debug_assertions, allow(clippy::used_underscore_binding))]
       let (_key_prefix, next_value_encoding, next_value_instances) = iter
         .next()
         .expect("stored median was before the actual median yet no values were after it");
       debug_assert_eq!(key_prefix.encode(), _key_prefix.encode(), "{KEY_PREFIX_ASSERT}");
-      debug_assert!(median.lexicographic_encode() != next_value_encoding, "{AFTER_ASSERT}",);
+      debug_assert!(median.lexicographic_encode() != next_value_encoding, "{AFTER_ASSERT}");
       median = MedianValue::lexicographic_decode(next_value_encoding);
       median_instances = next_value_instances;
     }
@@ -139,6 +144,7 @@ fn update_median<
     };
 
     while median_pos > target_median_pos {
+      #[cfg_attr(debug_assertions, allow(clippy::used_underscore_binding))]
       let (_key_prefix, prior_value_encoding) = iter
         .next()
         .expect("stored median was before the actual median yet no values were after it");
@@ -244,6 +250,7 @@ impl<
         }
 
         let current_median_key = Self::Store::hashed_key_for(key_prefix, &current_median_encoding);
+        #[cfg_attr(debug_assertions, allow(clippy::used_underscore_binding))]
         let (_key_prefix, next_encoding) = Self::Store::iter_keys_from(current_median_key)
           .next()
           .expect("last value in storage yet looking for value after it");
@@ -349,7 +356,7 @@ impl<
           Self::Position::remove(key_prefix);
           Self::Median::remove(key_prefix);
         } else {
-          let mut existing_median_pos =
+          let existing_median_pos =
             Self::Position::get(key_prefix).expect("values within median yet no current position");
 
           let new_median_encoding = if existing_median_pos >= new_length {
@@ -370,6 +377,7 @@ impl<
           } else {
             let existing_median_key =
               Self::Store::hashed_key_for(key_prefix, existing_median.lexicographic_encode());
+            #[cfg_attr(debug_assertions, allow(clippy::used_underscore_binding))]
             let (_key_prefix, next_value_encoding) =
               Self::Store::iter_keys_from(existing_median_key)
                 .next()

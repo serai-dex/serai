@@ -4,9 +4,9 @@
 
 use core::{fmt::Debug, future::Future};
 
-use serai_primitives::Amount;
+use serai_primitives::balance::Amount;
 
-use primitives::{ReceivedOutput, Payment};
+use primitives::{ReceivedOutput as _, Payment};
 use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor};
 use scheduler_primitives::*;
 
@@ -102,7 +102,7 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
   ///
   /// Returns `None` if the fee exceeded the inputs, or `Some` otherwise.
   // TODO: Enum for Change of None, Some, Mandatory
-  #[allow(clippy::type_complexity)]
+  #[expect(clippy::type_complexity)]
   fn plan_transaction_with_fee_amortization(
     &self,
     operating_costs: &mut u64,

@@ -1,12 +1,14 @@
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+
 use core::future::Future;
 use std::{
   sync::Arc,
   time::{UNIX_EPOCH, SystemTime, Duration},
 };
 
-use parity_scale_codec::{Encode, Decode};
+use borsh::{BorshSerialize, BorshDeserialize};
 
-use futures_util::sink::SinkExt;
+use futures_util::sink::SinkExt as _;
 use tokio::{sync::RwLock, time::sleep};
 
 use serai_db::MemDb;
@@ -89,7 +91,7 @@ impl Weights for TestWeights {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 struct TestBlock {
   id: TestBlockId,
   valid: Result<(), BlockError>,
@@ -103,7 +105,7 @@ impl Block for TestBlock {
   }
 }
 
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 struct TestNetwork(
   u16,
   Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>, SyncedBlockResultReceiver)>>>,
@@ -152,7 +154,7 @@ impl Network for TestNetwork {
     commit: Commit<TestSignatureScheme>,
   ) -> Option<TestBlock> {
     println!("Adding {:?}", &block);
-    assert!(block.valid.is_ok());
+    block.valid.unwrap();
     assert!(self.verify_commit(block.id(), &commit));
     Some(TestBlock { id: (u32::from_le_bytes(block.id) + 1).to_le_bytes(), valid: Ok(()) })
   }

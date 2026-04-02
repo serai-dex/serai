@@ -1,7 +1,8 @@
+use core::fmt::Write as _;
 use std::path::Path;
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{group::GroupEncoding, WrappedGroup};
+use ciphersuite::{group::GroupEncoding as _, WrappedGroup};
 
 use crate::{Network, Os, mimalloc, os, build_serai_service, write_dockerfile};
 
@@ -13,7 +14,7 @@ pub fn message_queue(
   ethereum_key: <Ristretto as WrappedGroup>::G,
   monero_key: <Ristretto as WrappedGroup>::G,
 ) {
-  let setup = mimalloc(Os::Alpine).to_string() +
+  let setup = mimalloc(Os::Alpine, network.release()) +
     &build_serai_service("", Os::Alpine, network.release(), network.db(), "serai-message-queue");
 
   let env_vars = [
@@ -21,12 +22,12 @@ pub fn message_queue(
     ("BITCOIN_KEY", hex::encode(bitcoin_key.to_bytes())),
     ("ETHEREUM_KEY", hex::encode(ethereum_key.to_bytes())),
     ("MONERO_KEY", hex::encode(monero_key.to_bytes())),
-    ("DB_PATH", "/volume/message-queue-db".to_string()),
-    ("RUST_LOG", "info,serai_message_queue=trace".to_string()),
+    ("DB_PATH", "/volume/message-queue-db".to_owned()),
+    ("RUST_LOG", "info,serai_message_queue=trace".to_owned()),
   ];
   let mut env_vars_str = String::new();
   for (env_var, value) in env_vars {
-    env_vars_str += &format!(r#"{env_var}=${{{env_var}:="{value}"}} "#);
+    write!(&mut env_vars_str, r#"{env_var}=${{{env_var}:="{value}"}} "#).unwrap();
   }
 
   let run_message_queue = format!(
@@ -41,7 +42,7 @@ CMD {env_vars_str} serai-message-queue
 "#
   );
 
-  let run = os(Os::Alpine, "", "messagequeue") + &run_message_queue;
+  let run = os(Os::Alpine, network.release(), "", "messagequeue") + &run_message_queue;
   let res = setup + &run;
 
   let mut message_queue_path = orchestration_path.to_path_buf();

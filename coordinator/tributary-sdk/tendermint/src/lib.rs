@@ -1,4 +1,4 @@
-#![expect(clippy::cast_possible_truncation)]
+#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::fmt::Debug;
 
@@ -8,16 +8,16 @@ use std::{
   collections::{VecDeque, HashMap},
 };
 
-use parity_scale_codec::{Encode, Decode, IoReader};
+use borsh::{BorshSerialize, BorshDeserialize};
 
 use futures_channel::mpsc;
 use futures_util::{
-  FutureExt, StreamExt, SinkExt,
+  FutureExt as _, StreamExt as _, SinkExt as _,
   future::{self, Fuse},
 };
 use patchable_async_sleep::sleep;
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get as _, DbTxn as _, Db as _};
 
 pub mod time;
 use time::{sys_time, CanonicalInstant};
@@ -43,14 +43,14 @@ pub fn commit_msg(end_time: u64, id: &[u8]) -> Vec<u8> {
   [&end_time.to_le_bytes(), id].concat()
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Encode, Decode)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Step {
   Propose,
   Prevote,
   Precommit,
 }
 
-#[derive(Clone, Eq, Debug, Encode, Decode)]
+#[derive(Clone, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Data<B: Block, S: Signature> {
   Proposal(Option<RoundNumber>, B),
   Prevote(Option<B::Id>),
@@ -92,7 +92,7 @@ impl<B: Block, S: Signature> Data<B, S> {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Message<V: ValidatorId, B: Block, S: Signature> {
   pub sender: V,
   pub block: BlockNumber,
@@ -102,7 +102,7 @@ pub struct Message<V: ValidatorId, B: Block, S: Signature> {
 }
 
 /// A signed Tendermint consensus message to be broadcast to the other validators.
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct SignedMessage<V: ValidatorId, B: Block, S: Signature> {
   pub msg: Message<V, B, S>,
   pub sig: S,
@@ -119,18 +119,18 @@ impl<V: ValidatorId, B: Block, S: Signature> SignedMessage<V, B, S> {
     &self,
     signer: &Scheme,
   ) -> bool {
-    signer.verify(self.msg.sender, &self.msg.encode(), &self.sig)
+    signer.verify(self.msg.sender, &borsh::to_vec(&self.msg).unwrap(), &self.sig)
   }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum SlashReason {
   FailToPropose,
   InvalidBlock,
   InvalidProposer,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug, Encode, Decode)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Evidence {
   ConflictingMessages(Vec<u8>, Vec<u8>),
   InvalidPrecommit(Vec<u8>),
@@ -161,7 +161,7 @@ pub type SignedMessageFor<N> = SignedMessage<
 >;
 
 pub fn decode_signed_message<N: Network>(mut data: &[u8]) -> Option<SignedMessageFor<N>> {
-  SignedMessageFor::<N>::decode(&mut data).ok()
+  SignedMessageFor::<N>::deserialize_reader(&mut data).ok()
 }
 
 fn decode_and_verify_signed_message<N: Network>(
@@ -206,7 +206,7 @@ pub fn verify_tendermint_evidence<N: Network>(
       };
       // TODO: We need to be passed in the genesis time to handle this edge case
       if msg.block.0 == 0 {
-        Err(TendermintError::InvalidEvidence)?
+        Err(TendermintError::InvalidEvidence)?;
         // todo!("invalid precommit signature on first block")
       }
 
@@ -229,7 +229,7 @@ pub fn verify_tendermint_evidence<N: Network>(
 
       // verify that the commit was actually invalid
       if schema.verify(msg.sender, &commit_msg(last_end_time.canonical(), id.as_ref()), sig) {
-        Err(TendermintError::InvalidEvidence)?
+        Err(TendermintError::InvalidEvidence)?;
       }
     }
     Evidence::InvalidValidRound(msg) => {
@@ -237,7 +237,7 @@ pub fn verify_tendermint_evidence<N: Network>(
 
       let Data::Proposal(Some(vr), _) = &msg.data else { Err(TendermintError::InvalidEvidence)? };
       if vr.0 < msg.round.0 {
-        Err(TendermintError::InvalidEvidence)?
+        Err(TendermintError::InvalidEvidence)?;
       }
     }
   }
@@ -252,6 +252,10 @@ pub enum SlashEvent {
 
 // Struct for if various upon handlers have been triggered to ensure they don't trigger multiple
 // times.
+//
+// While these `bool`s are awkward, they can be independently triggered, meaning our alternative
+// would simply be `enum Invoked { NotYet, Invoked }`.
+#[expect(clippy::struct_excessive_bools)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 struct Upons {
   upon_prevotes: bool,
@@ -341,7 +345,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       target: "tendermint",
       "proposer for block {}, round {round:?} was {} (me: {res})",
       self.block.number.0,
-      hex::encode(proposer.encode()),
+      hex::encode(borsh::to_vec(&proposer).unwrap()),
     );
     res
   }
@@ -408,9 +412,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
     }
     // If this commit is for a prior round, find it
     while self.block.end_time[&round].canonical() > commit.end_time {
-      if round.0 == 0 {
-        panic!("commit isn't for this machine's next block");
-      }
+      assert!(round.0 != 0, "commit isn't for this machine's next block");
       round.0 -= 1;
     }
     debug_assert_eq!(self.block.end_time[&round].canonical(), commit.end_time);
@@ -422,7 +424,11 @@ impl<N: Network + 'static> TendermintMachine<N> {
     // TODO: If the new slash event has evidence, emit to prevent a low-importance slash from
     // cancelling emission of high-importance slashes
     if !self.block.slashes.contains(&validator) {
-      log::info!(target: "tendermint", "Slashing validator {}", hex::encode(validator.encode()));
+      log::info!(
+        target: "tendermint",
+        "Slashing validator {}",
+        hex::encode(borsh::to_vec(&validator).unwrap()),
+      );
       self.block.slashes.insert(validator);
       self.network.slash(validator, slash_event).await;
     }
@@ -444,7 +450,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
     };
 
     // There either needs to not be a locked value or it must be equivalent
-    #[allow(clippy::map_unwrap_or)]
     if self
       .block
       .locked
@@ -479,7 +484,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
     // We don't check valid round < current round as the `message` function does
 
     // If locked is None, lockedRoundp is -1 and less than valid round
-    #[allow(clippy::map_unwrap_or)]
     let locked_clause_1 = self
       .block
       .locked
@@ -487,7 +491,6 @@ impl<N: Network + 'static> TendermintMachine<N> {
       .map(|(locked_round, _block)| locked_round.0 <= proposal_valid_round.0)
       .unwrap_or(true);
     // The second clause is if the locked values are equivalent. If no value is locked, they aren't
-    #[allow(clippy::map_unwrap_or)]
     let locked_clause_2 = self
       .block
       .locked
@@ -672,7 +675,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           self
             .slash(
               msg.sender,
-              SlashEvent::WithEvidence(Evidence::InvalidPrecommit(signed.encode())),
+              SlashEvent::WithEvidence(Evidence::InvalidPrecommit(borsh::to_vec(&signed).unwrap())),
             )
             .await;
           Err(TendermintError::Malicious)?;
@@ -702,7 +705,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         .slash(msg.sender, SlashEvent::Id(SlashReason::InvalidProposer, msg.block.0, msg.round.0))
         .await;
       Err(TendermintError::Malicious)?;
-    };
+    }
 
     // If this is a proposal, verify the block
     // If the block is invalid, drop the message, letting the timeout cover it
@@ -729,7 +732,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
             .await;
           Err(TendermintError::Malicious)?;
         }
-      };
+      }
     }
 
     // If this is a proposal, verify the valid round isn't fundamentally invalid
@@ -743,7 +746,10 @@ impl<N: Network + 'static> TendermintMachine<N> {
           self.broadcast(Data::Prevote(None));
         }
         self
-          .slash(msg.sender, SlashEvent::WithEvidence(Evidence::InvalidValidRound(msg.encode())))
+          .slash(
+            msg.sender,
+            SlashEvent::WithEvidence(Evidence::InvalidValidRound(borsh::to_vec(&msg).unwrap())),
+          )
           .await;
         Err(TendermintError::Malicious)?;
       }
@@ -846,7 +852,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   /// Create a new Tendermint machine, from the specified point, with the specified block as the
   /// one to propose next. This will return a channel to send messages from the gossip layer and
   /// the machine itself. The machine should have `run` called from an asynchronous task.
-  #[allow(clippy::new_ret_no_self)]
+  #[expect(clippy::new_ret_no_self)]
   pub async fn new(
     db: N::Db,
     network: N,
@@ -1010,13 +1016,13 @@ impl<N: Network + 'static> TendermintMachine<N> {
             Step::Prevote => {
               // Only run if it's still the step in question
               if self.block.round().step == step {
-                self.broadcast(Data::Precommit(None))
+                self.broadcast(Data::Precommit(None));
               }
             },
             Step::Precommit => {
               self.round(RoundNumber(self.block.round().number.0 + 1), None);
             }
-          };
+          }
 
           // Execute the upons now that the state has changed
           self.all_any_round_upons(self.block.round().number).await;
@@ -1034,7 +1040,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
           while !messages.is_empty() {
             self.network.broadcast(
-              SignedMessageFor::<N>::decode(&mut IoReader(&mut messages))
+              SignedMessageFor::<N>::deserialize_reader(&mut messages)
                 .expect("saved invalid message to DB")
             ).await;
           }
@@ -1059,7 +1065,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       } {
         if our_message {
           assert!(sig.is_none());
-          sig = Some(self.signer.sign(&msg.encode()).await);
+          sig = Some(self.signer.sign(&borsh::to_vec(&msg).unwrap()).await);
         }
         let sig = sig.unwrap();
 
@@ -1068,9 +1074,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
         // If this is our message, and we hit an invariant, we could be slashed.
         // We only broadcast our message after running it ourselves, to ensure it doesn't error, to
         // ensure we don't get slashed on invariants.
-        if res.is_err() && our_message {
-          panic!("honest node (ourselves) had invalid behavior");
-        }
+        assert!(!(res.is_err() && our_message), "honest node (ourselves) had invalid behavior");
 
         // Save this message to a linear tape of all our messages for this block, if ours
         // TODO: Since we do this after we mark this message as sent to prevent equivocations, a
@@ -1079,7 +1083,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           let message_tape_key = message_tape_key(self.genesis);
           let mut txn = self.db.txn();
           let mut message_tape = txn.get(&message_tape_key).unwrap_or(vec![]);
-          message_tape.extend(signed_msg.encode());
+          signed_msg.serialize(&mut message_tape).unwrap();
           txn.put(&message_tape_key, message_tape);
           txn.commit();
         }

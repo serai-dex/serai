@@ -1,19 +1,16 @@
-use core::future::Future;
-use std::{
-  collections::HashSet,
-  time::{Duration, Instant},
-};
+use core::{future::Future, time::Duration};
+use std::{collections::HashSet, time::Instant};
 
 use frost::dkg::ThresholdKeys;
 
-use serai_validator_sets_primitives::Session;
+use serai_primitives::validator_sets::Session;
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
 use messages::sign::VariantSignId;
 
 use primitives::task::ContinuallyRan;
-use scheduler::{Transaction, SignableTransaction, TransactionFor, TransactionsToSign};
+use scheduler::{Transaction as _, SignableTransaction, TransactionFor, TransactionsToSign};
 use scanner::CompletedEventualities;
 
 use frost_attempt_manager::*;
@@ -195,6 +192,7 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
             {
               let mut buf = Vec::with_capacity(256);
               signed_tx.write(&mut buf).unwrap();
+              #[expect(clippy::wildcard_enum_match_arm)]
               SerializedTransactions::set(
                 &mut txn,
                 match id {
@@ -217,7 +215,7 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
 
       // If it's been five minutes since the last publication, republish the transactions for all
       // active signing protocols
-      if Instant::now().duration_since(self.last_publication) > Duration::from_secs(5 * 60) {
+      if Instant::now().duration_since(self.last_publication) >= Duration::from_mins(5) {
         for tx in &self.active_signing_protocols {
           let Some(tx_buf) = SerializedTransactions::get(&self.db, *tx) else { continue };
           let mut tx_buf = tx_buf.as_slice();

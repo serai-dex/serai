@@ -2,10 +2,9 @@ use core::{marker::PhantomData, future::Future};
 
 use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
-use serai_primitives::Signature;
-use serai_validator_sets_primitives::Session;
+use serai_primitives::validator_sets::Session;
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
 use messages::sign::VariantSignId;
 
@@ -23,7 +22,7 @@ use crate::{
 };
 
 // Fetches slash reports to sign and signs them.
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 pub(crate) struct SlashReportSignerTask<D: Db, S: ScannerFeed> {
   db: D,
   _S: PhantomData<S>,
@@ -105,11 +104,7 @@ impl<D: Db, S: ScannerFeed> ContinuallyRan for SlashReportSignerTask<D, S> {
             // Drain the channel
             let slash_report = SlashReport::try_recv(&mut txn, self.session).unwrap();
             // Send the signature
-            SignedSlashReport::send(
-              &mut txn,
-              self.session,
-              &(slash_report, Signature::from(signature).0),
-            );
+            SignedSlashReport::send(&mut txn, self.session, &(slash_report, signature.into()));
           }
         }
 

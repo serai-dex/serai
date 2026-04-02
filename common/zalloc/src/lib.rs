@@ -1,5 +1,4 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(all(zalloc_rustc_nightly, feature = "allocator"), feature(allocator_api))]
 
 //! Implementation of a Zeroizing Allocator, enabling zeroizing memory on deallocation.
@@ -12,7 +11,7 @@ use core::{
   alloc::{Layout, GlobalAlloc},
 };
 
-use zeroize::Zeroize;
+use zeroize::Zeroize as _;
 
 /// An allocator wrapper which zeroizes its memory on dealloc.
 pub struct ZeroizingAlloc<T>(pub T);

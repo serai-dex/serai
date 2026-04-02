@@ -1,10 +1,10 @@
 use alloy_core::primitives::{hex, U256, Bytes, TxKind};
-use alloy_sol_types::SolCall;
+use alloy_sol_types::SolCall as _;
 
 use alloy_consensus::TxLegacy;
 
 use alloy_rpc_types_eth::{TransactionInput, TransactionRequest};
-use alloy_provider::Provider;
+use alloy_provider::Provider as _;
 
 use revm::{primitives::hardfork::SpecId, interpreter::gas::calculate_initial_tx_gas};
 

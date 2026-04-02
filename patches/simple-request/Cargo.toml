@@ -12,10 +12,11 @@ edition = "2021"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[workspace]
+
 [dependencies]
 hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
-simple-request = { path = "../../common/request", default-features = false, features = ["tokio"] }
+simple-request = { path = "../../common/request", features = ["tokio"] }
 
 [features]
 tls = ["simple-request/tls"]
-basic-auth = ["simple-request/basic-auth"]

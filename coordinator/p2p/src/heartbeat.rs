@@ -1,18 +1,19 @@
 use core::future::Future;
 use std::time::{Duration, SystemTime};
 
-use serai_client::validator_sets::primitives::{MAX_KEY_SHARES_PER_SET, ExternalValidatorSet};
+use serai_primitives::validator_sets::{ExternalValidatorSet, KeyShares};
 
-use futures_lite::FutureExt;
+use futures_lite::FutureExt as _;
 
-use tributary_sdk::{ReadWrite, TransactionTrait, Block, Tributary, TributaryReader};
+use tributary_sdk::{ReadWrite as _, TransactionTrait, Block, Tributary, TributaryReader};
 
 use serai_db::*;
 use serai_task::ContinuallyRan;
 
-use crate::{Heartbeat, Peer, P2p};
+use crate::{Heartbeat, Peer as _, P2p};
 
 // Amount of blocks in a minute
+#[expect(clippy::as_conversions)]
 const BLOCKS_PER_MINUTE: usize =
   (60 / (tributary_sdk::tendermint::TARGET_BLOCK_TIME / 1000)) as usize;
 
@@ -29,8 +30,9 @@ pub const MIN_BLOCKS_PER_BATCH: usize = BLOCKS_PER_MINUTE + 1;
 /// This estimates the size of a commit as `32 + (MAX_VALIDATORS * 128)`. At the time of writing, a
 /// commit is `8 + (validators * 32) + (32 + (validators * 32))` (for the time, list of validators,
 /// and aggregate signature). Accordingly, this should be a safe over-estimate.
+#[expect(clippy::as_conversions)]
 pub const BATCH_SIZE_LIMIT: usize = MIN_BLOCKS_PER_BATCH *
-  (tributary_sdk::BLOCK_SIZE_LIMIT + 32 + ((MAX_KEY_SHARES_PER_SET as usize) * 128));
+  (tributary_sdk::BLOCK_SIZE_LIMIT + 32 + ((KeyShares::MAX_PER_SET as usize) * 128));
 
 /// Sends a heartbeat to other validators on regular intervals informing them of our Tributary's
 /// tip.
@@ -50,7 +52,7 @@ impl<TD: Db, Tx: TransactionTrait, P: P2p> ContinuallyRan for HeartbeatTask<TD, 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       // If our blockchain hasn't had a block in the past minute, trigger the heartbeat protocol
-      const TIME_TO_TRIGGER_SYNCING: Duration = Duration::from_secs(60);
+      const TIME_TO_TRIGGER_SYNCING: Duration = Duration::from_mins(1);
 
       let mut tip = self.reader.tip();
       let time_since = {

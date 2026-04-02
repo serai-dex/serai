@@ -22,15 +22,10 @@ std-shims = { path = "../../common/std-shims", version = "0.1.4", default-featur
 zeroize = { version = "^1.5", default-features = false, features = ["derive"] }
 subtle = { version = "^2.4", default-features = false }
 
-digest = { version = "0.11.0-rc.1", default-features = false }
+digest = { version = "0.11", default-features = false }
 
 ff = { version = "0.13", default-features = false, features = ["bits"] }
 group = { version = "0.13", default-features = false }
-
-[dev-dependencies]
-hex = { version = "0.4", default-features = false, features = ["std"] }
-
-ff-group-tests = { version = "0.13", path = "../ff-group-tests" }
 
 [features]
 alloc = ["zeroize/alloc", "digest/alloc", "ff/alloc"]

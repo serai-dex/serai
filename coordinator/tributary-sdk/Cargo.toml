@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/tributary-sdk"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.89"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -24,7 +24,7 @@ zeroize = { version = "^1.5", default-features = false, features = ["std"] }
 rand = { version = "0.8", default-features = false, features = ["std"] }
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
-blake2 = { version = "0.11.0-rc.0", default-features = false, features = ["alloc"] }
+blake2 = { version = "0.11.0-rc.5", default-features = false, features = ["alloc"] }
 transcript = { package = "flexible-transcript", path = "../../crypto/transcript", version = "0.3", default-features = false, features = ["std", "recommended"] }
 
 ciphersuite = { path = "../../crypto/ciphersuite", version = "0.4", default-features = false, features = ["std"] }
@@ -36,7 +36,7 @@ log = { version = "0.4", default-features = false, features = ["std"] }
 
 serai-db = { path = "../../common/db", version = "0.1" }
 
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 futures-util = { version = "0.3", default-features = false, features = ["std", "sink", "channel"] }
 futures-channel = { version = "0.3", default-features = false, features = ["std", "sink"] }
 tendermint = { package = "tendermint-machine", path = "./tendermint", version = "0.2" }

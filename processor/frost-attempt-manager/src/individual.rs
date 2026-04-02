@@ -4,10 +4,10 @@ use rand_core::OsRng;
 
 use frost::{
   Participant, FrostError,
-  sign::{Writable, PreprocessMachine, SignMachine, SignatureMachine},
+  sign::{Writable as _, PreprocessMachine, SignMachine, SignatureMachine as _},
 };
 
-use serai_validator_sets_primitives::Session;
+use serai_primitives::validator_sets::Session;
 
 use serai_db::{Get, DbTxn, Db, create_db};
 use messages::sign::{VariantSignId, SignId, ProcessorMessage};
@@ -19,7 +19,7 @@ create_db!(
 );
 
 /// An instance of a signing protocol with re-attempts handled internally.
-#[allow(clippy::type_complexity)]
+#[expect(clippy::type_complexity)]
 pub(crate) struct SigningProtocol<D: Db, M: Clone + PreprocessMachine> {
   db: D,
   // The session this signing protocol is being conducted by.

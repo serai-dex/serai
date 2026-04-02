@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/abi"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.91"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -16,72 +16,38 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-bitvec = { version = "1", default-features = false, features = ["alloc", "serde"] }
+borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
 
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive", "bit-vec"] }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
-borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
-serde = { version = "1", default-features = false, features = ["derive", "alloc"], optional = true }
-
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
-sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
-
-sp-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
-sp-consensus-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
-
-frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
-frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", rev = "da19e1f8ca7a9e2cbf39fbfa493918eeeb45e10b", default-features = false }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
+sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["serde"], optional = true }
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
 
 serai-primitives = { path = "../primitives", version = "0.1", default-features = false }
-serai-coins-primitives = { path = "../coins/primitives", version = "0.1", default-features = false }
-serai-validator-sets-primitives = { path = "../validator-sets/primitives", version = "0.1", default-features = false }
-serai-genesis-liquidity-primitives = { path = "../genesis-liquidity/primitives", version = "0.1", default-features = false }
-serai-emissions-primitives = { path = "../emissions/primitives", version = "0.1", default-features = false }
-serai-in-instructions-primitives = { path = "../in-instructions/primitives", version = "0.1", default-features = false }
-serai-signals-primitives = { path = "../signals/primitives", version = "0.1", default-features = false }
+
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
+bitvec = { version = "1", default-features = false, features = ["alloc", "std"] }
+
+sp-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+sp-consensus-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
 
 [features]
 std = [
-  "bitvec/std",
-
-  "scale/std",
-
-  "borsh?/std",
-  "serde?/std",
+  "borsh/std",
 
   "sp-core/std",
-  "sp-runtime/std",
 
-  "sp-consensus-babe/std",
-  "sp-consensus-grandpa/std",
-
-  "frame-system/std",
-  "frame-support/std",
+  "scale?/std",
+  "sp-runtime?/std",
+  "frame-support?/std",
+  "frame-system?/std",
 
   "serai-primitives/std",
-  "serai-coins-primitives/std",
-  "serai-validator-sets-primitives/std",
-  "serai-genesis-liquidity-primitives/std",
-  "serai-emissions-primitives/std",
-  "serai-in-instructions-primitives/std",
-  "serai-signals-primitives/std",
 ]
-borsh = [
-  "dep:borsh",
-  "serai-primitives/borsh",
-  "serai-coins-primitives/borsh",
-  "serai-validator-sets-primitives/borsh",
-  "serai-genesis-liquidity-primitives/borsh",
-  "serai-in-instructions-primitives/borsh",
-  "serai-signals-primitives/borsh",
-]
-serde = [
-  "dep:serde",
-  "serai-primitives/serde",
-  "serai-coins-primitives/serde",
-  "serai-validator-sets-primitives/serde",
-  "serai-genesis-liquidity-primitives/serde",
-  "serai-in-instructions-primitives/serde",
-  "serai-signals-primitives/serde",
-]
+substrate = ["scale", "sp-runtime", "frame-support", "frame-system", "serai-primitives/scale"]
+try-runtime = ["sp-runtime/try-runtime"]
 default = ["std"]

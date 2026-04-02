@@ -1,9 +1,12 @@
 use core::future::Future;
 use std::sync::Arc;
 
-use serai_db::{DbTxn, Db};
+use serai_db::{DbTxn as _, Db};
 
-use serai_client::{validator_sets::primitives::ExternalValidatorSet, Serai};
+use serai_client_serai::{
+  abi::primitives::{network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet},
+  Serai,
+};
 
 use serai_task::ContinuallyRan;
 
@@ -28,7 +31,7 @@ impl<D: Db> ContinuallyRan for SetKeysTask<D> {
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let mut made_progress = false;
-      for network in serai_client::primitives::EXTERNAL_NETWORKS {
+      for network in ExternalNetworkId::all() {
         let mut txn = self.db.txn();
         let Some((session, keys)) = Keys::take(&mut txn, network) else {
           // No keys to set
@@ -37,10 +40,9 @@ impl<D: Db> ContinuallyRan for SetKeysTask<D> {
 
         // This uses the latest finalized block, not the latest cosigned block, which should be
         // fine as in the worst case, the only impact is no longer attempting TX publication
-        let serai =
-          self.serai.as_of_latest_finalized_block().await.map_err(|e| format!("{e:?}"))?;
-        let serai = serai.validator_sets();
-        let current_session = serai.session(network.into()).await.map_err(|e| format!("{e:?}"))?;
+        let serai = self.serai.state().await.map_err(|e| format!("{e:?}"))?;
+        let current_session =
+          serai.current_session(network.into()).await.map_err(|e| format!("{e:?}"))?;
         let current_session = current_session.map(|session| session.0);
         // Only attempt to set these keys if this isn't a retired session
         if Some(session.0) < current_session {
@@ -53,7 +55,7 @@ impl<D: Db> ContinuallyRan for SetKeysTask<D> {
           // We already checked the current session wasn't greater, and they're not equal
           assert!(current_session < Some(session.0));
           // This would mean the Serai node is resyncing and is behind where it prior was
-          Err("have a keys for a session Serai has yet to start".to_string())?;
+          Err("have a keys for a session Serai has yet to start".to_owned())?;
         }
 
         // If this session already has had its keys set, move on
@@ -65,9 +67,9 @@ impl<D: Db> ContinuallyRan for SetKeysTask<D> {
         {
           txn.commit();
           continue;
-        };
+        }
 
-        match self.serai.publish(&keys).await {
+        match self.serai.publish_transaction(&keys).await {
           Ok(()) => {
             txn.commit();
             made_progress = true;

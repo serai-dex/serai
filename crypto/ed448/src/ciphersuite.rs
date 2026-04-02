@@ -2,8 +2,8 @@ use prime_field::subtle::CtOption;
 
 use sha3::{
   digest::{
-    typenum::U114, core_api::BlockSizeUser, Update, Output, OutputSizeUser, FixedOutput,
-    ExtendableOutput, XofReader, HashMarker,
+    typenum::U114, block_api::BlockSizeUser, Update, Output, OutputSizeUser, FixedOutput,
+    ExtendableOutput as _, XofReader as _, HashMarker,
   },
   Shake256,
 };

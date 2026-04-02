@@ -15,7 +15,7 @@ pub fn serai_db_key(
 ///
 /// Creates a unit struct and a default implementation for the `key`, `get`, and `set`. The macro
 /// uses a syntax similar to defining a function. Parameters are concatenated to produce a key,
-/// they must be `scale` encodable. The return type is used to auto encode and decode the database
+/// they must be `borsh` serializable. The return type is used to auto (de)serialize the database
 /// value bytes using `borsh`.
 ///
 /// # Arguments
@@ -54,11 +54,10 @@ macro_rules! create_db {
       )?;
       impl$(<$($generic_name: $generic_type),+>)? $field_name$(<$($generic_name),+>)? {
         pub(crate) fn key($($arg: $arg_type),*) -> Vec<u8> {
-          use scale::Encode;
           $crate::serai_db_key(
             stringify!($db_name).as_bytes(),
             stringify!($field_name).as_bytes(),
-            ($($arg),*).encode()
+            &borsh::to_vec(&($($arg),*)).unwrap(),
           )
         }
         pub(crate) fn set(
@@ -79,7 +78,6 @@ macro_rules! create_db {
         }
         // Returns a PhantomData of all generic types so if the generic was only used in the value,
         // not the keys, this doesn't have unused generic types
-        #[allow(dead_code)]
         pub(crate) fn del(
           txn: &mut impl DbTxn
           $(, $arg: $arg_type)*

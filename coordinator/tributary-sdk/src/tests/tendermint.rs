@@ -26,5 +26,5 @@ fn assert_target_block_time() {
   assert_eq!(
     <TendermintNetwork<MemDb, TendermintTx, DummyP2p> as Network>::block_time(),
     TARGET_BLOCK_TIME / 1000
-  )
+  );
 }

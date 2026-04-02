@@ -1,14 +1,12 @@
 use core::marker::PhantomData;
-use std::io::{Read, Write};
+use std::io::{Read as _, Write as _};
 
 use group::GroupEncoding;
 
-use scale::{Encode, Decode, IoReader};
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::{Get, DbTxn, create_db};
 
-use serai_primitives::ExternalBalance;
-use serai_validator_sets_primitives::Session;
+use serai_primitives::{balance::ExternalBalance, validator_sets::Session};
 
 use primitives::EncodableG;
 use crate::{ScannerFeed, KeyFor, AddressFor};
@@ -94,7 +92,7 @@ impl<S: ScannerFeed> BatchDb<S> {
       if let Some(ReturnInformation { address, balance }) = return_information {
         buf.write_all(&[1]).unwrap();
         address.serialize(&mut buf).unwrap();
-        balance.encode_to(&mut buf);
+        balance.serialize(&mut buf).unwrap();
       } else {
         buf.write_all(&[0]).unwrap();
       }
@@ -116,7 +114,7 @@ impl<S: ScannerFeed> BatchDb<S> {
 
       res.push((opt[0] == 1).then(|| {
         let address = AddressFor::<S>::deserialize_reader(&mut buf).unwrap();
-        let balance = ExternalBalance::decode(&mut IoReader(&mut buf)).unwrap();
+        let balance = ExternalBalance::deserialize_reader(&mut buf).unwrap();
         ReturnInformation { address, balance }
       }));
     }

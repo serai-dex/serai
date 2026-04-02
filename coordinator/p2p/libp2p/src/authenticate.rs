@@ -2,14 +2,14 @@ use core::{pin::Pin, future::Future};
 use std::io;
 
 use zeroize::Zeroizing;
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
-use blake2::{Digest, Blake2s256};
+use blake2::{Digest as _, Blake2s256};
 use schnorrkel::{Keypair, PublicKey, Signature};
 
-use serai_client::primitives::PublicKey as Public;
+use serai_client_serai::abi::primitives::crypto::Public;
 
-use futures_util::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use futures_util::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _};
 use libp2p::{
   core::upgrade::{UpgradeInfo, InboundConnectionUpgrade, OutboundConnectionUpgrade},
   identity::{self, PeerId},
@@ -104,7 +104,7 @@ impl OnlyValidators {
       .verify_simple(PROTOCOL.as_bytes(), &msg, &sig)
       .map_err(|_| io::Error::other("invalid signature"))?;
 
-    Ok(peer_id_from_public(Public::from_raw(public_key.to_bytes())))
+    Ok(peer_id_from_public(Public(public_key.to_bytes())))
   }
 }
 

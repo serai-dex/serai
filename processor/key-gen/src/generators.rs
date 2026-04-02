@@ -6,7 +6,7 @@ use std::{
 
 use dkg::*;
 
-use serai_validator_sets_primitives::MAX_KEY_SHARES_PER_SET;
+use serai_primitives::validator_sets::KeyShares;
 
 /// A cache of the generators used by the eVRF DKG.
 ///
@@ -29,8 +29,8 @@ pub(crate) fn generators<C: 'static + Curves>() -> &'static Generators<C> {
     .or_insert_with(|| {
       // If we haven't prior needed generators for this Ciphersuite, generate new ones
       Box::leak(Box::new(Generators::<C>::new(
-        (MAX_KEY_SHARES_PER_SET * 2 / 3) + 1,
-        MAX_KEY_SHARES_PER_SET,
+        (KeyShares::MAX_PER_SET * 2 / 3) + 1,
+        KeyShares::MAX_PER_SET,
       )))
     })
     .downcast_ref()

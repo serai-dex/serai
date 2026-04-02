@@ -1,0 +1,28 @@
+[package]
+name = "serai-client-monero"
+version = "0.1.0"
+description = "A client for the Serai network's Monero functionality"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client/monero"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = ["serai", "monero"]
+edition = "2021"
+rust-version = "1.91"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+borsh = { version = "1", default-features = false, features = ["std"] }
+
+serai-primitives = { path = "../../primitives", version = "0.1", default-features = false, features = ["std"] }
+
+ciphersuite = { path = "../../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
+
+monero-ed25519 = { git = "https://github.com/monero-oxide/monero-oxide", rev = "c8be5d3d1287669946a83fbfcb296ce2a8852e47", version = "0.1.0", default-features = false, features = ["std"] }
+monero-address = { git = "https://github.com/monero-oxide/monero-oxide", rev = "c8be5d3d1287669946a83fbfcb296ce2a8852e47", version = "0.1.0", default-features = false, features = ["std"] }

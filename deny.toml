@@ -7,14 +7,15 @@ db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
 
 ignore = [
-  "RUSTSEC-2022-0061", # https://github.com/serai-dex/serai/227
-  "RUSTSEC-2024-0370", # proc-macro-error is unmaintained
-  "RUSTSEC-2024-0436", # paste is unmaintained
-  "RUSTSEC-2025-0057", # fxhash is unmaintained, fixed with bytecodealliance/wasmtime/pull/11634
+  "RUSTSEC-2024-0370", # `proc-macro-error` is unmaintained, in-tree due to Substrate/`litep2p`
+  "RUSTSEC-2024-0436", # `paste` is unmaintained
 ]
 
 [licenses]
 version = 2
+
+include-dev = true
+include-build = true
 
 allow = [
   # Effective public domain
@@ -29,7 +30,6 @@ allow = [
   "ISC",
   "Zlib",
   "Unicode-3.0",
-  # "OpenSSL", # Commented as it's not currently in-use within the Serai tree
   "CDLA-Permissive-2.0",
 
   # Non-invasive copyleft
@@ -73,6 +73,7 @@ exceptions = [
   { allow = ["AGPL-3.0-only"], name = "serai-monero-processor" },
 
   { allow = ["AGPL-3.0-only"], name = "tributary-sdk" },
+  { allow = ["AGPL-3.0-only"], name = "serai-cosign-types" },
   { allow = ["AGPL-3.0-only"], name = "serai-cosign" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-substrate" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-tributary" },
@@ -80,9 +81,9 @@ exceptions = [
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-libp2p-p2p" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator" },
 
-  { allow = ["AGPL-3.0-only"], name = "pallet-session" },
   { allow = ["AGPL-3.0-only"], name = "substrate-median" },
 
+  { allow = ["AGPL-3.0-only"], name = "serai-core-pallet" },
   { allow = ["AGPL-3.0-only"], name = "serai-coins-pallet" },
   { allow = ["AGPL-3.0-only"], name = "serai-dex-pallet" },
 
@@ -102,12 +103,11 @@ exceptions = [
 
   { allow = ["AGPL-3.0-only"], name = "serai-orchestrator" },
 
-  { allow = ["AGPL-3.0-only"], name = "mini-serai" },
-
   { allow = ["AGPL-3.0-only"], name = "serai-docker-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-message-queue-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-processor-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-tests" },
+  { allow = ["AGPL-3.0-only"], name = "serai-substrate-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-full-stack-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-reproducible-runtime-tests" },
 ]
@@ -125,12 +125,20 @@ multiple-versions = "warn"
 wildcards = "warn"
 highlight = "all"
 deny = [
+  # Contains a non-reproducible binary blob
+  # https://github.com/serde-rs/serde/pull/2514
+  # https://github.com/serde-rs/serde/issues/2575
   { name = "serde_derive", version = ">=1.0.172, <1.0.185" },
+  # Introduced an insecure implementation of `borsh` removed with `0.15.1`
+  # https://github.com/rust-lang/hashbrown/issues/576
   { name = "hashbrown", version = "=0.15.0" },
+
   # Legacy which _no one_ should use anymore
   { name = "is-terminal", version = "*" },
-  # Stop introduction into the tree without realizing it
-  { name = "once_cell_polyfill", version = "*" },
+
+  # Conflicts with our usage of mimalloc
+  # https://github.com/serai-dex/serai/issues/690
+  { name = "tikv-jemalloc-sys", version = "*" },
 ]
 
 [sources]
@@ -138,10 +146,8 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
+  "https://github.com/kayabaNerve/hickory-dns",
   "https://github.com/kayabaNerve/elliptic-curves",
   "https://github.com/monero-oxide/monero-oxide",
-  "https://github.com/kayabaNerve/monero-oxide",
-  "https://github.com/rust-bitcoin/rust-bip39",
-  "https://github.com/rust-rocksdb/rust-rocksdb",
   "https://github.com/serai-dex/patch-polkadot-sdk",
 ]

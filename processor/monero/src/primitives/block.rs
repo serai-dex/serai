@@ -8,7 +8,7 @@ use monero_wallet::{
   GuaranteedScanner,
 };
 
-use serai_client::networks::monero::Address;
+use serai_client_monero::Address;
 
 use primitives::{ReceivedOutput, EventualityTracker};
 use crate::{
@@ -63,7 +63,6 @@ impl primitives::Block for Block {
     }
   }
 
-  #[allow(clippy::type_complexity)]
   fn check_for_eventuality_resolutions(
     &self,
     eventualities: &mut EventualityTracker<Self::Eventuality>,

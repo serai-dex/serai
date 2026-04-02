@@ -1,13 +1,13 @@
 use core::fmt::Debug;
 use std::io;
 
-use zeroize::Zeroize;
+use zeroize::Zeroize as _;
 use thiserror::Error;
 
-use blake2::{Digest, Blake2b512};
+use blake2::{Digest as _, Blake2b512};
 
 use ciphersuite::{
-  group::{Group, GroupEncoding},
+  group::{Group as _, GroupEncoding as _},
   *,
 };
 use dalek_ff_group::Ristretto;
@@ -108,7 +108,7 @@ impl Signed {
   }
 }
 
-#[allow(clippy::large_enum_variant)]
+#[expect(clippy::large_enum_variant)]
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TransactionKind {
   /// This transaction should be provided by every validator, in an exact order.
@@ -161,6 +161,7 @@ pub trait Transaction: 'static + Send + Sync + Clone + Eq + Debug + ReadWrite {
   ///
   /// Panics if called on non-signed transactions.
   fn sig_hash(&self, genesis: [u8; 32]) -> <Ristretto as WrappedGroup>::F {
+    #[expect(clippy::wildcard_enum_match_arm)]
     match self.kind() {
       TransactionKind::Signed(order, Signed { signature, .. }) => {
         <Ristretto as WrappedGroup>::F::from_bytes_mod_order_wide(

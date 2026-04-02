@@ -1,17 +1,17 @@
-use std::sync::Arc;
+use std_shims::{prelude::*, sync::Arc};
 
-use rand_core::{RngCore, OsRng};
+use rand_core::{RngCore as _, OsRng};
 
-use group::ff::{Field, PrimeField};
+use group::ff::{Field as _, PrimeField as _};
 use k256::{Scalar, ProjectivePoint};
 
 use alloy_core::primitives::Address;
-use alloy_sol_types::SolCall;
+use alloy_sol_types::SolCall as _;
 
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_rpc_types_eth::{TransactionInput, TransactionRequest};
 use alloy_rpc_client::ClientBuilder;
-use alloy_provider::{Provider, RootProvider};
+use alloy_provider::{Provider as _, RootProvider};
 
 use alloy_node_bindings::{Anvil, AnvilInstance};
 
@@ -51,7 +51,7 @@ async fn setup_test() -> (AnvilInstance, Arc<RootProvider>, Address) {
           env!("OUT_DIR"),
           "/ethereum-schnorr-contract/TestSchnorr.bin-runtime"
         ))
-        .to_string(),
+        .to_owned(),
       ],
     )
     .await
@@ -68,7 +68,7 @@ async fn call_verify(
   signature: &Signature,
 ) -> bool {
   let public_key: [u8; 32] = public_key.eth_repr();
-  let c_bytes: [u8; 32] = signature.c().to_repr().into();
+  let c_bytes: [u8; 32] = signature.c();
   let s_bytes: [u8; 32] = signature.s().to_repr().into();
   let call = TransactionRequest::default().to(address).input(TransactionInput::new(
     abi::verifyCall::new((
@@ -96,7 +96,9 @@ async fn test_verify() {
     OsRng.fill_bytes(&mut message);
 
     let c = Signature::challenge(ProjectivePoint::GENERATOR * nonce, &public_key, &message);
-    let s = nonce + (c * key);
+    let c_scalar =
+      <Scalar as k256::elliptic_curve::ops::Reduce<k256::U256>>::reduce_bytes(&c.into());
+    let s = nonce + (c_scalar * key);
 
     let sig = Signature::new(c, s).unwrap();
     assert!(sig.verify(&public_key, &message));
@@ -119,7 +121,7 @@ async fn test_verify() {
 
     // Mutate c and make sure the signature now fails to verify
     {
-      let mutated_c = Signature::new(c + Scalar::ONE, s).unwrap();
+      let mutated_c = Signature::new((c_scalar + Scalar::ONE).to_repr().into(), s).unwrap();
       assert!(!mutated_c.verify(&public_key, &message));
       assert!(!call_verify(&provider, address, &public_key, &message, &mutated_c).await);
     }

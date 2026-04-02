@@ -1,21 +1,19 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
 use core::{
-  ops::Deref,
+  ops::Deref as _,
   fmt::{self, Debug},
 };
-#[allow(unused_imports)]
-use std_shims::prelude::*;
-use std_shims::{sync::Arc, vec, vec::Vec, collections::HashMap, io};
+use std_shims::{prelude::*, sync::Arc, collections::HashMap, io};
 
 use zeroize::{Zeroize, Zeroizing};
 
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField},
-    GroupEncoding,
+    ff::{Field as _, PrimeField},
+    GroupEncoding as _,
   },
   GroupIo, Id,
 };
@@ -34,7 +32,6 @@ impl Participant {
   }
 
   /// Convert a Participant identifier to bytes.
-  #[allow(clippy::wrong_self_convention)]
   pub const fn to_bytes(&self) -> [u8; 2] {
     self.0.to_le_bytes()
   }
@@ -269,13 +266,15 @@ impl<C: GroupIo + Id> fmt::Debug for ThresholdCore<C> {
 
 impl<C: GroupIo + Id> Zeroize for ThresholdCore<C> {
   fn zeroize(&mut self) {
-    self.params.zeroize();
-    self.group_key.zeroize();
-    for share in self.verification_shares.values_mut() {
+    let Self { params, group_key, verification_shares, interpolation, secret_share } = self;
+
+    params.zeroize();
+    group_key.zeroize();
+    for share in verification_shares.values_mut() {
       share.zeroize();
     }
-    self.interpolation.zeroize();
-    self.secret_share.zeroize();
+    interpolation.zeroize();
+    secret_share.zeroize();
   }
 }
 
@@ -322,15 +321,27 @@ impl<C: GroupIo + Id> fmt::Debug for ThresholdView<C> {
 
 impl<C: GroupIo + Id> Zeroize for ThresholdView<C> {
   fn zeroize(&mut self) {
-    self.scalar.zeroize();
-    self.offset.zeroize();
-    self.group_key.zeroize();
-    self.included.zeroize();
-    self.secret_share.zeroize();
-    for share in self.original_verification_shares.values_mut() {
+    let Self {
+      interpolation,
+      scalar,
+      offset,
+      group_key,
+      included,
+      secret_share,
+      original_verification_shares,
+      verification_shares,
+    } = self;
+
+    interpolation.zeroize();
+    scalar.zeroize();
+    offset.zeroize();
+    group_key.zeroize();
+    included.zeroize();
+    secret_share.zeroize();
+    for share in original_verification_shares.values_mut() {
       share.zeroize();
     }
-    for share in self.verification_shares.values_mut() {
+    for share in verification_shares.values_mut() {
       share.zeroize();
     }
   }
@@ -541,7 +552,7 @@ impl<C: GroupIo + Id> ThresholdKeys<C> {
         }
       }
       Interpolation::Lagrange => writer.write_all(&[1])?,
-    };
+    }
     let mut share_bytes = self.core.secret_share.to_repr();
     writer.write_all(share_bytes.as_ref())?;
     share_bytes.as_mut().zeroize();
@@ -648,7 +659,7 @@ impl<C: GroupIo + Id> ThresholdView<C> {
   /// Return the interpolation factor for a signer.
   pub fn interpolation_factor(&self, participant: Participant) -> Option<C::F> {
     if !self.included.contains(&participant) {
-      None?
+      None?;
     }
     Some(self.interpolation.interpolation_factor(participant, &self.included))
   }

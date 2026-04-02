@@ -32,7 +32,7 @@ mod ciphersuite;
 
 pub(crate) fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   use core::hint::black_box;
-  use prime_field::zeroize::Zeroize;
+  use prime_field::zeroize::Zeroize as _;
 
   let bit_ref = black_box(bit_ref);
 

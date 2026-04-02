@@ -5,7 +5,7 @@ use frost::dkg::ThresholdKeys;
 
 use alloy_core::primitives::{U256, Address as EthereumAddress};
 
-use serai_client::networks::ethereum::Address;
+use serai_client_ethereum::Address;
 
 use scheduler::SignableTransaction;
 

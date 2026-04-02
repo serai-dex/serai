@@ -1,16 +1,12 @@
+use core::fmt::Write as _;
 use std::path::Path;
 
 use crate::{Network, Os, mimalloc, write_dockerfile};
 
-fn monero_internal(
-  network: Network,
-  os: Os,
-  orchestration_path: &Path,
-  folder: &str,
-  monero_binary: &str,
-  ports: &str,
-) {
-  const MONERO_VERSION: &str = "0.18.4.3";
+pub fn monero(orchestration_path: &Path, network: Network) {
+  let os = Os::Alpine;
+
+  const MONERO_VERSION: &str = "0.18.4.6";
 
   let arch = match std::env::consts::ARCH {
     // We probably would run this without issues yet it's not worth needing to provide support for
@@ -20,65 +16,102 @@ fn monero_internal(
     _ => panic!("unsupported architecture"),
   };
 
-  #[rustfmt::skip]
-  let download_monero = format!(r#"
-FROM alpine:latest AS monero
+  let file = format!("monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2");
 
-RUN apk --no-cache add wget gnupg
+  // Fingerprint from https://github.com/monero-project/monero-site/issues/1949
+  const FINGERPRINT: &str = "81AC591FE9C4B65C5806AFC3F0AF4D462A0BDF92";
+
+  #[rustfmt::skip]
+  let mut download_monero = format!(r#"
+FROM alpine:latest AS download
 
 # Download Monero
-RUN wget -4 https://downloads.getmonero.org/cli/monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2
+RUN wget https://downloads.getmonero.org/cli/{file}
 
-# Verify Binary -- fingerprint from https://github.com/monero-project/monero-site/issues/1949
-ADD orchestration/{}/networks/monero/hashes-v{MONERO_VERSION}.txt .
-RUN gpg --keyserver hkp://keyserver.ubuntu.com:80 --keyserver-options no-self-sigs-only --receive-keys 81AC591FE9C4B65C5806AFC3F0AF4D462A0BDF92 && \
-  gpg --verify hashes-v{MONERO_VERSION}.txt && \
-  grep "$(sha256sum monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2 | cut -c 1-64)" hashes-v{MONERO_VERSION}.txt
+# Extract Monero
+RUN tar -xf {file} --strip-components=1
 
-# Extract it
-RUN tar -xvjf monero-linux-{arch}-v{MONERO_VERSION}.tar.bz2 --strip-components=1
-"#,
-    network.label(),
-  );
+# Download the binary's hashes
+RUN wget https://raw.githubusercontent.com/monero-project/monero-site/ddbaf497941dce722052d9f94c45fd4926a60b9e/downloads/hashes.txt -O SHA256SUMS
 
-  let setup = mimalloc(os).to_string() + &download_monero;
+# Verify `SHA256SUMS` with GnuPG
+FROM alpine:latest AS gnupg
+RUN apk --no-cache add gnupg
+RUN mkdir ~/.gnupg # Prevent the default config of `use-keyboxd`
+COPY --from=download SHA256SUMS /
+RUN gpg --keyserver hkps://keyserver.ubuntu.com --keyserver-options no-self-sigs-only --receive-keys {FINGERPRINT}
+RUN gpg --decrypt SHA256SUMS > SHA256SUMS.gpg
+
+# Verify `SHA256SUMS` with Sequoia PGP
+FROM alpine:latest AS sequoia
+RUN apk --no-cache add sequoia-sq
+COPY --from=download SHA256SUMS /
+RUN sq network keyserver search --server hkps://keyserver.ubuntu.com {FINGERPRINT}
+RUN sq pki link add --cert {FINGERPRINT} --all
+RUN sq verify --message SHA256SUMS --output SHA256SUMS.sq
+
+# Verify the integrity of `monero-*.tar.bz2` with regards to the `SHA256SUMS` file
+FROM alpine:latest AS sha256sum
+COPY --from=download *.tar.bz2 /
+COPY --from=gnupg SHA256SUMS.gpg /
+COPY --from=sequoia SHA256SUMS.sq /
+
+# Make sure GnuPG and Sequoia agree on the contents of `SHA256SUMS`
+RUN printf "\n" >> SHA256SUMS.sq
+RUN cmp SHA256SUMS.gpg SHA256SUMS.sq
+
+# Parse to just the hash for the one file we downloaded
+RUN grep "{file}" SHA256SUMS.sq > SHA256SUMS
+# Ensure we successfully grabbed the line in question
+RUN if [ $(wc -l SHA256SUMS) -ne 1 ]; then exit 1; fi
+
+RUN cat SHA256SUMS | sha256sum -c
+RUN touch /tmp/done
+
+FROM alpine:latest AS monero
+
+# Require successful executions of the verification steps
+COPY --from=sha256sum /tmp/done /tmp/done
+RUN rm /tmp/done
+
+COPY --from=download monerod .
+"#);
+
+  if os == Os::Alpine {
+    // Increase the default stack size, as Monero does heavily use its stack
+    write!(
+      &mut download_monero,
+      r#"
+ADD orchestration/increase_default_stack_size.sh .
+RUN ./increase_default_stack_size.sh monerod
+"#
+    )
+    .unwrap();
+  }
+
+  let setup = mimalloc(os, true) + &download_monero;
 
   let run_monero = format!(
     r#"
-COPY --from=monero --chown=monero:nogroup {monero_binary} /bin
+COPY --from=monero --chown=monero:nogroup monerod /bin
 
-EXPOSE {ports}
+EXPOSE 18080 18081
 
-ADD /orchestration/{}/networks/{folder}/run.sh /
+ADD /orchestration/{}/networks/monero/run.sh /
 CMD ["/run.sh"]
 "#,
     network.label(),
   );
 
-  let run =
-    crate::os(os, if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" }, "monero") +
-      &run_monero;
+  let run = crate::os(
+    os,
+    true,
+    if os == Os::Alpine { "RUN apk --no-cache add gcompat" } else { "" },
+    "monero",
+  ) + &run_monero;
   let res = setup + &run;
 
   let mut monero_path = orchestration_path.to_path_buf();
-  monero_path.push("networks");
-  monero_path.push(folder);
-  monero_path.push("Dockerfile");
-
+  monero_path.extend(["networks", "monero", "Dockerfile"]);
   write_dockerfile(monero_path, &res);
-}
-
-pub fn monero(orchestration_path: &Path, network: Network) {
-  monero_internal(network, Os::Debian, orchestration_path, "monero", "monerod", "18080 18081")
-}
-
-pub fn monero_wallet_rpc(orchestration_path: &Path) {
-  monero_internal(
-    Network::Dev,
-    Os::Debian,
-    orchestration_path,
-    "monero-wallet-rpc",
-    "monero-wallet-rpc",
-    "18082",
-  )
 }

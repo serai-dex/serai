@@ -1,19 +1,20 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![cfg_attr(not(feature = "std"), no_std)]
+#![no_std]
 
-#[allow(unused_imports)]
-use std_shims::prelude::*;
-use std_shims::io::{self, Read};
+use std_shims::{
+  prelude::*,
+  io::{self, Read},
+};
 
 use rand_core::{RngCore, CryptoRng};
 
 use zeroize::Zeroizing;
 
-use transcript::{Transcript, MerlinTranscript};
+use transcript::{Transcript as _, MerlinTranscript};
 
 use ciphersuite::{
-  group::{ff::PrimeField, GroupEncoding},
+  group::{ff::PrimeField as _, GroupEncoding as _},
   WrappedGroup,
 };
 use schnorr::SchnorrSignature;
@@ -29,7 +30,7 @@ pub mod frost {
   pub use ::frost::*;
 }
 
-use schnorrkel::{PublicKey, Signature, context::SigningTranscript, signing_context};
+use schnorrkel::{PublicKey, Signature, context::SigningTranscript as _, signing_context};
 
 type RistrettoPoint = <Ristretto as WrappedGroup>::G;
 type Scalar = <Ristretto as WrappedGroup>::F;
@@ -40,7 +41,7 @@ mod tests;
 #[derive(Clone)]
 struct SchnorrkelHram;
 impl Hram<Ristretto> for SchnorrkelHram {
-  #[allow(non_snake_case)]
+  #[expect(non_snake_case)]
   fn hram(R: &RistrettoPoint, A: &RistrettoPoint, m: &[u8]) -> Scalar {
     let ctx_len =
       usize::try_from(u32::from_le_bytes(m[0 .. 4].try_into().expect("malformed message")))

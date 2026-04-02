@@ -1,101 +1,123 @@
+#![cfg_attr(test, expect(unexpected_cfgs))]
+
 #[test]
 pub fn reproducibly_builds() {
-  use std::{collections::HashSet, process::Command};
+  use std::{path::PathBuf, fs, process::Command};
 
-  use rand_core::{RngCore, OsRng};
+  use rand_core::{RngCore as _, OsRng};
 
-  use dockertest::{PullPolicy, Image, TestBodySpecification, DockerTest};
+  let path = Command::new("cargo")
+    .arg("locate-project")
+    .arg("--workspace")
+    .arg("--message-format")
+    .arg("plain")
+    .output()
+    .unwrap();
+  assert!(path.status.success());
+  let mut path = PathBuf::from(String::from_utf8(path.stdout).unwrap().trim());
+  assert_eq!(path.file_name().unwrap(), "Cargo.toml");
+  assert!(path.pop());
 
-  const RUNS: usize = 3;
-  const TIMEOUT: u16 = 3 * 60 * 60; // 3 hours
+  const RUNS: usize = {
+    // 3 is a sane, healthy amount of runs to ensure this isn't being randomized when built.
+    #[cfg(any(target_arch = "x86_64", not(github_ci)))]
+    let runs = 3;
+    // This test is _incredibly_ slow when the host has to be emulated, so when in the GitHub CI
+    // where this will be cross-checked against other machines, we only run it once.
+    #[cfg(all(not(target_arch = "x86_64"), github_ci))]
+    let runs = 1;
+    runs
+  };
 
-  serai_docker_tests::build("runtime".to_string());
-
-  let mut ids = vec![[0; 8]; RUNS];
-  for id in &mut ids {
-    OsRng.fill_bytes(id);
+  let mut images = vec![];
+  // Push multiple builds via the canonical process
+  for _ in 0 .. RUNS {
+    let mut image = [0; 32];
+    OsRng.fill_bytes(&mut image);
+    images.push((
+      PathBuf::from("./orchestration/runtime/Containerfile"),
+      format!("runtime-{}", hex::encode(image)),
+    ));
+  }
+  // Push one run of each reproduction
+  for file in fs::read_dir(path.clone().join("orchestration/runtime/reproductions"))
+    .expect("couldn't iterate directory of reproducing `Containerfile`s")
+  {
+    let file = file.unwrap();
+    let mut image = [0; 32];
+    OsRng.fill_bytes(&mut image);
+    images.push((file.path(), format!("runtime-{}", hex::encode(image))));
   }
 
-  let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
-  for id in &ids {
-    test.provide_container(
-      TestBodySpecification::with_image(
-        Image::with_repository("serai-dev-runtime").pull_policy(PullPolicy::Never),
-      )
-      .set_handle(format!("runtime-build-{}", hex::encode(id)))
-      .replace_cmd(vec![
-        "sh".to_string(),
-        "-c".to_string(),
-        // Sleep for a minute after building to prevent the container from closing before we
-        // retrieve the hash
-        "cd /serai/substrate/runtime && cargo clean && cargo build --release &&
-           printf \"Runtime hash: \" > hash &&
-           sha256sum /serai/target/release/wbuild/serai-runtime/serai_runtime.wasm >> hash &&
-           cat hash &&
-           sleep 60"
-          .to_string(),
-      ]),
+  {
+    // Build the images in parallel
+    let mut commands = vec![];
+    for (containerfile, image) in &images {
+      let mut command = Command::new("docker");
+      command
+        .current_dir(&path)
+        .arg("buildx")
+        .arg("build")
+        .arg("--no-cache")
+        .arg(format!("--file={}", containerfile.display()))
+        .arg("--tag")
+        .arg(image)
+        .arg(".");
+
+      // Multiple simultaneous build processes are very noisy, so we quiet them
+      #[cfg(not(github_ci))]
+      command.arg("--quiet");
+
+      #[cfg_attr(not(github_ci), expect(unused_mut))]
+      let mut command = command.spawn().unwrap();
+
+      // In the GH CI, we force this to be sequential due to experiencing OOM kills on
+      // `macos-15-intel`. This doesn't take so long to run we're concerned about any time limit.
+      #[cfg(github_ci)]
+      assert!(command.wait().unwrap().success());
+
+      commands.push(command);
+    }
+
+    // Join all of the commands
+    for mut command in commands {
+      assert!(command.wait().unwrap().success());
+    }
+  }
+
+  let mut outputs = vec![];
+  for (_containerfile, image) in images {
+    outputs.push(
+      Command::new("docker")
+        .arg("run")
+        .arg("--quiet")
+        .arg("--pull")
+        .arg("never")
+        .arg("--rm")
+        .arg(&image)
+        .arg("sha256sum")
+        .arg("/serai.wasm")
+        .output(),
     );
+    // Attempt to clean up the image
+    let _ = Command::new("docker").arg("rmi").arg(&image).output();
   }
 
-  test.run(|_| async {
-    let ids = ids;
-    let mut containers = vec![];
-    for container in String::from_utf8(
-      Command::new("docker").arg("ps").arg("--format").arg("{{.Names}}").output().unwrap().stdout,
-    )
-    .expect("output wasn't utf-8")
-    .lines()
-    {
-      for id in &ids {
-        if container.contains(&hex::encode(id)) {
-          containers.push(container.trim().to_string());
-        }
-      }
+  let mut expected = None;
+  for output in outputs {
+    let output = output.unwrap();
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(output.status.success(), "{stdout}\n{}", String::from_utf8(output.stderr).unwrap());
+    if expected.is_none() {
+      expected = Some(stdout.clone());
     }
-    assert_eq!(containers.len(), RUNS, "couldn't find all containers");
+    assert_eq!(expected, Some(stdout));
+  }
 
-    let mut res = vec![None; RUNS];
-    'attempt: for _ in 0 .. (TIMEOUT / 10) {
-      tokio::time::sleep(core::time::Duration::from_secs(10)).await;
-
-      'runner: for (i, container) in containers.iter().enumerate() {
-        if res[i].is_some() {
-          continue;
-        }
-
-        let logs = Command::new("docker").arg("logs").arg(container).output().unwrap();
-        let Some(last_log) =
-          std::str::from_utf8(&logs.stdout).expect("output wasn't utf-8").lines().last()
-        else {
-          continue 'runner;
-        };
-
-        let split = last_log.split("Runtime hash: ").collect::<Vec<_>>();
-        if split.len() == 2 {
-          res[i] = Some(split[1].to_string());
-          continue 'runner;
-        }
-      }
-
-      for item in &res {
-        if item.is_none() {
-          continue 'attempt;
-        }
-      }
-      break;
-    }
-
-    // If we didn't get results from all runners, panic
-    for item in &res {
-      if item.is_none() {
-        panic!("couldn't get runtime hashes within allowed time");
-      }
-    }
-    let mut identical = HashSet::new();
-    for res in res.clone() {
-      identical.insert(res.unwrap());
-    }
-    assert_eq!(identical.len(), 1, "got different runtime hashes {res:?}");
-  });
+  let result = expected.unwrap();
+  let hash = result.split_whitespace().next().unwrap();
+  // Check this appears to be a 32-byte hash (encoded as hex)
+  assert_eq!(hash.len(), 64);
+  hex::decode(hash).unwrap();
+  println!("Hash: {hash}");
 }

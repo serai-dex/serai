@@ -1,29 +1,17 @@
-#![expect(clippy::cast_possible_truncation)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 
-#[cfg(feature = "networks")]
-pub mod networks;
-
+/// The client for the Serai network itself.
 #[cfg(feature = "serai")]
-mod serai;
-#[cfg(feature = "serai")]
-pub use serai::*;
+pub use serai_client_serai as serai;
 
-#[cfg(not(feature = "serai"))]
-pub use serai_abi::primitives;
-#[cfg(not(feature = "serai"))]
-mod other_primitives {
-  pub mod coins {
-    pub use serai_abi::coins::primitives;
-  }
-  pub mod validator_sets {
-    pub use serai_abi::validator_sets::primitives;
-  }
-  pub mod in_instructions {
-    pub use serai_abi::in_instructions::primitives;
-  }
-}
-#[cfg(not(feature = "serai"))]
-pub use other_primitives::*;
-
-#[cfg(test)]
-mod tests;
+/// The client for the Bitcoin integration.
+#[cfg(feature = "bitcoin")]
+pub use serai_client_bitcoin as bitcoin;
+/// The client for the Ethereum integration.
+#[cfg(feature = "ethereum")]
+pub use serai_client_ethereum as ethereum;
+/// The client for the Monero integration.
+#[cfg(feature = "monero")]
+pub use serai_client_monero as monero;

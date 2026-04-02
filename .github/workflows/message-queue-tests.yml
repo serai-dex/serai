@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - develop
+      - next
     paths:
       - "common/**"
       - "crypto/**"
@@ -27,10 +28,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@3df4ab11eba7bda6032a0b82a6bb43b11571feac
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Install Build Dependencies
         uses: ./.github/actions/build-dependencies
 
       - name: Run message-queue Docker tests
-        run: GITHUB_CI=true RUST_BACKTRACE=1 cargo test --all-features -p serai-message-queue-tests
+        run: cargo test --all-features -p serai-message-queue-tests

@@ -21,7 +21,7 @@ mod batch;
 pub use batch::batch;
 
 mod sign;
-#[allow(unused_imports)]
+#[expect(unused_imports)]
 pub use sign::sign;
 
 mod rotation;
@@ -62,7 +62,7 @@ pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
   let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   let mut coordinator_compositions = vec![];
   // Spawn one extra coordinator which isn't in-set
-  #[allow(clippy::range_plus_one)]
+  #[expect(clippy::range_plus_one)]
   for i in 0 .. (COORDINATORS + 1) {
     let name = name(i);
     let serai_composition = serai_composition(name, fast_epoch);
@@ -97,7 +97,7 @@ pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
           .set_start_policy(StartPolicy::Strict)
           .set_handle(handle.clone())
           .set_log_options(Some(LogOptions {
-            action: if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+            action: if std::env::var("GITHUB_CI") == Ok("true".to_owned()) {
               LogAction::Forward
             } else {
               LogAction::ForwardToFile { path: logs_path.clone() }
@@ -196,7 +196,7 @@ pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
 
       // Wait for the Serai node to boot, and for the Tendermint chain to get past the first block
       // TODO: Replace this with a Coordinator RPC we can query
-      tokio::time::sleep(Duration::from_secs(60)).await;
+      tokio::time::sleep(Duration::from_mins(1)).await;
 
       // Connect to the Message Queues as the processor
       let mut processors: Vec<Processor> = vec![];
@@ -218,7 +218,7 @@ pub(crate) async fn new_test(test_body: impl TestBody, fast_epoch: bool) {
 // https://github.com/serai-dex/serai/issues/340
 pub(crate) async fn wait_for_tributary() {
   tokio::time::sleep(Duration::from_secs(15)).await;
-  if std::env::var("GITHUB_CI") == Ok("true".to_string()) {
+  if std::env::var("GITHUB_CI") == Ok("true".to_owned()) {
     tokio::time::sleep(Duration::from_secs(6)).await;
   }
 }

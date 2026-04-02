@@ -4,9 +4,15 @@
 
 use std::{path::PathBuf, fs, process::Command};
 
-/// Build contracts from the specified path, outputting the artifacts to the specified path.
+/// A helper for a Rust build script to build contracts from the specified path.
 ///
-/// Requires solc 0.8.29.
+/// The artifacts path is expected to be a subdirectory of the `target` directory. This will output
+/// `cargo:rerun-if-changed` directives for the inputs but _not_ the outputs. As the artifacts will
+/// be within `cargo`'s `target` directory, `cargo` will rerun this if the `target` directory (and
+/// the artifacts within it) are cleaned. If your artifacts are not within your `target` directory,
+/// you should consider any necessary `cargo:rerun-if-changed` directives yourself.
+///
+/// Requires `solc 0.8.29`.
 pub fn build(
   include_paths: &[&str],
   contracts_path: &str,
@@ -15,18 +21,19 @@ pub fn build(
   if !fs::exists(artifacts_path)
     .map_err(|e| format!("couldn't check if artifacts directory already exists: {e:?}"))?
   {
-    fs::create_dir(artifacts_path)
+    fs::create_dir_all(artifacts_path)
       .map_err(|e| format!("couldn't create the non-existent artifacts directory: {e:?}"))?;
   }
 
-  println!("cargo:rerun-if-changed={contracts_path}/*");
-  println!("cargo:rerun-if-changed={artifacts_path}/*");
+  for path in include_paths.iter().copied().chain(core::iter::once(contracts_path)) {
+    println!("cargo:rerun-if-changed={path}");
+  }
 
   for line in String::from_utf8(
     Command::new("solc")
       .args(["--version"])
       .output()
-      .map_err(|_| "couldn't fetch solc output".to_string())?
+      .map_err(|_| "couldn't fetch solc output".to_owned())?
       .stdout,
   )
   .map_err(|_| "solc stdout wasn't UTF-8")?
@@ -34,9 +41,9 @@ pub fn build(
   {
     if let Some(version) = line.strip_prefix("Version: ") {
       let version =
-        version.split('+').next().ok_or_else(|| "no value present on line".to_string())?;
+        version.split('+').next().ok_or_else(|| "no value present on line".to_owned())?;
       if version != "0.8.29" {
-        Err(format!("version was {version}, 0.8.29 required"))?
+        Err(format!("version was {version}, 0.8.29 required"))?;
       }
     }
   }
@@ -53,7 +60,7 @@ pub fn build(
     args.push("--include-path");
     args.push(include_path);
   }
-  let mut args = args.into_iter().map(str::to_string).collect::<Vec<_>>();
+  let mut args = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
 
   let mut queue = vec![PathBuf::from(contracts_path)];
   while let Some(folder) = queue.pop() {
@@ -64,11 +71,11 @@ pub fn build(
         queue.push(entry.path());
       }
 
-      if kind.is_file() &&
+      if (!kind.is_dir()) &&
         entry
           .file_name()
           .into_string()
-          .map_err(|_| "file name wasn't a valid UTF-8 string".to_string())?
+          .map_err(|_| "file name wasn't a valid UTF-8 string".to_owned())?
           .ends_with(".sol")
       {
         args.push(
@@ -76,7 +83,7 @@ pub fn build(
             .path()
             .into_os_string()
             .into_string()
-            .map_err(|_| "file path wasn't a valid UTF-8 string".to_string())?,
+            .map_err(|_| "file path wasn't a valid UTF-8 string".to_owned())?,
         );
       }
 
@@ -87,9 +94,8 @@ pub fn build(
   let solc = Command::new("solc")
     .args(args.clone())
     .output()
-    .map_err(|_| "couldn't fetch solc output".to_string())?;
-  let stderr =
-    String::from_utf8(solc.stderr).map_err(|_| "solc stderr wasn't UTF-8".to_string())?;
+    .map_err(|_| "couldn't fetch solc output".to_owned())?;
+  let stderr = String::from_utf8(solc.stderr).map_err(|_| "solc stderr wasn't UTF-8".to_owned())?;
   if !solc.status.success() {
     Err(format!("solc (`{}`) didn't successfully execute: {stderr}", args.join(" ")))?;
   }

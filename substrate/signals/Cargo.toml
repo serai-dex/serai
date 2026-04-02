@@ -1,0 +1,90 @@
+[package]
+name = "serai-signals-pallet"
+version = "0.1.0"
+description = "Signals pallet"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/signals"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+ignored = ["scale"]
+
+[lints]
+workspace = true
+
+[dependencies]
+borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+pallet-session = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+pallet-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+
+serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
+
+serai-core-pallet = { path = "../core", default-features = false }
+serai-validator-sets-pallet = { path = "../validator-sets", default-features = false }
+
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+pallet-session = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+
+[features]
+std = [
+  "borsh/std",
+  "scale/std",
+
+  "sp-core/std",
+
+  "frame-support/std",
+  "frame-system/std",
+  "frame-benchmarking?/std",
+  "pallet-timestamp?/std",
+  "pallet-session?/std",
+  "pallet-babe/std",
+
+  "serai-abi/std",
+
+  "serai-core-pallet/std",
+  "serai-validator-sets-pallet/std",
+]
+
+runtime-benchmarks = [
+  "frame-system/runtime-benchmarks",
+  "frame-support/runtime-benchmarks",
+  "frame-benchmarking",
+  "pallet-timestamp/runtime-benchmarks",
+  "pallet-session/runtime-benchmarks",
+  "pallet-babe/runtime-benchmarks",
+
+  "serai-core-pallet/runtime-benchmarks",
+  "serai-validator-sets-pallet/runtime-benchmarks",
+]
+
+try-runtime = [
+  "frame-system/try-runtime",
+  "frame-support/try-runtime",
+  "pallet-babe/try-runtime",
+
+  "serai-abi/try-runtime",
+
+  "serai-core-pallet/try-runtime",
+  "serai-validator-sets-pallet/try-runtime",
+]
+
+default = ["std"]

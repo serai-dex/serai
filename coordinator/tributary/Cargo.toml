@@ -8,7 +8,6 @@ authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
 publish = false
-rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -21,23 +20,22 @@ workspace = true
 zeroize = { version = "^1.5", default-features = false, features = ["std"] }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
-scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["std", "derive"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-blake2 = { version = "0.11.0-rc.0", default-features = false, features = ["alloc"] }
+blake2 = { version = "0.11.0-rc.5", default-features = false, features = ["alloc"] }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
 schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", default-features = false, features = ["std"] }
 
-serai-client = { path = "../../substrate/client", default-features = false, features = ["serai", "borsh"] }
+serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 
 serai-db = { path = "../../common/db" }
 serai-task = { path = "../../common/task", version = "0.1" }
 
 tributary-sdk = { path = "../tributary-sdk" }
 
-serai-cosign = { path = "../cosign" }
+serai-cosign-types = { path = "../cosign/types" }
 serai-coordinator-substrate = { path = "../substrate" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }

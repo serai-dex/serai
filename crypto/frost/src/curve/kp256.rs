@@ -1,25 +1,25 @@
 use core::convert::AsRef;
 
-use sha2::{digest::Digest, Sha256};
+use sha2::{digest::Digest as _, Sha256};
 
 use ciphersuite::{
   group::{
-    ff::{Field, PrimeField},
-    GroupEncoding,
+    ff::{Field as _, PrimeField},
+    GroupEncoding as _,
   },
   WrappedGroup,
 };
 
 use elliptic_curve::{
-  zeroize::Zeroize,
+  zeroize::Zeroize as _,
   generic_array::{typenum::U32, GenericArray},
-  bigint::{NonZero, CheckedAdd, Encoding, U384},
-  hash2curve::{Expander, ExpandMsg, ExpandMsgXmd},
+  bigint::{NonZero, CheckedAdd as _, Encoding as _, U384},
+  hash2curve::{Expander as _, ExpandMsg as _, ExpandMsgXmd},
 };
 
 use crate::{curve::Curve, algorithm::Hram};
 
-#[allow(non_snake_case)]
+#[expect(non_snake_case)]
 fn hash_to_F<C: WrappedGroup<F: PrimeField<Repr = GenericArray<u8, U32>>>>(
   dst: &[u8],
   msg: &[u8],
@@ -110,7 +110,7 @@ macro_rules! kp_curve {
     #[derive(Clone)]
     pub struct $Hram;
     impl Hram<$Curve> for $Hram {
-      #[allow(non_snake_case)]
+      #[expect(non_snake_case)]
       fn hram(
         R: &<$Curve as WrappedGroup>::G,
         A: &<$Curve as WrappedGroup>::G,
@@ -133,7 +133,7 @@ kp_curve!("secp256k1", Secp256k1, IetfSecp256k1Hram, b"FROST-secp256k1-SHA256-v1
 
 #[cfg(test)]
 fn test_oversize_dst<C: WrappedGroup<F: PrimeField<Repr = GenericArray<u8, U32>>>>() {
-  use sha2::Digest;
+  use sha2::Digest as _;
 
   // The draft specifies DSTs >255 bytes should be hashed into a 32-byte DST
   let oversize_dst = [0x00; 256];

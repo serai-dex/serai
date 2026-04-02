@@ -1,0 +1,112 @@
+[package]
+name = "serai-in-instructions-pallet"
+version = "0.1.0"
+description = "Pallet handling In-Instructions for Serai"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/substrate/in-instructions"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+ignored = ["scale"]
+
+[lints]
+workspace = true
+
+[dependencies]
+scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
+borsh = { version = "1", default-features = false }
+
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+
+frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+
+bitvec = { version = "1", default-features = false, features = ["alloc"] }
+serai-abi = { path = "../abi", default-features = false, features = ["substrate"] }
+serai-core-pallet = { path = "../core", default-features = false }
+serai-coins-pallet = { path = "../coins", default-features = false }
+serai-validator-sets-pallet = { path = "../validator-sets", default-features = false }
+serai-signals-pallet = { path = "../signals", default-features = false }
+serai-dex-pallet = { path = "../dex", default-features = false }
+serai-economic-security-pallet = { path = "../economic-security", default-features = false }
+serai-genesis-liquidity-pallet = { path = "../genesis-liquidity", default-features = false }
+
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+
+[dev-dependencies]
+zeroize = { version = "1.5", default-features = false, features = ["alloc", "std"] }
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc", "std"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["alloc", "std"] }
+
+pallet-timestamp = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+pallet-session = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+pallet-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+pallet-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+
+serai-validator-sets-pallet = { path = "../validator-sets", default-features = false, features = ["tests"] }
+
+[features]
+std = [
+  "scale/std",
+  "borsh/std",
+
+  "sp-core/std",
+  "sp-application-crypto/std",
+
+  "frame-support/std",
+  "frame-system/std",
+
+  "bitvec/std",
+  "serai-abi/std",
+  "serai-core-pallet/std",
+  "serai-coins-pallet/std",
+  "serai-validator-sets-pallet/std",
+  "serai-signals-pallet/std",
+  "serai-dex-pallet/std",
+  "serai-economic-security-pallet/std",
+  "serai-genesis-liquidity-pallet/std",
+
+  "sp-io?/std",
+  "frame-benchmarking?/std",
+]
+
+try-runtime = [
+  "frame-support/try-runtime",
+  "frame-system/try-runtime",
+
+  "serai-abi/try-runtime",
+  "serai-core-pallet/try-runtime",
+  "serai-coins-pallet/try-runtime",
+  "serai-validator-sets-pallet/try-runtime",
+  "serai-signals-pallet/try-runtime",
+  "serai-dex-pallet/try-runtime",
+  "serai-economic-security-pallet/try-runtime",
+  "serai-genesis-liquidity-pallet/try-runtime",
+]
+
+runtime-benchmarks = [
+  "frame-support/runtime-benchmarks",
+  "frame-system/runtime-benchmarks",
+
+  "serai-core-pallet/runtime-benchmarks",
+  "serai-coins-pallet/runtime-benchmarks",
+  "serai-validator-sets-pallet/runtime-benchmarks",
+  "serai-signals-pallet/runtime-benchmarks",
+  "serai-dex-pallet/runtime-benchmarks",
+  "serai-economic-security-pallet/runtime-benchmarks",
+  "serai-genesis-liquidity-pallet/runtime-benchmarks",
+
+  "sp-io",
+  "frame-benchmarking/runtime-benchmarks",
+]
+
+default = ["std"]

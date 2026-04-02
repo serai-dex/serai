@@ -1,13 +1,15 @@
 use core::marker::PhantomData;
 
-use group::GroupEncoding;
+use group::GroupEncoding as _;
 
-use serai_primitives::{ExternalCoin, Amount, ExternalBalance};
+use serai_primitives::{
+  coin::ExternalCoin,
+  balance::{Amount, ExternalBalance},
+};
 
-use borsh::BorshDeserialize;
 use serai_db::{Get, DbTxn, create_db, db_channel};
 
-use primitives::{Payment, ReceivedOutput};
+use primitives::{Payment, ReceivedOutput as _};
 use utxo_scheduler_primitives::TreeTransaction;
 use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor};
 
@@ -19,9 +21,10 @@ create_db! {
   }
 }
 
+#[rustfmt::skip]
 db_channel! {
   UtxoScheduler {
-    PendingBranch: (key: &[u8], balance: ExternalBalance) -> Vec<u8>,
+    PendingBranch: <S: ScannerFeed>(key: &[u8], balance: ExternalBalance) -> TreeTransaction<AddressFor<S>>,
   }
 }
 
@@ -31,7 +34,7 @@ impl<S: ScannerFeed> Db<S> {
     OperatingCosts::get(getter, coin).unwrap_or(Amount(0))
   }
   pub(crate) fn set_operating_costs(txn: &mut impl DbTxn, coin: ExternalCoin, amount: Amount) {
-    OperatingCosts::set(txn, coin, &amount)
+    OperatingCosts::set(txn, coin, &amount);
   }
 
   pub(crate) fn outputs(
@@ -100,14 +103,13 @@ impl<S: ScannerFeed> Db<S> {
     balance: ExternalBalance,
     child: &TreeTransaction<AddressFor<S>>,
   ) {
-    PendingBranch::send(txn, key.to_bytes().as_ref(), balance, &borsh::to_vec(child).unwrap())
+    PendingBranch::<S>::send(txn, key.to_bytes().as_ref(), balance, child);
   }
   pub(crate) fn take_pending_branch(
     txn: &mut impl DbTxn,
     key: KeyFor<S>,
     balance: ExternalBalance,
   ) -> Option<TreeTransaction<AddressFor<S>>> {
-    PendingBranch::try_recv(txn, key.to_bytes().as_ref(), balance)
-      .map(|bytes| TreeTransaction::<AddressFor<S>>::deserialize(&mut bytes.as_slice()).unwrap())
+    PendingBranch::<S>::try_recv(txn, key.to_bytes().as_ref(), balance)
   }
 }
