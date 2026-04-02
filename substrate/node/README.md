@@ -72,3 +72,11 @@ respectively.
 The node, by default, will spawn an unrestricted RPC accessible to any address.
 It is NOT safe to publicly expose and an independent proxy MUST be added to
 limit connections, if ever exposed to untrusted users.
+
+### Audit Status
+
+This was
+[audited by Security Research Labs](/audits/substrate/Security%20Research%20Labs%20April%202026)
+as of commit `cf4276f8219cdde057c31434766c56446a7853e6`. Any following changes
+were not audited unless otherwise stated. Please read the linked report for
+more information.

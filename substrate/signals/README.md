@@ -71,3 +71,11 @@ validators within a network and `n` is the amount of networks, instead of
 
 Halting a network solely marks it as halted within the pallet. A consumer must
 then use this information to prevent further actions from occurring.
+
+### Audit Status
+
+This was
+[audited by Security Research Labs](/audits/substrate/Security%20Research%20Labs%20April%202026)
+as of commit `24eefa8bc50a6d17c23a6930bcf34aab1b6163d3`. Any following changes
+were not audited unless otherwise stated. Please read the linked report for
+more information.

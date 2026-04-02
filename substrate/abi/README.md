@@ -42,3 +42,11 @@ These types implement Substrate-specific APIs so an analogue for our bespoke
 types may be used with existing pallets, client code from Substrate. These,
 again, are considered an implementation detail and not part of the Serai
 protocol's definition nor any long-term commitment.
+
+### Audit Status
+
+This was
+[audited by Security Research Labs](/audits/substrate/Security%20Research%20Labs%20April%202026)
+as of commit `786ba87125ca9205e02bf74f29c49d0e28040a08`. Any following changes
+were not audited unless otherwise stated. Please read the linked report for
+more information.

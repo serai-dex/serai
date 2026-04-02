@@ -31,3 +31,11 @@ In order to ensure no allocation per key share is insane, a minimum of 0.01% of
 the amount distributed to the pools is set. This may cause even a single
 validator who allocates for a single key share to meet the requirement for the
 network to be considered economically secure.
+
+### Audit Status
+
+This was
+[audited by Security Research Labs](/audits/substrate/Security%20Research%20Labs%20April%202026)
+as of commit `391f1f050290ae90e31e90a3a524832cfaddaf94`. Any following changes
+were not audited unless otherwise stated. Please read the linked report for
+more information.

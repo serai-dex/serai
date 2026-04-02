@@ -66,3 +66,11 @@ Each instance may be configured with [`AllowMint`], a `trait` which determines
 if a mint should be allowed or not. This is intended to be composed with
 Serai's economic security design to limit the amount of liquidity present on
 the network to be proportional to the relevant validators' stake.
+
+### Audit Status
+
+This was
+[audited by Security Research Labs](/audits/substrate/Security%20Research%20Labs%20April%202026)
+as of commit `24eefa8bc50a6d17c23a6930bcf34aab1b6163d3`. Any following changes
+were not audited unless otherwise stated. Please read the linked report for
+more information.
