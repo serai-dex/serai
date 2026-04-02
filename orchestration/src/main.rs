@@ -193,6 +193,8 @@ fn build_serai_service(
     report "illegal instruction" when ran. The following block is only here as if uncommented, it
     does compile and successfully produce a binary. It's solely that the binary doesn't work.
 
+    https://github.com/serai-dex/serai/issues/737
+
   /*
     We enable LLVM's ControlFlowIntegrity, which requires enabling LTO.
 

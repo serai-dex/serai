@@ -103,8 +103,6 @@ exceptions = [
 
   { allow = ["AGPL-3.0-only"], name = "serai-orchestrator" },
 
-  { allow = ["AGPL-3.0-only"], name = "mini-serai" },
-
   { allow = ["AGPL-3.0-only"], name = "serai-docker-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-message-queue-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-processor-tests" },
