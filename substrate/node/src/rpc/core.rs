@@ -5,7 +5,7 @@ pub(crate) fn module(
 ) -> Result<RpcModule<impl 'static + Send + Sync>, Box<dyn std::error::Error + Send + Sync>> {
   let mut module = RpcModule::new(client);
 
-  module.register_method("system/next-nonce", |params, client, _ext| -> Result<_, Error> {
+  module.register_method("core/next-nonce", |params, client, _ext| -> Result<_, Error> {
     let Some(block_hash) = block_hash(client, &params)? else { Err(Error::InvalidStateReference)? };
 
     #[derive(sp_core::serde::Deserialize)]

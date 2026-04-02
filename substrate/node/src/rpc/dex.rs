@@ -12,10 +12,24 @@ pub(crate) fn module(
     let external_coin: ExternalCoin =
       coin.try_into().map_err(|()| Error::InvalidRequest("coin is not external coin"))?;
 
-    let Ok(reserves) = client.runtime_api().pool_reserves(block_hash, external_coin) else {
-      Err(Error::Internal("couldn't fetch the reserves for the coin"))?
+    let address = serai_abi::dex::address(external_coin);
+    let Ok(sri_balance) = client.runtime_api().balance(block_hash, address, Coin::Serai) else {
+      Err(Error::Internal("couldn't fetch the sri balance of the pool"))?
     };
-    Ok(hex::encode(borsh::to_vec(&reserves).unwrap()))
+    let Ok(external_coin_balance) =
+      client.runtime_api().balance(block_hash, address, external_coin.into())
+    else {
+      Err(Error::Internal("couldn't fetch the external coin balance of the pool"))?
+    };
+
+    #[derive(Clone, sp_core::serde::Serialize)]
+    #[serde(crate = "sp_core::serde")]
+    struct Reserves {
+      sri: u64,
+      external_coin: u64,
+    }
+
+    Ok(Reserves { sri: sri_balance.0, external_coin: external_coin_balance.0 })
   })?;
 
   Ok(module)

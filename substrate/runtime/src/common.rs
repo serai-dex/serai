@@ -4,7 +4,6 @@ use serai_abi::primitives::{
   network_id::NetworkId,
   validator_sets::{Session, ExternalValidatorSet},
   coin::{Coin, ExternalCoin},
-  dex::Reserves,
   balance::{Amount, Balance},
   address::SeraiAddress,
 };
@@ -79,9 +78,6 @@ sp_api::decl_runtime_apis! {
 
     /// Returns `true` if genesis period is completed, `false` otherwise.
     fn genesis_completed() -> bool;
-
-    /// Total pool reserves for a given coin.
-    fn pool_reserves(coin: ExternalCoin) -> Reserves;
 
     /// Next nonce to be used for this account.
     fn account_nonce(of: SeraiAddress) -> u32;

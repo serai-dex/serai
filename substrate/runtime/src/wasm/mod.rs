@@ -18,7 +18,6 @@ use serai_abi::{
     network_id::{ExternalNetworkId, NetworkId},
     coin::{Coin, ExternalCoin},
     balance::{Amount, Balance},
-    dex::Reserves,
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
     address::SeraiAddress,
   },
@@ -531,14 +530,6 @@ sp_api::impl_runtime_apis! {
 
     fn genesis_completed() -> bool {
       GenesisLiquidity::completed()
-    }
-
-    fn pool_reserves(coin: ExternalCoin) -> Reserves {
-      let pool = serai_abi::dex::address(coin);
-      Reserves {
-        sri: Coins::balance(pool, Coin::Serai),
-        external_coin: Coins::balance(pool, coin),
-      }
     }
 
     fn account_nonce(of: SeraiAddress) -> u32 {

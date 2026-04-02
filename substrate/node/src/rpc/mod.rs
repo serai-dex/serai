@@ -1,4 +1,4 @@
-use core::str::FromStr as _;
+use ::core::str::FromStr as _;
 use std::{sync::Arc, collections::HashSet};
 
 use rand_core::{RngCore as _, OsRng};
@@ -23,8 +23,8 @@ mod utils;
 use utils::*;
 
 mod dex;
-mod system;
 mod coins;
+mod core;
 mod blockchain;
 mod validator_sets;
 mod liquidity_tokens;
@@ -52,7 +52,7 @@ pub(crate) fn create_full<P: 'static + TransactionPool<Block = Block>>(
   root.merge(liquidity_tokens::module(client.clone())?)?;
   root.merge(genesis_liquidity::module(client.clone())?)?;
   root.merge(dex::module(client.clone())?)?;
-  root.merge(system::module(client.clone())?)?;
+  root.merge(core::module(client.clone())?)?;
   if let Some(authority_discovery) = authority_discovery {
     root.merge(p2p_validators::module(&bootnodes, client, authority_discovery)?)?;
   }

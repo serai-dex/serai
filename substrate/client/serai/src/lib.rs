@@ -36,13 +36,13 @@ pub use validator_sets::ValidatorSets;
 mod in_instructions;
 pub use in_instructions::InInstructions;
 
-pub(crate) fn rpc_coin(network: impl Into<Coin>) -> &'static str {
-  match network.into() {
+pub(crate) fn rpc_coin(coin: impl Into<Coin>) -> &'static str {
+  match coin.into() {
     Coin::Serai => r#""SRI""#,
-    Coin::External(ExternalCoin::Bitcoin) => r#""BTC""#,
-    Coin::External(ExternalCoin::Ether) => r#""ETH""#,
-    Coin::External(ExternalCoin::Dai) => r#""DAI""#,
-    Coin::External(ExternalCoin::Monero) => r#""XMR""#,
+    Coin::External(ExternalCoin::Bitcoin) => r#""sriBTC""#,
+    Coin::External(ExternalCoin::Ether) => r#""sriETH""#,
+    Coin::External(ExternalCoin::Dai) => r#""sriDAI""#,
+    Coin::External(ExternalCoin::Monero) => r#""sriXMR""#,
   }
 }
 

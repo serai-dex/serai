@@ -88,12 +88,12 @@ pub(super) fn network(params: &Params) -> Result<NetworkId, Error> {
 }
 
 pub(super) fn coin_from_str(coin: impl AsRef<str>) -> Result<Coin, Error> {
-  Ok(match coin.as_ref().to_uppercase().as_str() {
+  Ok(match coin.as_ref() {
     "SRI" => Coin::Serai,
-    "BTC" => Coin::External(ExternalCoin::Bitcoin),
-    "ETH" => Coin::External(ExternalCoin::Ether),
-    "DAI" => Coin::External(ExternalCoin::Dai),
-    "XMR" => Coin::External(ExternalCoin::Monero),
+    "sriBTC" => Coin::External(ExternalCoin::Bitcoin),
+    "sriETH" => Coin::External(ExternalCoin::Ether),
+    "sriDAI" => Coin::External(ExternalCoin::Dai),
+    "sriXMR" => Coin::External(ExternalCoin::Monero),
     _ => Err(Error::InvalidRequest("unrecognized external coin requested"))?,
   })
 }
