@@ -1,0 +1,21 @@
+[package]
+name = "core2"
+version = "0.4.99"
+description = "core2 which patches to std-shims"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/core2"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+std-shims = { path = "../../common/std-shims", default-features = false }
+
+[features]
+alloc = ["std-shims/alloc"]
+std = ["std-shims/std"]
+default = ["std"]

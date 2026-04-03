@@ -1,0 +1,16 @@
+[package]
+name = "cpufeatures"
+version = "0.2.99"
+description = "Patch to the latest version"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/cpufeatures"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+cpufeatures = { version = "0.3" }

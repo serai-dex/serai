@@ -1,0 +1,16 @@
+[package]
+name = "nonzero_ext"
+version = "0.3.99"
+description = "Minimal re-implementation of the necessary subset of `nonzero_ext`"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/nonzero_ext"
+rust-version = "1.83"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[features]
+std = []

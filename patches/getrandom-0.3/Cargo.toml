@@ -4,8 +4,6 @@ version = "0.3.99"
 description = "Updates to the latest version"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/patches/getrandom"
-authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-keywords = []
 edition = "2021"
 
 [package.metadata.docs.rs]

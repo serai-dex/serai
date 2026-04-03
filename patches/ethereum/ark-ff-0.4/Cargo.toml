@@ -4,8 +4,6 @@ version = "0.4.99"
 description = "Patch to an empty crate"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/patches/ethereum/ark-ff-0.4"
-authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-keywords = []
 edition = "2021"
 
 [package.metadata.docs.rs]

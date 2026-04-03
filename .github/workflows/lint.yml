@@ -106,7 +106,7 @@ jobs:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Install cargo deny
-        run: cargo +1.94.0 install cargo-deny --version =0.19.0
+        run: cargo +1.94.1 install --locked cargo-deny --version =0.19.0
 
       - name: Run cargo deny
         run: cargo deny -L error --all-features check --hide-inclusion-graph
@@ -152,8 +152,8 @@ jobs:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
       - name: Verify all dependencies are in use
         run: |
-          cargo +1.94.0 install cargo-machete --version =0.9.1
-          cargo +1.94.0 machete
+          cargo +1.94.1 install --locked cargo-machete --version =0.9.1
+          cargo +1.94.1 machete
 
   msrv:
     runs-on: ubuntu-latest
@@ -164,7 +164,7 @@ jobs:
       - name: Verify claimed `rust-version`
         shell: bash
         run: |
-          cargo +1.94.0 install cargo-msrv --version =0.19.3
+          cargo +1.94.1 install --locked cargo-msrv --version =0.19.3
 
           # Remove `patches/{home, getrandom}` as they force the entire workspace to Rust 1.85(+)
           echo "$(cat ./Cargo.toml | grep -v 'patches/home' | grep -v 'patches/getrandom')" > ./Cargo.toml
@@ -244,6 +244,19 @@ jobs:
           }
           check_workspace
 
+  vet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+
+      - name: Install cargo vet
+        run: cargo +1.94.1 install --locked cargo-vet --git https://github.com/kayabaNerve/cargo-vet --rev d2fb27daaeb839e5fa4f6b28c5cdd4a9185542b5
+
+      - name: Run cargo vet
+        run: |
+          cargo vet --locked
+          ./supply-chain/no-first-party.sh
+
   slither:
     runs-on: ubuntu-latest
     steps:
@@ -278,4 +291,20 @@ jobs:
           sudo apt install -y shellcheck
           find . -name "*.sh" | while read -r script; do
             shellcheck --enable=all --shell=sh --severity=info $script
+          done
+
+  # These are here as they should be minimal and accordingly immediate to run any/all tests on
+  test-patches:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-26-intel, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+      - name: Run Tests
+        shell: bash
+        run: |
+          find ./patches -name "Cargo.toml" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
           done

@@ -4,8 +4,6 @@ version = "0.4.99"
 description = "Ciphersuites built around ff/group"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ciphersuite"
-authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-keywords = ["ciphersuite", "ff", "group"]
 edition = "2021"
 
 [package.metadata.docs.rs]

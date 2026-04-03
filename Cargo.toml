@@ -189,14 +189,18 @@ primitive-types-12 = { package = "primitive-types", path = "patches/ethereum/pri
 rapidhash = { path = "patches/ethereum/rapidhash" }
 rlp = { path = "patches/ethereum/rlp" }
 secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-0.30" }
+indexmap = { path = "patches/indexmap" }
+schemars-09 = { package = "schemars", path = "patches/schemars-09" }
+schemars-10 = { package = "schemars", path = "patches/schemars-10" }
 wit-bindgen-rust-macro = { path = "patches/wit-bindgen-rust-macro" }
 
 # Dependencies from monero-oxide which originate from within our own tree, potentially shimmed to account for deviations since publishing
 std-shims = { path = "patches/std-shims" }
 simple-request = { path = "patches/simple-request" }
 flexible-transcript = { path = "crypto/transcript" }
+multiexp = { path = "crypto/multiexp" }
 ciphersuite = { path = "patches/ciphersuite" }
-dalek-ff-group = { path = "patches/dalek-ff-group" }
+dalek-ff-group = { path = "crypto/dalek-ff-group" }
 minimal-ed448 = { path = "crypto/ed448" }
 modular-frost = { path = "crypto/frost" }
 
@@ -206,21 +210,28 @@ lazy_static = { path = "patches/lazy_static" }
 home = { path = "patches/home" }
 
 # Updates to the latest version
-darling = { path = "patches/darling" }
+cpufeatures = { path = "patches/cpufeatures" }
 dtoa = { path = "patches/dtoa" }
 getrandom-02 = { package = "getrandom", path = "patches/getrandom-0.2" }
 getrandom-03 = { package = "getrandom", path = "patches/getrandom-0.3" }
 ryu = { path = "patches/ryu" }
 thiserror = { path = "patches/thiserror" }
 
-# `option-ext` is a copyleft library for a single one liner, which we provide ourselves
-option-ext = { path = "patches/option-ext" }
-
-# This is a trivial third-party crate which over-scopes its dependencies
-aurora-engine-modexp = { path = "patches/ethereum/aurora-engine-modexp" }
-
+# `core2` can be replaced with our in-tree `std-shims`
+core2 = { path = "patches/core2" }
+# `hex_lit` can be replaced with `hex-literal` (from RustCrypto)
+hex_lit = { path = "patches/hex_lit" }
+# `rustc-hex` (a Parity-published crate extracted from `rustc`) can be replaced with <50 lines
+rustc-hex = { path = "patches/rustc-hex" }
 # `keccak-asm` is liberal with 'use at your risk', yet API-compatible with `sha3`, so we prefer the latter
 keccak-asm = { path = "patches/keccak-asm" }
+
+# `option-ext` is a copyleft library for a single one liner, which we provide ourselves
+option-ext = { path = "patches/option-ext" }
+# This is a trivial third-party crate which over-scopes its dependencies
+aurora-engine-modexp = { path = "patches/ethereum/aurora-engine-modexp" }
+# `nonzero_ext` is more than 300 lines when we only need 10
+nonzero_ext = { path = "patches/nonzero_ext" }
 
 # `hickory-resolver` uses `moka`, which is obscene with LLM use and frequently has critical bugs
 # This is a version patched to use `lru-slab` for its LRU cache instead

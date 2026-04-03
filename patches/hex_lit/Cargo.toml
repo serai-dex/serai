@@ -1,0 +1,18 @@
+[package]
+name = "hex_lit"
+version = "0.1.99"
+description = "hex_lit which patches to hex-literal"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/hex_lit"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+hex-literal = { version = "1", default-features = false }
+
+[features]

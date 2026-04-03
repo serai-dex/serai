@@ -1,0 +1,626 @@
+
+# cargo-vet audits file
+
+[criteria.audited]
+description = "This crate was professionally audited."
+
+[criteria.reviewed]
+description = "This crate was reviewed by a member of Serai and found to be in good standing."
+implies = "safe-to-deploy"
+
+[[audits.ark-ff]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.3.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.ark-ff]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.4.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.aurora-engine-modexp]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.99.99"
+notes = "Re-implementation of the necessary subset of the `aurora-engine-modexp` API to consolidate arithmetic implementations"
+
+[[audits.base58ck]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.0"
+notes = "Not fuzz tested despite having novel arithmetic"
+
+[[audits.c-kzg]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "2.99.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.ciphersuite]]
+criteria = "audited"
+version = "0.2.0"
+notes = "`/audits/crypto/Cypher Stack March 2023`, excluding the Ed448 ciphersuite"
+
+[[audits.const-random]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.18"
+notes = "While this is as it says, a separate question is if anyone should use this"
+
+[[audits.const-random-macro]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.16"
+notes = "While this is as it says, a separate question is if anyone should use this"
+
+[[audits.core-json]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.4.0"
+notes = "Written by kayabaNerve"
+
+[[audits.core-json-derive]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.4.1"
+notes = "Written by kayabaNerve"
+
+[[audits.core-json-traits]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.4.1"
+notes = "Written by kayabaNerve"
+
+[[audits.cpufeatures]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.99"
+notes = "Patches from `0.2` to `0.3` whose only breaking change was a MSRV bump"
+
+[[audits.crypto-bigint]]
+criteria = "audited"
+version = "0.5.3"
+notes = "https://www.nccgroup.com/research/public-report-entropyrust-cryptography-review reviewed 0.5.2, with the fixes (and some other, presumably unaudited commits) released with 0.5.3"
+
+[[audits.dalek-ff-group]]
+criteria = "audited"
+version = "0.2.0"
+notes = "`/audits/crypto/Cypher Stack March 2023`"
+
+[[audits.dirs]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "6.0.0"
+
+[[audits.dkg]]
+criteria = "audited"
+version = "0.3.0"
+notes = "`/audits/crypto/Cypher Stack March 2023`"
+
+[[audits.dtoa]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.99.99"
+notes = "Patches to `zmij` which is by the same author, faster, and has an identical API"
+
+[[audits.ec-divisors]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"
+importable = false
+
+[[audits.either]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.15.0"
+
+[[audits.exit-future]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+
+[[audits.fastrand]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.4.0 -> 2.4.1"
+
+[[audits.fastrlp]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.3.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.fastrlp]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.4.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.ff-group-tests]]
+criteria = "audited"
+version = "0.12.1"
+notes = "`/audits/crypto/Cypher Stack March 2023`"
+
+[[audits.flexible-transcript]]
+criteria = "audited"
+version = "0.3.0"
+notes = "`/audits/crypto/Cypher Stack March 2023`"
+
+[[audits.generalized-bulletproofs]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"
+importable = false
+notes = "Written by kayabaNerve. The ZK proof itself needs further review"
+
+[[audits.generalized-bulletproofs]]
+criteria = "audited"
+version = "0.1.0@git:7d972e2b16fe57f4dfa4a9549d2fbb9306411704"
+notes = "`monero-oxide/audits/generalized-bulletproofs`"
+
+[[audits.generalized-bulletproofs-circuit-abstraction]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"
+importable = false
+notes = "Written by kayabaNerve"
+
+[[audits.generalized-bulletproofs-circuit-abstraction]]
+criteria = "audited"
+version = "0.1.0@git:cebfb4bdff0c34ead77ba3f1d4e5610e934c581f"
+notes = "`monero-oxide/audits/fcmps`, including formal verification/security proofs for its gadgets"
+
+[[audits.generalized-bulletproofs-ec-gadgets]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"
+importable = false
+notes = "Written by kayabaNerve"
+
+[[audits.generalized-bulletproofs-ec-gadgets]]
+criteria = "audited"
+version = "0.1.0@git:cebfb4bdff0c34ead77ba3f1d4e5610e934c581f"
+notes = "`monero-oxide/audits/fcmps`"
+
+[[audits.impl-codec]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.7.1"
+
+[[audits.indexmap]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.99.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.k256]]
+criteria = "audited"
+version = "0.13.2"
+notes = "https://www.nccgroup.com/research/public-report-entropyrust-cryptography-review reviewed 0.13.1, with the fixes (and some other, presumably unaudited commits) released with 0.13.2"
+
+[[audits.lazy_static]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.99.99"
+notes = "Re-implementation of a sufficient approximation of the `lazy_static` API around `std::sync::LazyLock`"
+
+[[audits.modular-frost]]
+criteria = "audited"
+version = "0.6.0"
+notes = "`/audits/crypto/Cypher Stack March 2023`, excluding the Ed448 ciphersuite"
+
+[[audits.monero-address]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-address]]
+criteria = "audited"
+version = "0.1.0@git:d5077ae9662f54b6a8a399a1ecdfefa0115b8cf7"
+notes = "`monero-oxide/audits/Cypher Stack May 2025`"
+
+[[audits.monero-base58]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-borromean]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-borromean]]
+criteria = "audited"
+version = "0.1.0@git:d5077ae9662f54b6a8a399a1ecdfefa0115b8cf7"
+notes = "`monero-oxide/audits/Cypher Stack May 2025`"
+
+[[audits.monero-bulletproofs]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-bulletproofs]]
+criteria = "audited"
+version = "0.1.0@git:d5077ae9662f54b6a8a399a1ecdfefa0115b8cf7"
+notes = "`monero-oxide/audits/Cypher Stack May 2025`"
+
+[[audits.monero-bulletproofs-generators]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-clsag]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-clsag]]
+criteria = "audited"
+version = "0.1.0@git:d5077ae9662f54b6a8a399a1ecdfefa0115b8cf7"
+notes = "`monero-oxide/audits/Cypher Stack May 2025`"
+
+[[audits.monero-daemon-rpc]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-ed25519]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-epee]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.2.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-interface]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-io]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-mlsag]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-mlsag]]
+criteria = "audited"
+version = "0.1.0@git:d5077ae9662f54b6a8a399a1ecdfefa0115b8cf7"
+notes = "`monero-oxide/audits/Cypher Stack May 2025`"
+
+[[audits.monero-oxide]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.4-alpha@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-oxide]]
+criteria = "audited"
+version = "0.1.4-alpha@git:d5077ae9662f54b6a8a399a1ecdfefa0115b8cf7"
+notes = "`monero-oxide/audits/Cypher Stack May 2025`, while named `monero-serai`"
+
+[[audits.monero-primitives]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-primitives]]
+criteria = "audited"
+version = "0.1.0@git:d5077ae9662f54b6a8a399a1ecdfefa0115b8cf7"
+notes = "`monero-oxide/audits/Cypher Stack May 2025`"
+
+[[audits.monero-simple-request-rpc]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-wallet]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
+
+[[audits.monero-wallet]]
+criteria = "audited"
+version = "0.1.0@git:d5077ae9662f54b6a8a399a1ecdfefa0115b8cf7"
+notes = "`monero-oxide/audits/Cypher Stack May 2025`"
+
+[[audits.multiexp]]
+criteria = "audited"
+version = "0.3.0"
+notes = "`/audits/crypto/Cypher Stack March 2023`"
+
+[[audits.nonzero_ext]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.3.99"
+
+[[audits.num-conv]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.1"
+
+[[audits.opaque-debug]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.3.1"
+
+[[audits.option-ext]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.99"
+notes = "MIT re-implementation of the necessary subset of the copyleft `option-ext`"
+
+[[audits.primitive-types]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.12.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.rapidhash]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "4.99.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.rlp]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.5.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.rustc-hex]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "2.99.99"
+notes = """
+`rustc-hex` is used for a single `struct`, as confirmed by the compiler
+accepting a `rustc-hex` which only provides said single `struct`. The provided
+implementation is minimal, tested, with the CI continually running tests on it.
+The replacement is zero-dependency and avoids a potential issue in the upstream
+`rustc-hex`, where non-hex characters were directly present in the `Display`
+implementation for `FromHexError`.
+"""
+
+[[audits.ryu]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.99.99"
+notes = "Patches to `zmij` which is by the same author, faster, and has a nearly-identical API. The unsafe `raw` module is omitted, but the fact this codebase compiles proves it had no active consumers"
+
+[[audits.schemars]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.9.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.schemars]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.99.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.schnorr-signatures]]
+criteria = "audited"
+version = "0.3.0"
+notes = "`/audits/crypto/Cypher Stack March 2023`"
+
+[[audits.secp256k1]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.30.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.stable_deref_trait]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.2.1"
+
+[[audits.toml_edit]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.25.10+spec-1.1.0 -> 0.25.11+spec-1.1.0"
+
+[[audits.want]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-run"
+version = "0.3.1"
+notes = "Undocumented panic prevents `safe-to-deploy`, see https://github.com/seanmonstar/want/pull/5"
+
+[[audits.wit-bindgen-rust-macro]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.51.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[trusted.windows]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-01-15"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-collections]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2025-02-06"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-core]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-11-15"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-future]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2025-02-10"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-implement]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2022-01-27"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-interface]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2022-02-18"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-link]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2024-07-17"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-numerics]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2023-05-15"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-registry]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2024-02-15"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-result]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2024-02-02"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-strings]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2024-02-02"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-sys]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-11-15"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-targets]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2022-09-09"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows-threading]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2025-04-29"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows_aarch64_gnullvm]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2022-09-01"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows_aarch64_msvc]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-11-05"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows_i686_gnu]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-10-28"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows_i686_gnullvm]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2024-04-02"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows_i686_msvc]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-10-27"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows_x86_64_gnu]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-10-28"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows_x86_64_gnullvm]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2022-09-01"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"
+
+[[trusted.windows_x86_64_msvc]]
+criteria = "safe-to-deploy"
+user-id = 64539 # Kenny Kerr (kennykerr)
+start = "2021-10-27"
+end = "2027-04-06"
+notes = "Trusted as reasonable and due to infeasibility of auditing"

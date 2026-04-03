@@ -1,0 +1,17 @@
+[package]
+name = "rustc-hex"
+version = "2.99.99"
+description = "Minimal rustc-hex alternative"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/rustc-hex"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+
+[features]
