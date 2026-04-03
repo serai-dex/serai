@@ -1,9 +1,9 @@
 [package]
-name = "darling"
-version = "0.20.99"
+name = "cpufeatures"
+version = "0.2.99"
 description = "Patch to the latest version"
 license = "MIT"
-repository = "https://github.com/serai-dex/serai/tree/develop/patches/darling"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/cpufeatures"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
@@ -15,4 +15,4 @@ rustdoc-args = ["--cfg", "docsrs"]
 [workspace]
 
 [dependencies]
-darling = { version = "0.21" }
+cpufeatures = { version = "0.3" }

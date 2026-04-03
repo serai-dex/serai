@@ -26,7 +26,7 @@ zeroize = { version = "1.5", default-features = false, features = ["zeroize_deri
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3.2", default-features = false, optional = true }
 
 ciphersuite = { path = "../ciphersuite", version = "0.4.1", default-features = false }
-multiexp = { path = "../multiexp", version = "0.5", default-features = false }
+multiexp = { path = "../multiexp", version = "0.4", default-features = false }
 
 [dev-dependencies]
 hex = "0.4"

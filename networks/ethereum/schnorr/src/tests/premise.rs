@@ -35,18 +35,19 @@ fn test_ecrecover() {
 
   // Sign the signature
   const MESSAGE: &[u8] = b"Hello, World!";
+  let hashed_message = <[u8; 32]>::from(Keccak256::digest(MESSAGE));
   let (sig, recovery_id) = private
     .as_nonzero_scalar()
-    .try_sign_prehashed(Scalar::random(&mut OsRng), &Keccak256::digest(MESSAGE))
+    .try_sign_prehashed(Scalar::random(&mut OsRng), &hashed_message.into())
     .unwrap();
 
   // Sanity check the signature verifies
-  assert_eq!(public.verify_prehash(&Keccak256::digest(MESSAGE), &sig).unwrap(), ());
+  assert_eq!(public.verify_prehash(&hashed_message, &sig).unwrap(), ());
 
   // Perform the ecrecover
   assert_eq!(
     ecrecover(
-      <Scalar as Reduce<U256>>::reduce_bytes(&Keccak256::digest(MESSAGE)),
+      <Scalar as Reduce<U256>>::reduce_bytes(&hashed_message.into()),
       u8::from(recovery_id.unwrap().is_y_odd()) == 1,
       *sig.r(),
       *sig.s()

@@ -54,6 +54,8 @@ wallet.
 - `patches`: Patches for our supply-chain to minimize dependencies and ensure
   a tighter surface.
 
+- `supply-chain`: `cargo vet` attestations for our supply chain.
+
 ### Links
 
 - [Website](https://serai.exchange/): https://serai.exchange/
