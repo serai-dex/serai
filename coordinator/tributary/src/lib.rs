@@ -193,6 +193,10 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
     data: &D,
     signer: SeraiAddress,
   ) -> Option<(SignId, HashMap<Participant, Vec<u8>>)> {
+    assert!(
+      matches!(topic, Topic::DkgConfirmation { .. }),
+      "accumulate_dkg_confirmation called with non-DkgConfirmation topic: {topic:?}"
+    );
     match TributaryDb::accumulate::<D>(
       self.tributary_txn,
       self.set.set,

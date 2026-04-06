@@ -51,8 +51,8 @@ pub(crate) enum Participating {
   Everyone,
 }
 
-pub(crate) fn required_participation(n: u16) -> Result<u16, &'static str> {
-  Ok(n.checked_mul(2).ok_or("total_weight * 2 overflows u16")? / 3 + 1)
+pub(crate) fn required_participation(n: u16) -> u16 {
+  n.checked_mul(2).expect(&format!("required_participation overflowed: {n} * 2")) / 3 + 1
 }
 
 impl Topic {
@@ -60,17 +60,16 @@ impl Topic {
   pub(crate) fn next_attempt_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round: _ } => Some(Topic::DkgConfirmation {
-        attempt: attempt.checked_add(1).unwrap_or(0),
+        attempt: attempt.checked_add(1)?,
         round: SigningProtocolRound::Preprocess,
       }),
-      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round: _ } => Some(Topic::Sign {
         id,
-        attempt: attempt.checked_add(1).unwrap_or(0),
+        attempt: attempt.checked_add(1)?,
         round: SigningProtocolRound::Preprocess,
       }),
+      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -78,10 +77,9 @@ impl Topic {
   pub(crate) fn reattempt_topic(self) -> Option<(u32, Topic)> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          let next_attempt = attempt.checked_add(1).unwrap_or(0);
+          let next_attempt = attempt.checked_add(1)?;
           Some((
             next_attempt,
             Topic::DkgConfirmation {
@@ -92,10 +90,9 @@ impl Topic {
         }
         SigningProtocolRound::Share => None,
       },
-      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          let next_attempt = attempt.checked_add(1).unwrap_or(0);
+          let next_attempt = attempt.checked_add(1)?;
           Some((
             next_attempt,
             Topic::Sign { id, attempt: next_attempt, round: SigningProtocolRound::Preprocess },
@@ -103,6 +100,7 @@ impl Topic {
         }
         SigningProtocolRound::Share => None,
       },
+      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -112,10 +110,8 @@ impl Topic {
   pub(crate) fn sign_id(self, set: ExternalValidatorSet) -> Option<messages::sign::SignId> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
-      Topic::DkgConfirmation { .. } => None,
-      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round: _ } => Some(SignId { session: set.session, id, attempt }),
+      Topic::RemoveParticipant { .. } | Topic::DkgConfirmation { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -131,7 +127,6 @@ impl Topic {
   ) -> Option<messages::sign::SignId> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round: _ } => Some({
         let id = {
           let mut id = [0; 32];
@@ -141,8 +136,7 @@ impl Topic {
         };
         SignId { session: set.session, id, attempt }
       }),
-      Topic::SlashReport => None,
-      Topic::Sign { .. } => None,
+      Topic::RemoveParticipant { .. } | Topic::SlashReport | Topic::Sign { .. } => None,
     }
   }
 
@@ -152,20 +146,19 @@ impl Topic {
   pub(crate) fn preceding_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => None,
         SigningProtocolRound::Share => {
           Some(Topic::DkgConfirmation { attempt, round: SigningProtocolRound::Preprocess })
         }
       },
-      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => None,
         SigningProtocolRound::Share => {
           Some(Topic::Sign { id, attempt, round: SigningProtocolRound::Preprocess })
         }
       },
+      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -175,20 +168,19 @@ impl Topic {
   pub(crate) fn succeeding_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
           Some(Topic::DkgConfirmation { attempt, round: SigningProtocolRound::Share })
         }
         SigningProtocolRound::Share => None,
       },
-      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
           Some(Topic::Sign { id, attempt, round: SigningProtocolRound::Share })
         }
         SigningProtocolRound::Share => None,
       },
+      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -210,10 +202,8 @@ impl Topic {
   pub(crate) fn participating(&self) -> Participating {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => Participating::Everyone,
-      Topic::DkgConfirmation { .. } => Participating::Participated,
-      Topic::SlashReport => Participating::Everyone,
-      Topic::Sign { .. } => Participating::Participated,
+      Topic::RemoveParticipant { .. } | Topic::SlashReport => Participating::Everyone,
+      Topic::DkgConfirmation { .. } | Topic::Sign { .. } => Participating::Participated,
     }
   }
 }
@@ -280,12 +270,12 @@ db_channel!(
 
 // 5 minutes
 #[cfg(not(feature = "longer-reattempts"))]
-const BASE_REATTEMPT_DELAY: u32 =
+pub(crate) const BASE_REATTEMPT_DELAY: u32 =
   (5u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
 
 // 10 minutes, intended for latent environments like the GitHub CI
 #[cfg(feature = "longer-reattempts")]
-const BASE_REATTEMPT_DELAY: u32 =
+pub(crate) const BASE_REATTEMPT_DELAY: u32 =
   (10u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
 
 pub(crate) struct TributaryDb;
@@ -439,6 +429,11 @@ impl TributaryDb {
   ) -> DataSet<D> {
     // This function will only be called once for a (validator, topic) tuple due to how we handle
     // nonces on transactions (deterministically to the topic)
+    assert!(
+      txn.get(Accumulated::<D>::key(set, topic, validator)).is_none(),
+      "accumulate called twice for the same (validator, topic) tuple: \
+       the nonce system should have prevented this"
+    );
 
     let accumulated_weight = AccumulatedWeight::get(txn, set, topic);
     if topic.requires_recognition() && accumulated_weight.is_none() {
@@ -468,13 +463,7 @@ impl TributaryDb {
       }
     }
 
-    let required_participation = match required_participation(total_weight) {
-      Ok(val) => val,
-      Err(e) => {
-        serai_env::error!("required_participation({total_weight}) failed: {e}");
-        return DataSet::None;
-      }
-    };
+    let required_participation = required_participation(total_weight);
 
     // The complete lack of validation on the data by these NOPs opens the potential for spam here
 
@@ -490,7 +479,9 @@ impl TributaryDb {
     }
 
     // Accumulate the data
-    accumulated_weight += validator_weight;
+    accumulated_weight = accumulated_weight.checked_add(validator_weight).expect(&format!(
+      "accumulated_weight {accumulated_weight} overflowed adding validator_weight {validator_weight}"
+    ));
     AccumulatedWeight::set(txn, set, topic, &accumulated_weight);
     Accumulated::set(txn, set, topic, validator, data);
 
@@ -500,9 +491,11 @@ impl TributaryDb {
       let reattempt_topic = topic.reattempt_topic();
       if let Some((attempt, reattempt_topic)) = reattempt_topic {
         // Linearly scale the time for the protocol with the attempt number
-        let blocks_till_reattempt = u64::from(attempt * BASE_REATTEMPT_DELAY);
+        let blocks_till_reattempt = u64::from(attempt) * u64::from(BASE_REATTEMPT_DELAY);
 
-        let recognize_at = block_number + blocks_till_reattempt;
+        let recognize_at = block_number.checked_add(blocks_till_reattempt).expect(&format!(
+          "recognize_at overflowed: block_number {block_number} + delay {blocks_till_reattempt}"
+        ));
         let mut queued = Reattempt::get(txn, set, recognize_at).unwrap_or(Vec::with_capacity(1));
         queued.push(reattempt_topic);
         Reattempt::set(txn, set, recognize_at, &queued);

@@ -94,12 +94,17 @@ impl Default for Signed {
   }
 }
 
-/// The type used for preprocesses in the signing protocol.
+/// The type used for preprocess payloads in the signing protocol.
 pub type Preprocess = [u8; 64];
-/// The type used for shares in the signing protocol.
+/// The type used for share payloads in the signing protocol.
 pub type Share = [u8; 32];
-/// The type used for either shares or preprocesses in the signing protocol.
-pub type GenericDataset = Vec<Vec<u8>>;
+/// A generic, less constrained type used for either share or preprocess payloads
+/// in the signing protocol.
+pub type GenericSignPayload = Vec<u8>;
+/// One serialized payload per key share held by the sending validator.
+/// The outer Vec has one entry per key share; each inner Vec<u8> is a
+/// serialized preprocess (64 bytes) or share (32 bytes), depending on `round`.
+pub type RoundPayloads = Vec<GenericSignPayload>;
 
 /// The Tributary transaction definition used by Serai
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
@@ -218,8 +223,9 @@ pub enum Transaction {
     /// The data itself
     ///
     /// There will be `n` blobs of data where `n` is the amount of key shares the validator sending
-    /// this transaction has.
-    data: Vec<Vec<u8>>,
+    /// this transaction has, and each blob is a serialized preprocess (64 bytes) or share
+    /// (32 bytes), uniform across all entries as determined by `round`.
+    data: RoundPayloads,
     /// The transaction's signer and signature
     signed: Signed,
   },
@@ -235,7 +241,7 @@ pub enum Transaction {
 
 impl ReadWrite for Transaction {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    borsh::from_reader(reader)
+    borsh::BorshDeserialize::deserialize_reader(reader)
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {

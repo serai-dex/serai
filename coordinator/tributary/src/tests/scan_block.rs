@@ -1,11 +1,14 @@
 use core::marker::PhantomData;
 use std::collections::HashMap;
-use rand::{Rng, RngCore};
+use rand::RngCore;
 use rand_core::OsRng;
-use serai_substrate_tests::{random_block_hash, random_serai_address};
+use serai_primitives::test_helpers::{
+  random_block_hash, random_block_number, random_bytes_32, random_serai_address, random_vec_of_len,
+};
 
-use ciphersuite::group::GroupEncoding;
-use dalek_ff_group::RistrettoPoint;
+use ciphersuite::{group::GroupEncoding, WrappedGroup};
+use dalek_ff_group::{Ristretto, RistrettoPoint};
+use schnorr::SchnorrSignature;
 
 use serai_primitives::address::SeraiAddress;
 
@@ -18,71 +21,25 @@ use serai_db::{Db, DbTxn, MemDb};
 use serai_cosign_types::CosignIntent;
 use serai_coordinator_substrate::NewSetInformation;
 
-use tributary_sdk::{Block, BlockHeader, Transaction as TributaryTransaction, P2p};
+use tributary_sdk::{
+  Block, BlockHeader, Transaction as TributaryTransaction, Evidence, tendermint::tx::TendermintTx,
+};
 
 use crate::{
+  CosignIntents, DkgConfirmationMessages, ProcessorMessages, ScanBlock, SubstrateBlockPlans,
   db::{
     AccumulatedWeight, ActivelyCosigning, CosignIntents as DbCosignIntents,
     LatestSubstrateBlockToCosign, Topic, TributaryDb,
   },
-  tests::{default_test_validator_set, random_serai_address_and_key},
+  transaction::{SigningProtocolRound, Signed, Transaction},
+  tests::{
+    all_signed_transactions_with, assert_cosigning_invariants, MockP2p, default_test_validator_set,
+    expected_topic_after_start_cosigning, setup_test_validators_and_weights,
+    setup_test_validators_and_weights_with_keys, random_serai_address_and_key, new_test_set_info,
+  },
 };
-use crate::transaction::{SigningProtocolRound, Signed, Transaction};
-use crate::{CosignIntents, DkgConfirmationMessages, ProcessorMessages, ScanBlock, SubstrateBlockPlans};
 
-#[derive(Clone)]
-struct MockP2p;
-impl P2p for MockP2p {
-  fn broadcast(&self, _: [u8; 32], _: Vec<u8>) -> impl Send + core::future::Future<Output = ()> {
-    async move { unimplemented!() }
-  }
-}
-
-fn get_test_validators_and_weights_setup(
-) -> (Vec<(SeraiAddress, u16)>, Vec<SeraiAddress>, HashMap<SeraiAddress, u16>, u16) {
-  let validator_data = vec![
-    (random_serai_address(&mut OsRng), 1u16),
-    (random_serai_address(&mut OsRng), 1),
-    (random_serai_address(&mut OsRng), 1),
-  ];
-  let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
-
-  let mut weights = HashMap::new();
-  for (address, weight) in &validator_data {
-    weights.insert(*address, *weight);
-  }
-
-  (validator_data, validators, weights, 3)
-}
-
-fn new_test_set_info(validators: &[(SeraiAddress, u16)]) -> NewSetInformation {
-  let mut participant_indexes = HashMap::new();
-  let mut reverse_lookup = HashMap::new();
-  let mut i = 1u16;
-  for (address, weight) in validators {
-    let mut indices = Vec::new();
-    for _ in 0 .. *weight {
-      let p = Participant::new(i).unwrap();
-      indices.push(p);
-      reverse_lookup.insert(p, *address);
-      i += 1;
-    }
-    participant_indexes.insert(*address, indices);
-  }
-
-  NewSetInformation {
-    set: default_test_validator_set(),
-    serai_block: random_block_hash(&mut OsRng).0,
-    declaration_time: OsRng.next_u64(),
-    threshold: OsRng.gen_range(0 ..= u16::MAX),
-    validators: validators.to_vec(),
-    evrf_public_keys: vec![],
-    participant_indexes,
-    participant_indexes_reverse_lookup: reverse_lookup,
-  }
-}
-
-fn make_scan_block<'a, TDT: DbTxn>(
+fn new_scan_block<'a, TDT: DbTxn>(
   txn: &'a mut TDT,
   set_info: &'a NewSetInformation,
   validators: &'a [SeraiAddress],
@@ -100,120 +57,113 @@ fn make_scan_block<'a, TDT: DbTxn>(
   }
 }
 
-/// Create a Signed with the given signer key and a dummy signature.
-fn make_signed(signer: RistrettoPoint) -> Signed {
-  Signed { signer, ..Signed::default() }
+/// Create a Signed with the given signer key and a random signature.
+fn new_signed(signer: RistrettoPoint) -> Signed {
+  Signed {
+    signer,
+    signature: SchnorrSignature {
+      R: Ristretto::generator() * <Ristretto as WrappedGroup>::F::random(&mut OsRng),
+      s: <Ristretto as WrappedGroup>::F::random(&mut OsRng),
+    },
+  }
 }
 
-mod potentially_start_cosign {
-  use super::*;
+#[test]
+fn potentially_start_cosign() {
+  let (validator_data, validators, weights, total_weight) = setup_test_validators_and_weights();
+  let set_info = new_test_set_info(&validator_data);
+  let set = set_info.set;
 
-  #[test]
-  fn potentially_start_cosign() {
-    let set = default_test_validator_set();
-    let (validator_data, validators, weights, total_weight) =
-      get_test_validators_and_weights_setup();
-    let set_info = new_test_set_info(&validator_data);
+  // Already actively cosigning: should not replace the actively cosigning block
+  {
+    let mut db = MemDb::new();
+    let initial_block_hash = random_block_hash(&mut OsRng);
 
-    // No TributaryDb::latest_substrate_block_to_cosign block: no-op
     {
-      let mut db = MemDb::new();
       let mut txn = db.txn();
-      {
-        let mut scan_block =
-          make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-        scan_block.potentially_start_cosign();
-      }
-      assert!(ActivelyCosigning::get(&mut txn, set).is_none());
+      TributaryDb::start_cosigning(&mut txn, set, initial_block_hash, OsRng.next_u64());
+      let new_block_hash = random_block_hash(&mut OsRng);
+      LatestSubstrateBlockToCosign::set(&mut txn, set, &new_block_hash);
+      txn.commit();
     }
 
-    // Already cosigning: should not replace the actively cosigning block
+    let mut txn = db.txn();
     {
-      let mut db = MemDb::new();
-      let initial_block_hash = random_block_hash(&mut OsRng);
-
-      {
-        let mut txn = db.txn();
-        TributaryDb::start_cosigning(&mut txn, set, initial_block_hash, OsRng.next_u64());
-        let new_block_hash = random_block_hash(&mut OsRng);
-        LatestSubstrateBlockToCosign::set(&mut txn, set, &new_block_hash);
-        txn.commit();
-      }
-
-      let mut txn = db.txn();
-      {
-        let mut scan_block =
-          make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-        scan_block.potentially_start_cosign();
-      }
-
-      // Did not replace initial_block_hash for new_block_hash
-      assert_eq!(ActivelyCosigning::get(&mut txn, set), Some(initial_block_hash));
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      scan_block.potentially_start_cosign();
     }
 
-    // Already cosigned: no-op
-    {
-      let mut db = MemDb::new();
-      let initial_block_hash = random_block_hash(&mut OsRng);
-
-      {
-        let mut txn = db.txn();
-        LatestSubstrateBlockToCosign::set(&mut txn, set, &initial_block_hash);
-        TributaryDb::mark_cosigned(&mut txn, set, initial_block_hash);
-        txn.commit();
-      }
-
-      let mut txn = db.txn();
-      {
-        let mut scan_block =
-          make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-        scan_block.potentially_start_cosign();
-      }
-
-      assert!(ActivelyCosigning::get(&mut txn, set).is_none());
-    }
-
-    // Ready to cosign: starts cosigning and sends processor message
-    {
-      let mut db = MemDb::new();
-      let block_hash = random_block_hash(&mut OsRng);
-      let mut global_session = [0; 32];
-      OsRng.fill_bytes(global_session.as_mut());
-
-      let intent =
-        CosignIntent { global_session, block_number: OsRng.next_u64(), block_hash, notable: false };
-
-      {
-        let mut txn = db.txn();
-        LatestSubstrateBlockToCosign::set(&mut txn, set, &block_hash);
-        CosignIntents::provide(&mut txn, set, &intent);
-        txn.commit();
-      }
-
-      let mut txn = db.txn();
-      {
-        let mut scan_block =
-          make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-        scan_block.potentially_start_cosign();
-      }
-
-      assert_eq!(ActivelyCosigning::get(&mut txn, set), Some(block_hash));
-      assert!(ProcessorMessages::try_recv(&mut txn, set).is_some());
-    }
+    // Did not replace initial_block_hash for new_block_hash
+    assert_eq!(ActivelyCosigning::get(&mut txn, set), Some(initial_block_hash));
   }
 
-  #[test]
-  #[should_panic(expected = "provided CosignIntent wasn't saved by its block hash")]
-  fn potentially_start_cosign_panics_on_differing_intent_blockhash() {
-    let set = default_test_validator_set();
-    let (validator_data, validators, weights, total_weight) =
-      get_test_validators_and_weights_setup();
-    let set_info = new_test_set_info(&validator_data);
+  // No TributaryDb::latest_substrate_block_to_cosign block: no-op
+  {
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    {
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      scan_block.potentially_start_cosign();
+    }
+    assert!(ActivelyCosigning::get(&mut txn, set).is_none());
+  }
 
+  // Already cosigned: no-op
+  {
+    let mut db = MemDb::new();
+    let initial_block_hash = random_block_hash(&mut OsRng);
+
+    {
+      let mut txn = db.txn();
+      LatestSubstrateBlockToCosign::set(&mut txn, set, &initial_block_hash);
+      TributaryDb::mark_cosigned(&mut txn, set, initial_block_hash);
+      txn.commit();
+    }
+
+    let mut txn = db.txn();
+    {
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      scan_block.potentially_start_cosign();
+    }
+
+    assert!(ActivelyCosigning::get(&mut txn, set).is_none());
+  }
+
+  // Ready to cosign: starts cosigning and sends processor message
+  {
     let mut db = MemDb::new();
     let block_hash = random_block_hash(&mut OsRng);
-    let mut global_session = [0; 32];
-    OsRng.fill_bytes(global_session.as_mut());
+    let global_session = random_bytes_32(&mut OsRng);
+
+    let intent = CosignIntent {
+      global_session,
+      block_number: random_block_number(&mut OsRng),
+      block_hash,
+      notable: false,
+    };
+
+    {
+      let mut txn = db.txn();
+      LatestSubstrateBlockToCosign::set(&mut txn, set, &block_hash);
+      CosignIntents::provide(&mut txn, set, &intent);
+      txn.commit();
+    }
+
+    let mut txn = db.txn();
+    {
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      scan_block.potentially_start_cosign();
+    }
+
+    assert_cosigning_invariants(&mut txn, set, block_hash, intent.block_number);
+    assert!(ProcessorMessages::try_recv(&mut txn, set).is_some());
+  }
+
+  // Panics when stored intent's block_hash differs from latest_substrate_block_to_cosign
+  {
+    let mut db = MemDb::new();
+    let block_hash = random_block_hash(&mut OsRng);
+    let global_session = random_bytes_32(&mut OsRng);
 
     {
       let mut txn = db.txn();
@@ -227,118 +177,108 @@ mod potentially_start_cosign {
         block_hash,
         &CosignIntent {
           global_session,
-          block_number: OsRng.next_u64(),
+          block_number: random_block_number(&mut OsRng),
           // but the intent's block_hash field is a new_block_hash
-          block_hash: new_block_hash, // triggering the assert_eq!(intent.block_hash, latest_substrate_block_to_cosign) panic
+          block_hash: new_block_hash,
           notable: false,
         },
       );
       txn.commit();
     }
 
-    {
+    let result = std::panic::catch_unwind(move || {
       let mut txn = db.txn();
-      let mut scan_block =
-        make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
       scan_block.potentially_start_cosign();
-    }
+    });
+    let err = result.expect_err("should panic on differing intent block hash");
+    let msg = err.downcast_ref::<String>().expect("panic payload should be a String");
+    assert!(
+      msg.contains("provided CosignIntent wasn't saved by its block hash"),
+      "unexpected panic message: {msg}"
+    );
   }
 }
 
 #[test]
 fn accumulate_dkg_confirmation() {
-  // Use 3 validators with weight 1 each so threshold math is deterministic:
-  // total_weight = 3, required_participation = 3 * 2 = 6 / 3 = 2 + 1 = 3
-  let v0 = random_serai_address(&mut OsRng);
-  let v1 = random_serai_address(&mut OsRng);
-  let v2 = random_serai_address(&mut OsRng);
-  let validator_data = vec![(v0, 1u16), (v1, 1), (v2, 1)];
-  let validators = vec![v0, v1, v2];
-  let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
-  let total_weight = 3u16;
+  let (validator_data, validators, weights, total_weight) = setup_test_validators_and_weights();
+  let (v1, v2, v3) = (validators[0], validators[1], validators[2]);
   let set_info = new_test_set_info(&validator_data);
   let set = set_info.set;
   let topic = Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Preprocess };
 
-  // Below threshold: returns None until enough weight accumulates
+  // Panics if the topic isn't DkgConfirmation
   {
     let mut db = MemDb::new();
     let mut txn = db.txn();
 
-    let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      scan_block.accumulate_dkg_confirmation(
+        random_block_number(&mut OsRng),
+        Topic::RemoveParticipant { participant: random_serai_address(&mut OsRng) },
+        &random_vec_of_len(&mut OsRng, 4),
+        validators[0],
+      );
+    }));
 
-    let block_number = OsRng.next_u64();
-
-    let mut data0 = vec![0u8; 4];
-    OsRng.fill_bytes(&mut data0);
-
-    assert!(scan_block.accumulate_dkg_confirmation(block_number, topic, &data0, v0).is_none());
-
-    let mut data1 = vec![0u8; 4];
-    OsRng.fill_bytes(&mut data1);
-
-    assert!(scan_block.accumulate_dkg_confirmation(block_number, topic, &data1, v1).is_none());
-
-    txn.commit();
+    assert!(result.is_err(), "should panic when called with a non-DkgConfirmation topic");
   }
 
   // Threshold crossed: third accumulation returns SignId + correctly mapped data
   {
     let mut db = MemDb::new();
     let mut txn = db.txn();
+    let block_number = random_block_number(&mut OsRng);
 
-    let mut data0 = vec![0u8; 4];
-    OsRng.fill_bytes(&mut data0);
-    let mut data1 = vec![0u8; 4];
-    OsRng.fill_bytes(&mut data1);
-    let mut data2 = vec![0u8; 4];
-    OsRng.fill_bytes(&mut data2);
-
-    let result;
     {
-      let mut scan_block =
-        make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let data1 = random_vec_of_len(&mut OsRng, 4);
+      let data2 = random_vec_of_len(&mut OsRng, 4);
+      let data3 = random_vec_of_len(&mut OsRng, 4);
 
-      assert!(scan_block.accumulate_dkg_confirmation(1, topic, &data0, v0).is_none());
-      assert!(scan_block.accumulate_dkg_confirmation(1, topic, &data1, v1).is_none());
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
-      result = scan_block.accumulate_dkg_confirmation(1, topic, &data2, v2);
+      assert!(scan_block.accumulate_dkg_confirmation(block_number, topic, &data1, v1).is_none());
+      assert!(scan_block.accumulate_dkg_confirmation(block_number, topic, &data2, v2).is_none());
+      let result = scan_block.accumulate_dkg_confirmation(block_number, topic, &data3, v3);
+
+      let (sign_id, data_set) = result.expect("third accumulation should cross threshold");
+
+      assert_eq!(
+        sign_id,
+        topic.dkg_confirmation_sign_id(set).unwrap(),
+        "SignId must match what dkg_confirmation_sign_id produces"
+      );
+
+      // Participants are 1-indexed by list position, not by weight-based indices
+      assert_eq!(data_set.len(), 3);
+      assert_eq!(data_set[&Participant::new(1).unwrap()], data1);
+      assert_eq!(data_set[&Participant::new(2).unwrap()], data2);
+      assert_eq!(data_set[&Participant::new(3).unwrap()], data3);
     }
-    let (sign_id, data_set) = result.unwrap();
 
-    // SignId must match what dkg_confirmation_sign_id produces
-    assert_eq!(sign_id, topic.dkg_confirmation_sign_id(set).unwrap());
-
-    // Participants are 1-indexed by list position, not by weight-based indices
-    assert_eq!(data_set.len(), 3);
-    assert_eq!(data_set[&Participant::new(1).unwrap()], data0);
-    assert_eq!(data_set[&Participant::new(2).unwrap()], data1);
-    assert_eq!(data_set[&Participant::new(3).unwrap()], data2);
-  }
-
-  // Past threshold: further accumulations are no-ops
-  {
-    let mut db = MemDb::new();
-    let mut txn = db.txn();
-
-    let mut data0 = vec![0u8; 4];
-    OsRng.fill_bytes(&mut data0);
-    let mut data1 = vec![0u8; 4];
-    OsRng.fill_bytes(&mut data1);
-    let mut data2 = vec![0u8; 4];
-    OsRng.fill_bytes(&mut data2);
-    let mut data_extra = vec![0u8; 4];
-    OsRng.fill_bytes(&mut data_extra);
-
+    // Past threshold: further accumulations from a new validator are no-ops
     {
-      let mut scan_block =
-        make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.accumulate_dkg_confirmation(1, topic, &data0, v0);
-      scan_block.accumulate_dkg_confirmation(1, topic, &data1, v1);
-      scan_block.accumulate_dkg_confirmation(1, topic, &data2, v2);
+      // Add a 4th validator so we have a fresh signer after threshold is crossed.
+      // total_weight=4, required_participation = 3, so v0+v1+v2 cross threshold.
+      let v4 = random_serai_address(&mut OsRng);
+      let mut validator_data_4 = validator_data.clone();
+      validator_data_4.push((v4, 1));
+      let validators_4: Vec<SeraiAddress> = validator_data_4.iter().map(|(a, _)| *a).collect();
+      let mut weights_4 = weights.clone();
+      weights_4.insert(v4, 1);
+      let set_info_4 = new_test_set_info(&validator_data_4);
 
-      // Already past threshold - this returns None
-      assert!(scan_block.accumulate_dkg_confirmation(1, topic, &data_extra, v0).is_none());
+      let data4 = random_vec_of_len(&mut OsRng, 4);
+
+      {
+        let mut scan_block = new_scan_block(&mut txn, &set_info_4, &validators_4, 4, &weights_4);
+        assert!(
+          scan_block.accumulate_dkg_confirmation(block_number, topic, &data4, v4).is_none(),
+          "accumulation after threshold should be a NOP"
+        );
+      }
     }
   }
 }
@@ -347,38 +287,37 @@ mod handle_application_tx {
   use super::*;
 
   #[test]
-  fn dont_handle_from_fatally_slashed() {
+  fn dont_handle_signed_kind_from_fatally_slashed() {
     let set = default_test_validator_set();
-    let (validator_data, validators, weights, total_weight) =
-      get_test_validators_and_weights_setup();
+    let (validator_data, validators, weights, total_weight) = setup_test_validators_and_weights();
     let set_info = new_test_set_info(&validator_data);
     let default_signer = SeraiAddress(Signed::default().signer().to_bytes());
 
     let mut db = MemDb::new();
 
-    // Don't handle transactions from those fatally slashed.
     {
       let mut txn = db.txn();
       TributaryDb::fatal_slash(&mut txn, set, default_signer, "test reason");
       txn.commit();
     }
 
-    let mut txn = db.txn();
-    let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+    for tx in all_signed_transactions_with(Signed::default()) {
+      let mut txn = db.txn();
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
-    scan_block.handle_application_tx(
-      OsRng.next_u64(),
-      Transaction::DkgParticipation { participation: vec![1, 2, 3], signed: Signed::default() },
-    );
+      scan_block.handle_application_tx(random_block_number(&mut OsRng), tx.clone());
 
-    assert!(ProcessorMessages::try_recv(&mut txn, set).is_none());
+      assert!(
+        ProcessorMessages::try_recv(&mut txn, set).is_none(),
+        "fatally slashed signer should be ignored for {tx:?}"
+      );
+    }
   }
 
   #[test]
-  fn handle_remove_participant_tx_type() {
+  fn remove_participant() {
     let set = default_test_validator_set();
-    let (validator_data, validators, weights, total_weight) =
-      get_test_validators_and_weights_setup();
+    let (validator_data, validators, weights, total_weight) = setup_test_validators_and_weights();
     let set_info = new_test_set_info(&validator_data);
     let default_signer = SeraiAddress(Signed::default().signer().to_bytes());
 
@@ -386,69 +325,21 @@ mod handle_application_tx {
     {
       let mut db = MemDb::new();
       let mut txn = db.txn();
-      let mut scan_block =
-        make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       let nonexistent = random_serai_address(&mut OsRng);
 
       scan_block.handle_application_tx(
-        OsRng.next_u64(),
+        random_block_number(&mut OsRng),
         Transaction::RemoveParticipant { participant: nonexistent, signed: Signed::default() },
       );
 
       assert!(TributaryDb::is_fatally_slashed(&mut txn, set, default_signer));
     }
 
-    // Valid RemoveParticipant with a signer who IS a validator accumulates weight
+    // Valid RemoveParticipant accumulates weight and eventually crosses threshold
     {
-      // Fresh db so the signer isn't fatally slashed from the sub-test above
-      let mut db = MemDb::new();
-      let mut txn = db.txn();
-
-      // Generate a signer that's actually in the validator set
-      let (signer_key, signer_addr) = random_serai_address_and_key(&mut OsRng);
-      let signer_weight = 1u16;
-
-      let mut extended_validator_data = validator_data.clone();
-      extended_validator_data.push((signer_addr, signer_weight));
-      let extended_validators: Vec<SeraiAddress> =
-        extended_validator_data.iter().map(|(a, _)| *a).collect();
-      let mut extended_weights = weights.clone();
-      extended_weights.insert(signer_addr, signer_weight);
-      let extended_total_weight = total_weight + signer_weight;
-      let extended_set_info = new_test_set_info(&extended_validator_data);
-
-      let mut scan_block = make_scan_block(
-        &mut txn,
-        &extended_set_info,
-        &extended_validators,
-        extended_total_weight,
-        &extended_weights,
-      );
-
-      // Target one of the original validators (not the signer)
-      let target = validators[OsRng.gen_range(0 ..= validators.len() - 1)];
-
-      scan_block.handle_application_tx(
-        OsRng.next_u64(),
-        Transaction::RemoveParticipant { participant: target, signed: make_signed(signer_key) },
-      );
-
-      assert!(AccumulatedWeight::get(
-        &mut txn,
-        set,
-        Topic::RemoveParticipant { participant: target }
-      )
-      .is_some());
-    }
-
-    // When enough validators vote to remove a participant, the threshold is crossed
-    // and the participant is fatally slashed (DataSet::Participating branch)
-    {
-      let mut db = MemDb::new();
-      let mut txn = db.txn();
-
-      // All 3 validators need real keys so they can sign
+      // All validators have real keys so they can sign
       let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
       let (key1, addr1) = random_serai_address_and_key(&mut OsRng);
       let (key2, addr2) = random_serai_address_and_key(&mut OsRng);
@@ -459,88 +350,93 @@ mod handle_application_tx {
       let set_info = new_test_set_info(&validator_data);
 
       let target = addr0;
-      let block_number = OsRng.next_u64();
+      let block_number = random_block_number(&mut OsRng);
 
-      // First two votes accumulate but don't cross the threshold
+      let mut db = MemDb::new();
+      let mut txn = db.txn();
+
+      // First vote: topic is recognized, target not yet slashed
       {
-        let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+        let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, 3, &weights);
         scan_block.handle_application_tx(
           block_number,
-          Transaction::RemoveParticipant { participant: target, signed: make_signed(key1) },
-        );
-        scan_block.handle_application_tx(
-          block_number,
-          Transaction::RemoveParticipant { participant: target, signed: make_signed(key2) },
+          Transaction::RemoveParticipant { participant: target, signed: new_signed(key0) },
         );
       }
-      assert!(!TributaryDb::is_fatally_slashed(&mut txn, set, target));
+      assert!(
+        TributaryDb::recognized(&mut txn, set, Topic::RemoveParticipant { participant: target }),
+        "RemoveParticipant topic should be recognized after handling the tx"
+      );
+      assert!(
+        !TributaryDb::is_fatally_slashed(&mut txn, set, target),
+        "target should not be fatally slashed after one vote"
+      );
 
-      // Third vote crosses the threshold — target gets fatally slashed
+      // Threshold crossed, target gets fatally slashed
       {
-        let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+        let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, 3, &weights);
         scan_block.handle_application_tx(
           block_number,
-          Transaction::RemoveParticipant { participant: target, signed: make_signed(key0) },
+          Transaction::RemoveParticipant { participant: target, signed: new_signed(key1) },
+        );
+        scan_block.handle_application_tx(
+          block_number,
+          Transaction::RemoveParticipant { participant: target, signed: new_signed(key2) },
         );
       }
-      assert!(TributaryDb::is_fatally_slashed(&mut txn, set, target));
+      assert!(
+        TributaryDb::is_fatally_slashed(&mut txn, set, target),
+        "target should be fatally slashed after threshold is crossed"
+      );
     }
   }
 
   #[test]
-  fn handle_dkg_participation_tx_type() {
+  fn dkg_participation() {
     let mut db = MemDb::new();
-    let set = default_test_validator_set();
 
-    // Use a real validator key so the signer exists in participant_indexes
-    let (signer_key, signer_addr) = random_serai_address_and_key(&mut OsRng);
-    let validator_data = vec![
-      (signer_addr, 1u16),
-      (random_serai_address(&mut OsRng), 1),
-      (random_serai_address(&mut OsRng), 1),
-    ];
-    let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
-    let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+    let set = default_test_validator_set();
+    let (keys_addrs, validator_data, validators, weights, total_weight) =
+      setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
+    let (signer_key, _) = keys_addrs[0];
 
     let mut txn = db.txn();
-    let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
 
-    scan_block.handle_application_tx(
-      OsRng.next_u64(),
-      Transaction::DkgParticipation {
-        participation: vec![1, 2, 3],
-        signed: make_signed(signer_key),
-      },
-    );
+    {
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      scan_block.handle_application_tx(
+        random_block_number(&mut OsRng),
+        Transaction::DkgParticipation {
+          participation: vec![1, 2, 3],
+          signed: new_signed(signer_key),
+        },
+      );
+    }
 
     assert!(ProcessorMessages::try_recv(&mut txn, set).is_some());
   }
 
   #[test]
-  fn handle_dkg_confirmation_preprocess_tx_type() {
+  fn dkg_confirmation_preprocess() {
     let set = default_test_validator_set();
-
-    let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
-    let (key1, addr1) = random_serai_address_and_key(&mut OsRng);
-    let (key2, addr2) = random_serai_address_and_key(&mut OsRng);
-    let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1)];
-    let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
-    let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+    let (keys_addrs, validator_data, validators, weights, total_weight) =
+      setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
+    let (key0, key1, key2) = (keys_addrs[0].0, keys_addrs[1].0, keys_addrs[2].0);
 
     // Below threshold: no DkgConfirmationMessages sent
     {
       let mut db = MemDb::new();
       let mut txn = db.txn();
-      let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block.handle_application_tx(
-        OsRng.next_u64(),
+        random_block_number(&mut OsRng),
         Transaction::DkgConfirmationPreprocess {
           attempt: OsRng.next_u32(),
           preprocess: [1u8; 64],
-          signed: make_signed(key0),
+          signed: new_signed(key0),
         },
       );
 
@@ -552,14 +448,15 @@ mod handle_application_tx {
       let mut db = MemDb::new();
       let mut txn = db.txn();
       {
-        let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+        let mut scan_block =
+          new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
         for (key, preprocess) in [(key0, [1u8; 64]), (key1, [2u8; 64]), (key2, [3u8; 64])] {
           scan_block.handle_application_tx(
             1,
             Transaction::DkgConfirmationPreprocess {
               attempt: 0,
               preprocess,
-              signed: make_signed(key),
+              signed: new_signed(key),
             },
           );
         }
@@ -570,30 +467,26 @@ mod handle_application_tx {
   }
 
   #[test]
-  fn handle_dkg_confirmation_share_tx_type() {
+  fn dkg_confirmation_share() {
     let set = default_test_validator_set();
-
-    let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
-    let (_, addr1) = random_serai_address_and_key(&mut OsRng);
-    let (_, addr2) = random_serai_address_and_key(&mut OsRng);
-    let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1)];
-    let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
-    let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+    let (keys_addrs, validator_data, validators, weights, total_weight) =
+      setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
+    let (key0, addr0) = keys_addrs[0];
 
-    // Share without preceding preprocess participation → fatal slash
+    // Share without preceding preprocess participation -> fatal slash
     // (the accumulate preceding_topic check slashes the signer)
     {
       let mut db = MemDb::new();
       let mut txn = db.txn();
-      let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block.handle_application_tx(
         1,
         Transaction::DkgConfirmationShare {
           attempt: 0,
           share: [10u8; 32],
-          signed: make_signed(key0),
+          signed: new_signed(key0),
         },
       );
 
@@ -601,7 +494,7 @@ mod handle_application_tx {
     }
   }
 
-  /// Verify that the full preprocess→share flow works for DkgConfirmation.
+  /// Verify that the full preprocess->share flow works for DkgConfirmation.
   ///
   /// Previously, this panicked because `accumulate<[u8; 32]>` (share) used typed deserialization
   /// on the preceding preprocess topic stored as `[u8; 64]`. Fixed by using a raw key-existence
@@ -609,41 +502,37 @@ mod handle_application_tx {
   #[test]
   fn dkg_confirmation_preprocess_then_share_flow() {
     let set = default_test_validator_set();
-
-    let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
-    let (key1, addr1) = random_serai_address_and_key(&mut OsRng);
-    let (key2, addr2) = random_serai_address_and_key(&mut OsRng);
-    let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1)];
-    let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
-    let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+    let (keys_addrs, validator_data, validators, weights, total_weight) =
+      setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
+    let (key0, key1, key2) = (keys_addrs[0].0, keys_addrs[1].0, keys_addrs[2].0);
 
     let mut db = MemDb::new();
     let mut txn = db.txn();
 
-    // All 3 validators submit preprocesses (threshold crossed → DkgConfirmationMessages sent)
+    // All 3 validators submit preprocesses (threshold crossed -> DkgConfirmationMessages sent)
     {
-      let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
       for (key, preprocess) in [(key0, [1u8; 64]), (key1, [2u8; 64]), (key2, [3u8; 64])] {
         scan_block.handle_application_tx(
           1,
           Transaction::DkgConfirmationPreprocess {
             attempt: 0,
             preprocess,
-            signed: make_signed(key),
+            signed: new_signed(key),
           },
         );
       }
     }
     assert!(DkgConfirmationMessages::try_recv(&mut txn, set).is_some());
 
-    // All 3 validators submit shares (threshold crossed → DkgConfirmationMessages sent)
+    // All 3 validators submit shares (threshold crossed -> DkgConfirmationMessages sent)
     {
-      let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
       for (key, share) in [(key0, [10u8; 32]), (key1, [20u8; 32]), (key2, [30u8; 32])] {
         scan_block.handle_application_tx(
           1,
-          Transaction::DkgConfirmationShare { attempt: 0, share, signed: make_signed(key) },
+          Transaction::DkgConfirmationShare { attempt: 0, share, signed: new_signed(key) },
         );
       }
     }
@@ -651,18 +540,20 @@ mod handle_application_tx {
   }
 
   #[test]
-  fn handle_cosign_tx_type() {
+  fn cosign() {
     let set = default_test_validator_set();
-    let (validator_data, validators, weights, total_weight) =
-      get_test_validators_and_weights_setup();
+    let (validator_data, validators, weights, total_weight) = setup_test_validators_and_weights();
     let set_info = new_test_set_info(&validator_data);
 
     let block_hash = random_block_hash(&mut OsRng);
-    let mut global_session = [0u8; 32];
-    OsRng.fill_bytes(&mut global_session);
+    let global_session = random_bytes_32(&mut OsRng);
 
-    let intent =
-      CosignIntent { global_session, block_number: OsRng.next_u64(), block_hash, notable: false };
+    let intent = CosignIntent {
+      global_session,
+      block_number: random_block_number(&mut OsRng),
+      block_hash,
+      notable: false,
+    };
 
     // Sets LatestSubstrateBlockToCosign and starts cosigning
     {
@@ -674,8 +565,7 @@ mod handle_application_tx {
       }
 
       let mut txn = db.txn();
-      let mut scan_block =
-        make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block.handle_application_tx(1, Transaction::Cosign { substrate_block_hash: block_hash });
 
@@ -697,8 +587,7 @@ mod handle_application_tx {
       }
 
       let mut txn = db.txn();
-      let mut scan_block =
-        make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block
         .handle_application_tx(1, Transaction::Cosign { substrate_block_hash: second_hash });
@@ -709,10 +598,9 @@ mod handle_application_tx {
   }
 
   #[test]
-  fn handle_cosigned_tx_type() {
+  fn cosigned() {
     let set = default_test_validator_set();
-    let (validator_data, validators, weights, total_weight) =
-      get_test_validators_and_weights_setup();
+    let (validator_data, validators, weights, total_weight) = setup_test_validators_and_weights();
     let set_info = new_test_set_info(&validator_data);
 
     // Marks block as cosigned
@@ -723,8 +611,7 @@ mod handle_application_tx {
 
       assert!(!TributaryDb::cosigned(&mut txn, set, block_hash));
 
-      let mut scan_block =
-        make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block
         .handle_application_tx(1, Transaction::Cosigned { substrate_block_hash: block_hash });
@@ -746,8 +633,7 @@ mod handle_application_tx {
       let mut txn = db.txn();
       assert_eq!(ActivelyCosigning::get(&mut txn, set), Some(block_hash));
 
-      let mut scan_block =
-        make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block
         .handle_application_tx(1, Transaction::Cosigned { substrate_block_hash: block_hash });
@@ -768,8 +654,7 @@ mod handle_application_tx {
       }
 
       let mut txn = db.txn();
-      let mut scan_block =
-        make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block
         .handle_application_tx(1, Transaction::Cosigned { substrate_block_hash: other_hash });
@@ -780,10 +665,9 @@ mod handle_application_tx {
   }
 
   #[test]
-  fn handle_substrate_block_tx_type() {
+  fn substrate_block() {
     let set = default_test_validator_set();
-    let (validator_data, validators, weights, total_weight) =
-      get_test_validators_and_weights_setup();
+    let (validator_data, validators, weights, total_weight) = setup_test_validators_and_weights();
     let set_info = new_test_set_info(&validator_data);
 
     let mut db = MemDb::new();
@@ -797,65 +681,53 @@ mod handle_application_tx {
     }
 
     let mut txn = db.txn();
-    let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+    let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
     scan_block.handle_application_tx(1, Transaction::SubstrateBlock { hash: block_hash });
 
     for plan in &plans {
-      let topic = Topic::Sign {
-        id: VariantSignId::Transaction(*plan),
-        attempt: 0,
-        round: SigningProtocolRound::Preprocess,
-      };
+      let topic = expected_topic_after_start_cosigning(VariantSignId::Transaction(*plan));
       assert!(AccumulatedWeight::get(&mut txn, set, topic).is_some());
     }
   }
 
   #[test]
-  fn handle_batch_tx_type() {
+  fn batch() {
     let set = default_test_validator_set();
-    let (validator_data, validators, weights, total_weight) =
-      get_test_validators_and_weights_setup();
+    let (validator_data, validators, weights, total_weight) = setup_test_validators_and_weights();
     let set_info = new_test_set_info(&validator_data);
 
     let mut db = MemDb::new();
     let batch_hash = [42u8; 32];
 
     let mut txn = db.txn();
-    let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+    let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
     scan_block.handle_application_tx(1, Transaction::Batch { hash: batch_hash });
 
-    let topic = Topic::Sign {
-      id: VariantSignId::Batch(batch_hash),
-      attempt: 0,
-      round: SigningProtocolRound::Preprocess,
-    };
+    let topic = expected_topic_after_start_cosigning(VariantSignId::Batch(batch_hash));
     assert!(AccumulatedWeight::get(&mut txn, set, topic).is_some());
   }
 
   #[test]
-  fn handle_sign_tx_type() {
+  fn sign() {
     let set = default_test_validator_set();
-
-    let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
-    let (key1, addr1) = random_serai_address_and_key(&mut OsRng);
-    let (key2, addr2) = random_serai_address_and_key(&mut OsRng);
-    let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1)];
-    let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
-    let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+    let (keys_addrs, validator_data, validators, weights, total_weight) =
+      setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
+    let (key0, addr0) = keys_addrs[0];
+    let (key1, key2) = (keys_addrs[1].0, keys_addrs[2].0);
 
     let sign_id = VariantSignId::Transaction([42; 32]);
-    let topic = Topic::Sign { id: sign_id, attempt: 0, round: SigningProtocolRound::Preprocess };
+    let topic = expected_topic_after_start_cosigning(sign_id);
 
-    // Wrong data length: signer has weight 1 but submits 2 entries → fatal slash
+    // Wrong data length: signer has weight 1 but submits 2 entries -> fatal slash
     {
       let mut db = MemDb::new();
       let mut txn = db.txn();
       TributaryDb::recognize_topic(&mut txn, set, topic);
 
-      let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
       scan_block.handle_application_tx(
         1,
         Transaction::Sign {
@@ -863,7 +735,7 @@ mod handle_application_tx {
           attempt: 0,
           round: SigningProtocolRound::Preprocess,
           data: vec![vec![1], vec![2]],
-          signed: make_signed(key0),
+          signed: new_signed(key0),
         },
       );
 
@@ -877,7 +749,8 @@ mod handle_application_tx {
       TributaryDb::recognize_topic(&mut txn, set, topic);
 
       {
-        let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+        let mut scan_block =
+          new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
         for key in [key0, key1, key2] {
           scan_block.handle_application_tx(
             1,
@@ -886,7 +759,7 @@ mod handle_application_tx {
               attempt: 0,
               round: SigningProtocolRound::Preprocess,
               data: vec![vec![1, 2, 3]],
-              signed: make_signed(key),
+              signed: new_signed(key),
             },
           );
         }
@@ -896,27 +769,95 @@ mod handle_application_tx {
     }
   }
 
+  /// Exercises the Sign Share -> Participating path (line 559: `Shares { id, shares: data_set }`).
+  /// Requires first accumulating preprocesses to threshold (which recognizes the Share topic
+  /// and stores preceding data), then accumulating shares to threshold.
   #[test]
-  fn handle_slash_report_tx_type() {
+  fn sign_share_sends_shares_message() {
     let set = default_test_validator_set();
-
-    let (key0, addr0) = random_serai_address_and_key(&mut OsRng);
-    let (_, addr1) = random_serai_address_and_key(&mut OsRng);
-    let (_, addr2) = random_serai_address_and_key(&mut OsRng);
-    let validator_data = vec![(addr0, 1u16), (addr1, 1), (addr2, 1)];
-    let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
-    let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+    let (keys_addrs, validator_data, validators, weights, total_weight) =
+      setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
+    let (key0, key1, key2) = (keys_addrs[0].0, keys_addrs[1].0, keys_addrs[2].0);
 
-    // Wrong length: 3 validators but only 2 slash points → fatal slash
+    let sign_id = VariantSignId::Transaction([42; 32]);
+    let preprocess_topic = expected_topic_after_start_cosigning(sign_id);
+    let share_topic = Topic::Sign { id: sign_id, attempt: 0, round: SigningProtocolRound::Share };
+
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+
+    // Recognize the Preprocess topic
+    TributaryDb::recognize_topic(&mut txn, set, preprocess_topic);
+
+    // Step 1: All validators submit preprocesses, crossing threshold.
+    // This auto-recognizes the Share topic (succeeding_topic) and stores preprocess data.
+    {
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      for key in [key0, key1, key2] {
+        scan_block.handle_application_tx(
+          1,
+          Transaction::Sign {
+            id: sign_id,
+            attempt: 0,
+            round: SigningProtocolRound::Preprocess,
+            data: vec![vec![1, 2, 3]],
+            signed: new_signed(key),
+          },
+        );
+      }
+    }
+
+    // Drain the Preprocesses message from step 1
+    assert!(ProcessorMessages::try_recv(&mut txn, set).is_some());
+
+    // Share topic should now be recognized
+    assert!(AccumulatedWeight::get(&mut txn, set, share_topic).is_some());
+
+    // Step 2: All validators submit shares, crossing threshold -> sends Shares message.
+    {
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      for key in [key0, key1, key2] {
+        scan_block.handle_application_tx(
+          2,
+          Transaction::Sign {
+            id: sign_id,
+            attempt: 0,
+            round: SigningProtocolRound::Share,
+            data: vec![vec![4, 5, 6]],
+            signed: new_signed(key),
+          },
+        );
+      }
+    }
+
+    // The Shares message should have been sent
+    let msg = ProcessorMessages::try_recv(&mut txn, set);
+    assert!(msg.is_some(), "expected Shares processor message");
+
+    // No validators should be slashed
+    for v in &validators {
+      assert!(!TributaryDb::is_fatally_slashed(&mut txn, set, *v));
+    }
+  }
+
+  #[test]
+  fn slash_report() {
+    let set = default_test_validator_set();
+    let (keys_addrs, validator_data, validators, weights, total_weight) =
+      setup_test_validators_and_weights_with_keys();
+    let set_info = new_test_set_info(&validator_data);
+    let (key0, addr0) = keys_addrs[0];
+
+    // Wrong length: 3 validators but only 2 slash points -> fatal slash
     {
       let mut db = MemDb::new();
       let mut txn = db.txn();
-      let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block.handle_application_tx(
         1,
-        Transaction::SlashReport { slash_points: vec![0, 0], signed: make_signed(key0) },
+        Transaction::SlashReport { slash_points: vec![0, 0], signed: new_signed(key0) },
       );
 
       assert!(TributaryDb::is_fatally_slashed(&mut txn, set, addr0));
@@ -926,11 +867,11 @@ mod handle_application_tx {
     {
       let mut db = MemDb::new();
       let mut txn = db.txn();
-      let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block.handle_application_tx(
         1,
-        Transaction::SlashReport { slash_points: vec![0, 0, 0], signed: make_signed(key0) },
+        Transaction::SlashReport { slash_points: vec![0, 0, 0], signed: new_signed(key0) },
       );
 
       assert!(AccumulatedWeight::get(&mut txn, set, Topic::SlashReport).is_some());
@@ -954,17 +895,77 @@ mod handle_application_tx {
       // Each reporter says: first 3 validators have 0 points, 4th has 100
       // required_participation = 4*2/3+1 = 3, so 3 submissions cross the threshold
       {
-        let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 4, &weights);
+        let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, 4, &weights);
         for key in [key0, key1, key2] {
           scan_block.handle_application_tx(
             1,
-            Transaction::SlashReport { slash_points: vec![0, 0, 0, 100], signed: make_signed(key) },
+            Transaction::SlashReport { slash_points: vec![0, 0, 0, 100], signed: new_signed(key) },
           );
         }
       }
 
       assert!(ProcessorMessages::try_recv(&mut txn, set).is_some());
     }
+  }
+
+  /// Exercises the even-length median branch (`(this_validator.len() / 2) - 1`) in
+  /// the SlashReport handler by using 5 validators where `required_participation = 4` (even).
+  #[test]
+  fn slash_report_even_reporter_count_median() {
+    let set = default_test_validator_set();
+
+    // 5 validators of weight 1 -> required_participation = 5*2/3+1 = 4
+    let keys_addrs: Vec<(RistrettoPoint, SeraiAddress)> =
+      (0 .. 5).map(|_| random_serai_address_and_key(&mut OsRng)).collect();
+    let validator_data: Vec<(SeraiAddress, u16)> =
+      keys_addrs.iter().map(|(_, addr)| (*addr, 1u16)).collect();
+    let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
+    let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+    let set_info = new_test_set_info(&validator_data);
+
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+
+    // 4 reporters submit different opinions about validator 4 (index 4).
+    // Reports (for all 5 validator positions):
+    //   reporter 0: [0, 0, 0, 0, 10]
+    //   reporter 1: [0, 0, 0, 0, 20]
+    //   reporter 2: [0, 0, 0, 0, 30]
+    //   reporter 3: [0, 0, 0, 0, 40]
+    //
+    // Sorted values for validator 4: [10, 20, 30, 40] (len=4, even)
+    // Even median index: (4 / 2) - 1 = 1 -> median = 20
+    //
+    // f = (5-1)/3 = 1, amortization baseline = sorted_medians[5-1-1] = sorted_medians[3] = 0
+    // amortized: [0, 0, 0, 0, 20]. Non-zero entries: [20] for validator 4.
+    let slash_reports = vec![
+      vec![0u32, 0, 0, 0, 10],
+      vec![0, 0, 0, 0, 20],
+      vec![0, 0, 0, 0, 30],
+      vec![0, 0, 0, 0, 40],
+    ];
+
+    {
+      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, 5, &weights);
+      for (i, report) in slash_reports.iter().enumerate() {
+        let (key, _) = keys_addrs[i];
+        scan_block.handle_application_tx(
+          1,
+          Transaction::SlashReport { slash_points: report.clone(), signed: new_signed(key) },
+        );
+      }
+    }
+
+    // Threshold was crossed with 4 reporters (even) -> even median branch exercised.
+    // Verify the signing topic was recognized and a message was sent.
+    let sign_topic = expected_topic_after_start_cosigning(VariantSignId::SlashReport);
+    assert!(
+      AccumulatedWeight::get(&mut txn, set, sign_topic).is_some(),
+      "SlashReport sign topic should be recognized"
+    );
+
+    let msg = ProcessorMessages::try_recv(&mut txn, set);
+    assert!(msg.is_some(), "expected SignSlashReport processor message");
   }
 
   mod fuzz_slash_report {
@@ -1025,7 +1026,7 @@ mod handle_application_tx {
     proptest! {
       #![proptest_config(ProptestConfig::with_cases(200))]
 
-      /// Fuzz the SlashReport → Participating path with randomized slash point vectors.
+      /// Fuzz the SlashReport -> Participating path with randomized slash point vectors.
       ///
       /// Uses 4 validators (f=1) so the threshold-crossing path is reachable.
       /// All 4 submit identical reports so the median equals the input.
@@ -1054,13 +1055,13 @@ mod handle_application_tx {
         let expected = expected_slash_report(4, &reports);
 
         {
-          let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 4, &weights);
+          let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, 4, &weights);
           for (key, _) in [(key0, &addr0), (key1, &addr1), (key2, &addr2), (key3, &addr3)] {
             scan_block.handle_application_tx(
               1,
               Transaction::SlashReport {
                 slash_points: slash_points.clone(),
-                signed: make_signed(key),
+                signed: new_signed(key),
               },
             );
           }
@@ -1068,7 +1069,7 @@ mod handle_application_tx {
 
         match expected {
           Some(result) if !result.is_empty() => {
-            // Non-empty slash report → message should be sent
+            // Non-empty slash report -> message should be sent
             prop_assert!(
               ProcessorMessages::try_recv(&mut txn, set).is_some(),
               "expected ProcessorMessage for non-empty slash report {:?}",
@@ -1076,7 +1077,7 @@ mod handle_application_tx {
             );
           }
           _ => {
-            // Empty or f==0 → no message sent (slash report is empty, nothing to sign)
+            // Empty or f==0 -> no message sent (slash report is empty, nothing to sign)
             // The code still sends the message even for empty reports due to the assert
             // passing with len=0 <= f. Verify it gets sent regardless.
             //
@@ -1090,11 +1091,7 @@ mod handle_application_tx {
         }
 
         // Verify the SlashReport signing topic was recognized
-        let sign_topic = Topic::Sign {
-          id: VariantSignId::SlashReport,
-          attempt: 0,
-          round: SigningProtocolRound::Preprocess,
-        };
+        let sign_topic = expected_topic_after_start_cosigning(VariantSignId::SlashReport);
         prop_assert!(
           AccumulatedWeight::get(&mut txn, set, sign_topic).is_some(),
           "SlashReport sign topic should be recognized"
@@ -1126,14 +1123,14 @@ mod handle_application_tx {
         let mut txn = db.txn();
 
         {
-          let mut scan_block = make_scan_block(&mut txn, &set_info, &validators, 7, &weights);
+          let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, 7, &weights);
           for (i, report) in reports.iter().enumerate() {
             let (key, _) = keys_addrs[i];
             scan_block.handle_application_tx(
               1,
               Transaction::SlashReport {
                 slash_points: report.clone(),
-                signed: make_signed(key),
+                signed: new_signed(key),
               },
             );
           }
@@ -1150,17 +1147,13 @@ mod handle_application_tx {
           }
         }
 
-        // Participating path was reached → message and topic recognition
+        // Participating path was reached -> message and topic recognition
         prop_assert!(ProcessorMessages::try_recv(&mut txn, set).is_some());
-        let sign_topic = Topic::Sign {
-          id: VariantSignId::SlashReport,
-          attempt: 0,
-          round: SigningProtocolRound::Preprocess,
-        };
+        let sign_topic = expected_topic_after_start_cosigning(VariantSignId::SlashReport);
         prop_assert!(AccumulatedWeight::get(&mut txn, set, sign_topic).is_some());
       }
 
-      /// Fuzz the wrong-length path: slash_points.len() != validators.len() → fatal slash
+      /// Fuzz the wrong-length path: slash_points.len() != validators.len() -> fatal slash
       #[test]
       fn fuzz_slash_report_wrong_length(
         num_validators in 4usize..10,
@@ -1186,12 +1179,12 @@ mod handle_application_tx {
 
         {
           let mut scan_block =
-            make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+            new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
           scan_block.handle_application_tx(
             1,
             Transaction::SlashReport {
               slash_points: vec![0; wrong_len],
-              signed: make_signed(signer_key),
+              signed: new_signed(signer_key),
             },
           );
         }
@@ -1216,47 +1209,49 @@ mod handle_block {
   fn processes_application_transactions() {
     let mut db = MemDb::new();
     let set = default_test_validator_set();
-    let batch_hash = [42; 32];
-    let (validator_data, validators, weights, total_weight) =
-      get_test_validators_and_weights_setup();
+    let batch_hash = random_bytes_32(&mut OsRng);
+    let (validator_data, validators, weights, total_weight) = setup_test_validators_and_weights();
     let set_info = new_test_set_info(&validator_data);
 
     let block = Block {
-      header: BlockHeader { parent: [0; 32], transactions: [0; 32] },
+      header: BlockHeader {
+        parent: random_bytes_32(&mut OsRng),
+        transactions: random_bytes_32(&mut OsRng),
+      },
       transactions: vec![TributaryTransaction::Application(Transaction::Batch {
         hash: batch_hash,
       })],
     };
 
-    let mut txn = db.txn();
-    let scan_block = make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+    {
+      let mut txn = db.txn();
+      let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
-    scan_block.handle_block(1, block);
-    txn.commit();
+      scan_block.handle_block(1, block);
+      txn.commit();
+    }
 
-    let topic = Topic::Sign {
-      id: VariantSignId::Batch(batch_hash),
-      attempt: 0,
-      round: SigningProtocolRound::Preprocess,
-    };
-    assert!(TributaryDb::recognized(&db, set, topic));
+    let expected_topic = expected_topic_after_start_cosigning(VariantSignId::Batch(batch_hash));
+    assert!(TributaryDb::recognized(&db, set, expected_topic));
   }
 
   #[test]
   fn empty_block_only_calls_start_of_block() {
     let mut db = MemDb::new();
     let set = default_test_validator_set();
-    let (validator_data, validators, weights, total_weight) =
-      get_test_validators_and_weights_setup();
+    let (validator_data, validators, weights, total_weight) = setup_test_validators_and_weights();
     let set_info = new_test_set_info(&validator_data);
 
     let block = Block {
-      header: BlockHeader { parent: [0; 32], transactions: [0; 32] },
+      header: BlockHeader {
+        parent: random_bytes_32(&mut OsRng),
+        transactions: random_bytes_32(&mut OsRng),
+      },
       transactions: vec![],
     };
 
     let mut txn = db.txn();
-    let scan_block = make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+    let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
     scan_block.handle_block(1, block);
     txn.commit();
@@ -1272,12 +1267,14 @@ mod handle_block {
     let set = default_test_validator_set();
     let batch_hash_a = [10; 32];
     let batch_hash_b = [20; 32];
-    let (validator_data, validators, weights, total_weight) =
-      get_test_validators_and_weights_setup();
+    let (validator_data, validators, weights, total_weight) = setup_test_validators_and_weights();
     let set_info = new_test_set_info(&validator_data);
 
     let block = Block {
-      header: BlockHeader { parent: [0; 32], transactions: [0; 32] },
+      header: BlockHeader {
+        parent: random_bytes_32(&mut OsRng),
+        transactions: random_bytes_32(&mut OsRng),
+      },
       transactions: vec![
         TributaryTransaction::Application(Transaction::Batch { hash: batch_hash_a }),
         TributaryTransaction::Application(Transaction::Batch { hash: batch_hash_b }),
@@ -1285,18 +1282,162 @@ mod handle_block {
     };
 
     let mut txn = db.txn();
-    let scan_block = make_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+    let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
     scan_block.handle_block(1, block);
     txn.commit();
 
     for hash in [batch_hash_a, batch_hash_b] {
-      let topic = Topic::Sign {
-        id: VariantSignId::Batch(hash),
-        attempt: 0,
-        round: SigningProtocolRound::Preprocess,
-      };
+      let topic = expected_topic_after_start_cosigning(VariantSignId::Batch(hash));
       assert!(TributaryDb::recognized(&db, set, topic));
     }
+  }
+
+  /// Construct a borsh-encoded `SignedMessage` for `TendermintNetwork<MemDb, Transaction, MockP2p>`.
+  ///
+  /// The network's types are: ValidatorId = [u8; 32], Block = TendermintBlock, Signature = [u8; 64].
+  /// We manually build the borsh encoding rather than depending on the internal tendermint types.
+  fn make_signed_message_bytes(sender: [u8; 32]) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    // Message fields:
+    bytes.extend_from_slice(&sender); // sender: [u8; 32]
+    bytes.extend_from_slice(&0u64.to_le_bytes()); // block: BlockNumber(0)
+    bytes.extend_from_slice(&0u32.to_le_bytes()); // round: RoundNumber(0)
+    bytes.push(1); // Data::Prevote variant index
+    bytes.push(0); // Option::None (no block id)
+                   // Signature:
+    bytes.extend_from_slice(&[0u8; 64]); // sig: [u8; 64]
+    bytes
+  }
+
+  #[test]
+  fn slash_evidence_invalid_precommit() {
+    let mut db = MemDb::new();
+    let set = default_test_validator_set();
+    let (_, addr0) = random_serai_address_and_key(&mut OsRng);
+    let validator_data = vec![(addr0, 1u16)];
+    let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
+    let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+    let set_info = new_test_set_info(&validator_data);
+
+    let evidence_bytes = make_signed_message_bytes(addr0.0);
+    let block = Block {
+      header: BlockHeader {
+        parent: random_bytes_32(&mut OsRng),
+        transactions: random_bytes_32(&mut OsRng),
+      },
+      transactions: vec![TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(
+        Evidence::InvalidPrecommit(evidence_bytes),
+      ))],
+    };
+
+    let mut txn = db.txn();
+    let scan_block = new_scan_block(&mut txn, &set_info, &validators, 1, &weights);
+    scan_block.handle_block(1, block);
+    txn.commit();
+
+    assert!(TributaryDb::is_fatally_slashed(&db, set, addr0));
+  }
+
+  #[test]
+  fn slash_evidence_invalid_valid_round() {
+    let mut db = MemDb::new();
+    let set = default_test_validator_set();
+    let (_, addr0) = random_serai_address_and_key(&mut OsRng);
+    let validator_data = vec![(addr0, 1u16)];
+    let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
+    let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+    let set_info = new_test_set_info(&validator_data);
+
+    let evidence_bytes = make_signed_message_bytes(addr0.0);
+    let block = Block {
+      header: BlockHeader {
+        parent: random_bytes_32(&mut OsRng),
+        transactions: random_bytes_32(&mut OsRng),
+      },
+      transactions: vec![TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(
+        Evidence::InvalidValidRound(evidence_bytes),
+      ))],
+    };
+
+    let mut txn = db.txn();
+    let scan_block = new_scan_block(&mut txn, &set_info, &validators, 1, &weights);
+    scan_block.handle_block(1, block);
+    txn.commit();
+
+    assert!(TributaryDb::is_fatally_slashed(&db, set, addr0));
+  }
+
+  #[test]
+  fn slash_evidence_conflicting_messages() {
+    let mut db = MemDb::new();
+    let set = default_test_validator_set();
+    let (_, addr0) = random_serai_address_and_key(&mut OsRng);
+    let validator_data = vec![(addr0, 1u16)];
+    let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
+    let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+    let set_info = new_test_set_info(&validator_data);
+
+    // Both messages have the same sender; the slash uses the first message's sender
+    let first = make_signed_message_bytes(addr0.0);
+    let second = make_signed_message_bytes(addr0.0);
+    let block = Block {
+      header: BlockHeader {
+        parent: random_bytes_32(&mut OsRng),
+        transactions: random_bytes_32(&mut OsRng),
+      },
+      transactions: vec![TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(
+        Evidence::ConflictingMessages(first, second),
+      ))],
+    };
+
+    let mut txn = db.txn();
+    let scan_block = new_scan_block(&mut txn, &set_info, &validators, 1, &weights);
+    scan_block.handle_block(1, block);
+    txn.commit();
+
+    assert!(TributaryDb::is_fatally_slashed(&db, set, addr0));
+  }
+
+  /// Verifies handle_block processes both Tendermint and Application transactions in one block.
+  #[test]
+  fn mixed_tendermint_and_application_txs() {
+    let mut db = MemDb::new();
+    let set = default_test_validator_set();
+    let (_, addr0) = random_serai_address_and_key(&mut OsRng);
+    let (_, addr1) = random_serai_address_and_key(&mut OsRng);
+    let validator_data = vec![(addr0, 1u16), (addr1, 1)];
+    let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
+    let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+    let set_info = new_test_set_info(&validator_data);
+
+    let batch_hash = [99; 32];
+    let evidence_bytes = make_signed_message_bytes(addr0.0);
+
+    let block = Block {
+      header: BlockHeader {
+        parent: random_bytes_32(&mut OsRng),
+        transactions: random_bytes_32(&mut OsRng),
+      },
+      transactions: vec![
+        // Tendermint SlashEvidence first
+        TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(Evidence::InvalidPrecommit(
+          evidence_bytes,
+        ))),
+        // Then an Application transaction
+        TributaryTransaction::Application(Transaction::Batch { hash: batch_hash }),
+      ],
+    };
+
+    let mut txn = db.txn();
+    let scan_block = new_scan_block(&mut txn, &set_info, &validators, 2, &weights);
+    scan_block.handle_block(1, block);
+    txn.commit();
+
+    // Tendermint evidence slashed addr0
+    assert!(TributaryDb::is_fatally_slashed(&db, set, addr0));
+    // Application tx was still processed
+    let topic = expected_topic_after_start_cosigning(VariantSignId::Batch(batch_hash));
+    assert!(TributaryDb::recognized(&db, set, topic));
   }
 }

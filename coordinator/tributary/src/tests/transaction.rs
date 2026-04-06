@@ -1,53 +1,76 @@
 use core::ops::Deref as _;
+use std::io::{self, Cursor, Read, Write};
 
-use rand::{CryptoRng, RngCore, rngs::OsRng};
+use blake2::{digest::typenum::U32, Digest as _, Blake2b};
+use borsh::{BorshDeserialize, BorshSerialize};
+use rand::{CryptoRng, Rng, RngCore, rngs::OsRng};
 
-use ciphersuite::{group::Group as _, *};
+use ciphersuite::{
+  group::{Group as _, GroupEncoding, ff::PrimeField},
+  *,
+};
 use dalek_ff_group::Ristretto;
 
-use serai_primitives::validator_sets::KeyShares;
-use serai_primitives::test_helpers::{
-  random_bytes_32, random_bytes_64, random_vec_u8, random_serai_address, random_block_hash,
-  random_genesis,
-};
-
 use messages::sign::VariantSignId;
-
+use serai_primitives::{test_helpers::*, validator_sets::KeyShares};
 use tributary_sdk::{
   ReadWrite,
   transaction::{Transaction as TransactionTrait, TransactionError, TransactionKind},
 };
 
-use crate::{db::Topic, tests::random_key};
-use crate::transaction::{SigningProtocolRound, Signed, Transaction};
+use crate::{
+  db::Topic,
+  tests::{random_key, random_signed},
+  transaction::{Signed, SigningProtocolRound, Transaction},
+};
 
-/// Create a random serai-coordinator-tributary `Signed` from a tributary-sdk `Signed`
-fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
-  let signed = tributary_sdk::tests::random_signed(&mut *rng);
-  Signed { signer: signed.signer, signature: signed.signature }
-}
-
-/// One of each signed transaction kind with random values.
-fn all_signed_transactions() -> Vec<Transaction> {
+/// One of each signed transaction kind, and attempts: at 0, a random attempt, and u32::MAX.
+fn all_signed_transactions_and_attempts() -> Vec<Transaction> {
+  let random_attempt = OsRng.gen_range(1u32 .. u32::MAX);
   vec![
+    // RemoveParticipant
     Transaction::RemoveParticipant {
       participant: random_serai_address(&mut OsRng),
       signed: random_signed(&mut OsRng),
     },
+    // DkgParticipation
     Transaction::DkgParticipation {
       participation: random_vec_u8(&mut OsRng),
       signed: random_signed(&mut OsRng),
     },
+    // DkgConfirmationPreprocess
     Transaction::DkgConfirmationPreprocess {
       attempt: 0,
       preprocess: random_bytes_64(&mut OsRng),
       signed: random_signed(&mut OsRng),
     },
+    Transaction::DkgConfirmationPreprocess {
+      attempt: random_attempt,
+      preprocess: random_bytes_64(&mut OsRng),
+      signed: random_signed(&mut OsRng),
+    },
+    Transaction::DkgConfirmationPreprocess {
+      attempt: u32::MAX,
+      preprocess: random_bytes_64(&mut OsRng),
+      signed: random_signed(&mut OsRng),
+    },
+    // DkgConfirmationShare
     Transaction::DkgConfirmationShare {
       attempt: 0,
       share: random_bytes_32(&mut OsRng),
       signed: random_signed(&mut OsRng),
     },
+    Transaction::DkgConfirmationShare {
+      attempt: random_attempt,
+      share: random_bytes_32(&mut OsRng),
+      signed: random_signed(&mut OsRng),
+    },
+    Transaction::DkgConfirmationShare {
+      attempt: u32::MAX,
+      share: random_bytes_32(&mut OsRng),
+      signed: random_signed(&mut OsRng),
+    },
+    // Sign Preprocess
     Transaction::Sign {
       id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
       attempt: 0,
@@ -56,12 +79,42 @@ fn all_signed_transactions() -> Vec<Transaction> {
       signed: random_signed(&mut OsRng),
     },
     Transaction::Sign {
+      id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
+      attempt: random_attempt,
+      round: SigningProtocolRound::Preprocess,
+      data: vec![random_vec_u8(&mut OsRng)],
+      signed: random_signed(&mut OsRng),
+    },
+    Transaction::Sign {
+      id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
+      attempt: u32::MAX,
+      round: SigningProtocolRound::Preprocess,
+      data: vec![random_vec_u8(&mut OsRng)],
+      signed: random_signed(&mut OsRng),
+    },
+    // Sign Share
+    Transaction::Sign {
       id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
       attempt: 0,
       round: SigningProtocolRound::Share,
       data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
       signed: random_signed(&mut OsRng),
     },
+    Transaction::Sign {
+      id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
+      attempt: random_attempt,
+      round: SigningProtocolRound::Share,
+      data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
+      signed: random_signed(&mut OsRng),
+    },
+    Transaction::Sign {
+      id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
+      attempt: u32::MAX,
+      round: SigningProtocolRound::Share,
+      data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
+      signed: random_signed(&mut OsRng),
+    },
+    // SlashReport
     Transaction::SlashReport {
       slash_points: (0 .. 3).map(|_| OsRng.next_u32()).collect(),
       signed: random_signed(&mut OsRng),
@@ -81,7 +134,7 @@ fn all_provided_transactions() -> Vec<Transaction> {
 
 /// One of each of all transaction kinds.
 fn all_transactions() -> Vec<Transaction> {
-  let mut txs = all_signed_transactions();
+  let mut txs = all_signed_transactions_and_attempts();
   txs.extend(all_provided_transactions());
   txs
 }
@@ -103,13 +156,9 @@ fn signing_protocol_round_nonce() {
 
 mod signed {
   use super::*;
-  use ciphersuite::group::{GroupEncoding, ff::PrimeField};
 
   #[test]
   fn borsh_serialize_and_deserialize() {
-    use std::io::{self, Read, Write};
-    use borsh::{BorshSerialize, BorshDeserialize};
-
     // Check the format of `Signed`
     {
       let signed = random_signed(&mut OsRng);
@@ -139,7 +188,7 @@ mod signed {
       );
 
       let deserialized: Signed = borsh::from_slice(&serialized).unwrap();
-      let mut cursor = std::io::Cursor::new(&serialized);
+      let mut cursor = Cursor::new(&serialized);
       assert_eq!(
         deserialized,
         Signed::deserialize_reader(&mut cursor).unwrap(),
@@ -192,7 +241,7 @@ mod signed {
     {
       let serialized = borsh::to_vec(&random_signed(&mut OsRng)).unwrap();
       let truncated = &serialized[.. 5];
-      let mut cursor = std::io::Cursor::new(truncated);
+      let mut cursor = Cursor::new(truncated);
       let result = Signed::deserialize_reader(&mut cursor);
       assert!(result.is_err(), "truncated data should fail to deserialize");
     }
@@ -201,7 +250,7 @@ mod signed {
     {
       let serialized = borsh::to_vec(&random_signed(&mut OsRng)).unwrap();
       let signer_only = &serialized[.. 32];
-      let mut cursor = std::io::Cursor::new(signer_only);
+      let mut cursor = Cursor::new(signer_only);
       let result = Signed::deserialize_reader(&mut cursor);
       assert!(result.is_err(), "signer-only data without signature should fail to deserialize");
     }
@@ -231,118 +280,174 @@ mod signed {
 mod transaction {
   use super::*;
 
-  #[test]
-  fn readwrite() {
-    for mut tx in all_transactions() {
-      let serialized = ReadWrite::serialize(&tx);
+  mod readwrite {
+    use super::*;
 
-      let expected = match &tx {
-        Transaction::RemoveParticipant { participant, signed } => {
-          let mut expected = vec![0u8];
-          expected.extend(&participant.0);
-          expected.extend(borsh::to_vec(signed).unwrap());
-          expected
-        }
-        Transaction::DkgParticipation { participation, signed } => {
-          let mut expected = vec![1u8];
-          expected.extend(&(participation.len() as u32).to_le_bytes());
-          expected.extend(participation);
-          expected.extend(borsh::to_vec(signed).unwrap());
-          expected
-        }
-        Transaction::DkgConfirmationPreprocess { attempt, preprocess, signed } => {
-          let mut expected = vec![2u8];
-          expected.extend(&attempt.to_le_bytes());
-          expected.extend(preprocess);
-          expected.extend(borsh::to_vec(signed).unwrap());
-          expected
-        }
-        Transaction::DkgConfirmationShare { attempt, share, signed } => {
-          let mut expected = vec![3u8];
-          expected.extend(&attempt.to_le_bytes());
-          expected.extend(share);
-          expected.extend(borsh::to_vec(signed).unwrap());
-          expected
-        }
-        Transaction::Cosign { substrate_block_hash } => {
-          let mut expected = vec![4u8];
-          expected.extend(&substrate_block_hash.0);
-          expected
-        }
-        Transaction::Cosigned { substrate_block_hash } => {
-          let mut expected = vec![5u8];
-          expected.extend(&substrate_block_hash.0);
-          expected
-        }
-        Transaction::SubstrateBlock { hash } => {
-          let mut expected = vec![6u8];
-          expected.extend(&hash.0);
-          expected
-        }
-        Transaction::Batch { hash } => {
-          let mut expected = vec![7u8];
-          expected.extend(hash);
-          expected
-        }
-        Transaction::Sign { id, attempt, round, data, signed } => {
-          let mut expected = vec![8u8];
-          // Independently encode VariantSignId
-          match id {
-            VariantSignId::Cosign(v) => {
-              expected.push(0u8);
-              expected.extend(&v.to_le_bytes());
-            }
-            VariantSignId::Batch(h) => {
-              expected.push(1u8);
-              expected.extend(h);
-            }
-            VariantSignId::SlashReport => {
-              expected.push(2u8);
-            }
-            VariantSignId::Transaction(h) => {
-              expected.push(3u8);
-              expected.extend(h);
-            }
-          }
-          expected.extend(&attempt.to_le_bytes());
-          match round {
-            SigningProtocolRound::Preprocess => expected.push(0u8),
-            SigningProtocolRound::Share => expected.push(1u8),
-          }
-          // Vec<Vec<u8>>
-          expected.extend(&(data.len() as u32).to_le_bytes());
-          for d in data {
-            expected.extend(&(d.len() as u32).to_le_bytes());
-            expected.extend(d);
-          }
-          expected.extend(borsh::to_vec(signed).unwrap());
-          expected
-        }
-        Transaction::SlashReport { slash_points, signed } => {
-          let mut expected = vec![9u8];
-          expected.extend(&(slash_points.len() as u32).to_le_bytes());
-          for &p in slash_points {
-            expected.extend(&p.to_le_bytes());
-          }
-          expected.extend(borsh::to_vec(signed).unwrap());
-          expected
-        }
-      };
+    #[test]
+    fn serialize_and_deserialize() {
+      for mut tx in all_transactions() {
+        let serialized = ReadWrite::serialize(&tx);
 
-      assert_eq!(serialized, expected, "format mismatch for {tx:?}");
+        let expected = match &tx {
+          Transaction::RemoveParticipant { participant, signed } => {
+            let mut expected = vec![0u8];
+            expected.extend(&participant.0);
+            expected.extend(borsh::to_vec(signed).unwrap());
+            expected
+          }
+          Transaction::DkgParticipation { participation, signed } => {
+            let mut expected = vec![1u8];
+            expected.extend(&(participation.len() as u32).to_le_bytes());
+            expected.extend(participation);
+            expected.extend(borsh::to_vec(signed).unwrap());
+            expected
+          }
+          Transaction::DkgConfirmationPreprocess { attempt, preprocess, signed } => {
+            let mut expected = vec![2u8];
+            expected.extend(&attempt.to_le_bytes());
+            expected.extend(preprocess);
+            expected.extend(borsh::to_vec(signed).unwrap());
+            expected
+          }
+          Transaction::DkgConfirmationShare { attempt, share, signed } => {
+            let mut expected = vec![3u8];
+            expected.extend(&attempt.to_le_bytes());
+            expected.extend(share);
+            expected.extend(borsh::to_vec(signed).unwrap());
+            expected
+          }
+          Transaction::Cosign { substrate_block_hash } => {
+            let mut expected = vec![4u8];
+            expected.extend(&substrate_block_hash.0);
+            expected
+          }
+          Transaction::Cosigned { substrate_block_hash } => {
+            let mut expected = vec![5u8];
+            expected.extend(&substrate_block_hash.0);
+            expected
+          }
+          Transaction::SubstrateBlock { hash } => {
+            let mut expected = vec![6u8];
+            expected.extend(&hash.0);
+            expected
+          }
+          Transaction::Batch { hash } => {
+            let mut expected = vec![7u8];
+            expected.extend(hash);
+            expected
+          }
+          Transaction::Sign { id, attempt, round, data, signed } => {
+            let mut expected = vec![8u8];
+            // Independently encode VariantSignId
+            match id {
+              VariantSignId::Cosign(v) => {
+                expected.push(0u8);
+                expected.extend(&v.to_le_bytes());
+              }
+              VariantSignId::Batch(h) => {
+                expected.push(1u8);
+                expected.extend(h);
+              }
+              VariantSignId::SlashReport => {
+                expected.push(2u8);
+              }
+              VariantSignId::Transaction(h) => {
+                expected.push(3u8);
+                expected.extend(h);
+              }
+            }
+            expected.extend(&attempt.to_le_bytes());
+            match round {
+              SigningProtocolRound::Preprocess => expected.push(0u8),
+              SigningProtocolRound::Share => expected.push(1u8),
+            }
+            // Use the RoundPayloads type of Vec<GenericSignPayload> to fit for both rounds
+            expected.extend(&(data.len() as u32).to_le_bytes());
+            for d in data {
+              expected.extend(&(d.len() as u32).to_le_bytes());
+              expected.extend(d);
+            }
+            expected.extend(borsh::to_vec(signed).unwrap());
+            expected
+          }
+          Transaction::SlashReport { slash_points, signed } => {
+            let mut expected = vec![9u8];
+            expected.extend(&(slash_points.len() as u32).to_le_bytes());
+            for &p in slash_points {
+              expected.extend(&p.to_le_bytes());
+            }
+            expected.extend(borsh::to_vec(signed).unwrap());
+            expected
+          }
+        };
 
-      let deserialized = Transaction::read(&mut serialized.as_slice()).unwrap();
-      assert_eq!(tx, deserialized);
+        assert_eq!(serialized, expected, "format mismatch for {tx:?}");
 
-      match tx.kind() {
-        TransactionKind::Signed(_, _) => {
+        let deserialized = Transaction::read(&mut serialized.as_slice()).unwrap();
+        assert_eq!(tx, deserialized);
+
+        if let TransactionKind::Signed(_, _) = tx.kind() {
           tx.sign(&mut OsRng, random_genesis(&mut OsRng), &random_key(&mut OsRng));
           let serialized = ReadWrite::serialize(&tx);
           let deserialized = Transaction::read(&mut serialized.as_slice()).unwrap();
           assert_eq!(tx, deserialized, "ReadWrite failed after signing for {tx:?}");
         }
-        _ => {}
       }
+    }
+
+    /// Regression test: `Transaction::read` must use `deserialize_reader`, not `borsh::from_reader`.
+    ///
+    /// `borsh::from_reader` asserts the reader is exhausted after deserialization. When multiple
+    /// transactions are serialized into a single stream (as happens in `Block::read`), the first
+    /// `from_reader` call would fail because subsequent transactions' bytes remain in the reader.
+    #[test]
+    fn sequential_reads_from_shared_reader() {
+      let txs = all_transactions();
+
+      let mut buf = Vec::new();
+      buf.extend(&u32::try_from(txs.len()).unwrap().to_le_bytes());
+      for tx in &txs {
+        tx.write(&mut buf).unwrap();
+      }
+
+      let mut cursor = Cursor::new(&buf);
+      let mut count = [0u8; 4];
+      cursor.read_exact(&mut count).unwrap();
+
+      for (i, expected) in txs.iter().enumerate() {
+        let actual = Transaction::read(&mut cursor)
+          .unwrap_or_else(|e| panic!("failed to read transaction {i} from shared reader: {e}"));
+        assert_eq!(&actual, expected, "transaction {i} mismatch after sequential read");
+      }
+
+      let mut leftover = [0u8; 1];
+      assert_eq!(
+        cursor.read(&mut leftover).unwrap(),
+        0,
+        "reader should be exhausted after reading all transactions"
+      );
+    }
+
+    /// Counterpart to `sequential_reads_from_shared_reader`: proves `borsh::from_reader` rejects
+    /// a reader that has leftover bytes, which is why `Transaction::read` must use
+    /// `deserialize_reader` instead.
+    #[test]
+    fn borsh_from_reader_rejects_shared_reader_with_trailing_bytes() {
+      let txs = all_transactions();
+
+      let mut buf = Vec::new();
+      buf.extend(&u32::try_from(txs.len()).unwrap().to_le_bytes());
+      for tx in &txs {
+        tx.write(&mut buf).unwrap();
+      }
+
+      let mut cursor = Cursor::new(&buf);
+      let mut count = [0u8; 4];
+      cursor.read_exact(&mut count).unwrap();
+
+      // borsh::from_reader should fail because subsequent tx bytes remain after the first
+      let result: io::Result<Transaction> = borsh::from_reader(&mut cursor);
+      assert!(result.is_err(), "borsh::from_reader should reject a reader with trailing bytes");
     }
   }
 
@@ -362,7 +467,7 @@ mod transaction {
         out
       }
 
-      for mut tx in all_signed_transactions() {
+      for mut tx in all_signed_transactions_and_attempts() {
         tx.sign(&mut OsRng, genesis, &key);
 
         let (expected_order, expected_nonce) = match &tx {
@@ -372,12 +477,7 @@ mod transaction {
             (order, 0)
           }
           Transaction::DkgParticipation { .. } => (borsh_label(b"DkgParticipation"), 0),
-          Transaction::DkgConfirmationPreprocess { attempt, .. } => {
-            let mut order = borsh_label(b"DkgConfirmation");
-            order.extend(&attempt.to_le_bytes());
-            (order, 1)
-          }
-          // NOTE: same order AND nonce as DkgConfirmationPreprocess
+          Transaction::DkgConfirmationPreprocess { attempt, .. } |
           Transaction::DkgConfirmationShare { attempt, .. } => {
             let mut order = borsh_label(b"DkgConfirmation");
             order.extend(&attempt.to_le_bytes());
@@ -411,7 +511,7 @@ mod transaction {
             (order, nonce)
           }
           Transaction::SlashReport { .. } => (borsh_label(b"SlashReport"), 0),
-          other => panic!("all_signed_transactions returned non-signed tx: {other:?}"),
+          other => panic!("all_signed_transactions_and_attempts returned non-signed tx: {other:?}"),
         };
 
         match tx.kind() {
@@ -454,8 +554,6 @@ mod transaction {
 
     #[test]
     fn hash_format_and_determinism() {
-      use blake2::{digest::typenum::U32, Digest as _, Blake2b};
-
       let key = random_key(&mut OsRng);
       let genesis = random_genesis(&mut OsRng);
 
@@ -497,7 +595,11 @@ mod transaction {
           let mut tx2 = tx.clone();
           tx1.sign(&mut OsRng, genesis, &key);
           tx2.sign(&mut OsRng, genesis, &key);
-          assert_eq!(tx1.hash(), tx2.hash(), "Hashes should be equal despite different signatures");
+          assert_eq!(
+            tx1.hash(),
+            tx2.hash(),
+            "Hashes should be equal despite different nonces and signatures"
+          );
         }
       }
     }
@@ -587,14 +689,11 @@ mod transaction {
         Transaction::DkgConfirmationShare { attempt, .. } => {
           Some(Topic::DkgConfirmation { attempt: *attempt, round: SigningProtocolRound::Share })
         }
-        Transaction::Cosign { .. } |
-        Transaction::Cosigned { .. } |
-        Transaction::SubstrateBlock { .. } |
-        Transaction::Batch { .. } => None,
         Transaction::Sign { id, attempt, round, .. } => {
           Some(Topic::Sign { id: *id, attempt: *attempt, round: *round })
         }
         Transaction::SlashReport { .. } => Some(Topic::SlashReport),
+        _ => None,
       };
       assert_eq!(tx.topic(), expected, "Wrong topic for {tx:?}");
     }
@@ -610,7 +709,7 @@ mod transaction {
       let genesis = random_genesis(&mut OsRng);
 
       // Sets correct signer and produces verifiable signature
-      for mut tx in all_signed_transactions() {
+      for mut tx in all_signed_transactions_and_attempts() {
         tx.sign(&mut OsRng, genesis, &key);
         let sig_hash = tx.sig_hash(genesis);
 
@@ -633,13 +732,14 @@ mod transaction {
         tx.sign(&mut OsRng, genesis, &key);
 
         let mut wrong_genesis = random_genesis(&mut OsRng);
+        // guaranteed to be the wrong genesis
         if wrong_genesis == genesis {
           wrong_genesis[0] ^= 1;
         }
         let wrong_challenge = tx.sig_hash(wrong_genesis);
-        if let TransactionKind::Signed(_, trib_signed) = tx.kind() {
+        if let TransactionKind::Signed(_, tributary_signed) = tx.kind() {
           assert_eq!(
-            trib_signed.signature.verify(trib_signed.signer, wrong_challenge),
+            tributary_signed.signature.verify(tributary_signed.signer, wrong_challenge),
             false,
             "Signature should not verify with wrong genesis"
           );
