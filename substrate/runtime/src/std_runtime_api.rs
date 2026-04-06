@@ -7,6 +7,7 @@ use serai_abi::{
     crypto::{KeyPair, EmbeddedEllipticCurveKeys},
     network_id::NetworkId,
     validator_sets::{Session, ExternalValidatorSet},
+    coin::{Coin, ExternalCoin},
     balance::Amount,
     address::SeraiAddress,
   },
@@ -170,6 +171,34 @@ sp_api::impl_runtime_apis! {
       validator: SeraiAddress,
       network: NetworkId,
     ) -> Option<EmbeddedEllipticCurveKeys> {
+      unimplemented!("runtime is only implemented when WASM")
+    }
+
+    fn balance(of: SeraiAddress, coin: Coin) -> Amount {
+      unimplemented!("runtime is only implemented when WASM")
+    }
+    fn liquidity_balance(of: SeraiAddress, coin: ExternalCoin) -> Amount {
+      unimplemented!("runtime is only implemented when WASM")
+    }
+    fn genesis_liquidity_balance(of: SeraiAddress, coin: ExternalCoin) -> Amount {
+      unimplemented!("runtime is only implemented when WASM")
+    }
+
+    fn supply(coin: Coin) -> Amount {
+      unimplemented!("runtime is only implemented when WASM")
+    }
+    fn liquidity_supply(coin: ExternalCoin) -> Amount {
+      unimplemented!("runtime is only implemented when WASM")
+    }
+    fn genesis_liquidity_supply(coin: ExternalCoin) -> Amount {
+      unimplemented!("runtime is only implemented when WASM")
+    }
+
+    fn genesis_completed() -> bool {
+      unimplemented!("runtime is only implemented when WASM")
+    }
+
+    fn account_nonce(of: SeraiAddress) -> u32 {
       unimplemented!("runtime is only implemented when WASM")
     }
   }

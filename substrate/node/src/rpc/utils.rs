@@ -87,6 +87,31 @@ pub(super) fn network(params: &Params) -> Result<NetworkId, Error> {
   network_from_str(network.network)
 }
 
+pub(super) fn coin_from_str(coin: impl AsRef<str>) -> Result<Coin, Error> {
+  Ok(match coin.as_ref() {
+    "SRI" => Coin::Serai,
+    "sriBTC" => Coin::External(ExternalCoin::Bitcoin),
+    "sriETH" => Coin::External(ExternalCoin::Ether),
+    "sriDAI" => Coin::External(ExternalCoin::Dai),
+    "sriXMR" => Coin::External(ExternalCoin::Monero),
+    _ => Err(Error::InvalidRequest("unrecognized external coin requested"))?,
+  })
+}
+
+pub(super) fn coin(params: &Params) -> Result<Coin, Error> {
+  #[derive(sp_core::serde::Deserialize)]
+  #[serde(crate = "sp_core::serde")]
+  struct Coin {
+    coin: String,
+  }
+
+  let Ok(coin) = params.parse::<Coin>() else {
+    Err(Error::InvalidRequest(r#"missing `string` "coin" field"#))?
+  };
+
+  coin_from_str(coin.coin)
+}
+
 pub(super) fn set(params: &Params) -> Result<ValidatorSet, Error> {
   #[derive(sp_core::serde::Deserialize)]
   #[serde(crate = "sp_core::serde")]
