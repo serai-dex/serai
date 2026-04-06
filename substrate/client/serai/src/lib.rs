@@ -283,6 +283,6 @@ impl State<'_> {
 
   /// Returns the next nonce to be used for this account.
   pub async fn account_nonce(&self, of: &SeraiAddress) -> Result<u32, RpcError> {
-    self.call::<u32>("system/next-nonce", &format!(r#", "address": "{of}" "#)).await
+    self.call::<u32>("core/next-nonce", &format!(r#", "address": "{of}" "#)).await
   }
 }
