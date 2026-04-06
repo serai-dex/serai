@@ -1,5 +1,3 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-
 use crate::{
   coin::{ExternalCoin, Coin},
   balance::Amount,
@@ -61,15 +59,13 @@ impl Premise {
 }
 
 /// The reserves for a liquidity pool.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Reserves {
   /// The amount of SRI already present.
   pub sri: Amount,
   /// The amount of the external coin already present.
   pub external_coin: Amount,
 }
-#[cfg(feature = "scale")]
-crate::borsh_as_scale!(Reserves);
 
 impl Reserves {
   /// The product of two amounts.

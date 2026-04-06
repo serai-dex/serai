@@ -3,7 +3,7 @@ use serai_abi::primitives::{
   crypto::{EmbeddedEllipticCurveKeys, SignedEmbeddedEllipticCurveKeys, KeyPair},
   network_id::NetworkId,
   validator_sets::{Session, ExternalValidatorSet},
-  coin::{Coin, ExternalCoin},
+  coin::{ExternalCoin, Coin},
   balance::{Amount, Balance},
   address::SeraiAddress,
 };
