@@ -266,13 +266,15 @@ impl<C: GroupIo + Id> fmt::Debug for ThresholdCore<C> {
 
 impl<C: GroupIo + Id> Zeroize for ThresholdCore<C> {
   fn zeroize(&mut self) {
-    self.params.zeroize();
-    self.group_key.zeroize();
-    for share in self.verification_shares.values_mut() {
+    let Self { params, group_key, verification_shares, interpolation, secret_share } = self;
+
+    params.zeroize();
+    group_key.zeroize();
+    for share in verification_shares.values_mut() {
       share.zeroize();
     }
-    self.interpolation.zeroize();
-    self.secret_share.zeroize();
+    interpolation.zeroize();
+    secret_share.zeroize();
   }
 }
 
@@ -319,15 +321,27 @@ impl<C: GroupIo + Id> fmt::Debug for ThresholdView<C> {
 
 impl<C: GroupIo + Id> Zeroize for ThresholdView<C> {
   fn zeroize(&mut self) {
-    self.scalar.zeroize();
-    self.offset.zeroize();
-    self.group_key.zeroize();
-    self.included.zeroize();
-    self.secret_share.zeroize();
-    for share in self.original_verification_shares.values_mut() {
+    let Self {
+      interpolation,
+      scalar,
+      offset,
+      group_key,
+      included,
+      secret_share,
+      original_verification_shares,
+      verification_shares,
+    } = self;
+
+    interpolation.zeroize();
+    scalar.zeroize();
+    offset.zeroize();
+    group_key.zeroize();
+    included.zeroize();
+    secret_share.zeroize();
+    for share in original_verification_shares.values_mut() {
       share.zeroize();
     }
-    for share in self.verification_shares.values_mut() {
+    for share in verification_shares.values_mut() {
       share.zeroize();
     }
   }

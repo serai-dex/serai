@@ -264,3 +264,11 @@ protocol is defined.
 A `PreInherents` hook is defined which _must_ be integrated into the runtime
 for this to work properly. Said hook will call [`Emissions::block_reward`] so
 that _MUST_ be in a well-defined state prior to this pallet's hook's execution.
+
+### Audit Status
+
+This was
+[audited by Security Research Labs](/audits/substrate/Security%20Research%20Labs%20April%202026)
+as of commit `c079232cc40db53154e41b70c825295ac11afd4d`. Any following changes
+were not audited unless otherwise stated. Please read the linked report for
+more information.

@@ -2,9 +2,9 @@
 #![doc = include_str!("../README.md")]
 #![no_std]
 
-use zeroize::Zeroize;
+use zeroize::ZeroizeOnDrop;
 
-use digest::{block_api::BlockSizeUser, Digest, Output, HashMarker};
+use digest::{Digest, Output};
 
 #[cfg(feature = "merlin")]
 mod merlin;
@@ -71,9 +71,9 @@ impl DigestTranscriptMember {
 
 /// A simple transcript format constructed around the specified hash algorithm.
 #[derive(Clone, Debug)]
-pub struct DigestTranscript<D: Send + Clone + Digest + HashMarker>(D);
+pub struct DigestTranscript<D: Send + Clone + Digest>(D);
 
-impl<D: Send + Clone + Digest + HashMarker> DigestTranscript<D> {
+impl<D: Send + Clone + Digest> DigestTranscript<D> {
   fn append(&mut self, kind: DigestTranscriptMember, value: &[u8]) {
     self.0.update([kind.as_u8()]);
     // Assumes messages don't exceed 16 exabytes
@@ -82,7 +82,7 @@ impl<D: Send + Clone + Digest + HashMarker> DigestTranscript<D> {
   }
 }
 
-impl<D: Send + Clone + Digest + HashMarker> Transcript for DigestTranscript<D> {
+impl<D: Send + Clone + Digest> Transcript for DigestTranscript<D> {
   type Challenge = Output<D>;
 
   fn new(name: &'static [u8]) -> Self {
@@ -118,38 +118,90 @@ impl<D: Send + Clone + Digest + HashMarker> Transcript for DigestTranscript<D> {
   }
 }
 
-// Digest doesn't implement Zeroize
-// Implement Zeroize for DigestTranscript by writing twice the block size to the digest in an
-// attempt to overwrite the internal hash state/any leftover bytes
-impl<D: Send + Clone + Digest + HashMarker> Zeroize for DigestTranscript<D>
-where
-  D: BlockSizeUser,
+impl<D: Send + Clone + Digest + ZeroizeOnDrop + ZeroizeOnDrop> ZeroizeOnDrop
+  for DigestTranscript<D>
 {
-  fn zeroize(&mut self) {
-    // Update in 4-byte chunks to reduce call quantity and enable word-level update optimizations
-    const WORD_SIZE: usize = 4;
-
-    // block_size returns the block_size in bytes
-    // Use a ceil div in case the block size isn't evenly divisible by our word size
-    let words = D::block_size().div_ceil(WORD_SIZE);
-    for _ in 0 .. (2 * words) {
-      self.0.update([255; WORD_SIZE]);
-    }
-
-    // Hopefully, the hash state is now overwritten to the point no data is recoverable
-    // These writes may be optimized out if they're never read
-    // Attempt to get them marked as read
-
-    fn mark_read<D: Send + Clone + Digest + HashMarker>(transcript: &DigestTranscript<D>) {
-      // Just get a challenge from the state
-      let mut challenge = core::hint::black_box(transcript.0.clone().finalize());
-      challenge.as_mut().zeroize();
-    }
-
-    mark_read(self);
-  }
 }
 
-/// The recommended transcript, guaranteed to be secure against length-extension attacks.
 #[cfg(feature = "recommended")]
-pub type RecommendedTranscript = DigestTranscript<blake2::Blake2b512>;
+mod recommended {
+  use core::fmt;
+
+  use blake2::{
+    digest::{
+      self, array::sizes::U64, block_api::FixedOutputCore, Update, OutputSizeUser, Output,
+      FixedOutput, HashMarker,
+    },
+    Blake2bVarCore,
+  };
+
+  use super::*;
+
+  /// Immediately `zeroize` a `struct` which implements `ZeroizeOnDrop` but not `Zeroize`.
+  ///
+  /// This effects behavior equivalent to `Zeroize` when `DefaultIsZeroes`. It's primarily intended
+  /// just to assert the value does in fact implement `ZeroizeOnDrop` and explicitly track this.
+  fn zeroize_zeroize_on_drop<T: Default + ZeroizeOnDrop>(value: &mut T) {
+    let mut replacement = T::default();
+    core::mem::swap(value, &mut replacement);
+    drop(replacement);
+  }
+
+  // We need to locally define this struct in order to be able to access its fields
+  digest::buffer_ct_variable!(
+    struct Blake2b<Out>(Blake2bVarCore);
+    exclude: SerializableState;
+    max_size: U64;
+  );
+  type Blake2b512 = Blake2b<U64>;
+
+  /// A `Blake2b512` which implements `ZeroizeOnDrop` because `blake2::Blake2b` does not.
+  #[derive(Clone, Default)]
+  pub struct ZeroizeOnDropBlake2b512(Blake2b512);
+  impl fmt::Debug for ZeroizeOnDropBlake2b512 {
+    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+      fmt.debug_struct("ZeroizeOnDropBlake2b512").finish_non_exhaustive()
+    }
+  }
+  impl Update for ZeroizeOnDropBlake2b512 {
+    fn update(&mut self, data: &[u8]) {
+      Update::update(&mut self.0, data);
+    }
+  }
+  impl OutputSizeUser for ZeroizeOnDropBlake2b512 {
+    type OutputSize = U64;
+  }
+  impl FixedOutput for ZeroizeOnDropBlake2b512 {
+    fn finalize_into(mut self, out: &mut Output<Self>) {
+      FixedOutputCore::finalize_fixed_core(&mut self.0.core, &mut self.0.buffer, out);
+      drop(self);
+    }
+  }
+  impl HashMarker for ZeroizeOnDropBlake2b512 {}
+  impl Drop for ZeroizeOnDropBlake2b512 {
+    fn drop(&mut self) {
+      let Self(Blake2b { core, buffer }) = self;
+      zeroize_zeroize_on_drop(core);
+      zeroize_zeroize_on_drop(buffer);
+    }
+  }
+  impl ZeroizeOnDrop for ZeroizeOnDropBlake2b512 {}
+
+  /// The recommended transcript, guaranteed to be secure against length-extension attacks.
+  pub type RecommendedTranscript = DigestTranscript<ZeroizeOnDropBlake2b512>;
+
+  // TODO: Remove the following after `monero-oxide` updates
+  impl zeroize::Zeroize for RecommendedTranscript {
+    fn zeroize(&mut self) {
+      zeroize_zeroize_on_drop(&mut self.0);
+    }
+  }
+
+  #[test]
+  fn bespoke_blake2b512_is_blake2b512() {
+    use blake2::Digest as _;
+    assert_eq!(blake2::Blake2b512::digest(b""), ZeroizeOnDropBlake2b512::digest(b""));
+  }
+}
+#[cfg(feature = "recommended")]
+pub use recommended::RecommendedTranscript;

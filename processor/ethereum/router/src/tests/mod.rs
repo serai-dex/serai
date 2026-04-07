@@ -54,7 +54,8 @@ pub(crate) fn test_key() -> (Scalar, PublicKey) {
 fn sign(key: (Scalar, PublicKey), msg: &[u8]) -> Signature {
   let nonce = Scalar::random(&mut OsRng);
   let c = Signature::challenge(ProjectivePoint::GENERATOR * nonce, &key.1, msg);
-  let s = nonce + (c * key.0);
+  let c_scalar = <Scalar as k256::elliptic_curve::ops::Reduce<k256::U256>>::reduce_bytes(&c.into());
+  let s = nonce + (c_scalar * key.0);
   Signature::new(c, s).unwrap()
 }
 

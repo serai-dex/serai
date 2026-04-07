@@ -56,7 +56,7 @@ pub(crate) struct SignableTransaction {
 impl SignableTransaction {
   fn signable(self) -> Result<BSignableTransaction, TransactionError> {
     BSignableTransaction::new(
-      self.inputs,
+      &self.inputs,
       &self.payments,
       self.change.map(ScriptBuf::from),
       None,

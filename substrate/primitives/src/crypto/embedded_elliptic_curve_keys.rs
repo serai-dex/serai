@@ -38,11 +38,11 @@ crate::borsh_as_scale!(EmbeddedEllipticCurve);
 /// These are used by validators for external networks as part of their Distributed Key Generation
 /// protocols.
 ///
-/// In the case of `Serai`, this is actually an auxilliary key which the validator uses in place of
+/// In the case of `Serai`, this is actually an auxiliary key which the validator uses in place of
 /// the key which declared them and controls their stake. It has no relation to the embedded
 /// elliptic curves validators for external networks use in their Distributed Key Generation
 /// protocols. The presence here is an artifact of the development timeline, where this struct
-/// SHOULD be renamed to `AuxilliaryKeys`.
+/// SHOULD be renamed to `AuxiliaryKeys`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub enum EmbeddedEllipticCurveKeys {
   /// The key to use for the validator's identity.

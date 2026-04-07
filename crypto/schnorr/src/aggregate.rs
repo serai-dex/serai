@@ -112,15 +112,6 @@ pub struct SchnorrAggregator<C: GroupIo + WithPreferredHash> {
   digest: DigestTranscript<C::H>,
   sigs: Vec<SchnorrSignature<C>>,
 }
-impl<C: GroupIo + WithPreferredHash> Zeroize for SchnorrAggregator<C>
-where
-  C::H: digest::block_api::BlockSizeUser,
-{
-  fn zeroize(&mut self) {
-    self.digest.zeroize();
-    self.sigs.zeroize();
-  }
-}
 
 impl<C: GroupIo + WithPreferredHash> SchnorrAggregator<C> {
   /// Create a new aggregator.

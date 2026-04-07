@@ -28,7 +28,8 @@ impl Hram<Secp256k1> for EthereumHram {
     A: &<Secp256k1 as WrappedGroup>::G,
     m: &[u8],
   ) -> <Secp256k1 as WrappedGroup>::F {
-    Signature::challenge(*R, &PublicKey::new(*A).unwrap(), m)
+    let c = Signature::challenge(*R, &PublicKey::new(*A).unwrap(), m);
+    <k256::Scalar as k256::elliptic_curve::ops::Reduce<k256::U256>>::reduce_bytes(&c.into())
   }
 }
 

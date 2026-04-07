@@ -16,12 +16,13 @@ use serai_abi::{
     constants::*,
     crypto::{Public, EmbeddedEllipticCurveKeys},
     network_id::{ExternalNetworkId, NetworkId},
-    coin::Coin,
+    coin::{Coin, ExternalCoin},
     balance::{Amount, Balance},
     validator_sets::{Session, ExternalValidatorSet, ValidatorSet},
     address::SeraiAddress,
   },
-  SubstrateHeader as Header, SubstrateBlock as Block, LazySubstrateBlock as LazyBlock,
+  TransactionContext as _, SubstrateHeader as Header, SubstrateBlock as Block,
+  LazySubstrateBlock as LazyBlock,
 };
 
 use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance, GenesisLiquidityTokensInstance};
@@ -505,6 +506,34 @@ sp_api::impl_runtime_apis! {
       network: NetworkId,
     ) -> Option<EmbeddedEllipticCurveKeys> {
       ValidatorSets::auxiliary_keys(validator, network)
+    }
+
+    fn balance(of: SeraiAddress, coin: Coin) -> Amount {
+      Coins::balance(of, coin)
+    }
+    fn liquidity_balance(of: SeraiAddress, coin: ExternalCoin) -> Amount {
+      LiquidityTokens::balance(of, coin)
+    }
+    fn genesis_liquidity_balance(of: SeraiAddress, coin: ExternalCoin) -> Amount {
+      GenesisLiquidityTokens::balance(of, coin)
+    }
+
+    fn supply(coin: Coin) -> Amount {
+      Coins::supply(coin)
+    }
+    fn liquidity_supply(coin: ExternalCoin) -> Amount {
+      LiquidityTokens::supply(coin)
+    }
+    fn genesis_liquidity_supply(coin: ExternalCoin) -> Amount {
+      GenesisLiquidityTokens::supply(coin)
+    }
+
+    fn genesis_completed() -> bool {
+      GenesisLiquidity::completed()
+    }
+
+    fn account_nonce(of: SeraiAddress) -> u32 {
+      Core::next_nonce(&of)
     }
   }
 }

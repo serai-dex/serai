@@ -205,6 +205,30 @@ pub(crate) fn new_test_ext() -> sp_io::TestExternalities {
 }
 
 #[test]
+fn required_halt_threshold() {
+  assert_eq!(Signals::required_threshold(&Signal::Halt(ExternalNetworkId::Bitcoin), 0), 1);
+  for nodes in 1 .. KeySharesStruct::MAX_PER_SET {
+    // Find the amount of Byzantine nodes a set this size _can't_ tolerate
+    let faulty = {
+      let mut faulty = 0;
+      while {
+        let honest = nodes - faulty;
+        ((2 * faulty) + 1) <= honest
+      } {
+        faulty += 1;
+      }
+      faulty
+    };
+    assert!(faulty != 0);
+    assert!(faulty <= nodes);
+    assert_eq!(
+      Signals::required_threshold(&Signal::Halt(ExternalNetworkId::Bitcoin), u64::from(nodes)),
+      u64::from(faulty)
+    );
+  }
+}
+
+#[test]
 fn retire() {
   let mut registrant = [0; 32];
   OsRng.fill_bytes(&mut registrant);
@@ -427,7 +451,7 @@ fn revoke_favor_and_stand_against() {
     CurrentSession::set(bitcoin_set.network, Some(bitcoin_set.session));
     KeyShares::set(bitcoin_set, Some(KeySharesStruct::ONE));
     SelectedValidators::set(bitcoin_set, vec![(validator, KeySharesStruct::ONE)]);
-    Stake::set(bitcoin_set.network, Some(Amount(2)));
+    Stake::set(bitcoin_set.network, Some(Amount(3)));
 
     // Revoking favor which hasn't been granted should error
     assert_eq!(
@@ -572,7 +596,7 @@ fn favor_lifetime() {
     CurrentSession::set(bitcoin_set.network, Some(bitcoin_set.session));
     KeyShares::set(bitcoin_set, Some(KeySharesStruct::ONE));
     SelectedValidators::set(bitcoin_set, vec![(validator, KeySharesStruct::ONE)]);
-    Stake::set(bitcoin_set.network, Some(Amount(2)));
+    Stake::set(bitcoin_set.network, Some(Amount(3)));
 
     let signal = Signal::Halt(ExternalNetworkId::Bitcoin);
     Signals::favor(Some(validator).into(), signal, NetworkId::Serai).unwrap();
@@ -621,6 +645,96 @@ fn favor_lifetime() {
   });
 }
 
+#[test]
+fn set_favor_lifetime() {
+  let alice = SeraiAddress([0xaa; 32]);
+  let bob = SeraiAddress([0xbb; 32]);
+  let claire = SeraiAddress([0xcc; 32]);
+  let validators = vec![
+    (alice, KeySharesStruct::try_from(3).unwrap()),
+    (bob, KeySharesStruct::ONE),
+    (claire, KeySharesStruct::ONE),
+  ];
+
+  let mut current_events = vec![];
+  let mut emit_events = |events| {
+    for event in events {
+      current_events.push(serai_abi::Event::Signals(event));
+    }
+    assert_eq!(
+      Core::events()
+        .iter()
+        .flat_map(IntoIterator::into_iter)
+        .map(|event| borsh::from_slice::<serai_abi::Event>(event.as_slice()).unwrap())
+        .filter(|event| matches!(event, serai_abi::Event::Signals(_)))
+        .collect::<Vec<_>>(),
+      current_events
+    );
+  };
+
+  let mut serai_set = ValidatorSet { network: NetworkId::Serai, session: Session(2) };
+  let bitcoin_set =
+    ValidatorSet { network: NetworkId::External(ExternalNetworkId::Bitcoin), session: Session(2) };
+
+  new_test_ext().execute_with(|| {
+    CurrentSession::set(serai_set.network, Some(serai_set.session));
+    KeyShares::set(serai_set, Some(KeySharesStruct::try_from(5).unwrap()));
+    SelectedValidators::set(serai_set, validators.clone());
+    Stake::set(serai_set.network, Some(Amount(1)));
+
+    CurrentSession::set(bitcoin_set.network, Some(bitcoin_set.session));
+    KeyShares::set(bitcoin_set, Some(KeySharesStruct::try_from(3).unwrap()));
+    SelectedValidators::set(bitcoin_set, validators.clone());
+    Stake::set(bitcoin_set.network, Some(Amount(3)));
+
+    // Favor with Alice now
+    let signal = Signal::Halt(ExternalNetworkId::Bitcoin);
+    Signals::favor(Some(alice).into(), signal, NetworkId::Serai).unwrap();
+    emit_events(vec![
+      Event::SignalFavored { signal, by: alice, with_network: NetworkId::Serai },
+      Event::ValidatorSetInFavor { signal, set: serai_set },
+    ]);
+    assert_eq!(
+      Signals::validator_sets_in_favor(signal, serai_set),
+      Some(Session(serai_set.session.0 + 1))
+    );
+
+    let advance_serai_session = |serai_set: &mut ValidatorSet| {
+      let session = Session(CurrentSession::get(serai_set.network).unwrap().0 + 1);
+      let old_serai_set = *serai_set;
+      *serai_set = ValidatorSet { network: old_serai_set.network, session };
+      CurrentSession::set(serai_set.network, Some(session));
+      KeyShares::set(*serai_set, KeyShares::take(old_serai_set));
+      SelectedValidators::set(*serai_set, SelectedValidators::take(old_serai_set));
+      Stake::set(serai_set.network, Stake::get(old_serai_set.network));
+    };
+
+    // Advance Serai's session
+    advance_serai_session(&mut serai_set);
+
+    // Favoring with Bob should work but not affect the tally
+    Signals::favor(Some(bob).into(), signal, NetworkId::Serai).unwrap();
+    emit_events(vec![
+      Event::SignalFavored { signal, by: bob, with_network: NetworkId::Serai },
+      // This will cause the tally for this Serai set, for which Alice's favor should still be
+      // counted and cause this set to be in favor (despite Bob alone being insufficient)
+      Event::ValidatorSetInFavor { signal, set: serai_set },
+    ]);
+    // Because we've advanced the Serai session, it should only be in favor until _this_ session
+    assert_eq!(Signals::validator_sets_in_favor(signal, serai_set), Some(serai_set.session));
+
+    // But favoring with Claire should cause there to be sufficient weight for this to last until
+    // the session after the prior session tallied as valid until
+    Signals::favor(Some(claire).into(), signal, NetworkId::Serai).unwrap();
+    emit_events(vec![Event::SignalFavored { signal, by: claire, with_network: NetworkId::Serai }]);
+    assert_eq!(
+      Signals::validator_sets_in_favor(signal, serai_set),
+      Some(Session(serai_set.session.0 + 1))
+    );
+  });
+}
+
+// TODO: Extend `fuzz` with random session advancements
 #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
 #[test]
 fn fuzz() {
@@ -690,12 +804,10 @@ fn fuzz() {
       };
 
       // Chose either a halt or a retirement signal
-      let (signal, final_event, numerator, denominator) = if OsRng.next_u64() & 1 == 1 {
+      let (signal, final_event) = if OsRng.next_u64() & 1 == 1 {
         (
           Signal::Halt(ExternalNetworkId::Ethereum),
           Event::NetworkHalted { network: ExternalNetworkId::Ethereum },
-          1,
-          3,
         )
       } else {
         let registrant = SeraiAddress([0xaa; 32]);
@@ -714,7 +826,7 @@ fn fuzz() {
           registrant,
         }]);
 
-        (Signal::Retire { signal_id }, Event::RetirementSignalLockedIn { signal: signal_id }, 4, 5)
+        (Signal::Retire { signal_id }, Event::RetirementSignalLockedIn { signal: signal_id })
       };
 
       // Perform 50 (un)favors and track the state is accurate
@@ -724,15 +836,19 @@ fn fuzz() {
         let set = sets[(OsRng.next_u64() as usize) % sets.len()];
 
         let distance_to_favor = |in_favor: &HashSet<_>| {
-          (((u16::from(KeyShares::get(set).unwrap()) * numerator) / denominator) + 1)
-            .checked_sub(
-              ValidatorSets::selected_validators(set)
-                .filter_map(|(validator, key_shares)| {
-                  in_favor.contains(&(set.network, validator)).then_some(u16::from(key_shares))
-                })
-                .sum::<u16>(),
-            )
-            .filter(|value| *value != 0)
+          u16::try_from(Signals::required_threshold(
+            &signal,
+            u64::from(u16::from(KeyShares::get(set).unwrap())),
+          ))
+          .unwrap()
+          .checked_sub(
+            ValidatorSets::selected_validators(set)
+              .filter_map(|(validator, key_shares)| {
+                in_favor.contains(&(set.network, validator)).then_some(u16::from(key_shares))
+              })
+              .sum::<u16>(),
+          )
+          .filter(|value| *value != 0)
         };
         let existing_distance_to_favor = distance_to_favor(&in_favor);
 
@@ -769,13 +885,11 @@ fn fuzz() {
           {
             expected_events.push(Event::ValidatorSetInFavor { signal, set });
             assert!(sets_in_favor.insert(set));
-            if u128::from(
-              sets_in_favor.iter().map(|set| Stake::get(set.network).unwrap().0).sum::<u64>(),
-            ) >= (((u128::from(
-              networks.iter().map(|network| Stake::get(network).unwrap().0).sum::<u64>(),
-            ) * u128::from(numerator)) /
-              u128::from(denominator)) +
-              1)
+            if sets_in_favor.iter().map(|set| Stake::get(set.network).unwrap().0).sum::<u64>() >=
+              Signals::required_threshold(
+                &signal,
+                networks.iter().map(|network| Stake::get(network).unwrap().0).sum::<u64>(),
+              )
             {
               expected_events.push(final_event.clone());
               done = true;

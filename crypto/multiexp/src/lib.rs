@@ -8,6 +8,7 @@ extern crate alloc;
 extern crate std;
 
 use zeroize::Zeroize;
+use subtle::ConditionallySelectable;
 
 use ff::PrimeFieldBits;
 use group::Group;
@@ -134,7 +135,9 @@ mod underlying {
 
   /// Performs a multiexponentiation, automatically selecting the optimal algorithm based on the
   /// amount of pairs.
-  pub fn multiexp<G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>(
+  pub fn multiexp<
+    G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
+  >(
     pairs: &[(G::Scalar, G)],
   ) -> G {
     match algorithm(pairs.len()) {
@@ -164,7 +167,9 @@ mod underlying {
 
   /// Performs a multiexponentiation, automatically selecting the optimal algorithm based on the
   /// amount of pairs.
-  pub fn multiexp<G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>(
+  pub fn multiexp<
+    G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
+  >(
     pairs: &[(G::Scalar, G)],
   ) -> G {
     pairs.iter().map(|(scalar, point)| *point * scalar).sum()

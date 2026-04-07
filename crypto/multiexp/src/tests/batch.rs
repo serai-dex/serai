@@ -3,13 +3,16 @@ use alloc::vec;
 use rand_core::{RngCore as _, OsRng};
 
 use zeroize::Zeroize;
+use subtle::ConditionallySelectable;
 
 use ff::{Field as _, PrimeFieldBits};
 use group::Group;
 
 use crate::BatchVerifier;
 
-pub(crate) fn test_batch<G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>() {
+pub(crate) fn test_batch<
+  G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
+>() {
   let valid = |batch: BatchVerifier<_, G>| {
     assert!(batch.verify());
     assert!(batch.verify_vartime());

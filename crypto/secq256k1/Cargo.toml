@@ -16,7 +16,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 hex-literal = { version = "1", default-features = false }
 
-sha2 = { version = "0.11.0-rc.0", default-features = false }
+sha2 = { version = "0.11", default-features = false }
 k256 = { version = "0.13", default-features = false, features = ["arithmetic", "expose-field"] }
 prime-field = { path = "../prime-field", default-features = false }
 short-weierstrass = { path = "../short-weierstrass", default-features = false }
