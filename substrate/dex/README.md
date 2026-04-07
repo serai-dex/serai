@@ -40,3 +40,11 @@ implementation is via [`serai_coins_pallet`], as parameterized by the
 [`LiquidityTokensInstance`], ensuring the safety of the underlying arithmetic
 for transfers. The interface for these tokens ([`serai_abi::dex::Call`],
 [`serai_abi::dex::Event`]) is entirely implemented within this crate however.
+
+### Audit Status
+
+This was
+[audited by Security Research Labs](/audits/substrate/Security%20Research%20Labs%20April%202026)
+as of commit `30e61adb9b5318cdd2b2cf9c3f8ce6c9afef1cb0`. Any following changes
+were not audited unless otherwise stated. Please read the linked report for
+more information.

@@ -271,6 +271,11 @@ mod pallet {
 
       Ok(())
     }
+
+    /// Returns `true` if the genesis period is completed or `false` otherwise.
+    pub fn completed() -> bool {
+      Oraclized::<T>::get().is_some()
+    }
   }
 
   #[pallet::call]

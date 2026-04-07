@@ -164,12 +164,12 @@ fn genesis(
   chain_spec
 }
 
-pub(super) fn development_config() -> ChainSpec {
+pub(super) fn solo_config() -> ChainSpec {
   genesis(
-    "Development Network",
-    "devnet",
+    "Solo Network",
+    "solo",
     ChainType::Development,
-    "serai-devnet",
+    "serai-solo",
     &devnet_genesis(
       &["Alice"],
       vec![
@@ -178,7 +178,6 @@ pub(super) fn development_config() -> ChainSpec {
         insecure_account_from_name("Charlie"),
         insecure_account_from_name("Dave"),
         insecure_account_from_name("Eve"),
-        insecure_account_from_name("Ferdie"),
       ],
     ),
   )
@@ -198,7 +197,6 @@ pub(super) fn local_config() -> ChainSpec {
         insecure_account_from_name("Charlie"),
         insecure_account_from_name("Dave"),
         insecure_account_from_name("Eve"),
-        insecure_account_from_name("Ferdie"),
       ],
     ),
   )

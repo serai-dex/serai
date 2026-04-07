@@ -1,5 +1,5 @@
 use sp_core::Get;
-use frame_support::weights::Weight;
+use frame_support::{weights::Weight, dispatch::PerDispatchClass};
 use frame_system::limits::{BlockLength, BlockWeights};
 
 /// The limits for the Serai protocol.
@@ -7,17 +7,30 @@ pub struct Limits;
 impl Get<BlockLength> for Limits {
   fn get() -> BlockLength {
     /*
-      We do not reserve an allocation for mandatory/operational transactions, assuming they'll be
-      prioritized in the mempool. This does technically give block producers an inventive to
-      misbehave by on-purposely favoring paying non-operational transactions over operational
-      transactions, but ensures the entire block is available to the transactions actually present
-      in the mempool.
+      We do not differentiate based on whether a transaction is mandatory/operational, assuming
+      transactions will be prioritized in the mempool. This does technically give block producers
+      an incentive to misbehave by on-purposely favoring paying non-operational transactions over
+      operational transactions, but ensures the entire block is available to the transactions
+      actually present in the mempool.
 
-      Additionally, Serai does not use `frame-system`'s provided transaction extension to enforce
-      these limits. It implements its own solution to enforce the block size accordingly. That
-      makes this setting pointless other than as a declared intent.
+      The header size limit is unlimited as Serai's header is of fixed size, and while the
+      committed-to Substrate header is not by syntax, its digests are fixed and finite. This
+      removes the need to bound it. Note `Some(_)` is used as `None` would not state there is no
+      max header size but rather effect a default value of 20% of the block size limit. The
+      subtraction of the size of a `u32` is an allowance for the encoding of the length of an empty
+      `transactions` vector.
+
+      Serai does not use `frame-system`'s provided transaction extension to enforce these limits.
+      It implements its own solution to enforce the block size accordingly. That makes this setting
+      pointless other than as a declared intent. Note this intent is somewhat fuzzy as it's a
+      `Block`'s, not a `SubstrateBlock`'s, max size declared as the intent within the Substrate
+      runtime.
     */
-    BlockLength::max(u32::try_from(serai_abi::Block::MAX_SIZE).unwrap())
+    let block_size_limit = u32::try_from(serai_abi::Block::MAX_SIZE).unwrap();
+    BlockLength {
+      max: PerDispatchClass::new(|_| block_size_limit),
+      max_header_size: Some(block_size_limit - (u32::BITS / u8::BITS)),
+    }
   }
 }
 impl Get<BlockWeights> for Limits {
@@ -44,4 +57,11 @@ impl Get<BlockWeights> for Limits {
     */
     BlockWeights::simple_max(Weight::MAX)
   }
+}
+
+// This simply tests the above getters do not panic.
+#[test]
+fn limits() {
+  <Limits as Get<BlockLength>>::get();
+  <Limits as Get<BlockWeights>>::get();
 }

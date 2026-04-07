@@ -59,3 +59,11 @@ As for why Borsh was preferred over SCALE,
 - Borsh is explicitly canonical, without malleability in its encodings
 - SCALE will presumably be phased out for the
   [JAM Codec](https://docs.rs/jam-codec)
+
+### Audit Status
+
+This was
+[audited by Security Research Labs](/audits/substrate/Security%20Research%20Labs%20April%202026)
+as of commit `786ba87125ca9205e02bf74f29c49d0e28040a08`. Any following changes
+were not audited unless otherwise stated. Please read the linked report for
+more information.

@@ -70,10 +70,7 @@ mod tests;
 
 impl From<&Signature> for abi::Signature {
   fn from(signature: &Signature) -> Self {
-    Self {
-      c: <[u8; 32]>::from(signature.c().to_repr()).into(),
-      s: <[u8; 32]>::from(signature.s().to_repr()).into(),
-    }
+    Self { c: signature.c().into(), s: <[u8; 32]>::from(signature.s().to_repr()).into() }
   }
 }
 

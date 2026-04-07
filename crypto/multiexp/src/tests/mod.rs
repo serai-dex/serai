@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use rand_core::OsRng;
 
 use zeroize::Zeroize;
+use subtle::ConditionallySelectable;
 
 use ff::{Field as _, PrimeFieldBits};
 use group::Group;
@@ -17,7 +18,7 @@ mod batch;
 #[cfg(feature = "batch")]
 use batch::test_batch;
 
-fn test_multiexp<G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>() {
+fn test_multiexp<G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>>() {
   let test = |pairs: &[_], sum| {
     // These should automatically determine the best algorithm
     assert_eq!(multiexp(pairs), sum);
@@ -84,7 +85,11 @@ fn benchmark() {
     test_multiexp::<ProjectivePoint>();
   }
 
-  fn benchmark_internal<G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>(straus_bool: bool) {
+  fn benchmark_internal<
+    G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
+  >(
+    straus_bool: bool,
+  ) {
     let runs: usize = 20;
 
     let mut start = 0;

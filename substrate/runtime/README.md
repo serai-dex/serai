@@ -47,3 +47,11 @@ They only exist to declare an API contract for the WASM blob.
 This can be changed by compiling with `--cfg native_runtime` as a flag to
 `rustc`. This is not officially endorsed nor supported for any reason but may
 be useful for certain testing environments.
+
+### Audit Status
+
+This was
+[audited by Security Research Labs](/audits/substrate/Security%20Research%20Labs%20April%202026)
+as of commit `e962cf49c8bb61f5779f10ad342cd075457bfd1b`. Any following changes
+were not audited unless otherwise stated. Please read the linked report for
+more information.

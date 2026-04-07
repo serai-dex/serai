@@ -331,7 +331,7 @@ pub mod pallet {
       */
       assert!(
         CurrentBlockSize::<T>::get().is_none(),
-        "AllExtrinsicsLen wasn't killed at the end of the last block"
+        "CurrentBlockSize wasn't killed at the end of the last block"
       );
       Pallet::<T>::start_transaction(serai_abi::Header::SIZE + 4);
 
@@ -375,4 +375,7 @@ pub mod pallet {
     }
   }
 }
+
+pub use pallet::{Config, Pallet, Call};
+#[doc(hidden)]
 pub use pallet::*;
