@@ -28,6 +28,11 @@ pub fn random_bytes_64<R: RngCore + CryptoRng>(rng: &mut R) -> [u8; 64] {
 /// Generate a random `Vec<u8>` with a random length between 1 and 128.
 pub fn random_vec_u8<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<u8> {
   let len = (rng.next_u32() % 128) as usize + 1;
+  random_vec_of_len(rng, len)
+}
+
+/// Generate a random byte vector of a specific length.
+pub fn random_vec_of_len<R: RngCore + CryptoRng>(rng: &mut R, len: usize) -> Vec<u8> {
   let mut bytes = vec![0u8; len];
   rng.fill_bytes(&mut bytes);
   bytes
