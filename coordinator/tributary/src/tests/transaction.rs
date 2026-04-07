@@ -3,7 +3,7 @@ use std::io::{self, Cursor, Read, Write};
 
 use blake2::{digest::typenum::U32, Digest as _, Blake2b};
 use borsh::{BorshDeserialize, BorshSerialize};
-use rand::{CryptoRng, Rng, RngCore, rngs::OsRng};
+use rand::{RngCore, rngs::OsRng};
 
 use ciphersuite::{
   group::{Group as _, GroupEncoding, ff::PrimeField},
@@ -18,126 +18,7 @@ use tributary_sdk::{
   transaction::{Transaction as TransactionTrait, TransactionError, TransactionKind},
 };
 
-use crate::{
-  db::Topic,
-  tests::{random_key, random_signed},
-  transaction::{Signed, SigningProtocolRound, Transaction},
-};
-
-/// One of each signed transaction kind, and attempts: at 0, a random attempt, and u32::MAX.
-fn all_signed_transactions_and_attempts() -> Vec<Transaction> {
-  let random_attempt = OsRng.gen_range(1u32 .. u32::MAX);
-  vec![
-    // RemoveParticipant
-    Transaction::RemoveParticipant {
-      participant: random_serai_address(&mut OsRng),
-      signed: random_signed(&mut OsRng),
-    },
-    // DkgParticipation
-    Transaction::DkgParticipation {
-      participation: random_vec_u8(&mut OsRng),
-      signed: random_signed(&mut OsRng),
-    },
-    // DkgConfirmationPreprocess
-    Transaction::DkgConfirmationPreprocess {
-      attempt: 0,
-      preprocess: random_bytes_64(&mut OsRng),
-      signed: random_signed(&mut OsRng),
-    },
-    Transaction::DkgConfirmationPreprocess {
-      attempt: random_attempt,
-      preprocess: random_bytes_64(&mut OsRng),
-      signed: random_signed(&mut OsRng),
-    },
-    Transaction::DkgConfirmationPreprocess {
-      attempt: u32::MAX,
-      preprocess: random_bytes_64(&mut OsRng),
-      signed: random_signed(&mut OsRng),
-    },
-    // DkgConfirmationShare
-    Transaction::DkgConfirmationShare {
-      attempt: 0,
-      share: random_bytes_32(&mut OsRng),
-      signed: random_signed(&mut OsRng),
-    },
-    Transaction::DkgConfirmationShare {
-      attempt: random_attempt,
-      share: random_bytes_32(&mut OsRng),
-      signed: random_signed(&mut OsRng),
-    },
-    Transaction::DkgConfirmationShare {
-      attempt: u32::MAX,
-      share: random_bytes_32(&mut OsRng),
-      signed: random_signed(&mut OsRng),
-    },
-    // Sign Preprocess
-    Transaction::Sign {
-      id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
-      attempt: 0,
-      round: SigningProtocolRound::Preprocess,
-      data: vec![random_vec_u8(&mut OsRng)],
-      signed: random_signed(&mut OsRng),
-    },
-    Transaction::Sign {
-      id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
-      attempt: random_attempt,
-      round: SigningProtocolRound::Preprocess,
-      data: vec![random_vec_u8(&mut OsRng)],
-      signed: random_signed(&mut OsRng),
-    },
-    Transaction::Sign {
-      id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
-      attempt: u32::MAX,
-      round: SigningProtocolRound::Preprocess,
-      data: vec![random_vec_u8(&mut OsRng)],
-      signed: random_signed(&mut OsRng),
-    },
-    // Sign Share
-    Transaction::Sign {
-      id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
-      attempt: 0,
-      round: SigningProtocolRound::Share,
-      data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
-      signed: random_signed(&mut OsRng),
-    },
-    Transaction::Sign {
-      id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
-      attempt: random_attempt,
-      round: SigningProtocolRound::Share,
-      data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
-      signed: random_signed(&mut OsRng),
-    },
-    Transaction::Sign {
-      id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
-      attempt: u32::MAX,
-      round: SigningProtocolRound::Share,
-      data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
-      signed: random_signed(&mut OsRng),
-    },
-    // SlashReport
-    Transaction::SlashReport {
-      slash_points: (0 .. 3).map(|_| OsRng.next_u32()).collect(),
-      signed: random_signed(&mut OsRng),
-    },
-  ]
-}
-
-/// One of each provided transaction kind.
-fn all_provided_transactions() -> Vec<Transaction> {
-  vec![
-    Transaction::Cosign { substrate_block_hash: random_block_hash(&mut OsRng) },
-    Transaction::Cosigned { substrate_block_hash: random_block_hash(&mut OsRng) },
-    Transaction::SubstrateBlock { hash: random_block_hash(&mut OsRng) },
-    Transaction::Batch { hash: random_block_hash(&mut OsRng).0 },
-  ]
-}
-
-/// One of each of all transaction kinds.
-fn all_transactions() -> Vec<Transaction> {
-  let mut txs = all_signed_transactions_and_attempts();
-  txs.extend(all_provided_transactions());
-  txs
-}
+use super::*;
 
 fn all_signing_protocol_rounds() -> Vec<SigningProtocolRound> {
   vec![SigningProtocolRound::Preprocess, SigningProtocolRound::Share]
@@ -467,7 +348,7 @@ mod transaction {
         out
       }
 
-      for mut tx in all_signed_transactions_and_attempts() {
+      for mut tx in all_signed_transactions_and_attempts(random_signed(&mut OsRng)) {
         tx.sign(&mut OsRng, genesis, &key);
 
         let (expected_order, expected_nonce) = match &tx {
@@ -709,7 +590,7 @@ mod transaction {
       let genesis = random_genesis(&mut OsRng);
 
       // Sets correct signer and produces verifiable signature
-      for mut tx in all_signed_transactions_and_attempts() {
+      for mut tx in all_signed_transactions_and_attempts(random_signed(&mut OsRng)) {
         tx.sign(&mut OsRng, genesis, &key);
         let sig_hash = tx.sig_hash(genesis);
 

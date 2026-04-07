@@ -655,10 +655,9 @@ impl<TD: Db, P: P2p> ContinuallyRan for ScanTributaryTask<TD, P> {
           .unwrap_or((0, self.tributary.genesis()));
 
       let mut made_progress = false;
-      while let Some(next) = self.tributary.block_after(&last_block_hash) {
-        let block = self.tributary.block(&next).unwrap();
+      while let Some(block_hash) = self.tributary.block_after(&last_block_hash) {
+        let block = self.tributary.block(&block_hash).unwrap();
         let block_number = last_block_number + 1;
-        let block_hash = block.hash();
 
         // Make sure we have all of the provided transactions for this block
         for tx in &block.transactions {

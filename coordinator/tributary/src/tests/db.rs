@@ -12,7 +12,7 @@ use serai_primitives::{
 };
 
 use crate::{
-  db::*,
+  db::{*, ProcessorMessages, DkgConfirmationMessages},
   tests::*,
   transaction::{RoundPayloads, Preprocess, Share, SigningProtocolRound},
 };
@@ -326,7 +326,8 @@ mod tributary_db {
     let block_hash1 = random_block_hash(&mut OsRng);
     let block_number1 = random_block_number(&mut OsRng);
 
-    let expected_topic = expected_topic_after_start_cosigning(VariantSignId::Cosign(block_number1));
+    let expected_topic =
+      expected_initially_recognized_sign_topic(VariantSignId::Cosign(block_number1));
 
     // Recognizes topic
     {
@@ -383,7 +384,7 @@ mod tributary_db {
       assert!(TributaryDb::recognized(
         &txn,
         set,
-        expected_topic_after_start_cosigning(VariantSignId::Cosign(block_number2))
+        expected_initially_recognized_sign_topic(VariantSignId::Cosign(block_number2))
       ));
       // Previous topic also remains recognized
       assert!(TributaryDb::recognized(&txn, set, expected_topic));
@@ -408,7 +409,7 @@ mod tributary_db {
       all_topics_and_attempts().len()
     );
 
-    for iteration in 0 .. 100 {
+    for _iteration in 0 .. 100 {
       for topic in all_topics_and_attempts() {
         // Fresh DB per topic so recognized state doesn't leak between iterations
         let mut db = MemDb::new();
@@ -420,7 +421,7 @@ mod tributary_db {
           reattemptable_topics.iter().copied().filter(|_| OsRng.next_u64() % 2 == 0).collect();
 
         serai_env::trace!(
-          "iteration={iteration}, topic={topic:?}, block_number={block_number}, \
+          "iteration={_iteration}, topic={topic:?}, block_number={block_number}, \
          reattempts={reattempts:?}"
         );
 
@@ -452,8 +453,7 @@ mod tributary_db {
         }
 
         // No extra messages should remain in either queue
-        assert!(ProcessorMessages::try_recv(&mut txn, set).is_none());
-        assert!(DkgConfirmationMessages::try_recv(&mut txn, set).is_none());
+        assert_no_pending_messages(&mut txn, set);
 
         txn.commit();
       }
@@ -485,7 +485,7 @@ mod tributary_db {
     fn default_accumulate_setup(
     ) -> (ExternalValidatorSet, SeraiAddress, Vec<SeraiAddress>, u16, u16) {
       let set = random_validator_set(&mut OsRng);
-      let (_, validators, _, total_weight) = setup_test_validators_and_weights();
+      let (_, _, validators, _, total_weight) = setup_test_validators_and_weights_with_keys();
       let validator = validators[0];
       let validator_weight = 1;
       (set, validator, validators, total_weight, validator_weight)

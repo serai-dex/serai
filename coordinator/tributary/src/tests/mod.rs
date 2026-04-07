@@ -11,20 +11,21 @@ use rand_core::OsRng;
 use serai_primitives::{
   address::SeraiAddress,
   test_helpers::{
-    random_bytes_32, random_bytes_64, random_serai_address, random_vec_u8,
+    random_block_hash, random_bytes_32, random_bytes_64, random_serai_address, random_vec_u8,
     default_test_validator_set,
   },
 };
 
-use tributary_sdk::P2p;
+use tributary_sdk::{P2p, tendermint::TendermintBlock};
+use tendermint::{
+  SignedMessage, Message, Data,
+  ext::{BlockNumber, RoundNumber},
+};
 use zeroize::Zeroizing;
 use dkg::Participant;
 use serai_coordinator_substrate::NewSetInformation;
 
-use crate::{
-  db::{ActivelyCosigning, TributaryDb},
-  transaction::{Signed, SigningProtocolRound, Transaction},
-};
+use crate::*;
 
 pub mod transaction;
 pub mod db;
@@ -57,24 +58,48 @@ pub(crate) fn random_serai_address_and_key<R: RngCore + CryptoRng>(
   (key, SeraiAddress(key.to_bytes()))
 }
 
-use crate::db::Topic;
-
 pub(crate) fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
   let signed = tributary_sdk::tests::random_signed(&mut *rng);
   Signed { signer: signed.signer, signature: signed.signature }
 }
 
-/// One of each signed transaction kind, using the provided `Signed` value.
-pub(crate) fn all_signed_transactions_with(signed: Signed) -> Vec<Transaction> {
+/// One of each signed transaction kind, and attempts: at 0, a random attempt, and u32::MAX.
+pub(crate) fn all_signed_transactions_and_attempts(signed: Signed) -> Vec<Transaction> {
+  let random_attempt = OsRng.gen_range(1u32 .. u32::MAX);
   vec![
+    // RemoveParticipant
     Transaction::RemoveParticipant { participant: random_serai_address(&mut OsRng), signed },
+    // DkgParticipation
     Transaction::DkgParticipation { participation: random_vec_u8(&mut OsRng), signed },
+    // DkgConfirmationPreprocess
     Transaction::DkgConfirmationPreprocess {
       attempt: 0,
       preprocess: random_bytes_64(&mut OsRng),
       signed,
     },
+    Transaction::DkgConfirmationPreprocess {
+      attempt: random_attempt,
+      preprocess: random_bytes_64(&mut OsRng),
+      signed,
+    },
+    Transaction::DkgConfirmationPreprocess {
+      attempt: u32::MAX,
+      preprocess: random_bytes_64(&mut OsRng),
+      signed,
+    },
+    // DkgConfirmationShare
     Transaction::DkgConfirmationShare { attempt: 0, share: random_bytes_32(&mut OsRng), signed },
+    Transaction::DkgConfirmationShare {
+      attempt: random_attempt,
+      share: random_bytes_32(&mut OsRng),
+      signed,
+    },
+    Transaction::DkgConfirmationShare {
+      attempt: u32::MAX,
+      share: random_bytes_32(&mut OsRng),
+      signed,
+    },
+    // Sign Preprocess
     Transaction::Sign {
       id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
       attempt: 0,
@@ -82,8 +107,77 @@ pub(crate) fn all_signed_transactions_with(signed: Signed) -> Vec<Transaction> {
       data: vec![random_vec_u8(&mut OsRng)],
       signed,
     },
+    Transaction::Sign {
+      id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
+      attempt: random_attempt,
+      round: SigningProtocolRound::Preprocess,
+      data: vec![random_vec_u8(&mut OsRng)],
+      signed,
+    },
+    Transaction::Sign {
+      id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
+      attempt: u32::MAX,
+      round: SigningProtocolRound::Preprocess,
+      data: vec![random_vec_u8(&mut OsRng)],
+      signed,
+    },
+    // Sign Share
+    Transaction::Sign {
+      id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
+      attempt: 0,
+      round: SigningProtocolRound::Share,
+      data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
+      signed,
+    },
+    Transaction::Sign {
+      id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
+      attempt: random_attempt,
+      round: SigningProtocolRound::Share,
+      data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
+      signed,
+    },
+    Transaction::Sign {
+      id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
+      attempt: u32::MAX,
+      round: SigningProtocolRound::Share,
+      data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
+      signed,
+    },
+    // SlashReport
     Transaction::SlashReport { slash_points: (0 .. 3).map(|_| OsRng.next_u32()).collect(), signed },
   ]
+}
+
+/// One of each provided transaction kind.
+pub(crate) fn all_provided_transactions() -> Vec<Transaction> {
+  vec![
+    Transaction::Cosign { substrate_block_hash: random_block_hash(&mut OsRng) },
+    Transaction::Cosigned { substrate_block_hash: random_block_hash(&mut OsRng) },
+    Transaction::SubstrateBlock { hash: random_block_hash(&mut OsRng) },
+    Transaction::Batch { hash: random_block_hash(&mut OsRng).0 },
+  ]
+}
+
+/// One of each of all transaction kinds.
+pub(crate) fn all_transactions() -> Vec<Transaction> {
+  let mut txs = all_signed_transactions_and_attempts(random_signed(&mut OsRng));
+  txs.extend(all_provided_transactions());
+  txs
+}
+
+/// Assert that no messages remain in either the processor or DKG confirmation queues.
+pub(crate) fn assert_no_pending_messages(
+  txn: &mut impl serai_db::DbTxn,
+  set: serai_primitives::validator_sets::ExternalValidatorSet,
+) {
+  assert!(
+    crate::ProcessorMessages::try_recv(txn, set).is_none(),
+    "unexpected remaining ProcessorMessage",
+  );
+  assert!(
+    crate::DkgConfirmationMessages::try_recv(txn, set).is_none(),
+    "unexpected remaining DkgConfirmationMessage",
+  );
 }
 
 pub(crate) fn random_transaction_id() -> VariantSignId {
@@ -91,7 +185,7 @@ pub(crate) fn random_transaction_id() -> VariantSignId {
 }
 
 /// The expected topic to be recognized after start_cosigning runs.
-pub(crate) fn expected_topic_after_start_cosigning(id: VariantSignId) -> Topic {
+pub(crate) fn expected_initially_recognized_sign_topic(id: VariantSignId) -> Topic {
   Topic::Sign { id, attempt: 0, round: SigningProtocolRound::Preprocess }
 }
 
@@ -105,7 +199,8 @@ pub(crate) fn assert_cosigning_invariants(
   block_hash: serai_primitives::BlockHash,
   block_number: u64,
 ) {
-  let expected_topic = expected_topic_after_start_cosigning(VariantSignId::Cosign(block_number));
+  let expected_topic =
+    expected_initially_recognized_sign_topic(VariantSignId::Cosign(block_number));
 
   assert_eq!(
     ActivelyCosigning::get(txn, set),
@@ -113,14 +208,63 @@ pub(crate) fn assert_cosigning_invariants(
     "ActivelyCosigning should be set to the block hash after start_cosigning"
   );
   assert!(
-    TributaryDb::recognized(txn, set, expected_topic),
+    RecognizedTopics::recognized(txn, set, expected_topic),
     "cosign topic should be recognized after start_cosigning"
   );
   assert_eq!(
-    TributaryDb::try_recv_topic_requiring_recognition(txn, set),
+    RecognizedTopics::try_recv_topic_requiring_recognition(txn, set),
     Some(expected_topic),
     "cosign topic should be queued for recognition after start_cosigning"
   );
+}
+
+/// Construct a borsh-encoded `SignedMessage` for `TendermintNetwork<MemDb, Transaction, MockP2p>`.
+pub(crate) fn make_signed_message_bytes(sender: [u8; 32]) -> Vec<u8> {
+  let msg = Message::<[u8; 32], TendermintBlock, [u8; 64]> {
+    sender,
+    block: BlockNumber(0),
+    round: RoundNumber(0),
+    data: Data::Prevote(None),
+  };
+  borsh::to_vec(&SignedMessage { msg, sig: [0u8; 64] }).unwrap()
+}
+
+/// Drain expected messages produced by the given transactions, then assert both queues are empty.
+///
+/// Some transactions produce messages on first submission (e.g. DkgParticipation, Cosign).
+/// This function drains those expected messages before calling `assert_no_pending_messages`.
+pub(crate) fn assert_block_side_effects(
+  txn: &mut impl serai_db::DbTxn,
+  set: serai_primitives::validator_sets::ExternalValidatorSet,
+  transactions: &[tributary_sdk::Transaction<Transaction>],
+) {
+  for tx in transactions {
+    match tx {
+      tributary_sdk::Transaction::Application(app_tx) => match app_tx {
+        Transaction::DkgParticipation { .. } => {
+          assert!(
+            crate::ProcessorMessages::try_recv(txn, set).is_some(),
+            "DkgParticipation should produce a processor message",
+          );
+        }
+        Transaction::Cosign { .. } => {
+          assert!(
+            crate::ProcessorMessages::try_recv(txn, set).is_some(),
+            "Cosign should produce a processor message",
+          );
+        }
+        Transaction::SlashReport { .. } => {
+          assert!(
+            RecognizedTopics::recognized(txn, set, Topic::SlashReport),
+            "SlashReport topic should be recognized",
+          );
+        }
+        _ => {}
+      },
+      tributary_sdk::Transaction::Tendermint(_) => {}
+    }
+  }
+  assert_no_pending_messages(txn, set);
 }
 
 pub(crate) fn new_test_set_info(validators: &[(SeraiAddress, u16)]) -> NewSetInformation {
@@ -150,27 +294,10 @@ pub(crate) fn new_test_set_info(validators: &[(SeraiAddress, u16)]) -> NewSetInf
   }
 }
 
-/// Common test setup: 3 random validators each with weight 1, total_weight = 3.
-pub(crate) fn setup_test_validators_and_weights(
-) -> (Vec<(SeraiAddress, u16)>, Vec<SeraiAddress>, HashMap<SeraiAddress, u16>, u16) {
-  let validator_data = vec![
-    (random_serai_address(&mut OsRng), 1u16),
-    (random_serai_address(&mut OsRng), 1),
-    (random_serai_address(&mut OsRng), 1),
-  ];
-  let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
-
-  let mut weights = HashMap::new();
-  for (address, weight) in &validator_data {
-    weights.insert(*address, *weight);
-  }
-
-  (validator_data, validators, weights, 3)
-}
-
-/// Like `setup_test_validators_and_weights`, but each validator also has a real key
-/// so tests can produce valid `Signed` values via `new_signed`.
-pub(crate) fn setup_test_validators_and_weights_with_keys() -> (
+/// Generate `n` random validators (weight 1 each) with keys, returning all derived collections.
+pub(crate) fn setup_n_validators_with_keys(
+  n: usize,
+) -> (
   Vec<(RistrettoPoint, SeraiAddress)>,
   Vec<(SeraiAddress, u16)>,
   Vec<SeraiAddress>,
@@ -178,11 +305,23 @@ pub(crate) fn setup_test_validators_and_weights_with_keys() -> (
   u16,
 ) {
   let keys_addrs: Vec<(RistrettoPoint, SeraiAddress)> =
-    (0 .. 3).map(|_| random_serai_address_and_key(&mut OsRng)).collect();
+    (0 .. n).map(|_| random_serai_address_and_key(&mut OsRng)).collect();
   let validator_data: Vec<(SeraiAddress, u16)> =
     keys_addrs.iter().map(|(_, addr)| (*addr, 1u16)).collect();
   let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
   let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
+  let total_weight = n as u16;
 
-  (keys_addrs, validator_data, validators, weights, 3)
+  (keys_addrs, validator_data, validators, weights, total_weight)
+}
+
+/// Common test setup with 3 random validators each with weight 1, total_weight = 3.
+pub(crate) fn setup_test_validators_and_weights_with_keys() -> (
+  Vec<(RistrettoPoint, SeraiAddress)>,
+  Vec<(SeraiAddress, u16)>,
+  Vec<SeraiAddress>,
+  HashMap<SeraiAddress, u16>,
+  u16,
+) {
+  setup_n_validators_with_keys(3)
 }
