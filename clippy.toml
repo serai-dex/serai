@@ -5,6 +5,26 @@ path = "Option::map_or"
 [[disallowed-methods]]
 path = "Option::map_or_else"
 
+# TODO: https://github.com/rust-lang/rust-clippy/pull/12194
+[[disallowed-methods]]
+path = "<ruint::Uint as core::ops::Add>::add"
+reason = "`add` uses wrapping arithmetic when we want checked"
+[[disallowed-methods]]
+path = "<ruint::Uint as core::ops::Add>::add_assign"
+reason = "`add_assign` uses wrapping arithmetic when we want checked"
+[[disallowed-methods]]
+path = "<ruint::Uint as core::ops::Sub>::sub"
+reason = "`sub` uses wrapping arithmetic when we want checked"
+[[disallowed-methods]]
+path = "<ruint::Uint as core::ops::Sub>::sub_assign"
+reason = "`sub_assign` uses wrapping arithmetic when we want checked"
+[[disallowed-methods]]
+path = "<ruint::Uint as core::ops::Mul>::mul"
+reason = "`mul` uses wrapping arithmetic when we want checked"
+[[disallowed-methods]]
+path = "<ruint::Uint as core::ops::Mul>::mul_assign"
+reason = "`mul_assign` uses wrapping arithmetic when we want checked"
+
 [[disallowed-methods]]
 path = "serai_coins_pallet::pallet::Pallet::burn_fn"
 reason = "this method should only be used when not `CoinsInstance`, which isn't enforced at compile-time"
