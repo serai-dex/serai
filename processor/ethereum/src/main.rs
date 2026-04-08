@@ -71,7 +71,7 @@ async fn main() {
       match provider.get_chain_id().await {
         Ok(chain_id) => break chain_id,
         Err(e) => {
-          log::error!("failed to fetch the chain ID on boot: {e:?}");
+          serai_env::error!("failed to fetch the chain ID on boot: {e:?}");
           tokio::time::sleep(delay).await;
           delay = (delay + Duration::from_secs(5)).max(Duration::from_mins(2));
         }

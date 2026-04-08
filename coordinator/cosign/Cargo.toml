@@ -22,7 +22,7 @@ blake2 = { version = "0.11.0-rc.5", default-features = false, features = ["alloc
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 serai-client-serai = { path = "../../substrate/client/serai", default-features = false }
 
-log = { version = "0.4", default-features = false, features = ["std"] }
+serai-env = { path = "../../common/env", version = "0.1.0" }
 
 tokio = { version = "1", default-features = false }
 
@@ -30,3 +30,19 @@ serai-db = { path = "../../common/db", version = "0.1.1" }
 serai-task = { path = "../../common/task", version = "0.1" }
 
 serai-cosign-types = { path = "./types" }
+
+[dev-dependencies]
+hex = { version = "0.4", default-features = false }
+
+rand_core = { version = "0.6", default-features = false }
+rand = { version = "0.8", default-features = false }
+
+schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
+
+serai-primitives = { path = "../../substrate/primitives", features = ["test-helpers"] }
+serai-abi = { path = "../../substrate/abi", default-features = false, features = ["std"] }
+
+serai-cosign-types = { path = "./types", features = ["test-helpers"] }
+serai-task = { path = "../../common/task", features = ["test-helpers"] }
+
+serai-shim-rpc = { path = "../../tests/shim-rpc" }

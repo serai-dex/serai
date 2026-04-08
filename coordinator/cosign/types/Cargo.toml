@@ -17,8 +17,14 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"], optional = true }
 schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
-
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
-
 serai-primitives = { path = "../../../substrate/primitives", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+serai-primitives = { path = "../../../substrate/primitives", features = ["test-helpers"] }
+
+[features]
+test-helpers = ["rand_core", "serai-primitives/test-helpers"]

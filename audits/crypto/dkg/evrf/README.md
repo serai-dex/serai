@@ -16,7 +16,7 @@ confirm:
 - The secret shares sent can be received by the intended recipient so long as
   they can access the bulletin board
 
-Additionally, Serai desired a robust scheme (albeit with an biased key as the
+Additionally, Serai desired a robust scheme (albeit with a biased key as the
 output, which is fine for our purposes). Accordingly, our implementation
 instantiates the threshold eVRF DKG from the eVRF paper, with our own proposal
 for verifiable encryption, with the caller allowed to decide the set of

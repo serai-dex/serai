@@ -43,7 +43,6 @@ serai-primitives = { path = "../../substrate/primitives", default-features = fal
 serai-client-ethereum = { path = "../../substrate/client/ethereum", default-features = false }
 
 zalloc = { path = "../../common/zalloc" }
-log = { version = "0.4", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 
 serai-env = { path = "../../common/env" }

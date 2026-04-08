@@ -11,12 +11,8 @@ use blake2::{Digest as _, Blake2s256};
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_client_serai::{
-  abi::{
-    primitives::{
-      BlockHash, crypto::Public, network_id::ExternalNetworkId,
-      validator_sets::ExternalValidatorSet,
-    },
-    Block,
+  abi::primitives::{
+    BlockHash, crypto::Public, network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet,
   },
   Serai,
 };
@@ -34,6 +30,10 @@ mod evaluator;
 mod delay;
 pub use delay::BROADCAST_FREQUENCY;
 use delay::LatestCosignedBlockNumber;
+
+/// Test helpers and fixtures.
+#[cfg(test)]
+pub mod tests;
 
 /// A 'global session', defined as all validator sets used for cosigning at a given moment.
 ///
@@ -62,7 +62,7 @@ pub(crate) struct GlobalSession {
   pub(crate) total_stake: u64,
 }
 impl GlobalSession {
-  fn id(mut cosigners: Vec<ExternalValidatorSet>) -> [u8; 32] {
+  pub(crate) fn id(mut cosigners: Vec<ExternalValidatorSet>) -> [u8; 32] {
     cosigners.sort_by_key(|a| borsh::to_vec(a).unwrap());
     Blake2s256::digest(borsh::to_vec(&cosigners).unwrap()).into()
   }
@@ -80,6 +80,50 @@ enum HasEvents {
   NonNotable,
   /// The block didn't have an event justifying a cosign.
   No,
+}
+
+mod has_events_ord {
+  use core::cmp::Ordering;
+  use super::HasEvents;
+
+  impl PartialOrd for HasEvents {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+      Some(self.cmp(other))
+    }
+  }
+  impl Ord for HasEvents {
+    /// A `cmp` based on the significance of the values.
+    ///
+    /// This is intended to allow using `a.max(b)` in order for the more-significant `HasEvents` to
+    /// resolve as the final `HasEvents`.
+    fn cmp(&self, other: &Self) -> Ordering {
+      #[allow(clippy::match_same_arms)]
+      match (self, other) {
+        (HasEvents::Notable, HasEvents::Notable) |
+        (HasEvents::NonNotable, HasEvents::NonNotable) |
+        (HasEvents::No, HasEvents::No) => Ordering::Equal,
+        (HasEvents::No, HasEvents::Notable | HasEvents::NonNotable) => Ordering::Less,
+        (HasEvents::Notable | HasEvents::NonNotable, HasEvents::No) => Ordering::Greater,
+        (HasEvents::NonNotable, HasEvents::Notable) => Ordering::Less,
+        (HasEvents::Notable, HasEvents::NonNotable) => Ordering::Greater,
+      }
+    }
+  }
+
+  #[test]
+  fn has_events_ord() {
+    assert_eq!(HasEvents::Notable.cmp(&HasEvents::Notable), Ordering::Equal);
+    assert_eq!(HasEvents::NonNotable.cmp(&HasEvents::NonNotable), Ordering::Equal);
+    assert_eq!(HasEvents::No.cmp(&HasEvents::No), Ordering::Equal);
+
+    assert!(HasEvents::No < HasEvents::NonNotable);
+    assert!(HasEvents::No < HasEvents::Notable);
+    assert!(HasEvents::NonNotable < HasEvents::Notable);
+
+    assert!(HasEvents::Notable > HasEvents::NonNotable);
+    assert!(HasEvents::Notable > HasEvents::No);
+    assert!(HasEvents::NonNotable > HasEvents::No);
+  }
 }
 
 create_db! {
@@ -120,7 +164,7 @@ create_db! {
 }
 
 /// An object usable to request notable cosigns for a block.
-pub trait RequestNotableCosigns: 'static + Send {
+pub trait RequestNotableCosigns: 'static + Send + Sync {
   /// The error type which may be encountered when requesting notable cosigns.
   type Error: Debug;
 
@@ -177,6 +221,14 @@ pub struct Cosigning<D: Db> {
   db: D,
 }
 impl<D: Db> Cosigning<D> {
+  #[cfg(test)]
+  /// Create a cosigning handle using an already-initialized database.
+  ///
+  /// This does not spawn any background tasks; use `Cosigning::spawn` for the full service.
+  pub fn new(db: D) -> Self {
+    Self { db }
+  }
+
   /// Spawn the tasks to intend and evaluate cosigns.
   ///
   /// The database specified must only be used with a singular instance of the Serai network, and
@@ -185,9 +237,13 @@ impl<D: Db> Cosigning<D> {
     db: D,
     serai: Arc<Serai>,
     request: R,
-    tasks_to_run_upon_cosigning: Vec<TaskHandle>,
+    tasks_to_run_upon_cosigning_blocks: Vec<TaskHandle>,
   ) -> Self {
-    let (intend_task, _intend_task_handle) = Task::new();
+    let (intend_task, intend_task_handle) = Task::new();
+    // Forget the intend task handle, as dropping the handle would stop the task
+    // keeps all cosign tasks running in the background
+    core::mem::forget(intend_task_handle);
+
     let (evaluator_task, evaluator_task_handle) = Task::new();
     let (delay_task, delay_task_handle) = Task::new();
     tokio::spawn(
@@ -204,18 +260,19 @@ impl<D: Db> Cosigning<D> {
     );
     tokio::spawn(
       (delay::CosignDelayTask { db: db.clone() })
-        .continually_run(delay_task, tasks_to_run_upon_cosigning),
+        .continually_run(delay_task, tasks_to_run_upon_cosigning_blocks),
     );
+
     Self { db }
   }
 
   /// The latest cosigned block number.
-  pub fn latest_cosigned_block_number(getter: &impl Get) -> Result<u64, Faulted> {
+  pub fn latest_cosigned_block_number(getter: &impl Get) -> Result<Option<u64>, Faulted> {
     if FaultedSession::get(getter).is_some() {
       Err(Faulted)?;
     }
 
-    Ok(LatestCosignedBlockNumber::get(getter).unwrap_or(0))
+    Ok(LatestCosignedBlockNumber::get(getter))
   }
 
   /// Fetch a cosigned Substrate block's hash by its block number.
@@ -223,12 +280,16 @@ impl<D: Db> Cosigning<D> {
     getter: &impl Get,
     block_number: u64,
   ) -> Result<Option<BlockHash>, Faulted> {
-    if block_number > Self::latest_cosigned_block_number(getter)? {
+    let Some(latest) = Self::latest_cosigned_block_number(getter)? else {
+      return Ok(None);
+    };
+    if block_number > latest {
       return Ok(None);
     }
 
     Ok(Some(
-      SubstrateBlockHash::get(getter, block_number).expect("cosigned block but didn't index it"),
+      SubstrateBlockHash::get(getter, block_number)
+        .unwrap_or_else(|| panic!("cosigned block {block_number} but didn't index it")),
     ))
   }
 
@@ -236,44 +297,35 @@ impl<D: Db> Cosigning<D> {
   ///
   /// If this global session hasn't produced any notable cosigns, this will return the latest
   /// cosigns for this session.
-  pub fn notable_cosigns(getter: &impl Get, global_session: [u8; 32]) -> Vec<SignedCosign> {
-    let mut cosigns = vec![];
-    for network in ExternalNetworkId::all() {
-      if let Some(cosign) = NetworksLatestCosignedBlock::get(getter, global_session, network) {
-        cosigns.push(cosign);
-      }
-    }
-    cosigns
+  pub fn notable_or_latest_cosigns(
+    getter: &impl Get,
+    global_session: [u8; 32],
+  ) -> Vec<SignedCosign> {
+    ExternalNetworkId::all()
+      .filter_map(|network| NetworksLatestCosignedBlock::get(getter, global_session, network))
+      .collect()
   }
 
   /// The cosigns to rebroadcast every `BROADCAST_FREQUENCY` seconds.
   ///
-  /// This will be the most recent cosigns, in case the initial broadcast failed, or the faulty
-  /// cosigns, in case of a fault, to induce identification of the fault by others.
+  /// This will be the most recent cosigns in case the initial broadcast failed, or the faulty
+  /// cosigns in case of a fault, in order to induce identification of the fault by others.
   pub fn cosigns_to_rebroadcast(&self) -> Vec<SignedCosign> {
     if let Some(faulted) = FaultedSession::get(&self.db) {
       let mut cosigns = Faults::get(&self.db, faulted).expect("faulted with no faults");
       // Also include all of our recognized-as-honest cosigns in an attempt to induce fault
       // identification in those who see the faulty cosigns as honest
-      for network in ExternalNetworkId::all() {
-        if let Some(cosign) = NetworksLatestCosignedBlock::get(&self.db, faulted, network) {
-          if cosign.cosign.global_session == faulted {
-            cosigns.push(cosign);
-          }
-        }
-      }
+      cosigns.extend(
+        Self::notable_or_latest_cosigns(&self.db, faulted)
+          .into_iter()
+          .filter(|c| c.cosign.global_session == faulted),
+      );
       cosigns
     } else {
       let Some(global_session) = evaluator::currently_evaluated_global_session(&self.db) else {
         return vec![];
       };
-      let mut cosigns = vec![];
-      for network in ExternalNetworkId::all() {
-        if let Some(cosign) = NetworksLatestCosignedBlock::get(&self.db, global_session, network) {
-          cosigns.push(cosign);
-        }
-      }
-      cosigns
+      Self::notable_or_latest_cosigns(&self.db, global_session)
     }
   }
 
@@ -285,10 +337,10 @@ impl<D: Db> Cosigning<D> {
     let network = cosign.cosigner;
 
     // Check our indexed blockchain includes a block with this block number
-    let Some(our_block_hash) = SubstrateBlockHash::get(&self.db, cosign.block_number) else {
+    let Some(indexed_block_hash) = SubstrateBlockHash::get(&self.db, cosign.block_number) else {
       Err(IntakeCosignError::NotYetIndexedBlock)?
     };
-    let faulty = cosign.block_hash != our_block_hash;
+    let faulty = cosign.block_hash != indexed_block_hash;
 
     // Check this isn't a dated cosign within its global session (as it would be if rebroadcasted)
     if !faulty {
@@ -341,8 +393,7 @@ impl<D: Db> Cosigning<D> {
       // This global session starts the block *after* its declaration, so we want to check if the
       // block declaring it was cosigned
       if (global_session.start_block_number - 1) > latest_cosigned_block_number {
-        drop(txn);
-        return Err(IntakeCosignError::FutureGlobalSession);
+        Err(IntakeCosignError::FutureGlobalSession)?;
       }
 
       // This is safe as it's in-range and newer, as prior checked since it isn't faulty

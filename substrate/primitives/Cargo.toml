@@ -64,4 +64,6 @@ std = [
   "bech32/std"
 ]
 scale = ["dep:scale", "sp-core/serde"]
+# This feature is not intended for public consumption and is not covered by any guarantees (SemVer, safety)
+test-helpers = ["std"]
 default = ["std"]

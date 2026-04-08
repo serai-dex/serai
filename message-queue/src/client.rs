@@ -131,15 +131,15 @@ impl MessageQueue {
       }
       first = false;
 
-      log::trace!("opening socket to message-queue for next");
+      serai_env::trace!("opening socket to message-queue for next");
       let mut socket = match TcpStream::connect(&self.url).await {
         Ok(socket) => socket,
         Err(e) => {
-          log::warn!("couldn't connect to message-queue server: {e:?}");
+          serai_env::warn!("couldn't connect to message-queue server: {e:?}");
           continue;
         }
       };
-      log::trace!("opened socket for next");
+      serai_env::trace!("opened socket for next");
 
       loop {
         if Self::send(&mut socket, msg.clone()).await.is_err() {
@@ -148,7 +148,7 @@ impl MessageQueue {
         let status = match socket.read_u8().await {
           Ok(status) => status,
           Err(e) => {
-            log::warn!("couldn't read status u8: {e:?}");
+            serai_env::warn!("couldn't read status u8: {e:?}");
             continue 'outer;
           }
         };
@@ -168,14 +168,14 @@ impl MessageQueue {
         let len = match socket.read_u32_le().await {
           Ok(len) => len,
           Err(e) => {
-            log::warn!("couldn't read len: {e:?}");
+            serai_env::warn!("couldn't read len: {e:?}");
             return vec![];
           }
         };
         let mut buf = vec![0; usize::try_from(len).unwrap()];
         // Read the message
         let Ok(_) = socket.read_exact(&mut buf).await else {
-          log::warn!("couldn't read the message");
+          serai_env::warn!("couldn't read the message");
           return vec![];
         };
         buf

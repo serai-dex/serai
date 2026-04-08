@@ -105,6 +105,7 @@ members = [
 
   "tests/no-std",
 
+  "tests/shim-rpc",
   "tests/docker",
   "tests/message-queue",
   # TODO "tests/processor",
@@ -231,6 +232,7 @@ k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "8293be3f
 p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "8293be3f9855eea0936523a9b100f1f69261ea4b" }
 
 [workspace.lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }
 # https://doc.rust-lang.org/rustc/lints/listing/allowed-by-default.html
 ambiguous_negative_literals = "warn"
 closure_returning_async_block = "warn"

@@ -43,8 +43,11 @@ impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let next_block = NextBlock::get(&self.db).unwrap_or(0);
-      let latest_finalized_block =
-        Cosigning::<D>::latest_cosigned_block_number(&self.db).map_err(|e| format!("{e:?}"))?;
+      let Some(latest_finalized_block) =
+        Cosigning::<D>::latest_cosigned_block_number(&self.db).map_err(|e| format!("{e:?}"))?
+      else {
+        return Ok(false);
+      };
 
       // These are all the events which generate canonical messages
       struct CanonicalEvents {

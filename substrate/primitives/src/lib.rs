@@ -53,6 +53,11 @@ pub mod instructions;
 /// Merkle trees.
 pub mod merkle;
 
+/// Test helpers for generating random instances of primitive types.
+#[cfg(any(test, feature = "test-helpers"))]
+#[doc(hidden)]
+pub mod test_helpers;
+
 /// The type used to identify block numbers.
 ///
 /// A block's number is its zero-indexed position on the list of blocks which form a blockchain.
@@ -75,7 +80,7 @@ impl From<u64> for BlockNumber {
   level so this is fine for our use-case. If we do ever see a 64-byte block hash, we can simply
   hash it into a 32-byte hash or truncate it.
 */
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
 pub struct BlockHash(pub [u8; 32]);
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(BlockHash);

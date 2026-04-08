@@ -89,7 +89,7 @@ pub(crate) fn queue_message(
   let mut txn = db.txn();
   let intent_key = intent_key(meta.from, meta.to, &meta.intent);
   if Get::get(&txn, &intent_key).is_some() {
-    log::warn!(
+    serai_env::warn!(
       "Prior queued message attempted to be queued again. From: {:?} To: {:?} Intent: {}",
       meta.from,
       meta.to,
@@ -111,7 +111,7 @@ pub(crate) fn queue_message(
     },
   );
 
-  log::info!("Queued message. From: {:?} To: {:?} ID: {id}", meta.from, meta.to);
+  serai_env::info!("Queued message. From: {:?} To: {:?} ID: {id}", meta.from, meta.to);
   DbTxn::commit(txn);
 }
 
@@ -148,18 +148,15 @@ pub(crate) fn ack_message(from: Service, to: Service, id: u64, sig: SchnorrSigna
   // It's the second if we acknowledge messages before saving them as acknowledged
   // TODO: Check only a proper message is being acked
 
-  log::info!("Acknowledging From: {from:?} To: {to:?} ID: {id}");
+  serai_env::info!("Acknowledging From: {from:?} To: {to:?} ID: {id}");
 
   QUEUES.read().unwrap()[&(from, to)].write().unwrap().ack_message(id);
 }
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-  // TODO: `env_logger::Env` for `serai-env` and `Builder::from_env`?
-  env_logger::Builder::from_default_env()
-    .parse_filters(&serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
-    .init();
-  log::info!("Starting message-queue service...");
+  serai_env::init_logger();
+  serai_env::info!("Starting message-queue service...");
 
   // Open the DB
   #[expect(unused_variables, unreachable_code)]

@@ -1,6 +1,6 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use core::{ops::Deref as _, str::FromStr as _, time::Duration};
+use core::{ops::Deref as _, time::Duration};
 use std::{sync::Arc, collections::HashMap, time::Instant};
 
 use zeroize::{Zeroize as _, Zeroizing};
@@ -69,12 +69,12 @@ async fn serai() -> Arc<Serai> {
       "http://{}:9944",
       serai_env::var("SERAI_HOSTNAME").expect("Serai hostname wasn't provided")
     )) else {
-      log::error!("couldn't connect to the Serai node");
+      serai_env::error!("couldn't connect to the Serai node");
       tokio::time::sleep(delay).await;
       delay = (delay + SERAI_CONNECTION_DELAY).min(MAX_SERAI_CONNECTION_DELAY);
       continue;
     };
-    log::info!("made initial connection to Serai node");
+    serai_env::info!("made initial connection to Serai node");
     return Arc::new(serai);
   }
 }
@@ -94,7 +94,7 @@ fn spawn_cosigning<D: serai_db::Db>(
     loop {
       // Intake our own cosigns
       match Cosigning::<D>::latest_cosigned_block_number(&db) {
-        Ok(latest_cosigned_block_number) => {
+        Ok(Some(latest_cosigned_block_number)) => {
           let mut txn = db.txn();
           // The cosigns we prior tried to intake yet failed to
           let mut cosigns = ErroneousCosigns::get(&txn).unwrap_or(vec![]);
@@ -126,10 +126,11 @@ fn spawn_cosigning<D: serai_db::Db>(
 
           txn.commit();
         }
+        Ok(None) => {}
         Err(Faulted) => {
           // We don't panic here as the following code rebroadcasts our cosigns which is
           // necessary to inform other coordinators of the faulty cosigns
-          log::error!("cosigning faulted");
+          serai_env::error!("cosigning faulted");
         }
       }
 
@@ -330,13 +331,8 @@ async fn handle_network(
 #[tokio::main]
 async fn main() {
   // Initialize the logger
-  env_logger::builder()
-    .filter_level(
-      log::LevelFilter::from_str(&serai_env::var("RUST_LOG").unwrap_or_else(|| "info".to_owned()))
-        .expect("`RUST_LOG` environment variable had an invalid filter"),
-    )
-    .init();
-  log::info!("starting coordinator service...");
+  serai_env::init_logger();
+  serai_env::info!("starting coordinator service...");
 
   // Read the Serai key from the env
   let serai_key = {
