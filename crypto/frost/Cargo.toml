@@ -24,24 +24,24 @@ thiserror = { version = "2", default-features = false }
 rand_core = { version = "0.6", default-features = false, features = ["alloc"] }
 rand_chacha = { version = "0.3", default-features = false }
 
-zeroize = { version = "^1.5", default-features = false, features = ["alloc", "zeroize_derive"] }
-subtle = { version = "^2.4", default-features = false }
+zeroize = { version = "1.5", default-features = false, features = ["alloc", "zeroize_derive"] }
+subtle = { version = "2.4", default-features = false }
 
 hex = { version = "0.4", default-features = false, features = ["alloc"], optional = true }
 
-transcript = { package = "flexible-transcript", path = "../transcript", version = "^0.3.2", default-features = false, features = ["recommended"] }
+transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3.2", default-features = false, features = ["recommended"] }
 
 dalek-ff-group = { path = "../dalek-ff-group", version = "0.5", default-features = false, features = ["alloc"], optional = true }
 minimal-ed448 = { path = "../ed448", version = "0.4", default-features = false, features = ["alloc"], optional = true }
 
-ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["alloc"] }
-sha2 = { version = "0.10.0", default-features = false, optional = true }
+ciphersuite = { path = "../ciphersuite", version = "0.4.1", default-features = false, features = ["alloc"] }
+sha2 = { version = "0.10", default-features = false, optional = true }
 elliptic-curve = { version = "0.13", default-features = false, features = ["hash2curve"], optional = true }
 ciphersuite-kp256 = { path = "../ciphersuite/kp256", version = "0.4", default-features = false, features = ["alloc"], optional = true }
 
 multiexp = { path = "../multiexp", version = "0.4", default-features = false, features = ["alloc", "batch"] }
 
-schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "^0.5.1", default-features = false, features = ["alloc"] }
+schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.5.1", default-features = false, features = ["alloc"] }
 
 dkg = { path = "../dkg", version = "0.6.1", default-features = false }
 dkg-recovery = { path = "../dkg/recovery", version = "0.6", default-features = false, optional = true }

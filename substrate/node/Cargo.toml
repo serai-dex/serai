@@ -38,6 +38,7 @@ sp-blockchain = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sp-consensus = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sp-state-machine = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sp-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
+sp-keyring = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sp-keystore = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sp-runtime = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
@@ -49,12 +50,13 @@ frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 serai-abi = { path = "../abi", features = ["std", "substrate"] }
 serai-runtime = { path = "../runtime", features = ["std"] }
 
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
+dirs = { version = "6", default-features = false }
 
 borsh = { version = "1", default-features = false, features = ["std"] }
-futures-util = "0.3"
-tokio = { version = "1", features = ["sync", "rt-multi-thread"] }
-jsonrpsee = { version = "0.24", features = ["server"] }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["sync", "signal", "rt-multi-thread"] }
+jsonrpsee = { version = "0.24", default-features = false, features = ["server"] }
 
 sc-transaction-pool = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sc-transaction-pool-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
@@ -71,14 +73,14 @@ sc-consensus-babe = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sc-consensus-grandpa = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sc-authority-discovery = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 
+sc-tracing = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sc-telemetry = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sc-chain-spec = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
-sc-cli = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
+sc-utils = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 
 serai-env = { path = "../../common/env" }
 
 [features]
-default = []
 runtime-benchmarks = [
   "frame-benchmarking/runtime-benchmarks",
 

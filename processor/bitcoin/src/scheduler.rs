@@ -5,7 +5,7 @@ use ciphersuite_kp256::Secp256k1;
 
 use bitcoin_serai::{
   bitcoin::ScriptBuf,
-  wallet::{TransactionError, SignableTransaction as BSignableTransaction, p2tr_script_buf},
+  wallet::{TransactionError, SignableTransaction as BSignableTransaction},
 };
 
 use serai_primitives::{coin::ExternalCoin, balance::Amount};
@@ -18,16 +18,16 @@ use utxo_scheduler::{PlannedTransaction, TransactionPlanner};
 use transaction_chaining_scheduler::{EffectedReceivedOutputs, Scheduler as GenericScheduler};
 
 use crate::{
-  scan::{offsets_for_key, scanner},
+  scan::{OFFSETS, scanner},
   output::Output,
   transaction::{SignableTransaction, Eventuality},
   rpc::Rpc,
 };
 
 fn address_from_serai_key(key: <Secp256k1 as WrappedGroup>::G, kind: OutputType) -> Address {
-  let offset = <Secp256k1 as WrappedGroup>::G::GENERATOR * offsets_for_key(key)[&kind];
+  let offset = <Secp256k1 as WrappedGroup>::G::GENERATOR * OFFSETS[&kind];
   Address::new(
-    p2tr_script_buf(key + offset)
+    bitcoin_serai::wallet::address(key + offset)
       .expect("creating address from Serai key which wasn't properly tweaked"),
   )
   .expect("couldn't create Serai-representable address for P2TR script")
@@ -69,8 +69,7 @@ fn signable_transaction<D: Db>(
     getting the transaction unstuck (via CPFP).
   */
   payments.push((
-    // The generator is even so this is valid
-    p2tr_script_buf(<Secp256k1 as WrappedGroup>::G::GENERATOR).unwrap(),
+    bitcoin_serai::wallet::address(<Secp256k1 as WrappedGroup>::G::GENERATOR).unwrap(),
     // This uses the minimum output value allowed, as defined as a constant in bitcoin-serai
     // TODO: Add a test for this comparing to bitcoin's `minimal_non_dust`
     bitcoin_serai::wallet::DUST,
@@ -80,7 +79,7 @@ fn signable_transaction<D: Db>(
     .map(<Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::change_address);
 
   BSignableTransaction::new(
-    inputs.clone(),
+    &inputs,
     &payments,
     change.clone().map(ScriptBuf::from),
     None,
@@ -143,6 +142,7 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
         Err(
           TransactionError::TooMuchData |
           TransactionError::TooLowFee |
+          TransactionError::Overflow |
           TransactionError::TooLargeTransaction,
         ) => unreachable!(),
         Err(TransactionError::NotEnoughFunds { fee, .. }) => Amount(fee),
@@ -181,7 +181,6 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
             let mut res = vec![];
             for output in scanner.scan_transaction(tx) {
               res.push(Output::new_with_presumed_origin(
-                key,
                 tx,
                 // It shouldn't matter if this is wrong as we should never try to return these
                 // We still provide an accurate value to ensure a lack of discrepancies
@@ -199,6 +198,7 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
         Err(
           TransactionError::TooMuchData |
           TransactionError::TooLowFee |
+          TransactionError::Overflow |
           TransactionError::TooLargeTransaction,
         ) => unreachable!(),
         Err(TransactionError::NotEnoughFunds { .. }) => {

@@ -55,7 +55,7 @@ impl<D: Db> primitives::Block for Block<D> {
     // We skip the coinbase transaction as its burdened by maturity
     for tx in &self.1.txdata[1 ..] {
       for output in scanner.scan_transaction(tx) {
-        res.push(Output::new(&self.0, key, tx, output));
+        res.push(Output::new(&self.0, tx, output));
       }
     }
     res

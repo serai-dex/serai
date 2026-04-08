@@ -68,7 +68,7 @@ async fn call_verify(
   signature: &Signature,
 ) -> bool {
   let public_key: [u8; 32] = public_key.eth_repr();
-  let c_bytes: [u8; 32] = signature.c().to_repr().into();
+  let c_bytes: [u8; 32] = signature.c();
   let s_bytes: [u8; 32] = signature.s().to_repr().into();
   let call = TransactionRequest::default().to(address).input(TransactionInput::new(
     abi::verifyCall::new((
@@ -96,7 +96,9 @@ async fn test_verify() {
     OsRng.fill_bytes(&mut message);
 
     let c = Signature::challenge(ProjectivePoint::GENERATOR * nonce, &public_key, &message);
-    let s = nonce + (c * key);
+    let c_scalar =
+      <Scalar as k256::elliptic_curve::ops::Reduce<k256::U256>>::reduce_bytes(&c.into());
+    let s = nonce + (c_scalar * key);
 
     let sig = Signature::new(c, s).unwrap();
     assert!(sig.verify(&public_key, &message));
@@ -119,7 +121,7 @@ async fn test_verify() {
 
     // Mutate c and make sure the signature now fails to verify
     {
-      let mutated_c = Signature::new(c + Scalar::ONE, s).unwrap();
+      let mutated_c = Signature::new((c_scalar + Scalar::ONE).to_repr().into(), s).unwrap();
       assert!(!mutated_c.verify(&public_key, &message));
       assert!(!call_verify(&provider, address, &public_key, &message, &mutated_c).await);
     }

@@ -1,6 +1,6 @@
 [package]
 name = "lazy_static"
-version = "1.99.0"
+version = "1.99.99"
 description = "`lazy_static` which patches to `std::sync::LazyLock`"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/patches/lazy_static"

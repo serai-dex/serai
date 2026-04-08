@@ -14,18 +14,37 @@ use simple_request::{hyper, TokioClient};
 use borsh::BorshDeserialize as _;
 pub use serai_abi as abi;
 use abi::{
-  primitives::{BlockHash, network_id::ExternalNetworkId},
+  primitives::{
+    BlockHash,
+    network_id::ExternalNetworkId,
+    coin::{Coin, ExternalCoin},
+    address::SeraiAddress,
+  },
   Transaction, Block, Event,
 };
 
 mod coins;
 pub use coins::Coins;
 
+mod dex;
+mod liquidity_tokens;
+mod genesis_liquidity;
+
 mod validator_sets;
 pub use validator_sets::ValidatorSets;
 
 mod in_instructions;
 pub use in_instructions::InInstructions;
+
+pub(crate) fn rpc_coin(coin: impl Into<Coin>) -> &'static str {
+  match coin.into() {
+    Coin::Serai => r#""SRI""#,
+    Coin::External(ExternalCoin::Bitcoin) => r#""sriBTC""#,
+    Coin::External(ExternalCoin::Ether) => r#""sriETH""#,
+    Coin::External(ExternalCoin::Dai) => r#""sriDAI""#,
+    Coin::External(ExternalCoin::Monero) => r#""sriXMR""#,
+  }
+}
 
 /// An error from the RPC.
 #[derive(Debug, Error)]
@@ -260,5 +279,10 @@ impl State<'_> {
     params: &str,
   ) -> Result<ResponseValue, RpcError> {
     self.serai.call(method, &format!(r#"{{ "block": "{}" {params} }}"#, self.block)).await
+  }
+
+  /// Returns the next nonce to be used for this account.
+  pub async fn account_nonce(&self, of: &SeraiAddress) -> Result<u32, RpcError> {
+    self.call::<u32>("core/next-nonce", &format!(r#", "address": "{of}" "#)).await
   }
 }

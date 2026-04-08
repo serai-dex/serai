@@ -23,6 +23,9 @@ pub fn serai(
 
   let run_serai = format!(
     r#"
+# Disable `detect_stack_use_after_return` as it isn't compatible with `wasmtime`'s bespoke `setjmp`
+ENV ASAN_OPTIONS=detect_stack_use_after_return=0
+
 # Copy the Serai binary and relevant license
 COPY --from=builder --chown=serai /serai/bin/serai-node /bin/
 COPY --from=builder --chown=serai /serai/AGPL-3.0 .

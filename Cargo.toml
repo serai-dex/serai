@@ -189,43 +189,56 @@ primitive-types-12 = { package = "primitive-types", path = "patches/ethereum/pri
 rapidhash = { path = "patches/ethereum/rapidhash" }
 rlp = { path = "patches/ethereum/rlp" }
 secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-0.30" }
+indexmap = { path = "patches/indexmap" }
+schemars-09 = { package = "schemars", path = "patches/schemars-09" }
+schemars-10 = { package = "schemars", path = "patches/schemars-10" }
 wit-bindgen-rust-macro = { path = "patches/wit-bindgen-rust-macro" }
 
-# Dependencies from monero-oxide which originate from within our own tree,  potentially shimmed to account for deviations since publishing
+# Dependencies from monero-oxide which originate from within our own tree, potentially shimmed to account for deviations since publishing
 std-shims = { path = "patches/std-shims" }
 simple-request = { path = "patches/simple-request" }
-multiexp = { path = "crypto/multiexp" }
 flexible-transcript = { path = "crypto/transcript" }
+multiexp = { path = "crypto/multiexp" }
 ciphersuite = { path = "patches/ciphersuite" }
-dalek-ff-group = { path = "patches/dalek-ff-group" }
+dalek-ff-group = { path = "crypto/dalek-ff-group" }
 minimal-ed448 = { path = "crypto/ed448" }
 modular-frost = { path = "crypto/frost" }
 
 # Patches due to `std` now including the required functionality
-is_terminal_polyfill = { path = "patches/is_terminal_polyfill" }
 lazy_static = { path = "patches/lazy_static" }
 # This has a non-deprecated `std` alternative since Rust's 2024 edition
 home = { path = "patches/home" }
 
 # Updates to the latest version
-darling = { path = "patches/darling" }
+cpufeatures = { path = "patches/cpufeatures" }
 dtoa = { path = "patches/dtoa" }
 getrandom-02 = { package = "getrandom", path = "patches/getrandom-0.2" }
 getrandom-03 = { package = "getrandom", path = "patches/getrandom-0.3" }
 ryu = { path = "patches/ryu" }
 thiserror = { path = "patches/thiserror" }
 
-# directories-next was created because directories was unmaintained
-# directories-next is now unmaintained while directories is maintained
-# The directories author pulls in ridiculously pointless crates and prefers
-# copyleft licenses
-# The following two patches resolve everything
+# `core2` can be replaced with our in-tree `std-shims`
+core2 = { path = "patches/core2" }
+# `hex_lit` can be replaced with `hex-literal` (from RustCrypto)
+hex_lit = { path = "patches/hex_lit" }
+# `keccak-asm` is liberal with 'use at your risk', yet API-compatible with `sha3`, so we prefer the latter
+keccak-asm = { path = "patches/keccak-asm" }
+
+# `option-ext` is a copyleft library for a single one liner, which we provide ourselves
 option-ext = { path = "patches/option-ext" }
-directories-next = { path = "patches/directories-next" }
+# This is a trivial third-party crate which over-scopes its dependencies
+aurora-engine-modexp = { path = "patches/ethereum/aurora-engine-modexp" }
+# `nonzero_ext` is more than 300 lines when we only need 10
+nonzero_ext = { path = "patches/nonzero_ext" }
+
+# `hickory-resolver` uses `moka`, which is obscene with LLM use and frequently has critical bugs
+# This is a version patched to use `lru-slab` for its LRU cache instead
+hickory-proto = { git = "https://github.com/kayabaNerve/hickory-dns", rev = "265df12bc084df83f67733ab99b9fb17ad48bf7a" }
+hickory-resolver = { git = "https://github.com/kayabaNerve/hickory-dns", rev = "265df12bc084df83f67733ab99b9fb17ad48bf7a" }
 
 # Patch to include `FromUniformBytes<64>` over `Scalar`
-k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
-p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "4994c9ab163781a88cd4a49beae812a89a44e8c3" }
+k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "8293be3f9855eea0936523a9b100f1f69261ea4b" }
+p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "8293be3f9855eea0936523a9b100f1f69261ea4b" }
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(coverage)'] }

@@ -1,4 +1,4 @@
 #!/bin/sh
 set -e
 
-serai-node --base-path /volume --unsafe-rpc-external --rpc-cors all --chain testnet --validator
+serai-node --data-dir /volume --network testnet --validator

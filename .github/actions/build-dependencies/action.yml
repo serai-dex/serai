@@ -53,7 +53,7 @@ runs:
     - name: Install solc
       shell: bash
       run: |
-        cargo install svm-rs --version =0.5.23
+        cargo +1.94.1 install --locked svm-rs --version =0.5.23
 
         solc_version() {
           # Install the version of `solc` specified in the contracts

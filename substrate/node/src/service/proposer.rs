@@ -1,12 +1,9 @@
-use core::{marker::PhantomData, time::Duration, future::Future};
+use core::{marker::PhantomData, future::Future};
 use futures_util::future::{self, Ready, Either};
 
-use sp_runtime::{
-  generic::{DigestItem, Digest},
-  traits::Block,
-};
+use sp_runtime::{generic::DigestItem, traits::Block};
 use sp_blockchain::Error;
-use sp_consensus::{InherentData, Proposal, Proposer, Environment};
+use sp_consensus::{ProposeArgs, Proposal, Proposer, Environment};
 use sp_timestamp::Timestamp;
 
 use serai_abi::{primitives::address::SeraiAddress, SeraiPreExecutionDigest};
@@ -23,18 +20,11 @@ impl<B: Block, Underlying: Proposer<B, Error = Error>> Proposer<B>
   for SeraiProposer<B, Underlying>
 {
   type Error = Underlying::Error;
-  type Proposal = Either<Ready<Result<Proposal<B, Self::Proof>, Error>>, Underlying::Proposal>;
-  type ProofRecording = Underlying::ProofRecording;
-  type Proof = Underlying::Proof;
+  type Proposal = Either<Ready<Result<Proposal<B>, Error>>, Underlying::Proposal>;
 
-  fn propose(
-    self,
-    inherent_data: InherentData,
-    mut inherent_digests: Digest,
-    max_duration: Duration,
-    block_size_limit: Option<usize>,
-  ) -> Self::Proposal {
-    let timestamp = match inherent_data
+  fn propose(self, mut args: ProposeArgs<B>) -> Self::Proposal {
+    let timestamp = match args
+      .inherent_data
       .get_data::<Timestamp>(&sp_timestamp::INHERENT_IDENTIFIER)
       .map_err(|e| Error::Application(e.into()))
       .and_then(|timestamp| {
@@ -45,7 +35,7 @@ impl<B: Block, Underlying: Proposer<B, Error = Error>> Proposer<B>
     };
 
     // Insert our expected digest
-    inherent_digests.logs.push(DigestItem::PreRuntime(
+    args.inherent_digests.logs.push(DigestItem::PreRuntime(
       SeraiPreExecutionDigest::CONSENSUS_ID,
       borsh::to_vec(&SeraiPreExecutionDigest {
         proposer: self.proposer_identity,
@@ -55,12 +45,7 @@ impl<B: Block, Underlying: Proposer<B, Error = Error>> Proposer<B>
     ));
 
     // Passthrough to the underlying proposer's `propose` function
-    Either::Right(self.underlying.propose(
-      inherent_data,
-      inherent_digests,
-      max_duration,
-      block_size_limit,
-    ))
+    Either::Right(self.underlying.propose(args))
   }
 }
 

@@ -4,7 +4,7 @@ pub(crate) fn module(
   bootnodes: &[MultiaddrWithPeerId],
   client: Arc<FullClient>,
   authority_discovery: sc_authority_discovery::Service,
-) -> Result<RpcModule<impl 'static + Send + Sync>, Box<dyn core::error::Error + Send + Sync>> {
+) -> Result<RpcModule<impl 'static + Send + Sync>, Box<dyn ::core::error::Error + Send + Sync>> {
   let bootnodes = bootnodes.iter().map(ToString::to_string).collect::<Vec<_>>();
   let mut module =
     RpcModule::new((bootnodes, client, tokio::sync::RwLock::new(authority_discovery)));

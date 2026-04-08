@@ -103,8 +103,6 @@ exceptions = [
 
   { allow = ["AGPL-3.0-only"], name = "serai-orchestrator" },
 
-  { allow = ["AGPL-3.0-only"], name = "mini-serai" },
-
   { allow = ["AGPL-3.0-only"], name = "serai-shim-rpc" },
   { allow = ["AGPL-3.0-only"], name = "serai-docker-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-message-queue-tests" },
@@ -138,8 +136,6 @@ deny = [
 
   # Legacy which _no one_ should use anymore
   { name = "is-terminal", version = "*" },
-  # Stop introduction into the tree without realizing it
-  { name = "once_cell_polyfill", version = "*" },
 
   # Conflicts with our usage of mimalloc
   # https://github.com/serai-dex/serai/issues/690
@@ -151,6 +147,7 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = [
+  "https://github.com/kayabaNerve/hickory-dns",
   "https://github.com/kayabaNerve/elliptic-curves",
   "https://github.com/monero-oxide/monero-oxide",
   "https://github.com/serai-dex/patch-polkadot-sdk",

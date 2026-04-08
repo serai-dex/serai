@@ -24,7 +24,7 @@ use primitives::{OutputType, ReceivedOutput};
 
 use crate::{
   primitives::x_coord_to_even_point,
-  scan::{offsets_for_key, presumed_origin, extract_serai_data},
+  scan::{OFFSETS, presumed_origin, extract_serai_data},
 };
 
 #[derive(Clone, PartialEq, Eq, Hash, Debug, BorshSerialize, BorshDeserialize)]
@@ -54,16 +54,11 @@ pub(crate) struct Output {
 }
 
 impl Output {
-  pub(crate) fn new(
-    getter: &impl Get,
-    key: <Secp256k1 as WrappedGroup>::G,
-    tx: &Transaction,
-    output: WalletOutput,
-  ) -> Self {
+  pub(crate) fn new(getter: &impl Get, tx: &Transaction, output: WalletOutput) -> Self {
     Self {
-      kind: offsets_for_key(key)
-        .into_iter()
-        .find_map(|(kind, offset)| (offset == output.offset()).then_some(kind))
+      kind: OFFSETS
+        .iter()
+        .find_map(|(kind, offset)| (offset == &output.offset()).then_some(*kind))
         .expect("scanned output for unknown offset"),
       presumed_origin: presumed_origin(getter, tx),
       output,
@@ -72,15 +67,14 @@ impl Output {
   }
 
   pub(crate) fn new_with_presumed_origin(
-    key: <Secp256k1 as WrappedGroup>::G,
     tx: &Transaction,
     presumed_origin: Option<Address>,
     output: WalletOutput,
   ) -> Self {
     Self {
-      kind: offsets_for_key(key)
-        .into_iter()
-        .find_map(|(kind, offset)| (offset == output.offset()).then_some(kind))
+      kind: OFFSETS
+        .iter()
+        .find_map(|(kind, offset)| (offset == &output.offset()).then_some(*kind))
         .expect("scanned output for unknown offset"),
       presumed_origin,
       output,

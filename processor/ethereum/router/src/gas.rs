@@ -270,15 +270,19 @@ impl Router {
     };
 
     // Sign a dummy signature
-    let (private_key, public_key) = Self::gas_estimation_key();
-    let c = Signature::challenge(
-      // Use a nonce of 1
-      ProjectivePoint::GENERATOR,
-      &public_key,
-      &Self::execute_message(CHAIN_ID, self.address, 1, coin, shimmed_fee, outs.clone()),
-    );
-    let s = Scalar::ONE + (c * private_key);
-    let sig = Signature::new(c, s).unwrap();
+    let sig = {
+      let (private_key, public_key) = Self::gas_estimation_key();
+      let c = Signature::challenge(
+        // Use a nonce of 1
+        ProjectivePoint::GENERATOR,
+        &public_key,
+        &Self::execute_message(CHAIN_ID, self.address, 1, coin, shimmed_fee, outs.clone()),
+      );
+      let c_scalar =
+        <Scalar as k256::elliptic_curve::ops::Reduce<k256::U256>>::reduce_bytes(&c.into());
+      let s = Scalar::ONE + (c_scalar * private_key);
+      Signature::new(c, s).unwrap()
+    };
 
     // Write the current transaction
     /*

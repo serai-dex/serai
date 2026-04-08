@@ -16,13 +16,13 @@ rustdoc-args = ["--cfg", "docsrs"]
 [dependencies]
 hex-literal = { version = "1", default-features = false }
 
-sha2 = { version = "0.11.0-rc.0", default-features = false }
+sha2 = { version = "0.11", default-features = false }
 k256 = { version = "0.13", default-features = false, features = ["arithmetic", "expose-field"] }
 prime-field = { path = "../prime-field", default-features = false }
 short-weierstrass = { path = "../short-weierstrass", default-features = false }
 
 ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false }
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "dc1b3dbe436aae61ec363505052d4715d38ce1df", default-features = false, optional = true }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "0d6f5e840ad1f955e4e4dec00c5165f134815b15", default-features = false, optional = true }
 
 [dev-dependencies]
 hex = "0.4"

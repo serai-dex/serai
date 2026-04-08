@@ -1,6 +1,7 @@
 use alloc::vec;
 
 use zeroize::Zeroize;
+use subtle::{ConstantTimeEq as _, ConditionallySelectable};
 
 use ff::PrimeFieldBits;
 use group::Group;
@@ -9,7 +10,7 @@ use crate::prep_bits;
 
 // Pippenger's algorithm for multiexponentiation, as published in the SIAM Journal on Computing
 // DOI: 10.1137/0209022
-pub(crate) fn pippenger<G: Zeroize + Group<Scalar: PrimeFieldBits>>(
+pub(crate) fn pippenger<G: Zeroize + ConditionallySelectable + Group<Scalar: PrimeFieldBits>>(
   pairs: &[(G::Scalar, G)],
   window: u8,
 ) -> G {
@@ -25,7 +26,10 @@ pub(crate) fn pippenger<G: Zeroize + Group<Scalar: PrimeFieldBits>>(
 
     let mut buckets = vec![G::identity(); 2_usize.pow(window.into())];
     for p in 0 .. bits.len() {
-      buckets[usize::from(bits[p][n])] += pairs[p].1;
+      for (i, bucket) in buckets.iter_mut().enumerate() {
+        *bucket +=
+          <_>::conditional_select(&G::identity(), &pairs[p].1, i.ct_eq(&usize::from(bits[p][n])));
+      }
     }
 
     let mut intermediate_sum = G::identity();

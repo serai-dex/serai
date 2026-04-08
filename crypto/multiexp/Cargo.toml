@@ -17,7 +17,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-zeroize = { version = "^1.5", default-features = false, features = ["zeroize_derive"] }
+zeroize = { version = "1.5", default-features = false, features = ["zeroize_derive"] }
+subtle = { version = "2.4", default-features = false }
 
 ff = { version = "0.13", default-features = false, features = ["bits"] }
 group = { version = "0.13", default-features = false }
@@ -27,12 +28,12 @@ rand_core = { version = "0.6", default-features = false, optional = true }
 [dev-dependencies]
 rand_core = { version = "0.6", features = ["std"] }
 
-k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits"] }
+k256 = { version = "0.13.1", default-features = false, features = ["arithmetic", "bits"] }
 dalek-ff-group = { path = "../dalek-ff-group" }
 
 [features]
 alloc = ["zeroize/alloc"]
-std = ["alloc", "zeroize/std", "ff/std", "rand_core?/std"]
+std = ["alloc", "zeroize/std", "subtle/std", "ff/std", "rand_core?/std"]
 
 batch = ["alloc", "rand_core"]
 

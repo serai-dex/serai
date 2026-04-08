@@ -24,7 +24,9 @@ use short_weierstrass::{ShortWeierstrass, Affine, Projective};
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Secq256k1;
 impl Zeroize for Secq256k1 {
-  fn zeroize(&mut self) {}
+  fn zeroize(&mut self) {
+    let Self = self;
+  }
 }
 
 impl ShortWeierstrass for Secq256k1 {

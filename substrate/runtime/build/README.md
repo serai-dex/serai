@@ -103,3 +103,11 @@ intent is to enable verifying _used_ builds (not under-development builds).
 The included methodology is specific to WASM, meaning this build script will
 not immediately work to produce a PolkaVM runtime. Support for PolkaVM could be
 assumed if one instead used `substrate-wasm-builder`.
+
+### Audit Status
+
+This (when `substrate/runtime/build.rs`) was
+[audited by Security Research Labs](/audits/substrate/Security%20Research%20Labs%20April%202026)
+as of commit `3f5d73492f604e4d68b9919c8e4c84f54ffccb9e`. Any following changes
+were not audited unless otherwise stated. Please read the linked report for
+more information.
