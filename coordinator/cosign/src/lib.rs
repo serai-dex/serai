@@ -31,8 +31,8 @@ mod delay;
 pub use delay::BROADCAST_FREQUENCY;
 use delay::LatestCosignedBlockNumber;
 
-#[cfg(test)]
 /// Test helpers and fixtures.
+#[cfg(test)]
 pub mod tests;
 
 /// A 'global session', defined as all validator sets used for cosigning at a given moment.
@@ -80,6 +80,50 @@ enum HasEvents {
   NonNotable,
   /// The block didn't have an event justifying a cosign.
   No,
+}
+
+mod has_events_ord {
+  use core::cmp::Ordering;
+  use super::HasEvents;
+
+  impl PartialOrd for HasEvents {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+      Some(self.cmp(other))
+    }
+  }
+  impl Ord for HasEvents {
+    /// A `cmp` based on the significance of the values.
+    ///
+    /// This is intended to allow using `a.max(b)` in order for the more-significant `HasEvents` to
+    /// resolve as the final `HasEvents`.
+    fn cmp(&self, other: &Self) -> Ordering {
+      #[allow(clippy::match_same_arms)]
+      match (self, other) {
+        (HasEvents::Notable, HasEvents::Notable) |
+        (HasEvents::NonNotable, HasEvents::NonNotable) |
+        (HasEvents::No, HasEvents::No) => Ordering::Equal,
+        (HasEvents::No, HasEvents::Notable | HasEvents::NonNotable) => Ordering::Less,
+        (HasEvents::Notable | HasEvents::NonNotable, HasEvents::No) => Ordering::Greater,
+        (HasEvents::NonNotable, HasEvents::Notable) => Ordering::Less,
+        (HasEvents::Notable, HasEvents::NonNotable) => Ordering::Greater,
+      }
+    }
+  }
+
+  #[test]
+  fn has_events_ord() {
+    assert_eq!(HasEvents::Notable.cmp(&HasEvents::Notable), Ordering::Equal);
+    assert_eq!(HasEvents::NonNotable.cmp(&HasEvents::NonNotable), Ordering::Equal);
+    assert_eq!(HasEvents::No.cmp(&HasEvents::No), Ordering::Equal);
+
+    assert!(HasEvents::No < HasEvents::NonNotable);
+    assert!(HasEvents::No < HasEvents::Notable);
+    assert!(HasEvents::NonNotable < HasEvents::Notable);
+
+    assert!(HasEvents::Notable > HasEvents::NonNotable);
+    assert!(HasEvents::Notable > HasEvents::No);
+    assert!(HasEvents::NonNotable > HasEvents::No);
+  }
 }
 
 create_db! {
@@ -245,7 +289,7 @@ impl<D: Db> Cosigning<D> {
 
     Ok(Some(
       SubstrateBlockHash::get(getter, block_number)
-        .expect(&format!("cosigned block {} but didn't index it", block_number)),
+        .unwrap_or_else(|| panic!("cosigned block {block_number} but didn't index it")),
     ))
   }
 
@@ -253,27 +297,26 @@ impl<D: Db> Cosigning<D> {
   ///
   /// If this global session hasn't produced any notable cosigns, this will return the latest
   /// cosigns for this session.
-  pub fn notable_cosigns(getter: &impl Get, global_session: [u8; 32]) -> Vec<SignedCosign> {
-    let mut cosigns = vec![];
-    for network in ExternalNetworkId::all() {
-      if let Some(cosign) = NetworksLatestCosignedBlock::get(getter, global_session, network) {
-        cosigns.push(cosign);
-      }
-    }
-    cosigns
+  pub fn notable_or_latest_cosigns(
+    getter: &impl Get,
+    global_session: [u8; 32],
+  ) -> Vec<SignedCosign> {
+    ExternalNetworkId::all()
+      .filter_map(|network| NetworksLatestCosignedBlock::get(getter, global_session, network))
+      .collect()
   }
 
   /// The cosigns to rebroadcast every `BROADCAST_FREQUENCY` seconds.
   ///
-  /// This will be the most recent cosigns in case the initial broadcast failed.
-  /// Or, the faulty cosigns in case of a fault. To induce identification of the fault by others.
+  /// This will be the most recent cosigns in case the initial broadcast failed, or the faulty
+  /// cosigns in case of a fault, in order to induce identification of the fault by others.
   pub fn cosigns_to_rebroadcast(&self) -> Vec<SignedCosign> {
     if let Some(faulted) = FaultedSession::get(&self.db) {
       let mut cosigns = Faults::get(&self.db, faulted).expect("faulted with no faults");
       // Also include all of our recognized-as-honest cosigns in an attempt to induce fault
       // identification in those who see the faulty cosigns as honest
       cosigns.extend(
-        Self::notable_cosigns(&self.db, faulted)
+        Self::notable_or_latest_cosigns(&self.db, faulted)
           .into_iter()
           .filter(|c| c.cosign.global_session == faulted),
       );
@@ -282,7 +325,7 @@ impl<D: Db> Cosigning<D> {
       let Some(global_session) = evaluator::currently_evaluated_global_session(&self.db) else {
         return vec![];
       };
-      Self::notable_cosigns(&self.db, global_session)
+      Self::notable_or_latest_cosigns(&self.db, global_session)
     }
   }
 

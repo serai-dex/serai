@@ -8156,10 +8156,8 @@ dependencies = [
  "ciphersuite 0.4.2",
  "dalek-ff-group 0.5.0",
  "dkg-musig",
- "env_logger",
  "frost-schnorrkel",
  "hex",
- "log",
  "modular-frost",
  "rand_core 0.6.4",
  "schnorrkel",
@@ -8274,10 +8272,17 @@ version = "0.1.0"
 dependencies = [
  "blake2 0.11.0-rc.5",
  "borsh",
- "log",
+ "hex",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+ "schnorrkel",
+ "serai-abi",
  "serai-client-serai",
  "serai-cosign-types",
  "serai-db",
+ "serai-env",
+ "serai-primitives",
+ "serai-shim-rpc",
  "serai-task",
  "tokio",
 ]
@@ -8287,6 +8292,7 @@ name = "serai-cosign-types"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "rand_core 0.6.4",
  "schnorrkel",
  "serai-primitives",
 ]
@@ -8364,6 +8370,10 @@ dependencies = [
 [[package]]
 name = "serai-env"
 version = "0.1.0"
+dependencies = [
+ "env_logger",
+ "log",
+]
 
 [[package]]
 name = "serai-ethereum-processor"
@@ -8384,7 +8394,6 @@ dependencies = [
  "ethereum-schnorr-contract",
  "hex",
  "k256",
- "log",
  "modular-frost",
  "rand_core 0.6.4",
  "serai-client-ethereum",
@@ -8409,8 +8418,6 @@ dependencies = [
 name = "serai-ethereum-relayer"
 version = "0.1.0"
 dependencies = [
- "env_logger",
- "log",
  "serai-db",
  "serai-env",
  "tokio",
@@ -8493,10 +8500,8 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "dalek-ff-group 0.5.0",
- "env_logger",
  "flexible-transcript",
  "hex",
- "log",
  "rand_core 0.6.4",
  "schnorr-signatures",
  "serai-db",
@@ -8595,7 +8600,6 @@ dependencies = [
  "futures-util",
  "hex",
  "jsonrpsee",
- "log",
  "rand_core 0.6.4",
  "sc-authority-discovery",
  "sc-basic-authorship",
@@ -8629,6 +8633,7 @@ dependencies = [
  "sp-runtime",
  "sp-state-machine",
  "sp-timestamp",
+ "sp-tracing",
  "tokio",
  "zeroize",
 ]
@@ -8677,9 +8682,7 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "dkg-evrf",
- "env_logger",
  "hex",
- "log",
  "serai-cosign-types",
  "serai-db",
  "serai-env",
@@ -8985,6 +8988,23 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "toml 0.9.12+spec-1.1.0",
+]
+
+[[package]]
+name = "serai-shim-rpc"
+version = "0.1.0"
+dependencies = [
+ "blake2 0.11.0-rc.5",
+ "borsh",
+ "hex",
+ "jsonrpsee",
+ "rand_core 0.6.4",
+ "schnorrkel",
+ "serai-abi",
+ "serai-client-serai",
+ "serai-primitives",
+ "serde",
+ "tokio",
 ]
 
 [[package]]

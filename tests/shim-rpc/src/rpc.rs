@@ -1,16 +1,16 @@
-use jsonrpsee::{
-  RpcModule,
-  types::{error::ErrorObjectOwned, params::Params},
-};
-use serde::Deserialize;
-
 use serai_abi::{
-  Event,
   primitives::{
     BlockHash,
     network_id::{ExternalNetworkId, NetworkId},
     validator_sets::{ExternalValidatorSet, Session, ValidatorSet},
   },
+  Event,
+};
+
+use serde::Deserialize;
+use jsonrpsee::{
+  RpcModule,
+  types::{error::ErrorObjectOwned, params::Params},
 };
 
 use crate::state::{SharedState, ShimState};
@@ -129,7 +129,7 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
         if let Some(err) = state.errors.check_method("blockchain/latest_finalized_block_number") {
           return Err(Error::Internal(err.to_owned()));
         }
-        Ok(state.latest_finalized_block_number())
+        Ok(state.latest_finalized_block_number().unwrap_or(0))
       },
     )
     .map_err(|e| Error::Internal(e.to_string()))?;

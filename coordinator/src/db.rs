@@ -59,7 +59,7 @@ pub(crate) fn tributary_db(set: ExternalValidatorSet) -> Db {
 }
 
 pub(crate) fn prune_tributary_db(set: ExternalValidatorSet) {
-  log::info!("pruning data directory for tributary {set:?}");
+  serai_env::info!("pruning data directory for tributary {set:?}");
   let db = tributary_db_folder(set);
   if fs::exists(&db).expect("couldn't check if tributary DB exists") {
     fs::remove_dir_all(db).unwrap();

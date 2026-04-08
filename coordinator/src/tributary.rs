@@ -68,7 +68,7 @@ async fn provide_transaction<TD: DbTrait, P: P2p>(
     // present on-chain, and this enters an infinite loop to block the calling task from
     // advancing
     Err(ProvidedError::LocalMismatchesOnChain) => loop {
-      log::error!(
+      serai_env::error!(
         "Tributary {set:?} was supposed to provide {tx:?} but peers disagree, halting Tributary",
       );
       // Print this every five minutes as this does need to be handled
@@ -106,7 +106,7 @@ impl<CD: DbTrait, TD: DbTrait, P: P2p> ContinuallyRan
         let latest = match Cosigning::<CD>::latest_cosigned_block_number(&txn) {
           Ok(latest) => latest,
           Err(Faulted) => {
-            log::error!("cosigning faulted");
+            serai_env::error!("cosigning faulted");
             Err("cosigning faulted")?
           }
         };

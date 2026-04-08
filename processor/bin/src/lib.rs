@@ -1,6 +1,6 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use core::{cmp::Ordering, str::FromStr as _};
+use core::cmp::Ordering;
 
 use zeroize::{Zeroize as _, Zeroizing};
 
@@ -48,7 +48,7 @@ pub type Db = serai_db::RocksDB;
 /// Yields the database.
 pub fn init() -> Db {
   serai_env::init_logger();
-  log::info!("Starting processor service...");
+  serai_env::info!("Starting processor service...");
 
   #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
   let db =
@@ -132,10 +132,14 @@ async fn first_block_after_time<S: ScannerFeed>(feed: &S, serai_time: u64) -> u6
     match first_block_after_time_iteration(feed, serai_time).await {
       Ok(Some(block)) => return block,
       Ok(None) => {
-        log::info!("waiting for block to activate at (a block with timestamp >= {serai_time})");
+        serai_env::info!(
+          "waiting for block to activate at (a block with timestamp >= {serai_time})"
+        );
       }
       Err(e) => {
-        log::error!("couldn't find the first block Serai should scan due to an RPC error: {e:?}");
+        serai_env::error!(
+          "couldn't find the first block Serai should scan due to an RPC error: {e:?}"
+        );
       }
     }
     tokio::time::sleep(core::time::Duration::from_secs(5)).await;

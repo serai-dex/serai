@@ -10,9 +10,10 @@ use crate::{
   intend::{BlockEventData, BlockEvents, GlobalSessionsChannel},
 };
 
-#[cfg(not(any(test)))]
+#[expect(clippy::cfg_not_test)]
+#[cfg(not(test))]
 pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_mins(1);
-#[cfg(any(test))]
+#[cfg(test)]
 pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(6);
 
 const COSIGN_COMMIT_THRESHOLD_NUMERATOR: u128 = 83;
@@ -27,23 +28,26 @@ create_db!(
 
 db_channel!(
   SubstrateCosignEvaluatorChannels {
-    // (cosigned block, time cosign was evaluated, has_events)
+    // (cosigned block, time cosign was evaluated in seconds since the epoch, has_events)
     CosignedBlocks: () -> (u64, u64, bool),
   }
 );
 
-/// Commit a block as evaluated without sending it for cosign delay.
+/// Commit a block as evaluated.
 fn commit_evaluated_block(mut txn: impl DbTxn, block_number: u64, has_events: bool) {
   CosignedBlocks::send(&mut txn, &(block_number, now_timestamp().as_secs(), has_events));
   txn.commit();
 }
 
+/// Fetch the currently being-evaluated global session.
+///
 /// This is a strict function which won't panic, even with a malicious Serai node, so long as:
 /// - It's called incrementally (with an increment of 1)
 /// - It's only called for block numbers we've completed indexing on within the intend task
 /// - It's only called for block numbers after a global session has started
 /// - The global sessions channel is populated as the block declaring the session is indexed
-/// Which all hold true within the context of this task and the intend task.
+///
+/// which all hold true within the context of this task and the intend task.
 ///
 /// This function will also ensure the currently evaluated global session is incremented once we
 /// finish evaluation of the prior session.
@@ -65,7 +69,7 @@ fn currently_evaluated_global_session_strict(
     };
     assert!(
       existing.1.start_block_number <= block_number,
-      "candidate's start block number ({:#?}) exceeds our block number ({block_number})",
+      "candidate's start block number ({}) exceeds our block number ({block_number})",
       existing.1.start_block_number
     );
     existing
@@ -101,8 +105,11 @@ fn should_request_cosigns(last_request_for_cosigns: &mut Instant) -> bool {
   true
 }
 
-//// Calculate the minimum threshold required for cosigning
+/// Calculate the minimum threshold required for cosigning
 pub(crate) fn cosign_threshold(total_stake: u64) -> u64 {
+  const {
+    assert!(COSIGN_COMMIT_THRESHOLD_NUMERATOR < COSIGN_COMMIT_THRESHOLD_DENOMINATOR);
+  }
   u64::try_from(
     (u128::from(total_stake) * COSIGN_COMMIT_THRESHOLD_NUMERATOR) /
       COSIGN_COMMIT_THRESHOLD_DENOMINATOR,
@@ -164,12 +171,12 @@ async fn ensure_cosigned(
     return Ok(());
   }
 
-  // For HasEvents::Notable request the superseding notable cosigns over the network
-  // If this session hasn't yet produced notable cosigns, then we presume we'll see
-  // the desired non-notable cosigns as part of normal operations, without needing to
-  // explicitly request them
-  //
-  // For HasEvents::NonNotable request the necessary cosigns over the network
+  /*
+    Request the superseding notable cosigns over the network.
+
+    If this session hasn't yet produced notable cosigns, then we presume we'll see the desired
+    non-notable cosigns as part of normal operations, without needing to explicitly request them.
+  */
   if should_request_cosigns(last_request_for_cosigns) {
     request
       .request_notable_cosigns(global_session)
@@ -198,6 +205,7 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
+      let mut prior_global_session = None;
       let mut known_cosign = None;
       let mut made_progress = false;
       loop {
@@ -231,6 +239,11 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
         // Fetch the global session information
         let (global_session, global_session_info) =
           currently_evaluated_global_session_strict(&mut txn, block_number);
+        // If the global session has changed, clear the cached `known_cosign`
+        if prior_global_session != Some(global_session) {
+          prior_global_session = Some(global_session);
+          known_cosign = None;
+        }
 
         match has_events {
           // Because this had notable events, we require an explicit cosign for this block by a
@@ -267,17 +280,8 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
           // Since this block didn't have any notable events, we simply require a cosign for this
           // block or a greater block by the current validator sets
           HasEvents::NonNotable => {
-            // Check if this was satisfied by a cached result which wasn't calculated incrementally
-            let known_cosigned = if let Some(known_cosign) = known_cosign {
-              known_cosign >= block_number
-            } else {
-              // Clear `known_cosign` which is no longer helpful
-              known_cosign = None;
-              false
-            };
-
-            // If it isn't already known to be cosigned, evaluate the latest cosigns
-            if !known_cosigned {
+            // If not already known to be cosigned by a cached result, evaluate the latest cosigns
+            if known_cosign < Some(block_number) {
               let (weight_cosigned, lowest_common_block) = evaluate_non_notable_cosigns(
                 &txn,
                 block_number,
@@ -309,20 +313,17 @@ impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, 
           }
           // If this block has no events necessitating cosigning, we can immediately consider the
           // block cosigned (making this block a NOP)
-          HasEvents::No => {
-            commit_evaluated_block(txn, block_number, false);
-            made_progress = true;
-            continue;
-          }
+          HasEvents::No => {}
         }
 
         // Since we checked we had the necessary cosigns, send it for delay before acknowledgement
-        commit_evaluated_block(txn, block_number, true);
+        commit_evaluated_block(txn, block_number, has_events != HasEvents::No);
 
-        // INFOs roughly every ~1 hour, no need for repetitive logging on prod,
+        // INFOs roughly every ~1 hour, no need for repetitive logging on prod
+        #[expect(clippy::cfg_not_test)]
         #[cfg(not(test))]
         if (block_number % 500) == 0 {
-          serai_env::prod_info!("marking block #{block_number} as cosigned");
+          serai_env::info!("marking block #{block_number} as cosigned");
         }
         // for tests debug on every block
         #[cfg(test)]

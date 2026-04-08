@@ -94,13 +94,13 @@ fn wasm_binary(dev: bool) -> Vec<u8> {
   const DEFAULT_WASM_PATH: &str = "/runtime/serai.wasm";
   let path = serai_env::var("SERAI_WASM_PATH").unwrap_or(DEFAULT_WASM_PATH.to_owned());
   if let Ok(binary) = fs::read(&path) {
-    log::info!("using {path} for the WASM");
+    sp_tracing::info!("using {path} for the WASM");
     return binary;
   }
 
   assert!(dev, "could not read WASM for the runtime and this is not a dev network");
 
-  log::info!("using built-in wasm");
+  sp_tracing::info!("using built-in wasm");
   serai_runtime::WASM.to_vec()
 }
 

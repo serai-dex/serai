@@ -37,40 +37,16 @@ jobs:
 
       - name: Run Tests
         run: |
-          cargo test --all-features \
-            -p serai-message-queue \
-            -p serai-processor-messages \
-            -p serai-processor-key-gen \
-            -p serai-processor-view-keys \
-            -p serai-processor-frost-attempt-manager \
-            -p serai-processor-primitives \
-            -p serai-processor-scanner \
-            -p serai-processor-scheduler-primitives \
-            -p serai-processor-utxo-scheduler-primitives \
-            -p serai-processor-utxo-scheduler \
-            -p serai-processor-transaction-chaining-scheduler \
-            -p serai-processor-smart-contract-scheduler \
-            -p serai-processor-signers \
-            -p serai-processor-bin \
-            -p serai-bitcoin-processor \
-            -p serai-processor-ethereum-primitives \
-            -p serai-ethereum-test-primitives \
-            -p serai-processor-ethereum-deployer \
-            -p serai-processor-ethereum-router \
-            -p serai-processor-ethereum-erc20 \
-            -p serai-ethereum-processor \
-            -p serai-monero-processor \
-            -p tendermint-machine \
-            -p tributary-sdk \
-            -p serai-cosign-types \
-            -p serai-cosign \
-            -p serai-coordinator-substrate \
-            -p serai-coordinator-tributary \
-            -p serai-coordinator-p2p \
-            -p serai-coordinator-libp2p-p2p \
-            -p serai-coordinator \
-            -p serai-orchestrator \
-            -p serai-docker-tests
+          cargo test --all-features -p serai-message-queue
+          find ./processor -name "Cargo.toml" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done
+          find ./coordinator -name "Cargo.toml" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done
+          cargo test --all-features -p serai-orchestrator
+          cargo test --all-features -p serai-shim-rpc
+          cargo test --all-features -p serai-docker-tests
 
   test-substrate:
     runs-on: ubuntu-latest

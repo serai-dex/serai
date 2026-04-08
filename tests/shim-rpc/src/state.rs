@@ -1,25 +1,27 @@
 use std::{
-  collections::{HashMap, HashSet},
   sync::Arc,
-  time::{SystemTime, UNIX_EPOCH},
+  collections::{HashSet, HashMap},
+  time::SystemTime,
 };
 
-use blake2::{Blake2b256, Digest as _};
-use rand_core::{OsRng, RngCore};
-use tokio::sync::RwLock;
+use rand_core::{RngCore as _, OsRng};
+
+use blake2::{Digest as _, Blake2b256};
 
 use serai_abi::{
-  BLOCK_BRANCH_TAG, BLOCK_LEAF_TAG, Block, Event, Header, HeaderV1,
   primitives::{
     BlockHash,
-    address::SeraiAddress,
-    balance::Amount,
     crypto::KeyPair,
-    merkle::{IncrementalUnbalancedMerkleTree, UnbalancedMerkleTree},
+    merkle::{UnbalancedMerkleTree, IncrementalUnbalancedMerkleTree},
+    address::SeraiAddress,
     network_id::{ExternalNetworkId, NetworkId},
-    validator_sets::{ExternalValidatorSet, Session},
+    validator_sets::{Session, ExternalValidatorSet},
+    balance::Amount,
   },
+  BLOCK_LEAF_TAG, BLOCK_BRANCH_TAG, HeaderV1, Header, Block, Event,
 };
+
+use tokio::sync::RwLock;
 
 /// Per-block validator-sets state.
 #[derive(Clone, Debug, Default)]
@@ -47,15 +49,8 @@ pub struct ErrorInjection {
 impl ErrorInjection {
   /// Check if this request should randomly fail based on the configured `failure_rate`.
   pub fn check_random_failure(&self, method: &str) -> Option<String> {
-    if self.failure_rate == 0 {
-      return None;
-    }
-    let val = OsRng.next_u32() % 100;
-    if val < u32::from(self.failure_rate) {
-      Some(format!("fuzz: random failure on `{method}` (rate={}%)", self.failure_rate))
-    } else {
-      None
-    }
+    ((OsRng.next_u32() % 100) < u32::from(self.failure_rate))
+      .then(|| format!("fuzz: random failure on `{method}` (rate={}%)", self.failure_rate))
   }
 
   /// Check if an error should be injected for this method call.
@@ -113,10 +108,11 @@ impl ShimState {
         builds_upon: self.builds_upon.clone().calculate(BLOCK_BRANCH_TAG),
         proposer: SeraiAddress([0; 32]),
         unix_time_in_millis: u64::try_from(
-          SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(),
+          SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis(),
         )
         .unwrap(),
         transactions_commitment: UnbalancedMerkleTree::EMPTY,
+        // TODO: Properly populate `events_commitment`
         events_commitment: UnbalancedMerkleTree::EMPTY,
         consensus_commitment: [0; 32],
       }),
@@ -137,9 +133,9 @@ impl ShimState {
     block_hash
   }
 
-  /// The latest finalized block number, or 0 if no blocks exist.
-  pub fn latest_finalized_block_number(&self) -> u64 {
-    self.blocks_by_number.keys().copied().max().unwrap_or(0)
+  /// The latest finalized block number.
+  pub fn latest_finalized_block_number(&self) -> Option<u64> {
+    self.blocks_by_number.keys().copied().max()
   }
 
   /// Create a block whose `builds_upon` header value comes from an empty tree,
@@ -154,7 +150,7 @@ impl ShimState {
         builds_upon: IncrementalUnbalancedMerkleTree::new().calculate(BLOCK_BRANCH_TAG),
         proposer: SeraiAddress([0; 32]),
         unix_time_in_millis: u64::try_from(
-          SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis(),
+          SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis(),
         )
         .unwrap(),
         transactions_commitment: UnbalancedMerkleTree::EMPTY,

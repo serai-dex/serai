@@ -1,6 +1,6 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use core::{ops::Deref as _, str::FromStr as _, time::Duration};
+use core::{ops::Deref as _, time::Duration};
 use std::{sync::Arc, collections::HashMap, time::Instant};
 
 use zeroize::{Zeroize as _, Zeroizing};
@@ -69,12 +69,12 @@ async fn serai() -> Arc<Serai> {
       "http://{}:9944",
       serai_env::var("SERAI_HOSTNAME").expect("Serai hostname wasn't provided")
     )) else {
-      log::error!("couldn't connect to the Serai node");
+      serai_env::error!("couldn't connect to the Serai node");
       tokio::time::sleep(delay).await;
       delay = (delay + SERAI_CONNECTION_DELAY).min(MAX_SERAI_CONNECTION_DELAY);
       continue;
     };
-    log::info!("made initial connection to Serai node");
+    serai_env::info!("made initial connection to Serai node");
     return Arc::new(serai);
   }
 }
@@ -130,7 +130,7 @@ fn spawn_cosigning<D: serai_db::Db>(
         Err(Faulted) => {
           // We don't panic here as the following code rebroadcasts our cosigns which is
           // necessary to inform other coordinators of the faulty cosigns
-          log::error!("cosigning faulted");
+          serai_env::error!("cosigning faulted");
         }
       }
 
@@ -332,7 +332,7 @@ async fn handle_network(
 async fn main() {
   // Initialize the logger
   serai_env::init_logger();
-  log::info!("starting coordinator service...");
+  serai_env::info!("starting coordinator service...");
 
   // Read the Serai key from the env
   let serai_key = {

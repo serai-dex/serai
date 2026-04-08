@@ -1,4 +1,4 @@
-use crate::{delay::*, evaluator::*, intend::*, tests::*, *};
+use crate::{intend::*, evaluator::*, delay::*, tests::*, *};
 
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
 struct TestGlobalSession {
@@ -70,14 +70,18 @@ fn fuzz_global_session_id() {
     assert_eq!(id1, id2);
 
     // Order-independence: any permutation produces the same ID
-    let mut reversed = sets.clone();
-    reversed.reverse();
-    assert_eq!(id1, GlobalSession::id(reversed));
+    {
+      let mut shuffled = sets.clone();
+      shuffled.shuffle(&mut OsRng);
+      assert_eq!(id1, GlobalSession::id(shuffled));
+    }
 
     // Collision resistance: changing any set should change the ID
-    let mut altered = sets.clone();
-    altered[0] = random_validator_set(&mut OsRng);
-    if altered != sets {
+    {
+      let mut altered = sets.clone();
+      while altered[0] == sets[0] {
+        altered[0] = random_validator_set(&mut OsRng);
+      }
       assert_ne!(id1, GlobalSession::id(altered));
     }
   }
@@ -103,14 +107,15 @@ mod intake_cosign_error {
   }
 }
 
-// More cases are tested in ./full_stack.rs with fuzzing for different event type blocks
+// More cases are tested in `tests/full_stack.rs` with fuzzing for different event type blocks
 #[tokio::test]
 async fn spawn_end_to_end() {
   let db = MemDb::new();
   let (shim_serai, serai) = setup_shim_serai().await;
   let (request, _calls) = TestRequest::new(false);
 
-  /// Create a trivial task that logs and sets a flag when triggered whose handle is passed to the cosigning pipeline.
+  /// Create a trivial task that logs and sets a flag when triggered whose handle is passed to the
+  /// cosigning pipeline.
   struct LogOnTrigger(Arc<AtomicBool>);
   impl ContinuallyRan for LogOnTrigger {
     type Error = std::convert::Infallible;
@@ -135,7 +140,6 @@ async fn spawn_end_to_end() {
   {
     assert!(cosigning.cosigns_to_rebroadcast().is_empty());
     let latest = Cosigning::<MemDb>::latest_cosigned_block_number(&db);
-    assert!(latest.is_ok());
     assert_eq!(latest.unwrap(), None);
   }
 
@@ -253,7 +257,8 @@ fn notable_cosigns() {
   // Empty without cosigns
   {
     let db = MemDb::new();
-    let cosigns = Cosigning::<MemDb>::notable_cosigns(&db, random_global_session(&mut OsRng));
+    let cosigns =
+      Cosigning::<MemDb>::notable_or_latest_cosigns(&db, random_global_session(&mut OsRng));
     assert!(cosigns.is_empty());
   }
 
@@ -280,7 +285,7 @@ fn notable_cosigns() {
     let mut cosigning = Cosigning::new(db.clone());
     cosigning.intake_cosign(&signed).unwrap();
 
-    let notable = Cosigning::<MemDb>::notable_cosigns(&db, id);
+    let notable = Cosigning::<MemDb>::notable_or_latest_cosigns(&db, id);
     assert_eq!(notable.len(), 1);
 
     let SignedCosign { cosign, .. } = &notable[0];
@@ -681,7 +686,7 @@ mod intake_cosign {
     let signed = sign_cosign(cosign, &keypair);
 
     let mut cosigning = Cosigning::new(db);
-    assert!(cosigning.intake_cosign(&signed).is_ok());
+    cosigning.intake_cosign(&signed).unwrap();
   }
 
   #[test]
@@ -707,7 +712,7 @@ mod intake_cosign {
     let signed = sign_cosign(cosign, &keypair);
 
     let mut cosigning = Cosigning::new(db.clone());
-    assert!(cosigning.intake_cosign(&signed).is_ok());
+    cosigning.intake_cosign(&signed).unwrap();
 
     let faults: Option<Vec<SignedCosign>> = Faults::get(&db, id);
     assert!(faults.is_some());
@@ -757,10 +762,12 @@ mod intake_cosign {
     };
     let newer_signed = sign_cosign(newer_cosign, &keypair);
 
-    assert!(cosigning.intake_cosign(&newer_signed).is_ok());
+    cosigning.intake_cosign(&newer_signed).unwrap();
 
     let latest = NetworksLatestCosignedBlock::get(&db, id, network).unwrap();
     assert_eq!(latest.cosign.block_number, block_number2);
+
+    // TODO: Check rebroadcasted cosigns updates
   }
 
   #[test]
@@ -777,7 +784,7 @@ mod intake_cosign {
     {
       let mut txn = db.txn();
       GlobalSessionsLastBlock::set(&mut txn, id, &last_block);
-      for i in 1 ..= last_block {
+      for i in 0 ..= last_block {
         let hash = random_block_hash(&mut OsRng);
         SubstrateBlockHash::set(&mut txn, i, &hash);
         block_hashes.push(hash);
@@ -790,12 +797,12 @@ mod intake_cosign {
     let cosign = Cosign {
       global_session: id,
       block_number: last_block,
-      block_hash: block_hashes[last_block as usize - 1],
+      block_hash: block_hashes[usize::try_from(last_block).unwrap()],
       cosigner: network,
     };
     let signed = sign_cosign(cosign, &keypair);
 
-    assert!(cosigning.intake_cosign(&signed).is_ok());
+    cosigning.intake_cosign(&signed).unwrap();
 
     let latest = NetworksLatestCosignedBlock::get(&db, id, network).unwrap();
     assert_eq!(latest.cosign.block_number, last_block);
@@ -825,7 +832,7 @@ mod intake_cosign {
     let faulty_signed_1 = sign_cosign(faulty_cosign_1, &keypair);
 
     let mut cosigning = Cosigning::new(db.clone());
-    assert!(cosigning.intake_cosign(&faulty_signed_1).is_ok());
+    cosigning.intake_cosign(&faulty_signed_1).unwrap();
 
     let faults_after_first = Faults::get(&db, id).unwrap();
     assert_eq!(faults_after_first.len(), 1);
@@ -835,7 +842,7 @@ mod intake_cosign {
       Cosign { global_session: id, block_number, block_hash: faulty_hash_2, cosigner: network };
     let faulty_signed_2 = sign_cosign(faulty_cosign_2, &keypair);
 
-    assert!(cosigning.intake_cosign(&faulty_signed_2).is_ok());
+    cosigning.intake_cosign(&faulty_signed_2).unwrap();
 
     let faults_after_second = Faults::get(&db, id).unwrap();
     assert_eq!(
@@ -898,7 +905,7 @@ mod intake_cosign {
     let faulty_signed = sign_cosign(faulty_cosign, &keypair1);
 
     let mut cosigning = Cosigning::new(db.clone());
-    assert!(cosigning.intake_cosign(&faulty_signed).is_ok());
+    cosigning.intake_cosign(&faulty_signed).unwrap();
 
     let faults = Faults::get(&db, id).unwrap();
     assert_eq!(faults.len(), 1);

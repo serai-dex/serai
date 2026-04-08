@@ -1,5 +1,3 @@
-use core::str::FromStr as _;
-
 pub(crate) use tokio::{
   io::{AsyncReadExt as _, AsyncWriteExt as _},
   net::TcpListener,
@@ -10,7 +8,7 @@ use serai_db::{Get as _, DbTxn as _, Db as _};
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
   serai_env::init_logger();
-  log::info!("Starting Ethereum relayer server...");
+  serai_env::info!("Starting Ethereum relayer server...");
 
   // Open the DB
   #[expect(unused_variables, unreachable_code)]
@@ -54,7 +52,7 @@ async fn main() {
 
             let Ok(()) = socket.write_all(&[1]).await else { break };
 
-            log::info!("received transaction to publish (nonce {nonce})");
+            serai_env::info!("received transaction to publish (nonce {nonce})");
           }
         });
       }

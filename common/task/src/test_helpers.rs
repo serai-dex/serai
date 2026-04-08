@@ -16,6 +16,7 @@ impl TaskTest {
   }
 
   /// Assert that a task iteration fails with an error containing the given string.
+  // TODO: Replace this with typed errors.
   pub async fn task_runs_and_fails_with<T: ContinuallyRan>(task: &mut T, error: &str) {
     log::debug!("running task (expecting failure): {}", core::any::type_name::<T>());
     let err = task.run_iteration().await.unwrap_err();
@@ -27,7 +28,7 @@ impl TaskTest {
 /// Trait for test structs that can produce a [`ContinuallyRan`] task.
 pub trait IntoTask {
   /// The task type produced by this test struct.
-  type Task: ContinuallyRan + 'static;
+  type Task: 'static + ContinuallyRan;
   /// Create the task from the current test state.
-  fn into_task(&self) -> Self::Task;
+  fn task(&self) -> Self::Task;
 }

@@ -1,15 +1,13 @@
-use rand::{Rng, RngCore};
-use rand_core::OsRng;
-use serai_abi::primitives::test_helpers::random_serai_address;
-use serai_shim_rpc::{*, test_helpers::*};
+use rand_core::{RngCore as _, OsRng};
 
 use serai_client_serai::{
   *,
-  abi::{
-    primitives::{balance::*, network_id::*, validator_sets::*},
-    validator_sets::*,
+  abi::primitives::{
+    network_id::*, validator_sets::*, balance::*, test_helpers::random_serai_address,
   },
 };
+
+use serai_shim_rpc::{*, test_helpers::*};
 
 #[tokio::test]
 async fn test_basic_block_and_number() {
@@ -35,7 +33,7 @@ async fn test_basic_block_and_number() {
   let block3 = serai.block_by_number(3).await.unwrap().unwrap();
   assert_eq!(block3.header.number(), 3, "block 3 should have number 3");
 
-  let none = serai.block_by_number(OsRng.gen_range(5 .. 999)).await.unwrap();
+  let none = serai.block_by_number(5 + (OsRng.next_u64() % 1000)).await.unwrap();
   assert!(none.is_none(), "non-existent block should return None");
 }
 
@@ -73,21 +71,18 @@ async fn test_events_round_trip() {
     ),
   ]];
 
-  let shim = SeraiShimRpcBuilder::new().with_block(events).build().await;
+  let shim = SeraiShimRpcBuilder::new().with_block(events.clone()).build().await;
 
   let serai = Serai::new(shim.url()).unwrap();
 
   let block = serai.block_by_number(1).await.unwrap().unwrap();
   let hash = block.header.hash();
 
-  let events = serai.events(hash).await.unwrap();
-
-  let vs = events.validator_sets();
-  let vs_events: Vec<_> = vs.events().collect();
-  assert_eq!(vs_events.len(), 2, "should have 2 validator_sets events");
-
-  assert!(matches!(vs_events[0], Event::Allocation { .. }), "first event should be Allocation");
-  assert!(matches!(vs_events[1], Event::SetDecided { .. }), "second event should be SetDecided");
+  let rpc_events = serai.events(hash).await.unwrap();
+  assert_eq!(
+    rpc_events.validator_sets().events().cloned().map(serai_abi::Event::from).collect::<Vec<_>>(),
+    events.into_iter().flat_map(Vec::into_iter).collect::<Vec<_>>()
+  );
 }
 
 #[tokio::test]
@@ -99,7 +94,7 @@ async fn test_dynamic_block_addition() {
   let latest = serai.latest_finalized_block_number().await.unwrap();
   assert_eq!(latest, 0, "initially no blocks should exist");
 
-  let hash = shim.add_block_with_events(vec![vec![]]).await;
+  let hash = shim.make_block(1, vec![vec![]]).await;
 
   let latest = serai.latest_finalized_block_number().await.unwrap();
   assert_eq!(latest, 1, "should have 1 block after adding one");

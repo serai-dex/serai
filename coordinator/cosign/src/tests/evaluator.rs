@@ -1,7 +1,9 @@
-use crate::{evaluator::*, intend::*, tests::*, *};
+#![expect(clippy::unchecked_time_subtraction)]
 
-pub(crate) struct EvaluatorTest {
-  pub(crate) db: MemDb,
+use crate::{intend::*, evaluator::*, tests::*, *};
+
+struct EvaluatorTest {
+  db: MemDb,
 }
 
 impl Default for EvaluatorTest {
@@ -13,7 +15,7 @@ impl Default for EvaluatorTest {
 impl IntoTask for EvaluatorTest {
   type Task = CosignEvaluatorTask<MemDb, TestRequest>;
 
-  fn into_task(&self) -> Self::Task {
+  fn task(&self) -> Self::Task {
     let (request, _calls) = TestRequest::new(false);
     CosignEvaluatorTask { db: self.db.clone(), request, last_request_for_cosigns: Instant::now() }
   }
@@ -37,7 +39,8 @@ impl EvaluatorTest {
     (global_session, set.network)
   }
 
-  /// Like `init_global_session` but with empty stakes, for testing the "didn't have its stake" error.
+  /// Like `init_global_session` but with empty stakes, for testing the "didn't have its stake"
+  /// error.
   fn init_stakeless_global_session(
     &mut self,
     start_block_number: u64,
@@ -138,7 +141,7 @@ async fn processes_blocks_with_no_events() {
 
   // Returns false (made no progress) on no blocks to evaluate
   {
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
     verify_db_invariants(&mut test.db, None);
   }
@@ -153,7 +156,7 @@ async fn processes_blocks_with_no_events() {
     BlockEvents::send(&mut txn, &BlockEventData { block_number: 2, has_events: HasEvents::No });
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
     verify_db_invariants(&mut test.db, Some((0, 2)));
   }
@@ -170,7 +173,7 @@ async fn processes_blocks_with_no_events() {
       txn.commit();
     }
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
     verify_db_invariants(&mut test.db, Some((3, 6)));
 
@@ -196,13 +199,13 @@ async fn processes_notable_events_when_cosigned() {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
     assert!(GlobalSessionsChannel::peek(&test.db).is_none(), "global session should be consumed");
     assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
 
     // Still fails on retry even with enough time elapsed to re-request cosigns
-    let mut task: CosignEvaluatorTask<MemDb, TestRequest> = test.into_task().into();
+    let mut task = test.task();
     task.last_request_for_cosigns = Instant::now() - Duration::from_secs(5);
     TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
     assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
@@ -219,7 +222,7 @@ async fn processes_notable_events_when_cosigned() {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
     verify_db_invariants(&mut test.db, Some((0, 1)));
   }
@@ -239,7 +242,7 @@ async fn processes_notable_events_when_cosigned() {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
     assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
   }
@@ -257,7 +260,7 @@ async fn processes_notable_events_when_cosigned() {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
     assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
   }
@@ -281,7 +284,7 @@ async fn processes_notable_events_when_cosigned() {
       }
       txn.commit();
 
-      let mut task = test.into_task();
+      let mut task = test.task();
       TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
       verify_db_invariants(&mut test.db, Some((block_number, block_number)));
     }
@@ -305,7 +308,7 @@ async fn processes_notable_events_when_cosigned() {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_and_fails_with(&mut task, "didn't have its stake").await;
   }
 
@@ -348,13 +351,13 @@ async fn processes_non_notable_events_when_cosigned() {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
     assert!(GlobalSessionsChannel::peek(&test.db).is_none(), "global session should be consumed");
     assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
 
     // Still fails on retry even with enough time elapsed to re-request cosigns
-    let mut task: CosignEvaluatorTask<MemDb, TestRequest> = test.into_task().into();
+    let mut task = test.task();
     task.last_request_for_cosigns = Instant::now() - Duration::from_secs(5);
     TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
     assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
@@ -371,7 +374,7 @@ async fn processes_non_notable_events_when_cosigned() {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
     verify_db_invariants(&mut test.db, Some((0, 1)));
   }
@@ -391,7 +394,7 @@ async fn processes_non_notable_events_when_cosigned() {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
     verify_db_invariants(&mut test.db, Some((2, 2)));
   }
@@ -411,7 +414,7 @@ async fn processes_non_notable_events_when_cosigned() {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_and_fails_with(&mut task, "wasn't yet cosigned").await;
     assert!(BlockEvents::peek(&test.db).is_some(), "block events should remain for retry");
   }
@@ -436,7 +439,7 @@ async fn processes_non_notable_events_when_cosigned() {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
     verify_db_invariants(&mut test.db, Some((3, 5)));
   }
@@ -459,7 +462,7 @@ async fn processes_non_notable_events_when_cosigned() {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_and_fails_with(&mut task, "didn't have its stake").await;
   }
 
@@ -510,7 +513,7 @@ mod errors {
     );
     txn.commit();
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     // will panic
     let _ = task.run_iteration().await;
   }
@@ -530,7 +533,7 @@ mod errors {
       txn.commit();
     }
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     // will panic
     let _ = task.run_iteration().await;
   }
@@ -587,7 +590,7 @@ mod errors {
     BlockEvents::send(&mut txn, &BlockEventData { block_number: 1, has_events });
     txn.commit();
 
-    test.into_task()
+    test.task()
   }
 
   #[tokio::test]

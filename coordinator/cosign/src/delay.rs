@@ -6,23 +6,27 @@ use serai_task::{DoesNotError, ContinuallyRan};
 
 use crate::evaluator::CosignedBlocks;
 
-#[cfg(not(any(test)))]
+#[expect(clippy::cfg_not_test)]
+#[cfg(not(test))]
 /// How often callers should broadcast the cosigns flagged for rebroadcasting.
 pub const BROADCAST_FREQUENCY: Duration = Duration::from_mins(1);
-#[cfg(any(test))]
+#[cfg(test)]
 /// How often callers should broadcast the cosigns flagged for rebroadcasting.
 pub const BROADCAST_FREQUENCY: Duration = Duration::from_secs(6);
 
-#[cfg(not(any(test)))]
+#[expect(clippy::cfg_not_test)]
+#[cfg(not(test))]
 const SYNCHRONY_EXPECTATION: Duration = Duration::from_secs(10);
-#[cfg(any(test))]
+#[cfg(test)]
 const SYNCHRONY_EXPECTATION: Duration = Duration::from_secs(1);
 
 pub(crate) const ACKNOWLEDGEMENT_DELAY: Duration =
   Duration::from_secs(BROADCAST_FREQUENCY.as_secs() + SYNCHRONY_EXPECTATION.as_secs());
 
 pub(crate) fn now_timestamp() -> Duration {
-  SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).expect("error getting current timestamp")
+  SystemTime::now()
+    .duration_since(SystemTime::UNIX_EPOCH)
+    .expect("current time was less than the epoch")
 }
 
 create_db!(
@@ -56,7 +60,10 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
 
         // Defensive check, not likely to happen but does not allow regressing
         if block_number <= latest_cosigned_block_number {
-          serai_env::warn!("Attempting to delay on an already cosigned block number ({block_number}, latest={latest_cosigned_block_number})");
+          serai_env::warn!(
+            "attempting to delay #{block_number} when #{} was already cosigned",
+            latest_cosigned_block_number,
+          );
           // consume and skip without sleeping.
           txn.commit();
           continue;
@@ -71,20 +78,26 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         }
 
         // Calculate when we should mark it as valid
-        let now_timestamp = now_timestamp().as_secs();
-        let time_valid_timestamp = time_evaluated + ACKNOWLEDGEMENT_DELAY.as_secs();
+        let now_timestamp = now_timestamp();
+        let time_valid_timestamp = Duration::from_secs(time_evaluated) + ACKNOWLEDGEMENT_DELAY;
 
         // Drop txn during sleep
         drop(txn);
 
         if let Some(time_left) = time_valid_timestamp.checked_sub(now_timestamp) {
-          serai_env::debug!("{block_number}: sleeping for {time_left}s");
-          tokio::time::sleep(Duration::from_secs(time_left)).await;
+          serai_env::debug!(
+            "delaying consideration of #{block_number} as cosigned for {} seconds",
+            time_left.as_secs()
+          );
+          tokio::time::sleep(time_left).await;
         }
 
         let mut txn = self.db.txn();
         // Consume block to continue
-        CosignedBlocks::try_recv(&mut txn);
+        assert_eq!(
+          Some((block_number, time_evaluated, has_events)),
+          CosignedBlocks::try_recv(&mut txn)
+        );
         LatestCosignedBlockNumber::set(&mut txn, &block_number);
         txn.commit();
 

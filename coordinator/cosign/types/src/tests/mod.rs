@@ -1,42 +1,31 @@
-use crate::{COSIGN_CONTEXT, Cosign, SignedCosign};
+use rand_core::{RngCore, CryptoRng};
+
+use serai_primitives::{network_id::ExternalNetworkId, test_helpers::random_block_hash};
+
+use crate::{COSIGN_CONTEXT, CosignIntent, Cosign, SignedCosign};
 
 /// Sign a [`Cosign`] with a schnorrkel keypair, producing a [`SignedCosign`].
 pub fn sign_cosign(cosign: Cosign, keypair: &schnorrkel::Keypair) -> SignedCosign {
   SignedCosign {
-    cosign: cosign.clone(),
     signature: keypair.sign_simple(COSIGN_CONTEXT, &cosign.signature_message()).to_bytes(),
+    cosign,
   }
 }
 
-#[cfg(test)]
-use rand_core::OsRng;
-#[cfg(any(test, feature = "test-helpers"))]
-use rand_core::RngCore;
-#[cfg(any(test, feature = "test-helpers"))]
-pub use serai_primitives::test_helpers::random_global_session;
-#[cfg(any(test, feature = "test-helpers"))]
-use serai_primitives::test_helpers::random_block_hash;
-#[cfg(test)]
-use serai_primitives::test_helpers::random_keypair;
-#[cfg(any(test, feature = "test-helpers"))]
-use crate::ExternalNetworkId;
-#[cfg(any(test, feature = "test-helpers"))]
-use crate::CosignIntent;
-#[cfg(test)]
-use crate::Public;
-
 /// Generate a random [`ExternalNetworkId`] for testing.
-#[cfg(any(test, feature = "test-helpers"))]
-pub fn random_external_network_id(
-  rng: &mut (impl RngCore + rand_core::CryptoRng),
-) -> ExternalNetworkId {
+pub fn random_external_network_id(rng: &mut (impl RngCore + CryptoRng)) -> ExternalNetworkId {
   let all: Vec<_> = ExternalNetworkId::all().collect();
-  all[(rng.next_u32() as usize) % all.len()]
+  #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+  all[(rng.next_u64() as usize) % all.len()]
+}
+
+/// Generate a random global session ID (`[u8; 32]`).
+pub fn random_global_session<R: RngCore + CryptoRng>(rng: &mut R) -> [u8; 32] {
+  serai_primitives::test_helpers::random_bytes_32(rng)
 }
 
 /// Generate a random [`Cosign`] for testing.
-#[cfg(any(test, feature = "test-helpers"))]
-pub fn random_cosign(rng: &mut (impl RngCore + rand_core::CryptoRng)) -> Cosign {
+pub fn random_cosign(rng: &mut (impl RngCore + CryptoRng)) -> Cosign {
   Cosign {
     global_session: random_global_session(rng),
     block_number: rng.next_u64(),
@@ -46,8 +35,7 @@ pub fn random_cosign(rng: &mut (impl RngCore + rand_core::CryptoRng)) -> Cosign 
 }
 
 /// Generate a random [`CosignIntent`] for testing.
-#[cfg(any(test, feature = "test-helpers"))]
-pub fn random_cosign_intent(rng: &mut (impl RngCore + rand_core::CryptoRng)) -> CosignIntent {
+pub fn random_cosign_intent(rng: &mut (impl RngCore + CryptoRng)) -> CosignIntent {
   CosignIntent {
     global_session: random_global_session(rng),
     block_number: rng.next_u64(),
@@ -58,6 +46,8 @@ pub fn random_cosign_intent(rng: &mut (impl RngCore + rand_core::CryptoRng)) -> 
 
 #[test]
 fn cosign_intent_into_cosign() {
+  use rand_core::OsRng;
+
   let intent = random_cosign_intent(&mut OsRng);
   let network = random_external_network_id(&mut OsRng);
   let Cosign { global_session, block_number, block_hash, cosigner } = intent.into_cosign(network);
@@ -70,48 +60,52 @@ fn cosign_intent_into_cosign() {
 
 #[test]
 fn deterministic_and_comprehensive_signature_message() {
-  let cosign = random_cosign(&mut OsRng);
-  let Cosign { global_session, block_number, block_hash, cosigner } = cosign;
+  use rand_core::OsRng;
 
-  let msg1 = cosign.signature_message();
-  let msg2 = cosign.signature_message();
+  let cosign = random_cosign(&mut OsRng);
+  let msg = cosign.signature_message();
 
   // Deterministic
-  assert_eq!(msg1, msg2, "signature_message should be deterministic");
+  assert_eq!(msg, cosign.signature_message(), "signature_message should be deterministic");
 
   // Comprehensive
   {
+    let Cosign { global_session, block_number, block_hash, cosigner } = cosign;
     let mut expected = Vec::new();
     expected.extend(borsh::to_vec(&(global_session, block_number, block_hash, cosigner)).unwrap());
-    assert_eq!(msg1, expected, "signature_message should include all fields in Borsh order");
+    assert_eq!(msg, expected, "signature_message should include all fields in Borsh order");
   }
 
   // Changing any single field must produce a different message
+  let Cosign { global_session, block_number, block_hash, cosigner } = cosign;
   {
     let mut other_session = global_session;
     other_session[0] ^= 1;
-    let other = Cosign { global_session: other_session, ..cosign.clone() };
-    assert_ne!(msg1, other.signature_message(), "different global_session must change message");
+    let other = Cosign { global_session: other_session, ..cosign };
+    assert_ne!(msg, other.signature_message(), "different global_session must change message");
   }
   {
-    let other = Cosign { block_number: block_number.wrapping_add(1), ..cosign.clone() };
-    assert_ne!(msg1, other.signature_message(), "different block_number must change message");
+    let other = Cosign { block_number: block_number.wrapping_add(1), ..cosign };
+    assert_ne!(msg, other.signature_message(), "different block_number must change message");
   }
   {
     let mut other_hash = block_hash;
     other_hash.0[0] ^= 1;
-    let other = Cosign { block_hash: other_hash, ..cosign.clone() };
-    assert_ne!(msg1, other.signature_message(), "different block_hash must change message");
+    let other = Cosign { block_hash: other_hash, ..cosign };
+    assert_ne!(msg, other.signature_message(), "different block_hash must change message");
   }
   {
     let other_cosigner = ExternalNetworkId::all().find(|n| *n != cosigner).unwrap();
-    let other = Cosign { cosigner: other_cosigner, ..cosign.clone() };
-    assert_ne!(msg1, other.signature_message(), "different cosigner must change message");
+    let other = Cosign { cosigner: other_cosigner, ..cosign };
+    assert_ne!(msg, other.signature_message(), "different cosigner must change message");
   }
 }
 
 #[test]
 fn signed_cosign_verify_signature() {
+  use rand_core::OsRng;
+  use serai_primitives::test_helpers::random_keypair;
+
   {
     let (keypair, public) = random_keypair(&mut OsRng);
     let cosign = random_cosign(&mut OsRng);
@@ -124,7 +118,7 @@ fn signed_cosign_verify_signature() {
     let (_, public2) = random_keypair(&mut OsRng);
     let cosign = random_cosign(&mut OsRng);
     let signed = sign_cosign(cosign, &keypair1);
-    assert_eq!(signed.verify_signature(public2), false, "invalid signature should not verify");
+    assert!(!signed.verify_signature(public2), "invalid signature should not verify");
   }
 
   {
@@ -137,10 +131,9 @@ fn signed_cosign_verify_signature() {
       "test precondition: bytes should be invalid for schnorrkel"
     );
 
-    let invalid_pubkey = Public(invalid_bytes);
-    assert_eq!(
-      signed.verify_signature(invalid_pubkey),
-      false,
+    let invalid_pubkey = serai_primitives::crypto::Public(invalid_bytes);
+    assert!(
+      !signed.verify_signature(invalid_pubkey),
       "invalid public key bytes should return false"
     );
   }
@@ -157,11 +150,6 @@ fn signed_cosign_verify_signature() {
     let signed = SignedCosign { cosign, signature: invalid_sig_bytes };
 
     let (_, valid_public) = random_keypair(&mut OsRng);
-
-    assert_eq!(
-      signed.verify_signature(valid_public),
-      false,
-      "invalid signature bytes should return false"
-    );
+    assert!(!signed.verify_signature(valid_public), "invalid signature bytes should return false");
   }
 }

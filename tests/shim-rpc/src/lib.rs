@@ -1,38 +1,34 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-pub mod state;
-pub mod rpc;
-pub mod builder;
-pub mod test_helpers;
-
-#[cfg(any(test, feature = "test-helpers"))]
-pub mod event_fuzzer;
-
-pub use state::*;
-pub use builder::SeraiShimRpcBuilder;
-
-use core::mem;
-use std::{env, net::SocketAddr, sync::Arc};
-
-use jsonrpsee::server::ServerBuilder;
-use tokio::sync::RwLock;
+use std::{sync::Arc, net::SocketAddr, env};
 
 use serai_abi::{
   primitives::{BlockHash, merkle::IncrementalUnbalancedMerkleTree},
   Event,
 };
 
+use jsonrpsee::server::{ServerBuilder, ServerHandle};
+use tokio::sync::RwLock;
+
+pub mod state;
+pub mod rpc;
+pub mod builder;
+pub mod test_helpers;
+
+pub mod event_fuzzer;
+
+pub use state::*;
+pub use builder::SeraiShimRpcBuilder;
+
 /// A bespoke shim RPC node that speaks JSON-RPC 2.0 over HTTP,
 /// wire-compatible with the production `Serai` client.
 pub struct SeraiShimRpc {
   url: String,
   state: SharedState,
+  _handle: ServerHandle,
 }
 
 impl SeraiShimRpc {
-  /// The block number of the first block in the chain.
-  pub const STARTING_BLOCK_NUMBER: u64 = 0;
-
   /// Create a builder for configuring and starting a shim RPC node.
   pub fn builder() -> SeraiShimRpcBuilder {
     SeraiShimRpcBuilder::new()
@@ -49,10 +45,7 @@ impl SeraiShimRpc {
       .expect("failed to bind shim RPC node server");
 
     let addr = server.local_addr().expect("server should have a local address");
-    let handle = server.start(rpc_module);
-    mem::forget(handle);
-
-    Self { url: format!("http://{addr}"), state }
+    Self { url: format!("http://{addr}"), state, _handle: server.start(rpc_module) }
   }
 
   /// The HTTP URL this shim is listening on.
@@ -71,10 +64,8 @@ impl SeraiShimRpc {
   /// Returns the hash of the newly created block.
   pub async fn add_block_with_events(&self, events: Vec<Vec<Event>>) -> BlockHash {
     let mut state = self.state.write().await;
-    let Some(latest_block) = state.blocks_by_number.keys().copied().max() else {
-      return state.make_block(Self::STARTING_BLOCK_NUMBER, events);
-    };
-    let number = latest_block + 1;
+    let number =
+      state.latest_finalized_block_number().map(|latest_block| latest_block + 1).unwrap_or(0);
     state.make_block(number, events)
   }
 

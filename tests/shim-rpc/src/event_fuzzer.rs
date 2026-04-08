@@ -2,19 +2,19 @@
 
 use std::collections::HashMap;
 
-use rand_core::{OsRng, RngCore};
+use rand_core::{RngCore as _, OsRng};
 
 use serai_abi::{
-  Event, validator_sets,
   primitives::{
     address::SeraiAddress,
     crypto::KeyPair,
     network_id::{ExternalNetworkId, NetworkId},
     validator_sets::{ExternalValidatorSet, KeyShares, Session, ValidatorSet},
+    test_helpers::{
+      random_external_address, random_external_key, random_keypair, random_serai_address,
+    },
   },
-};
-use serai_primitives::test_helpers::{
-  random_external_address, random_external_key, random_keypair, random_serai_address,
+  validator_sets, Event,
 };
 
 use crate::test_helpers::*;
@@ -26,6 +26,7 @@ pub struct EventFuzzer {
   /// All networks.
   networks: Vec<NetworkId>,
   /// Running stake ledger: `(network, validator) -> accumulated_stake`.
+  // TODO: Track for `NetworkId`, not `ExternalNetworkId`
   stakes: HashMap<(ExternalNetworkId, SeraiAddress), u64>,
   /// Sets that have been decided but have not yet set their keys.
   pending_keys: HashMap<ExternalValidatorSet, Vec<SeraiAddress>>,
@@ -36,6 +37,7 @@ pub struct EventFuzzer {
 }
 
 impl EventFuzzer {
+  #[expect(clippy::new_without_default)]
   pub fn new() -> Self {
     // OsRng.next_u64() % 17 = 0..16, + 4 means from 4..20 validators per test
     let num_validators = usize::try_from((OsRng.next_u64() % 17) + 4).unwrap();
@@ -56,13 +58,13 @@ impl EventFuzzer {
   }
 
   /// Pick a random element from a slice.
-  fn pick<'a, T>(&mut self, slice: &'a [T]) -> &'a T {
+  fn pick<T>(slice: &[T]) -> &T {
     let i = OsRng.next_u64() % u64::try_from(slice.len()).unwrap();
     &slice[usize::try_from(i).unwrap()]
   }
 
   /// Generate a random amount using a weighted distribution.
-  fn random_amount(&mut self) -> u64 {
+  fn random_amount() -> u64 {
     match OsRng.next_u64() % 100 {
       0 ..= 24 => (OsRng.next_u64() % 10) + 1,
       25 ..= 59 => (OsRng.next_u64() % 990) + 11,
@@ -73,9 +75,9 @@ impl EventFuzzer {
 
   /// Generate a random allocation event.
   fn random_allocation(&mut self) -> Event {
-    let validator = *self.pick(&self.validators.clone());
-    let network = *self.pick(&self.networks.clone());
-    let amount = self.random_amount();
+    let validator = *Self::pick(&self.validators.clone());
+    let network = *Self::pick(&self.networks.clone());
+    let amount = Self::random_amount();
     if let Ok(ext) = ExternalNetworkId::try_from(network) {
       *self.stakes.entry((ext, validator)).or_default() += amount;
     }
@@ -86,8 +88,8 @@ impl EventFuzzer {
   fn random_deallocation(&mut self) -> Option<Event> {
     // ~25% chance of generating a Serai deallocation
     if OsRng.next_u64() % 4 == 0 {
-      let validator = *self.pick(&self.validators.clone());
-      let amount = self.random_amount();
+      let validator = *Self::pick(&self.validators.clone());
+      let amount = Self::random_amount();
       return Some(deallocation_event(validator, NetworkId::Serai, amount));
     }
 
@@ -100,9 +102,9 @@ impl EventFuzzer {
     if candidates.is_empty() {
       return None;
     }
-    let &((network, validator), current_stake) = self.pick(&candidates);
+    let &((network, validator), current_stake) = Self::pick(&candidates);
     // Use weighted amount, clamped to current_stake so we don't underflow
-    let amount = self.random_amount().min(current_stake).max(1);
+    let amount = Self::random_amount().min(current_stake);
     *self.stakes.entry((network, validator)).or_default() -= amount;
     Some(deallocation_event(validator, NetworkId::External(network), amount))
   }
@@ -111,7 +113,7 @@ impl EventFuzzer {
   fn random_set_decided(&mut self) -> Option<Event> {
     let external_networks: Vec<ExternalNetworkId> =
       self.networks.iter().copied().filter_map(|n| ExternalNetworkId::try_from(n).ok()).collect();
-    let network = *self.pick(&external_networks);
+    let network = *Self::pick(&external_networks);
     let session_num = *self.next_session.entry(network).or_insert(0);
     let set = ExternalValidatorSet { network, session: Session(session_num) };
 
@@ -172,7 +174,7 @@ impl EventFuzzer {
     burn_with_instruction_event(
       random_serai_address(&mut OsRng),
       random_external_address(&mut OsRng),
-      self.random_amount(),
+      Self::random_amount(),
     )
   }
 
@@ -248,8 +250,8 @@ impl EventFuzzer {
     let mut keys_events = Vec::new();
 
     for &network in &external_networks {
-      let validator = *self.pick(&self.validators.clone());
-      let amount = self.random_amount();
+      let validator = *Self::pick(&self.validators.clone());
+      let amount = Self::random_amount();
 
       *self.stakes.entry((network, validator)).or_default() += amount;
       alloc_events.push(allocation_event(validator, NetworkId::External(network), amount));

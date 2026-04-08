@@ -32,13 +32,17 @@ serai-task = { path = "../../common/task", version = "0.1" }
 serai-cosign-types = { path = "./types" }
 
 [dev-dependencies]
-serai-cosign-types = { path = "./types", features = ["test-helpers"] }
-serai-shim-rpc = { path = "../../tests/shim-rpc", features = ["test-helpers"] }
-serai-task = { path = "../../common/task", features = ["test-helpers"] }
+hex = { version = "0.4", default-features = false }
+
+rand_core = { version = "0.6", default-features = false }
+rand = { version = "0.8", default-features = false }
+
+schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
+
+serai-primitives = { path = "../../substrate/primitives", features = ["test-helpers"] }
 serai-abi = { path = "../../substrate/abi", default-features = false, features = ["std"] }
 
-hex = { version = "0.4", default-features = false }
-schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
-rand = { version = "0.8", default-features = false }
-rand_core = { version = "0.6", default-features = false }
-serai-primitives = { path = "../../substrate/primitives", features = ["test-helpers"] }
+serai-cosign-types = { path = "./types", features = ["test-helpers"] }
+serai-task = { path = "../../common/task", features = ["test-helpers"] }
+
+serai-shim-rpc = { path = "../../tests/shim-rpc" }

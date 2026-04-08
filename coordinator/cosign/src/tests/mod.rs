@@ -1,64 +1,66 @@
-#[cfg(test)]
-mod intend;
-
-#[cfg(test)]
-mod evaluator;
-
-#[cfg(test)]
-mod delay;
-
-#[cfg(test)]
-mod cosigning;
-
-#[cfg(test)]
-mod full_stack;
-
-pub use std::{
+use std::{
   collections::HashMap,
   sync::{
-    Arc,
     atomic::{AtomicBool, AtomicUsize, Ordering},
+    Arc, LazyLock,
   },
   time::{Duration, Instant},
 };
 
-pub use borsh::{BorshDeserialize, BorshSerialize};
-pub use rand::{CryptoRng, Rng, RngCore, seq::SliceRandom};
-pub use rand_core::OsRng;
+use borsh::{BorshSerialize, BorshDeserialize};
 
-pub use serai_db::{Db, DbTxn, MemDb};
-pub use serai_shim_rpc::{*, event_fuzzer::*};
-pub use serai_abi::validator_sets::Event;
-pub use serai_client_serai::{
-  Serai,
-  abi::primitives::{
-    address::SeraiAddress, balance::*, coin::*, crypto::*, instructions::*, network_id::*,
-    validator_sets::*,
+use rand_core::{RngCore, CryptoRng, OsRng};
+use rand::{Rng as _, seq::SliceRandom as _};
+
+use serai_client_serai::{
+  abi::{
+    primitives::{
+      crypto::*, address::SeraiAddress, network_id::*, balance::*, validator_sets::*,
+      test_helpers::*,
+    },
+    validator_sets::Event,
   },
+  Serai,
 };
-pub use serai_task::{
+
+use serai_db::{DbTxn, Db as _, MemDb};
+use serai_task::{
   ContinuallyRan, Task,
   test_helpers::{IntoTask, TaskTest},
 };
-pub use serai_primitives::test_helpers::*;
-pub use serai_cosign_types::{
+use serai_cosign_types::{
   SignedCosign,
-  tests::{sign_cosign, random_cosign, random_cosign_intent},
+  tests::{
+    random_external_network_id, random_global_session, random_cosign_intent, random_cosign,
+    sign_cosign,
+  },
 };
+
+use serai_shim_rpc::{*, event_fuzzer::*};
 
 use crate::{GlobalSession, RequestNotableCosigns};
 
+mod intend;
+mod evaluator;
+mod delay;
+mod cosigning;
+mod full_stack;
+
+static INIT_LOGGER: LazyLock<()> = LazyLock::new(|| {
+  serai_env::init_logger();
+});
+
 #[derive(Clone)]
-pub(crate) struct TestRequest {
-  pub(crate) calls: Arc<AtomicUsize>,
-  pub(crate) should_error: bool,
+struct TestRequest {
+  calls: Arc<AtomicUsize>,
+  should_error: bool,
 }
 
 #[derive(Debug)]
-pub(crate) struct RequestError;
+struct RequestError;
 
 impl TestRequest {
-  pub(crate) fn new(should_error: bool) -> (Self, Arc<AtomicUsize>) {
+  fn new(should_error: bool) -> (Self, Arc<AtomicUsize>) {
     let calls = Arc::new(AtomicUsize::new(0));
     (Self { calls: calls.clone(), should_error }, calls)
   }
@@ -84,34 +86,35 @@ impl RequestNotableCosigns for TestRequest {
   }
 }
 
-/// Create a [`SeraiShimRpc`] and a [`Arc<Serai>`] to use it.
-pub(crate) async fn setup_shim_serai() -> (SeraiShimRpc, Arc<Serai>) {
+/// Create a [`SeraiShimRpc`] and an [`Arc<Serai>`] to use it.
+async fn setup_shim_serai() -> (SeraiShimRpc, Arc<Serai>) {
   let shim_serai = SeraiShimRpc::start(ShimState::default()).await;
   let serai = Arc::new(Serai::new(shim_serai.url()).unwrap());
   (shim_serai, serai)
 }
 
-pub use serai_cosign_types::tests::random_external_network_id;
-
-/// For whe external validator set does not alter or affect the behavior of the functions being tested
-/// this can be used just as a default value any time
-pub(crate) fn default_test_validator_set() -> ExternalValidatorSet {
+fn default_test_validator_set() -> ExternalValidatorSet {
   ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) }
 }
-pub(crate) fn random_validator_set<R: RngCore + CryptoRng>(rng: &mut R) -> ExternalValidatorSet {
-  ExternalValidatorSet { network: random_external_network_id(rng), session: Session(rng.gen()) }
+fn random_validator_set<R: RngCore + CryptoRng>(rng: &mut R) -> ExternalValidatorSet {
+  ExternalValidatorSet {
+    network: random_external_network_id(rng),
+    session: Session(rng.next_u32()),
+  }
 }
 
 /// Build a single-network [`GlobalSession`] from the given components.
-pub(crate) fn build_global_session(
+fn build_global_session(
   set: ExternalValidatorSet,
   public: Public,
   stake: u64,
   start_block_number: u64,
 ) -> GlobalSession {
-  let mut keys = HashMap::new();
-  keys.insert(set.network, public);
-  let mut stakes = HashMap::new();
-  stakes.insert(set.network, stake);
-  GlobalSession { start_block_number, sets: vec![set], keys, stakes, total_stake: stake }
+  GlobalSession {
+    start_block_number,
+    sets: vec![set],
+    keys: HashMap::from([(set.network, public)]),
+    stakes: HashMap::from([(set.network, stake)]),
+    total_stake: stake,
+  }
 }

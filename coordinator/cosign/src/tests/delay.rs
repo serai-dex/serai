@@ -17,7 +17,7 @@ impl Default for DelayTest {
 impl IntoTask for DelayTest {
   type Task = CosignDelayTask<MemDb>;
 
-  fn into_task(&self) -> Self::Task {
+  fn task(&self) -> Self::Task {
     CosignDelayTask { db: self.db.clone() }
   }
 }
@@ -43,12 +43,12 @@ fn verify_db_invariants(db: &MemDb, expected_latest_block: Option<u64>) {
 
 #[tokio::test]
 async fn updates_latest_finalized_block_after_ack_delay() {
-  serai_env::init_logger();
+  *INIT_LOGGER;
   let (mut test, start) = DelayTest::new();
 
   // Returns false (made no progress) on no CosignedBlocks
   {
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
     verify_db_invariants(&test.db, None);
   }
@@ -65,7 +65,7 @@ async fn updates_latest_finalized_block_after_ack_delay() {
       txn.commit();
     }
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
     verify_db_invariants(&test.db, Some(2));
   }
@@ -86,7 +86,7 @@ async fn updates_latest_finalized_block_after_ack_delay() {
       txn.commit();
     }
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
     verify_db_invariants(&test.db, Some(5));
   }
@@ -107,7 +107,7 @@ async fn updates_latest_finalized_block_after_ack_delay() {
       txn.commit();
     }
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
     verify_db_invariants(&test.db, Some(8));
   }
@@ -124,7 +124,7 @@ async fn updates_latest_finalized_block_after_ack_delay() {
     txn.commit();
 
     let start = Instant::now();
-    let mut task = test.into_task();
+    let mut task = test.task();
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
     verify_db_invariants(&test.db, Some(11));
     assert!(
@@ -154,7 +154,7 @@ async fn does_not_regress_and_skips_if_not_a_later_block() {
       txn.commit();
     }
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     // returns made_progress as true
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
     verify_db_invariants(&test.db, Some(4));
@@ -169,7 +169,7 @@ async fn does_not_regress_and_skips_if_not_a_later_block() {
       txn.commit();
     }
 
-    let mut task = test.into_task();
+    let mut task = test.task();
     // No progress was made since the same block number was also skipped,
     // made_progress returns false
     TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
@@ -189,8 +189,7 @@ async fn respects_acknowledgement_delay() {
     txn.commit();
   }
 
-  let start = Instant::now();
-  let mut task = test.into_task();
+  let mut task = test.task();
 
   // Run the task in the background (it will sleep internally for ACKNOWLEDGEMENT_DELAY)
   let task_handle = tokio::spawn(async move { task.run_iteration().await });
@@ -207,9 +206,10 @@ async fn respects_acknowledgement_delay() {
   verify_db_invariants(&test.db, Some(block_number));
 
   // The elapsed time must be at least ACKNOWLEDGEMENT_DELAY
-  let elapsed = start.elapsed();
+  let new_now = now_secs();
   assert!(
-    elapsed >= ACKNOWLEDGEMENT_DELAY,
-    "completed in {elapsed:?}, expected at least {ACKNOWLEDGEMENT_DELAY:?}"
+    Duration::from_secs(new_now) >= (Duration::from_secs(now) + ACKNOWLEDGEMENT_DELAY),
+    "completed in {:?}, expected at least {ACKNOWLEDGEMENT_DELAY:?}",
+    new_now - now,
   );
 }

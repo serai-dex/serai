@@ -42,11 +42,8 @@ fn sign_and_intake(
   let Some(keypair) = event_fuzzer.keypairs.get(&public.0) else { return Ok(()) };
   let signed = sign_cosign(cosign, keypair);
   match cosigning.intake_cosign(&signed) {
-    Ok(()) => Ok(()),
-    Err(IntakeCosignError::FutureGlobalSession) |
-    Err(IntakeCosignError::UnrecognizedGlobalSession) |
-    Err(IntakeCosignError::NotYetIndexedBlock) => Err((network, intent)),
-    Err(IntakeCosignError::StaleCosign) => Ok(()),
+    Ok(()) | Err(IntakeCosignError::StaleCosign) => Ok(()),
+    Err(e) if e.temporal() => Err((network, intent)),
     Err(ref e) => {
       serai_env::log::warn!(
         "intake_cosign error: block={}, network={network:?}, err={e:?}",
@@ -84,7 +81,7 @@ async fn run_honest_cosigning_capped(
   max_block: Option<u64>,
   deferred_intents: &mut Vec<(ExternalNetworkId, CosignIntent)>,
 ) {
-  let mut pending_intents: Vec<(ExternalNetworkId, CosignIntent)> = Vec::new();
+  let mut pending_intents = Vec::<(ExternalNetworkId, CosignIntent)>::new();
   loop {
     {
       let mut db = db.clone();
@@ -128,10 +125,10 @@ async fn run_honest_cosigning_capped(
 /// occasionally fail, exercising the `ContinuallyRan` error/retry paths.
 #[tokio::test]
 async fn full_stack_fuzzed() {
-  serai_env::init_logger();
+  *INIT_LOGGER;
 
   let iterations = 5;
-  for i in 1 .. iterations + 1 {
+  for i in 1 ..= iterations {
     let num_blocks = OsRng.gen_range(5 .. 20);
     let mut event_fuzzer = EventFuzzer::new();
     let blocks = event_fuzzer.generate_blocks_with_keygen(num_blocks);
@@ -180,7 +177,7 @@ async fn full_stack_fuzzed() {
 /// must halt immediately, and all subsequent operations must reflect the fault.
 #[tokio::test]
 async fn equivocation_halts_protocol() {
-  serai_env::init_logger();
+  *INIT_LOGGER;
 
   let iterations = 5;
   for iteration in 1 ..= iterations {
@@ -210,7 +207,7 @@ async fn equivocation_halts_protocol() {
     let equivocation_after_block: u64 = OsRng.gen_range(2 ..= target / 2);
 
     let mut reached_equivocation_point = false;
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(300);
+    let deadline = tokio::time::Instant::now() + Duration::from_mins(5);
 
     // Step 1: run the honest pipeline until we've cosigned enough blocks to equivocate
     // We need at least one global session to exist and at least one block cosigned under it.
@@ -379,7 +376,7 @@ async fn equivocation_halts_protocol() {
 /// stalling but not halting the protocol.
 #[tokio::test]
 async fn dos_stall_offline_set() {
-  serai_env::init_logger();
+  *INIT_LOGGER;
 
   let iterations = 5;
   for iteration in 1 ..= iterations {
@@ -392,7 +389,8 @@ async fn dos_stall_offline_set() {
     // Ensure at least one block in the latter half has events (a burn),
     // so blocks with HasEvents::No don't let the pipeline sail through uncosigned.
     let mid = num_blocks / 2;
-    if blocks[mid ..].iter().all(|b| b.is_empty()) {
+    if blocks[mid ..].iter().all(Vec::is_empty) {
+      #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
       let burn_index = mid + (OsRng.next_u64() as usize % (num_blocks - mid));
       blocks[burn_index] = vec![vec![event_fuzzer.random_burn()]];
     }
@@ -510,7 +508,8 @@ async fn dos_stall_offline_set() {
       // for a session whose declaring block needs the offline network) go to the offline
       // buffer for recovery.
       if after == before {
-        offline_buffer.extend(pending_intents.drain(..));
+        offline_buffer.append(&mut pending_intents);
+        assert!(pending_intents.is_empty(), "`append` on a vector drains from it");
         break;
       }
     }
@@ -543,7 +542,7 @@ async fn dos_stall_offline_set() {
       }
     }
 
-    let recovery_deadline = tokio::time::Instant::now() + Duration::from_secs(120);
+    let recovery_deadline = tokio::time::Instant::now() + Duration::from_mins(2);
     run_honest_cosigning(&db, &mut cosigning, &event_fuzzer, |latest| {
       if tokio::time::Instant::now() >= recovery_deadline {
         serai_env::log::warn!(

@@ -11,9 +11,10 @@ pub fn var(variable: &str) -> Option<String> {
 }
 
 pub fn init_logger() {
+  // TODO: Implement `env_logger::Env` for this library instead of using `env_logger::Env`?
   env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
     .try_init()
-    .ok();
+    .unwrap();
 }
 
 /// Coverage-gated `trace!`. Compiles to nothing under `cfg(coverage)`.
@@ -74,16 +75,4 @@ macro_rules! error {
 #[macro_export]
 macro_rules! error {
   ($($arg:tt)+) => {};
-}
-
-/// `info!` in production, `debug!` in tests.
-/// Use for operational logging that is useful in production but noisy during testing.
-#[macro_export]
-macro_rules! prod_info {
-  ($($arg:tt)+) => {{
-    #[cfg(not(test))]
-    { $crate::log::info!($($arg)+) }
-    #[cfg(test)]
-    { $crate::log::debug!($($arg)+) }
-  }};
 }

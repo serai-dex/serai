@@ -1,6 +1,6 @@
 use serai_abi::Event;
 
-use crate::{SeraiShimRpc, state::ShimState};
+use crate::{state::ShimState, SeraiShimRpc};
 
 /// Builder for constructing a [`SeraiShimRpc`] with pre-populated blocks.
 #[must_use]
@@ -10,6 +10,7 @@ pub struct SeraiShimRpcBuilder {
 
 impl SeraiShimRpcBuilder {
   /// Create a new builder.
+  #[allow(clippy::new_without_default)]
   pub fn new() -> Self {
     Self { blocks: Vec::new() }
   }
@@ -35,11 +36,5 @@ impl SeraiShimRpcBuilder {
     }
 
     SeraiShimRpc::start(shim_state).await
-  }
-}
-
-impl Default for SeraiShimRpcBuilder {
-  fn default() -> Self {
-    Self::new()
   }
 }

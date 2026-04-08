@@ -1,10 +1,10 @@
 //! Test helper functions for constructing common Serai ABI events.
 
 use serai_abi::{
-  *,
   primitives::{
-    address::*, balance::*, coin::*, instructions::*, network_id::*, validator_sets::*,
+    address::*, network_id::*, coin::*, balance::*, validator_sets::*, instructions::*,
   },
+  *,
 };
 
 pub fn set_decided_event(set: ValidatorSet, validators: Vec<(SeraiAddress, KeyShares)>) -> Event {

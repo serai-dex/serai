@@ -53,8 +53,9 @@ pub mod instructions;
 /// Merkle trees.
 pub mod merkle;
 
-#[cfg(any(test, feature = "test-helpers"))]
 /// Test helpers for generating random instances of primitive types.
+#[cfg(any(test, feature = "test-helpers"))]
+#[doc(hidden)]
 pub mod test_helpers;
 
 /// The type used to identify block numbers.

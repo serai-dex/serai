@@ -1,5 +1,7 @@
 //! Test helpers for generating random instances of primitive types.
 
+use alloc::vec;
+
 use rand_core::{RngCore, CryptoRng};
 
 use crate::{
@@ -24,7 +26,17 @@ pub fn random_bytes_64<R: RngCore + CryptoRng>(rng: &mut R) -> [u8; 64] {
 
 /// Generate a random [`ExternalAddress`].
 pub fn random_external_address<R: RngCore + CryptoRng>(rng: &mut R) -> ExternalAddress {
-  ExternalAddress::try_from(random_bytes_32(rng).to_vec()).unwrap()
+  let len = usize::try_from(rng.next_u32() % ExternalAddress::MAX_SIZE).unwrap();
+  let mut external_address = vec![0; len];
+  rng.fill_bytes(&mut external_address);
+  ExternalAddress::try_from(external_address).unwrap()
+}
+
+#[test]
+fn random_external_address_is_in_range() {
+  for _ in 0 .. (128 * ExternalAddress::MAX_SIZE) {
+    random_external_address(&mut rand_core::OsRng);
+  }
 }
 
 /// Generate a random [`SeraiAddress`].
@@ -46,15 +58,20 @@ pub fn random_keypair<R: RngCore + CryptoRng>(rng: &mut R) -> (schnorrkel::Keypa
 
 /// Generate a random [`ExternalKey`].
 pub fn random_external_key<R: RngCore + CryptoRng>(rng: &mut R) -> ExternalKey {
-  ExternalKey(random_bytes_32(rng).to_vec().try_into().unwrap())
+  let len = usize::try_from(rng.next_u32() % ExternalKey::MAX_SIZE).unwrap();
+  let mut external_key = vec![0; len];
+  rng.fill_bytes(&mut external_key);
+  ExternalKey(external_key.try_into().unwrap())
+}
+
+#[test]
+fn random_external_key_is_in_range() {
+  for _ in 0 .. (128 * ExternalKey::MAX_SIZE) {
+    random_external_key(&mut rand_core::OsRng);
+  }
 }
 
 /// Generate a random [`BlockHash`].
 pub fn random_block_hash<R: RngCore + CryptoRng>(rng: &mut R) -> BlockHash {
   BlockHash(random_bytes_32(rng))
-}
-
-/// Generate a random global session ID (`[u8; 32]`).
-pub fn random_global_session<R: RngCore + CryptoRng>(rng: &mut R) -> [u8; 32] {
-  random_bytes_32(rng)
 }
