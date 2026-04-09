@@ -152,38 +152,39 @@ pub enum Transaction {
     substrate_block_hash: BlockHash,
   },
 
-  // After producing this cosign, we need to start work on the latest intended-to-be cosigned
-  // block. That requires agreement on when this cosign was produced, which we solve by noting
-  // this cosign on-chain.
-  //
-  // We ideally don't have this transaction at all. The coordinator, without access to any of the
-  // key shares, could observe the FROST signing session and determine a successful completion.
-  // Unfortunately, that functionality is not present in modular-frost, so we do need to support
-  // *some* asynchronous flow (where the processor or P2P network informs us of the successful
-  // completion).
-  //
-  // If we use a `Provided` transaction, that requires everyone observe this cosign.
-  //
-  // If we use an `Unsigned` transaction, we can't verify the cosign signature inside
-  // `Transaction::verify` unless we embedded the full `SignedCosign` on-chain. The issue is since
-  // a Tributary is stateless with regards to the on-chain logic, including `Transaction::verify`,
-  // we can't verify the signature against the group's public key unless we also include that (but
-  // then we open a DoS where arbitrary group keys are specified to cause inclusion of arbitrary
-  // blobs on chain).
-  //
-  // If we use a `Signed` transaction, we mitigate the DoS risk by having someone to fatally
-  // slash. We have horrible performance though as for 100 validators, all 100 will publish this
-  // transaction.
-  //
-  // We could use a signed `Unsigned` transaction, where it includes a signer and signature but
-  // isn't technically a Signed transaction. This lets us de-duplicate the transaction premised on
-  // its contents.
-  //
-  // The optimal choice is likely to use a `Provided` transaction. We don't actually need to
-  // observe the produced cosign (which is ephemeral). As long as it's agreed the cosign in
-  // question no longer needs to produced, which would mean the cosigning protocol at-large
-  // cosigning the block in question, it'd be safe to provide this and move on to the next cosign.
   /// Note an intended-to-be-cosigned Substrate block as cosigned
+  ///
+  /// After producing this cosign, we need to start work on the latest intended-to-be cosigned
+  /// block. That requires agreement on when this cosign was produced, which we solve by noting
+  /// this cosign on-chain.
+  ///
+  /// We ideally don't have this transaction at all. The coordinator, without access to any of the
+  /// key shares, could observe the FROST signing session and determine a successful completion.
+  /// Unfortunately, that functionality is not present in modular-frost, so we do need to support
+  /// *some* asynchronous flow (where the processor or P2P network informs us of the successful
+  /// completion).
+  ///
+  /// If we use a `Provided` transaction, that requires everyone observe this cosign.
+  ///
+  /// If we use an `Unsigned` transaction, we can't verify the cosign signature inside
+  /// `Transaction::verify` unless we embedded the full `SignedCosign` on-chain. The issue is since
+  /// a Tributary is stateless with regards to the on-chain logic, including `Transaction::verify`,
+  /// we can't verify the signature against the group's public key unless we also include that (but
+  /// then we open a DoS where arbitrary group keys are specified to cause inclusion of arbitrary
+  /// blobs on chain).
+  ///
+  /// If we use a `Signed` transaction, we mitigate the DoS risk by having someone to fatally
+  /// slash. We have horrible performance though as for 100 validators, all 100 will publish this
+  /// transaction.
+  ///
+  /// We could use a signed `Unsigned` transaction, where it includes a signer and signature but
+  /// isn't technically a Signed transaction. This lets us de-duplicate the transaction premised on
+  /// its contents.
+  ///
+  /// The optimal choice is likely to use a `Provided` transaction. We don't actually need to
+  /// observe the produced cosign (which is ephemeral). As long as it's agreed the cosign in
+  /// question no longer needs to produced, which would mean the cosigning protocol at-large
+  /// cosigning the block in question, it'd be safe to provide this and move on to the next cosign.
   Cosigned {
     /// The hash of the Substrate block which was cosigned
     substrate_block_hash: BlockHash,

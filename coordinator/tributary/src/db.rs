@@ -52,6 +52,7 @@ pub(crate) enum Participating {
 }
 
 pub(crate) fn required_participation(n: u16) -> u16 {
+  // All of our topics require 2/3rds participation
   n.checked_mul(2).expect(&format!("required_participation overflowed: {n} * 2")) / 3 + 1
 }
 
@@ -110,8 +111,8 @@ impl Topic {
   pub(crate) fn sign_id(self, set: ExternalValidatorSet) -> Option<messages::sign::SignId> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::Sign { id, attempt, round: _ } => Some(SignId { session: set.session, id, attempt }),
       Topic::RemoveParticipant { .. } | Topic::DkgConfirmation { .. } | Topic::SlashReport => None,
+      Topic::Sign { id, attempt, round: _ } => Some(SignId { session: set.session, id, attempt }),
     }
   }
 
@@ -337,7 +338,8 @@ impl TributaryDb {
     );
   }
   pub(crate) fn finish_cosigning(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
-    ActivelyCosigning::take(txn, set).expect("finished cosigning but wasn't cosigning");
+    ActivelyCosigning::take(txn, set)
+      .expect("tried to finish cosigning but wasn't actively cosigning");
   }
   pub(crate) fn mark_cosigned(
     txn: &mut impl DbTxn,
@@ -401,9 +403,9 @@ impl TributaryDb {
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
     validator: SeraiAddress,
-    #[cfg_attr(coverage, allow(unused_variables))] reason: &str,
+    _reason: &str,
   ) {
-    serai_env::warn!("{validator} fatally slashed: {reason}");
+    serai_env::warn!("{validator} fatally slashed: {_reason}");
     SlashPoints::set(txn, set, validator, &u32::MAX);
   }
 

@@ -147,10 +147,16 @@ mod required_participation_tests {
   }
 
   #[test]
-  #[should_panic = "overflowed"]
   fn panics_on_overflow() {
-    // u16::MAX * 2 overflows u16
-    required_participation(u16::MAX);
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+      required_participation(u16::MAX);
+    }));
+    assert!(res.is_err());
+
+    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+      required_participation((u16::MAX / 2) + 1);
+    }));
+    assert!(res.is_err());
   }
 }
 
@@ -910,7 +916,7 @@ mod tributary_db {
           topic,
           validator,
           validator_weight,
-          &vec![1, 2, 3],
+          &random_vec_u8(&mut OsRng),
         );
 
         // Second call with same (validator, topic) should panic
@@ -923,7 +929,7 @@ mod tributary_db {
           topic,
           validator,
           validator_weight,
-          &vec![4, 5, 6],
+          &random_vec_u8(&mut OsRng),
         );
       }
 
@@ -934,7 +940,7 @@ mod tributary_db {
       fn double_call_after_threshold_with_reattempt_panics() {
         // DkgConfirmation Preprocess has a reattempt topic, so entries survive post-threshold
         let topic = Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Preprocess };
-        let (set, _validator, validators, total_weight, _validator_weight) =
+        let (set, validator, validators, total_weight, validator_weight) =
           default_accumulate_setup();
         let mut db = MemDb::new();
         let mut txn = db.txn();
@@ -961,9 +967,9 @@ mod tributary_db {
           total_weight,
           block_number,
           topic,
-          validators[0],
-          1,
-          &vec![99],
+          validator,
+          validator_weight,
+          &random_vec_u8(&mut OsRng),
         );
       }
 
@@ -974,7 +980,7 @@ mod tributary_db {
       fn double_call_after_threshold_without_reattempt_is_nop() {
         // RemoveParticipant has no reattempt, so entries are cleaned up post-threshold
         let topic = Topic::RemoveParticipant { participant: random_serai_address(&mut OsRng) };
-        let (set, _validator, validators, total_weight, _validator_weight) =
+        let (set, validator, validators, total_weight, validator_weight) =
           default_accumulate_setup();
         let mut db = MemDb::new();
         let mut txn = db.txn();
@@ -1002,9 +1008,9 @@ mod tributary_db {
           total_weight,
           block_number,
           topic,
-          validators[0],
-          1,
-          &vec![99],
+          validator,
+          validator_weight,
+          &random_vec_u8(&mut OsRng),
         );
 
         assert!(matches!(result, DataSet::None), "should be NOP after threshold");
@@ -1044,7 +1050,7 @@ mod tributary_db {
         let post_slashed = TributaryDb::is_fatally_slashed(db, set, validator);
         let post_weight = AccumulatedWeight::get(db, set, topic);
 
-        // Branch 1: Slash for participating in unrecognized topic requiring recognition.
+        // Slash for participating in unrecognized topic requiring recognition.
         if topic.requires_recognition() && pre_weight.is_none() {
           assert!(post_slashed, "should be fatally slashed for unrecognized topic");
           assert!(matches!(result, DataSet::None));
@@ -1058,7 +1064,7 @@ mod tributary_db {
 
         let weight_before = pre_weight.unwrap_or(0);
 
-        // Branch 2: Slash for participating without completing the preceding topic.
+        // Slash for participating without completing the preceding topic.
         if topic.preceding_topic().is_some() && !has_preceding_accumulated {
           assert!(post_slashed, "should be fatally slashed for missing preceding participation");
           assert!(matches!(result, DataSet::None));
@@ -1066,7 +1072,7 @@ mod tributary_db {
           return;
         }
 
-        // Branch 3: Already accumulated past the threshold - NOP.
+        // Already accumulated past the threshold - NOP.
         if weight_before >= required {
           assert!(matches!(result, DataSet::None));
           assert_eq!(post_weight, pre_weight, "weight unchanged when past threshold");
@@ -1076,7 +1082,7 @@ mod tributary_db {
           return;
         }
 
-        // Branch 5: Old attempt - the next attempt's topic already has weight.
+        // Old attempt, the next attempt's topic already has weight.
         // Note: pre_weight may be None (topic not yet recognized) which is preserved.
         let next_attempt_superseded = has_next_topic_weight && topic.next_attempt_topic().is_some();
         if next_attempt_superseded {
@@ -1088,7 +1094,7 @@ mod tributary_db {
           return;
         }
 
-        // Accumulation happened (Branches 6 & 7)
+        // Accumulation happened
         let new_weight = weight_before + validator_weight;
         assert_eq!(post_weight, Some(new_weight), "weight should reflect accumulation");
 
@@ -1097,9 +1103,9 @@ mod tributary_db {
         }
 
         if new_weight >= required {
-          // Branch 7: Threshold crossed.
+          // Threshold crossed.
 
-          // 7a: Reattempt should be queued if topic is reattemptable.
+          // Reattempt should be queued if topic is reattemptable.
           if let Some((reattempt_attempt, reattempt_topic)) = topic.reattempt_topic() {
             let blocks_till = u64::from(reattempt_attempt)
               .checked_mul(u64::from(BASE_REATTEMPT_DELAY))
@@ -1115,7 +1121,7 @@ mod tributary_db {
             );
           }
 
-          // 7b: Succeeding topic should be recognized (weight set to 0).
+          // Succeeding topic should be recognized (weight set to 0).
           if let Some(succeeding) = topic.succeeding_topic() {
             assert_eq!(
               AccumulatedWeight::get(db, set, succeeding),
@@ -1124,7 +1130,7 @@ mod tributary_db {
             );
           }
 
-          // 7c: Accumulated data cleanup depends on whether a reattempt exists.
+          // Accumulated data cleanup depends on whether a reattempt exists.
           // The cleanup loop only iterates the `validators` slice, so data for a validator
           // not in the list is never deleted regardless of reattempt status.
           let has_reattempt = topic.reattempt_topic().is_some();
@@ -1141,10 +1147,7 @@ mod tributary_db {
             );
           }
 
-          // 7d: Result depends on whether the validator was in the collection list.
-          // The collection loop only gathers data from the `validators` slice.
-          // `participated` = data_set.contains_key(&validator), which is false when
-          // the validator is not in the slice.
+          // Result depends on whether the validator was in the collection list.
           if validator_in_list {
             match result {
               DataSet::Participating(data_set) => {
@@ -1186,7 +1189,8 @@ mod tributary_db {
             }
           }
         } else {
-          // Branch 6: Below threshold - data stored, result is None.
+          // Below threshold
+          // data stored, result is None.
           assert!(matches!(result, DataSet::None), "result should be None when below threshold");
           assert_eq!(
             Accumulated::<Vec<u8>>::get(db, set, topic, validator),

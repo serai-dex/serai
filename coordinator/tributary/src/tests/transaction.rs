@@ -242,7 +242,6 @@ mod transaction {
               SigningProtocolRound::Preprocess => expected.push(0u8),
               SigningProtocolRound::Share => expected.push(1u8),
             }
-            // Use the RoundPayloads type of Vec<GenericSignPayload> to fit for both rounds
             expected.extend(&(data.len() as u32).to_le_bytes());
             for d in data {
               expected.extend(&(d.len() as u32).to_le_bytes());

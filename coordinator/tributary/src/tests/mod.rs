@@ -231,7 +231,7 @@ pub(crate) fn make_signed_message_bytes(sender: [u8; 32]) -> Vec<u8> {
 
 /// Drain expected messages produced by the given transactions, then assert both queues are empty.
 ///
-/// Some transactions produce messages on first submission (e.g. DkgParticipation, Cosign).
+/// Some transactions produce messages on first submission (DkgParticipation, Cosign, SlashReport).
 /// This function drains those expected messages before calling `assert_no_pending_messages`.
 pub(crate) fn assert_block_side_effects(
   txn: &mut impl serai_db::DbTxn,
@@ -296,7 +296,7 @@ pub(crate) fn new_test_set_info(validators: &[(SeraiAddress, u16)]) -> NewSetInf
 
 /// Generate `n` random validators (weight 1 each) with keys, returning all derived collections.
 pub(crate) fn setup_n_validators_with_keys(
-  n: usize,
+  n: u16,
 ) -> (
   Vec<(RistrettoPoint, SeraiAddress)>,
   Vec<(SeraiAddress, u16)>,
@@ -310,7 +310,7 @@ pub(crate) fn setup_n_validators_with_keys(
     keys_addrs.iter().map(|(_, addr)| (*addr, 1u16)).collect();
   let validators: Vec<SeraiAddress> = validator_data.iter().map(|(a, _)| *a).collect();
   let weights: HashMap<SeraiAddress, u16> = validator_data.iter().copied().collect();
-  let total_weight = n as u16;
+  let total_weight = n;
 
   (keys_addrs, validator_data, validators, weights, total_weight)
 }
