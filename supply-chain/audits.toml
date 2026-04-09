@@ -26,6 +26,19 @@ criteria = "safe-to-deploy"
 version = "1.99.99"
 notes = "Re-implementation of the necessary subset of the `aurora-engine-modexp` API to consolidate arithmetic implementations"
 
+[[audits.base16ct]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = """
+This uses `unsafe` to hex-encoded data (in byte slices) to UTF-8 strings, which
+is safe so long as the encoder is always in range. While I didn't see an
+exhaustive test present, I did add a pair of tests for `encode_nibble` (one for
+lower, one for upper) to ensure its output is valid for any in-range input. I
+also manually checked its possible inputs are properly constrained to being a
+nibble. Accordingly, while concerns can be raised, this should be fine.
+"""
+
 [[audits.base58ck]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
