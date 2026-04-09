@@ -37,7 +37,7 @@ pub enum SigningProtocolRound {
 }
 
 impl SigningProtocolRound {
-  fn nonce(self) -> u32 {
+  pub(crate) fn nonce(self) -> u32 {
     match self {
       SigningProtocolRound::Preprocess => 0,
       SigningProtocolRound::Share => 1,
@@ -51,9 +51,9 @@ impl SigningProtocolRound {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Signed {
   /// The signer.
-  signer: <Ristretto as WrappedGroup>::G,
+  pub(crate) signer: <Ristretto as WrappedGroup>::G,
   /// The signature.
-  signature: SchnorrSignature<Ristretto>,
+  pub(crate) signature: SchnorrSignature<Ristretto>,
 }
 
 impl BorshSerialize for Signed {
@@ -77,8 +77,8 @@ impl Signed {
   }
 
   /// Provide a nonce to convert a `Signed` into a `tributary::Signed`.
-  fn to_tributary_signed(self, nonce: u32) -> TributarySigned {
-    TributarySigned { signer: self.signer, nonce, signature: self.signature }
+  pub(crate) fn to_tributary_signed(self, round: SigningProtocolRound) -> TributarySigned {
+    TributarySigned { signer: self.signer, nonce: round.nonce(), signature: self.signature }
   }
 }
 
@@ -93,6 +93,18 @@ impl Default for Signed {
     }
   }
 }
+
+/// The type used for preprocess payloads in the signing protocol.
+pub type Preprocess = [u8; 64];
+/// The type used for share payloads in the signing protocol.
+pub type Share = [u8; 32];
+/// A generic, less constrained type used for either share or preprocess payloads
+/// in the signing protocol.
+pub type GenericSignPayload = Vec<u8>;
+/// One serialized payload per key share held by the sending validator.
+/// The outer Vec has one entry per key share; each inner Vec<u8> is a
+/// serialized preprocess (64 bytes) or share (32 bytes), depending on `round`.
+pub type RoundPayloads = Vec<GenericSignPayload>;
 
 /// The Tributary transaction definition used by Serai
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
@@ -117,7 +129,7 @@ pub enum Transaction {
     /// The attempt number of this signing protocol
     attempt: u32,
     /// The preprocess
-    preprocess: [u8; 64],
+    preprocess: Preprocess,
     /// The transaction's signer and signature
     signed: Signed,
   },
@@ -126,7 +138,7 @@ pub enum Transaction {
     /// The attempt number of this signing protocol
     attempt: u32,
     /// The signature share
-    share: [u8; 32],
+    share: Share,
     /// The transaction's signer and signature
     signed: Signed,
   },
@@ -140,39 +152,38 @@ pub enum Transaction {
     substrate_block_hash: BlockHash,
   },
 
+  // After producing this cosign, we need to start work on the latest intended-to-be cosigned
+  // block. That requires agreement on when this cosign was produced, which we solve by noting
+  // this cosign on-chain.
+  //
+  // We ideally don't have this transaction at all. The coordinator, without access to any of the
+  // key shares, could observe the FROST signing session and determine a successful completion.
+  // Unfortunately, that functionality is not present in modular-frost, so we do need to support
+  // *some* asynchronous flow (where the processor or P2P network informs us of the successful
+  // completion).
+  //
+  // If we use a `Provided` transaction, that requires everyone observe this cosign.
+  //
+  // If we use an `Unsigned` transaction, we can't verify the cosign signature inside
+  // `Transaction::verify` unless we embedded the full `SignedCosign` on-chain. The issue is since
+  // a Tributary is stateless with regards to the on-chain logic, including `Transaction::verify`,
+  // we can't verify the signature against the group's public key unless we also include that (but
+  // then we open a DoS where arbitrary group keys are specified to cause inclusion of arbitrary
+  // blobs on chain).
+  //
+  // If we use a `Signed` transaction, we mitigate the DoS risk by having someone to fatally
+  // slash. We have horrible performance though as for 100 validators, all 100 will publish this
+  // transaction.
+  //
+  // We could use a signed `Unsigned` transaction, where it includes a signer and signature but
+  // isn't technically a Signed transaction. This lets us de-duplicate the transaction premised on
+  // its contents.
+  //
+  // The optimal choice is likely to use a `Provided` transaction. We don't actually need to
+  // observe the produced cosign (which is ephemeral). As long as it's agreed the cosign in
+  // question no longer needs to produced, which would mean the cosigning protocol at-large
+  // cosigning the block in question, it'd be safe to provide this and move on to the next cosign.
   /// Note an intended-to-be-cosigned Substrate block as cosigned
-  ///
-  /// After producing this cosign, we need to start work on the latest intended-to-be cosigned
-  /// block. That requires agreement on when this cosign was produced, which we solve by noting
-  /// this cosign on-chain.
-  ///
-  /// We ideally don't have this transaction at all. The coordinator, without access to any of the
-  /// key shares, could observe the FROST signing session and determine a successful completion.
-  /// Unfortunately, that functionality is not present in modular-frost, so we do need to support
-  /// *some* asynchronous flow (where the processor or P2P network informs us of the successful
-  /// completion).
-  ///
-  /// If we use a `Provided` transaction, that requires everyone observe this cosign.
-  ///
-  /// If we use an `Unsigned` transaction, we can't verify the cosign signature inside
-  /// `Transaction::verify` unless we embedded the full `SignedCosign` on-chain. The issue is since
-  /// a Tributary is stateless with regards to the on-chain logic, including `Transaction::verify`,
-  /// we can't verify the signature against the group's public key unless we also include that (but
-  /// then we open a DoS where arbitrary group keys are specified to cause inclusion of arbitrary
-  /// blobs on chain).
-  ///
-  /// If we use a `Signed` transaction, we mitigate the DoS risk by having someone to fatally
-  /// slash. We have horrible performance though as for 100 validators, all 100 will publish this
-  /// transaction.
-  ///
-  /// We could use a signed `Unsigned` transaction, where it includes a signer and signature but
-  /// isn't technically a Signed transaction. This lets us de-duplicate the transaction premised on
-  /// its contents.
-  ///
-  /// The optimal choice is likely to use a `Provided` transaction. We don't actually need to
-  /// observe the produced cosign (which is ephemeral). As long as it's agreed the cosign in
-  /// question no longer needs to produced, which would mean the cosigning protocol at-large
-  /// cosigning the block in question, it'd be safe to provide this and move on to the next cosign.
   Cosigned {
     /// The hash of the Substrate block which was cosigned
     substrate_block_hash: BlockHash,
@@ -212,8 +223,9 @@ pub enum Transaction {
     /// The data itself
     ///
     /// There will be `n` blobs of data where `n` is the amount of key shares the validator sending
-    /// this transaction has.
-    data: Vec<Vec<u8>>,
+    /// this transaction has, and each blob is a serialized preprocess (64 bytes) or share
+    /// (32 bytes), uniform across all entries as determined by `round`.
+    data: RoundPayloads,
     /// The transaction's signer and signature
     signed: Signed,
   },
@@ -229,7 +241,7 @@ pub enum Transaction {
 
 impl ReadWrite for Transaction {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    borsh::from_reader(reader)
+    borsh::BorshDeserialize::deserialize_reader(reader)
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -242,20 +254,20 @@ impl TransactionTrait for Transaction {
     match self {
       Transaction::RemoveParticipant { participant, signed } => TransactionKind::Signed(
         borsh::to_vec(&(b"RemoveParticipant".as_slice(), participant)).unwrap(),
-        signed.to_tributary_signed(0),
+        signed.to_tributary_signed(SigningProtocolRound::Preprocess),
       ),
 
       Transaction::DkgParticipation { signed, .. } => TransactionKind::Signed(
         borsh::to_vec(b"DkgParticipation".as_slice()).unwrap(),
-        signed.to_tributary_signed(0),
+        signed.to_tributary_signed(SigningProtocolRound::Preprocess),
       ),
       Transaction::DkgConfirmationPreprocess { attempt, signed, .. } => TransactionKind::Signed(
         borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
-        signed.to_tributary_signed(0),
+        signed.to_tributary_signed(SigningProtocolRound::Share),
       ),
       Transaction::DkgConfirmationShare { attempt, signed, .. } => TransactionKind::Signed(
         borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
-        signed.to_tributary_signed(1),
+        signed.to_tributary_signed(SigningProtocolRound::Share),
       ),
 
       Transaction::Cosign { .. } => TransactionKind::Provided("Cosign"),
@@ -265,12 +277,12 @@ impl TransactionTrait for Transaction {
 
       Transaction::Sign { id, attempt, round, signed, .. } => TransactionKind::Signed(
         borsh::to_vec(&(b"Sign".as_slice(), id, attempt)).unwrap(),
-        signed.to_tributary_signed(round.nonce()),
+        signed.to_tributary_signed(*round),
       ),
 
       Transaction::SlashReport { signed, .. } => TransactionKind::Signed(
         borsh::to_vec(b"SlashReport".as_slice()).unwrap(),
-        signed.to_tributary_signed(0),
+        signed.to_tributary_signed(SigningProtocolRound::Preprocess),
       ),
     }
   }

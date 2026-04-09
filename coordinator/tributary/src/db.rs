@@ -22,7 +22,7 @@ pub enum Topic {
   },
 
   // DkgParticipation isn't represented here as participations are immediately sent to the
-  // processor, not accumulated within this databse
+  // processor, not accumulated within this database
   /// Participation in the signing protocol to confirm the DKG results on Substrate
   DkgConfirmation {
     /// The attempt number this is for
@@ -45,51 +45,62 @@ pub enum Topic {
   },
 }
 
-enum Participating {
+#[derive(Debug, PartialEq)]
+pub(crate) enum Participating {
   Participated,
   Everyone,
 }
 
+pub(crate) fn required_participation(n: u16) -> u16 {
+  n.checked_mul(2).expect(&format!("required_participation overflowed: {n} * 2")) / 3 + 1
+}
+
 impl Topic {
   // The topic used by the next attempt of this protocol
-  fn next_attempt_topic(self) -> Option<Topic> {
+  pub(crate) fn next_attempt_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round: _ } => Some(Topic::DkgConfirmation {
-        attempt: attempt + 1,
+        attempt: attempt.checked_add(1)?,
         round: SigningProtocolRound::Preprocess,
       }),
-      Topic::SlashReport => None,
-      Topic::Sign { id, attempt, round: _ } => {
-        Some(Topic::Sign { id, attempt: attempt + 1, round: SigningProtocolRound::Preprocess })
-      }
+      Topic::Sign { id, attempt, round: _ } => Some(Topic::Sign {
+        id,
+        attempt: attempt.checked_add(1)?,
+        round: SigningProtocolRound::Preprocess,
+      }),
+      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
   // The topic for the re-attempt to schedule
-  fn reattempt_topic(self) -> Option<(u32, Topic)> {
+  pub(crate) fn reattempt_topic(self) -> Option<(u32, Topic)> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          let attempt = attempt + 1;
+          let next_attempt = attempt.checked_add(1)?;
           Some((
-            attempt,
-            Topic::DkgConfirmation { attempt, round: SigningProtocolRound::Preprocess },
+            next_attempt,
+            Topic::DkgConfirmation {
+              attempt: next_attempt,
+              round: SigningProtocolRound::Preprocess,
+            },
           ))
         }
         SigningProtocolRound::Share => None,
       },
-      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          let attempt = attempt + 1;
-          Some((attempt, Topic::Sign { id, attempt, round: SigningProtocolRound::Preprocess }))
+          let next_attempt = attempt.checked_add(1)?;
+          Some((
+            next_attempt,
+            Topic::Sign { id, attempt: next_attempt, round: SigningProtocolRound::Preprocess },
+          ))
         }
         SigningProtocolRound::Share => None,
       },
+      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -99,10 +110,8 @@ impl Topic {
   pub(crate) fn sign_id(self, set: ExternalValidatorSet) -> Option<messages::sign::SignId> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
-      Topic::DkgConfirmation { .. } => None,
-      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round: _ } => Some(SignId { session: set.session, id, attempt }),
+      Topic::RemoveParticipant { .. } | Topic::DkgConfirmation { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -118,7 +127,6 @@ impl Topic {
   ) -> Option<messages::sign::SignId> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round: _ } => Some({
         let id = {
           let mut id = [0; 32];
@@ -128,54 +136,51 @@ impl Topic {
         };
         SignId { session: set.session, id, attempt }
       }),
-      Topic::SlashReport => None,
-      Topic::Sign { .. } => None,
+      Topic::RemoveParticipant { .. } | Topic::SlashReport | Topic::Sign { .. } => None,
     }
   }
 
   /// The topic which precedes this topic as a prerequisite
   ///
   /// The preceding topic must define this topic as succeeding
-  fn preceding_topic(self) -> Option<Topic> {
+  pub(crate) fn preceding_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => None,
         SigningProtocolRound::Share => {
           Some(Topic::DkgConfirmation { attempt, round: SigningProtocolRound::Preprocess })
         }
       },
-      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => None,
         SigningProtocolRound::Share => {
           Some(Topic::Sign { id, attempt, round: SigningProtocolRound::Preprocess })
         }
       },
+      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
   /// The topic which succeeds this topic, with this topic as a prerequisite
   ///
   /// The succeeding topic must define this topic as preceding
-  fn succeeding_topic(self) -> Option<Topic> {
+  pub(crate) fn succeeding_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
           Some(Topic::DkgConfirmation { attempt, round: SigningProtocolRound::Share })
         }
         SigningProtocolRound::Share => None,
       },
-      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
           Some(Topic::Sign { id, attempt, round: SigningProtocolRound::Share })
         }
         SigningProtocolRound::Share => None,
       },
+      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -194,19 +199,11 @@ impl Topic {
     }
   }
 
-  fn required_participation(&self, n: u16) -> u16 {
-    let _ = self;
-    // All of our topics require 2/3rds participation
-    ((2 * n) / 3) + 1
-  }
-
-  fn participating(&self) -> Participating {
+  pub(crate) fn participating(&self) -> Participating {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } => Participating::Everyone,
-      Topic::DkgConfirmation { .. } => Participating::Participated,
-      Topic::SlashReport => Participating::Everyone,
-      Topic::Sign { .. } => Participating::Participated,
+      Topic::RemoveParticipant { .. } | Topic::SlashReport => Participating::Everyone,
+      Topic::DkgConfirmation { .. } | Topic::Sign { .. } => Participating::Participated,
     }
   }
 }
@@ -271,6 +268,16 @@ db_channel!(
   }
 );
 
+// 5 minutes
+#[cfg(not(feature = "longer-reattempts"))]
+pub(crate) const BASE_REATTEMPT_DELAY: u32 =
+  (5u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
+
+// 10 minutes, intended for latent environments like the GitHub CI
+#[cfg(feature = "longer-reattempts")]
+pub(crate) const BASE_REATTEMPT_DELAY: u32 =
+  (10u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
+
 pub(crate) struct TributaryDb;
 impl TributaryDb {
   pub(crate) fn last_handled_tributary_block(
@@ -330,7 +337,7 @@ impl TributaryDb {
     );
   }
   pub(crate) fn finish_cosigning(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
-    assert!(ActivelyCosigning::take(txn, set).is_some(), "finished cosigning but not cosigning");
+    ActivelyCosigning::take(txn, set).expect("finished cosigning but wasn't cosigning");
   }
   pub(crate) fn mark_cosigned(
     txn: &mut impl DbTxn,
@@ -347,6 +354,13 @@ impl TributaryDb {
     Cosigned::get(txn, set, substrate_block_hash).is_some()
   }
 
+  /// The next topic requiring recognition which has been recognized by this Tributary.
+  pub fn try_recv_topic_requiring_recognition(
+    txn: &mut impl DbTxn,
+    set: ExternalValidatorSet,
+  ) -> Option<Topic> {
+    RecognizedTopics::try_recv(txn, set)
+  }
   pub(crate) fn recognize_topic(txn: &mut impl DbTxn, set: ExternalValidatorSet, topic: Topic) {
     AccumulatedWeight::set(txn, set, topic, &0);
     RecognizedTopics::send(txn, set, &topic);
@@ -387,9 +401,9 @@ impl TributaryDb {
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
     validator: SeraiAddress,
-    reason: &str,
+    #[cfg_attr(coverage, allow(unused_variables))] reason: &str,
   ) {
-    log::warn!("{validator} fatally slashed: {reason}");
+    serai_env::warn!("{validator} fatally slashed: {reason}");
     SlashPoints::set(txn, set, validator, &u32::MAX);
   }
 
@@ -415,6 +429,11 @@ impl TributaryDb {
   ) -> DataSet<D> {
     // This function will only be called once for a (validator, topic) tuple due to how we handle
     // nonces on transactions (deterministically to the topic)
+    assert!(
+      txn.get(Accumulated::<D>::key(set, topic, validator)).is_none(),
+      "accumulate called twice for the same (validator, topic) tuple: \
+       the nonce system should have prevented this"
+    );
 
     let accumulated_weight = AccumulatedWeight::get(txn, set, topic);
     if topic.requires_recognition() && accumulated_weight.is_none() {
@@ -431,7 +450,9 @@ impl TributaryDb {
     // Check if there's a preceding topic, this validator participated
     let preceding_topic = topic.preceding_topic();
     if let Some(preceding_topic) = preceding_topic {
-      if Accumulated::<D>::get(txn, set, preceding_topic, validator).is_none() {
+      // Use a raw key-existence check instead of `Accumulated::<D>::get` because the preceding
+      // topic may have stored a different type (e.g. preprocess is [u8; 64], share is [u8; 32])
+      if txn.get(Accumulated::<D>::key(set, preceding_topic, validator)).is_none() {
         Self::fatal_slash(
           txn,
           set,
@@ -442,10 +463,12 @@ impl TributaryDb {
       }
     }
 
+    let required_participation = required_participation(total_weight);
+
     // The complete lack of validation on the data by these NOPs opens the potential for spam here
 
     // If we've already accumulated past the threshold, NOP
-    if accumulated_weight >= topic.required_participation(total_weight) {
+    if accumulated_weight >= required_participation {
       return DataSet::None;
     }
     // If this is for an old attempt, NOP
@@ -456,29 +479,23 @@ impl TributaryDb {
     }
 
     // Accumulate the data
-    accumulated_weight += validator_weight;
+    accumulated_weight = accumulated_weight.checked_add(validator_weight).expect(&format!(
+      "accumulated_weight {accumulated_weight} overflowed adding validator_weight {validator_weight}"
+    ));
     AccumulatedWeight::set(txn, set, topic, &accumulated_weight);
     Accumulated::set(txn, set, topic, validator, data);
 
     // Check if we now cross the weight threshold
-    if accumulated_weight >= topic.required_participation(total_weight) {
+    if accumulated_weight >= required_participation {
       // Queue this for re-attempt after enough time passes
       let reattempt_topic = topic.reattempt_topic();
       if let Some((attempt, reattempt_topic)) = reattempt_topic {
-        // 5 minutes
-        #[cfg(not(feature = "longer-reattempts"))]
-        const BASE_REATTEMPT_DELAY: u32 =
-          (5u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
-
-        // 10 minutes, intended for latent environments like the GitHub CI
-        #[cfg(feature = "longer-reattempts")]
-        const BASE_REATTEMPT_DELAY: u32 =
-          (10u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
-
         // Linearly scale the time for the protocol with the attempt number
-        let blocks_till_reattempt = u64::from(attempt * BASE_REATTEMPT_DELAY);
+        let blocks_till_reattempt = u64::from(attempt) * u64::from(BASE_REATTEMPT_DELAY);
 
-        let recognize_at = block_number + blocks_till_reattempt;
+        let recognize_at = block_number.checked_add(blocks_till_reattempt).expect(&format!(
+          "recognize_at overflowed: block_number {block_number} + delay {blocks_till_reattempt}"
+        ));
         let mut queued = Reattempt::get(txn, set, recognize_at).unwrap_or(Vec::with_capacity(1));
         queued.push(reattempt_topic);
         Reattempt::set(txn, set, recognize_at, &queued);

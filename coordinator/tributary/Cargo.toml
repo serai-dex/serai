@@ -28,7 +28,7 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = fals
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
 schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", default-features = false, features = ["std"] }
 
-serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
+serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std", "test-helpers"] }
 
 serai-db = { path = "../../common/db" }
 serai-task = { path = "../../common/task", version = "0.1" }
@@ -40,7 +40,17 @@ serai-coordinator-substrate = { path = "../substrate" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 
-log = { version = "0.4", default-features = false, features = ["std"] }
+serai-env = { path = "../../common/env", version = "0.1.0" }
+
+[dev-dependencies]
+env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
+rand = { version = "0.8", default-features = false, features = ["std"] }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
+tendermint = { package = "tendermint-machine", path = "../tributary-sdk/tendermint" }
+tributary-sdk = { path = "../tributary-sdk", features = ["tests"] }
+tokio = { version = "1", default-features = false, features = ["rt", "time", "macros", "rt-multi-thread"] }
+serai-task = { path = "../../common/task", features = ["test-helpers"] }
+serai-substrate-tests = { path = "../../tests/substrate" }
 
 [features]
 longer-reattempts = []

@@ -39,6 +39,9 @@ mod db;
 use db::*;
 pub use db::Topic;
 
+#[cfg(test)]
+mod tests;
+
 /// Messages to send to the Processors.
 pub struct ProcessorMessages;
 impl ProcessorMessages {
@@ -101,7 +104,7 @@ impl RecognizedTopics {
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
   ) -> Option<Topic> {
-    db::RecognizedTopics::try_recv(txn, set)
+    TributaryDb::try_recv_topic_requiring_recognition(txn, set)
   }
 }
 
@@ -190,6 +193,10 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
     data: &D,
     signer: SeraiAddress,
   ) -> Option<(SignId, HashMap<Participant, Vec<u8>>)> {
+    assert!(
+      matches!(topic, Topic::DkgConfirmation { .. }),
+      "accumulate_dkg_confirmation called with non-DkgConfirmation topic: {topic:?}"
+    );
     match TributaryDb::accumulate::<D>(
       self.tributary_txn,
       self.set.set,
@@ -469,13 +476,14 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
             }
             let amortized_slash_report = median_slash_report;
 
-            // Create the resulting slash report
+            // Create the resulting slash report, only including validators who have non-zero
+            // slash points after amortization
             let mut slash_report = vec![];
             for points in amortized_slash_report {
               // TODO: Natively store this as a `Slash`
               if points == u32::MAX {
                 slash_report.push(Slash::Fatal);
-              } else {
+              } else if points > 0 {
                 slash_report.push(Slash::Points(points));
               }
             }
@@ -647,10 +655,9 @@ impl<TD: Db, P: P2p> ContinuallyRan for ScanTributaryTask<TD, P> {
           .unwrap_or((0, self.tributary.genesis()));
 
       let mut made_progress = false;
-      while let Some(next) = self.tributary.block_after(&last_block_hash) {
-        let block = self.tributary.block(&next).unwrap();
+      while let Some(block_hash) = self.tributary.block_after(&last_block_hash) {
+        let block = self.tributary.block(&block_hash).unwrap();
         let block_number = last_block_number + 1;
-        let block_hash = block.hash();
 
         // Make sure we have all of the provided transactions for this block
         for tx in &block.transactions {
