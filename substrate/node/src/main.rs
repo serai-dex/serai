@@ -465,7 +465,7 @@ fn main() {
   // Shut down
   let task_registry = task_manager.into_task_registry();
   const SHUTDOWN_TIMEOUT: Duration = Duration::from_mins(1);
-  log::info!("Shutting down (with {}s timeout)", SHUTDOWN_TIMEOUT.as_secs());
+  sp_tracing::info!("Shutting down (with {}s timeout)", SHUTDOWN_TIMEOUT.as_secs());
   runtime.shutdown_timeout(SHUTDOWN_TIMEOUT);
 
   // Check all tasks successfully terminated within the timeout given
