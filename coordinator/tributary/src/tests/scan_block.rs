@@ -780,7 +780,8 @@ mod handle_application_tx {
         setup_n_validators_with_keys(num_validators);
       let set_info = new_test_set_info(&validator_data);
 
-      let report = vec![u32::MAX, 0, 0, 0];
+      let mut report = vec![0u32; num_validators as usize];
+      report[0] = u32::MAX;
       let reports: Vec<Vec<u32>> = vec![report; num_reports];
 
       let mut db = MemDb::new();

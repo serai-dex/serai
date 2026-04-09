@@ -23,9 +23,3 @@ tokio = { version = "1", features = ["time"] }
 
 dockertest = "0.5"
 serai-docker-tests = { path = "../docker" }
-
-rand_core = { version = "0.6", default-features = false, features = ["std"] }
-
-[dev-dependencies]
-rand = { version = "0.8", default-features = false, features = ["std"] }
-rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
