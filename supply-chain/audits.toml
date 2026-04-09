@@ -92,6 +92,88 @@ criteria = "safe-to-deploy"
 version = "0.2.99"
 notes = "Patches from `0.2` to `0.3` whose only breaking change was a MSRV bump"
 
+[[audits.cranelift-assembler-x64]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-assembler-x64-meta]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-bforest]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-bitset]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-codegen]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = """
+I cannot and have not verified the correctness of these changes. What I have
+done is checked they appear to correspond to the release notes, specifically
+GHSA-jhxm-h53p-jm7w and GHSA-qqfj-4vcm-26hv.
+"""
+
+[[audits.cranelift-codegen-meta]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely version bumps"
+
+[[audits.cranelift-codegen-shared]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-control]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-entity]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-frontend]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-isle]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-native]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-srcgen]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
 [[audits.crypto-bigint]]
 criteria = "audited"
 version = "0.5.3"
@@ -408,6 +490,18 @@ criteria = "safe-to-deploy"
 version = "0.12.99"
 notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
 
+[[audits.pulley-interpreter]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.pulley-macros]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
 [[audits.rapidhash]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -477,6 +571,64 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-run"
 version = "0.3.1"
 notes = "Undocumented panic prevents `safe-to-deploy`, see https://github.com/seanmonstar/want/pull/5"
+
+[[audits.wasmtime]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "GHSA-m758-wjhj-p3jq and GHSA-6wgr-89rj-399p"
+
+[[audits.wasmtime-environ]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = """
+Without full context on the safety or soundness of this, I can confirm these
+changes appear to correspond to GHSA-394w-hwhg-8vgm, GHSA-jxhv-7h78-9775, and
+GHSA-hx6p-xpx3-jvvv.
+"""
+
+[[audits.wasmtime-internal-core]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-cranelift]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-fiber]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-jit-debug]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-jit-icache-coherence]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-unwinder]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-versioned-export-macros]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
 
 [[audits.wit-bindgen-rust-macro]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
