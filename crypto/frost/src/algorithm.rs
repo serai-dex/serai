@@ -27,7 +27,7 @@ impl WriteAddendum for () {
 pub trait Addendum: Send + Sync + Clone + PartialEq + Debug + WriteAddendum {}
 impl<A: Send + Sync + Clone + PartialEq + Debug + WriteAddendum> Addendum for A {}
 
-/// Algorithm trait usable by the FROST signing machine to produce signatures..
+/// Algorithm trait usable by the FROST signing machine to produce signatures.
 pub trait Algorithm<C: Curve>: Send + Sync {
   /// The transcript format this algorithm uses.
   ///

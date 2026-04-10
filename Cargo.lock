@@ -7673,19 +7673,28 @@ dependencies = [
 name = "serai-client-serai"
 version = "0.1.0"
 dependencies = [
+ "bitvec",
  "blake2 0.11.0-rc.5",
  "borsh",
+ "ciphersuite 0.4.2",
  "core-json-derive",
  "core-json-traits",
+ "dalek-ff-group",
+ "dkg-musig",
  "dockertest",
+ "frost-schnorrkel",
  "hex",
+ "modular-frost",
+ "rand_core 0.6.4",
  "serai-abi",
  "serai-docker-tests",
  "serai-substrate-tests",
  "simple-request 0.3.0",
+ "sp-application-crypto",
  "sp-core",
  "thiserror 2.0.18",
  "tokio",
+ "zeroize",
 ]
 
 [[package]]

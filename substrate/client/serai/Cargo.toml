@@ -28,8 +28,20 @@ borsh = { version = "1", default-features = false, features = ["std"] }
 serai-abi = { path = "../../abi", version = "0.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
+zeroize = "1.5"
+rand_core = "0.6"
+
 blake2 = { version = "0.11.0-rc.5", default-features = false }
+ciphersuite = { path = "../../../crypto/ciphersuite" }
+dalek-ff-group = { path = "../../../crypto/dalek-ff-group" }
+dkg-musig = { path = "../../../crypto/dkg/musig" }
+frost = { package = "modular-frost", path = "../../../crypto/frost", features = ["tests"] }
+schnorrkel = { path = "../../../crypto/schnorrkel", package = "frost-schnorrkel" }
+
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
+sp-application-crypto = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
+
+bitvec = { version = "1", default-features = false, features = ["std"] }
 
 tokio = { version = "1", default-features = false, features = ["rt", "macros"] }
 dockertest = "0.5"
