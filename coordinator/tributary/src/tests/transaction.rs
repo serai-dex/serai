@@ -275,7 +275,7 @@ mod transaction {
       }
     }
 
-    /// Regression test: `Transaction::read` must use `deserialize_reader`, not `borsh::from_reader`.
+    /// Regression test: `Transaction::read` must use `deserialize_reader`, not `borsh::from_reader`
     ///
     /// `borsh::from_reader` asserts the reader is exhausted after deserialization. When multiple
     /// transactions are serialized into a single stream (as happens in `Block::read`), the first

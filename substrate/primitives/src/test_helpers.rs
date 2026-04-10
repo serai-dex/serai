@@ -28,7 +28,7 @@ pub fn random_bytes_64<R: RngCore + CryptoRng>(rng: &mut R) -> [u8; 64] {
 
 /// Generate a random `Vec<u8>` with a random length between 1 and 128.
 pub fn random_vec_u8<R: RngCore + CryptoRng>(rng: &mut R) -> Vec<u8> {
-  let len = (rng.next_u32() % 128) as usize + 1;
+  let len = usize::try_from(rng.next_u32() % 128).unwrap() + 1;
   random_vec_of_len(rng, len)
 }
 
@@ -109,7 +109,7 @@ pub fn random_block_number<R: RngCore + CryptoRng>(rng: &mut R) -> u64 {
 /// Generate a random [`ExternalNetworkId`].
 pub fn random_external_network_id<R: RngCore + CryptoRng>(rng: &mut R) -> ExternalNetworkId {
   let all: Vec<_> = ExternalNetworkId::all().collect();
-  all[(rng.next_u32() as usize) % all.len()]
+  all[usize::try_from(rng.next_u32()).unwrap() % all.len()]
 }
 
 /// Generate a random [`ExternalValidatorSet`].
