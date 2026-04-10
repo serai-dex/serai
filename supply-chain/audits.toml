@@ -20,17 +20,47 @@ criteria = "safe-to-deploy"
 version = "0.4.99"
 notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
 
+[[audits.asn1-rs-impl]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = """
+This seems like a straightforward proc macro to convert a formatted input into
+an array. I am unfamiliar with the OID format and cannot comment this to be
+sound, and it appears to lack extensive testing, but the macro itself seems
+reasonable (even if using far too many dependencies) and the output safe.
+"""
+
 [[audits.aurora-engine-modexp]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "1.99.99"
 notes = "Re-implementation of the necessary subset of the `aurora-engine-modexp` API to consolidate arithmetic implementations"
 
+[[audits.base16ct]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = """
+This uses `unsafe` to hex-encoded data (in byte slices) to UTF-8 strings, which
+is safe so long as the encoder is always in range. While I didn't see an
+exhaustive test present, I did add a pair of tests for `encode_nibble` (one for
+lower, one for upper) to ensure its output is valid for any in-range input. I
+also manually checked its possible inputs are properly constrained to being a
+nibble. Accordingly, while concerns can be raised, this should be fine.
+"""
+
 [[audits.base58ck]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "0.1.0"
 notes = "Not fuzz tested despite having novel arithmetic"
+
+[[audits.bitcoin-io]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.4"
+notes = "Handrolls a `rust-version` approximate in its `build.rs`"
 
 [[audits.c-kzg]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -73,11 +103,108 @@ criteria = "reviewed"
 version = "0.4.1"
 notes = "Written by kayabaNerve"
 
+[[audits.cpubits]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.0"
+notes = """
+Only safe for non-16-bit targets, making this unsafe to deploy. It's only being
+marked as vetted now as,
+1) Overall it appears fine
+2) Serai does not target any 16-bit platforms
+3) Because we should be able to audit the diff with `0.1.1` to obtain a clean
+   vet
+4) Because `0.1.1` is hopefully soon due to
+   https://github.com/RustCrypto/utils/pull/1470 already being opened
+"""
+
 [[audits.cpufeatures]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "0.2.99"
 notes = "Patches from `0.2` to `0.3` whose only breaking change was a MSRV bump"
+
+[[audits.cranelift-assembler-x64]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-assembler-x64-meta]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-bforest]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-bitset]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-codegen]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = """
+I cannot and have not verified the correctness of these changes. What I have
+done is checked they appear to correspond to the release notes, specifically
+GHSA-jhxm-h53p-jm7w and GHSA-qqfj-4vcm-26hv.
+"""
+
+[[audits.cranelift-codegen-meta]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely version bumps"
+
+[[audits.cranelift-codegen-shared]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-control]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-entity]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-frontend]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-isle]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-native]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
+
+[[audits.cranelift-srcgen]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.130.0 -> 0.130.1"
+notes = "Solely a version bump"
 
 [[audits.crypto-bigint]]
 criteria = "audited"
@@ -148,6 +275,12 @@ criteria = "audited"
 version = "0.3.0"
 notes = "`/audits/crypto/Cypher Stack March 2023`"
 
+[[audits.fnv]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.0.7"
+notes = "I have not confirmed any relation to the algorithm it claims to implement"
+
 [[audits.generalized-bulletproofs]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -184,6 +317,12 @@ criteria = "audited"
 version = "0.1.0@git:cebfb4bdff0c34ead77ba3f1d4e5610e934c581f"
 notes = "`monero-oxide/audits/fcmps`"
 
+[[audits.hex-literal]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.1.0"
+notes = "Lacking an exhaustive test for all 256 possible hex sequences"
+
 [[audits.impl-codec]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -194,6 +333,12 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "1.99.99"
 notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.itoa]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "1.0.18"
+notes = "For soundness, I have assumed the validity of `div_rem_1e16`"
 
 [[audits.k256]]
 criteria = "audited"
@@ -368,6 +513,16 @@ criteria = "audited"
 version = "0.3.0"
 notes = "`/audits/crypto/Cypher Stack March 2023`"
 
+[[audits.nohash-hasher]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.2.0"
+notes = """
+This uses a marker trait to enforce a runtime contract over how
+`<T as Hash>::hash` is actually implemented, panicking if not satisfied (when
+`debug_assertions` is enabled). This is reasonably documented however.
+"""
+
 [[audits.nonzero_ext]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -394,6 +549,18 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "0.12.99"
 notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.pulley-interpreter]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.pulley-macros]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
 
 [[audits.rapidhash]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -459,17 +626,94 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.25.10+spec-1.1.0 -> 0.25.11+spec-1.1.0"
 
+[[audits.tuplex]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.2"
+
 [[audits.want]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-run"
 version = "0.3.1"
 notes = "Undocumented panic prevents `safe-to-deploy`, see https://github.com/seanmonstar/want/pull/5"
 
+[[audits.wasmtime]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "GHSA-m758-wjhj-p3jq and GHSA-6wgr-89rj-399p"
+
+[[audits.wasmtime-environ]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = """
+Without full context on the safety or soundness of this, I can confirm these
+changes appear to correspond to GHSA-394w-hwhg-8vgm, GHSA-jxhv-7h78-9775, and
+GHSA-hx6p-xpx3-jvvv.
+"""
+
+[[audits.wasmtime-internal-core]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-cranelift]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-fiber]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-jit-debug]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-jit-icache-coherence]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-unwinder]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
+[[audits.wasmtime-internal-versioned-export-macros]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "43.0.0 -> 43.0.1"
+notes = "Solely a version bump"
+
 [[audits.wit-bindgen-rust-macro]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "0.51.99"
 notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[trusted.hashbrown]]
+criteria = "safe-to-deploy"
+user-id = 55123 # rust-lang-owner
+start = "2025-04-30"
+end = "2027-04-09"
+notes = "Trusted due to rust-lang"
+
+[[trusted.libc]]
+criteria = "safe-to-deploy"
+user-id = 55123 # rust-lang-owner
+start = "2024-08-15"
+end = "2027-04-09"
+notes = "Trusted due to rust-lang and infeasibility of auditing"
 
 [[trusted.windows]]
 criteria = "safe-to-deploy"

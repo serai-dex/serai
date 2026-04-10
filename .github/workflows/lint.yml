@@ -306,5 +306,8 @@ jobs:
         shell: bash
         run: |
           find ./patches -name "Cargo.toml" | while IFS="\n" read -r manifest; do
-            cargo test --all-features --manifest-path $manifest
+            folder=$(echo "$manifest" | sed s/"\/[^\/]*$"//)
+            if [ $(grep -r -F "#[test]" "$folder" | wc -l || true) -ne 0 ]; then
+              cargo test --all-features --manifest-path "$manifest"
+            fi
           done

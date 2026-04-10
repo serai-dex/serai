@@ -132,8 +132,8 @@ jobs:
           source_of_truth: ${{ needs.source_of_truth.outputs.hash }}
         shell: bash
         run: |
-          rustup toolchain install 1.94.1 --profile minimal --component rust-src
-          cargo +1.94.1 build -p serai-runtime --release --no-default-features
+          rustup toolchain install 1.94.0 --profile minimal --component rust-src
+          cargo +1.94.0 build -p serai-runtime --release --no-default-features
 
           HASH=$(sha256sum $(find ./target -name serai_runtime.wasm | head -n1) | cut -d' ' -f1)
 

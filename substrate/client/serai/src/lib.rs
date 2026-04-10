@@ -190,7 +190,7 @@ impl Serai {
     self
       .call(
         "blockchain/publish_transaction",
-        &format!(r#"{{ "transaction": {} }}"#, hex::encode(borsh::to_vec(transaction).unwrap())),
+        &format!(r#"{{ "transaction": "{}" }}"#, hex::encode(borsh::to_vec(transaction).unwrap())),
       )
       .await
   }
