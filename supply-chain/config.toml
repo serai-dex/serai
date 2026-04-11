@@ -957,10 +957,6 @@ criteria = "safe-to-deploy"
 version = "7.1.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.arrayref]]
-version = "0.3.9"
-criteria = "safe-to-deploy"
-
 [[exemptions.arrayvec]]
 version = "0.7.6"
 criteria = "safe-to-deploy"
@@ -1671,10 +1667,6 @@ criteria = "safe-to-deploy"
 version = "0.3.32"
 criteria = "safe-to-deploy"
 
-[[exemptions.futures-utils-wasm]]
-version = "0.1.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.generic-array]]
 version = "0.14.7"
 criteria = "safe-to-deploy"
@@ -1723,10 +1715,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.h2]]
 version = "0.4.13"
-criteria = "safe-to-deploy"
-
-[[exemptions.hash-db]]
-version = "0.16.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.hashbrown]]
@@ -1916,7 +1904,7 @@ version = "0.1.34"
 criteria = "safe-to-deploy"
 
 [[exemptions.js-sys]]
-version = "0.3.94"
+version = "0.3.95"
 criteria = "safe-to-deploy"
 
 [[exemptions.jsonrpsee]]
@@ -2617,15 +2605,15 @@ version = "36.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.revm-bytecode]]
-version = "9.0.0"
+version = "10.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.revm-context]]
-version = "15.0.0"
+version = "16.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.revm-context-interface]]
-version = "16.0.0"
+version = "17.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.revm-database]]
@@ -2637,23 +2625,23 @@ version = "10.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.revm-handler]]
-version = "17.0.0"
+version = "18.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.revm-inspector]]
-version = "17.0.0"
+version = "18.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.revm-interpreter]]
-version = "34.0.0"
+version = "35.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.revm-precompile]]
-version = "32.1.0"
+version = "33.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.revm-primitives]]
-version = "22.1.0"
+version = "23.0.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.revm-state]]
@@ -2721,7 +2709,7 @@ version = "1.14.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.rustls-webpki]]
-version = "0.103.10"
+version = "0.103.11"
 criteria = "safe-to-deploy"
 
 [[exemptions.rustversion]]
@@ -3604,7 +3592,7 @@ version = "0.4.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.web-sys]]
-version = "0.3.94"
+version = "0.3.95"
 criteria = "safe-to-deploy"
 
 [[exemptions.web-time]]

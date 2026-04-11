@@ -88,7 +88,7 @@ impl Inspector<RevmContext> for WorstCaseCallInspector {
       does call precompiles (ecrecover) and accordingly has to model the gas of that correctly.
     */
     if (self.call_depth == 1) && (!precompiles().contains(&inputs.target_address)) {
-      let unused_gas = inputs.gas_limit - outcome.result.gas.spent();
+      let unused_gas = inputs.gas_limit - outcome.result.gas.total_gas_spent();
       self.unused_gas += unused_gas;
 
       // Now that the CALL is over, flag we should normalize the values on the stack
@@ -145,7 +145,7 @@ impl Router {
     While whoever publishes these transactions may be able to query a gas estimate, it may not be
     reasonable to. If the signing context is a distributed group, as Serai frequently employs, a
     non-deterministic gas (such as estimates from the local nodes) would require a consensus
-    protocol to determine  which to use.
+    protocol to determine which to use.
 
     These gas limits may break if/when gas opcodes undergo repricing. In that case, this library is
     expected to be modified with these made parameters. The caller would then be expected to pass
@@ -325,7 +325,7 @@ impl Router {
       {
         ExecutionResult::Success { gas, .. } => {
           assert_eq!(gas.final_refunded(), 0);
-          gas.used()
+          gas.tx_gas_used()
         }
         res @ (ExecutionResult::Revert { .. } | ExecutionResult::Halt { .. }) => {
           panic!("estimated execute transaction failed: {res:?}")
@@ -351,7 +351,7 @@ impl Router {
         0,
       );
       assert_eq!(gas.floor_gas, 0);
-      gas.initial_gas
+      gas.initial_total_gas
     };
     let mut current_initial_gas = initial_gas(shimmed_fee, abi::Signature::from(&sig));
     // Remove the current initial gas from the transaction's gas
