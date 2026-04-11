@@ -8,7 +8,7 @@ static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
   zalloc::ZeroizingAlloc(std::alloc::System);
 
 use core::time::Duration;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use alloy_core::primitives::U256;
 use alloy_simple_request_transport::SimpleRequest;
@@ -69,22 +69,40 @@ async fn main() {
     let mut delay = Duration::from_secs(5);
     loop {
       match provider.get_chain_id().await {
-        Ok(chain_id) => break chain_id,
+        Ok(chain_id) => break U256::from(chain_id),
         Err(e) => {
           serai_env::error!("failed to fetch the chain ID on boot: {e:?}");
           tokio::time::sleep(delay).await;
-          delay = (delay + Duration::from_secs(5)).max(Duration::from_mins(2));
+          delay = (delay + Duration::from_secs(5)).min(Duration::from_mins(2));
         }
       }
     }
   };
 
+  let router = Arc::new(OnceLock::new());
+  let rpc = Rpc { db: db.clone(), provider: provider.clone(), router: router.clone() };
+  if InitialSeraiKey::get(&db).is_some() {
+    // Initialize the router now
+    let mut delay = Duration::from_secs(5);
+    loop {
+      match rpc.initialize_router().await {
+        Ok(()) => {
+          assert!(router.get().is_some());
+          break;
+        }
+        Err(e) => {
+          serai_env::error!("failed find the router on boot: {e:?}");
+          tokio::time::sleep(delay).await;
+          delay = (delay + Duration::from_secs(5)).min(Duration::from_mins(2));
+        }
+      }
+    }
+  }
+
   bin::main_loop::<SetInitialKey, _, KeyGenParams, _>(
     db.clone(),
-    Rpc { db: db.clone(), provider: provider.clone() },
-    Scheduler::<bin::Db>::new(SmartContract {
-      chain_id: U256::from_le_slice(&chain_id.to_le_bytes()),
-    }),
+    rpc,
+    Scheduler::<bin::Db>::new(SmartContract { chain_id, router }),
     TransactionPublisher::new(db, provider, {
       let relayer_hostname = env::var("ETHEREUM_RELAYER_HOSTNAME")
         .expect("ethereum relayer hostname wasn't specified")

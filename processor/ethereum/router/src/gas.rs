@@ -385,18 +385,14 @@ impl Router {
   /// deduct from each `OutInstruction`, before all `OutInstruction`s incur an amortized fee of
   /// what remains for the batch itself.
   pub fn execute_out_instruction_gas_estimate(
-    &mut self,
+    &self,
     coin: Coin,
     instruction: abi::OutInstruction,
   ) -> u64 {
-    if !self.empty_execute_gas.contains_key(&coin) {
-      // This can't be de-duplicated across ERC20s due to the zero bytes in the address
-      let (gas, _fee) = self.execute_gas_and_fee(coin, U256::from(0), &OutInstructions(vec![]));
-      self.empty_execute_gas.insert(coin, gas);
-    }
-
-    let (gas, _fee) =
+    let (empty_execute_gas, _fee) =
+      self.execute_gas_and_fee(coin, U256::from(0), &OutInstructions(vec![]));
+    let (gas_with_out_instruction, _fee) =
       self.execute_gas_and_fee(coin, U256::from(0), &OutInstructions(vec![instruction]));
-    gas - self.empty_execute_gas[&coin]
+    gas_with_out_instruction - empty_execute_gas
   }
 }

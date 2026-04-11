@@ -7964,6 +7964,7 @@ dependencies = [
  "k256",
  "modular-frost",
  "rand_core 0.6.4",
+ "revm-primitives",
  "serai-client-ethereum",
  "serai-db",
  "serai-env",

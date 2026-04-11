@@ -1,5 +1,8 @@
 use core::future::Future;
-use std::{sync::Arc, collections::HashSet};
+use std::{
+  sync::{Arc, OnceLock},
+  collections::HashSet,
+};
 
 use alloy_core::primitives::B256;
 use alloy_rpc_types_eth::{Header, BlockNumberOrTag};
@@ -26,6 +29,43 @@ use crate::{
 pub(crate) struct Rpc<D: Db> {
   pub(crate) db: D,
   pub(crate) provider: Arc<RootProvider>,
+  pub(crate) router: Arc<OnceLock<Router>>,
+}
+
+impl<D: Db> Rpc<D> {
+  pub(crate) async fn router(&self) -> Result<Router, RpcError<TransportErrorKind>> {
+    let Some(router) = Router::new(
+      self.provider.clone(),
+      &ethereum_schnorr::PublicKey::new(
+        crate::InitialSeraiKey::get(&self.db)
+          .ok_or_else(|| {
+            TransportErrorKind::Custom(
+              "trying to identify the router before the initial key was set".to_owned().into(),
+            )
+          })?
+          .0,
+      )
+      .expect("initial key used by Serai wasn't representable on Ethereum"),
+    )
+    .await?
+    else {
+      Err(TransportErrorKind::Custom("router has yet to be deployed on chain".to_owned().into()))?
+    };
+    Ok(router)
+  }
+}
+
+impl<D: Db> Rpc<D> {
+  pub(crate) async fn initialize_router(&self) -> Result<(), RpcError<TransportErrorKind>> {
+    if self.router.get().is_none() {
+      let router = self.router().await?;
+      match self.router.set(router) {
+        Ok(()) => {}
+        Err(router) => assert_eq!(router.address(), self.router.get().unwrap().address()),
+      }
+    }
+    Ok(())
+  }
 }
 
 impl<D: Db> ScannerFeed for Rpc<D> {
@@ -46,6 +86,14 @@ impl<D: Db> ScannerFeed for Rpc<D> {
     &self,
   ) -> impl Send + Future<Output = Result<u64, Self::EphemeralError>> {
     async move {
+      /*
+        Because all RPC requests go through this method, we use it to ensure the Router is
+        populated throughout the entire service. While this will represent the chain as offline
+        until the Router is identified, the initial key generation won't require the chain and it's
+        fine to only allow indexing the chain once our Router is deployed.
+      */
+      self.initialize_router().await?;
+
       let actual_number = self
         .provider
         .get_block(BlockNumberOrTag::Finalized.into())
@@ -74,6 +122,14 @@ impl<D: Db> ScannerFeed for Rpc<D> {
     number: u64,
   ) -> impl Send + Future<Output = Result<u64, Self::EphemeralError>> {
     async move {
+      // The Scanner should prevent this from being reached, yet the real point is to ensure the
+      // Router is initialized, which is done whenever this method is called
+      if self.latest_finalized_block_number().await? < number {
+        Err(TransportErrorKind::Custom(
+          "requested block time for unfinalized block number".to_owned().into(),
+        ))?;
+      }
+
       let header = self
         .provider
         .get_block(BlockNumberOrTag::Number(number).into())
@@ -87,6 +143,7 @@ impl<D: Db> ScannerFeed for Rpc<D> {
       // This is monotonic ever since the merge
       // https://github.com/ethereum/consensus-specs/blob/4afe39822c9ad9747e0f5635cca117c18441ec1b
       //   /specs/bellatrix/beacon-chain.md?plain=1#L393-L394
+      // TODO: Check this header was in fact post-merge, if not, falling back to the block number?
       Ok(header.timestamp)
     }
   }
@@ -98,6 +155,14 @@ impl<D: Db> ScannerFeed for Rpc<D> {
        + Future<Output = Result<<Self::Block as primitives::Block>::Header, Self::EphemeralError>>
   {
     async move {
+      // The Scanner should prevent this from being reached, yet the real point is to ensure the
+      // Router is initialized, which is done whenever this method is called
+      if self.latest_finalized_block_number().await? < number {
+        Err(TransportErrorKind::Custom(
+          "requested block header for unfinalized block number".to_owned().into(),
+        ))?;
+      }
+
       let start = number * 32;
       let prior_end_hash = if start == 0 {
         [0; 32]
