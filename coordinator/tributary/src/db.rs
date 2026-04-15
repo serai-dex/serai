@@ -53,7 +53,7 @@ pub(crate) enum Participating {
 
 pub(crate) fn required_participation(n: u16) -> u16 {
   // All of our topics require 2/3rds participation
-  n.checked_mul(2).unwrap_or_else(|| panic!("required_participation overflowed: {} * 2", n)) / 3 + 1
+  n.checked_mul(2).unwrap_or_else(|| panic!("required_participation overflowed: {n} * 2")) / 3 + 1
 }
 
 impl Topic {
@@ -493,8 +493,7 @@ impl TributaryDb {
     // Accumulate the data
     accumulated_weight = accumulated_weight.checked_add(validator_weight).unwrap_or_else(|| {
       panic!(
-        "accumulated_weight {} overflowed adding validator_weight {}",
-        accumulated_weight, validator_weight
+        "accumulated_weight {accumulated_weight} overflowed adding validator_weight {validator_weight}",
       )
     });
     AccumulatedWeight::set(txn, set, topic, &accumulated_weight);
@@ -511,8 +510,7 @@ impl TributaryDb {
         #[expect(clippy::expect_fun_call)]
         let recognize_at = block_number.checked_add(blocks_till_reattempt).unwrap_or_else(|| {
           panic!(
-            "recognize_at overflowed: block_number {} + delay {}",
-            block_number, blocks_till_reattempt
+            "recognize_at overflowed: block_number {block_number} + delay {blocks_till_reattempt}",
           );
         });
         let mut queued = Reattempt::get(txn, set, recognize_at).unwrap_or(Vec::with_capacity(1));
