@@ -61,16 +61,17 @@ impl Topic {
   pub(crate) fn next_attempt_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
+      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round: _ } => Some(Topic::DkgConfirmation {
         attempt: attempt.checked_add(1)?,
         round: SigningProtocolRound::Preprocess,
       }),
+      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round: _ } => Some(Topic::Sign {
         id,
         attempt: attempt.checked_add(1)?,
         round: SigningProtocolRound::Preprocess,
       }),
-      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -78,6 +79,7 @@ impl Topic {
   pub(crate) fn reattempt_topic(self) -> Option<(u32, Topic)> {
     #[expect(clippy::match_same_arms)]
     match self {
+      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
           let next_attempt = attempt.checked_add(1)?;
@@ -91,6 +93,7 @@ impl Topic {
         }
         SigningProtocolRound::Share => None,
       },
+      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
           let next_attempt = attempt.checked_add(1)?;
@@ -101,7 +104,6 @@ impl Topic {
         }
         SigningProtocolRound::Share => None,
       },
-      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -111,7 +113,9 @@ impl Topic {
   pub(crate) fn sign_id(self, set: ExternalValidatorSet) -> Option<messages::sign::SignId> {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } | Topic::DkgConfirmation { .. } | Topic::SlashReport => None,
+      Topic::RemoveParticipant { .. } => None,
+      Topic::DkgConfirmation { .. } => None,
+      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round: _ } => Some(SignId { session: set.session, id, attempt }),
     }
   }
@@ -128,6 +132,7 @@ impl Topic {
   ) -> Option<messages::sign::SignId> {
     #[expect(clippy::match_same_arms)]
     match self {
+      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round: _ } => Some({
         let id = {
           let mut id = [0; 32];
@@ -137,7 +142,8 @@ impl Topic {
         };
         SignId { session: set.session, id, attempt }
       }),
-      Topic::RemoveParticipant { .. } | Topic::SlashReport | Topic::Sign { .. } => None,
+      Topic::SlashReport => None,
+      Topic::Sign { .. } => None,
     }
   }
 
@@ -147,19 +153,20 @@ impl Topic {
   pub(crate) fn preceding_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
+      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => None,
         SigningProtocolRound::Share => {
           Some(Topic::DkgConfirmation { attempt, round: SigningProtocolRound::Preprocess })
         }
       },
+      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => None,
         SigningProtocolRound::Share => {
           Some(Topic::Sign { id, attempt, round: SigningProtocolRound::Preprocess })
         }
       },
-      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -169,19 +176,20 @@ impl Topic {
   pub(crate) fn succeeding_topic(self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)]
     match self {
+      Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
           Some(Topic::DkgConfirmation { attempt, round: SigningProtocolRound::Share })
         }
         SigningProtocolRound::Share => None,
       },
+      Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
           Some(Topic::Sign { id, attempt, round: SigningProtocolRound::Share })
         }
         SigningProtocolRound::Share => None,
       },
-      Topic::RemoveParticipant { .. } | Topic::SlashReport => None,
     }
   }
 
@@ -203,8 +211,10 @@ impl Topic {
   pub(crate) fn participating(&self) -> Participating {
     #[expect(clippy::match_same_arms)]
     match self {
-      Topic::RemoveParticipant { .. } | Topic::SlashReport => Participating::Everyone,
-      Topic::DkgConfirmation { .. } | Topic::Sign { .. } => Participating::Participated,
+      Topic::RemoveParticipant { .. } => Participating::Everyone,
+      Topic::DkgConfirmation { .. } => Participating::Participated,
+      Topic::SlashReport => Participating::Everyone,
+      Topic::Sign { .. } => Participating::Participated,
     }
   }
 }
