@@ -252,6 +252,7 @@ impl ReadWrite for Transaction {
 
 impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind {
+    #[expect(clippy::match_same_arms)]
     match self {
       Transaction::RemoveParticipant { participant, signed } => TransactionKind::Signed(
         borsh::to_vec(&(b"RemoveParticipant".as_slice(), participant)).unwrap(),

@@ -53,7 +53,10 @@ pub(crate) enum Participating {
 
 pub(crate) fn required_participation(n: u16) -> u16 {
   // All of our topics require 2/3rds participation
-  n.checked_mul(2).expect(&format!("required_participation overflowed: {n} * 2")) / 3 + 1
+  #[expect(clippy::expect_fun_call)]
+  n.checked_mul(2).expect(&format!("required_participation overflowed: {n} * 2")) /
+    3 +
+    1
 }
 
 impl Topic {
@@ -413,9 +416,9 @@ impl TributaryDb {
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
     validator: SeraiAddress,
-    _reason: &str,
+    #[cfg_attr(coverage, allow(unused_variables))] reason: &str,
   ) {
-    serai_env::warn!("{validator} fatally slashed: {_reason}");
+    serai_env::warn!("{validator} fatally slashed: {reason}");
     SlashPoints::set(txn, set, validator, &u32::MAX);
   }
 
@@ -491,6 +494,7 @@ impl TributaryDb {
     }
 
     // Accumulate the data
+    #[expect(clippy::expect_fun_call)]
     accumulated_weight = accumulated_weight.checked_add(validator_weight).expect(&format!(
       "accumulated_weight {} overflowed adding validator_weight {}",
       accumulated_weight, validator_weight
@@ -506,6 +510,7 @@ impl TributaryDb {
         // Linearly scale the time for the protocol with the attempt number
         let blocks_till_reattempt = u64::from(attempt) * u64::from(BASE_REATTEMPT_DELAY);
 
+        #[expect(clippy::expect_fun_call)]
         let recognize_at = block_number.checked_add(blocks_till_reattempt).expect(&format!(
           "recognize_at overflowed: block_number {block_number} + delay {blocks_till_reattempt}"
         ));
