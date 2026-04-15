@@ -78,8 +78,8 @@ impl CalldataAgnosticGas {
     }
     gas_used +
       (calculate_initial_tx_gas(SpecId::CANCUN, &without_variable_zero_bytes, false, 0, 0, 0)
-        .initial_gas -
-        calculate_initial_tx_gas(SpecId::CANCUN, input, false, 0, 0, 0).initial_gas)
+        .initial_total_gas -
+        calculate_initial_tx_gas(SpecId::CANCUN, input, false, 0, 0, 0).initial_total_gas)
   }
 }
 

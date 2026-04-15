@@ -20,6 +20,22 @@ criteria = "safe-to-deploy"
 version = "0.4.99"
 notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
 
+[[audits.arrayref]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.3.9"
+notes = """
+As of Rust 1.93.0, there's `<[T]>::as_array` and `<[T]>::as_mut_array` which
+would be eligible to replace `array_ref!` and `array_mut_ref!` without
+`unsafe`. The only caveat would be how this bound-checks when taking the slice,
+then uses `unsafe` to cast to an array, while the `std` library option would
+bound-check when taking the slice _and_ check the length when casting (though
+this may be trivially optimized out).
+
+While I would add such a patch, that wouldn't cover the `array_refs!`,
+`mut_array_refs!` macros.
+"""
+
 [[audits.asn1-rs-impl]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -67,6 +83,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "2.99.99"
 notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.cc]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.2.59 -> 1.2.60"
 
 [[audits.ciphersuite]]
 criteria = "audited"
@@ -281,6 +302,11 @@ criteria = "safe-to-deploy"
 version = "1.0.7"
 notes = "I have not confirmed any relation to the algorithm it claims to implement"
 
+[[audits.futures-utils-wasm]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.0"
+
 [[audits.generalized-bulletproofs]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -317,11 +343,25 @@ criteria = "audited"
 version = "0.1.0@git:cebfb4bdff0c34ead77ba3f1d4e5610e934c581f"
 notes = "`monero-oxide/audits/fcmps`"
 
+[[audits.hash-db]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.16.0"
+
 [[audits.hex-literal]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "1.1.0"
 notes = "Lacking an exhaustive test for all 256 possible hex sequences"
+
+[[audits.ident_case]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-run"
+version = "1.0.1"
+notes = """
+This crate silently assumes input string are ASCII and may panic on or not
+properly handle casing for Unicode characters.
+"""
 
 [[audits.impl-codec]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -333,6 +373,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "1.99.99"
 notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[audits.indexmap]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.13.1 -> 2.14.0"
 
 [[audits.itoa]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -350,6 +395,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "1.99.99"
 notes = "Re-implementation of a sufficient approximation of the `lazy_static` API around `std::sync::LazyLock`"
+
+[[audits.libredox]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.1.15 -> 0.1.16"
 
 [[audits.modular-frost]]
 criteria = "audited"
@@ -568,6 +618,26 @@ criteria = "safe-to-deploy"
 version = "4.99.99"
 notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
 
+[[audits.revm]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "36.0.0 -> 37.0.0"
+
+[[audits.revm-database]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "12.0.0 -> 13.0.0"
+
+[[audits.revm-database-interface]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "10.0.0 -> 11.0.0"
+
+[[audits.revm-state]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "10.0.0 -> 11.0.0"
+
 [[audits.rlp]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -636,6 +706,27 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-run"
 version = "0.3.1"
 notes = "Undocumented panic prevents `safe-to-deploy`, see https://github.com/seanmonstar/want/pull/5"
+
+[[audits.wasm-bindgen]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.117 -> 0.2.118"
+
+[[audits.wasm-bindgen-macro]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.117 -> 0.2.118"
+notes = "Solely a version bump"
+
+[[audits.wasm-bindgen-macro-support]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.117 -> 0.2.118"
+
+[[audits.wasm-bindgen-shared]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.117 -> 0.2.118"
 
 [[audits.wasmtime]]
 who = "Luke Parker <lukeparker5132@gmail.com>"

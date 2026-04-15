@@ -13,6 +13,12 @@ when = "2025-11-20"
 user-id = 55123
 user-login = "rust-lang-owner"
 
+[[publisher.hashbrown]]
+version = "0.17.0"
+when = "2026-04-09"
+user-id = 55123
+user-login = "rust-lang-owner"
+
 [[publisher.libc]]
 version = "0.2.184"
 when = "2026-04-01"

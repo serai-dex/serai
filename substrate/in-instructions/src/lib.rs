@@ -891,7 +891,9 @@ mod pallet {
 
       let mut builder = ValidTransaction::with_tag_prefix("InInstructions");
       if let Some(required_last_batch) = batch.batch.id().checked_sub(1) {
-        builder = builder.and_requires((batch.batch.network(), required_last_batch));
+        if LastBatch::<T>::get(batch.batch.network()) < Some(required_last_batch) {
+          builder = builder.and_requires((batch.batch.network(), required_last_batch));
+        }
       }
       builder
         .and_provides((batch.batch.network(), batch.batch.id()))

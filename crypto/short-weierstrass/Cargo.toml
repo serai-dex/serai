@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/crypto/short-weier
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["ff", "group", "elliptic-curve", "weierstrass"]
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true

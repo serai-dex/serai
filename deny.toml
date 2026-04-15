@@ -4,11 +4,14 @@ version = 2
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 
+unsound = "all"
+unmaintained = "all"
 yanked = "deny"
 
 ignore = [
   "RUSTSEC-2024-0370", # `proc-macro-error` is unmaintained, in-tree due to Substrate/`litep2p`
   "RUSTSEC-2024-0436", # `paste` is unmaintained
+  "RUSTSEC-2026-0097", # `rand` is unsafe when the `log` feature is enabled, which we check in CI
 ]
 
 [licenses]

@@ -233,7 +233,6 @@ pub struct Escape {
 pub struct Router {
   provider: Arc<RootProvider>,
   address: Address,
-  empty_execute_gas: HashMap<Coin, u64>,
 }
 impl Router {
   fn init_code(key: &PublicKey) -> Vec<u8> {
@@ -279,7 +278,7 @@ impl Router {
     else {
       return Ok(None);
     };
-    Ok(Some(Self { provider, address, empty_execute_gas: HashMap::new() }))
+    Ok(Some(Self { provider, address }))
   }
 
   /// The address of the router.
