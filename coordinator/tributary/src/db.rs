@@ -507,7 +507,6 @@ impl TributaryDb {
         // Linearly scale the time for the protocol with the attempt number
         let blocks_till_reattempt = u64::from(attempt) * u64::from(BASE_REATTEMPT_DELAY);
 
-        #[expect(clippy::expect_fun_call)]
         let recognize_at = block_number.checked_add(blocks_till_reattempt).unwrap_or_else(|| {
           panic!(
             "recognize_at overflowed: block_number {block_number} + delay {blocks_till_reattempt}",
