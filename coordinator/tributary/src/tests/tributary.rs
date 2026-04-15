@@ -1,4 +1,4 @@
-use serai_db::{Db, DbTxn, MemDb};
+use serai_db::{Db as _, DbTxn as _, MemDb};
 use crate::*;
 use super::*;
 
@@ -6,7 +6,15 @@ use super::*;
 fn unwrap_slash_report(tx: Transaction) -> (Vec<u32>, Signed) {
   match tx {
     Transaction::SlashReport { slash_points, signed } => (slash_points, signed),
-    other => panic!("expected SlashReport, got {other:?}"),
+    other @ (Transaction::RemoveParticipant { .. } |
+    Transaction::DkgParticipation { .. } |
+    Transaction::DkgConfirmationPreprocess { .. } |
+    Transaction::DkgConfirmationShare { .. } |
+    Transaction::Cosign { .. } |
+    Transaction::Cosigned { .. } |
+    Transaction::SubstrateBlock { .. } |
+    Transaction::Batch { .. } |
+    Transaction::Sign { .. }) => panic!("expected SlashReport, got {other:?}"),
   }
 }
 

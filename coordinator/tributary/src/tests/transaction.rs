@@ -2,11 +2,11 @@ use core::ops::Deref as _;
 use std::io::{self, Cursor, Read, Write};
 
 use blake2::{digest::typenum::U32, Digest as _, Blake2b};
-use borsh::{BorshDeserialize, BorshSerialize};
-use rand::{RngCore, rngs::OsRng};
+use borsh::{BorshDeserialize as _, BorshSerialize as _};
+use rand::{RngCore as _, rngs::OsRng};
 
 use ciphersuite::{
-  group::{Group as _, GroupEncoding, ff::PrimeField},
+  group::{Group as _, GroupEncoding as _, ff::PrimeField as _},
   *,
 };
 use dalek_ff_group::Ristretto;
@@ -15,7 +15,7 @@ use messages::sign::VariantSignId;
 use serai_primitives::{test_helpers::*, validator_sets::KeyShares};
 use tributary_sdk::{
   ReadWrite,
-  transaction::{Transaction as TransactionTrait, TransactionError, TransactionKind},
+  transaction::{Transaction as _, TransactionError, TransactionKind},
 };
 
 use super::*;
@@ -84,7 +84,7 @@ mod signed {
       struct FailingWriter;
       impl Write for FailingWriter {
         fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
-          Err(io::Error::new(io::ErrorKind::Other, "simulated write failure"))
+          Err(io::Error::other("simulated write failure"))
         }
         fn flush(&mut self) -> io::Result<()> {
           Ok(())
@@ -141,7 +141,7 @@ mod signed {
   fn to_tributary_signed_matches_signed() {
     let signed = random_signed(&mut OsRng);
     for round in all_signing_protocol_rounds() {
-      let tributary_signed = signed.clone().to_tributary_signed(round);
+      let tributary_signed = signed.to_tributary_signed(round);
       assert_eq!(signed.signer(), tributary_signed.signer);
       assert_eq!(signed.signature, tributary_signed.signature);
       assert_eq!(tributary_signed.nonce, round.nonce());
@@ -158,6 +158,7 @@ mod signed {
   }
 }
 
+#[allow(clippy::module_inception)]
 mod transaction {
   use super::*;
 
@@ -178,7 +179,7 @@ mod transaction {
           }
           Transaction::DkgParticipation { participation, signed } => {
             let mut expected = vec![1u8];
-            expected.extend(&(participation.len() as u32).to_le_bytes());
+            expected.extend(&u32::try_from(participation.len()).unwrap().to_le_bytes());
             expected.extend(participation);
             expected.extend(borsh::to_vec(signed).unwrap());
             expected
@@ -242,9 +243,9 @@ mod transaction {
               SigningProtocolRound::Preprocess => expected.push(0u8),
               SigningProtocolRound::Share => expected.push(1u8),
             }
-            expected.extend(&(data.len() as u32).to_le_bytes());
+            expected.extend(&u32::try_from(data.len()).unwrap().to_le_bytes());
             for d in data {
-              expected.extend(&(d.len() as u32).to_le_bytes());
+              expected.extend(&u32::try_from(d.len()).unwrap().to_le_bytes());
               expected.extend(d);
             }
             expected.extend(borsh::to_vec(signed).unwrap());
@@ -252,7 +253,7 @@ mod transaction {
           }
           Transaction::SlashReport { slash_points, signed } => {
             let mut expected = vec![9u8];
-            expected.extend(&(slash_points.len() as u32).to_le_bytes());
+            expected.extend(&u32::try_from(slash_points.len()).unwrap().to_le_bytes());
             for &p in slash_points {
               expected.extend(&p.to_le_bytes());
             }
@@ -342,12 +343,12 @@ mod transaction {
       /// Borsh-encodes a byte-string label: `len(4 LE) || label`
       fn borsh_label(label: &[u8]) -> Vec<u8> {
         let mut out = Vec::new();
-        out.extend(&(label.len() as u32).to_le_bytes());
+        out.extend(&u32::try_from(label.len()).unwrap().to_le_bytes());
         out.extend(label);
         out
       }
 
-      for mut tx in all_signed_transactions_and_attempts(random_signed(&mut OsRng)) {
+      for mut tx in all_signed_transactions_and_attempts(&random_signed(&mut OsRng)) {
         tx.sign(&mut OsRng, genesis, &key);
 
         let (expected_order, expected_nonce) = match &tx {
@@ -391,7 +392,12 @@ mod transaction {
             (order, nonce)
           }
           Transaction::SlashReport { .. } => (borsh_label(b"SlashReport"), 0),
-          other => panic!("all_signed_transactions_and_attempts returned non-signed tx: {other:?}"),
+          other @ (Transaction::Cosign { .. } |
+          Transaction::Cosigned { .. } |
+          Transaction::SubstrateBlock { .. } |
+          Transaction::Batch { .. }) => {
+            panic!("all_signed_transactions_and_attempts returned non-signed tx: {other:?}")
+          }
         };
 
         match tx.kind() {
@@ -403,7 +409,9 @@ mod transaction {
               "Signature verification failed for {tx:?}"
             );
           }
-          other => panic!("Expected Signed kind, got {other:?} for {tx:?}"),
+          other @ (TransactionKind::Provided(_) | TransactionKind::Unsigned) => {
+            panic!("Expected Signed kind, got {other:?} for {tx:?}")
+          }
         }
       }
     }
@@ -416,14 +424,23 @@ mod transaction {
           Transaction::Cosigned { .. } => "Cosigned",
           Transaction::SubstrateBlock { .. } => "SubstrateBlock",
           Transaction::Batch { .. } => "Batch",
-          other => panic!("all_provided_transactions returned non-provided tx: {other:?}"),
+          other @ (Transaction::RemoveParticipant { .. } |
+          Transaction::DkgParticipation { .. } |
+          Transaction::DkgConfirmationPreprocess { .. } |
+          Transaction::DkgConfirmationShare { .. } |
+          Transaction::Sign { .. } |
+          Transaction::SlashReport { .. }) => {
+            panic!("all_provided_transactions returned non-provided tx: {other:?}")
+          }
         };
 
         match tx.kind() {
           TransactionKind::Provided(actual_order) => {
             assert_eq!(actual_order, expected_order, "Wrong order for {tx:?}");
           }
-          other => panic!("Expected Provided kind, got {other:?} for {tx:?}"),
+          other @ (TransactionKind::Unsigned | TransactionKind::Signed(..)) => {
+            panic!("Expected Provided kind, got {other:?} for {tx:?}")
+          }
         }
       }
     }
@@ -515,8 +532,7 @@ mod transaction {
         Transaction::RemoveParticipant { .. } |
         Transaction::DkgParticipation { .. } |
         Transaction::DkgConfirmationPreprocess { .. } |
-        Transaction::DkgConfirmationShare { .. } => {}
-
+        Transaction::DkgConfirmationShare { .. } |
         // Provided: no validation beyond structure
         Transaction::Cosign { .. } |
         Transaction::Cosigned { .. } |
@@ -532,8 +548,9 @@ mod transaction {
             data,
             signed: *signed,
           };
-          assert_eq!(with_data(vec![vec![]; 0]).verify(), Ok(()));
-          assert_eq!(with_data(vec![vec![]; OsRng.next_u32() as usize % max]).verify(), Ok(()));
+          assert_eq!(with_data(Vec::new()).verify(), Ok(()));
+          let random_len = usize::try_from(OsRng.next_u32()).unwrap() % max;
+          assert_eq!(with_data(vec![vec![]; random_len]).verify(), Ok(()));
           assert_eq!(with_data(vec![vec![]; max]).verify(), Ok(()));
           assert_eq!(
             with_data(vec![vec![]; max + 1]).verify(),
@@ -545,8 +562,9 @@ mod transaction {
         Transaction::SlashReport { signed, .. } => {
           let with_points =
             |points| Transaction::SlashReport { slash_points: points, signed: *signed };
-          assert_eq!(with_points(vec![0; 0]).verify(), Ok(()));
-          assert_eq!(with_points(vec![0; OsRng.next_u32() as usize % max]).verify(), Ok(()));
+          assert_eq!(with_points(vec![]).verify(), Ok(()));
+          let random_len = usize::try_from(OsRng.next_u32()).unwrap() % max;
+          assert_eq!(with_points(vec![0; random_len]).verify(), Ok(()));
           assert_eq!(with_points(vec![0; max]).verify(), Ok(()));
           assert_eq!(with_points(vec![0; max + 1]).verify(), Err(TransactionError::InvalidContent));
         }
@@ -561,7 +579,11 @@ mod transaction {
         Transaction::RemoveParticipant { participant, .. } => {
           Some(Topic::RemoveParticipant { participant: *participant })
         }
-        Transaction::DkgParticipation { .. } => None,
+        Transaction::DkgParticipation { .. } |
+        Transaction::Cosign { .. } |
+        Transaction::Cosigned { .. } |
+        Transaction::SubstrateBlock { .. } |
+        Transaction::Batch { .. } => None,
         Transaction::DkgConfirmationPreprocess { attempt, .. } => Some(Topic::DkgConfirmation {
           attempt: *attempt,
           round: SigningProtocolRound::Preprocess,
@@ -573,7 +595,6 @@ mod transaction {
           Some(Topic::Sign { id: *id, attempt: *attempt, round: *round })
         }
         Transaction::SlashReport { .. } => Some(Topic::SlashReport),
-        _ => None,
       };
       assert_eq!(tx.topic(), expected, "Wrong topic for {tx:?}");
     }
@@ -589,7 +610,7 @@ mod transaction {
       let genesis = random_genesis(&mut OsRng);
 
       // Sets correct signer and produces verifiable signature
-      for mut tx in all_signed_transactions_and_attempts(random_signed(&mut OsRng)) {
+      for mut tx in all_signed_transactions_and_attempts(&random_signed(&mut OsRng)) {
         tx.sign(&mut OsRng, genesis, &key);
         let sig_hash = tx.sig_hash(genesis);
 
@@ -618,9 +639,8 @@ mod transaction {
         }
         let wrong_challenge = tx.sig_hash(wrong_genesis);
         if let TransactionKind::Signed(_, tributary_signed) = tx.kind() {
-          assert_eq!(
-            tributary_signed.signature.verify(tributary_signed.signer, wrong_challenge),
-            false,
+          assert!(
+            !tributary_signed.signature.verify(tributary_signed.signer, wrong_challenge),
             "Signature should not verify with wrong genesis"
           );
         }

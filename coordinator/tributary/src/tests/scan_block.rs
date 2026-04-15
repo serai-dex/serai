@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 
 use schnorr::SchnorrSignature;
 
-use serai_db::{Db, DbTxn, MemDb};
+use serai_db::{Db as _, DbTxn, MemDb};
 use serai_primitives::test_helpers::{random_block_hash, random_block_number, random_vec_of_len};
 use serai_cosign_types::CosignIntent;
 use tributary_sdk::{
@@ -276,7 +276,7 @@ mod handle_application_tx {
       txn.commit();
     }
 
-    for tx in all_signed_transactions_and_attempts(Signed::default()) {
+    for tx in all_signed_transactions_and_attempts(&Signed::default()) {
       let mut txn = db.txn();
 
       {
@@ -313,7 +313,7 @@ mod handle_application_tx {
         Transaction::RemoveParticipant { participant: nonexistent, signed: Signed::default() },
       );
 
-      assert!(TributaryDb::is_fatally_slashed(&mut txn, set, default_signer));
+      assert!(TributaryDb::is_fatally_slashed(&txn, set, default_signer));
     }
 
     // Valid RemoveParticipant accumulates weight and eventually crosses threshold
@@ -340,14 +340,14 @@ mod handle_application_tx {
       }
       assert!(
         RecognizedTopics::recognized(
-          &mut txn,
+          &txn,
           set,
           Topic::RemoveParticipant { participant: target }
         ),
         "RemoveParticipant topic should be recognized after handling the tx"
       );
       assert!(
-        !TributaryDb::is_fatally_slashed(&mut txn, set, target),
+        !TributaryDb::is_fatally_slashed(&txn, set, target),
         "target should not be fatally slashed after one vote"
       );
 
@@ -364,7 +364,7 @@ mod handle_application_tx {
         );
       }
       assert!(
-        TributaryDb::is_fatally_slashed(&mut txn, set, target),
+        TributaryDb::is_fatally_slashed(&txn, set, target),
         "target should be fatally slashed after threshold is crossed"
       );
     }
@@ -465,7 +465,7 @@ mod handle_application_tx {
       );
 
       assert!(
-        TributaryDb::is_fatally_slashed(&mut txn, set, addr0),
+        TributaryDb::is_fatally_slashed(&txn, set, addr0),
         "share without preceding preprocess should fatally slash"
       );
     }
@@ -565,7 +565,7 @@ mod handle_application_tx {
         Transaction::Cosign { substrate_block_hash: block_hash },
       );
 
-      assert_eq!(TributaryDb::latest_substrate_block_to_cosign(&mut txn, set), Some(block_hash));
+      assert_eq!(TributaryDb::latest_substrate_block_to_cosign(&txn, set), Some(block_hash));
       assert_eq!(TributaryDb::actively_cosigning(&mut txn, set), Some(block_hash));
       assert!(ProcessorMessages::try_recv(&mut txn, set).is_some());
     }
@@ -590,7 +590,7 @@ mod handle_application_tx {
         Transaction::Cosign { substrate_block_hash: second_hash },
       );
 
-      assert_eq!(TributaryDb::latest_substrate_block_to_cosign(&mut txn, set), Some(second_hash));
+      assert_eq!(TributaryDb::latest_substrate_block_to_cosign(&txn, set), Some(second_hash));
       assert_eq!(TributaryDb::actively_cosigning(&mut txn, set), Some(first_hash));
     }
   }
@@ -699,7 +699,7 @@ mod handle_application_tx {
 
     for plan in &plans {
       let topic = expected_initially_recognized_sign_topic(VariantSignId::Transaction(*plan));
-      assert!(RecognizedTopics::recognized(&mut txn, set, topic));
+      assert!(RecognizedTopics::recognized(&txn, set, topic));
     }
   }
 
@@ -723,7 +723,7 @@ mod handle_application_tx {
     }
 
     let topic = expected_initially_recognized_sign_topic(VariantSignId::Batch(batch_hash));
-    assert!(RecognizedTopics::recognized(&mut txn, set, topic));
+    assert!(RecognizedTopics::recognized(&txn, set, topic));
   }
 
   mod slash_report {
@@ -754,14 +754,14 @@ mod handle_application_tx {
         scan_block.handle_application_tx(
           random_block_number(&mut OsRng),
           Transaction::SlashReport {
-            slash_points: vec![0; wrong_len as usize],
+            slash_points: vec![0; usize::from(wrong_len)],
             signed: new_signed(signer_key),
           },
         );
       }
 
       assert!(
-        TributaryDb::is_fatally_slashed(&mut txn, set, signer_addr),
+        TributaryDb::is_fatally_slashed(&txn, set, signer_addr),
         "signer should be fatally slashed for wrong-length slash report",
       );
       assert!(
@@ -773,14 +773,14 @@ mod handle_application_tx {
     #[test]
     fn fatal_slash_as_reported_median() {
       let num_validators = OsRng.gen_range(4u16 .. 10);
-      let num_reports = required_participation(num_validators) as usize;
+      let num_reports = usize::from(required_participation(num_validators));
 
       let set = default_test_validator_set();
       let (keys_addrs, validator_data, validators, weights, total_weight) =
         setup_n_validators_with_keys(num_validators);
       let set_info = new_test_set_info(&validator_data);
 
-      let mut report = vec![0u32; num_validators as usize];
+      let mut report = vec![0u32; usize::from(num_validators)];
       report[0] = u32::MAX;
       let reports: Vec<Vec<u32>> = vec![report; num_reports];
 
@@ -818,7 +818,7 @@ mod handle_application_tx {
         }
 
         // Compute the median for each validator position across all reporters
-        let mut medians = Vec::with_capacity(num_validators as usize);
+        let mut medians = Vec::with_capacity(usize::from(num_validators));
         for i in 0 .. usize::from(num_validators) {
           let mut values: Vec<u32> = reports.iter().map(|r| r[i]).collect();
           values.sort_unstable();
@@ -853,7 +853,7 @@ mod handle_application_tx {
         for _ in 0 .. 200 {
           // random even: 4, 6, 8, or 10
           let n = OsRng.gen_range(2u16 ..= 5) * 2;
-          let num_reports = required_participation(n as u16);
+          let num_reports = required_participation(n);
 
           let set = default_test_validator_set();
 
@@ -896,7 +896,7 @@ mod handle_application_tx {
 
           let sign_topic = expected_initially_recognized_sign_topic(VariantSignId::SlashReport);
           assert!(
-            RecognizedTopics::recognized(&mut txn, set, sign_topic),
+            RecognizedTopics::recognized(&txn, set, sign_topic),
             "SlashReport sign topic should be recognized",
           );
         }
@@ -945,7 +945,7 @@ mod handle_application_tx {
 
           assert!(ProcessorMessages::try_recv(&mut txn, set).is_some());
           let sign_topic = expected_initially_recognized_sign_topic(VariantSignId::SlashReport);
-          assert!(RecognizedTopics::recognized(&mut txn, set, sign_topic));
+          assert!(RecognizedTopics::recognized(&txn, set, sign_topic));
         }
       }
     }
@@ -981,7 +981,7 @@ mod handle_application_tx {
         },
       );
 
-      assert!(TributaryDb::is_fatally_slashed(&mut txn, set, addr0));
+      assert!(TributaryDb::is_fatally_slashed(&txn, set, addr0));
     }
 
     // Valid data: threshold crossing sends ProcessorMessage
@@ -1055,7 +1055,7 @@ mod handle_application_tx {
     assert!(ProcessorMessages::try_recv(&mut txn, set).is_some());
 
     // Share topic should now be recognized
-    assert!(RecognizedTopics::recognized(&mut txn, set, share_topic));
+    assert!(RecognizedTopics::recognized(&txn, set, share_topic));
 
     // Step 2: All validators submit shares, crossing threshold -> sends Shares message.
     {
@@ -1081,7 +1081,7 @@ mod handle_application_tx {
 
     // No validators should be slashed
     for v in &validators {
-      assert!(!TributaryDb::is_fatally_slashed(&mut txn, set, *v));
+      assert!(!TributaryDb::is_fatally_slashed(&txn, set, *v));
     }
   }
 }
@@ -1117,7 +1117,7 @@ fn handle_block() {
   // Each application transaction type passes through handle_block.
   // Signed transactions use a real validator key so participant_indexes lookups succeed.
   // Cosign and SubstrateBlock need external state populated before they can run.
-  for tx in all_signed_transactions_and_attempts(signed) {
+  for tx in all_signed_transactions_and_attempts(&signed) {
     let mut db = MemDb::new();
     let mut txn = db.txn();
 
@@ -1160,7 +1160,14 @@ fn handle_block() {
         let plans = vec![random_bytes_32(&mut OsRng)];
         SubstrateBlockPlans::set(&mut txn, set, *hash, &plans);
       }
-      _ => {}
+      Transaction::RemoveParticipant { .. } |
+      Transaction::DkgParticipation { .. } |
+      Transaction::DkgConfirmationPreprocess { .. } |
+      Transaction::DkgConfirmationShare { .. } |
+      Transaction::Cosigned { .. } |
+      Transaction::Batch { .. } |
+      Transaction::Sign { .. } |
+      Transaction::SlashReport { .. } => {}
     }
 
     let block_txs = vec![TributaryTransaction::Application(tx)];

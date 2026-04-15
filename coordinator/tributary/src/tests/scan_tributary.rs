@@ -14,7 +14,7 @@ async fn make_tributary(
   db: MemDb,
 ) -> (Tributary<MemDb, Transaction, MockP2p>, Zeroizing<<Ristretto as WrappedGroup>::F>, [u8; 32]) {
   let key = random_key(&mut OsRng);
-  let pub_key = get_key_point(key.clone());
+  let pub_key = get_key_point(&key);
   let genesis = random_genesis(&mut OsRng);
   let tributary = Tributary::<MemDb, Transaction, MockP2p>::new(
     db,
@@ -44,7 +44,7 @@ async fn new_scan_tributary_task() {
     assert_eq!(task.validators.len(), 1);
     assert_eq!(task.validators[0], addr);
     assert_eq!(task.total_weight, 3);
-    assert_eq!(*task.validator_weights.get(&addr).unwrap(), 3);
+    assert_eq!(task.validator_weights[&addr], 3);
   }
 
   // Multiple validators with different weights
@@ -57,9 +57,9 @@ async fn new_scan_tributary_task() {
 
     assert_eq!(task.validators.len(), 3);
     assert_eq!(task.total_weight, 7);
-    assert_eq!(*task.validator_weights.get(&addr1).unwrap(), 1);
-    assert_eq!(*task.validator_weights.get(&addr2).unwrap(), 2);
-    assert_eq!(*task.validator_weights.get(&addr3).unwrap(), 4);
+    assert_eq!(task.validator_weights[&addr1], 1);
+    assert_eq!(task.validator_weights[&addr2], 2);
+    assert_eq!(task.validator_weights[&addr3], 4);
   }
 
   // Preserves set info
@@ -84,9 +84,10 @@ async fn wait_for_block_after(
     if let Some(hash) = reader.block_after(parent) {
       return hash;
     }
-    if start.elapsed() > std::time::Duration::from_secs(30) {
-      panic!("timed out waiting for a block after {:?}", parent);
-    }
+    assert!(
+      start.elapsed() <= std::time::Duration::from_secs(30),
+      "timed out waiting for a block after {parent:?}"
+    );
     tokio::time::sleep(std::time::Duration::from_millis(20)).await;
   }
 }
@@ -99,7 +100,7 @@ fn inject_block(
   parent: [u8; 32],
   transactions: Vec<TributaryTransaction<Transaction>>,
 ) -> [u8; 32] {
-  let tx_hashes: Vec<[u8; 32]> = transactions.iter().map(|tx| tx.hash()).collect();
+  let tx_hashes: Vec<[u8; 32]> = transactions.iter().map(tributary_sdk::Transaction::hash).collect();
   let txs_hash =
     Blake2s256::digest(tx_hashes.iter().flat_map(|h| h.iter().copied()).collect::<Vec<_>>()).into();
   let block = Block { header: BlockHeader { parent, transactions: txs_hash }, transactions };
@@ -197,9 +198,10 @@ async fn scan_tributary_task_run_iteration() {
     let mut parent = genesis2;
     let start = std::time::Instant::now();
     loop {
-      if start.elapsed() > std::time::Duration::from_secs(30) {
-        panic!("timed out waiting for a block with the provided tx");
-      }
+      assert!(
+        start.elapsed() <= std::time::Duration::from_secs(30),
+        "timed out waiting for a block with the provided tx"
+      );
       if let Some(hash) = reader.block_after(&parent) {
         let block = reader.block(&hash).unwrap();
         if block
