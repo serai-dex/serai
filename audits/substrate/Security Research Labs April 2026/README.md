@@ -92,3 +92,10 @@ the audit and may provide additional context:
 - https://github.com/serai-dex/serai/issues/755
 - https://github.com/serai-dex/serai/issues/756
 - https://github.com/serai-dex/serai/issues/764
+
+### Provenance
+
+Please see
+[here](
+  https://github.com/srlabs/audit-reports/blob/0f18a906405d125a1abc74c6ad3c0c78d35c18a9/Other_Blockchains/SRL-Serai-baseline_assurance_report-2026.pdf
+) for SRLabs' publication of this report.
