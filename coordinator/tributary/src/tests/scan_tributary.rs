@@ -100,7 +100,8 @@ fn inject_block(
   parent: [u8; 32],
   transactions: Vec<TributaryTransaction<Transaction>>,
 ) -> [u8; 32] {
-  let tx_hashes: Vec<[u8; 32]> = transactions.iter().map(tributary_sdk::Transaction::hash).collect();
+  let tx_hashes: Vec<[u8; 32]> =
+    transactions.iter().map(tributary_sdk::Transaction::hash).collect();
   let txs_hash =
     Blake2s256::digest(tx_hashes.iter().flat_map(|h| h.iter().copied()).collect::<Vec<_>>()).into();
   let block = Block { header: BlockHeader { parent, transactions: txs_hash }, transactions };

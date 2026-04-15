@@ -492,9 +492,7 @@ impl TributaryDb {
 
     // Accumulate the data
     accumulated_weight = accumulated_weight.checked_add(validator_weight).unwrap_or_else(|| {
-      panic!(
-        "accumulated_weight {accumulated_weight} overflowed adding validator_weight {validator_weight}",
-      )
+      panic!("accumulated {accumulated_weight} overflowed adding validator's {validator_weight}")
     });
     AccumulatedWeight::set(txn, set, topic, &accumulated_weight);
     Accumulated::set(txn, set, topic, validator, data);

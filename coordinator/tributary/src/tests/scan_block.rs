@@ -339,11 +339,7 @@ mod handle_application_tx {
         );
       }
       assert!(
-        RecognizedTopics::recognized(
-          &txn,
-          set,
-          Topic::RemoveParticipant { participant: target }
-        ),
+        RecognizedTopics::recognized(&txn, set, Topic::RemoveParticipant { participant: target }),
         "RemoveParticipant topic should be recognized after handling the tx"
       );
       assert!(

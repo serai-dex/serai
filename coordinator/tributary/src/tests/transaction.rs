@@ -528,12 +528,11 @@ mod transaction {
 
       // Test boundary conditions per variant
       match &tx {
-        // Fixed-length: no validation beyond structure
+        // No additional validation beyond structure
         Transaction::RemoveParticipant { .. } |
         Transaction::DkgParticipation { .. } |
         Transaction::DkgConfirmationPreprocess { .. } |
         Transaction::DkgConfirmationShare { .. } |
-        // Provided: no validation beyond structure
         Transaction::Cosign { .. } |
         Transaction::Cosigned { .. } |
         Transaction::SubstrateBlock { .. } |
