@@ -22,4 +22,5 @@ group = { version = "0.13", default-features = false }
 k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic"] }
 
 alloy-primitives = { version = "1", default-features = false }
-alloy-consensus = { version = "1", default-features = false, features = ["k256"] }
+
+alloy-consensus = { version = "2", default-features = false, features = ["k256"] }

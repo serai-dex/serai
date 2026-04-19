@@ -99,7 +99,7 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        Invoke-WebRequest https://github.com/containers/podman/releases/download/v5.8.1/podman-installer-windows-amd64.msi -OutFile podman.msi
+        Invoke-WebRequest https://github.com/containers/podman/releases/download/v5.8.2/podman-installer-windows-amd64.msi -OutFile podman.msi
         Start-Process -Wait -PassThru 'msiexec' -ArgumentList "/package podman.msi /quiet /log podman-msi.log MACHINE_PROVIDER=wsl ALLUSERS=1"
         Get-Content podman-msi.log
 

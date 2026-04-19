@@ -12,10 +12,7 @@ jobs:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Install `cargo deny`
-        run: cargo +1.94.1 install --locked cargo-deny --version =0.19.1
+        run: cargo +1.95.0 install --locked cargo-deny --version =0.19.4
 
       - name: Run `cargo deny`
-        run: |
-          cargo deny -L error --all-features check --hide-inclusion-graph
-          # Confirm `log` isn't a dependency of `rand` (RUSTSEC-2026-0097)
-          [ $(cargo tree --all-features --edges all --invert log --depth 1 --prefix none | grep "^rand" | wc -l || true) -eq 0 ]
+        run: cargo deny -L error --all-features check --hide-inclusion-graph

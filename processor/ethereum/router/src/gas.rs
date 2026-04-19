@@ -12,7 +12,7 @@ use revm::{
   database::{empty_db::EmptyDB, in_memory_db::InMemoryDB},
   interpreter::{
     gas::calculate_initial_tx_gas,
-    interpreter_action::{CallInputs, CallOutcome},
+    interpreter_action::{CallInputs, CallOutcome, CreateInputs, CreateOutcome},
     interpreter::EthInterpreter,
     Interpreter,
   },
@@ -59,26 +59,18 @@ fn precompiles() -> EthPrecompiles {
   hooking `call_end`.
 */
 pub(crate) struct WorstCaseCallInspector {
+  router: Address,
   erc20: Option<Address>,
-  call_depth: usize,
   unused_gas: u64,
   override_immediate_call_return_value: bool,
 }
 impl Inspector<RevmContext> for WorstCaseCallInspector {
-  fn call(&mut self, _context: &mut RevmContext, _inputs: &mut CallInputs) -> Option<CallOutcome> {
-    self.call_depth += 1;
-    // Don't override the CALL immediately for prior described reasons
-    None
-  }
-
   fn call_end(
     &mut self,
-    _context: &mut RevmContext,
+    context: &mut RevmContext,
     inputs: &CallInputs,
     outcome: &mut CallOutcome,
   ) {
-    self.call_depth -= 1;
-
     /*
       Mark the amount of gas left unused, for us to later assume will be used in practice.
 
@@ -87,12 +79,15 @@ impl Inspector<RevmContext> for WorstCaseCallInspector {
       perfectly model precompiles (which wouldn't be worth the complexity) yet because the Router
       does call precompiles (ecrecover) and accordingly has to model the gas of that correctly.
     */
-    if (self.call_depth == 1) && (!precompiles().contains(&inputs.target_address)) {
-      let unused_gas = inputs.gas_limit - outcome.result.gas.total_gas_spent();
-      self.unused_gas += unused_gas;
+    if context.journaled_state.depth() == 1 {
+      assert_eq!(inputs.caller, self.router);
+      if !precompiles().contains(&inputs.target_address) {
+        let unused_gas = inputs.gas_limit - outcome.result.gas.total_gas_spent();
+        self.unused_gas += unused_gas;
 
-      // Now that the CALL is over, flag we should normalize the values on the stack
-      self.override_immediate_call_return_value = true;
+        // Now that the Router's CALL is over, flag we should normalize the values on the stack
+        self.override_immediate_call_return_value = true;
+      }
     }
 
     // If ERC20, provide the expected ERC20 return data
@@ -113,6 +108,23 @@ impl Inspector<RevmContext> for WorstCaseCallInspector {
       );
       self.override_immediate_call_return_value = false;
     }
+  }
+
+  fn create(
+    &mut self,
+    context: &mut RevmContext,
+    inputs: &mut CreateInputs,
+  ) -> Option<CreateOutcome> {
+    /*
+      Because this is within a nested call, its gas consumption will be set to the maximum by the
+      above. This means we don't have to model or effect any gas properties here.
+    */
+    assert!(context.journaled_state.depth() > 1);
+    assert_eq!(inputs.caller(), self.router);
+    // Don't simulate the caller's code in order to make storage slot state deterministic and to
+    // prevent any potential Denial of Services by computationally non-trivial code
+    inputs.set_init_code(Bytes::new());
+    None
   }
 }
 
@@ -227,8 +239,8 @@ impl Router {
           tx.kind = self.address.into();
         }),
       WorstCaseCallInspector {
+        router: self.address,
         erc20,
-        call_depth: 0,
         unused_gas: 0,
         override_immediate_call_return_value: false,
       },

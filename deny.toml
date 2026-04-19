@@ -11,7 +11,6 @@ yanked = "deny"
 ignore = [
   "RUSTSEC-2024-0370", # `proc-macro-error` is unmaintained, in-tree due to Substrate/`litep2p`
   "RUSTSEC-2024-0436", # `paste` is unmaintained
-  "RUSTSEC-2026-0097", # `rand` is unsafe when the `log` feature is enabled, which we check in CI
 ]
 
 [licenses]
@@ -136,6 +135,10 @@ deny = [
   # Introduced an insecure implementation of `borsh` removed with `0.15.1`
   # https://github.com/rust-lang/hashbrown/issues/576
   { name = "hashbrown", version = "=0.15.0" },
+  # Incorrect implementation of cSHAKE
+  # https://github.com/RustCrypto/hashes/pull/834
+  { name = "cshake", version = "<0.1.1" },
+  { name = "sha3", version = ">=0.10.2, <0.10.9" },
 
   # Legacy which _no one_ should use anymore
   { name = "is-terminal", version = "*" },

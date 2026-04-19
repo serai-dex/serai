@@ -1,7 +1,7 @@
 use crate::Os;
 
-// 2.2.7
-const MIMALLOC_VERSION: &str = "6a53d72d46a1a641d8e5793db37cb2da60e04192";
+// 2.3.0
+const MIMALLOC_VERSION: &str = "5459bece783e4ff86ef4c54dbb3b0d7a142a07d9";
 const HARDENING_FLAGS: &str = "-DMI_SECURE=ON -DMI_GUARDED=ON -DMI_XMALLOC=ON";
 #[rustfmt::skip]
 const COMPILATION_FLAGS: &str =

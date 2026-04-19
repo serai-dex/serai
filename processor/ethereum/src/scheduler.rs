@@ -135,11 +135,12 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
         {
           let mut i = 0;
           while i < payments.len() {
-            let (gas, _fee) = router.execute_gas_and_fee(
-              coin_to_ethereum_coin(coin),
-              fee_per_gas,
-              &OutInstructions::from(batch.as_slice()),
-            );
+            let (gas, _fee) =
+              router.execute_gas_and_fee(coin_to_ethereum_coin(coin), fee_per_gas, &{
+                let mut batch = batch.clone();
+                batch.push(payments[i].clone());
+                OutInstructions::from(batch.as_slice())
+              });
             if gas <= BATCH_GAS_LIMIT {
               batch.push(payments.remove(i));
             } else {
@@ -163,13 +164,14 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
             router.execute_out_instruction_gas_estimate(coin_to_ethereum_coin(coin), payment.into())
           })
           .collect::<Vec<_>>();
-        let base_gas = {
-          let (batch_gas, _fee) = router.execute_gas_and_fee(
+        let (base_gas, expected_fee) = {
+          let (batch_gas, expected_fee) = router.execute_gas_and_fee(
             coin_to_ethereum_coin(coin),
             fee_per_gas,
             &OutInstructions::from(batch.as_slice()),
           );
-          batch_gas - gas_per_payment.iter().copied().sum::<u64>()
+          let base_gas = batch_gas.saturating_sub(gas_per_payment.iter().copied().sum::<u64>());
+          (base_gas, expected_fee)
         };
         let base_gas_per_payment = base_gas.div_ceil(u64::try_from(batch.len()).unwrap());
         let fee_per_payment = gas_per_payment
@@ -178,6 +180,10 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
             fee_per_gas.checked_mul(U256::from(base_gas_per_payment + gas_per_payment)).unwrap()
           })
           .collect::<Vec<_>>();
+        let total_fee = fee_per_payment
+          .iter()
+          .fold(U256::ZERO, |accum, fee_per_payment| accum.checked_add(*fee_per_payment).unwrap());
+        assert!(expected_fee <= total_fee);
 
         let original_len = batch.len();
         batch = batch
@@ -193,9 +199,7 @@ impl<D: Db> smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract {
         }
 
         // Since this batch is packed and all payments can be amortized, actually amortize it
-        let mut total_fee = U256::ZERO;
         for (payment, fee) in batch.iter_mut().zip(fee_per_payment) {
-          total_fee = total_fee.checked_add(fee).unwrap();
           payment.1 = payment.1.checked_sub(fee).expect("payment's amount exceeds fee");
         }
 

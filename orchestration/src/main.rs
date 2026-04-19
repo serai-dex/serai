@@ -239,7 +239,7 @@ fn build_serai_service(
       let mut supports_asan = false;
       #[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
       {
-        supports_asan = (!release) && os == Os::Debian;
+        supports_asan = (!release) && (os == Os::Debian);
       }
 
       if supports_safestack && supports_asan {

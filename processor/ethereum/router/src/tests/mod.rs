@@ -14,6 +14,7 @@ use alloy_rpc_types_eth::{BlockNumberOrTag, TransactionInput, TransactionRequest
 use alloy_simple_request_transport::SimpleRequest;
 use alloy_rpc_client::ClientBuilder;
 use alloy_provider::{
+  network::ReceiptResponse as _,
   Provider as _, RootProvider,
   ext::{DebugApi as _, TraceApi as _},
 };
@@ -313,12 +314,17 @@ impl Test {
     out_instructions: OutInstructions,
     results: Vec<bool>,
   ) -> (Signed<TxLegacy>, u64) {
+    let fee_per_gas = 100_000_000_000;
+    let (gas_estimate, fee_estimate) =
+      self.router.execute_gas_and_fee(coin, U256::from(fee_per_gas), &out_instructions);
     let (message_hash, mut tx) = self.execute_tx(coin, fee, out_instructions);
     tx.gas_limit = 100_000_000;
-    tx.gas_price = 100_000_000_000;
+    tx.gas_price = fee_per_gas;
     let tx = ethereum_primitives::deterministically_sign(tx);
     let receipt = ethereum_test_primitives::publish_tx(&self.provider, tx.clone()).await;
     assert!(receipt.status());
+    assert!(receipt.gas_used() <= gas_estimate);
+    assert!(U256::from(receipt.cost()) <= fee_estimate);
 
     // We don't check the gas for `execute` here, instead at the call-sites where we have
     // beneficial  context
