@@ -43,11 +43,12 @@ jobs:
 
           # nightly Rust
           NIGHTLY="${{ steps.nightly.outputs.version }}"
-          cargo +$NIGHTLY clippy --all-features --all-targets -- -D warnings
-          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-primitives -- -D warnings
-          cargo +$NIGHTLY clippy --all-targets -p serai-primitives -- -D warnings
-          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-abi -- -D warnings
-          cargo +$NIGHTLY clippy --all-targets -p serai-abi -- -D warnings
+          sed -i s/'# TODO: `-Zcargo-lints`: '//g ./Cargo.toml
+          cargo +$NIGHTLY clippy -Zcargo-lints --all-features --all-targets -- -D warnings
+          cargo +$NIGHTLY clippy -Zcargo-lints --no-default-features --all-targets -p serai-primitives -- -D warnings
+          cargo +$NIGHTLY clippy -Zcargo-lints --all-targets -p serai-primitives -- -D warnings
+          cargo +$NIGHTLY clippy -Zcargo-lints --no-default-features --all-targets -p serai-abi -- -D warnings
+          cargo +$NIGHTLY clippy -Zcargo-lints --all-targets -p serai-abi -- -D warnings
 
       - name: Verify `pallet::hooks` is unused
         shell: bash

@@ -1,12 +1,12 @@
 use core::{hint::black_box, borrow::Borrow, ops::*, iter::Sum};
 
 use subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable, ConditionallyNegatable};
-use zeroize::{Zeroize, DefaultIsZeroes};
+use zeroize::{Zeroize as _, DefaultIsZeroes};
 
 use rand_core::RngCore;
 
 use group::{
-  ff::{Field, PrimeField, PrimeFieldBits},
+  ff::{Field as _, PrimeField as _, PrimeFieldBits},
   Group, GroupEncoding,
   prime::PrimeGroup,
 };
@@ -55,6 +55,7 @@ impl<C: ShortWeierstrass> PartialEq for Projective<C> {
 impl<C: ShortWeierstrass> Eq for Projective<C> {}
 
 impl<C: ShortWeierstrass> ConditionallySelectable for Projective<C> {
+  #[expect(clippy::many_single_char_names)]
   fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
     let x = C::FieldElement::conditional_select(&a.x, &b.x, choice);
     let y = C::FieldElement::conditional_select(&a.y, &b.y, choice);
@@ -272,21 +273,6 @@ impl<'a, C: ShortWeierstrass> Sum<&'a Self> for Projective<C> {
   }
 }
 
-impl<C: ShortWeierstrass<Scalar = ()>> Projective<C> {
-  /// Sample a random on-curve point with an unknown discrete logarithm w.r.t. any other points.
-  pub fn random(rng: impl RngCore) -> Self {
-    Self::from(Affine::random(rng))
-  }
-  /// If this point is the additive identity.
-  pub fn is_identity(&self) -> Choice {
-    self.is_identity_internal()
-  }
-  /// The sum of this point with itself.
-  pub fn double(&self) -> Self {
-    self.double_internal()
-  }
-}
-
 impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>, S: Borrow<C::Scalar>> Mul<S> for Projective<C> {
   type Output = Self;
   fn mul(self, scalar: S) -> Self {
@@ -422,6 +408,7 @@ mod alloc {
 
     type BorrowedInterpolator = ec_divisors::Interpolator<C::FieldElement>;
     fn interpolator_for_scalar_mul() -> Self::BorrowedInterpolator {
+      #[expect(clippy::as_conversions)]
       ec_divisors::Interpolator::new((<C::Scalar as PrimeField>::NUM_BITS as usize).div_ceil(2) + 2)
     }
 

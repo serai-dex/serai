@@ -27,4 +27,4 @@ rand_core = { version = "0.6", default-features = false, features = ["std"] }
 serai-primitives = { path = "../../../substrate/primitives", features = ["test-helpers"] }
 
 [features]
-test-helpers = ["rand_core", "serai-primitives/test-helpers"]
+test-helpers = ["dep:rand_core", "serai-primitives/test-helpers"]

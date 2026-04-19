@@ -5,7 +5,7 @@ use zeroize::DefaultIsZeroes;
 
 use rand_core::RngCore;
 
-use group::ff::{Field, PrimeField};
+use group::ff::{Field as _, PrimeField as _};
 
 use crate::{ShortWeierstrass, Projective};
 
@@ -106,6 +106,7 @@ impl<C: ShortWeierstrass> Affine<C> {
   pub fn random(mut rng: impl RngCore) -> Self {
     loop {
       let x = C::FieldElement::random(&mut rng);
+      #[expect(clippy::as_conversions)]
       let y_is_odd = Choice::from((rng.next_u64() % 2) as u8);
       let Some(res) = Option::<Self>::from(Self::decompress(x, y_is_odd)) else { continue };
       return res;

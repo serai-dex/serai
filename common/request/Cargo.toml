@@ -31,7 +31,7 @@ base64ct = { version = "1", features = ["alloc"], optional = true }
 
 [features]
 tokio = ["hyper-util/tokio"]
-tls = ["tokio", "hyper-rustls"]
+tls = ["tokio", "dep:hyper-rustls"]
 webpki-roots = ["tls", "hyper-rustls/webpki-roots"]
-basic-auth = ["zeroize", "base64ct"]
+basic-auth = ["dep:zeroize", "dep:base64ct"]
 default = ["tls"]

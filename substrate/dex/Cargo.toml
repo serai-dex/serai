@@ -70,6 +70,7 @@ runtime-benchmarks = [
   "serai-core-pallet/runtime-benchmarks",
   "serai-coins-pallet/runtime-benchmarks",
 
+  "dep:frame-benchmarking",
   "frame-benchmarking/runtime-benchmarks",
 ]
 

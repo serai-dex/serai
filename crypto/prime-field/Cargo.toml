@@ -13,6 +13,9 @@ rust-version = "1.86"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lints]
+workspace = true
+
 [dependencies]
 paste = { version = "1", default-features = false }
 zeroize = { version = "^1.5", default-features = false }
@@ -28,5 +31,5 @@ ff-group-tests = { version = "0.13", path = "../ff-group-tests", optional = true
 
 [features]
 alloc = ["zeroize/alloc", "ff/alloc"]
-std = ["alloc", "zeroize/std", "subtle/std", "rand_core/std", "ff/std", "ff-group-tests"]
+std = ["alloc", "zeroize/std", "subtle/std", "rand_core/std", "ff/std", "dep:ff-group-tests"]
 default = ["std"]

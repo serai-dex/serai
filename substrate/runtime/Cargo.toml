@@ -103,19 +103,30 @@ serai-in-instructions-pallet = { path = "../in-instructions", default-features =
 
 [features]
 std = [
-  "scale/std",
+  "dep:scale",
+  "scale?/std",
 
-  "sp-version/std",
-  "sp-runtime/std",
+  "dep:sp-version",
+  "sp-version?/std",
+  "dep:sp-runtime",
+  "sp-runtime?/std",
 
-  "sp-api/std",
-  "sp-transaction-pool/std",
-  "sp-inherents/std",
-  "sp-block-builder/std",
-  "sp-consensus-babe/std",
-  "sp-consensus-grandpa/std",
-  "sp-authority-discovery/std",
+  "dep:sp-api",
+  "sp-api?/std",
+  "dep:sp-transaction-pool",
+  "sp-transaction-pool?/std",
+  "dep:sp-inherents",
+  "sp-inherents?/std",
+  "dep:sp-block-builder",
+  "sp-block-builder?/std",
+  "dep:sp-consensus-babe",
+  "sp-consensus-babe?/std",
+  "dep:sp-consensus-grandpa",
+  "sp-consensus-grandpa?/std",
+  "dep:sp-authority-discovery",
+  "sp-authority-discovery?/std",
 
+  "dep:serai-abi",
   "serai-abi/std",
 ]
 

@@ -22,6 +22,6 @@ spin = { version = "0.10", default-features = false, features = ["use_ticket_mut
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "inline-more"], optional = true }
 
 [features]
-alloc = ["hashbrown"]
+alloc = ["dep:hashbrown"]
 std = ["alloc", "spin/std"]
 default = ["std"]

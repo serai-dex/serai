@@ -13,6 +13,9 @@ rust-version = "1.85"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lints]
+workspace = true
+
 [dependencies]
 zeroize = { version = "^1.5", default-features = false }
 subtle = { version = "^2.4", default-features = false }
@@ -24,6 +27,6 @@ group = { version = "0.13", default-features = false }
 ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "0d6f5e840ad1f955e4e4dec00c5165f134815b15", default-features = false, optional = true }
 
 [features]
-alloc = ["zeroize/alloc", "rand_core/alloc", "ff/alloc", "group/alloc", "ec-divisors"]
+alloc = ["zeroize/alloc", "rand_core/alloc", "ff/alloc", "group/alloc", "dep:ec-divisors"]
 std = ["alloc", "zeroize/std", "subtle/std", "rand_core/std", "ff/std"]
 default = ["std"]

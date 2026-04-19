@@ -337,3 +337,16 @@ suspicious_xor_used_as_pow = "warn"
 unnecessary_self_imports = "warn"
 unused_trait_names = "warn"
 wildcard_enum_match_arm = "warn"
+
+# TODO: `-Zcargo-lints`: [workspace.lints.cargo]
+# TODO: `-Zcargo-lints`: missing_lints_inheritance = "warn"
+# TODO: `-Zcargo-lints`: non_kebab_case_bins = "warn"
+# TODO: `-Zcargo-lints`: non_kebab_case_features = "warn"
+# TODO: `-Zcargo-lints`: non_kebab_case_packages = "warn"
+# TODO: `-Zcargo-lints`: redundant_homepage = "warn"
+# TODO: `-Zcargo-lints`: redundant_readme = "warn"
+# TODO: `-Zcargo-lints`: unknown_lints = "warn"
+# TODO: `-Zcargo-lints`: unused_dependencies = "warn"
+# TODO: `-Zcargo-lints`: unused_workspace_dependencies = "warn"
+# TODO: `-Zcargo-lints`: unused_workspace_package_fields = "warn"
+# TODO: Lint for implicit features?

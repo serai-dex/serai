@@ -32,6 +32,7 @@ pub mod __prime_field_private {
     }
   }
 
+  #[expect(clippy::as_conversions)]
   pub const fn uint_to_u64_words<const LIMBS: usize, const WORDS: usize>(
     value: Uint<LIMBS>,
   ) -> [u64; WORDS] {
@@ -39,6 +40,7 @@ pub mod __prime_field_private {
     let mut i = 0;
     while i < Uint::<LIMBS>::LIMBS {
       let word: Word = value.as_limbs()[i].0;
+      const { assert!(Word::BITS <= u64::BITS); }
       let word = word as u64;
       let bits = i * (Word::BITS as usize);
       let j = bits / (u64::BITS as usize);
@@ -62,7 +64,9 @@ pub mod __prime_field_private {
   ) -> Uint<LIMBS> {
     let mut reconstruction = Uint::<LIMBS>::ZERO;
     let mut i = 0;
+    #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
     while i < WORDS {
+      const { assert!(Uint::<LIMBS>::BITS < u32::MAX); }
       reconstruction = reconstruction
         .bitor(&Uint::<LIMBS>::from_u64(words[i]).shl_vartime((i * (u64::BITS as usize)) as u32));
       i += 1;
@@ -427,6 +431,7 @@ macro_rules! odd_prime_field_with_specific_repr {
               Self(self.0.pow(&SQRT_EXP))
             } else if ONE_MOD_EIGHT {
               const TM1D2: UnderlyingUint = (T.wrapping_sub(&UnderlyingUint::ONE)).shr_vartime(1);
+              #[expect(clippy::as_conversions)]
               const TM1D2_WORDS_LEN: usize = UnderlyingUint::BITS.div_ceil(u64::BITS) as usize;
               const TM1D2_WORDS: [u64; TM1D2_WORDS_LEN] = uint_to_u64_words(TM1D2);
 
@@ -440,6 +445,7 @@ macro_rules! odd_prime_field_with_specific_repr {
                 }
                 res
               };
+              #[expect(clippy::as_conversions)]
               const _ASSERT_RECONSTRUCTION_EQUALS_VALUE:
                 [(); 0 - ((!RECONSTRUCTION_EQUALS_VALUE) as usize)] = [(); _];
 
@@ -567,6 +573,7 @@ macro_rules! odd_prime_field_with_specific_repr {
           }
         }
 
+        #[expect(clippy::as_conversions)]
         const BITS_PLUS_SECURITY_LEVEL: usize =
           (MODULUS.bits() + MODULUS.bits().div_ceil(2)) as usize;
         const BITS_PLUS_SECURITY_LEVEL_BYTES: usize = BITS_PLUS_SECURITY_LEVEL.div_ceil(8);

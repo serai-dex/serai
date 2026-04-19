@@ -30,6 +30,7 @@ blake2 = { version = "0.11.0-rc.5", default-features = false }
 
 [features]
 std = ["zeroize/std", "merlin?/std"]
-recommended = ["blake2"]
+merlin = ["dep:merlin"]
+recommended = ["dep:blake2"]
 tests = []
 default = ["std"]
