@@ -40,7 +40,9 @@ pub mod __prime_field_private {
     let mut i = 0;
     while i < Uint::<LIMBS>::LIMBS {
       let word: Word = value.as_limbs()[i].0;
-      const { assert!(Word::BITS <= u64::BITS); }
+      const {
+        assert!(Word::BITS <= u64::BITS);
+      }
       let word = word as u64;
       let bits = i * (Word::BITS as usize);
       let j = bits / (u64::BITS as usize);
@@ -66,7 +68,9 @@ pub mod __prime_field_private {
     let mut i = 0;
     #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
     while i < WORDS {
-      const { assert!(Uint::<LIMBS>::BITS < u32::MAX); }
+      const {
+        assert!(Uint::<LIMBS>::BITS < u32::MAX);
+      }
       reconstruction = reconstruction
         .bitor(&Uint::<LIMBS>::from_u64(words[i]).shl_vartime((i * (u64::BITS as usize)) as u32));
       i += 1;

@@ -66,8 +66,11 @@ impl ShortWeierstrass for Secq256k1 {
   const IDENTITY: Self::Repr = Array([0; 33]);
   fn encode_compressed(x: Self::FieldElement, odd_y: Choice) -> Self::Repr {
     let mut res = Array([0; 33]);
-    res[0] =
-      <_>::conditional_select(&u8::from(Tag::CompressedEvenY), &u8::from(Tag::CompressedOddY), odd_y);
+    res[0] = <_>::conditional_select(
+      &u8::from(Tag::CompressedEvenY),
+      &u8::from(Tag::CompressedOddY),
+      odd_y,
+    );
     {
       let res: &mut [u8] = res.as_mut();
       res[1 ..].copy_from_slice(x.to_repr().as_ref());
@@ -78,8 +81,11 @@ impl ShortWeierstrass for Secq256k1 {
     // Parse out if `y` is odd
     let odd_y = bytes[0].ct_eq(&u8::from(Tag::CompressedOddY));
     // Check if the tag was malleated
-    let expected_tag =
-      <_>::conditional_select(&u8::from(Tag::CompressedEvenY), &u8::from(Tag::CompressedOddY), odd_y);
+    let expected_tag = <_>::conditional_select(
+      &u8::from(Tag::CompressedEvenY),
+      &u8::from(Tag::CompressedOddY),
+      odd_y,
+    );
     let invalid = !bytes[0].ct_eq(&expected_tag);
 
     // Copy the alleged `x` coordinate, overwriting with `0xffffff...` if the sign byte was
