@@ -272,88 +272,6 @@ criteria = "safe-to-deploy"
 version = "0.2.99"
 notes = "Patches from `0.2` to `0.3` whose only breaking change was a MSRV bump"
 
-[[audits.cranelift-assembler-x64]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely a version bump"
-
-[[audits.cranelift-assembler-x64-meta]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely a version bump"
-
-[[audits.cranelift-bforest]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely a version bump"
-
-[[audits.cranelift-bitset]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely a version bump"
-
-[[audits.cranelift-codegen]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = """
-I cannot and have not verified the correctness of these changes. What I have
-done is checked they appear to correspond to the release notes, specifically
-GHSA-jhxm-h53p-jm7w and GHSA-qqfj-4vcm-26hv.
-"""
-
-[[audits.cranelift-codegen-meta]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely version bumps"
-
-[[audits.cranelift-codegen-shared]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely a version bump"
-
-[[audits.cranelift-control]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely a version bump"
-
-[[audits.cranelift-entity]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely a version bump"
-
-[[audits.cranelift-frontend]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely a version bump"
-
-[[audits.cranelift-isle]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely a version bump"
-
-[[audits.cranelift-native]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely a version bump"
-
-[[audits.cranelift-srcgen]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.130.0 -> 0.130.1"
-notes = "Solely a version bump"
-
 [[audits.crypto-bigint]]
 criteria = "audited"
 version = "0.5.3"
@@ -742,18 +660,6 @@ criteria = "safe-to-deploy"
 version = "0.12.99"
 notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
 
-[[audits.pulley-interpreter]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "43.0.0 -> 43.0.1"
-notes = "Solely a version bump"
-
-[[audits.pulley-macros]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "43.0.0 -> 43.0.1"
-notes = "Solely a version bump"
-
 [[audits.rand]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -967,64 +873,6 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.2.117 -> 0.2.118"
 
-[[audits.wasmtime]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "43.0.0 -> 43.0.1"
-notes = "GHSA-m758-wjhj-p3jq and GHSA-6wgr-89rj-399p"
-
-[[audits.wasmtime-environ]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "43.0.0 -> 43.0.1"
-notes = """
-Without full context on the safety or soundness of this, I can confirm these
-changes appear to correspond to GHSA-394w-hwhg-8vgm, GHSA-jxhv-7h78-9775, and
-GHSA-hx6p-xpx3-jvvv.
-"""
-
-[[audits.wasmtime-internal-core]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "43.0.0 -> 43.0.1"
-notes = "Solely a version bump"
-
-[[audits.wasmtime-internal-cranelift]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "43.0.0 -> 43.0.1"
-notes = "Solely a version bump"
-
-[[audits.wasmtime-internal-fiber]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "43.0.0 -> 43.0.1"
-notes = "Solely a version bump"
-
-[[audits.wasmtime-internal-jit-debug]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "43.0.0 -> 43.0.1"
-notes = "Solely a version bump"
-
-[[audits.wasmtime-internal-jit-icache-coherence]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "43.0.0 -> 43.0.1"
-notes = "Solely a version bump"
-
-[[audits.wasmtime-internal-unwinder]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "43.0.0 -> 43.0.1"
-notes = "Solely a version bump"
-
-[[audits.wasmtime-internal-versioned-export-macros]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "43.0.0 -> 43.0.1"
-notes = "Solely a version bump"
-
 [[audits.webpki-roots]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1035,6 +883,97 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "0.51.99"
 notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
+
+[[trusted.cranelift-assembler-x64]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-assembler-x64-meta]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-bforest]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-bitset]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-codegen]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-codegen-meta]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-codegen-shared]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-control]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-entity]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-frontend]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-isle]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-native]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.cranelift-srcgen]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
 
 [[trusted.hashbrown]]
 criteria = "safe-to-deploy"
@@ -1049,6 +988,111 @@ user-id = 55123 # rust-lang-owner
 start = "2024-08-15"
 end = "2027-04-09"
 notes = "Trusted due to rust-lang and infeasibility of auditing"
+
+[[trusted.pulley-interpreter]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.pulley-macros]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.rustc-demangle]]
+criteria = "safe-to-deploy"
+user-id = 55123 # rust-lang-owner
+start = "2023-03-23"
+end = "2027-04-20"
+notes = "Trusted due to rust-lang"
+
+[[trusted.wasm-encoder]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasm-tools"
+start = "2025-08-14"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmparser]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasm-tools"
+start = "2025-08-14"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmprinter]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasm-tools"
+start = "2025-08-14"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmtime]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmtime-environ]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmtime-internal-core]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-02-24"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmtime-internal-cranelift]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmtime-internal-fiber]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmtime-internal-jit-debug]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmtime-internal-jit-icache-coherence]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmtime-internal-unwinder]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmtime-internal-versioned-export-macros]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-04-20"
+notes = "Trusted due to bytecodealliance and infeasibility of auditing"
 
 [[trusted.windows]]
 criteria = "safe-to-deploy"

@@ -1,6 +1,71 @@
 
 # cargo-vet imports lock
 
+[[publisher.cranelift-assembler-x64]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-assembler-x64-meta]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-bforest]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-bitset]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-codegen]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-codegen-meta]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-codegen-shared]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-control]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-entity]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-frontend]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-isle]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-native]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.cranelift-srcgen]]
+version = "0.131.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
 [[publisher.hashbrown]]
 version = "0.15.5"
 when = "2025-08-07"
@@ -24,6 +89,82 @@ version = "0.2.185"
 when = "2026-04-13"
 user-id = 55123
 user-login = "rust-lang-owner"
+
+[[publisher.pulley-interpreter]]
+version = "44.0.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.pulley-macros]]
+version = "44.0.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.rustc-demangle]]
+version = "0.1.27"
+when = "2026-01-15"
+user-id = 55123
+user-login = "rust-lang-owner"
+
+[[publisher.wasm-encoder]]
+version = "0.246.2"
+when = "2026-04-03"
+trusted-publisher = "github:bytecodealliance/wasm-tools"
+
+[[publisher.wasmparser]]
+version = "0.246.2"
+when = "2026-04-03"
+trusted-publisher = "github:bytecodealliance/wasm-tools"
+
+[[publisher.wasmprinter]]
+version = "0.246.2"
+when = "2026-04-03"
+trusted-publisher = "github:bytecodealliance/wasm-tools"
+
+[[publisher.wasmtime]]
+version = "44.0.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.wasmtime-environ]]
+version = "44.0.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.wasmtime-internal-core]]
+version = "44.0.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.wasmtime-internal-cranelift]]
+version = "44.0.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.wasmtime-internal-fiber]]
+version = "44.0.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.wasmtime-internal-jit-debug]]
+version = "44.0.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.wasmtime-internal-jit-icache-coherence]]
+version = "44.0.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.wasmtime-internal-unwinder]]
+version = "44.0.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+
+[[publisher.wasmtime-internal-versioned-export-macros]]
+version = "44.0.0"
+when = "2026-04-20"
+trusted-publisher = "github:bytecodealliance/wasmtime"
 
 [[publisher.windows]]
 version = "0.62.2"
