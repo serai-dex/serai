@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.29;
+// slither-disable-next-line pragma // Checked in CI
+pragma solidity ^0.8.34;
 
 /// @title Serai Router (without functions overriden by selector collisions)
 /// @author Luke Parker <lukeparker@serai.exchange>

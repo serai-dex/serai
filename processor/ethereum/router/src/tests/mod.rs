@@ -78,9 +78,9 @@ impl CalldataAgnosticGas {
       }
     }
     gas_used +
-      (calculate_initial_tx_gas(SpecId::CANCUN, &without_variable_zero_bytes, false, 0, 0, 0)
+      (calculate_initial_tx_gas(SpecId::OSAKA, &without_variable_zero_bytes, false, 0, 0, 0)
         .initial_total_gas -
-        calculate_initial_tx_gas(SpecId::CANCUN, input, false, 0, 0, 0).initial_total_gas)
+        calculate_initial_tx_gas(SpecId::OSAKA, input, false, 0, 0, 0).initial_total_gas)
   }
 }
 
@@ -121,10 +121,10 @@ impl Test {
   }
 
   async fn new() -> Self {
-    // The following is explicitly only evaluated against the cancun network upgrade at this time
+    // The following is explicitly only evaluated against the Osaka network upgrade at this time
     let anvil = Anvil::new()
       .arg("--hardfork")
-      .arg("cancun")
+      .arg("osaka")
       .arg("--tracing")
       .arg("--no-request-size-limit")
       .arg("--disable-block-gas-limit")

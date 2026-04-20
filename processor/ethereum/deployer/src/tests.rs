@@ -14,10 +14,10 @@ use crate::{
 
 #[tokio::test]
 async fn test_deployer() {
-  const CANCUN: &str = "cancun";
+  const OSAKA: &str = "osaka";
   const LATEST: &str = "latest";
 
-  for network in [CANCUN, LATEST] {
+  for network in [OSAKA, LATEST] {
     let anvil = (if network == LATEST {
       // If this is the latest network, it's inherently defaulted to when `anvil` is spawned
       Anvil::new()
@@ -39,9 +39,9 @@ async fn test_deployer() {
       assert!(receipt.status());
       assert_eq!(receipt.contract_address.unwrap(), Deployer::address());
 
-      if network == CANCUN {
+      if network == OSAKA {
         // Check the gas programmed was twice the gas used
-        // We only check this for cancun as the constant was programmed per cancun's gas pricing
+        // We only check this for Osaka as the constant was programmed per Osaka's gas pricing
         assert_eq!(2 * receipt.gas_used, gas_programmed);
       }
     }
