@@ -33,7 +33,7 @@ use ethereum_schnorr::{PublicKey, Signature};
 use crate::*;
 
 // The specification this uses
-const SPEC_ID: SpecId = SpecId::CANCUN;
+const SPEC_ID: SpecId = SpecId::OSAKA;
 
 // The chain ID used for gas estimation
 const CHAIN_ID: U256 = U256::from_be_slice(&[1]);
@@ -152,7 +152,7 @@ impl Router {
     The gas limits to use for non-Execute transactions.
 
     These don't branch on the success path, allowing constants to be used out-right. These
-    constants target the Cancun network upgrade and are validated by the tests.
+    constants target the Osaka network upgrade and are validated by the tests.
 
     While whoever publishes these transactions may be able to query a gas estimate, it may not be
     reasonable to. If the signing context is a distributed group, as Serai frequently employs, a
@@ -235,7 +235,7 @@ impl Router {
           cfg.chain_id = CHAIN_ID.try_into().unwrap();
         })
         .modify_tx_chained(|tx: &mut TxEnv| {
-          tx.gas_limit = u64::MAX;
+          tx.gas_limit = revm::primitives::eip7825::TX_GAS_LIMIT_CAP;
           tx.kind = self.address.into();
         }),
       WorstCaseCallInspector {
@@ -362,17 +362,18 @@ impl Router {
         0,
         0,
       );
-      assert_eq!(gas.floor_gas, 0);
-      gas.initial_total_gas
+      (gas.initial_total_gas, gas.floor_gas)
     };
-    let mut current_initial_gas = initial_gas(shimmed_fee, abi::Signature::from(&sig));
+    let (mut current_initial_gas, mut floor_gas) =
+      initial_gas(shimmed_fee, abi::Signature::from(&sig));
     // Remove the current initial gas from the transaction's gas
     gas -= current_initial_gas;
     loop {
       // Calculate the would-be fee
-      let fee = fee_per_gas * U256::from(gas + current_initial_gas);
+      let fee = fee_per_gas * U256::from((gas + current_initial_gas).max(floor_gas));
       // Calculate the would-be gas for this fee
-      let new_initial_gas =
+      let new_initial_gas;
+      (new_initial_gas, floor_gas) =
         initial_gas(fee, abi::Signature { c: [0xff; 32].into(), s: [0xff; 32].into() });
       // If the values are equal, or if it went down, return
       /*
@@ -382,7 +383,7 @@ impl Router {
         gas to ensure this algorithm terminates.
       */
       if current_initial_gas >= new_initial_gas {
-        return (gas + new_initial_gas, fee);
+        return ((gas + new_initial_gas).max(floor_gas), fee);
       }
       // Update what the current initial gas is
       current_initial_gas = new_initial_gas;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-pragma solidity ^0.8.29;
+pragma solidity =0.8.34;
 
 /*
   The expected deployment process of Serai's Router is as follows:

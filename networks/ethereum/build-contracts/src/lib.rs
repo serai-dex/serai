@@ -12,7 +12,7 @@ use std::{path::PathBuf, fs, process::Command};
 /// the artifacts within it) are cleaned. If your artifacts are not within your `target` directory,
 /// you should consider any necessary `cargo:rerun-if-changed` directives yourself.
 ///
-/// Requires `solc 0.8.29`.
+/// Requires `solc 0.8.34` and outputs contracts targetting the Osaka network upgrade.
 pub fn build(
   include_paths: &[&str],
   contracts_path: &str,
@@ -42,8 +42,8 @@ pub fn build(
     if let Some(version) = line.strip_prefix("Version: ") {
       let version =
         version.split('+').next().ok_or_else(|| "no value present on line".to_owned())?;
-      if version != "0.8.29" {
-        Err(format!("version was {version}, 0.8.29 required"))?;
+      if version != "0.8.34" {
+        Err(format!("version was {version}, 0.8.34 required"))?;
       }
     }
   }
@@ -51,7 +51,8 @@ pub fn build(
   #[rustfmt::skip]
   let mut args = vec![
     "--base-path", ".",
-    "-o", artifacts_path, "--overwrite",
+    "--output-dir", artifacts_path, "--overwrite",
+    "--evm-version", "osaka",
     "--bin", "--bin-runtime", "--abi",
     "--via-ir", "--optimize",
     "--no-color",

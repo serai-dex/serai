@@ -72,7 +72,7 @@ async fn test_create_address() {
     // Check the function is constant-gas
     let gas_used = test.provider.estimate_gas(call).await.unwrap();
     let initial_gas =
-      calculate_initial_tx_gas(SpecId::CANCUN, &input, false, 0, 0, 0).initial_total_gas;
+      calculate_initial_tx_gas(SpecId::OSAKA, &input, false, 0, 0, 0).initial_total_gas;
     let this_call = gas_used - initial_gas;
     if gas.is_none() {
       gas = Some(this_call);
