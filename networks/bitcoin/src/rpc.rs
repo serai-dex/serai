@@ -106,7 +106,7 @@ impl Rpc {
         .body(
           format!(r#"{{ "method": "{method}", "params": {params} }}"#).as_bytes().to_vec().into(),
         )
-        .unwrap(),
+        .map_err(|_| RpcError::ConnectionError)?,
     );
     request.with_basic_auth();
     request.set_response_size_limit(Some(100 * 1024 * 1024));
