@@ -44,7 +44,8 @@ jobs:
           # nightly Rust
           NIGHTLY="${{ steps.nightly.outputs.version }}"
           cp ./Cargo.toml ./Cargo.toml.bak
-          sed -i s/'# TODO: `-Zcargo-lints`: '//g ./Cargo.toml
+          sed s/'# TODO: `-Zcargo-lints`: '//g ./Cargo.toml > ./Cargo.toml.cargo-lints
+          mv ./Cargo.toml.cargo-lints ./Cargo.toml
           cargo +$NIGHTLY clippy --locked -Zcargo-lints --all-features --all-targets -- -D warnings
           cargo +$NIGHTLY clippy --locked -Zcargo-lints --no-default-features --all-targets -p serai-primitives -- -D warnings
           cargo +$NIGHTLY clippy --locked -Zcargo-lints --all-targets -p serai-primitives -- -D warnings
