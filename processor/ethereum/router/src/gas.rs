@@ -370,7 +370,8 @@ impl Router {
     gas -= current_initial_gas;
     loop {
       // Calculate the would-be fee
-      let fee = fee_per_gas * U256::from((gas + current_initial_gas).max(floor_gas));
+      let fee =
+        fee_per_gas.checked_mul(U256::from((gas + current_initial_gas).max(floor_gas))).unwrap();
       // Calculate the would-be gas for this fee
       let new_initial_gas;
       (new_initial_gas, floor_gas) =
@@ -406,6 +407,6 @@ impl Router {
       self.execute_gas_and_fee(coin, U256::from(0), &OutInstructions(vec![]));
     let (gas_with_out_instruction, _fee) =
       self.execute_gas_and_fee(coin, U256::from(0), &OutInstructions(vec![instruction]));
-    gas_with_out_instruction - empty_execute_gas
+    gas_with_out_instruction.saturating_sub(empty_execute_gas)
   }
 }
