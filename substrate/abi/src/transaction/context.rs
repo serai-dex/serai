@@ -42,9 +42,9 @@ pub struct ExplicitContext {
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct ContextualizedSignature {
   /// The explicit context.
-  pub(super) explicit_context: ExplicitContext,
+  pub explicit_context: ExplicitContext,
   /// The signature.
-  pub(super) signature: Signature,
+  pub signature: Signature,
 }
 
 #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
