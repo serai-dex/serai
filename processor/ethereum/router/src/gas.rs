@@ -12,7 +12,7 @@ use revm::{
   database::{empty_db::EmptyDB, in_memory_db::InMemoryDB},
   interpreter::{
     gas::calculate_initial_tx_gas,
-    interpreter_action::{CallInputs, CallOutcome},
+    interpreter_action::{CallInputs, CallOutcome, CreateInputs, CreateOutcome},
     interpreter::EthInterpreter,
     Interpreter,
   },
@@ -33,7 +33,7 @@ use ethereum_schnorr::{PublicKey, Signature};
 use crate::*;
 
 // The specification this uses
-const SPEC_ID: SpecId = SpecId::CANCUN;
+const SPEC_ID: SpecId = SpecId::OSAKA;
 
 // The chain ID used for gas estimation
 const CHAIN_ID: U256 = U256::from_be_slice(&[1]);
@@ -59,26 +59,18 @@ fn precompiles() -> EthPrecompiles {
   hooking `call_end`.
 */
 pub(crate) struct WorstCaseCallInspector {
+  router: Address,
   erc20: Option<Address>,
-  call_depth: usize,
   unused_gas: u64,
   override_immediate_call_return_value: bool,
 }
 impl Inspector<RevmContext> for WorstCaseCallInspector {
-  fn call(&mut self, _context: &mut RevmContext, _inputs: &mut CallInputs) -> Option<CallOutcome> {
-    self.call_depth += 1;
-    // Don't override the CALL immediately for prior described reasons
-    None
-  }
-
   fn call_end(
     &mut self,
-    _context: &mut RevmContext,
+    context: &mut RevmContext,
     inputs: &CallInputs,
     outcome: &mut CallOutcome,
   ) {
-    self.call_depth -= 1;
-
     /*
       Mark the amount of gas left unused, for us to later assume will be used in practice.
 
@@ -87,12 +79,15 @@ impl Inspector<RevmContext> for WorstCaseCallInspector {
       perfectly model precompiles (which wouldn't be worth the complexity) yet because the Router
       does call precompiles (ecrecover) and accordingly has to model the gas of that correctly.
     */
-    if (self.call_depth == 1) && (!precompiles().contains(&inputs.target_address)) {
-      let unused_gas = inputs.gas_limit - outcome.result.gas.total_gas_spent();
-      self.unused_gas += unused_gas;
+    if context.journaled_state.depth() == 1 {
+      assert_eq!(inputs.caller, self.router);
+      if !precompiles().contains(&inputs.target_address) {
+        let unused_gas = inputs.gas_limit - outcome.result.gas.total_gas_spent();
+        self.unused_gas += unused_gas;
 
-      // Now that the CALL is over, flag we should normalize the values on the stack
-      self.override_immediate_call_return_value = true;
+        // Now that the Router's CALL is over, flag we should normalize the values on the stack
+        self.override_immediate_call_return_value = true;
+      }
     }
 
     // If ERC20, provide the expected ERC20 return data
@@ -113,6 +108,23 @@ impl Inspector<RevmContext> for WorstCaseCallInspector {
       );
       self.override_immediate_call_return_value = false;
     }
+  }
+
+  fn create(
+    &mut self,
+    context: &mut RevmContext,
+    inputs: &mut CreateInputs,
+  ) -> Option<CreateOutcome> {
+    /*
+      Because this is within a nested call, its gas consumption will be set to the maximum by the
+      above. This means we don't have to model or effect any gas properties here.
+    */
+    assert!(context.journaled_state.depth() > 1);
+    assert_eq!(inputs.caller(), self.router);
+    // Don't simulate the caller's code in order to make storage slot state deterministic and to
+    // prevent any potential Denial of Services by computationally non-trivial code
+    inputs.set_init_code(Bytes::new());
+    None
   }
 }
 
@@ -140,7 +152,7 @@ impl Router {
     The gas limits to use for non-Execute transactions.
 
     These don't branch on the success path, allowing constants to be used out-right. These
-    constants target the Cancun network upgrade and are validated by the tests.
+    constants target the Osaka network upgrade and are validated by the tests.
 
     While whoever publishes these transactions may be able to query a gas estimate, it may not be
     reasonable to. If the signing context is a distributed group, as Serai frequently employs, a
@@ -223,12 +235,12 @@ impl Router {
           cfg.chain_id = CHAIN_ID.try_into().unwrap();
         })
         .modify_tx_chained(|tx: &mut TxEnv| {
-          tx.gas_limit = u64::MAX;
+          tx.gas_limit = revm::primitives::eip7825::TX_GAS_LIMIT_CAP;
           tx.kind = self.address.into();
         }),
       WorstCaseCallInspector {
+        router: self.address,
         erc20,
-        call_depth: 0,
         unused_gas: 0,
         override_immediate_call_return_value: false,
       },
@@ -350,17 +362,19 @@ impl Router {
         0,
         0,
       );
-      assert_eq!(gas.floor_gas, 0);
-      gas.initial_total_gas
+      (gas.initial_total_gas, gas.floor_gas)
     };
-    let mut current_initial_gas = initial_gas(shimmed_fee, abi::Signature::from(&sig));
+    let (mut current_initial_gas, mut floor_gas) =
+      initial_gas(shimmed_fee, abi::Signature::from(&sig));
     // Remove the current initial gas from the transaction's gas
     gas -= current_initial_gas;
     loop {
       // Calculate the would-be fee
-      let fee = fee_per_gas * U256::from(gas + current_initial_gas);
+      let fee =
+        fee_per_gas.checked_mul(U256::from((gas + current_initial_gas).max(floor_gas))).unwrap();
       // Calculate the would-be gas for this fee
-      let new_initial_gas =
+      let new_initial_gas;
+      (new_initial_gas, floor_gas) =
         initial_gas(fee, abi::Signature { c: [0xff; 32].into(), s: [0xff; 32].into() });
       // If the values are equal, or if it went down, return
       /*
@@ -370,7 +384,7 @@ impl Router {
         gas to ensure this algorithm terminates.
       */
       if current_initial_gas >= new_initial_gas {
-        return (gas + new_initial_gas, fee);
+        return ((gas + new_initial_gas).max(floor_gas), fee);
       }
       // Update what the current initial gas is
       current_initial_gas = new_initial_gas;
@@ -393,6 +407,6 @@ impl Router {
       self.execute_gas_and_fee(coin, U256::from(0), &OutInstructions(vec![]));
     let (gas_with_out_instruction, _fee) =
       self.execute_gas_and_fee(coin, U256::from(0), &OutInstructions(vec![instruction]));
-    gas_with_out_instruction - empty_execute_gas
+    gas_with_out_instruction.saturating_sub(empty_execute_gas)
   }
 }

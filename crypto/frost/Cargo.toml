@@ -88,14 +88,14 @@ std = [
   "dkg-dealer?/std",
 ]
 
-ed25519 = ["dalek-ff-group"]
-ristretto = ["dalek-ff-group"]
+ed25519 = ["dep:dalek-ff-group"]
+ristretto = ["dep:dalek-ff-group"]
 
-secp256k1 = ["sha2", "elliptic-curve", "ciphersuite-kp256"]
-p256 = ["sha2", "elliptic-curve", "ciphersuite-kp256"]
+secp256k1 = ["dep:sha2", "dep:elliptic-curve", "dep:ciphersuite-kp256"]
+p256 = ["dep:sha2", "dep:elliptic-curve", "dep:ciphersuite-kp256"]
 
-ed448 = ["minimal-ed448"]
+ed448 = ["dep:minimal-ed448"]
 
-tests = ["hex", "rand_core/getrandom", "dkg-dealer", "dkg-recovery"]
+tests = ["dep:hex", "rand_core/getrandom", "dep:dkg-dealer", "dep:dkg-recovery"]
 
 default = ["std"]

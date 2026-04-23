@@ -4,7 +4,7 @@
 
 use sha2::digest::array::{typenum::U33, Array};
 use k256::elliptic_curve::{
-  subtle::{Choice, CtOption, ConstantTimeEq, ConditionallySelectable},
+  subtle::{Choice, CtOption, ConstantTimeEq as _, ConditionallySelectable as _},
   zeroize::Zeroize,
   group::{ff::PrimeField, Group, GroupEncoding},
   sec1::Tag,
@@ -66,8 +66,11 @@ impl ShortWeierstrass for Secq256k1 {
   const IDENTITY: Self::Repr = Array([0; 33]);
   fn encode_compressed(x: Self::FieldElement, odd_y: Choice) -> Self::Repr {
     let mut res = Array([0; 33]);
-    res[0] =
-      <_>::conditional_select(&(Tag::CompressedEvenY as u8), &(Tag::CompressedOddY as u8), odd_y);
+    res[0] = <_>::conditional_select(
+      &u8::from(Tag::CompressedEvenY),
+      &u8::from(Tag::CompressedOddY),
+      odd_y,
+    );
     {
       let res: &mut [u8] = res.as_mut();
       res[1 ..].copy_from_slice(x.to_repr().as_ref());
@@ -76,10 +79,13 @@ impl ShortWeierstrass for Secq256k1 {
   }
   fn decode_compressed(bytes: &Self::Repr) -> (<Self::FieldElement as PrimeField>::Repr, Choice) {
     // Parse out if `y` is odd
-    let odd_y = bytes[0].ct_eq(&(Tag::CompressedOddY as u8));
+    let odd_y = bytes[0].ct_eq(&u8::from(Tag::CompressedOddY));
     // Check if the tag was malleated
-    let expected_tag =
-      <_>::conditional_select(&(Tag::CompressedEvenY as u8), &(Tag::CompressedOddY as u8), odd_y);
+    let expected_tag = <_>::conditional_select(
+      &u8::from(Tag::CompressedEvenY),
+      &u8::from(Tag::CompressedOddY),
+      odd_y,
+    );
     let invalid = !bytes[0].ct_eq(&expected_tag);
 
     // Copy the alleged `x` coordinate, overwriting with `0xffffff...` if the sign byte was
@@ -124,6 +130,7 @@ impl ciphersuite::WithPreferredHash for Secq256k1 {
 
 #[cfg(feature = "alloc")]
 impl generalized_bulletproofs_ec_gadgets::DiscreteLogParameter for Secq256k1 {
+  #[expect(clippy::as_conversions)]
   type ScalarBits = sha2::digest::array::typenum::U<{ Scalar::NUM_BITS as usize }>;
 }
 
@@ -134,7 +141,7 @@ fn test_curve() {
 
 #[test]
 fn generator() {
-  use ciphersuite::group::GroupEncoding;
+  use ciphersuite::group::GroupEncoding as _;
   assert_eq!(
     <Point as Group>::generator(),
     Point::from_bytes(&Array(hex_literal::hex!(

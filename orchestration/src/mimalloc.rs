@@ -1,8 +1,8 @@
 use crate::Os;
 
-// 2.2.7
-const MIMALLOC_VERSION: &str = "6a53d72d46a1a641d8e5793db37cb2da60e04192";
-const HARDENING_FLAGS: &str = "-DMI_SECURE=ON -DMI_GUARDED=ON -DMI_XMALLOC=ON";
+// 3.3.1
+const MIMALLOC_VERSION: &str = "e2e6e70f8333e58ed0116591ca33a56227db9139";
+const HARDENING_FLAGS: &str = "-DMI_SECURE_FULL=ON -DMI_GUARDED=ON -DMI_XMALLOC=ON";
 #[rustfmt::skip]
 const COMPILATION_FLAGS: &str =
   "-DMI_OVERRIDE=ON -DMI_OPT_ARCH=ON -DMI_BUILD_SHARED=ON -DMI_BUILD_STATIC=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF";
@@ -25,12 +25,7 @@ rm -rf .git ./bin
 mkdir -p out
 cd out
 
-# `CMakeLists.txt` requires a C++ compiler but `mimalloc` does not use one by default. We claim
-# there is a working C++ compiler so CMake doesn't complain, allowing us to not unnecessarily
-# install one. If it was ever invoked, our choice of `false` would immediately let us know.
-#
-# https://github.com/microsoft/mimalloc/issues/1179
-{env} CXX=false cmake -DCMAKE_CXX_COMPILER_WORKS=1 {flags} ..
+{env} cmake {flags} ..
 make
 
 cd ..

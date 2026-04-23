@@ -35,6 +35,6 @@ dalek-ff-group = { path = "../dalek-ff-group" }
 alloc = ["zeroize/alloc"]
 std = ["alloc", "zeroize/std", "subtle/std", "ff/std", "rand_core?/std"]
 
-batch = ["alloc", "rand_core"]
+batch = ["alloc", "dep:rand_core"]
 
 default = ["std"]

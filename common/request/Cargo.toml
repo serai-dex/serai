@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/common/request"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["http", "https", "async", "request", "ssl"]
 edition = "2021"
-rust-version = "1.81"
+rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -31,7 +31,7 @@ base64ct = { version = "1", features = ["alloc"], optional = true }
 
 [features]
 tokio = ["hyper-util/tokio"]
-tls = ["tokio", "hyper-rustls"]
+tls = ["tokio", "dep:hyper-rustls"]
 webpki-roots = ["tls", "hyper-rustls/webpki-roots"]
-basic-auth = ["zeroize", "base64ct"]
+basic-auth = ["dep:zeroize", "dep:base64ct"]
 default = ["tls"]

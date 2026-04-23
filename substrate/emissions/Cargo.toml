@@ -80,7 +80,7 @@ runtime-benchmarks = [
   "serai-dex-pallet/runtime-benchmarks",
   "serai-validator-sets-pallet/runtime-benchmarks",
 
-  "pallet-timestamp",
+  "dep:pallet-timestamp",
 ]
 
 default = ["std"]

@@ -76,7 +76,7 @@ impl Deployer {
       */
       gas_price: 100_000_000_000u128,
       /*
-        This is twice the cost of deployment as of Ethereum's Cancun upgrade. The wide margin is to
+        This is twice the cost of deployment as of Ethereum's Osaka upgrade. The wide margin is to
         increase the likelihood of surviving changes to the cost of contract deployment (notably
         the gas cost of calldata). While wasteful, this only has to be done once per chain and is
         accepted accordingly.

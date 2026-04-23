@@ -48,6 +48,6 @@ std = [
 
   "serai-primitives/std",
 ]
-substrate = ["scale", "sp-runtime", "frame-support", "frame-system", "serai-primitives/scale"]
+substrate = ["dep:scale", "dep:sp-runtime", "dep:frame-support", "dep:frame-system", "serai-primitives/scale"]
 try-runtime = ["sp-runtime/try-runtime"]
 default = ["std"]

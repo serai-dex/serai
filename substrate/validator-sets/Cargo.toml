@@ -105,16 +105,17 @@ try-runtime = [
 ]
 
 runtime-benchmarks = [
-  "zeroize",
-  "rand_core",
-  "rand_chacha",
-  "ciphersuite",
-  "dalek-ff-group",
+  "dep:zeroize",
+  "dep:rand_core",
+  "dep:rand_chacha",
+  "dep:ciphersuite",
+  "dep:dalek-ff-group",
 
-  "bitvec",
+  "dep:bitvec",
 
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
+  "dep:frame-benchmarking",
   "frame-benchmarking/runtime-benchmarks",
 
   "pallet-babe/runtime-benchmarks",

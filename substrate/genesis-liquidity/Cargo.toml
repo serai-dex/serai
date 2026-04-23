@@ -95,8 +95,9 @@ runtime-benchmarks = [
   "serai-dex-pallet/runtime-benchmarks",
   "serai-validator-sets-pallet/runtime-benchmarks",
 
-  "bitvec",
-  "pallet-timestamp",
+  "dep:bitvec",
+  "dep:pallet-timestamp",
+  "dep:frame-benchmarking",
   "frame-benchmarking/runtime-benchmarks",
 ]
 

@@ -84,7 +84,7 @@ std = [
   "dalek-ff-group?/std",
   "embedwards25519?/std",
 ]
-secp256k1 = ["ciphersuite-kp256", "secq256k1"]
-ed25519 = ["dalek-ff-group", "embedwards25519"]
+secp256k1 = ["dep:ciphersuite-kp256", "dep:secq256k1"]
+ed25519 = ["dep:dalek-ff-group", "dep:embedwards25519"]
 tests = ["rand_core/getrandom"]
 default = ["std"]

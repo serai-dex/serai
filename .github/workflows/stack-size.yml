@@ -28,7 +28,7 @@ jobs:
 
       - name: Monero Daemon Cache
         id: cache-monerod
-        uses: actions/cache@668228422ae6a00e4ad889ee87cd7109ec5666a7 # 5.0.4
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # 5.0.5
         with:
           path: monerod
           key: stack-size-monerod
@@ -74,9 +74,9 @@ jobs:
             # macOS also has the benefit of packaging (via MacPorts) `mrsh`,
             # which explicitly attempts to be be exactly POSIX, without any extensions.
             # We first have to install MacPorts, the easiest method being from source.
-            curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.12.4.tar.bz2
-            tar xf MacPorts-2.12.4.tar.bz2
-            cd MacPorts-2.12.4
+            curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.12.5.tar.bz2
+            tar xf MacPorts-2.12.5.tar.bz2
+            cd MacPorts-2.12.5
             ./configure
             make
             sudo make install

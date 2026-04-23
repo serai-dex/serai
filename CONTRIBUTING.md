@@ -30,13 +30,13 @@ available via your system and the `ROCKSDB_LIB_DIR` environment variable is set
 (optionally along with the `SNAPPY_LIB_DIR` environment variable).
 
 Building the Ethereum smart contracts (and libraries for them) relies on an
-exact version of Solidity, currently `0.8.29`. Our recommended way to install
+exact version of Solidity, currently `0.8.34`. Our recommended way to install
 Solidity is via [`svm-rs`](https://docs.rs/svm-rs) as follows:
 
 ```sh
 cargo install svm-rs
-svm install 0.8.29
-svm use 0.8.29
+svm install 0.8.34
+svm use 0.8.34
 ```
 
 Building the Serai node can be done locally for development purposes. Building

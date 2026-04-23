@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: CC0
-pragma solidity ^0.8.29;
+// slither-disable-next-line pragma // Checked in CI
+pragma solidity ^0.8.34;
 
 interface IERC20 {
   event Transfer(address indexed from, address indexed to, uint256 value);

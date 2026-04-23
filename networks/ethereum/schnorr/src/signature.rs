@@ -40,7 +40,9 @@ impl Signature {
   /// representation.
   ///
   /// With negligible probability, this MAY return a value congruent to `0` modulo the order of
-  /// secp256k1, which will create an invalid/unverifiable signature.
+  /// secp256k1, which will create an invalid/unverifiable signature. This MAY return an invalid
+  /// output when `R` is the identity point.
+  // TODO: Identify exact behavior of `R` and possibly require `NonIdentity<ProjectivePoint>`?
   #[must_use]
   pub fn challenge(R: ProjectivePoint, key: &PublicKey, message: &[u8]) -> [u8; 32] {
     // H(R || A || m)

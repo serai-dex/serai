@@ -105,7 +105,8 @@ runtime-benchmarks = [
   "serai-economic-security-pallet/runtime-benchmarks",
   "serai-genesis-liquidity-pallet/runtime-benchmarks",
 
-  "sp-io",
+  "dep:sp-io",
+  "dep:frame-benchmarking",
   "frame-benchmarking/runtime-benchmarks",
 ]
 

@@ -53,12 +53,14 @@ std = [
 
   "k256/std",
   "frost/std",
+
+  "hex?/std",
 ]
 rpc = [
   "std",
-  "hex/std",
-  "core-json-traits",
-  "core-json-derive",
-  "simple-request",
+  "dep:hex",
+  "dep:core-json-traits",
+  "dep:core-json-derive",
+  "dep:simple-request",
 ]
 default = ["std", "rpc"]

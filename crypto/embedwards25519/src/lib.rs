@@ -95,6 +95,7 @@ impl ciphersuite::GroupCanonicalEncoding for Embedwards25519 {
 
 #[cfg(feature = "alloc")]
 impl generalized_bulletproofs_ec_gadgets::DiscreteLogParameter for Embedwards25519 {
+  #[expect(clippy::as_conversions)]
   type ScalarBits = typenum::U<{ <Scalar as PrimeField>::NUM_BITS as usize }>;
 }
 

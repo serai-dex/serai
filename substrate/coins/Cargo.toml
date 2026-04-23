@@ -52,8 +52,8 @@ std = [
   "serai-core-pallet/std",
 
   "sp-io?/std",
-  "pallet-timestamp?/std",
   "frame-benchmarking?/std",
+  "pallet-timestamp?/std",
 ]
 
 try-runtime = [
@@ -70,8 +70,10 @@ runtime-benchmarks = [
 
   "serai-core-pallet/runtime-benchmarks",
 
-  "sp-io",
+  "dep:sp-io",
+  "dep:frame-benchmarking",
   "frame-benchmarking/runtime-benchmarks",
+  "dep:pallet-timestamp",
   "pallet-timestamp/runtime-benchmarks",
 ]
 

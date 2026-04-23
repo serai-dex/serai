@@ -13,6 +13,9 @@ rust-version = "1.89"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[lints]
+workspace = true
+
 [dependencies]
 hex-literal = { version = "1", default-features = false }
 
@@ -37,6 +40,6 @@ rand_core = { version = "0.6", features = ["std"] }
 ff-group-tests = { path = "../ff-group-tests" }
 
 [features]
-alloc = ["zeroize/alloc", "prime-field/alloc", "short-weierstrass/alloc", "curve25519-dalek/alloc", "blake2/alloc", "ciphersuite/alloc", "generalized-bulletproofs-ec-gadgets"]
+alloc = ["zeroize/alloc", "prime-field/alloc", "short-weierstrass/alloc", "curve25519-dalek/alloc", "blake2/alloc", "ciphersuite/alloc", "dep:generalized-bulletproofs-ec-gadgets"]
 std = ["alloc", "zeroize/std", "prime-field/std", "short-weierstrass/std", "ciphersuite/std", "generalized-bulletproofs-ec-gadgets/std"]
 default = ["std"]

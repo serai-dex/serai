@@ -40,6 +40,6 @@ ciphersuite = { path = "../ciphersuite" }
 
 [features]
 alloc = ["zeroize/alloc", "ciphersuite/alloc", "multiexp/alloc", "multiexp/batch"]
-aggregate = ["alloc", "transcript"]
+aggregate = ["alloc", "dep:transcript"]
 std = ["alloc", "std-shims/std", "rand_core/std", "zeroize/std", "transcript?/std", "ciphersuite/std", "multiexp/std"]
 default = ["std"]

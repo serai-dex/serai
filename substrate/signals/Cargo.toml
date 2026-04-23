@@ -67,8 +67,11 @@ std = [
 runtime-benchmarks = [
   "frame-system/runtime-benchmarks",
   "frame-support/runtime-benchmarks",
-  "frame-benchmarking",
+  "dep:frame-benchmarking",
+  "frame-benchmarking/runtime-benchmarks",
+  "dep:pallet-timestamp",
   "pallet-timestamp/runtime-benchmarks",
+  "dep:pallet-session",
   "pallet-session/runtime-benchmarks",
   "pallet-babe/runtime-benchmarks",
 

@@ -24,10 +24,10 @@ serai-client-ethereum = { path = "./ethereum", optional = true }
 serai-client-monero = { path = "./monero", optional = true }
 
 [features]
-serai = ["serai-client-serai"]
+serai = ["dep:serai-client-serai"]
 
-bitcoin = ["serai-client-bitcoin"]
-ethereum = ["serai-client-ethereum"]
-monero = ["serai-client-monero"]
+bitcoin = ["dep:serai-client-bitcoin"]
+ethereum = ["dep:serai-client-ethereum"]
+monero = ["dep:serai-client-monero"]
 
 default = ["serai", "bitcoin", "ethereum", "monero"]

@@ -34,20 +34,24 @@ jobs:
         shell: bash
         run: |
           # stable Rust
-          cargo clippy --all-features --all-targets -- -D warnings
+          cargo clippy --locked --all-features --all-targets -- -D warnings
           # Check a few variations of `serai-primitives`, `serai-abi`
-          cargo clippy --no-default-features --all-targets -p serai-primitives -- -D warnings
-          cargo clippy --all-targets -p serai-primitives -- -D warnings
-          cargo clippy --no-default-features --all-targets -p serai-abi -- -D warnings
-          cargo clippy --all-targets -p serai-abi -- -D warnings
+          cargo clippy --locked --no-default-features --all-targets -p serai-primitives -- -D warnings
+          cargo clippy --locked --all-targets -p serai-primitives -- -D warnings
+          cargo clippy --locked --no-default-features --all-targets -p serai-abi -- -D warnings
+          cargo clippy --locked --all-targets -p serai-abi -- -D warnings
 
           # nightly Rust
           NIGHTLY="${{ steps.nightly.outputs.version }}"
-          cargo +$NIGHTLY clippy --all-features --all-targets -- -D warnings
-          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-primitives -- -D warnings
-          cargo +$NIGHTLY clippy --all-targets -p serai-primitives -- -D warnings
-          cargo +$NIGHTLY clippy --no-default-features --all-targets -p serai-abi -- -D warnings
-          cargo +$NIGHTLY clippy --all-targets -p serai-abi -- -D warnings
+          cp ./Cargo.toml ./Cargo.toml.bak
+          sed s/'# TODO: `-Zcargo-lints`: '//g ./Cargo.toml > ./Cargo.toml.cargo-lints
+          mv ./Cargo.toml.cargo-lints ./Cargo.toml
+          cargo +$NIGHTLY clippy --locked -Zcargo-lints --all-features --all-targets -- -D warnings
+          cargo +$NIGHTLY clippy --locked -Zcargo-lints --no-default-features --all-targets -p serai-primitives -- -D warnings
+          cargo +$NIGHTLY clippy --locked -Zcargo-lints --all-targets -p serai-primitives -- -D warnings
+          cargo +$NIGHTLY clippy --locked -Zcargo-lints --no-default-features --all-targets -p serai-abi -- -D warnings
+          cargo +$NIGHTLY clippy --locked -Zcargo-lints --all-targets -p serai-abi -- -D warnings
+          mv ./Cargo.toml.bak ./Cargo.toml
 
       - name: Verify `pallet::hooks` is unused
         shell: bash
@@ -65,14 +69,14 @@ jobs:
             exit 1
           fi
 
-      # Also verify the lockfile isn't dirty
-      # This happens when someone edits a Cargo.toml yet doesn't do anything
-      # which causes the lockfile to be updated
-      # The above clippy run will cause it to be updated, so checking there's
-      # no differences present now performs the desired check
-      - name: Verify lockfile
+      # Check the Git index didn't change as a result of the build process
+      - name: Check the Git index is unmodified
         shell: bash
-        run: git diff | wc -l | LC_ALL="en_US.utf8" grep -x -e "^[ ]*0"
+        run: |
+          # Add all files so any untracked files are also considered in the difference
+          git add .
+          # Check there's no difference
+          [ $(git diff HEAD | wc -l) -eq 0 ]
 
   # Verify the documentation builds without erroring
   docs:
@@ -106,13 +110,10 @@ jobs:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Install cargo deny
-        run: cargo +1.94.1 install --locked cargo-deny --version =0.19.1
+        run: cargo +1.95.0 install --locked cargo-deny --version =0.19.4
 
       - name: Run cargo deny
-        run: |
-          cargo deny -L error --all-features check --hide-inclusion-graph
-          # Confirm `log` isn't a dependency of `rand` (RUSTSEC-2026-0097)
-          [ $(cargo tree --all-features --edges all --invert log --depth 1 --prefix none | grep "^rand" | wc -l || true) -eq 0 ]
+        run: cargo deny -L error --all-features check --hide-inclusion-graph
 
   fmt:
     runs-on: ubuntu-latest
@@ -155,8 +156,8 @@ jobs:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
       - name: Verify all dependencies are in use
         run: |
-          cargo +1.94.1 install --locked cargo-machete --version =0.9.1
-          cargo +1.94.1 machete
+          cargo +1.95.0 install --locked cargo-machete --version =0.9.2
+          cargo +1.95.0 machete
 
   msrv:
     runs-on: ubuntu-latest
@@ -167,7 +168,7 @@ jobs:
       - name: Verify claimed `rust-version`
         shell: bash
         run: |
-          cargo +1.94.1 install --locked cargo-msrv --version =0.19.3
+          cargo +1.95.0 install --locked cargo-msrv --version =0.19.3
 
           # Remove `patches/{home, getrandom}` as they force the entire workspace to Rust 1.85(+)
           echo "$(cat ./Cargo.toml | grep -v 'patches/home' | grep -v 'patches/getrandom')" > ./Cargo.toml
@@ -253,7 +254,7 @@ jobs:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
 
       - name: Install cargo vet
-        run: cargo +1.94.1 install --locked cargo-vet --git https://github.com/kayabaNerve/cargo-vet --rev d2fb27daaeb839e5fa4f6b28c5cdd4a9185542b5
+        run: cargo +1.95.0 install --locked cargo-vet --git https://github.com/kayabaNerve/cargo-vet --rev d2fb27daaeb839e5fa4f6b28c5cdd4a9185542b5
 
       - name: Run cargo vet
         run: |
@@ -272,7 +273,7 @@ jobs:
         shell: bash
         run: |
           sudo apt install -y python3-pip
-          python3 -m pip install slither-analyzer==0.11.3
+          python3 -m pip install slither-analyzer==0.11.5
 
           slither ./networks/ethereum/schnorr/contracts/Schnorr.sol
           slither --include-paths ./networks/ethereum/schnorr/contracts ./networks/ethereum/schnorr/contracts/tests/Schnorr.sol
