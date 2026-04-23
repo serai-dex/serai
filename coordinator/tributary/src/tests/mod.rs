@@ -11,8 +11,7 @@ use rand_core::OsRng;
 use serai_primitives::{
   address::SeraiAddress,
   test_helpers::{
-    random_block_hash, random_bytes_32, random_bytes_64, random_serai_address, random_vec_u8,
-    default_test_validator_set,
+    random_bytes, random_block_hash, random_serai_address, random_vec_u8, random_validator_set,
   },
 };
 
@@ -71,77 +70,77 @@ pub(crate) fn all_signed_transactions_and_attempts(signed: &Signed) -> Vec<Trans
     // RemoveParticipant
     Transaction::RemoveParticipant { participant: random_serai_address(&mut OsRng), signed },
     // DkgParticipation
-    Transaction::DkgParticipation { participation: random_vec_u8(&mut OsRng), signed },
+    Transaction::DkgParticipation { participation: random_vec_u8(&mut OsRng, 0 ..= 128), signed },
     // DkgConfirmationPreprocess
     Transaction::DkgConfirmationPreprocess {
       attempt: 0,
-      preprocess: random_bytes_64(&mut OsRng),
+      preprocess: random_bytes(&mut OsRng),
       signed,
     },
     Transaction::DkgConfirmationPreprocess {
       attempt: random_attempt,
-      preprocess: random_bytes_64(&mut OsRng),
+      preprocess: random_bytes(&mut OsRng),
       signed,
     },
     Transaction::DkgConfirmationPreprocess {
       attempt: u64::MAX,
-      preprocess: random_bytes_64(&mut OsRng),
+      preprocess: random_bytes(&mut OsRng),
       signed,
     },
     // DkgConfirmationShare
-    Transaction::DkgConfirmationShare { attempt: 0, share: random_bytes_32(&mut OsRng), signed },
+    Transaction::DkgConfirmationShare { attempt: 0, share: random_bytes(&mut OsRng), signed },
     Transaction::DkgConfirmationShare {
       attempt: random_attempt,
-      share: random_bytes_32(&mut OsRng),
+      share: random_bytes(&mut OsRng),
       signed,
     },
     Transaction::DkgConfirmationShare {
       attempt: u64::MAX,
-      share: random_bytes_32(&mut OsRng),
+      share: random_bytes(&mut OsRng),
       signed,
     },
     // Sign Preprocess
     Transaction::Sign {
-      id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
+      id: VariantSignId::Transaction(random_bytes(&mut OsRng)),
       attempt: 0,
       round: SigningProtocolRound::Preprocess,
-      data: vec![random_vec_u8(&mut OsRng)],
+      data: vec![random_vec_u8(&mut OsRng, 0 ..= 128)],
       signed,
     },
     Transaction::Sign {
-      id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
+      id: VariantSignId::Transaction(random_bytes(&mut OsRng)),
       attempt: random_attempt,
       round: SigningProtocolRound::Preprocess,
-      data: vec![random_vec_u8(&mut OsRng)],
+      data: vec![random_vec_u8(&mut OsRng, 0 ..= 128)],
       signed,
     },
     Transaction::Sign {
-      id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
+      id: VariantSignId::Transaction(random_bytes(&mut OsRng)),
       attempt: u64::MAX,
       round: SigningProtocolRound::Preprocess,
-      data: vec![random_vec_u8(&mut OsRng)],
+      data: vec![random_vec_u8(&mut OsRng, 0 ..= 128)],
       signed,
     },
     // Sign Share
     Transaction::Sign {
-      id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
+      id: VariantSignId::Batch(random_bytes(&mut OsRng)),
       attempt: 0,
       round: SigningProtocolRound::Share,
-      data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
+      data: vec![random_vec_u8(&mut OsRng, 0 ..= 128), random_vec_u8(&mut OsRng, 0 ..= 128)],
       signed,
     },
     Transaction::Sign {
-      id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
+      id: VariantSignId::Batch(random_bytes(&mut OsRng)),
       attempt: random_attempt,
       round: SigningProtocolRound::Share,
-      data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
+      data: vec![random_vec_u8(&mut OsRng, 0 ..= 128), random_vec_u8(&mut OsRng, 0 ..= 128)],
       signed,
     },
     Transaction::Sign {
-      id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
+      id: VariantSignId::Batch(random_bytes(&mut OsRng)),
       attempt: u64::MAX,
       round: SigningProtocolRound::Share,
-      data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
+      data: vec![random_vec_u8(&mut OsRng, 0 ..= 128), random_vec_u8(&mut OsRng, 0 ..= 128)],
       signed,
     },
     // SlashReport
@@ -155,7 +154,7 @@ pub(crate) fn all_provided_transactions() -> Vec<Transaction> {
     Transaction::Cosign { substrate_block_hash: random_block_hash(&mut OsRng) },
     Transaction::Cosigned { substrate_block_hash: random_block_hash(&mut OsRng) },
     Transaction::SubstrateBlock { hash: random_block_hash(&mut OsRng) },
-    Transaction::Batch { hash: random_block_hash(&mut OsRng).0 },
+    Transaction::Batch { hash: random_bytes(&mut OsRng) },
   ]
 }
 
@@ -290,8 +289,8 @@ pub(crate) fn new_test_set_info(validators: &[(SeraiAddress, u16)]) -> NewSetInf
   }
 
   NewSetInformation {
-    set: default_test_validator_set(),
-    serai_block: random_bytes_32(&mut OsRng),
+    set: random_validator_set(&mut OsRng),
+    serai_block: random_bytes(&mut OsRng),
     declaration_time: OsRng.next_u64(),
     threshold: OsRng.gen_range(0 ..= u16::MAX),
     validators: validators.to_vec(),

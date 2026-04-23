@@ -21,7 +21,7 @@ pub fn random_external_network_id(rng: &mut (impl RngCore + CryptoRng)) -> Exter
 
 /// Generate a random global session ID (`[u8; 32]`).
 pub fn random_global_session<R: RngCore + CryptoRng>(rng: &mut R) -> [u8; 32] {
-  serai_primitives::test_helpers::random_bytes_32(rng)
+  serai_primitives::test_helpers::random_bytes(rng)
 }
 
 /// Generate a random [`Cosign`] for testing.

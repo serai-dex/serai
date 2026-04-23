@@ -6,8 +6,7 @@ use serai_primitives::{
   address::SeraiAddress,
   validator_sets::ExternalValidatorSet,
   test_helpers::{
-    random_bytes_32, random_bytes_64, random_serai_address, random_block_number,
-    default_test_validator_set, random_validator_set, random_vec_u8, random_block_hash,
+    random_bytes, random_block_hash, random_serai_address, random_validator_set, random_vec_u8,
   },
 };
 
@@ -35,29 +34,29 @@ fn all_topics_and_attempts() -> Vec<Topic> {
     Topic::SlashReport,
     // Sign Preprocess
     Topic::Sign {
-      id: random_transaction_id(),
+      id: random_variant_sign_id(),
       attempt: 0,
       round: SigningProtocolRound::Preprocess,
     },
     Topic::Sign {
-      id: random_transaction_id(),
+      id: random_variant_sign_id(),
       attempt: random_attempt,
       round: SigningProtocolRound::Preprocess,
     },
     Topic::Sign {
-      id: random_transaction_id(),
+      id: random_variant_sign_id(),
       attempt: u64::MAX,
       round: SigningProtocolRound::Preprocess,
     },
     // Sign Share
-    Topic::Sign { id: random_transaction_id(), attempt: 0, round: SigningProtocolRound::Share },
+    Topic::Sign { id: random_variant_sign_id(), attempt: 0, round: SigningProtocolRound::Share },
     Topic::Sign {
-      id: random_transaction_id(),
+      id: random_variant_sign_id(),
       attempt: random_attempt,
       round: SigningProtocolRound::Share,
     },
     Topic::Sign {
-      id: random_transaction_id(),
+      id: random_variant_sign_id(),
       attempt: u64::MAX,
       round: SigningProtocolRound::Share,
     },
@@ -337,7 +336,7 @@ mod tributary_db {
     let mut db = MemDb::new();
     let set = random_validator_set(&mut OsRng);
     let block_hash1 = random_block_hash(&mut OsRng);
-    let block_number1 = random_block_number(&mut OsRng);
+    let block_number1 = OsRng.next_u64();
 
     let expected_topic =
       expected_initially_recognized_sign_topic(VariantSignId::Cosign(block_number1));
@@ -357,7 +356,7 @@ mod tributary_db {
 
       let retry = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let block_hash2 = random_block_hash(&mut OsRng);
-        let block_number2 = random_block_number(&mut OsRng);
+        let block_number2 = OsRng.next_u64();
         TributaryDb::start_cosigning(&mut txn, set, block_hash2, block_number2);
       }));
 
@@ -385,7 +384,7 @@ mod tributary_db {
     {
       let mut txn = db.txn();
       let block_hash2 = random_block_hash(&mut OsRng);
-      let block_number2 = random_block_number(&mut OsRng);
+      let block_number2 = OsRng.next_u64();
 
       TributaryDb::start_cosigning(&mut txn, set, block_hash2, block_number2);
       assert_eq!(ActivelyCosigning::get(&txn, set), Some(block_hash2));
@@ -427,7 +426,7 @@ mod tributary_db {
         // Fresh DB per topic so recognized state doesn't leak between iterations
         let mut db = MemDb::new();
         let mut txn = db.txn();
-        let block_number = random_block_number(&mut OsRng);
+        let block_number = OsRng.next_u64();
 
         // Randomly select which reattempt topics are queued for this block
         let reattempts: Vec<Topic> =
@@ -528,11 +527,11 @@ mod tributary_db {
             set,
             &validators,
             total_weight,
-            random_block_number(&mut OsRng),
+            OsRng.next_u64(),
             share_topic,
             validator,
             validator_weight,
-            &random_bytes_32(&mut OsRng),
+            &random_bytes(&mut OsRng),
           );
           txn.commit();
 
@@ -564,7 +563,7 @@ mod tributary_db {
             set,
             share_topic.preceding_topic().unwrap(),
             validator,
-            &random_bytes_64(&mut OsRng),
+            &random_bytes(&mut OsRng),
           );
 
           // Accumulate a share (Share)
@@ -574,11 +573,11 @@ mod tributary_db {
             set,
             &validators,
             total_weight,
-            random_block_number(&mut OsRng),
+            OsRng.next_u64(),
             share_topic,
             validator,
             validator_weight,
-            &random_bytes_32(&mut OsRng),
+            &random_bytes(&mut OsRng),
           );
           txn.commit();
 
@@ -615,7 +614,7 @@ mod tributary_db {
             set,
             &validators,
             total_weight,
-            random_block_number(&mut OsRng),
+            OsRng.next_u64(),
             preprocess_topic,
             |_| vec![random_vec_u8(&mut OsRng)],
             None::<fn(usize, &DataSet<RoundPayloads>)>,
@@ -628,7 +627,7 @@ mod tributary_db {
             set,
             &validators,
             total_weight,
-            random_block_number(&mut OsRng),
+            OsRng.next_u64(),
             share_topic,
             validator,
             validator_weight,
@@ -658,7 +657,7 @@ mod tributary_db {
           let (set, _validator, validators, total_weight, _validator_weight) =
             default_accumulate_setup();
           let mut db = MemDb::new();
-          let block_number = random_block_number(&mut OsRng);
+          let block_number = OsRng.next_u64();
 
           {
             let mut txn = db.txn();
@@ -725,16 +724,16 @@ mod tributary_db {
           let unrelated = Topic::SlashReport;
           {
             let mut txn = db.txn();
-            let result = TributaryDb::accumulate::<Share>(
+            let result = TributaryDb::accumulate::<[u8; 32]>(
               &mut txn,
               set,
               &validators,
               total_weight,
-              random_block_number(&mut OsRng),
+              OsRng.next_u64(),
               unrelated,
               validators[0],
               validator_weight,
-              &random_bytes_32(&mut OsRng),
+              &random_bytes(&mut OsRng),
             );
             assert!(matches!(result, DataSet::None));
             txn.commit();
@@ -743,7 +742,7 @@ mod tributary_db {
           assert_eq!(AccumulatedWeight::get(&db, set, unrelated), Some(validator_weight));
 
           // Accumulating for our topic proceeds (not NOP'd by unrelated weight)
-          let data = random_bytes_32(&mut OsRng);
+          let data = random_bytes(&mut OsRng);
           {
             let mut txn = db.txn();
             if topic.requires_recognition() {
@@ -754,7 +753,7 @@ mod tributary_db {
               set,
               &validators,
               total_weight,
-              random_block_number(&mut OsRng),
+              OsRng.next_u64(),
               topic,
               validators[1],
               validator_weight,
@@ -879,7 +878,7 @@ mod tributary_db {
               set,
               &validators,
               total_weight,
-              random_block_number(&mut OsRng),
+              OsRng.next_u64(),
               topic,
               |i| [u8::try_from(i).unwrap(); 32],
               None::<NoEachFn>,
@@ -918,11 +917,11 @@ mod tributary_db {
           set,
           &validators,
           total_weight,
-          random_block_number(&mut OsRng),
+          OsRng.next_u64(),
           topic,
           validator,
           validator_weight,
-          &random_vec_u8(&mut OsRng),
+          &random_vec_u8(&mut OsRng, 0 ..= 128),
         );
 
         // Second call with same (validator, topic) should panic
@@ -931,11 +930,11 @@ mod tributary_db {
           set,
           &validators,
           total_weight,
-          random_block_number(&mut OsRng),
+          OsRng.next_u64(),
           topic,
           validator,
           validator_weight,
-          &random_vec_u8(&mut OsRng),
+          &random_vec_u8(&mut OsRng, 0 ..= 128),
         );
       }
 
@@ -950,7 +949,7 @@ mod tributary_db {
           default_accumulate_setup();
         let mut db = MemDb::new();
         let mut txn = db.txn();
-        let block_number = random_block_number(&mut OsRng);
+        let block_number = OsRng.next_u64();
 
         TributaryDb::recognize_topic(&mut txn, set, topic);
 
@@ -975,7 +974,7 @@ mod tributary_db {
           topic,
           validator,
           validator_weight,
-          &random_vec_u8(&mut OsRng),
+          &random_vec_u8(&mut OsRng, 0 ..= 128),
         );
       }
 
@@ -990,7 +989,7 @@ mod tributary_db {
           default_accumulate_setup();
         let mut db = MemDb::new();
         let mut txn = db.txn();
-        let block_number = random_block_number(&mut OsRng);
+        let block_number = OsRng.next_u64();
 
         accumulate_to_threshold::<Vec<u8>, _, _>(
           &mut txn,
@@ -1016,7 +1015,7 @@ mod tributary_db {
           topic,
           validator,
           validator_weight,
-          &random_vec_u8(&mut OsRng),
+          &random_vec_u8(&mut OsRng, 0 ..= 128),
         );
 
         assert!(matches!(result, DataSet::None), "should be NOP after threshold");
@@ -1246,7 +1245,7 @@ mod tributary_db {
           };
 
           let mut db = MemDb::new();
-          let set = default_test_validator_set();
+          let set = random_validator_set(&mut OsRng);
 
           let validators: Vec<SeraiAddress> =
             (0 .. num_validators).map(|_i| random_serai_address(&mut OsRng)).collect();

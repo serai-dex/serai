@@ -2,9 +2,10 @@ use core::marker::PhantomData;
 
 use schnorr::SchnorrSignature;
 
-use serai_db::{Db as _, DbTxn, MemDb};
-use serai_primitives::test_helpers::{random_block_hash, random_block_number, random_vec_of_len};
+use serai_primitives::test_helpers::{random_block_hash, random_vec_u8};
 use serai_cosign_types::CosignIntent;
+
+use serai_db::{Db as _, DbTxn, MemDb};
 use tributary_sdk::{
   Block, BlockHeader, Transaction as TributaryTransaction, Evidence, tendermint::tx::TendermintTx,
 };
@@ -107,14 +108,10 @@ fn potentially_start_cosign() {
   {
     let mut db = MemDb::new();
     let block_hash = random_block_hash(&mut OsRng);
-    let global_session = random_bytes_32(&mut OsRng);
+    let global_session = random_bytes(&mut OsRng);
 
-    let intent = CosignIntent {
-      global_session,
-      block_number: random_block_number(&mut OsRng),
-      block_hash,
-      notable: false,
-    };
+    let intent =
+      CosignIntent { global_session, block_number: OsRng.next_u64(), block_hash, notable: false };
 
     {
       let mut txn = db.txn();
@@ -137,7 +134,7 @@ fn potentially_start_cosign() {
   {
     let mut db = MemDb::new();
     let block_hash = random_block_hash(&mut OsRng);
-    let global_session = random_bytes_32(&mut OsRng);
+    let global_session = random_bytes(&mut OsRng);
 
     {
       let mut txn = db.txn();
@@ -151,7 +148,7 @@ fn potentially_start_cosign() {
         block_hash,
         &CosignIntent {
           global_session,
-          block_number: random_block_number(&mut OsRng),
+          block_number: OsRng.next_u64(),
           // but the intent's block_hash field is a new_block_hash
           block_hash: new_block_hash,
           notable: false,
@@ -191,9 +188,9 @@ fn accumulate_dkg_confirmation() {
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
       scan_block.accumulate_dkg_confirmation(
-        random_block_number(&mut OsRng),
+        OsRng.next_u64(),
         Topic::RemoveParticipant { participant: random_serai_address(&mut OsRng) },
-        &random_vec_of_len(&mut OsRng, 4),
+        &random_vec_u8(&mut OsRng, 4 ..= 4),
         validators[0],
       );
     }));
@@ -205,12 +202,12 @@ fn accumulate_dkg_confirmation() {
   {
     let mut db = MemDb::new();
     let mut txn = db.txn();
-    let block_number = random_block_number(&mut OsRng);
+    let block_number = OsRng.next_u64();
 
     {
-      let data1 = random_vec_of_len(&mut OsRng, 4);
-      let data2 = random_vec_of_len(&mut OsRng, 4);
-      let data3 = random_vec_of_len(&mut OsRng, 4);
+      let data1 = random_vec_u8(&mut OsRng, 4 ..= 4);
+      let data2 = random_vec_u8(&mut OsRng, 4 ..= 4);
+      let data3 = random_vec_u8(&mut OsRng, 4 ..= 4);
 
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
@@ -244,7 +241,7 @@ fn accumulate_dkg_confirmation() {
       weights_4.insert(v4, 1);
       let set_info_4 = new_test_set_info(&validator_data_4);
 
-      let data4 = random_vec_of_len(&mut OsRng, 4);
+      let data4 = random_vec_u8(&mut OsRng, 4 ..= 4);
 
       {
         let mut scan_block = new_scan_block(&mut txn, &set_info_4, &validators_4, 4, &weights_4);
@@ -262,7 +259,7 @@ mod handle_application_tx {
 
   #[test]
   fn dont_handle_signed_kind_from_fatally_slashed() {
-    let set = default_test_validator_set();
+    let set = random_validator_set(&mut OsRng);
     let (_, validator_data, validators, weights, total_weight) =
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
@@ -282,7 +279,7 @@ mod handle_application_tx {
       {
         let mut scan_block =
           new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-        scan_block.handle_application_tx(random_block_number(&mut OsRng), tx.clone());
+        scan_block.handle_application_tx(OsRng.next_u64(), tx.clone());
       }
 
       assert!(
@@ -294,7 +291,7 @@ mod handle_application_tx {
 
   #[test]
   fn remove_participant() {
-    let set = default_test_validator_set();
+    let set = random_validator_set(&mut OsRng);
     let (_, validator_data, validators, weights, total_weight) =
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
@@ -309,7 +306,7 @@ mod handle_application_tx {
       let nonexistent = random_serai_address(&mut OsRng);
 
       scan_block.handle_application_tx(
-        random_block_number(&mut OsRng),
+        OsRng.next_u64(),
         Transaction::RemoveParticipant { participant: nonexistent, signed: Signed::default() },
       );
 
@@ -325,7 +322,7 @@ mod handle_application_tx {
       let (key2, _) = keys_addrs[2];
 
       let target = addr0;
-      let block_number = random_block_number(&mut OsRng);
+      let block_number = OsRng.next_u64();
 
       let mut db = MemDb::new();
       let mut txn = db.txn();
@@ -370,7 +367,7 @@ mod handle_application_tx {
   fn dkg_participation() {
     let mut db = MemDb::new();
 
-    let set = default_test_validator_set();
+    let set = random_validator_set(&mut OsRng);
     let (keys_addrs, validator_data, validators, weights, total_weight) =
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
@@ -381,7 +378,7 @@ mod handle_application_tx {
     {
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
       scan_block.handle_application_tx(
-        random_block_number(&mut OsRng),
+        OsRng.next_u64(),
         Transaction::DkgParticipation {
           participation: vec![1, 2, 3],
           signed: new_signed(signer_key),
@@ -394,7 +391,7 @@ mod handle_application_tx {
 
   #[test]
   fn dkg_confirmation_preprocess() {
-    let set = default_test_validator_set();
+    let set = random_validator_set(&mut OsRng);
     let (keys_addrs, validator_data, validators, weights, total_weight) =
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
@@ -402,7 +399,7 @@ mod handle_application_tx {
 
     let mut db = MemDb::new();
     let mut txn = db.txn();
-    let block_number = random_block_number(&mut OsRng);
+    let block_number = OsRng.next_u64();
 
     // Below threshold: no DkgConfirmationMessages sent
     {
@@ -412,7 +409,7 @@ mod handle_application_tx {
         block_number,
         Transaction::DkgConfirmationPreprocess {
           attempt: 0,
-          preprocess: random_bytes_64(&mut OsRng),
+          preprocess: random_bytes(&mut OsRng),
           signed: new_signed(key0),
         },
       );
@@ -427,7 +424,7 @@ mod handle_application_tx {
           block_number,
           Transaction::DkgConfirmationPreprocess {
             attempt: 0,
-            preprocess: random_bytes_64(&mut OsRng),
+            preprocess: random_bytes(&mut OsRng),
             signed: new_signed(key),
           },
         );
@@ -438,7 +435,7 @@ mod handle_application_tx {
 
   #[test]
   fn dkg_confirmation_share() {
-    let set = default_test_validator_set();
+    let set = random_validator_set(&mut OsRng);
     let (keys_addrs, validator_data, validators, weights, total_weight) =
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
@@ -452,10 +449,10 @@ mod handle_application_tx {
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block.handle_application_tx(
-        random_block_number(&mut OsRng),
+        OsRng.next_u64(),
         Transaction::DkgConfirmationShare {
           attempt: 0,
-          share: random_bytes_32(&mut OsRng),
+          share: random_bytes(&mut OsRng),
           signed: new_signed(key0),
         },
       );
@@ -469,7 +466,7 @@ mod handle_application_tx {
     // Full preprocess->share flow
     let mut db = MemDb::new();
     let mut txn = db.txn();
-    let block_number = random_block_number(&mut OsRng);
+    let block_number = OsRng.next_u64();
 
     // All 3 validators submit preprocesses (threshold crossed -> DkgConfirmationMessages sent)
     {
@@ -479,7 +476,7 @@ mod handle_application_tx {
           block_number,
           Transaction::DkgConfirmationPreprocess {
             attempt: 0,
-            preprocess: random_bytes_64(&mut OsRng),
+            preprocess: random_bytes(&mut OsRng),
             signed: new_signed(key),
           },
         );
@@ -497,7 +494,7 @@ mod handle_application_tx {
         block_number,
         Transaction::DkgConfirmationShare {
           attempt: 0,
-          share: random_bytes_32(&mut OsRng),
+          share: random_bytes(&mut OsRng),
           signed: new_signed(key0),
         },
       );
@@ -515,7 +512,7 @@ mod handle_application_tx {
           block_number,
           Transaction::DkgConfirmationShare {
             attempt: 0,
-            share: random_bytes_32(&mut OsRng),
+            share: random_bytes(&mut OsRng),
             signed: new_signed(key),
           },
         );
@@ -529,20 +526,16 @@ mod handle_application_tx {
 
   #[test]
   fn cosign() {
-    let set = default_test_validator_set();
+    let set = random_validator_set(&mut OsRng);
     let (_, validator_data, validators, weights, total_weight) =
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
 
     let block_hash = random_block_hash(&mut OsRng);
-    let global_session = random_bytes_32(&mut OsRng);
+    let global_session = random_bytes(&mut OsRng);
 
-    let intent = CosignIntent {
-      global_session,
-      block_number: random_block_number(&mut OsRng),
-      block_hash,
-      notable: false,
-    };
+    let intent =
+      CosignIntent { global_session, block_number: OsRng.next_u64(), block_hash, notable: false };
 
     // Sets LatestSubstrateBlockToCosign and starts cosigning
     {
@@ -557,7 +550,7 @@ mod handle_application_tx {
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block.handle_application_tx(
-        random_block_number(&mut OsRng),
+        OsRng.next_u64(),
         Transaction::Cosign { substrate_block_hash: block_hash },
       );
 
@@ -582,7 +575,7 @@ mod handle_application_tx {
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
 
       scan_block.handle_application_tx(
-        random_block_number(&mut OsRng),
+        OsRng.next_u64(),
         Transaction::Cosign { substrate_block_hash: second_hash },
       );
 
@@ -593,7 +586,7 @@ mod handle_application_tx {
 
   #[test]
   fn cosigned() {
-    let set = default_test_validator_set();
+    let set = random_validator_set(&mut OsRng);
     let (_, validator_data, validators, weights, total_weight) =
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
@@ -608,7 +601,7 @@ mod handle_application_tx {
         let mut scan_block =
           new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
         scan_block.handle_application_tx(
-          random_block_number(&mut OsRng),
+          OsRng.next_u64(),
           Transaction::Cosigned { substrate_block_hash: block_hash },
         );
       }
@@ -634,7 +627,7 @@ mod handle_application_tx {
         let mut scan_block =
           new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
         scan_block.handle_application_tx(
-          random_block_number(&mut OsRng),
+          OsRng.next_u64(),
           Transaction::Cosigned { substrate_block_hash: block_hash },
         );
       }
@@ -658,7 +651,7 @@ mod handle_application_tx {
         let mut scan_block =
           new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
         scan_block.handle_application_tx(
-          random_block_number(&mut OsRng),
+          OsRng.next_u64(),
           Transaction::Cosigned { substrate_block_hash: other_hash },
         );
       }
@@ -669,14 +662,14 @@ mod handle_application_tx {
 
   #[test]
   fn substrate_block() {
-    let set = default_test_validator_set();
+    let set = random_validator_set(&mut OsRng);
     let (_, validator_data, validators, weights, total_weight) =
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
 
     let mut db = MemDb::new();
     let block_hash = random_block_hash(&mut OsRng);
-    let plans = vec![random_bytes_32(&mut OsRng), random_bytes_32(&mut OsRng)];
+    let plans = vec![random_bytes(&mut OsRng), random_bytes(&mut OsRng)];
 
     {
       let mut txn = db.txn();
@@ -687,10 +680,8 @@ mod handle_application_tx {
     let mut txn = db.txn();
     {
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_application_tx(
-        random_block_number(&mut OsRng),
-        Transaction::SubstrateBlock { hash: block_hash },
-      );
+      scan_block
+        .handle_application_tx(OsRng.next_u64(), Transaction::SubstrateBlock { hash: block_hash });
     }
 
     for plan in &plans {
@@ -701,21 +692,18 @@ mod handle_application_tx {
 
   #[test]
   fn batch() {
-    let set = default_test_validator_set();
+    let set = random_validator_set(&mut OsRng);
     let (_, validator_data, validators, weights, total_weight) =
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
 
     let mut db = MemDb::new();
-    let batch_hash = random_bytes_32(&mut OsRng);
+    let batch_hash = random_bytes(&mut OsRng);
 
     let mut txn = db.txn();
     {
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_application_tx(
-        random_block_number(&mut OsRng),
-        Transaction::Batch { hash: batch_hash },
-      );
+      scan_block.handle_application_tx(OsRng.next_u64(), Transaction::Batch { hash: batch_hash });
     }
 
     let topic = expected_initially_recognized_sign_topic(VariantSignId::Batch(batch_hash));
@@ -733,7 +721,7 @@ mod handle_application_tx {
         wrong_len = if wrong_len == 1 { 2 } else { wrong_len - 1 };
       }
 
-      let set = default_test_validator_set();
+      let set = random_validator_set(&mut OsRng);
 
       let (keys_addrs, validator_data, validators, weights, total_weight) =
         setup_n_validators_with_keys(num_validators);
@@ -748,7 +736,7 @@ mod handle_application_tx {
         let mut scan_block =
           new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
         scan_block.handle_application_tx(
-          random_block_number(&mut OsRng),
+          OsRng.next_u64(),
           Transaction::SlashReport {
             slash_points: vec![0; usize::from(wrong_len)],
             signed: new_signed(signer_key),
@@ -771,7 +759,7 @@ mod handle_application_tx {
       let num_validators = OsRng.gen_range(4u16 .. 10);
       let num_reports = usize::from(Topic::SlashReport.required_participation(num_validators));
 
-      let set = default_test_validator_set();
+      let set = random_validator_set(&mut OsRng);
       let (keys_addrs, validator_data, validators, weights, total_weight) =
         setup_n_validators_with_keys(num_validators);
       let set_info = new_test_set_info(&validator_data);
@@ -789,7 +777,7 @@ mod handle_application_tx {
         for (i, report) in reports.iter().enumerate() {
           let (key, _) = keys_addrs[i];
           scan_block.handle_application_tx(
-            random_block_number(&mut OsRng),
+            OsRng.next_u64(),
             Transaction::SlashReport { slash_points: report.clone(), signed: new_signed(key) },
           );
         }
@@ -851,7 +839,7 @@ mod handle_application_tx {
           let n = OsRng.gen_range(2u16 ..= 5) * 2;
           let num_reports = Topic::SlashReport.required_participation(n);
 
-          let set = default_test_validator_set();
+          let set = random_validator_set(&mut OsRng);
 
           let (keys_addrs, validator_data, validators, weights, total_weight) =
             setup_n_validators_with_keys(n);
@@ -869,7 +857,7 @@ mod handle_application_tx {
             for (i, report) in reports.iter().enumerate() {
               let (key, _) = keys_addrs[i];
               scan_block.handle_application_tx(
-                random_block_number(&mut OsRng),
+                OsRng.next_u64(),
                 Transaction::SlashReport { slash_points: report.clone(), signed: new_signed(key) },
               );
             }
@@ -906,7 +894,7 @@ mod handle_application_tx {
           let f = usize::from((n - 1) / 3);
           let num_reports = Topic::SlashReport.required_participation(n);
 
-          let set = default_test_validator_set();
+          let set = random_validator_set(&mut OsRng);
 
           let (keys_addrs, validator_data, validators, weights, total_weight) =
             setup_n_validators_with_keys(n);
@@ -924,7 +912,7 @@ mod handle_application_tx {
             for (i, report) in reports.iter().enumerate() {
               let (key, _) = keys_addrs[i];
               scan_block.handle_application_tx(
-                random_block_number(&mut OsRng),
+                OsRng.next_u64(),
                 Transaction::SlashReport { slash_points: report.clone(), signed: new_signed(key) },
               );
             }
@@ -949,14 +937,14 @@ mod handle_application_tx {
 
   #[test]
   fn sign() {
-    let set = default_test_validator_set();
+    let set = random_validator_set(&mut OsRng);
     let (keys_addrs, validator_data, validators, weights, total_weight) =
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
     let (key0, addr0) = keys_addrs[0];
     let (key1, key2) = (keys_addrs[1].0, keys_addrs[2].0);
 
-    let sign_id = VariantSignId::Transaction(random_bytes_32(&mut OsRng));
+    let sign_id = VariantSignId::Transaction(random_bytes(&mut OsRng));
     let topic = expected_initially_recognized_sign_topic(sign_id);
 
     // Wrong data length: signer has weight 1 but submits 2 entries -> fatal slash
@@ -967,7 +955,7 @@ mod handle_application_tx {
 
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
       scan_block.handle_application_tx(
-        random_block_number(&mut OsRng),
+        OsRng.next_u64(),
         Transaction::Sign {
           id: sign_id,
           attempt: 0,
@@ -991,7 +979,7 @@ mod handle_application_tx {
           new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
         for key in [key0, key1, key2] {
           scan_block.handle_application_tx(
-            random_block_number(&mut OsRng),
+            OsRng.next_u64(),
             Transaction::Sign {
               id: sign_id,
               attempt: 0,
@@ -1012,13 +1000,13 @@ mod handle_application_tx {
   /// and stores preceding data), then accumulating shares to threshold.
   #[test]
   fn sign_share_sends_shares_message() {
-    let set = default_test_validator_set();
+    let set = random_validator_set(&mut OsRng);
     let (keys_addrs, validator_data, validators, weights, total_weight) =
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
     let (key0, key1, key2) = (keys_addrs[0].0, keys_addrs[1].0, keys_addrs[2].0);
 
-    let sign_id = VariantSignId::Transaction(random_bytes_32(&mut OsRng));
+    let sign_id = VariantSignId::Transaction(random_bytes(&mut OsRng));
     let preprocess_topic = expected_initially_recognized_sign_topic(sign_id);
     let share_topic = Topic::Sign { id: sign_id, attempt: 0, round: SigningProtocolRound::Share };
 
@@ -1031,7 +1019,7 @@ mod handle_application_tx {
     // Step 1: All validators submit preprocesses, crossing threshold.
     // This auto-recognizes the Share topic (succeeding_topic) and stores preprocess data.
     {
-      let block_number = random_block_number(&mut OsRng);
+      let block_number = OsRng.next_u64();
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
       for key in [key0, key1, key2] {
         scan_block.handle_application_tx(
@@ -1055,7 +1043,7 @@ mod handle_application_tx {
 
     // Step 2: All validators submit shares, crossing threshold -> sends Shares message.
     {
-      let block_number = random_block_number(&mut OsRng);
+      let block_number = OsRng.next_u64();
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
       for key in [key0, key1, key2] {
         scan_block.handle_application_tx(
@@ -1084,7 +1072,7 @@ mod handle_application_tx {
 
 #[test]
 fn handle_block() {
-  let set = default_test_validator_set();
+  let set = random_validator_set(&mut OsRng);
   let (keys_addrs, validator_data, validators, weights, total_weight) =
     setup_n_validators_with_keys(3);
   let set_info = new_test_set_info(&validator_data);
@@ -1097,15 +1085,15 @@ fn handle_block() {
     let mut txn = db.txn();
     let block = Block {
       header: BlockHeader {
-        parent: random_bytes_32(&mut OsRng),
-        transactions: random_bytes_32(&mut OsRng),
+        parent: random_bytes(&mut OsRng),
+        transactions: random_bytes(&mut OsRng),
       },
       transactions: vec![],
     };
 
     {
       let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(random_block_number(&mut OsRng), block);
+      scan_block.handle_block(OsRng.next_u64(), block);
     }
     assert_no_pending_messages(&mut txn, set);
   }
@@ -1120,15 +1108,15 @@ fn handle_block() {
     let block_txs = vec![TributaryTransaction::Application(tx)];
     let block = Block {
       header: BlockHeader {
-        parent: random_bytes_32(&mut OsRng),
-        transactions: random_bytes_32(&mut OsRng),
+        parent: random_bytes(&mut OsRng),
+        transactions: random_bytes(&mut OsRng),
       },
       transactions: block_txs.clone(),
     };
 
     {
       let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(random_block_number(&mut OsRng), block);
+      scan_block.handle_block(OsRng.next_u64(), block);
     }
     assert_block_side_effects(&mut txn, set, &block_txs);
   }
@@ -1145,15 +1133,15 @@ fn handle_block() {
           &mut txn,
           set,
           &CosignIntent {
-            global_session: random_bytes_32(&mut OsRng),
-            block_number: random_block_number(&mut OsRng),
+            global_session: random_bytes(&mut OsRng),
+            block_number: OsRng.next_u64(),
             block_hash: *substrate_block_hash,
             notable: false,
           },
         );
       }
       Transaction::SubstrateBlock { hash } => {
-        let plans = vec![random_bytes_32(&mut OsRng)];
+        let plans = vec![random_bytes(&mut OsRng)];
         SubstrateBlockPlans::set(&mut txn, set, *hash, &plans);
       }
       Transaction::RemoveParticipant { .. } |
@@ -1169,15 +1157,15 @@ fn handle_block() {
     let block_txs = vec![TributaryTransaction::Application(tx)];
     let block = Block {
       header: BlockHeader {
-        parent: random_bytes_32(&mut OsRng),
-        transactions: random_bytes_32(&mut OsRng),
+        parent: random_bytes(&mut OsRng),
+        transactions: random_bytes(&mut OsRng),
       },
       transactions: block_txs.clone(),
     };
 
     {
       let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(random_block_number(&mut OsRng), block);
+      scan_block.handle_block(OsRng.next_u64(), block);
     }
     assert_block_side_effects(&mut txn, set, &block_txs);
   }
@@ -1199,8 +1187,8 @@ fn handle_block() {
 
       let block = Block {
         header: BlockHeader {
-          parent: random_bytes_32(&mut OsRng),
-          transactions: random_bytes_32(&mut OsRng),
+          parent: random_bytes(&mut OsRng),
+          transactions: random_bytes(&mut OsRng),
         },
         transactions: vec![TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(evidence))],
       };
@@ -1244,7 +1232,7 @@ fn handle_block() {
         has_evidence = true;
       } else {
         // Random application transaction, use Batch so we can assert recognition
-        let hash = random_bytes_32(&mut OsRng);
+        let hash = random_bytes(&mut OsRng);
         batch_hashes.push(hash);
         transactions.push(TributaryTransaction::Application(Transaction::Batch { hash }));
       }
@@ -1252,15 +1240,15 @@ fn handle_block() {
 
     let block = Block {
       header: BlockHeader {
-        parent: random_bytes_32(&mut OsRng),
-        transactions: random_bytes_32(&mut OsRng),
+        parent: random_bytes(&mut OsRng),
+        transactions: random_bytes(&mut OsRng),
       },
       transactions: transactions.clone(),
     };
 
     {
       let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(random_block_number(&mut OsRng), block);
+      scan_block.handle_block(OsRng.next_u64(), block);
     }
 
     if has_evidence {

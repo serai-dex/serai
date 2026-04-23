@@ -20,7 +20,7 @@ fn unwrap_slash_report(tx: Transaction) -> (Vec<u32>, Signed) {
 
 #[test]
 fn slash_report() {
-  let set = default_test_validator_set();
+  let set = random_validator_set(&mut OsRng);
 
   // No slash points set: all zeros
   {

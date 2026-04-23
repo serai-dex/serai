@@ -268,7 +268,7 @@ mod transaction {
         assert_eq!(tx, deserialized);
 
         if let TransactionKind::Signed(_, _) = tx.kind() {
-          tx.sign(&mut OsRng, random_genesis(&mut OsRng), &random_key(&mut OsRng));
+          tx.sign(&mut OsRng, random_bytes(&mut OsRng), &random_key(&mut OsRng));
           let serialized = ReadWrite::serialize(&tx);
           let deserialized = Transaction::read(&mut serialized.as_slice()).unwrap();
           assert_eq!(tx, deserialized, "ReadWrite failed after signing for {tx:?}");
@@ -316,7 +316,7 @@ mod transaction {
     #[test]
     fn signed_transactions_match_kind_and_nonce_and_sig() {
       let key = random_key(&mut OsRng);
-      let genesis = random_genesis(&mut OsRng);
+      let genesis = random_bytes(&mut OsRng);
 
       /// Borsh-encodes a byte-string label: `len(4 LE) || label`
       fn borsh_label(label: &[u8]) -> Vec<u8> {
@@ -430,7 +430,7 @@ mod transaction {
     #[test]
     fn hash_format_and_determinism() {
       let key = random_key(&mut OsRng);
-      let genesis = random_genesis(&mut OsRng);
+      let genesis = random_bytes(&mut OsRng);
 
       for tx in all_transactions() {
         assert_eq!(tx.hash(), tx.hash(), "Hash not deterministic for {tx:?}");
@@ -584,7 +584,7 @@ mod transaction {
     fn tx_sign() {
       let key = random_key(&mut OsRng);
       let expected_signer = Ristretto::generator() * key.deref();
-      let genesis = random_genesis(&mut OsRng);
+      let genesis = random_bytes(&mut OsRng);
 
       // Sets correct signer and produces verifiable signature
       for mut tx in all_signed_transactions_and_attempts(&random_signed(&mut OsRng)) {
@@ -606,10 +606,10 @@ mod transaction {
           participant: random_serai_address(&mut OsRng),
           signed: random_signed(&mut OsRng),
         };
-        let genesis = random_genesis(&mut OsRng);
+        let genesis = random_bytes(&mut OsRng);
         tx.sign(&mut OsRng, genesis, &key);
 
-        let mut wrong_genesis = random_genesis(&mut OsRng);
+        let mut wrong_genesis = random_bytes(&mut OsRng);
         // guaranteed to be the wrong genesis
         if wrong_genesis == genesis {
           wrong_genesis[0] ^= 1;
@@ -629,7 +629,7 @@ mod transaction {
     fn panics_on_cosign() {
       let key = random_key(&mut OsRng);
       let mut tx = Transaction::Cosign { substrate_block_hash: random_block_hash(&mut OsRng) };
-      tx.sign(&mut OsRng, random_genesis(&mut OsRng), &key);
+      tx.sign(&mut OsRng, random_bytes(&mut OsRng), &key);
     }
 
     #[test]
@@ -637,7 +637,7 @@ mod transaction {
     fn panics_on_cosigned() {
       let key = random_key(&mut OsRng);
       let mut tx = Transaction::Cosigned { substrate_block_hash: random_block_hash(&mut OsRng) };
-      tx.sign(&mut OsRng, random_genesis(&mut OsRng), &key);
+      tx.sign(&mut OsRng, random_bytes(&mut OsRng), &key);
     }
 
     #[test]
@@ -645,7 +645,7 @@ mod transaction {
     fn panics_on_substrate_block() {
       let key = random_key(&mut OsRng);
       let mut tx = Transaction::SubstrateBlock { hash: random_block_hash(&mut OsRng) };
-      tx.sign(&mut OsRng, random_genesis(&mut OsRng), &key);
+      tx.sign(&mut OsRng, random_bytes(&mut OsRng), &key);
     }
 
     #[test]
@@ -653,7 +653,7 @@ mod transaction {
     fn panics_on_batch() {
       let key = random_key(&mut OsRng);
       let mut tx = Transaction::Batch { hash: random_block_hash(&mut OsRng).0 };
-      tx.sign(&mut OsRng, random_genesis(&mut OsRng), &key);
+      tx.sign(&mut OsRng, random_bytes(&mut OsRng), &key);
     }
   }
 }

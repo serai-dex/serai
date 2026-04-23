@@ -153,13 +153,13 @@ async fn scan_tributary_task_run_iteration() {
   TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
   let (last_handled_block_number, last_handled_block_hash) =
-    TributaryDb::last_handled_tributary_block(&db, default_test_validator_set()).unwrap();
+    TributaryDb::last_handled_tributary_block(&db, set_info.set).unwrap();
   assert!(last_handled_block_number >= 1, "expected at least block 1 to be handled");
 
   // Processes block with provided and signed txs - inject after the actual last handled block
   {
     let batch_tx =
-      TributaryTransaction::Application(Transaction::Batch { hash: random_bytes_32(&mut OsRng) });
+      TributaryTransaction::Application(Transaction::Batch { hash: random_bytes(&mut OsRng) });
     let fake_evidence = TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(
       Evidence::InvalidPrecommit(make_signed_message_bytes(addr.0)),
     ));
@@ -183,7 +183,7 @@ async fn scan_tributary_task_run_iteration() {
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
     let mut txn = db.txn();
-    assert_block_side_effects(&mut txn, default_test_validator_set(), &block_txs);
+    assert_block_side_effects(&mut txn, set_info.set, &block_txs);
   }
 
   // Errors when locally provided txs are missing
