@@ -201,5 +201,9 @@ sp_api::impl_runtime_apis! {
     fn account_nonce(of: SeraiAddress) -> u32 {
       unimplemented!("runtime is only implemented when WASM")
     }
+
+    fn economic_security_time() -> u64 {
+      unimplemented!("runtime is only implemented when WASM")
+    }
   }
 }

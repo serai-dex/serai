@@ -535,6 +535,10 @@ sp_api::impl_runtime_apis! {
     fn account_nonce(of: SeraiAddress) -> u32 {
       Core::next_nonce(&of)
     }
+
+    fn economic_security_time() -> u64 {
+      GenesisLiquidity::economic_security_time()
+    }
   }
 }
 
