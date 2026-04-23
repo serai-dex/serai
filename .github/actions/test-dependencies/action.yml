@@ -10,7 +10,7 @@ inputs:
   bitcoin-version:
     description: "Bitcoin version to download and run as a regtest node"
     required: false
-    default: "30.2"
+    default: "31.0"
 
 runs:
   using: "composite"
@@ -19,7 +19,7 @@ runs:
       uses: ./.github/actions/build-dependencies
 
     - name: Install Foundry
-      uses: foundry-rs/foundry-toolchain@8789b3e21e6c11b2697f5eb56eddae542f746c10 # 1.7.0
+      uses: foundry-rs/foundry-toolchain@c7450ba673e133f5ee30098b3b54f444d3a2ca2d # 1.8.0
       with:
         version: v1.5.1
         cache: false

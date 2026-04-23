@@ -5,7 +5,7 @@ inputs:
   version:
     description: "Version to download and run"
     required: false
-    default: "30.2"
+    default: "31.0"
 
 runs:
   using: "composite"
