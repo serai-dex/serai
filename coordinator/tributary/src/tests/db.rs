@@ -17,20 +17,20 @@ use crate::{
   transaction::{RoundPayloads, Preprocess, Share, SigningProtocolRound},
 };
 
-/// One of each topic kind, and attempts: at 0, a random attempt, and u32::MAX.
+/// One of each topic kind, and attempts: at 0, a random attempt, and u64::MAX.
 fn all_topics_and_attempts() -> Vec<Topic> {
-  let random_attempt = OsRng.gen_range(1u32 .. u32::MAX);
+  let random_attempt = OsRng.gen_range(1u64 .. u64::MAX);
   vec![
     // RemoveParticipant
     Topic::RemoveParticipant { participant: random_serai_address(&mut OsRng) },
     // DkgConfirmation Preprocess
     Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Preprocess },
     Topic::DkgConfirmation { attempt: random_attempt, round: SigningProtocolRound::Preprocess },
-    Topic::DkgConfirmation { attempt: u32::MAX, round: SigningProtocolRound::Preprocess },
+    Topic::DkgConfirmation { attempt: u64::MAX, round: SigningProtocolRound::Preprocess },
     // DkgConfirmation Share
     Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Share },
     Topic::DkgConfirmation { attempt: random_attempt, round: SigningProtocolRound::Share },
-    Topic::DkgConfirmation { attempt: u32::MAX, round: SigningProtocolRound::Share },
+    Topic::DkgConfirmation { attempt: u64::MAX, round: SigningProtocolRound::Share },
     // SlashReport
     Topic::SlashReport,
     // Sign Preprocess
@@ -46,7 +46,7 @@ fn all_topics_and_attempts() -> Vec<Topic> {
     },
     Topic::Sign {
       id: random_transaction_id(),
-      attempt: u32::MAX,
+      attempt: u64::MAX,
       round: SigningProtocolRound::Preprocess,
     },
     // Sign Share
@@ -58,13 +58,13 @@ fn all_topics_and_attempts() -> Vec<Topic> {
     },
     Topic::Sign {
       id: random_transaction_id(),
-      attempt: u32::MAX,
+      attempt: u64::MAX,
       round: SigningProtocolRound::Share,
     },
   ]
 }
 
-/// Share-round topics only, with attempts: at 0, random, and u32::MAX.
+/// Share-round topics only, with attempts: at 0, random, and u64::MAX.
 fn all_share_topics_and_attempts() -> Vec<Topic> {
   all_topics_and_attempts()
     .into_iter()
@@ -78,7 +78,7 @@ fn all_share_topics_and_attempts() -> Vec<Topic> {
     .collect()
 }
 
-/// Preprocess-round topics only, with attempts: at 0, random, and u32::MAX.
+/// Preprocess-round topics only, with attempts: at 0, random, and u64::MAX.
 fn all_preprocess_topics_and_attempts() -> Vec<Topic> {
   all_topics_and_attempts()
     .into_iter()
@@ -848,10 +848,10 @@ mod tributary_db {
         let (set, _validator, validators, total_weight, _validator_weight) =
           default_accumulate_setup();
 
-        // attempt just below u32::MAX so reattempt_topic() returns Some(u32::MAX)
+        // attempt just below u64::MAX so reattempt_topic() returns Some(u64::MAX)
         let topic =
-          Topic::DkgConfirmation { attempt: u32::MAX - 1, round: SigningProtocolRound::Preprocess };
-        assert_eq!(topic.reattempt_topic().unwrap().0, u32::MAX);
+          Topic::DkgConfirmation { attempt: u64::MAX - 1, round: SigningProtocolRound::Preprocess };
+        assert_eq!(topic.reattempt_topic().unwrap().0, u64::MAX);
 
         // block_number near u64::MAX forces checked_add to overflow
         let block_number = u64::MAX - 1;
@@ -1129,7 +1129,7 @@ mod tributary_db {
 
           // Reattempt should be queued if topic is reattemptable.
           if let Some((reattempt_attempt, reattempt_topic)) = topic.reattempt_topic() {
-            let blocks_till = u64::from(reattempt_attempt)
+            let blocks_till = reattempt_attempt
               .checked_mul(u64::from(BASE_REATTEMPT_DELAY))
               .expect("reattempt delay overflowed u64");
             let recognize_at =
@@ -1235,7 +1235,7 @@ mod tributary_db {
           let has_preceding_topic_accumulated = OsRng.gen::<bool>();
 
           let topic_variant = OsRng.gen_range(0u8 .. 5);
-          let attempt = OsRng.gen_range(0u32 .. 100);
+          let attempt = OsRng.gen_range(0u64 .. 100);
           let round = if OsRng.gen::<bool>() {
             SigningProtocolRound::Preprocess
           } else {

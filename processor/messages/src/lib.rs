@@ -176,7 +176,7 @@ pub mod sign {
   pub struct SignId {
     pub session: Session,
     pub id: VariantSignId,
-    pub attempt: u32,
+    pub attempt: u64,
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]

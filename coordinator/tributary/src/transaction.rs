@@ -127,7 +127,7 @@ pub enum Transaction {
   /// The preprocess to confirm the DKG results on-chain
   DkgConfirmationPreprocess {
     /// The attempt number of this signing protocol
-    attempt: u32,
+    attempt: u64,
     /// The preprocess
     preprocess: Preprocess,
     /// The transaction's signer and signature
@@ -136,7 +136,7 @@ pub enum Transaction {
   /// The signature share to confirm the DKG results on-chain
   DkgConfirmationShare {
     /// The attempt number of this signing protocol
-    attempt: u32,
+    attempt: u64,
     /// The signature share
     share: Share,
     /// The transaction's signer and signature
@@ -218,7 +218,7 @@ pub enum Transaction {
     /// The ID of the object being signed
     id: VariantSignId,
     /// The attempt number of this signing protocol
-    attempt: u32,
+    attempt: u64,
     /// The round this data is for, within the signing protocol
     round: SigningProtocolRound,
     /// The data itself

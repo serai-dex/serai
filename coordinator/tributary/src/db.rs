@@ -26,7 +26,7 @@ pub enum Topic {
   /// Participation in the signing protocol to confirm the DKG results on Substrate
   DkgConfirmation {
     /// The attempt number this is for
-    attempt: u32,
+    attempt: u64,
     /// The round of the signing protocol
     round: SigningProtocolRound,
   },
@@ -39,7 +39,7 @@ pub enum Topic {
     /// The ID of the signing protocol
     id: VariantSignId,
     /// The attempt number this is for
-    attempt: u32,
+    attempt: u64,
     /// The round of the signing protocol
     round: SigningProtocolRound,
   },
@@ -63,26 +63,24 @@ impl Topic {
     match self {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round: _ } => Some(Topic::DkgConfirmation {
-        attempt: attempt.checked_add(1)?,
+        attempt: attempt + 1,
         round: SigningProtocolRound::Preprocess,
       }),
       Topic::SlashReport => None,
-      Topic::Sign { id, attempt, round: _ } => Some(Topic::Sign {
-        id,
-        attempt: attempt.checked_add(1)?,
-        round: SigningProtocolRound::Preprocess,
-      }),
+      Topic::Sign { id, attempt, round: _ } => {
+        Some(Topic::Sign { id, attempt: attempt + 1, round: SigningProtocolRound::Preprocess })
+      }
     }
   }
 
   // The topic for the re-attempt to schedule
-  pub(crate) fn reattempt_topic(self) -> Option<(u32, Topic)> {
+  pub(crate) fn reattempt_topic(self) -> Option<(u64, Topic)> {
     #[expect(clippy::match_same_arms)]
     match self {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          let next_attempt = attempt.checked_add(1)?;
+          let next_attempt = attempt + 1;
           Some((
             next_attempt,
             Topic::DkgConfirmation {
@@ -96,7 +94,7 @@ impl Topic {
       Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          let next_attempt = attempt.checked_add(1)?;
+          let next_attempt = attempt + 1;
           Some((
             next_attempt,
             Topic::Sign { id, attempt: next_attempt, round: SigningProtocolRound::Preprocess },

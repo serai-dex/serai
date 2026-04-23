@@ -14,7 +14,7 @@ use messages::sign::{VariantSignId, SignId, ProcessorMessage};
 
 create_db!(
   FrostAttemptManager {
-    Attempted: (session: Session, id: VariantSignId) -> u32,
+    Attempted: (session: Session, id: VariantSignId) -> u64,
   }
 );
 
@@ -31,10 +31,10 @@ pub(crate) struct SigningProtocol<D: Db, M: Clone + PreprocessMachine> {
   id: VariantSignId,
   // This accepts a vector of `root` machines in order to support signing with multiple key shares.
   root: Vec<M>,
-  preprocessed: HashMap<u32, (Vec<M::SignMachine>, HashMap<Participant, Vec<u8>>)>,
+  preprocessed: HashMap<u64, (Vec<M::SignMachine>, HashMap<Participant, Vec<u8>>)>,
   // Here, we drop to a single machine as we only need one to complete the signature.
   shared: HashMap<
-    u32,
+    u64,
     (
       <M::SignMachine as SignMachine<M::Signature>>::SignatureMachine,
       HashMap<Participant, Vec<u8>>,
@@ -67,7 +67,7 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
   /// Start a new attempt of the signing protocol.
   ///
   /// Returns the (serialized) preprocesses for the attempt.
-  pub(crate) fn attempt(&mut self, attempt: u32) -> Vec<ProcessorMessage> {
+  pub(crate) fn attempt(&mut self, attempt: u64) -> Vec<ProcessorMessage> {
     /*
       We'd get slashed as malicious if we:
         1) Preprocessed
@@ -134,7 +134,7 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
   /// Returns the (serialized) shares for the attempt.
   pub(crate) fn preprocesses(
     &mut self,
-    attempt: u32,
+    attempt: u64,
     serialized_preprocesses: HashMap<Participant, Vec<u8>>,
   ) -> Vec<ProcessorMessage> {
     log::debug!("handling preprocesses for signing protocol {:?}", self.id);
@@ -226,7 +226,7 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
   /// Returns the signature produced by the protocol.
   pub(crate) fn shares(
     &mut self,
-    attempt: u32,
+    attempt: u64,
     serialized_shares: HashMap<Participant, Vec<u8>>,
   ) -> Result<M::Signature, Vec<ProcessorMessage>> {
     log::debug!("handling shares for signing protocol {:?}", self.id);

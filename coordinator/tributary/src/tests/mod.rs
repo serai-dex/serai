@@ -63,9 +63,9 @@ pub(crate) fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
   Signed { signer: signed.signer, signature: signed.signature }
 }
 
-/// One of each signed transaction kind, and attempts: at 0, a random attempt, and u32::MAX.
+/// One of each signed transaction kind, and attempts: at 0, a random attempt, and u64::MAX.
 pub(crate) fn all_signed_transactions_and_attempts(signed: &Signed) -> Vec<Transaction> {
-  let random_attempt = OsRng.gen_range(1u32 .. u32::MAX);
+  let random_attempt = OsRng.gen_range(1u64 .. u64::MAX);
   let signed = *signed;
   vec![
     // RemoveParticipant
@@ -84,7 +84,7 @@ pub(crate) fn all_signed_transactions_and_attempts(signed: &Signed) -> Vec<Trans
       signed,
     },
     Transaction::DkgConfirmationPreprocess {
-      attempt: u32::MAX,
+      attempt: u64::MAX,
       preprocess: random_bytes_64(&mut OsRng),
       signed,
     },
@@ -96,7 +96,7 @@ pub(crate) fn all_signed_transactions_and_attempts(signed: &Signed) -> Vec<Trans
       signed,
     },
     Transaction::DkgConfirmationShare {
-      attempt: u32::MAX,
+      attempt: u64::MAX,
       share: random_bytes_32(&mut OsRng),
       signed,
     },
@@ -117,7 +117,7 @@ pub(crate) fn all_signed_transactions_and_attempts(signed: &Signed) -> Vec<Trans
     },
     Transaction::Sign {
       id: VariantSignId::Transaction(random_bytes_32(&mut OsRng)),
-      attempt: u32::MAX,
+      attempt: u64::MAX,
       round: SigningProtocolRound::Preprocess,
       data: vec![random_vec_u8(&mut OsRng)],
       signed,
@@ -139,7 +139,7 @@ pub(crate) fn all_signed_transactions_and_attempts(signed: &Signed) -> Vec<Trans
     },
     Transaction::Sign {
       id: VariantSignId::Batch(random_bytes_32(&mut OsRng)),
-      attempt: u32::MAX,
+      attempt: u64::MAX,
       round: SigningProtocolRound::Share,
       data: vec![random_vec_u8(&mut OsRng), random_vec_u8(&mut OsRng)],
       signed,
