@@ -77,8 +77,8 @@ impl Signed {
   }
 
   /// Provide a nonce to convert a `Signed` into a `tributary::Signed`.
-  pub(crate) fn to_tributary_signed(self, round: SigningProtocolRound) -> TributarySigned {
-    TributarySigned { signer: self.signer, nonce: round.nonce(), signature: self.signature }
+  pub(crate) fn to_tributary_signed(self, nonce: u32) -> TributarySigned {
+    TributarySigned { signer: self.signer, nonce, signature: self.signature }
   }
 }
 
@@ -252,24 +252,23 @@ impl ReadWrite for Transaction {
 
 impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind {
-    #[expect(clippy::match_same_arms)]
     match self {
       Transaction::RemoveParticipant { participant, signed } => TransactionKind::Signed(
         borsh::to_vec(&(b"RemoveParticipant".as_slice(), participant)).unwrap(),
-        signed.to_tributary_signed(SigningProtocolRound::Preprocess),
+        signed.to_tributary_signed(0),
       ),
 
       Transaction::DkgParticipation { signed, .. } => TransactionKind::Signed(
         borsh::to_vec(b"DkgParticipation".as_slice()).unwrap(),
-        signed.to_tributary_signed(SigningProtocolRound::Preprocess),
+        signed.to_tributary_signed(0),
       ),
       Transaction::DkgConfirmationPreprocess { attempt, signed, .. } => TransactionKind::Signed(
         borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
-        signed.to_tributary_signed(SigningProtocolRound::Share),
+        signed.to_tributary_signed(SigningProtocolRound::Preprocess.nonce()),
       ),
       Transaction::DkgConfirmationShare { attempt, signed, .. } => TransactionKind::Signed(
         borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
-        signed.to_tributary_signed(SigningProtocolRound::Share),
+        signed.to_tributary_signed(SigningProtocolRound::Share.nonce()),
       ),
 
       Transaction::Cosign { .. } => TransactionKind::Provided("Cosign"),
@@ -279,12 +278,12 @@ impl TransactionTrait for Transaction {
 
       Transaction::Sign { id, attempt, round, signed, .. } => TransactionKind::Signed(
         borsh::to_vec(&(b"Sign".as_slice(), id, attempt)).unwrap(),
-        signed.to_tributary_signed(*round),
+        signed.to_tributary_signed(round.nonce()),
       ),
 
       Transaction::SlashReport { signed, .. } => TransactionKind::Signed(
         borsh::to_vec(b"SlashReport".as_slice()).unwrap(),
-        signed.to_tributary_signed(SigningProtocolRound::Preprocess),
+        signed.to_tributary_signed(0),
       ),
     }
   }

@@ -141,7 +141,7 @@ mod signed {
   fn to_tributary_signed_matches_signed() {
     let signed = random_signed(&mut OsRng);
     for round in all_signing_protocol_rounds() {
-      let tributary_signed = signed.to_tributary_signed(round);
+      let tributary_signed = signed.to_tributary_signed(round.nonce());
       assert_eq!(signed.signer(), tributary_signed.signer);
       assert_eq!(signed.signature, tributary_signed.signature);
       assert_eq!(tributary_signed.nonce, round.nonce());
