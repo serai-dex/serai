@@ -769,7 +769,7 @@ mod handle_application_tx {
     #[test]
     fn fatal_slash_as_reported_median() {
       let num_validators = OsRng.gen_range(4u16 .. 10);
-      let num_reports = usize::from(required_participation(num_validators));
+      let num_reports = usize::from(Topic::SlashReport.required_participation(num_validators));
 
       let set = default_test_validator_set();
       let (keys_addrs, validator_data, validators, weights, total_weight) =
@@ -849,7 +849,7 @@ mod handle_application_tx {
         for _ in 0 .. 200 {
           // random even: 4, 6, 8, or 10
           let n = OsRng.gen_range(2u16 ..= 5) * 2;
-          let num_reports = required_participation(n);
+          let num_reports = Topic::SlashReport.required_participation(n);
 
           let set = default_test_validator_set();
 
@@ -904,7 +904,7 @@ mod handle_application_tx {
           // random odd: 5, 7, 9, or 11
           let n = OsRng.gen_range(2u16 ..= 5) * 2 + 1;
           let f = usize::from((n - 1) / 3);
-          let num_reports = required_participation(n);
+          let num_reports = Topic::SlashReport.required_participation(n);
 
           let set = default_test_validator_set();
 

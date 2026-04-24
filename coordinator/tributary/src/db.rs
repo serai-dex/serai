@@ -51,11 +51,6 @@ pub(crate) enum Participating {
   Everyone,
 }
 
-pub(crate) fn required_participation(n: u16) -> u16 {
-  // All of our topics require 2/3rds participation
-  n.checked_mul(2).unwrap_or_else(|| panic!("required_participation overflowed: {n} * 2")) / 3 + 1
-}
-
 impl Topic {
   // The topic used by the next attempt of this protocol
   pub(crate) fn next_attempt_topic(self) -> Option<Topic> {
@@ -204,6 +199,18 @@ impl Topic {
       // We do require recognition for every sign protocol
       Topic::Sign { .. } => true,
     }
+  }
+
+  pub(crate) fn required_participation(&self, n: u16) -> u16 {
+    // All of our current topics require 2/3rds participation
+    let _ = self;
+
+    let wide = u32::from(n);
+    let fraction_lt_input =
+      wide.checked_mul(2).expect("widened integer overflowed when multiplied by `2`") / 3;
+    let result_lte_input = fraction_lt_input + 1;
+    u16::try_from(result_lte_input)
+      .expect("value less than or equal to `u16` input wasn't itself valid as a `u16`")
   }
 
   pub(crate) fn participating(&self) -> Participating {
@@ -473,8 +480,9 @@ impl TributaryDb {
       }
     }
 
-    let required_participation = required_participation(total_weight);
+    let required_participation = topic.required_participation(total_weight);
 
+    // TODO:
     // The complete lack of validation on the data by these NOPs opens the potential for spam here
 
     // If we've already accumulated past the threshold, NOP

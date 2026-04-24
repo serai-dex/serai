@@ -132,32 +132,16 @@ where
   result
 }
 
-mod required_participation_tests {
-  use super::*;
-
-  #[test]
-  fn passes() {
-    assert_eq!(required_participation(0), 1);
-
-    // No panics
-    {
-      let random_n = OsRng.gen_range(0 .. u16::MAX / 2);
-      let _ = required_participation(random_n);
-      let _ = required_participation(u16::MAX / 2);
-    }
-  }
-
-  #[test]
-  fn panics_on_overflow() {
-    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-      required_participation(u16::MAX);
-    }));
-    assert!(res.is_err());
-
-    let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-      required_participation((u16::MAX / 2) + 1);
-    }));
-    assert!(res.is_err());
+#[test]
+fn required_participation() {
+  assert_eq!(Topic::SlashReport.required_participation(0), 1);
+  assert_eq!(Topic::SlashReport.required_participation(u16::MAX), 43691);
+  for _ in 0 .. 128 {
+    #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+    let validators = OsRng.next_u64() as u16;
+    let required = Topic::SlashReport.required_participation(validators);
+    assert!(((2 * (validators - required)) + 1) <= required);
+    assert!((required - ((2 * (validators - required)) + 1)) <= 2);
   }
 }
 
@@ -1068,7 +1052,7 @@ mod tributary_db {
         validator_in_list: bool,
         result: &DataSet<Vec<u8>>,
       ) {
-        let required = required_participation(total_weight);
+        let required = topic.required_participation(total_weight);
         let post_slashed = TributaryDb::is_fatally_slashed(db, set, validator);
         let post_weight = AccumulatedWeight::get(db, set, topic);
 
