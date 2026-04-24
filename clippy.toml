@@ -5,6 +5,10 @@ path = "Option::map_or"
 [[disallowed-methods]]
 path = "Option::map_or_else"
 
+[[disallowed-methods]]
+path = "borsh::from_reader"
+reason = "`borsh::from_reader` errors if there's any bytes following the read item, which isn't documented behavior"
+
 # TODO: https://github.com/rust-lang/rust-clippy/pull/12194
 [[disallowed-methods]]
 path = "<ruint::Uint as core::ops::Add>::add"

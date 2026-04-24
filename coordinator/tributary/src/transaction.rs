@@ -242,7 +242,7 @@ pub enum Transaction {
 
 impl ReadWrite for Transaction {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    borsh::BorshDeserialize::deserialize_reader(reader)
+    Self::deserialize_reader(reader)
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {

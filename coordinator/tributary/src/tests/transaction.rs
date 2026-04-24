@@ -308,28 +308,6 @@ mod transaction {
         "reader should be exhausted after reading all transactions"
       );
     }
-
-    /// Counterpart to `sequential_reads_from_shared_reader`: proves `borsh::from_reader` rejects
-    /// a reader that has leftover bytes, which is why `Transaction::read` must use
-    /// `deserialize_reader` instead.
-    #[test]
-    fn borsh_from_reader_rejects_shared_reader_with_trailing_bytes() {
-      let txs = all_transactions();
-
-      let mut buf = Vec::new();
-      buf.extend(&u32::try_from(txs.len()).unwrap().to_le_bytes());
-      for tx in &txs {
-        tx.write(&mut buf).unwrap();
-      }
-
-      let mut cursor = Cursor::new(&buf);
-      let mut count = [0u8; 4];
-      cursor.read_exact(&mut count).unwrap();
-
-      // borsh::from_reader should fail because subsequent tx bytes remain after the first
-      let result: io::Result<Transaction> = borsh::from_reader(&mut cursor);
-      assert!(result.is_err(), "borsh::from_reader should reject a reader with trailing bytes");
-    }
   }
 
   mod kind {

@@ -1,5 +1,7 @@
 use std::io;
 
+use borsh::BorshDeserialize as _;
+
 use ciphersuite_kp256::Secp256k1;
 use frost::dkg::ThresholdKeys;
 
@@ -122,7 +124,7 @@ impl SignableTransaction for Action {
         Action::SetKey { chain_id, router_address, nonce, key }
       }
       1 => {
-        let coin = borsh::from_reader(reader)?;
+        let coin = <_>::deserialize_reader(reader)?;
 
         let mut fee = [0; 32];
         reader.read_exact(&mut fee)?;
@@ -134,7 +136,7 @@ impl SignableTransaction for Action {
 
         let mut outs = vec![];
         for _ in 0 .. outs_len {
-          let address = borsh::from_reader(reader)?;
+          let address = <_>::deserialize_reader(reader)?;
 
           let mut amount = [0; 32];
           reader.read_exact(&mut amount)?;
@@ -202,7 +204,7 @@ impl primitives::Eventuality for Eventuality {
   }
 
   fn read(reader: &mut impl io::Read) -> io::Result<Self> {
-    Ok(Self(borsh::from_reader(reader)?))
+    Ok(Self(<_>::deserialize_reader(reader)?))
   }
   fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
     borsh::BorshSerialize::serialize(&self.0, writer)
