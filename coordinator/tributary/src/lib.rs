@@ -620,11 +620,19 @@ pub struct ScanTributaryTask<TD: Db, P: P2p> {
 
 impl<TD: Db, P: P2p> ScanTributaryTask<TD, P> {
   /// Create a new instance of this task.
+  ///
+  /// This will panic if the Tributary read does not correspond to the set.
   pub fn new(
     tributary_db: TD,
     set: NewSetInformation,
     tributary: TributaryReader<TD, Transaction>,
   ) -> Self {
+    assert_eq!(
+      set.tributary_genesis(),
+      tributary.genesis(),
+      "set information is inconsistent with the tributary"
+    );
+
     let mut validators = Vec::with_capacity(set.validators.len());
     let mut total_weight = 0;
     let mut validator_weights = HashMap::with_capacity(set.validators.len());

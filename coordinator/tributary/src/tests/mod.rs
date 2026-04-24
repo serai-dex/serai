@@ -273,31 +273,24 @@ pub(crate) fn assert_block_side_effects(
   assert_no_pending_messages(txn, set);
 }
 
-pub(crate) fn new_test_set_info(validators: &[(SeraiAddress, u16)]) -> NewSetInformation {
-  let mut participant_indexes = HashMap::new();
-  let mut reverse_lookup = HashMap::new();
-  let mut i = 1u16;
-  for (address, weight) in validators {
-    let mut indices = Vec::new();
-    for _ in 0 .. *weight {
-      let p = Participant::new(i).unwrap();
-      indices.push(p);
-      reverse_lookup.insert(p, *address);
-      i += 1;
-    }
-    participant_indexes.insert(*address, indices);
-  }
-
-  NewSetInformation {
-    set: random_validator_set(&mut OsRng),
-    serai_block: random_bytes(&mut OsRng),
-    declaration_time: OsRng.next_u64(),
-    threshold: OsRng.gen_range(0 ..= u16::MAX),
-    validators: validators.to_vec(),
-    evrf_public_keys: vec![],
-    participant_indexes,
-    participant_indexes_reverse_lookup: reverse_lookup,
-  }
+fn new_test_set_info(validators: &[(SeraiAddress, u16)]) -> NewSetInformation {
+  let set = random_validator_set(&mut OsRng);
+  let serai_block_hash = random_bytes(&mut OsRng);
+  let serai_block_time = OsRng.next_u64();
+  let threshold = u16::try_from(
+    ((usize::from(validators.iter().map(|(_validator, weight)| *weight).sum::<u16>()) * 2) / 3) + 1,
+  )
+  .unwrap();
+  let validators = validators.to_vec();
+  let evrf_public_keys = vec![];
+  NewSetInformation::new(
+    set,
+    serai_block_hash,
+    serai_block_time,
+    threshold,
+    validators,
+    evrf_public_keys,
+  )
 }
 
 pub(crate) type ValidatorSetup = (

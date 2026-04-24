@@ -7,6 +7,10 @@ use std::collections::HashMap;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
+use blake2::{
+  digest::{typenum::U32, Digest as _},
+  Blake2b,
+};
 use dkg::Participant;
 
 use serai_client_serai::abi::{
@@ -79,6 +83,37 @@ impl NewSetInformation {
       }
       self.participant_indexes.insert(*validator, these_is);
     }
+  }
+
+  /// Create a new [`NewSetInformation`].
+  pub fn new(
+    set: ExternalValidatorSet,
+    serai_block: [u8; 32],
+    declaration_time: u64,
+    threshold: u16,
+    validators: Vec<(SeraiAddress, u16)>,
+    evrf_public_keys: Vec<([u8; 32], Vec<u8>)>,
+  ) -> Self {
+    let mut result = Self {
+      set,
+      serai_block,
+      declaration_time,
+      threshold,
+      validators,
+      evrf_public_keys,
+      participant_indexes: Default::default(),
+      participant_indexes_reverse_lookup: Default::default(),
+    };
+    result.init_participant_indexes();
+    result
+  }
+}
+
+impl NewSetInformation {
+  /// The hash to use for the genesis of the corresponding Tributary.
+  pub fn tributary_genesis(&self) -> [u8; 32] {
+    // This MUST only hash data completely deterministic to the Substrate blockchain.
+    Blake2b::<U32>::digest(borsh::to_vec(self).unwrap()).into()
   }
 }
 
