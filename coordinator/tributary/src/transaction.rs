@@ -94,18 +94,6 @@ impl Default for Signed {
   }
 }
 
-/// The type used for preprocess payloads in the signing protocol.
-pub type Preprocess = [u8; 64];
-/// The type used for share payloads in the signing protocol.
-pub type Share = [u8; 32];
-/// A generic, less constrained type used for either share or preprocess payloads
-/// in the signing protocol.
-pub type GenericSignPayload = Vec<u8>;
-/// One serialized payload per key share held by the sending validator.
-/// The outer Vec has one entry per key share; each inner Vec<u8> is a
-/// serialized preprocess (64 bytes) or share (32 bytes), depending on `round`.
-pub type RoundPayloads = Vec<GenericSignPayload>;
-
 /// The Tributary transaction definition used by Serai
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Transaction {
@@ -129,7 +117,7 @@ pub enum Transaction {
     /// The attempt number of this signing protocol
     attempt: u64,
     /// The preprocess
-    preprocess: Preprocess,
+    preprocess: [u8; 64],
     /// The transaction's signer and signature
     signed: Signed,
   },
@@ -138,7 +126,7 @@ pub enum Transaction {
     /// The attempt number of this signing protocol
     attempt: u64,
     /// The signature share
-    share: Share,
+    share: [u8; 32],
     /// The transaction's signer and signature
     signed: Signed,
   },
@@ -224,9 +212,8 @@ pub enum Transaction {
     /// The data itself
     ///
     /// There will be `n` blobs of data where `n` is the amount of key shares the validator sending
-    /// this transaction has, and each blob is a serialized preprocess (64 bytes) or share
-    /// (32 bytes), uniform across all entries as determined by `round`.
-    data: RoundPayloads,
+    /// this transaction has.
+    data: Vec<Vec<u8>>,
     /// The transaction's signer and signature
     signed: Signed,
   },

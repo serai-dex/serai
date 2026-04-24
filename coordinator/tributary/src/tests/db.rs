@@ -91,7 +91,7 @@ fn all_preprocess_topics_and_attempts() -> Vec<Topic> {
     .collect()
 }
 
-type NoEachFn = fn(usize, &DataSet<Share>);
+type NoEachFn = fn(usize, &DataSet<[u8; 32]>);
 
 /// Cross threshold by accumulating from all validators, returning the final result.
 #[expect(clippy::too_many_arguments)]
@@ -522,7 +522,7 @@ mod tributary_db {
           // Do not store any preceding Preprocess data
           // Validator should be slashed with reason:
           // "participated in topic without participating in prior"
-          let result = TributaryDb::accumulate::<Share>(
+          let result = TributaryDb::accumulate::<[u8; 32]>(
             &mut txn,
             set,
             &validators,
@@ -557,8 +557,8 @@ mod tributary_db {
             TributaryDb::recognize_topic(&mut txn, set, share_topic);
           }
 
-          // Store preceding preprocess data (Preprocess)
-          Accumulated::<Preprocess>::set(
+          // Store preceding preprocess data
+          Accumulated::<[u8; 64]>::set(
             &mut txn,
             set,
             share_topic.preceding_topic().unwrap(),
@@ -566,9 +566,9 @@ mod tributary_db {
             &random_bytes(&mut OsRng),
           );
 
-          // Accumulate a share (Share)
+          // Accumulate a share
           // The preceding check should find the key despite the type mismatch and NOT slash.
-          let result = TributaryDb::accumulate::<Share>(
+          let result = TributaryDb::accumulate::<[u8; 32]>(
             &mut txn,
             set,
             &validators,
@@ -586,10 +586,10 @@ mod tributary_db {
           // Below threshold (1 of 3) so result is None but data is stored
           assert!(matches!(result, DataSet::None));
           // Confirm data is stored
-          assert!(Accumulated::<Share>::get(&db, set, share_topic, validator).is_some());
+          assert!(Accumulated::<[u8; 32]>::get(&db, set, share_topic, validator).is_some());
         }
 
-        // Same types: stores type of RoundPayloads for both Preprocess and Share.
+        // Same types: stores type of Vec<Vec<u8>> for both Preprocess and Share.
         // Only topics where the preprocess data survives after threshold
         // (reattempt exists).
         for share_topic in all_share_topics_and_attempts()
@@ -616,13 +616,13 @@ mod tributary_db {
             total_weight,
             OsRng.next_u64(),
             preprocess_topic,
-            |_| vec![random_vec_u8(&mut OsRng)],
-            None::<fn(usize, &DataSet<RoundPayloads>)>,
+            |_| vec![random_vec_u8(&mut OsRng, 0 ..= 128)],
+            None::<fn(usize, &DataSet<Vec<Vec<u8>>>)>,
           );
 
-          // Accumulate a share with the same RoundPayloads type
-          let share_data: RoundPayloads = vec![random_vec_u8(&mut OsRng)];
-          let result = TributaryDb::accumulate::<RoundPayloads>(
+          // Accumulate a share with the same Vec<Vec<u8>> type
+          let share_data: Vec<Vec<u8>> = vec![random_vec_u8(&mut OsRng, 0 ..= 128)];
+          let result = TributaryDb::accumulate::<Vec<Vec<u8>>>(
             &mut txn,
             set,
             &validators,
@@ -641,7 +641,7 @@ mod tributary_db {
           );
           assert!(matches!(result, DataSet::None), "below threshold (1 of 3)");
           assert_eq!(
-            Accumulated::<RoundPayloads>::get(&db, set, share_topic, validator),
+            Accumulated::<Vec<Vec<u8>>>::get(&db, set, share_topic, validator),
             Some(share_data)
           );
         }
@@ -673,7 +673,7 @@ mod tributary_db {
               block_number,
               topic,
               |i| [u8::try_from(i).unwrap(); 32],
-              Some(|i: usize, result: &DataSet<Share>| {
+              Some(|i: usize, result: &DataSet<[u8; 32]>| {
                 if i < 2 {
                   assert!(matches!(result, DataSet::None));
                 } else {
@@ -695,12 +695,12 @@ mod tributary_db {
             assert!(!TributaryDb::is_fatally_slashed(&db, set, *v));
             if has_reattempt {
               assert!(
-                Accumulated::<Share>::get(&db, set, topic, *v).is_some(),
+                Accumulated::<[u8; 32]>::get(&db, set, topic, *v).is_some(),
                 "data should be preserved when reattempt exists: {topic:?}"
               );
             } else {
               assert!(
-                Accumulated::<Share>::get(&db, set, topic, *v).is_none(),
+                Accumulated::<[u8; 32]>::get(&db, set, topic, *v).is_none(),
                 "data should be cleaned up when no reattempt: {topic:?}"
               );
             }
@@ -748,7 +748,7 @@ mod tributary_db {
             if topic.requires_recognition() {
               TributaryDb::recognize_topic(&mut txn, set, topic);
             }
-            let result = TributaryDb::accumulate::<Share>(
+            let result = TributaryDb::accumulate::<[u8; 32]>(
               &mut txn,
               set,
               &validators,
@@ -764,7 +764,7 @@ mod tributary_db {
           }
 
           // Data was stored (not NOP'd)
-          assert_eq!(Accumulated::<Share>::get(&db, set, topic, validators[1]), Some(data));
+          assert_eq!(Accumulated::<[u8; 32]>::get(&db, set, topic, validators[1]), Some(data));
           assert_eq!(AccumulatedWeight::get(&db, set, topic), Some(validator_weight));
         }
       }
@@ -804,7 +804,7 @@ mod tributary_db {
           if topic.reattempt_topic().is_some() {
             for (i, v) in validators.iter().enumerate() {
               assert_eq!(
-                Accumulated::<Share>::get(&db, set, topic, *v),
+                Accumulated::<[u8; 32]>::get(&db, set, topic, *v),
                 Some([u8::try_from(i).unwrap(); 32]),
                 "data should be preserved when reattempt exists: {topic:?}"
               );
@@ -816,7 +816,7 @@ mod tributary_db {
             );
             for v in &validators {
               assert!(
-                Accumulated::<Share>::get(&db, set, topic, *v).is_none(),
+                Accumulated::<[u8; 32]>::get(&db, set, topic, *v).is_none(),
                 "data should be cleaned up when no reattempt: {topic:?}"
               );
             }
