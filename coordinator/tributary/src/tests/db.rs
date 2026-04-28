@@ -981,6 +981,15 @@ mod tributary_db {
       /// After threshold without a reattempt topic, Accumulated entries are
       /// cleaned up. The duplicate call does not hit the assertion (key is gone)
       /// and instead falls through to the weight >= threshold NOP.
+      /*
+        TODO: This test is unclear.
+
+        It should test an unreachable case (double accumulate), which is why that is allowed to
+        generally panic. This test shows the literal behavior where if the topic's data is pruned,
+        then those asserts for an unreachable case disappear, which is fine. Why are we testing
+        this behavior though? It should be unreachable and unobservable. This is more akin to a bug
+        report that sanity checks disappear than functionality we want to assert the behavior of.
+      */
       #[test]
       fn double_call_after_threshold_without_reattempt_is_nop() {
         // RemoveParticipant has no reattempt, so entries are cleaned up post-threshold
