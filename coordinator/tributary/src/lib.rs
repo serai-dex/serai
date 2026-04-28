@@ -195,7 +195,7 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
   ) -> Option<(SignId, HashMap<Participant, Vec<u8>>)> {
     assert!(
       matches!(topic, Topic::DkgConfirmation { .. }),
-      "accumulate_dkg_confirmation called with non-DkgConfirmation topic: {topic:?}"
+      "`accumulate_dkg_confirmation` called with non-`DkgConfirmation` topic: {topic:?}"
     );
     match TributaryDb::accumulate::<D>(
       self.tributary_txn,
@@ -712,7 +712,7 @@ impl<TD: Db, P: P2p> ContinuallyRan for ScanTributaryTask<TD, P> {
   }
 }
 
-/// Create the Transaction::SlashReport to publish per the local view.
+/// Create the `Transaction::SlashReport` to publish per the local view.
 pub fn slash_report_transaction(getter: &impl Get, set: &NewSetInformation) -> Transaction {
   let mut slash_points = Vec::with_capacity(set.validators.len());
   for (validator, _weight) in set.validators.iter().copied() {

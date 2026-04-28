@@ -24,7 +24,7 @@ async fn make_tributary(
   let mut validators = vec![];
   for weight in weights.iter().copied() {
     let this_key = random_key(&mut OsRng);
-    let pub_key = get_key_point(&this_key);
+    let pub_key = <Ristretto as WrappedGroup>::generator() * *this_key;
     key = Some(this_key);
     validator_keys.push((pub_key, u64::from(weight)));
     let addr = SeraiAddress(pub_key.to_bytes());

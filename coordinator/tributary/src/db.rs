@@ -2,13 +2,15 @@ use std::collections::HashMap;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::{BlockHash, validator_sets::ExternalValidatorSet, address::SeraiAddress};
-
-use messages::sign::{VariantSignId, SignId};
+use serai_primitives::{
+  BlockHash,
+  validator_sets::{KeyShares, ExternalValidatorSet},
+  address::SeraiAddress,
+};
 
 use serai_db::*;
-
 use serai_cosign_types::CosignIntent;
+use messages::sign::{VariantSignId, SignId};
 
 use crate::transaction::SigningProtocolRound;
 
@@ -45,7 +47,7 @@ pub enum Topic {
   },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(PartialEq, Eq, Debug)]
 pub(crate) enum Participating {
   Participated,
   Everyone,
@@ -353,8 +355,10 @@ impl TributaryDb {
     );
   }
   pub(crate) fn finish_cosigning(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
-    ActivelyCosigning::take(txn, set)
-      .expect("tried to finish cosigning but wasn't actively cosigning");
+    assert!(
+      ActivelyCosigning::take(txn, set).is_some(),
+      "tried to finish cosigning but wasn't actively cosigning"
+    );
   }
   pub(crate) fn mark_cosigned(
     txn: &mut impl DbTxn,
@@ -371,19 +375,19 @@ impl TributaryDb {
     Cosigned::get(txn, set, substrate_block_hash).is_some()
   }
 
-  /// The next topic requiring recognition which has been recognized by this Tributary.
-  pub fn try_recv_topic_requiring_recognition(
-    txn: &mut impl DbTxn,
-    set: ExternalValidatorSet,
-  ) -> Option<Topic> {
-    RecognizedTopics::try_recv(txn, set)
-  }
   pub(crate) fn recognize_topic(txn: &mut impl DbTxn, set: ExternalValidatorSet, topic: Topic) {
     AccumulatedWeight::set(txn, set, topic, &0);
     RecognizedTopics::send(txn, set, &topic);
   }
   pub(crate) fn recognized(getter: &impl Get, set: ExternalValidatorSet, topic: Topic) -> bool {
     AccumulatedWeight::get(getter, set, topic).is_some()
+  }
+  /// The next topic which required recognition which has now been recognized by this Tributary.
+  pub(crate) fn try_recv_topic_requiring_recognition(
+    txn: &mut impl DbTxn,
+    set: ExternalValidatorSet,
+  ) -> Option<Topic> {
+    RecognizedTopics::try_recv(txn, set)
   }
 
   pub(crate) fn start_of_block(txn: &mut impl DbTxn, set: ExternalValidatorSet, block_number: u64) {
@@ -448,8 +452,7 @@ impl TributaryDb {
     // nonces on transactions (deterministically to the topic)
     assert!(
       txn.get(Accumulated::<D>::key(set, topic, validator)).is_none(),
-      "accumulate called twice for the same (validator, topic) tuple: \
-       the nonce system should have prevented this"
+      "accumulate called twice for the same (validator, topic) tuple",
     );
 
     let accumulated_weight = AccumulatedWeight::get(txn, set, topic);
@@ -497,9 +500,11 @@ impl TributaryDb {
     }
 
     // Accumulate the data
-    accumulated_weight = accumulated_weight.checked_add(validator_weight).unwrap_or_else(|| {
-      panic!("accumulated {accumulated_weight} overflowed adding validator's {validator_weight}")
-    });
+    const {
+      // If this is true, the following addition won't trip unless we're accumulating past the max
+      assert!(KeyShares::MAX_PER_SET < u16::MAX);
+    }
+    accumulated_weight += validator_weight;
     AccumulatedWeight::set(txn, set, topic, &accumulated_weight);
     Accumulated::set(txn, set, topic, validator, data);
 
@@ -508,14 +513,10 @@ impl TributaryDb {
       // Queue this for re-attempt after enough time passes
       let reattempt_topic = topic.reattempt_topic();
       if let Some((attempt, reattempt_topic)) = reattempt_topic {
-        // Linearly scale the time for the protocol with the attempt number
-        let blocks_till_reattempt = u64::from(attempt) * u64::from(BASE_REATTEMPT_DELAY);
+        // Linearly scale the time for the protocol with the attempt number, up to 10x
+        let blocks_till_reattempt = attempt.min(10).saturating_mul(u64::from(BASE_REATTEMPT_DELAY));
 
-        let recognize_at = block_number.checked_add(blocks_till_reattempt).unwrap_or_else(|| {
-          panic!(
-            "recognize_at overflowed: block_number {block_number} + delay {blocks_till_reattempt}",
-          );
-        });
+        let recognize_at = block_number + blocks_till_reattempt;
         let mut queued = Reattempt::get(txn, set, recognize_at).unwrap_or(Vec::with_capacity(1));
         queued.push(reattempt_topic);
         Reattempt::set(txn, set, recognize_at, &queued);

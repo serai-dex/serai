@@ -94,7 +94,11 @@ impl Default for Signed {
   }
 }
 
-/// The Tributary transaction definition used by Serai
+/// The Tributary transaction definition used by Serai.
+///
+/// Two transactions will be considered equal if equal on every level. This means transactions
+/// which aren't equal may share a hash, due to the hash not binding to the signature, yet the
+/// equality binding to the signature.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Transaction {
   /// A vote to remove a participant for invalid behavior

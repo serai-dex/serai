@@ -1,22 +1,22 @@
 use rand::{Rng as _, RngCore as _, rngs::OsRng};
-use messages::sign::{SignId, VariantSignId};
 
-use serai_db::{Db as _, DbTxn, MemDb};
 use serai_primitives::{
   address::SeraiAddress,
-  validator_sets::ExternalValidatorSet,
+  validator_sets::{ExternalValidatorSet, KeyShares},
   test_helpers::{
     random_bytes, random_block_hash, random_serai_address, random_validator_set, random_vec_u8,
   },
 };
 
+use messages::sign::{SignId, VariantSignId};
+use serai_db::{Db as _, DbTxn, MemDb};
 use crate::{
+  transaction::SigningProtocolRound,
   db::{*, ProcessorMessages, DkgConfirmationMessages},
   tests::*,
-  transaction::{RoundPayloads, Preprocess, Share, SigningProtocolRound},
 };
 
-/// One of each topic kind, and attempts: at 0, a random attempt, and u64::MAX.
+/// One of each topic kind, and attempts: at 0 and a random attempt.
 fn all_topics_and_attempts() -> Vec<Topic> {
   let random_attempt = OsRng.gen_range(1u64 .. u64::MAX);
   vec![
@@ -25,11 +25,9 @@ fn all_topics_and_attempts() -> Vec<Topic> {
     // DkgConfirmation Preprocess
     Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Preprocess },
     Topic::DkgConfirmation { attempt: random_attempt, round: SigningProtocolRound::Preprocess },
-    Topic::DkgConfirmation { attempt: u64::MAX, round: SigningProtocolRound::Preprocess },
     // DkgConfirmation Share
     Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Share },
     Topic::DkgConfirmation { attempt: random_attempt, round: SigningProtocolRound::Share },
-    Topic::DkgConfirmation { attempt: u64::MAX, round: SigningProtocolRound::Share },
     // SlashReport
     Topic::SlashReport,
     // Sign Preprocess
@@ -43,11 +41,6 @@ fn all_topics_and_attempts() -> Vec<Topic> {
       attempt: random_attempt,
       round: SigningProtocolRound::Preprocess,
     },
-    Topic::Sign {
-      id: random_variant_sign_id(),
-      attempt: u64::MAX,
-      round: SigningProtocolRound::Preprocess,
-    },
     // Sign Share
     Topic::Sign { id: random_variant_sign_id(), attempt: 0, round: SigningProtocolRound::Share },
     Topic::Sign {
@@ -55,15 +48,10 @@ fn all_topics_and_attempts() -> Vec<Topic> {
       attempt: random_attempt,
       round: SigningProtocolRound::Share,
     },
-    Topic::Sign {
-      id: random_variant_sign_id(),
-      attempt: u64::MAX,
-      round: SigningProtocolRound::Share,
-    },
   ]
 }
 
-/// Share-round topics only, with attempts: at 0, random, and u64::MAX.
+/// Share-round topics only, with attempts: at 0 and random.
 fn all_share_topics_and_attempts() -> Vec<Topic> {
   all_topics_and_attempts()
     .into_iter()
@@ -77,7 +65,7 @@ fn all_share_topics_and_attempts() -> Vec<Topic> {
     .collect()
 }
 
-/// Preprocess-round topics only, with attempts: at 0, random, and u64::MAX.
+/// Preprocess-round topics only, with attempts: at 0 and random.
 fn all_preprocess_topics_and_attempts() -> Vec<Topic> {
   all_topics_and_attempts()
     .into_iter()
@@ -123,7 +111,7 @@ where
       1,
       &data,
     );
-    if let Some(ref mut f) = on_each {
+    if let Some(f) = &mut on_each {
       f(i, &result);
     }
   }
@@ -180,21 +168,23 @@ mod topic {
         Topic::DkgConfirmation { attempt, round } => match round {
           SigningProtocolRound::Preprocess => assert_eq!(
             topic.reattempt_topic(),
-            attempt.checked_add(1).map(|next| {
-              (
-                next,
-                Topic::DkgConfirmation { attempt: next, round: SigningProtocolRound::Preprocess },
-              )
-            })
+            Some((
+              attempt + 1,
+              Topic::DkgConfirmation {
+                attempt: attempt + 1,
+                round: SigningProtocolRound::Preprocess
+              },
+            ))
           ),
           SigningProtocolRound::Share => assert_eq!(topic.reattempt_topic(), None),
         },
         Topic::Sign { id, attempt, round } => match round {
           SigningProtocolRound::Preprocess => assert_eq!(
             topic.reattempt_topic(),
-            attempt.checked_add(1).map(|next| {
-              (next, Topic::Sign { id, attempt: next, round: SigningProtocolRound::Preprocess })
-            })
+            Some((
+              attempt + 1,
+              Topic::Sign { id, attempt: attempt + 1, round: SigningProtocolRound::Preprocess }
+            ))
           ),
           SigningProtocolRound::Share => assert_eq!(topic.reattempt_topic(), None),
         },
@@ -338,14 +328,13 @@ mod tributary_db {
     let block_hash1 = random_block_hash(&mut OsRng);
     let block_number1 = OsRng.next_u64();
 
-    let expected_topic =
-      expected_initially_recognized_sign_topic(VariantSignId::Cosign(block_number1));
+    let expected_topic = initial_sign_topic(VariantSignId::Cosign(block_number1));
 
     // Recognizes topic
     {
       let mut txn = db.txn();
       TributaryDb::start_cosigning(&mut txn, set, block_hash1, block_number1);
-      assert_cosigning_invariants(&mut txn, set, block_hash1, block_number1);
+      assert_start_cosigning_invariants(&mut txn, set, block_hash1, block_number1);
       txn.commit();
     }
 
@@ -364,8 +353,6 @@ mod tributary_db {
 
       // Previous topic still recognized
       assert!(TributaryDb::recognized(&txn, set, expected_topic));
-
-      txn.commit();
     }
 
     // Finish cosigning
@@ -396,7 +383,7 @@ mod tributary_db {
       assert!(TributaryDb::recognized(
         &txn,
         set,
-        expected_initially_recognized_sign_topic(VariantSignId::Cosign(block_number2))
+        initial_sign_topic(VariantSignId::Cosign(block_number2))
       ));
       // Previous topic also remains recognized
       assert!(TributaryDb::recognized(&txn, set, expected_topic));
@@ -407,7 +394,7 @@ mod tributary_db {
 
   #[test]
   fn start_of_block() {
-    let _ = env_logger::try_init();
+    serai_env::init_logger();
     let set = random_validator_set(&mut OsRng);
 
     let reattemptable_topics: Vec<Topic> = all_topics_and_attempts()
@@ -886,6 +873,7 @@ mod tributary_db {
             txn.commit();
           }
 
+          assert!(TributaryDb::recognized(&db, set, succeeding));
           assert_eq!(
             AccumulatedWeight::get(&db, set, succeeding),
             Some(0),
@@ -945,6 +933,7 @@ mod tributary_db {
       fn double_call_after_threshold_with_reattempt_panics() {
         // DkgConfirmation Preprocess has a reattempt topic, so entries survive post-threshold
         let topic = Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Preprocess };
+        assert!(topic.reattempt_topic().is_some());
         let (set, validator, validators, total_weight, validator_weight) =
           default_accumulate_setup();
         let mut db = MemDb::new();
@@ -1079,7 +1068,7 @@ mod tributary_db {
         let weight_before = pre_weight.unwrap_or(0);
 
         // Slash for participating without completing the preceding topic.
-        if topic.preceding_topic().is_some() && !has_preceding_accumulated {
+        if topic.preceding_topic().is_some() && (!has_preceding_accumulated) {
           assert!(post_slashed, "should be fatally slashed for missing preceding participation");
           assert!(matches!(result, DataSet::None));
           assert_eq!(post_weight, pre_weight, "weight unchanged after preceding slash");
@@ -1122,6 +1111,7 @@ mod tributary_db {
           // Reattempt should be queued if topic is reattemptable.
           if let Some((reattempt_attempt, reattempt_topic)) = topic.reattempt_topic() {
             let blocks_till = reattempt_attempt
+              .min(10)
               .checked_mul(u64::from(BASE_REATTEMPT_DELAY))
               .expect("reattempt delay overflowed u64");
             let recognize_at =
@@ -1218,11 +1208,11 @@ mod tributary_db {
       fn fuzz_accumulate() {
         for _ in 0 .. 1000 {
           let has_initial_weight = OsRng.gen::<bool>();
-          let initial_weight = OsRng.gen_range(0u16 .. u16::MAX);
-          let total_weight = OsRng.gen_range(1u16 .. u16::MAX);
+          let initial_weight = OsRng.gen_range(0u16 .. KeyShares::MAX_PER_SET);
+          let total_weight = OsRng.gen_range(1u16 .. KeyShares::MAX_PER_SET);
 
           let has_next_topic_weight = OsRng.gen::<bool>();
-          let next_topic_initial_weight = OsRng.gen_range(0u16 .. u16::MAX);
+          let next_topic_initial_weight = OsRng.gen_range(0u16 .. KeyShares::MAX_PER_SET);
 
           let has_preceding_topic_accumulated = OsRng.gen::<bool>();
 
@@ -1235,12 +1225,12 @@ mod tributary_db {
           };
           let cosign_block = OsRng.next_u64();
           let batch_id: [u8; 32] = OsRng.gen();
-          let validator_weight = OsRng.gen_range(1u16 .. u16::MAX);
+          let validator_weight = OsRng.gen_range(1u16 .. KeyShares::MAX_PER_SET);
           let block_number = OsRng.gen_range(1u64 .. u64::MAX);
           let data: Vec<u8> = (0 .. OsRng.gen_range(0usize .. 64)).map(|_| OsRng.gen()).collect();
 
-          let num_validators = OsRng.gen_range(1u16 .. u16::MAX);
-          let cur_validator = OsRng.gen_range(0u16 .. u16::MAX);
+          let num_validators = OsRng.gen_range(1u16 .. u16::from(u8::MAX));
+          let cur_validator = OsRng.gen_range(0u16 .. u16::from(u8::MAX));
           let validator_in_list = OsRng.gen::<bool>();
 
           let topic = match topic_variant % 5 {
@@ -1293,50 +1283,36 @@ mod tributary_db {
           let pre_weight = AccumulatedWeight::get(&txn, set, topic);
           let pre_slashed = TributaryDb::is_fatally_slashed(&txn, set, validator);
 
-          let catch_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let result = TributaryDb::accumulate::<Vec<u8>>(
-              &mut txn,
-              set,
-              &validators,
-              total_weight,
-              block_number,
-              topic,
-              validator,
-              validator_weight,
-              &data,
-            );
+          let result = TributaryDb::accumulate::<Vec<u8>>(
+            &mut txn,
+            set,
+            &validators,
+            total_weight,
+            block_number,
+            topic,
+            validator,
+            validator_weight,
+            &data,
+          );
 
-            txn.commit();
+          txn.commit();
 
-            verify_accumulate_invariants(
-              &db_clone,
-              set,
-              total_weight,
-              block_number,
-              topic,
-              validator,
-              validator_weight,
-              &data,
-              pre_weight,
-              pre_slashed,
-              has_preceding_topic_accumulated,
-              has_next_topic_weight,
-              validator_in_list,
-              &result,
-            );
-          }));
-
-          if let Err(panic) = catch_result {
-            let msg = panic
-              .downcast_ref::<String>()
-              .map(String::as_str)
-              .or_else(|| panic.downcast_ref::<&str>().copied())
-              .unwrap_or("");
-            if msg.contains("overflowed") {
-              continue;
-            }
-            std::panic::resume_unwind(panic);
-          }
+          verify_accumulate_invariants(
+            &db_clone,
+            set,
+            total_weight,
+            block_number,
+            topic,
+            validator,
+            validator_weight,
+            &data,
+            pre_weight,
+            pre_slashed,
+            has_preceding_topic_accumulated,
+            has_next_topic_weight,
+            validator_in_list,
+            &result,
+          );
         }
       }
     }

@@ -1,21 +1,24 @@
 use core::ops::Deref as _;
-use std::io::{self, Cursor, Read, Write};
+use std::{
+  io::{self, Cursor, Read, Write},
+  collections::HashSet,
+};
 
+use rand_core::{RngCore as _, OsRng};
 use blake2::{digest::typenum::U32, Digest as _, Blake2b};
-use borsh::{BorshDeserialize as _, BorshSerialize as _};
-use rand::{RngCore as _, rngs::OsRng};
-
 use ciphersuite::{
-  group::{Group as _, GroupEncoding as _, ff::PrimeField as _},
+  group::{ff::PrimeField as _, Group as _, GroupEncoding as _},
   *,
 };
 use dalek_ff_group::Ristretto;
+
+use borsh::{BorshDeserialize as _, BorshSerialize as _};
 
 use messages::sign::VariantSignId;
 use serai_primitives::{test_helpers::*, validator_sets::KeyShares};
 use tributary_sdk::{
   ReadWrite,
-  transaction::{Transaction as _, TransactionError, TransactionKind},
+  transaction::{TransactionKind, Transaction as _, TransactionError},
 };
 
 use super::*;
@@ -26,12 +29,8 @@ fn all_signing_protocol_rounds() -> Vec<SigningProtocolRound> {
 
 #[test]
 fn signing_protocol_round_nonce() {
-  for round in all_signing_protocol_rounds() {
-    let expected_nonce = match round {
-      SigningProtocolRound::Preprocess => 0,
-      SigningProtocolRound::Share => 1,
-    };
-    assert_eq!(round.nonce(), expected_nonce, "Wrong nonce for {round:?}");
+  for (i, round) in all_signing_protocol_rounds().into_iter().enumerate() {
+    assert_eq!(round.nonce(), u32::try_from(i).unwrap(), "Wrong nonce for {round:?}");
   }
 }
 
@@ -69,10 +68,9 @@ mod signed {
       );
 
       let deserialized: Signed = borsh::from_slice(&serialized).unwrap();
-      let mut cursor = Cursor::new(&serialized);
       assert_eq!(
         deserialized,
-        Signed::deserialize_reader(&mut cursor).unwrap(),
+        Signed::deserialize_reader(&mut serialized.as_slice()).unwrap(),
         "borsh::from_slice and Signed::deserialize_reader should produce identical results"
       );
 
@@ -122,8 +120,7 @@ mod signed {
     {
       let serialized = borsh::to_vec(&random_signed(&mut OsRng)).unwrap();
       let truncated = &serialized[.. 5];
-      let mut cursor = Cursor::new(truncated);
-      let result = Signed::deserialize_reader(&mut cursor);
+      let result = Signed::deserialize_reader(&mut &*truncated);
       assert!(result.is_err(), "truncated data should fail to deserialize");
     }
 
@@ -131,8 +128,7 @@ mod signed {
     {
       let serialized = borsh::to_vec(&random_signed(&mut OsRng)).unwrap();
       let signer_only = &serialized[.. 32];
-      let mut cursor = Cursor::new(signer_only);
-      let result = Signed::deserialize_reader(&mut cursor);
+      let result = Signed::deserialize_reader(&mut &*signer_only);
       assert!(result.is_err(), "signer-only data without signature should fail to deserialize");
     }
   }
@@ -326,7 +322,8 @@ mod transaction {
         out
       }
 
-      for mut tx in all_signed_transactions_and_attempts(&random_signed(&mut OsRng)) {
+      let mut orders = HashSet::new();
+      for mut tx in all_signed_transactions_and_attempts(random_signed(&mut OsRng)) {
         tx.sign(&mut OsRng, genesis, &key);
 
         let (expected_order, expected_nonce) = match &tx {
@@ -336,7 +333,11 @@ mod transaction {
             (order, 0)
           }
           Transaction::DkgParticipation { .. } => (borsh_label(b"DkgParticipation"), 0),
-          Transaction::DkgConfirmationPreprocess { attempt, .. } |
+          Transaction::DkgConfirmationPreprocess { attempt, .. } => {
+            let mut order = borsh_label(b"DkgConfirmation");
+            order.extend(&attempt.to_le_bytes());
+            (order, 0)
+          }
           Transaction::DkgConfirmationShare { attempt, .. } => {
             let mut order = borsh_label(b"DkgConfirmation");
             order.extend(&attempt.to_le_bytes());
@@ -374,9 +375,10 @@ mod transaction {
           Transaction::Cosigned { .. } |
           Transaction::SubstrateBlock { .. } |
           Transaction::Batch { .. }) => {
-            panic!("all_signed_transactions_and_attempts returned non-signed tx: {other:?}")
+            unreachable!("all_signed_transactions_and_attempts returned non-signed tx: {other:?}")
           }
         };
+        orders.insert((expected_order.clone(), expected_nonce));
 
         match tx.kind() {
           TransactionKind::Signed(order, signed) => {
@@ -392,10 +394,12 @@ mod transaction {
           }
         }
       }
+      assert_eq!(orders.len(), 11);
     }
 
     #[test]
     fn provided_transactions_kind() {
+      let mut orders = HashSet::new();
       for tx in all_provided_transactions() {
         let expected_order = match &tx {
           Transaction::Cosign { .. } => "Cosign",
@@ -411,6 +415,7 @@ mod transaction {
             panic!("all_provided_transactions returned non-provided tx: {other:?}")
           }
         };
+        orders.insert(expected_order);
 
         match tx.kind() {
           TransactionKind::Provided(actual_order) => {
@@ -421,6 +426,7 @@ mod transaction {
           }
         }
       }
+      assert_eq!(orders.len(), 4);
     }
   }
 
@@ -475,6 +481,7 @@ mod transaction {
             tx2.hash(),
             "Hashes should be equal despite different nonces and signatures"
           );
+          assert_ne!(ReadWrite::serialize(&tx1), ReadWrite::serialize(&tx2));
         }
       }
     }
@@ -587,17 +594,35 @@ mod transaction {
       let genesis = random_bytes(&mut OsRng);
 
       // Sets correct signer and produces verifiable signature
-      for mut tx in all_signed_transactions_and_attempts(&random_signed(&mut OsRng)) {
+      for mut tx in all_signed_transactions_and_attempts(random_signed(&mut OsRng)) {
         tx.sign(&mut OsRng, genesis, &key);
+        let TransactionKind::Signed(order, tributary_signed) = tx.kind() else {
+          panic!("non-signed TX from `all_signed_transactions_and_attempts`")
+        };
         let sig_hash = tx.sig_hash(genesis);
+        assert_eq!(
+          sig_hash,
+          <Ristretto as WrappedGroup>::F::from_bytes_mod_order_wide(
+            &blake2::Blake2b512::digest(
+              [
+                b"Tributary Signed Transaction",
+                genesis.as_slice(),
+                &tx.hash(),
+                order.as_slice(),
+                tributary_signed.signature.R.to_bytes().as_slice(),
+              ]
+              .concat(),
+            )
+            .into(),
+          )
+        );
 
-        if let TransactionKind::Signed(_, tributary_signed) = tx.kind() {
-          assert_eq!(tributary_signed.signer, expected_signer, "Wrong signer for {tx:?}");
-          assert!(
-            tributary_signed.signature.verify(tributary_signed.signer, sig_hash),
-            "Signature verification failed for {tx:?}"
-          );
-        }
+        assert_eq!(tributary_signed.signer, expected_signer, "Wrong signer for {tx:?}");
+        assert_ne!(tributary_signed.signature.R, <Ristretto as WrappedGroup>::G::identity());
+        assert!(
+          tributary_signed.signature.verify(tributary_signed.signer, sig_hash),
+          "Signature verification failed for {tx:?}"
+        );
       }
 
       // Wrong genesis fails verification

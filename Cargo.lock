@@ -7748,7 +7748,6 @@ name = "serai-coordinator"
 version = "0.1.0"
 dependencies = [
  "bitvec",
- "blake2 0.11.0-rc.6",
  "borsh",
  "ciphersuite 0.4.2",
  "dalek-ff-group",
