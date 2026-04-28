@@ -401,25 +401,9 @@ mod handle_application_tx {
     let mut txn = db.txn();
     let block_number = OsRng.next_u64();
 
-    // Below threshold: no DkgConfirmationMessages sent
     {
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-
-      scan_block.handle_application_tx(
-        block_number,
-        Transaction::DkgConfirmationPreprocess {
-          attempt: 0,
-          preprocess: random_bytes(&mut OsRng),
-          signed: new_signed(key0),
-        },
-      );
-    }
-    assert!(DkgConfirmationMessages::try_recv(&mut txn, set).is_none());
-
-    // Threshold crossed: sends DkgConfirmationMessages (Preprocesses)
-    {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      for key in [key1, key2] {
+      for (i, key) in [key0, key1, key2].into_iter().enumerate() {
         scan_block.handle_application_tx(
           block_number,
           Transaction::DkgConfirmationPreprocess {
@@ -428,8 +412,14 @@ mod handle_application_tx {
             signed: new_signed(key),
           },
         );
+        if i != 2 {
+          // Below threshold: no DkgConfirmationMessages sent
+          assert!(DkgConfirmationMessages::try_recv(&mut txn, set).is_none());
+        }
       }
     }
+    // Threshold crossed: sends DkgConfirmationMessages (Preprocesses)
+    // TODO: Check the received message is the expected one
     assert!(DkgConfirmationMessages::try_recv(&mut txn, set).is_some());
   }
 
@@ -471,7 +461,7 @@ mod handle_application_tx {
     // All 3 validators submit preprocesses (threshold crossed -> DkgConfirmationMessages sent)
     {
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      for key in [key0, key1, key2] {
+      for (i, key) in [key0, key1, key2].into_iter().enumerate() {
         scan_block.handle_application_tx(
           block_number,
           Transaction::DkgConfirmationPreprocess {
@@ -480,34 +470,21 @@ mod handle_application_tx {
             signed: new_signed(key),
           },
         );
+        if i != 2 {
+          assert!(DkgConfirmationMessages::try_recv(&mut txn, set).is_none());
+        }
       }
     }
+    // TODO: Check the exact message received
     assert!(
       DkgConfirmationMessages::try_recv(&mut txn, set).is_some(),
       "preprocesses crossing threshold should produce DkgConfirmationMessages"
     );
 
-    // Below threshold: no DkgConfirmationMessages sent
-    {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_application_tx(
-        block_number,
-        Transaction::DkgConfirmationShare {
-          attempt: 0,
-          share: random_bytes(&mut OsRng),
-          signed: new_signed(key0),
-        },
-      );
-    }
-    assert!(
-      DkgConfirmationMessages::try_recv(&mut txn, set).is_none(),
-      "single share should not produce DkgConfirmationMessages"
-    );
-
     // Threshold crossed: sends DkgConfirmationMessages (Shares)
     {
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      for key in [key1, key2] {
+      for (i, key) in [key0, key1, key2].into_iter().enumerate() {
         scan_block.handle_application_tx(
           block_number,
           Transaction::DkgConfirmationShare {
@@ -516,8 +493,15 @@ mod handle_application_tx {
             signed: new_signed(key),
           },
         );
+        if i != 2 {
+        assert!(
+          DkgConfirmationMessages::try_recv(&mut txn, set).is_none(),
+          "less than threshold should not produce DkgConfirmationMessages"
+        );
+        }
       }
     }
+    // TODO: Check the exact message received
     assert!(
       DkgConfirmationMessages::try_recv(&mut txn, set).is_some(),
       "shares crossing threshold should produce DkgConfirmationMessages"
@@ -635,6 +619,20 @@ mod handle_application_tx {
     }
 
     // Does not finish active cosign when block doesn't match
+    /*
+      TODO: The story for this test is unclear.
+
+      The intent is that if we are to cosign block #500, then block #501, we don't interrupt
+      cosigning block #500 to begin on block #501. Instead, we finish #500, by which point we may
+      be asked to cosign block #501, or maybe even #502. The intent is by finishing #500, we
+      inherently begin the latest block to cosign.
+
+      This test asserts that if we're cosigning X, but then finish Y (which should be an
+      unreachable invariant, as we shouldn't start cosinging while already cosigning), that we
+      continue on X. Presumably, this is a byproduct of how if we finish #500 but have #501
+      pending, we're intended to immediately rollover to #501, presented here as explicit
+      functionality to test for. This has to be straightened out.
+    */
     {
       let mut db = MemDb::new();
       let active_hash = random_block_hash(&mut OsRng);

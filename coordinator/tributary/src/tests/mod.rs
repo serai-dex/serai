@@ -239,6 +239,7 @@ pub(crate) fn assert_block_side_effects(
   transactions: &[tributary_sdk::Transaction<Transaction>],
 ) {
   for tx in transactions {
+    // TODO: Expand from checking the message is `Some(_)` to the exact expected message
     match tx {
       tributary_sdk::Transaction::Application(app_tx) => match app_tx {
         Transaction::DkgParticipation { .. } => {
