@@ -37,7 +37,7 @@ pub enum SigningProtocolRound {
 }
 
 impl SigningProtocolRound {
-  fn nonce(self) -> u32 {
+  pub(crate) fn nonce(self) -> u32 {
     match self {
       SigningProtocolRound::Preprocess => 0,
       SigningProtocolRound::Share => 1,
@@ -51,9 +51,9 @@ impl SigningProtocolRound {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Signed {
   /// The signer.
-  signer: <Ristretto as WrappedGroup>::G,
+  pub(crate) signer: <Ristretto as WrappedGroup>::G,
   /// The signature.
-  signature: SchnorrSignature<Ristretto>,
+  pub(crate) signature: SchnorrSignature<Ristretto>,
 }
 
 impl BorshSerialize for Signed {
@@ -77,7 +77,7 @@ impl Signed {
   }
 
   /// Provide a nonce to convert a `Signed` into a `tributary::Signed`.
-  fn to_tributary_signed(self, nonce: u32) -> TributarySigned {
+  pub(crate) fn to_tributary_signed(self, nonce: u32) -> TributarySigned {
     TributarySigned { signer: self.signer, nonce, signature: self.signature }
   }
 }
@@ -94,7 +94,11 @@ impl Default for Signed {
   }
 }
 
-/// The Tributary transaction definition used by Serai
+/// The Tributary transaction definition used by Serai.
+///
+/// Two transactions will be considered equal if equal on every level. This means transactions
+/// which aren't equal may share a hash, due to the hash not binding to the signature, yet the
+/// equality binding to the signature.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub enum Transaction {
   /// A vote to remove a participant for invalid behavior
@@ -115,7 +119,7 @@ pub enum Transaction {
   /// The preprocess to confirm the DKG results on-chain
   DkgConfirmationPreprocess {
     /// The attempt number of this signing protocol
-    attempt: u32,
+    attempt: u64,
     /// The preprocess
     preprocess: [u8; 64],
     /// The transaction's signer and signature
@@ -124,7 +128,7 @@ pub enum Transaction {
   /// The signature share to confirm the DKG results on-chain
   DkgConfirmationShare {
     /// The attempt number of this signing protocol
-    attempt: u32,
+    attempt: u64,
     /// The signature share
     share: [u8; 32],
     /// The transaction's signer and signature
@@ -206,7 +210,7 @@ pub enum Transaction {
     /// The ID of the object being signed
     id: VariantSignId,
     /// The attempt number of this signing protocol
-    attempt: u32,
+    attempt: u64,
     /// The round this data is for, within the signing protocol
     round: SigningProtocolRound,
     /// The data itself
@@ -229,7 +233,7 @@ pub enum Transaction {
 
 impl ReadWrite for Transaction {
   fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    borsh::from_reader(reader)
+    Self::deserialize_reader(reader)
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
@@ -251,11 +255,11 @@ impl TransactionTrait for Transaction {
       ),
       Transaction::DkgConfirmationPreprocess { attempt, signed, .. } => TransactionKind::Signed(
         borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
-        signed.to_tributary_signed(0),
+        signed.to_tributary_signed(SigningProtocolRound::Preprocess.nonce()),
       ),
       Transaction::DkgConfirmationShare { attempt, signed, .. } => TransactionKind::Signed(
         borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
-        signed.to_tributary_signed(1),
+        signed.to_tributary_signed(SigningProtocolRound::Share.nonce()),
       ),
 
       Transaction::Cosign { .. } => TransactionKind::Provided("Cosign"),

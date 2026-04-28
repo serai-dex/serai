@@ -7748,7 +7748,6 @@ name = "serai-coordinator"
 version = "0.1.0"
 dependencies = [
  "bitvec",
- "blake2 0.11.0-rc.6",
  "borsh",
  "ciphersuite 0.4.2",
  "dalek-ff-group",
@@ -7816,6 +7815,7 @@ dependencies = [
 name = "serai-coordinator-substrate"
 version = "0.1.0"
 dependencies = [
+ "blake2 0.11.0-rc.6",
  "borsh",
  "dkg",
  "futures",
@@ -7835,15 +7835,20 @@ dependencies = [
  "ciphersuite 0.4.2",
  "dalek-ff-group",
  "dkg",
- "log",
+ "rand 0.8.6",
+ "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "schnorr-signatures",
  "serai-coordinator-substrate",
  "serai-cosign-types",
  "serai-db",
+ "serai-env",
  "serai-primitives",
  "serai-processor-messages",
+ "serai-substrate-tests",
  "serai-task",
+ "tendermint-machine",
+ "tokio",
  "tributary-sdk",
  "zeroize",
 ]

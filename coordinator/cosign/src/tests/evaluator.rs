@@ -131,7 +131,7 @@ fn signed_cosign(
       block_hash: random_block_hash(&mut OsRng),
       cosigner,
     },
-    signature: random_bytes_64(&mut OsRng),
+    signature: random_bytes(&mut OsRng),
   }
 }
 

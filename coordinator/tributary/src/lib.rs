@@ -39,6 +39,9 @@ mod db;
 use db::*;
 pub use db::Topic;
 
+#[cfg(test)]
+mod tests;
+
 /// Messages to send to the Processors.
 pub struct ProcessorMessages;
 impl ProcessorMessages {
@@ -101,7 +104,7 @@ impl RecognizedTopics {
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
   ) -> Option<Topic> {
-    db::RecognizedTopics::try_recv(txn, set)
+    TributaryDb::try_recv_topic_requiring_recognition(txn, set)
   }
 }
 
@@ -190,6 +193,10 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
     data: &D,
     signer: SeraiAddress,
   ) -> Option<(SignId, HashMap<Participant, Vec<u8>>)> {
+    assert!(
+      matches!(topic, Topic::DkgConfirmation { .. }),
+      "`accumulate_dkg_confirmation` called with non-`DkgConfirmation` topic: {topic:?}"
+    );
     match TributaryDb::accumulate::<D>(
       self.tributary_txn,
       self.set.set,
@@ -479,7 +486,9 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
                 slash_report.push(Slash::Points(points));
               }
             }
-            assert!(slash_report.len() <= f);
+            assert!(
+              slash_report.iter().filter(|points| !matches!(points, Slash::Points(0))).count() <= f
+            );
 
             // Recognize the topic for signing the slash report
             TributaryDb::recognize_topic(
@@ -611,11 +620,19 @@ pub struct ScanTributaryTask<TD: Db, P: P2p> {
 
 impl<TD: Db, P: P2p> ScanTributaryTask<TD, P> {
   /// Create a new instance of this task.
+  ///
+  /// This will panic if the Tributary read does not correspond to the set.
   pub fn new(
     tributary_db: TD,
     set: NewSetInformation,
     tributary: TributaryReader<TD, Transaction>,
   ) -> Self {
+    assert_eq!(
+      set.tributary_genesis(),
+      tributary.genesis(),
+      "set information is inconsistent with the tributary"
+    );
+
     let mut validators = Vec::with_capacity(set.validators.len());
     let mut total_weight = 0;
     let mut validator_weights = HashMap::with_capacity(set.validators.len());
@@ -647,10 +664,9 @@ impl<TD: Db, P: P2p> ContinuallyRan for ScanTributaryTask<TD, P> {
           .unwrap_or((0, self.tributary.genesis()));
 
       let mut made_progress = false;
-      while let Some(next) = self.tributary.block_after(&last_block_hash) {
-        let block = self.tributary.block(&next).unwrap();
+      while let Some(block_hash) = self.tributary.block_after(&last_block_hash) {
+        let block = self.tributary.block(&block_hash).unwrap();
         let block_number = last_block_number + 1;
-        let block_hash = block.hash();
 
         // Make sure we have all of the provided transactions for this block
         for tx in &block.transactions {
@@ -696,7 +712,7 @@ impl<TD: Db, P: P2p> ContinuallyRan for ScanTributaryTask<TD, P> {
   }
 }
 
-/// Create the Transaction::SlashReport to publish per the local view.
+/// Create the `Transaction::SlashReport` to publish per the local view.
 pub fn slash_report_transaction(getter: &impl Get, set: &NewSetInformation) -> Transaction {
   let mut slash_points = Vec::with_capacity(set.validators.len());
   for (validator, _weight) in set.validators.iter().copied() {
