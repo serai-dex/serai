@@ -1,4 +1,5 @@
 name: Lint
+permissions: {}
 
 on:
   push:
@@ -10,6 +11,7 @@ on:
 
 jobs:
   clippy:
+    name: cargo clippy
     strategy:
       matrix:
         os: [ubuntu-latest, macos-26-intel, macos-latest]
@@ -17,18 +19,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Get nightly version to use
         id: nightly
         shell: bash
-        run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
+        run: echo "NIGHTLY_VERSION=$(cat .github/nightly-version)" >> "$GITHUB_ENV"
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
 
       - name: Install nightly rust
         shell: bash
-        run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal --component clippy --component rust-src
+        run: rustup toolchain install $NIGHTLY_VERSION --profile minimal --component clippy --component rust-src
 
       - name: Run Clippy
         shell: bash
@@ -42,15 +46,14 @@ jobs:
           cargo clippy --locked --all-targets -p serai-abi -- -D warnings
 
           # nightly Rust
-          NIGHTLY="${{ steps.nightly.outputs.version }}"
           cp ./Cargo.toml ./Cargo.toml.bak
           sed s/'# TODO: `-Zcargo-lints`: '//g ./Cargo.toml > ./Cargo.toml.cargo-lints
           mv ./Cargo.toml.cargo-lints ./Cargo.toml
-          cargo +$NIGHTLY clippy --locked -Zcargo-lints --all-features --all-targets -- -D warnings
-          cargo +$NIGHTLY clippy --locked -Zcargo-lints --no-default-features --all-targets -p serai-primitives -- -D warnings
-          cargo +$NIGHTLY clippy --locked -Zcargo-lints --all-targets -p serai-primitives -- -D warnings
-          cargo +$NIGHTLY clippy --locked -Zcargo-lints --no-default-features --all-targets -p serai-abi -- -D warnings
-          cargo +$NIGHTLY clippy --locked -Zcargo-lints --all-targets -p serai-abi -- -D warnings
+          cargo +$NIGHTLY_VERSION clippy --locked -Zcargo-lints --all-features --all-targets -- -D warnings
+          cargo +$NIGHTLY_VERSION clippy --locked -Zcargo-lints --no-default-features --all-targets -p serai-primitives -- -D warnings
+          cargo +$NIGHTLY_VERSION clippy --locked -Zcargo-lints --all-targets -p serai-primitives -- -D warnings
+          cargo +$NIGHTLY_VERSION clippy --locked -Zcargo-lints --no-default-features --all-targets -p serai-abi -- -D warnings
+          cargo +$NIGHTLY_VERSION clippy --locked -Zcargo-lints --all-targets -p serai-abi -- -D warnings
           mv ./Cargo.toml.bak ./Cargo.toml
 
       - name: Verify `pallet::hooks` is unused
@@ -80,14 +83,17 @@ jobs:
 
   # Verify the documentation builds without erroring
   docs:
+    name: cargo docs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Get nightly version to use
         id: nightly
         shell: bash
-        run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
+        run: echo "NIGHTLY_VERSION=$(cat .github/nightly-version)" >> "$GITHUB_ENV"
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
@@ -101,13 +107,16 @@ jobs:
           sed -i -s s/"doc_cfg, doc_cfg"/"doc_cfg"/g $(find ~/.cargo -type f -name "*.rs")
           sed -i -s s/"doc_cfg_hide"/"doc_cfg"/ $(find ~/.cargo -type f -name "*.rs")
           sed -i -s s/"doc_cfg, doc_cfg"/"doc_cfg"/g $(find ~/.cargo -type f -name "*.rs")
-          rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal --component rust-src --component rust-docs
-          RUSTDOCFLAGS="--cfg docsrs -Z unstable-options --document-hidden-items" cargo +${{ steps.nightly.outputs.version }} doc --workspace --all-features --document-private-items
+          rustup toolchain install $NIGHTLY_VERSION --profile minimal --component rust-src --component rust-docs
+          RUSTDOCFLAGS="--cfg docsrs -Z unstable-options --document-hidden-items" cargo +$NIGHTLY_VERSION doc --workspace --all-features --document-private-items
 
   deny:
+    name: cargo deny
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Install cargo deny
         run: cargo +1.95.0 install --locked cargo-deny --version =0.19.4
@@ -116,27 +125,30 @@ jobs:
         run: cargo deny -L error --all-features check --hide-inclusion-graph
 
   fmt:
+    name: cargo fmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Get nightly version to use
         id: nightly
         shell: bash
-        run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
+        run: echo "NIGHTLY_VERSION=$(cat .github/nightly-version)" >> "$GITHUB_ENV"
 
       - name: Install nightly rust
         shell: bash
-        run: rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal --component rustfmt
+        run: rustup toolchain install $NIGHTLY_VERSION --profile minimal --component rustfmt
 
       - name: Run rustfmt
         shell: bash
-        run: cargo +${{ steps.nightly.outputs.version }} fmt -- --check
+        run: cargo +$NIGHTLY_VERSION fmt -- --check
 
       - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@8789b3e21e6c11b2697f5eb56eddae542f746c10 # 1.7.0
+        uses: foundry-rs/foundry-toolchain@c7450ba673e133f5ee30098b3b54f444d3a2ca2d # 1.8.0
         with:
-          version: v1.5.1
+          version: f83bad912a9dba7bf0371def1e70bb1896048356 # 1.7.0
           cache: false
 
       - name: Run forge fmt
@@ -151,18 +163,26 @@ jobs:
           forge fmt --check $(find . -name "*.sol")
 
   machete:
+    name: cargo machete
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
+
       - name: Verify all dependencies are in use
         run: |
           cargo +1.95.0 install --locked cargo-machete --version =0.9.2
           cargo +1.95.0 machete
 
   msrv:
+    name: cargo msrv
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
+
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
       - name: Verify claimed `rust-version`
@@ -249,9 +269,12 @@ jobs:
           check_workspace
 
   vet:
+    name: cargo vet
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Install cargo vet
         run: cargo +1.95.0 install --locked cargo-vet --git https://github.com/kayabaNerve/cargo-vet --rev d2fb27daaeb839e5fa4f6b28c5cdd4a9185542b5
@@ -262,9 +285,12 @@ jobs:
           ./supply-chain/no-first-party.sh
 
   slither:
+    name: slither
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
@@ -286,9 +312,13 @@ jobs:
           slither Router.sol
 
   shellcheck:
+    name: shellcheck
     runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
+
       - name: shellcheck
         shell: bash
         run: |
@@ -299,6 +329,7 @@ jobs:
 
   # These are here as they should be minimal and accordingly immediate to run any/all tests on
   test-patches:
+    name: Run the tests of the crates in `patches/`
     strategy:
       matrix:
         os: [ubuntu-latest, macos-26-intel, macos-latest, windows-latest]
@@ -306,6 +337,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
+
       - name: Run Tests
         shell: bash
         run: |

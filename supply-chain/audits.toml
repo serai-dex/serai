@@ -18,7 +18,32 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
 
+[[audits.alloy-consensus]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
+notes = """
+The release notes claim to avoid clones, but the added function still has a
+`Clone` bound which is questionable.
+"""
+
 [[audits.alloy-consensus-any]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.8.3 -> 2.0.0"
+
+[[audits.alloy-consensus-any]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-eip7928]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.3.3 -> 0.3.5"
+
+[[audits.alloy-eips]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
@@ -26,12 +51,19 @@ delta = "1.8.3 -> 2.0.0"
 [[audits.alloy-eips]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-delta = "1.8.3 -> 2.0.0"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
 
 [[audits.alloy-genesis]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-run"
 delta = "1.8.3 -> 2.0.0"
+
+[[audits.alloy-genesis]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-run"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
 
 [[audits.alloy-json-rpc]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -39,7 +71,24 @@ criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
 notes = "Solely a version bump"
 
+[[audits.alloy-json-rpc]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
 [[audits.alloy-network]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.8.3 -> 2.0.0"
+
+[[audits.alloy-network]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-network-primitives]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
@@ -47,7 +96,8 @@ delta = "1.8.3 -> 2.0.0"
 [[audits.alloy-network-primitives]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-delta = "1.8.3 -> 2.0.0"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
 
 [[audits.alloy-node-bindings]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -55,10 +105,20 @@ criteria = "safe-to-run"
 delta = "1.8.3 -> 2.0.0"
 notes = "Solely a version bump"
 
+[[audits.alloy-node-bindings]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-run"
+delta = "2.0.0 -> 2.0.1"
+
 [[audits.alloy-provider]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
+
+[[audits.alloy-provider]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
 
 [[audits.alloy-rpc-client]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -66,7 +126,24 @@ criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
 notes = "Solely a version bump"
 
+[[audits.alloy-rpc-client]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
 [[audits.alloy-rpc-types-any]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.8.3 -> 2.0.0"
+
+[[audits.alloy-rpc-types-any]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-rpc-types-debug]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
@@ -74,9 +151,21 @@ delta = "1.8.3 -> 2.0.0"
 [[audits.alloy-rpc-types-debug]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-rpc-types-eth]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
 
 [[audits.alloy-rpc-types-eth]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-rpc-types-trace]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
@@ -84,7 +173,7 @@ delta = "1.8.3 -> 2.0.0"
 [[audits.alloy-rpc-types-trace]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-delta = "1.8.3 -> 2.0.0"
+delta = "2.0.0 -> 2.0.1"
 
 [[audits.alloy-serde]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -92,10 +181,22 @@ criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
 notes = "I did not check the panic safety of this"
 
+[[audits.alloy-serde]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
 [[audits.alloy-signer]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
+notes = "Solely a version bump"
+
+[[audits.alloy-signer]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
 notes = "Solely a version bump"
 
 [[audits.alloy-signer-local]]
@@ -104,15 +205,32 @@ criteria = "safe-to-run"
 delta = "1.8.3 -> 2.0.0"
 notes = "Solely a version bump"
 
+[[audits.alloy-signer-local]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-run"
+delta = "2.0.0 -> 2.0.1"
+
 [[audits.alloy-transport]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
 
+[[audits.alloy-transport]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
 [[audits.alloy-tx-macros]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.8.3 -> 2.0.0"
+notes = "Solely a version bump"
+
+[[audits.alloy-tx-macros]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.0 -> 2.0.1"
 notes = "Solely a version bump"
 
 [[audits.ark-ff]]
@@ -185,6 +303,11 @@ criteria = "safe-to-deploy"
 version = "0.1.4"
 notes = "Handrolls a `rust-version` approximate in its `build.rs`"
 
+[[audits.bitcoin-units]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.1.2 -> 0.1.3"
+
 [[audits.bitflags]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -205,6 +328,11 @@ notes = "Stub which never compiles to manually trim its subtree from our `Cargo.
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.2.59 -> 1.2.60"
+
+[[audits.cc]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.2.60 -> 1.2.61"
 
 [[audits.ciphersuite]]
 criteria = "audited"
@@ -254,16 +382,11 @@ notes = "Written by kayabaNerve"
 [[audits.cpubits]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-version = "0.1.0"
+version = "0.1.1"
 notes = """
-Only safe for non-16-bit targets, making this unsafe to deploy. It's only being
-marked as vetted now as,
-1) Overall it appears fine
-2) Serai does not target any 16-bit platforms
-3) Because we should be able to audit the diff with `0.1.1` to obtain a clean
-   vet
-4) Because `0.1.1` is hopefully soon due to
-   https://github.com/RustCrypto/utils/pull/1470 already being opened
+I reviewed 0.1.0 but found it incorrect on 16-bit platforms, for which I opened
+a fix (https://github.com/RustCrypto/utils/pull/1470) which was merged for this
+0.1.1 release :tada:
 """
 
 [[audits.cpufeatures]]
@@ -281,6 +404,23 @@ notes = "https://www.nccgroup.com/research/public-report-entropyrust-cryptograph
 criteria = "audited"
 version = "0.2.0"
 notes = "`/audits/crypto/Cypher Stack March 2023`"
+
+[[audits.data-encoding]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.10.0 -> 2.11.0"
+
+[[audits.data-encoding-macro]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.1.19 -> 0.1.20"
+notes = "Solely a version bump"
+
+[[audits.data-encoding-macro-internal]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.1.17 -> 0.1.18"
+notes = "Solely a version bump"
 
 [[audits.dirs]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -398,6 +538,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "1.1.0"
 notes = "Lacking an exhaustive test for all 256 possible hex sequences"
+
+[[audits.hybrid-array]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.4.10 -> 0.4.11"
 
 [[audits.hyper-rustls]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -786,6 +931,33 @@ The replacement is zero-dependency and avoids a potential issue in the upstream
 implementation for `FromHexError`.
 """
 
+[[audits.rustls]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.23.38 -> 0.23.40"
+
+[[audits.rustls-pki-types]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.14.0 -> 1.14.1"
+notes = """
+This adds a hard limit of 256 MB per PEM, which may be a practical bound, but
+with the way it's written, seems to be an implementation detail. That raises
+the question of if such a limit is sound and whether this could lead to
+fingerprinting/something approximate to a netsplit.
+"""
+
+[[audits.rustls-webpki]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.103.12 -> 0.103.13"
+notes = """
+This primarily fixes RUSTSEC-2026-0104 by rejecting cases with padding, without
+bits. The RUSTSEC advisory notes this syntactically valid, but here it's
+declared to have invalid semantics. I'm unsure what the semantics of these
+should be and cannot comment if that's correct or not.
+"""
+
 [[audits.ryu]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -852,18 +1024,18 @@ criteria = "safe-to-run"
 version = "0.3.1"
 notes = "Undocumented panic prevents `safe-to-deploy`, see https://github.com/seanmonstar/want/pull/5"
 
-[[audits.wasm-bindgen]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.2.117 -> 0.2.118"
-
 [[audits.wasm-bindgen-macro]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.2.117 -> 0.2.118"
 notes = "Solely a version bump"
 
-[[audits.wasm-bindgen-macro-support]]
+[[audits.wasm-bindgen-macro]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.118 -> 0.2.120"
+
+[[audits.wasm-bindgen-shared]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.2.117 -> 0.2.118"
@@ -871,12 +1043,17 @@ delta = "0.2.117 -> 0.2.118"
 [[audits.wasm-bindgen-shared]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-delta = "0.2.117 -> 0.2.118"
+delta = "0.2.118 -> 0.2.120"
 
 [[audits.webpki-roots]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.0.6 -> 1.0.7"
+
+[[audits.winnow]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.1 -> 1.0.2"
 
 [[audits.wit-bindgen-rust-macro]]
 who = "Luke Parker <lukeparker5132@gmail.com>"

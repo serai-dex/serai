@@ -21,7 +21,7 @@ runs:
     - name: Install Foundry
       uses: foundry-rs/foundry-toolchain@c7450ba673e133f5ee30098b3b54f444d3a2ca2d # 1.8.0
       with:
-        version: v1.5.1
+        version: f83bad912a9dba7bf0371def1e70bb1896048356 # 1.7.0
         cache: false
 
     - name: Run a Monero Regtest Node

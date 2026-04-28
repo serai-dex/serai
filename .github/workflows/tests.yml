@@ -1,4 +1,5 @@
 name: Tests
+permissions: {}
 
 on:
   push:
@@ -28,9 +29,12 @@ on:
 
 jobs:
   test-infra:
+    name: Test various pieces of infrastructure
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Test Dependencies
         uses: ./.github/actions/test-dependencies
@@ -49,9 +53,12 @@ jobs:
           cargo test --all-features -p serai-docker-tests
 
   test-substrate:
+    name: Test `substrate/` crates (except `client/`)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
@@ -65,9 +72,12 @@ jobs:
           cargo test --all-features -p serai-substrate-tests
 
   test-serai-client:
+    name: Test `substrate/client` crates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies

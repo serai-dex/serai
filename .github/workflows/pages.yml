@@ -43,10 +43,14 @@ concurrency:
 jobs:
   # Build job
   build:
+    name: Build the site
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
+
       - name: Setup Ruby
         uses: ruby/setup-ruby@8aeb6ff8030dd539317f8e1769a044873b56ea71 # 1.268.0
         with:
@@ -58,14 +62,15 @@ jobs:
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # 5.0.0
       - name: Build with Jekyll
         shell: bash
-        run: cd ${{ github.workspace }}/docs && bundle exec jekyll build --baseurl "${{ steps.pages.outputs.base_path }}"
         env:
           JEKYLL_ENV: production
+          BASEURL: ${{ steps.pages.outputs.base_path }}
+        run: cd ${{ github.workspace }}/docs && bundle exec jekyll build --baseurl "$BASEURL"
 
       - name: Get nightly version to use
         id: nightly
         shell: bash
-        run: echo "version=$(cat .github/nightly-version)" >> $GITHUB_OUTPUT
+        run: echo "NIGHTLY_VERSION=$(cat .github/nightly-version)" >> "$GITHUB_ENV"
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
       - name: Buld Rust docs
@@ -77,8 +82,8 @@ jobs:
           sed -i -s s/"doc_cfg, doc_cfg"/"doc_cfg"/g $(find ~/.cargo -type f -name "*.rs")
           sed -i -s s/"doc_cfg_hide"/"doc_cfg"/ $(find ~/.cargo -type f -name "*.rs")
           sed -i -s s/"doc_cfg, doc_cfg"/"doc_cfg"/g $(find ~/.cargo -type f -name "*.rs")
-          rustup toolchain install ${{ steps.nightly.outputs.version }} --profile minimal --component rust-src --component rust-docs
-          RUSTDOCFLAGS="--cfg docsrs -Z unstable-options --document-hidden-items" cargo +${{ steps.nightly.outputs.version }} doc --workspace --all-features --document-private-items
+          rustup toolchain install $NIGHTLY_VERSION --profile minimal --component rust-src --component rust-docs
+          RUSTDOCFLAGS="--cfg docsrs -Z unstable-options --document-hidden-items" cargo +$NIGHTLY_VERSION doc --workspace --all-features --document-private-items
           mv target/doc docs/_site/rust
 
       - name: Upload artifact
@@ -88,6 +93,7 @@ jobs:
 
   # Deployment job
   deploy:
+    name: Deploy the built site
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

@@ -1,4 +1,5 @@
 name: common/ Tests
+permissions: {}
 
 on:
   push:
@@ -16,6 +17,8 @@ on:
 
 jobs:
   test-common:
+    name: Test `common/` crates
+
     strategy:
       matrix:
         os: [ubuntu-latest, macos-26-intel, macos-latest]
@@ -23,6 +26,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies

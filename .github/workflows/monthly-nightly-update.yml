@@ -1,4 +1,6 @@
 name: Monthly Nightly Update
+permissions:
+  pull-requests: write
 
 on:
   schedule:
@@ -6,11 +8,12 @@ on:
 
 jobs:
   update:
-    name: Update nightly
+    name: Update the nightly version of Rust used to this month's
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
         with:
+          persist-credentials: false
           submodules: "recursive"
 
       - name: Write nightly version

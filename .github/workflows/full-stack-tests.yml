@@ -1,4 +1,5 @@
 name: Full Stack Tests
+permissions: {}
 
 on:
   push:
@@ -10,10 +11,13 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  test-full-stack:
+    name: e2e tests for the full stack (`tests/full-stack`)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Install Build Dependencies
         uses: ./.github/actions/build-dependencies

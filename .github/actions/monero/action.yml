@@ -20,6 +20,8 @@ runs:
     - name: Download the Monero Daemon
       if: steps.cache-monerod.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
       run: |
         OS=${{ runner.os }}
         ARCH=${{ runner.arch }}
@@ -38,12 +40,12 @@ runs:
         if [ "$OS" = "macos" ]; then
           OS="mac"
           # If this is an ARM macOS downloading a historic version, download x64 to run via Rosetta
-          if [ $(echo "${{ inputs.version }}" | cut -d'.' -f2) -lt 18 ]; then
+          if [ $(echo "${ VERSION }" | cut -d'.' -f2) -lt 18 ]; then
             ARCH="x64"
           fi
         fi
 
-        FILE=monero-$OS-$ARCH-${{ inputs.version }}.$EXT
+        FILE=monero-$OS-$ARCH-${ VERSION }.$EXT
         mkdir monero-tmp
         cd monero-tmp
         curl -L https://downloads.getmonero.org/cli/$FILE -o $FILE

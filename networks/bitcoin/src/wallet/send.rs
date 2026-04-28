@@ -228,10 +228,13 @@ impl SignableTransaction {
       Err(TransactionError::NoOutputs)?;
     }
 
-    let (weight, vbytes) = Self::calculate_weight_vbytes(inputs.len(), tx_outs.clone());
-    if weight > u64::from(bitcoin::policy::MAX_STANDARD_TX_WEIGHT) {
-      Err(TransactionError::TooLargeTransaction)?;
-    }
+    let vbytes = {
+      let (weight, vbytes) = Self::calculate_weight_vbytes(inputs.len(), tx_outs.clone());
+      if weight > u64::from(bitcoin::policy::MAX_STANDARD_TX_WEIGHT) {
+        Err(TransactionError::TooLargeTransaction)?;
+      }
+      vbytes
+    };
 
     let needed_fee = fee_per_vbyte.checked_mul(vbytes).ok_or(TransactionError::Overflow)?;
 

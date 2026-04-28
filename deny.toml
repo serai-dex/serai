@@ -146,6 +146,9 @@ deny = [
   # Conflicts with our usage of mimalloc
   # https://github.com/serai-dex/serai/issues/690
   { name = "tikv-jemalloc-sys", version = "*" },
+
+  # https://github.com/libp2p/rust-libp2p/issues/6222
+  { name = "libp2p-floodsub", version = "*" },
 ]
 
 [sources]

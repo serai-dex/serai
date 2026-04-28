@@ -1,4 +1,5 @@
-name: Check Update Default Stack Size
+name: Check `increase_default_stack_size.sh`
+permissions: {}
 
 on:
   push:
@@ -14,12 +15,15 @@ on:
 
 jobs:
   stack_size:
+    name: Check `increase_default_stack_size.sh`
     strategy:
       matrix:
         os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04, macos-26-intel, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Install Go
         uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # 6.1.0

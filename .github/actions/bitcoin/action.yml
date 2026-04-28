@@ -20,6 +20,8 @@ runs:
     - name: Download and Extract the Bitcoin Daemon
       if: steps.cache-bitcoind.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
       run: |
         OS=${{ runner.os }}
         ARCH=${{ runner.arch }}
@@ -44,16 +46,16 @@ runs:
           EXT="zip"
         fi
 
-        FILE=bitcoin-${{ inputs.version }}-$ARCH$OS.$EXT
+        FILE=bitcoin-${ VERSION }-$ARCH$OS.$EXT
 
-        curl -L https://bitcoincore.org/bin/bitcoin-core-${{ inputs.version }}/$FILE -o $FILE
+        curl -L https://bitcoincore.org/bin/bitcoin-core-${ VERSION }/$FILE -o $FILE
 
         if [ "${{ runner.os }}" = "Windows" ]; then
           unzip $FILE
           mv $(find . -name "bitcoind*") .
         else
           tar -xf $FILE
-          cd bitcoin-${{ inputs.version }}
+          cd bitcoin-${ VERSION }
           if [ "${{ runner.os }}" = "macOS" ]; then
             sudo mv bin/* /usr/local/bin/
           else

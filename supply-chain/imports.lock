@@ -85,8 +85,8 @@ user-id = 55123
 user-login = "rust-lang-owner"
 
 [[publisher.libc]]
-version = "0.2.185"
-when = "2026-04-13"
+version = "0.2.186"
+when = "2026-04-23"
 user-id = 55123
 user-login = "rust-lang-owner"
 

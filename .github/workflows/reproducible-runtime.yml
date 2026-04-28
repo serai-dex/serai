@@ -1,4 +1,5 @@
 name: Reproducible Runtime
+permissions: {}
 
 on:
   push:
@@ -28,11 +29,14 @@ jobs:
   # Do one run to determine what the hash of the runtime _should_ be
   # Any host is valid for this as they _should_ all give the same result
   source_of_truth:
+    name: Build the runtime on the Source of Truth
     runs-on: ubuntu-latest
     outputs:
       hash: ${{ steps.build.outputs.hash }}
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Install Build Dependencies
         uses: ./.github/actions/build-dependencies
@@ -64,6 +68,8 @@ jobs:
 
   # Run (mostly) the same job, but for _all_ of the hosts we want to test this with
   build:
+    name: Build the runtime from alternative hosts
+
     strategy:
       matrix:
         # Unfortunately, we do not run this on `macos-latest` at this time due to it being too slow
@@ -73,6 +79,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Install Build Dependencies
         uses: ./.github/actions/build-dependencies
@@ -113,6 +121,8 @@ jobs:
   # _should_ work however. Unfortunately, even if it does, it can never be recommended in case it
   # doesn't (which there'd be no way to know without also doing it properly, saving no time at all).
   build_native:
+    name: Build the runtime from alternative hosts, without an OCI runtime
+
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, macos-26-intel, windows-latest]
@@ -121,6 +131,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
 
       - name: Install dependencies
         shell: bash
