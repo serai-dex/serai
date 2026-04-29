@@ -18,7 +18,7 @@ jobs:
 
       - name: Write nightly version
         shell: bash
-        run: echo $(date +"nightly-%Y-%m"-01) > .github/nightly-version
+        run: echo $(date +"%Y-%m"-01) > .github/nightly-version
 
       - name: Create the commit
         shell: bash

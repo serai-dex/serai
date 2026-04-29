@@ -40,7 +40,10 @@ jobs:
       - name: Get nightly version to use
         id: nightly
         shell: bash
-        run: echo "NIGHTLY_VERSION=$(cat .github/nightly-version)" >> "$GITHUB_ENV"
+        run: |
+          # Ensure `nightly-version` only contains numbers and dashes
+          [ $(grep -v "^[0-9-]*$" .github/nightly-version | wc -l || true) -eq 0 ]
+          echo "NIGHTLY_VERSION=nightly-$(cat .github/nightly-version)" >> "$GITHUB_ENV"
 
       - name: Install RISC-V Toolchain
         shell: bash

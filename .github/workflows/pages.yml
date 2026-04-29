@@ -57,6 +57,7 @@ jobs:
           bundler-cache: true
           cache-version: 0
           working-directory: "${{ github.workspace }}/docs"
+
       - name: Setup Pages
         id: pages
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # 5.0.0
@@ -70,9 +71,14 @@ jobs:
       - name: Get nightly version to use
         id: nightly
         shell: bash
-        run: echo "NIGHTLY_VERSION=$(cat .github/nightly-version)" >> "$GITHUB_ENV"
+        run: |
+          # Ensure `nightly-version` only contains numbers and dashes
+          [ $(grep -v "^[0-9-]*$" .github/nightly-version | wc -l || true) -eq 0 ]
+          echo "NIGHTLY_VERSION=nightly-$(cat .github/nightly-version)" >> "$GITHUB_ENV"
+
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
+
       - name: Buld Rust docs
         shell: bash
         run: |
