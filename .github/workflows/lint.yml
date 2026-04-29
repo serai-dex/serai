@@ -237,7 +237,7 @@ jobs:
             # Finally, we compare the two.
             echo "Declared rust-version: $existing"
             echo "Actual rust-version: $actual"
-            [ $existing == $actual ]
+            [ "$existing" == "$actual" ]
             result=$?
 
             # Restore the original `Cargo.toml`.
@@ -267,7 +267,7 @@ jobs:
             # Remove the trailing comma by replacing the last line's "," with ""
             members=$(echo "$members" | sed "$(($(echo "$members" | wc -l) - 1))s/\,//")
 
-            echo $members | jq -r ".[]" | while read -r member; do
+            echo "$members" | jq -r ".[]" | while read -r member; do
               check_msrv $member
               correct=$?
               if [ $correct -ne 0 ]; then
