@@ -8,7 +8,7 @@ use borsh::{io, BorshSerialize, BorshDeserialize};
 use ciphersuite::{
   group::{
     ff::{Field as _, PrimeField, FromUniformBytes},
-    GroupEncoding,
+    Group as _, GroupEncoding,
   },
   WrappedGroup, GroupCanonicalEncoding,
 };
@@ -237,11 +237,18 @@ impl SignedEmbeddedEllipticCurveKeys {
     match &self {
       Self::Serai(_, _) => {}
       Self::Bitcoin(e, _, e_sig, _) | Self::Ethereum(e, _, e_sig, _) | Self::Monero(e, e_sig) => {
+        let e = Option::<<Embedwards25519 as WrappedGroup>::G>::from(
+          Embedwards25519::from_canonical_bytes(e),
+        )?;
+        // The eVRF DKG rejects public keys which are the identity as they don't have well-defined
+        // affine coordinates
+        if bool::from(e.is_identity()) {
+          None?;
+        }
+
         let sig = SchnorrSignature::<Embedwards25519>::read(&mut e_sig.as_slice()).ok()?;
         if !sig.verify(
-          Option::<<Embedwards25519 as WrappedGroup>::G>::from(
-            Embedwards25519::from_canonical_bytes(e),
-          )?,
+          e,
           <<Embedwards25519 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(
             &challenge,
           ),
@@ -254,9 +261,14 @@ impl SignedEmbeddedEllipticCurveKeys {
     // Verify the Schnorr signatures for Secq256k1
     match &self {
       Self::Bitcoin(_, s, _, s_sig) | Self::Ethereum(_, s, _, s_sig) => {
+        let s = Option::<<Secq256k1 as WrappedGroup>::G>::from(Secq256k1::from_canonical_bytes(s))?;
+        if bool::from(s.is_identity()) {
+          None?;
+        }
+
         let sig = SchnorrSignature::<Secq256k1>::read(&mut s_sig.as_slice()).ok()?;
         if !sig.verify(
-          Option::<<Secq256k1 as WrappedGroup>::G>::from(Secq256k1::from_canonical_bytes(s))?,
+          s,
           <<Secq256k1 as WrappedGroup>::F as FromUniformBytes<_>>::from_uniform_bytes(&challenge),
         ) {
           None?;

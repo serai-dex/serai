@@ -8,9 +8,10 @@ in practice, the need for an additional round of communication to occur where
 all participants confirm they received their secret shares.
 
 Within Serai, it was posited to use the same premises as the DDH eVRF itself to
-achieve a verifiable encryption scheme. This allows the secret shares to be
-posted to any 'bulletin board' (such as a blockchain) and for all observers to
-confirm:
+achieve a
+[verifiable encryption scheme](https://github.com/serai-dex/serai/issues/576).
+This allows the secret shares to be posted to any 'bulletin board' (such as a
+blockchain) and for all observers to confirm:
 
 - A participant participated
 - The secret shares sent can be received by the intended recipient so long as
@@ -24,7 +25,7 @@ participants. They may:
 
 - Select everyone, collapsing to the non-threshold unbiased DKG from the eVRF
   paper
-- Select a pre-determined set, collapsing to the threshold unbaised DKG from
+- Select a pre-determined set, collapsing to the threshold unbiased DKG from
   the eVRF paper
 - Select a post-determined set (with any solution for the Common Subset
   problem), allowing achieving a robust threshold biased DKG
@@ -34,11 +35,26 @@ this is unnecessary when the resulting key will be biased. Any proof of
 knowledge for the coefficients, as necessary for their extraction within the
 security proofs, would be sufficient.
 
+This idea was presented at the FROST Implementers Round Table in 2024, as
+hosted by Blockchain Commons, as "DKG 576" (in reference to the issue number
+proposing it).
+
 MAGIC Grants contracted HashCloak to formalize Serai's proposal for a DKG and
 provide proofs for its security. This resulted in
-[this paper](<./Security Proofs.pdf>).
+[this paper](<./Security Proofs.pdf>), uploaded and announced in September,
+2025.
 
-Our implementation itself is then built on top of the audited
+In October, 2025, [Golden](https://eprint.iacr.org/2025/1924) was published by
+Bünz, Choi, and Komlo, including a similar Publicly-Verifiable Encryption
+scheme. Their construction of a DKG differed, and upon being contacted, they
+disagreed the security proofs for the DKG by HashCloak were convincing (though
+without challenging the proofs for the Publicly-Verifiable Encryption scheme at
+the time). In March, 2026, they published an updated version of their paper
+including an Appendix K, presenting the non-threshold unbiased DKG from the
+eVRF paper composed with their Publicly-Verifiable Encryption scheme and their
+own proofs of security for the composition.
+
+Our implementation is built on top of the audited
 [`generalized-bulletproofs`](https://github.com/kayabaNerve/monero-oxide/tree/generalized-bulletproofs/audits/crypto/generalized-bulletproofs)
 and
 [`generalized-bulletproofs-ec-gadgets`](https://github.com/monero-oxide/monero-oxide/tree/fcmp%2B%2B/audits/fcmps).

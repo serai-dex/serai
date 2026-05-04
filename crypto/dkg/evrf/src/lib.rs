@@ -53,30 +53,9 @@ pub struct Participation<C: Curves> {
 }
 
 impl<C: Curves> Participation<C> {
-  pub fn read<R: Read>(reader: &mut R, n: u16) -> io::Result<Self> {
-    // Ban <32-bit platforms, allowing us to assume `u32` -> `usize` works
-    #[expect(clippy::as_conversions)]
-    const _NO_16_BIT_PLATFORMS: [(); (usize::BITS - u32::BITS) as usize] = [(); _];
-
-    // TODO: Replace `len` with some calculation deterministic to the params
-    let mut len = [0; 4];
-    reader.read_exact(&mut len)?;
-    let len = usize::try_from(u32::from_le_bytes(len)).expect("<32-bit platform?");
-
-    /*
-      Don't allocate a buffer for the claimed length.
-
-      We read chunks of a fixed-length until we reach the claimed length, preventing an adversary
-      from forcing us to allocate GB unless the proof is actually GB long.
-    */
-    const CHUNK_SIZE: usize = 1024;
-    let mut proof = Vec::with_capacity(len.min(CHUNK_SIZE));
-    while proof.len() < len {
-      let next_chunk = (len - proof.len()).min(CHUNK_SIZE);
-      let old_proof_len = proof.len();
-      proof.resize(old_proof_len + next_chunk, 0);
-      reader.read_exact(&mut proof[old_proof_len ..])?;
-    }
+  pub fn read<R: Read>(reader: &mut R, t: u16, n: u16) -> io::Result<Self> {
+    let mut proof = vec![0; Proof::<C>::transcript_len(t.into(), n.into())];
+    reader.read_exact(&mut proof)?;
 
     let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
     for i in Participant::iter().take(usize::from(n)) {
@@ -87,7 +66,6 @@ impl<C: Curves> Participation<C> {
   }
 
   pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
-    writer.write_all(&u32::try_from(self.proof.len()).unwrap().to_le_bytes())?;
     writer.write_all(&self.proof)?;
     for i in Participant::iter().take(self.encrypted_secret_shares.len()) {
       writer.write_all(self.encrypted_secret_shares[&i].to_repr().as_ref())?;
@@ -183,7 +161,7 @@ impl<C: Curves> Dkg<C> {
   /// Participate in performing the DKG for the specified parameters.
   ///
   /// The context MUST be unique across invocations. Reuse of context will lead to sharing
-  /// prior-shared secrets.
+  /// prior-shared secrets again.
   pub fn participate(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,
@@ -268,7 +246,7 @@ fn verifiable_encryption_statements<C: Curves>(
 
     /*
       The encrypted secret share scaling `G`, minus the encryption key commitment, minus the
-      ommitment to the secret share, should equal the identity point.
+      commitment to the secret share, should equal the identity point.
 
       We actually subtract the encrypted share to optimize the amount of negations we perform.
     */
@@ -401,8 +379,8 @@ impl<C: Curves> Dkg<C> {
           g_scalar += this_g_scalar;
           pairs.extend(&these_pairs);
 
-          // Also push this g_scalar onto these_pairs so these_pairs can be verified individually
-          // upon error
+          // Also push this g_scalar onto `these_pairs` so `these_pairs` can be verified
+          // individually upon error
           these_pairs.push((this_g_scalar, generators.0.g()));
           share_verification_statements_actual.insert(*i, these_pairs);
 
@@ -416,18 +394,12 @@ impl<C: Curves> Dkg<C> {
               This is only possible because we already interpolated the commitments to verify the
               encrypted secret share.
             */
-            let sum_encrypted_secret_share = sum_encrypted_secret_shares
-              .get(j)
-              .copied()
-              .unwrap_or(<C::ToweringCurve as WrappedGroup>::F::ZERO);
-            let sum_mask = sum_masks
-              .get(j)
-              .copied()
-              .unwrap_or(<C::ToweringCurve as WrappedGroup>::G::identity());
-            sum_encrypted_secret_shares.insert(*j, sum_encrypted_secret_share + enc_share);
-
+            *sum_encrypted_secret_shares
+              .entry(*j)
+              .or_insert(<C::ToweringCurve as WrappedGroup>::F::ZERO) += enc_share;
             let j_index = usize::from(u16::from(*j)) - 1;
-            sum_masks.insert(*j, sum_mask + data.encryption_key_commitments[j_index]);
+            *sum_masks.entry(*j).or_insert(<C::ToweringCurve as WrappedGroup>::G::identity()) +=
+              data.encryption_key_commitments[j_index];
 
             formatted_encrypted_secret_shares
               .insert(*j, (data.ecdh_commitments[j_index], *enc_share));
@@ -454,8 +426,8 @@ impl<C: Curves> Dkg<C> {
       return Ok(VerifyResult::Invalid(faulty));
     }
 
-    // We check at least t key shares of people have participated in contributing entropy
-    // Since the key shares of the participants exceed t, meaning if they're malicious they can
+    // We check at least `t` key shares of people have participated in contributing entropy
+    // Since the key shares of the participants exceed `t`, meaning if they're malicious they can
     // reconstruct the key regardless, this is safe to the threshold
     {
       let mut participating_weight = 0;
@@ -463,14 +435,15 @@ impl<C: Curves> Dkg<C> {
       for i in valid.keys() {
         let evrf_public_key = evrf_public_keys[usize::from(u16::from(*i)) - 1];
 
-        // Remove this key from the Vec to prevent double-counting
         /*
+          Remove this key from the `Vec` to prevent double-counting.
+
           Double-counting would be a risk if multiple participants shared an eVRF public key and
           participated. This code does still allow such participants (in order to let participants
           be weighted), and any one of them participating will count as all participating. This is
           fine as any one such participant will be able to decrypt the shares for themselves and
-          all other participants, so this is still a key generated by an amount of participants who
-          could simply reconstruct the key.
+          all other participants with the same key, so this is still a key generated by an amount
+          of participants who could simply reconstruct the key.
         */
         let start_len = evrf_public_keys_mut.len();
         evrf_public_keys_mut.retain(|key| *key != evrf_public_key);
@@ -484,7 +457,7 @@ impl<C: Curves> Dkg<C> {
       }
     }
 
-    // If we now have >= t participations, output the result
+    // If we now have `>= t` participations, output the result
 
     // Calculate each user's verification share
     let mut verification_shares = HashMap::with_capacity(usize::from(n));
@@ -507,7 +480,7 @@ impl<C: Curves> Dkg<C> {
 
   /// Retrieve keys from a successful DKG.
   ///
-  /// This will return _all_ keys belong to the participant.
+  /// This will return _all_ keys belonging to the participant.
   pub fn keys(
     &self,
     evrf_private_key: &Zeroizing<<C::EmbeddedCurve as WrappedGroup>::F>,

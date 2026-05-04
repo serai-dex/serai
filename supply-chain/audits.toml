@@ -573,7 +573,7 @@ notes = "Patches to `zmij` which is by the same author, faster, and has an ident
 [[audits.ec-divisors]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-version = "0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"
+version = "0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
 importable = false
 
 [[audits.either]]
@@ -625,21 +625,21 @@ criteria = "safe-to-deploy"
 version = "0.1.0"
 
 [[audits.generalized-bulletproofs]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-version = "0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"
-importable = false
-notes = "Written by kayabaNerve. The ZK proof itself needs further review"
-
-[[audits.generalized-bulletproofs]]
 criteria = "audited"
 version = "0.1.0@git:7d972e2b16fe57f4dfa4a9549d2fbb9306411704"
 notes = "`monero-oxide/audits/generalized-bulletproofs`"
 
+[[audits.generalized-bulletproofs]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
+importable = false
+notes = "Written by kayabaNerve. The ZK proof itself needs further review"
+
 [[audits.generalized-bulletproofs-circuit-abstraction]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-version = "0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"
+version = "0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
 importable = false
 notes = "Written by kayabaNerve"
 
@@ -651,7 +651,7 @@ notes = "`monero-oxide/audits/fcmps`, including formal verification/security pro
 [[audits.generalized-bulletproofs-ec-gadgets]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-version = "0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"
+version = "0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
 importable = false
 notes = "Written by kayabaNerve"
 

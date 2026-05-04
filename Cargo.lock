@@ -2391,7 +2391,7 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 [[package]]
 name = "ec-divisors"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=0d6f5e840ad1f955e4e4dec00c5165f134815b15#0d6f5e840ad1f955e4e4dec00c5165f134815b15"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a#a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
 dependencies = [
  "dalek-ff-group",
  "ff",
@@ -3086,7 +3086,7 @@ checksum = "42012b0f064e01aa58b545fe3727f90f7dd4020f4a3ea735b50344965f5a57e9"
 [[package]]
 name = "generalized-bulletproofs"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=0d6f5e840ad1f955e4e4dec00c5165f134815b15#0d6f5e840ad1f955e4e4dec00c5165f134815b15"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a#a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
 dependencies = [
  "blake2 0.10.6",
  "ciphersuite 0.4.99",
@@ -3102,7 +3102,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-circuit-abstraction"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=0d6f5e840ad1f955e4e4dec00c5165f134815b15#0d6f5e840ad1f955e4e4dec00c5165f134815b15"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a#a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs",
@@ -3113,7 +3113,7 @@ dependencies = [
 [[package]]
 name = "generalized-bulletproofs-ec-gadgets"
 version = "0.1.0"
-source = "git+https://github.com/monero-oxide/monero-oxide?rev=0d6f5e840ad1f955e4e4dec00c5165f134815b15#0d6f5e840ad1f955e4e4dec00c5165f134815b15"
+source = "git+https://github.com/monero-oxide/monero-oxide?rev=a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a#a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
 dependencies = [
  "ciphersuite 0.4.99",
  "generalized-bulletproofs-circuit-abstraction",

@@ -294,14 +294,16 @@ impl<P: KeyGenParams> KeyGen<P> {
 
             let blame = vec![ProcessorMessage::Blame { session, participant }];
             let Ok(substrate_participation) =
-              Participation::<Ristretto>::read(&mut participation, n)
+              Participation::<Ristretto>::read(&mut participation, threshold, n)
             else {
               return blame;
             };
             let len_at_network_participation_start_pos = participation.len();
-            let Ok(network_participation) =
-              Participation::<P::ExternalNetworkCiphersuite>::read(&mut participation, n)
-            else {
+            let Ok(network_participation) = Participation::<P::ExternalNetworkCiphersuite>::read(
+              &mut participation,
+              threshold,
+              n,
+            ) else {
               return blame;
             };
 
@@ -435,6 +437,7 @@ impl<P: KeyGenParams> KeyGen<P> {
               *key,
               Participation::read(
                 &mut participation.as_slice(),
+                threshold,
                 evrf_public_keys.len().try_into().unwrap(),
               )
               .expect("prior read participation was invalid"),

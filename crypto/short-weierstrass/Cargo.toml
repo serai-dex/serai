@@ -24,7 +24,7 @@ rand_core = { version = "0.6", default-features = false }
 ff = { version = "0.13", default-features = false, features = ["bits"] }
 group = { version = "0.13", default-features = false }
 
-ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "0d6f5e840ad1f955e4e4dec00c5165f134815b15", default-features = false, optional = true }
+ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a", default-features = false, optional = true }
 
 [features]
 alloc = ["zeroize/alloc", "rand_core/alloc", "ff/alloc", "group/alloc", "dep:ec-divisors"]

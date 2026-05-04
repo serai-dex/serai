@@ -7,12 +7,12 @@ use generalized_bulletproofs_ec_gadgets::{DiscreteLogParameter, Divisor, PointWi
 
 use crate::Curves;
 
-/*
-  For all variables we must commit to during the ZK proof, we place them on the 'tape'. The tape
-  is a linear representation of every single variable committed to by the proof, from which we can
-  read a collection of variables from/push a collection of variables onto. This offers an API
-  similar to reading/writing to a byte stream, despite working with variables in a ZK proof.
-*/
+/// The variables committed to within Pedersen vector commitments.
+///
+/// For all variables we must commit to during the ZK proof, we place them on the 'tape'. The tape
+/// is a linear representation of every single variable committed to by the proof, from which we
+/// can read a collection of variables from/push a collection of variables onto. This offers an API
+/// similar to reading/writing to a byte stream, despite working with variables in a ZK proof.
 pub(super) struct Tape {
   generators: usize,
   current_position: usize,

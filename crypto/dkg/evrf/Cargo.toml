@@ -1,7 +1,7 @@
 [package]
 name = "dkg-evrf"
 version = "0.1.0"
-description = "Distributed key generation over ff/group"
+description = "Publicly-verifiable one-round threshold distributed key generation"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dkg/evrf"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
@@ -34,10 +34,10 @@ generic-array = { version = "1", default-features = false, features = ["alloc"] 
 blake2 = { version = "0.11.0-rc.5", default-features = false }
 rand_chacha = { version = "0.3", default-features = false }
 
-generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "0d6f5e840ad1f955e4e4dec00c5165f134815b15", default-features = false }
-ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "0d6f5e840ad1f955e4e4dec00c5165f134815b15", default-features = false }
-generalized-bulletproofs-circuit-abstraction = { git = "https://github.com/monero-oxide/monero-oxide", rev = "0d6f5e840ad1f955e4e4dec00c5165f134815b15", default-features = false }
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "0d6f5e840ad1f955e4e4dec00c5165f134815b15", default-features = false }
+generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a", default-features = false }
+ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a", default-features = false }
+generalized-bulletproofs-circuit-abstraction = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a", default-features = false }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a", default-features = false }
 
 dkg = { path = "..", default-features = false }
 
@@ -52,7 +52,7 @@ rand = { version = "0.8", default-features = false, features = ["std"] }
 ciphersuite = { path = "../../ciphersuite", default-features = false, features = ["std"]  }
 embedwards25519 = { path = "../../embedwards25519", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../../dalek-ff-group", default-features = false, features = ["std"] }
-generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "0d6f5e840ad1f955e4e4dec00c5165f134815b15", features = ["tests"] }
+generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a", features = ["tests"] }
 dkg-recovery = { path = "../recovery" }
 
 [features]

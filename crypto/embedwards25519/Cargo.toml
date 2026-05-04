@@ -30,7 +30,7 @@ curve25519-dalek = { version = "4", default-features = false, features = ["legac
 blake2 = { version = "0.11.0-rc.5", default-features = false }
 ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false }
 
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "0d6f5e840ad1f955e4e4dec00c5165f134815b15", default-features = false, optional = true }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a", default-features = false, optional = true }
 
 [dev-dependencies]
 hex = "0.4"

@@ -80,7 +80,7 @@ first-party = true
 first-party = false
 notes = "Member of `patches/`, but explicitly tracked as if third-party"
 
-[policy."ec-divisors:0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"]
+[policy."ec-divisors:0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"]
 first-party = false
 
 [policy.embedwards25519]
@@ -138,13 +138,13 @@ first-party = false
 audit-as-crates-io = false
 first-party = true
 
-[policy."generalized-bulletproofs-circuit-abstraction:0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"]
+[policy."generalized-bulletproofs-circuit-abstraction:0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"]
 first-party = false
 
-[policy."generalized-bulletproofs-ec-gadgets:0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"]
+[policy."generalized-bulletproofs-ec-gadgets:0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"]
 first-party = false
 
-[policy."generalized-bulletproofs:0.1.0@git:0d6f5e840ad1f955e4e4dec00c5165f134815b15"]
+[policy."generalized-bulletproofs:0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"]
 first-party = false
 
 [policy."getrandom:0.2.99"]

@@ -6,7 +6,13 @@ use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng, SeedableRng as _};
 use rand_chacha::ChaCha20Rng;
 
-use ciphersuite::{group::ff::Field as _, WrappedGroup};
+use ciphersuite::{
+  group::{
+    ff::{Field as _, PrimeField},
+    GroupEncoding,
+  },
+  WrappedGroup,
+};
 
 use generalized_bulletproofs::{
   Generators, BatchVerifier, PedersenCommitment, PedersenVectorCommitment,
@@ -107,6 +113,62 @@ impl<
 
   /// Sample an encryption key, proving it's correctly-formed and committed to within a Pedersen
   /// commitment.
+  ///
+  /// This is the fundamental gadget behind this novelty, as detailed in the following documents:
+  /// - https://gist.github.com/kayabaNerve/cfbde74b0660dfdf8dd55326d6ec33d7
+  /// - https://github.com/serai-dex/serai/blob/next/audits/crypto/dkg/evrf/Security%20Proofs.pdf
+  ///
+  /// A similar gadget was also detailed in a later publication, https://eprint.iacr.org/2025/1924.
+  /// The schemes differ in that ours samples ephemeral scalars to use for the ECDHs, approximate
+  /// to ECIES. In contrast, the authors of Golden calculate the ECDH between long-lived public
+  /// keys, using the mutually-known ECDH's `x` coordinate as the discrete-logarithm for scaling
+  /// two ephemerally-sampled points (the sum of their `x` coordinates forming the encryption key).
+  ///
+  /// Their scheme requires proving one scalar multiplication of the prover's key, and then three
+  /// per other participant (one to prove the calculation of the shared ECDH, one to prove the
+  /// calculation of the two ECDHs with ephemerally-sampled points). Our scheme requires proving
+  /// four scalar multiplications, the two openings for the commitments to the sampled scalars and
+  /// the two ECDHs, before communicating the commitments in question. In that regard, the scheme
+  /// presented in Golden can be considered more efficient.
+  ///
+  /// However, the usage of an `x` coordinate from a single ECDH is not unbiased, and also can't
+  /// simply be reduced from a field element into a scalar. Even if one argues the loss of security
+  /// negligible (or even irrelevant due to more efficient attacks already known to exist), if the
+  /// scheme did use an unbiased discrete-log for the ephemeral ECDHs, it'd presumably need at
+  /// least a second static public-key to sample. This still replaces the two at-time-of-DKG
+  /// commitments to ephemeral scalars with one additional at-setup commitment and could still be
+  /// considered more efficient.
+  ///
+  /// One other benefit of Golden's design is not sampling ephemeral encryption keys, avoiding
+  /// needing to commit to the discrete logarithm of each one.
+  ///
+  /// While the efficiency is tempting, this maintains use of emphemerally-sampled encryption keys.
+  /// In order to consider adopting their clever technique of a static DH used as a discrete-log
+  /// for ephemerally-sampled points, we would want to see a proof the static DH's `x` coordinate
+  /// is uniform as a discrete logarithm, which it wouldn't be except perhaps for some special
+  /// choices of primes. To sketch a modification which would achieve this goal however,
+  ///
+  /// For an elliptic curve defined over $p$ with order $q$, a generator $G$, and
+  /// $(A_1, A_2, B_1, B_2)$ from a setup with the lower-case variants representing their
+  /// discrete-logarithms over $G$, we posit
+  /// $(a_1 \cdot B_1).x * p + (a_2 \cdot B_2) % q$ to be within $1/((q / 2)^2 / q)$-distance from
+  /// uniform of $\mathbb{F}_q$, which is sufficient when $(q / 2)^2 / q$ is greater than or equal
+  /// to the security parameter $\kappa$. The exact details would involve an argument that this is
+  /// effectively a wide reduction from $p^2$ to $q$ (such as a 512-bit reduction to a 256-bit
+  /// prime field), and the distance from uniform modulo $p^2$ is minor (only a few bits).
+  ///
+  /// We'll also note that the verifiable encryption gadget in Golden does not immediately work
+  /// when for a batch, multiple recipients share public keys. The scheme would have to be extended
+  /// to also hash the index of the recipient as to avoid sampling the same ephemeral points and
+  /// reusing them (a trivial adjustment). Ephemerally-sampled scalars for each recipient do not
+  /// have that concern.
+  ///
+  /// Finally, in our scheme, we'll note one _could_ use ephemerally-sampled scalars _per proof_ to
+  /// reduce from four scalar multiplications per-message to just two, achieving greater efficiency
+  /// than Golden re: amount of scalar multiplications, but also losing the ability to send to
+  /// multiple messages with a single public key. Such a scheme does not immediately have a trivial
+  /// adjustment available to restore that functionality, unless one argued that a publicly-derived
+  /// tweak of a recipient's key was still usable as if uniformly sampled.
   fn verifiable_encryption(&mut self, ecdh_commitments: &[EmbeddedPoint<C>; 2]) {
     // Read the public key used for this encryption
     let challenged_public_key = self.challenged_generators.next().unwrap();
@@ -178,6 +240,10 @@ type GeneratorTable<C> = generalized_bulletproofs_ec_gadgets::GeneratorTable<
   <C as Curves>::EmbeddedCurveParameters,
 >;
 
+const DLOGS_PER_COEFFICIENT: usize = 2;
+const DLOGS_PER_ECDH: usize = 2;
+const ECDHS_PER_PARTICIPANT: usize = 2;
+
 pub(super) struct Proof<C>(PhantomData<C>);
 impl<C: Curves> Proof<C> {
   fn discrete_log_claims(coefficients: usize, participants: usize) -> usize {
@@ -188,11 +254,8 @@ impl<C: Curves> Proof<C> {
         for each participant (with the sum of their `x` coordinates being uniform and used as the
         mask)
     */
-    const DLOGS_PER_COEFFICIENT: usize = 2;
-    const ECDHS_PER_PARTICIPANT: usize = 2;
-    const DLOGS_PER_ECDH: usize = 2;
-    const DLOGS_PER_PARTICIPANT: usize = ECDHS_PER_PARTICIPANT * DLOGS_PER_ECDH;
-    1 + (DLOGS_PER_COEFFICIENT * coefficients) + (DLOGS_PER_PARTICIPANT * participants)
+    1 + (DLOGS_PER_COEFFICIENT * coefficients) +
+      (DLOGS_PER_ECDH * ECDHS_PER_PARTICIPANT * participants)
   }
 
   fn expected_multiplications(coefficients: usize, participants: usize) -> usize {
@@ -213,8 +276,54 @@ impl<C: Curves> Proof<C> {
   }
 
   fn variables_in_vector_commitments(coefficients: usize, participants: usize) -> usize {
-    Tape::variables_for_points_with_common_dlog::<C>(1 + (2 * coefficients)) +
-      (participants * 2 * Tape::variables_for_points_with_common_dlog::<C>(2))
+    Tape::variables_for_points_with_common_dlog::<C>(1 + (DLOGS_PER_COEFFICIENT * coefficients)) +
+      (participants *
+        ECDHS_PER_PARTICIPANT *
+        Tape::variables_for_points_with_common_dlog::<C>(DLOGS_PER_ECDH))
+  }
+
+  fn vector_commitments(coefficients: usize, participants: usize) -> usize {
+    Self::variables_in_vector_commitments(coefficients, participants)
+      .div_ceil(Self::generators_to_use(coefficients, participants))
+  }
+
+  pub(crate) fn transcript_len(coefficients: usize, participants: usize) -> usize {
+    // `AI, AO, AS`
+    let mut group_elements = 3;
+    // `tau_x, u, t_caret, a, b`
+    let mut scalar_eleents = 5;
+    // IPA rows
+    group_elements +=
+      2 * usize::try_from(Self::generators_to_use(coefficients, participants).ilog2()).unwrap();
+
+    // Vector commitments
+    group_elements += {
+      let vector_commitments = Self::vector_commitments(coefficients, participants);
+      let ni = 2 + (2 * vector_commitments);
+      let l_r_poly_len = 1 + ni + 1;
+      let t_poly_len = (2 * l_r_poly_len) - 1;
+      let t_commitments = t_poly_len - (ni / 2) - 1;
+      vector_commitments + t_commitments
+    };
+
+    // Commitments (to the coefficients, encrypted secret shares)
+    let commitments = coefficients + participants;
+    group_elements += commitments;
+
+    // Commitments to the ephemeral scalars used for the ECDHs
+    group_elements += 2 * participants;
+
+    // Opening of the commitments
+    group_elements += commitments;
+
+    // Proof for the opening of the coefficients, commitments to the encryption keys
+    group_elements += 2;
+    scalar_eleents += 2;
+
+    (group_elements *
+      <<C::ToweringCurve as WrappedGroup>::G as GroupEncoding>::Repr::default().as_ref().len()) +
+      (scalar_eleents *
+        <<C::ToweringCurve as WrappedGroup>::F as PrimeField>::Repr::default().as_ref().len())
   }
 
   fn circuit(
@@ -428,7 +537,7 @@ impl<C: Curves> Proof<C> {
         loop {
           ecdh_ephemeral_secret =
             Zeroizing::new(<C::EmbeddedCurve as WrappedGroup>::F::random(&mut *rng));
-          // 0 would produce the identity, which isn't representable within the discrete-log proof.
+          // 0 would produce the identity, which isn't representable within the discrete-log proof
           if bool::from(!ecdh_ephemeral_secret.is_zero()) {
             break;
           }
@@ -474,6 +583,10 @@ impl<C: Curves> Proof<C> {
         mask: <C::ToweringCurve as WrappedGroup>::F::random(&mut *rng),
       });
     }
+    debug_assert_eq!(
+      vector_commitments.len(),
+      Self::vector_commitments(coefficients.len(), participant_public_keys.len())
+    );
 
     // Create the Pedersen commitments
     let mut commitments = Vec::with_capacity(coefficients.len() + participant_public_keys.len());
@@ -520,16 +633,26 @@ impl<C: Curves> Proof<C> {
       &mut transcript,
     );
 
-    let (statement, Some(witness)) = circuit
-      .statement(
-        generators.reduce(generators_to_use).ok_or(AcProveError::IncorrectAmountOfGenerators)?,
-        commited_commitments,
-      )
-      .unwrap()
-    else {
+    let (statement, Some(witness)) = (match circuit.statement(
+      generators.reduce(generators_to_use).ok_or(AcProveError::IncorrectAmountOfGenerators)?,
+      commited_commitments,
+    ) {
+      Ok(result) => result,
+      Err(
+        AcStatementError::ConstrainedNonExistentTerm |
+        AcStatementError::ConstrainedNonExistentVectorCommitment |
+        AcStatementError::ConstrainedNonExistentCommitment,
+      ) => {
+        panic!("prover generated an invalid circuit for the eVRF DKG")
+      }
+      // 'too many commitments' is when they threaten 2**32 or so, so this should be unreachable
+      Err(AcStatementError::TooManyCommitments) => {
+        panic!("prover generated too large of a circuit for the eVRF DKG")
+      }
+    }) else {
       panic!("proving yet wasn't yielded the witness");
     };
-    statement.prove(&mut *rng, &mut transcript, witness).unwrap();
+    statement.prove(&mut *rng, &mut transcript, witness)?;
 
     // Push the reveal onto the transcript
     for commitment in &commitments {
@@ -537,18 +660,30 @@ impl<C: Curves> Proof<C> {
     }
 
     // Prove the openings of the commitments were correct
-    let mut x = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
+    let mut weighted_values = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
+    let mut weighted_blinding_factors = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
     for commitment in commitments {
-      *x += commitment.mask * transcript.challenge::<C::ToweringCurve>();
+      let weight = transcript.challenge::<C::ToweringCurve>();
+      *weighted_values += commitment.value * weight;
+      *weighted_blinding_factors += commitment.mask * weight;
     }
 
-    // Produce a Schnorr PoK for the weighted-sum of the Pedersen commitments' blinding factors
-    let r = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::random(&mut *rng));
-    transcript.push_point(&(generators.h() * r.deref()));
+    // Produce PoKs for the weighted-sum of the Pedersen commitments' values, blinding factors
+    let r_values = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::random(&mut *rng));
+    let r_blinding_factors =
+      Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::random(&mut *rng));
+    transcript.push_point(&(generators.g() * r_values.deref()));
+    transcript.push_point(&(generators.h() * r_blinding_factors.deref()));
     let c = transcript.challenge::<C::ToweringCurve>();
-    transcript.push_scalar((c * x.deref()) + r.deref());
+    transcript.push_scalar((c * weighted_values.deref()) + r_values.deref());
+    transcript.push_scalar((c * weighted_blinding_factors.deref()) + r_blinding_factors.deref());
 
-    Ok(ProveResult { coefficients, encryption_keys, proof: transcript.complete() })
+    let proof = transcript.complete();
+    debug_assert_eq!(
+      proof.len(),
+      Self::transcript_len(coefficients.len(), participant_public_keys.len())
+    );
+    Ok(ProveResult { coefficients, encryption_keys, proof })
   }
 
   #[expect(clippy::too_many_arguments)]
@@ -578,8 +713,7 @@ impl<C: Curves> Proof<C> {
       let mut transcript = VerifierTranscript::new(transcript, proof);
 
       let vector_commitments =
-        Self::variables_in_vector_commitments(coefficients, participant_public_keys.len())
-          .div_ceil(generators_to_use);
+        Self::vector_commitments(coefficients, participant_public_keys.len());
       /*
         One commitment is used to commit to each coefficient of the secret-sharing polynomial, and
         one commitment is used to commit to each encryption key used to encrypt a secret share to
@@ -619,10 +753,22 @@ impl<C: Curves> Proof<C> {
         &mut transcript,
       );
 
-      let (statement, None) = circuit
+      let (statement, None) = (match circuit
         .statement(generators.reduce(generators_to_use).ok_or(())?, all_commitments)
-        .unwrap()
-      else {
+      {
+        Ok(result) => result,
+        Err(
+          AcStatementError::ConstrainedNonExistentTerm |
+          AcStatementError::ConstrainedNonExistentVectorCommitment |
+          AcStatementError::ConstrainedNonExistentCommitment,
+        ) => {
+          panic!("verifier generated an invalid circuit for the eVRF DKG")
+        }
+        // 'too many commitments' is when they threaten 2**32 or so, so this should be unreachable
+        Err(AcStatementError::TooManyCommitments) => {
+          panic!("verifier generated too large of a circuit for the eVRF DKG")
+        }
+      }) else {
         panic!("verifying yet was yielded a witness");
       };
 
@@ -660,16 +806,24 @@ impl<C: Curves> Proof<C> {
         )
       };
       #[expect(non_snake_case)]
-      let A = weighted_sum_commitments - weighted_sum_openings;
-
-      // Schnorr signature
+      let A_values = weighted_sum_openings;
       #[expect(non_snake_case)]
-      let R = transcript.read_point::<C::ToweringCurve>().map_err(|_| ())?;
-      let c = transcript.challenge::<C::ToweringCurve>();
-      let s = transcript.read_scalar::<C::ToweringCurve>().map_err(|_| ())?;
+      let A_blinding_factors = weighted_sum_commitments - weighted_sum_openings;
 
-      // Doesn't batch verify this as we can't access the internals of the GBP batch verifier
-      if (R + (A * c)) != (generators.h() * s) {
+      // Verify the proof that the openings were well-defined
+      #[expect(non_snake_case)]
+      let R_values = transcript.read_point::<C::ToweringCurve>().map_err(|_| ())?;
+      #[expect(non_snake_case)]
+      let R_blinding_factors = transcript.read_point::<C::ToweringCurve>().map_err(|_| ())?;
+      let c = transcript.challenge::<C::ToweringCurve>();
+      let s_values = transcript.read_scalar::<C::ToweringCurve>().map_err(|_| ())?;
+      let s_blinding_factors = transcript.read_scalar::<C::ToweringCurve>().map_err(|_| ())?;
+
+      // We don't batch verify these as we can't access the internals of the GBP batch verifier
+      if (R_values + (A_values * c)) != (generators.g() * s_values) {
+        Err(())?;
+      }
+      if (R_blinding_factors + (A_blinding_factors * c)) != (generators.h() * s_blinding_factors) {
         Err(())?;
       }
     }
