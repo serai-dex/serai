@@ -27,6 +27,12 @@ The release notes claim to avoid clones, but the added function still has a
 `Clone` bound which is questionable.
 """
 
+[[audits.alloy-consensus]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
+notes = "Solely a version bump"
+
 [[audits.alloy-consensus-any]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -36,6 +42,12 @@ delta = "1.8.3 -> 2.0.0"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-consensus-any]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
 notes = "Solely a version bump"
 
 [[audits.alloy-eip7928]]
@@ -54,6 +66,20 @@ criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
 notes = "Solely a version bump"
 
+[[audits.alloy-eips]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
+notes = """
+I am not commenting on the soundness of this. The library's FFI-ish code with
+`c-kzg` (when the `kzg` feature is enabled) is questionable:
+https://github.com/alloy-rs/alloy/issues/3950.  This is being accepted as not
+only do we not use the `kzg` feature, but we actually have `c-kzg` patched to
+an empty crate, proving we never even attempt to compile it
+(`/patches/ethereum/c-kzg`). That guarantees it's a non-issue within our
+context.
+"""
+
 [[audits.alloy-genesis]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-run"
@@ -63,6 +89,12 @@ delta = "1.8.3 -> 2.0.0"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-run"
 delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-genesis]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-run"
+delta = "2.0.1 -> 2.0.4"
 notes = "Solely a version bump"
 
 [[audits.alloy-json-rpc]]
@@ -77,6 +109,12 @@ criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
 notes = "Solely a version bump"
 
+[[audits.alloy-json-rpc]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
+notes = "Solely a version bump"
+
 [[audits.alloy-network]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -86,6 +124,12 @@ delta = "1.8.3 -> 2.0.0"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-network]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
 notes = "Solely a version bump"
 
 [[audits.alloy-network-primitives]]
@@ -99,6 +143,12 @@ criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
 notes = "Solely a version bump"
 
+[[audits.alloy-network-primitives]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
+notes = "Solely a version bump"
+
 [[audits.alloy-node-bindings]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-run"
@@ -110,6 +160,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-run"
 delta = "2.0.0 -> 2.0.1"
 
+[[audits.alloy-node-bindings]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-run"
+delta = "2.0.1 -> 2.0.4"
+
 [[audits.alloy-provider]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -119,6 +174,11 @@ delta = "1.8.3 -> 2.0.0"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
+
+[[audits.alloy-provider]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
 
 [[audits.alloy-rpc-client]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -132,6 +192,11 @@ criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
 notes = "Solely a version bump"
 
+[[audits.alloy-rpc-client]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
+
 [[audits.alloy-rpc-types-any]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -141,6 +206,12 @@ delta = "1.8.3 -> 2.0.0"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-rpc-types-any]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
 notes = "Solely a version bump"
 
 [[audits.alloy-rpc-types-debug]]
@@ -154,6 +225,12 @@ criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
 notes = "Solely a version bump"
 
+[[audits.alloy-rpc-types-debug]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
+notes = "Solely a version bump"
+
 [[audits.alloy-rpc-types-eth]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -165,6 +242,12 @@ criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
 notes = "Solely a version bump"
 
+[[audits.alloy-rpc-types-eth]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
+notes = "Solely a version bump"
+
 [[audits.alloy-rpc-types-trace]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -174,6 +257,12 @@ delta = "1.8.3 -> 2.0.0"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
+
+[[audits.alloy-rpc-types-trace]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
+notes = "Solely a version bump"
 
 [[audits.alloy-serde]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -187,6 +276,11 @@ criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
 notes = "Solely a version bump"
 
+[[audits.alloy-serde]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
+
 [[audits.alloy-signer]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -197,6 +291,12 @@ notes = "Solely a version bump"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-signer]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
 notes = "Solely a version bump"
 
 [[audits.alloy-signer-local]]
@@ -210,6 +310,12 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-run"
 delta = "2.0.0 -> 2.0.1"
 
+[[audits.alloy-signer-local]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-run"
+delta = "2.0.1 -> 2.0.4"
+notes = "Solely a version bump"
+
 [[audits.alloy-transport]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -219,6 +325,12 @@ delta = "1.8.3 -> 2.0.0"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-transport]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
 notes = "Solely a version bump"
 
 [[audits.alloy-tx-macros]]
@@ -231,6 +343,12 @@ notes = "Solely a version bump"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "2.0.0 -> 2.0.1"
+notes = "Solely a version bump"
+
+[[audits.alloy-tx-macros]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "2.0.1 -> 2.0.4"
 notes = "Solely a version bump"
 
 [[audits.ark-ff]]
@@ -349,6 +467,15 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "4.6.0 -> 4.6.1"
 
+[[audits.const-hex]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.18.1 -> 1.19.0"
+notes = """
+This adds support for the `0X` prefix, which I wouldn't consider well-defined,
+even if supporting more things is... supporting more things.
+"""
+
 [[audits.const-random]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -421,6 +548,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.1.17 -> 0.1.18"
 notes = "Solely a version bump"
+
+[[audits.digest]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.11.2 -> 0.11.3"
 
 [[audits.dirs]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -527,6 +659,11 @@ notes = "Written by kayabaNerve"
 criteria = "audited"
 version = "0.1.0@git:cebfb4bdff0c34ead77ba3f1d4e5610e934c581f"
 notes = "`monero-oxide/audits/fcmps`"
+
+[[audits.h2]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.4.13 -> 0.4.14"
 
 [[audits.hash-db]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -794,6 +931,16 @@ criteria = "safe-to-deploy"
 version = "0.2.99"
 notes = "MIT re-implementation of the necessary subset of the copyleft `option-ext`"
 
+[[audits.pin-project]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.1.11 -> 1.1.12"
+
+[[audits.pin-project-internal]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.1.11 -> 1.1.12"
+
 [[audits.pkg-config]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -996,6 +1143,11 @@ delta = "0.10.8 -> 0.10.9"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "1.2.1"
+
+[[audits.tokio]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.52.1 -> 1.52.2"
 
 [[audits.toml_edit]]
 who = "Luke Parker <lukeparker5132@gmail.com>"

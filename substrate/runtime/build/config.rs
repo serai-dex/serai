@@ -23,7 +23,7 @@ pub(super) fn wasm_rustflags() -> String {
   /// Compiler arguments for WASM.
   ///
   /// `--export-table` causes the linker to export the function table from our artifact, allowing
-  /// out VM to identify what function we want to call by its name.
+  /// our VM to identify what function we want to call by its name.
   const WASM: &str = "-C link-arg=--export-table";
   /// The compilation arguments required due to <https://github.com/rust-lang/rust/issues/145491>.
   const ONE_45491: &str =

@@ -59,7 +59,7 @@ runs:
         solc_version() {
           # Install the version of `solc` specified in the contracts
           # This also checks the specified version is consistent across contracts
-          cat $(find . -name "*.sol") | grep "pragma solidity" | IFS="\n" while read -r line; do
+          cat $(find . -name "*.sol") | grep "pragma solidity" | while IFS="\n" read -r line; do
             THIS_SOLC_VERSION=$(printf "%s" "$line" | cut -d'^' -f2 | cut -d'=' -f2 | cut -d';' -f1)
             if [ "$SOLC_VERSION" = "" ]; then
               SOLC_VERSION="$THIS_SOLC_VERSION"

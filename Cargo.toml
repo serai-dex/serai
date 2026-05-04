@@ -234,9 +234,9 @@ aurora-engine-modexp = { path = "patches/ethereum/aurora-engine-modexp" }
 nonzero_ext = { path = "patches/nonzero_ext" }
 
 # `hickory-resolver` uses `moka`, which is obscene with LLM use and frequently has critical bugs
-# This is a version patched to use `lru-slab` for its LRU cache instead
-hickory-proto = { git = "https://github.com/kayabaNerve/hickory-dns", rev = "265df12bc084df83f67733ab99b9fb17ad48bf7a" }
-hickory-resolver = { git = "https://github.com/kayabaNerve/hickory-dns", rev = "265df12bc084df83f67733ab99b9fb17ad48bf7a" }
+# This is a version patched to use `lru-slab` for its LRU cache instead, and some other misc fixes backported
+hickory-proto = { git = "https://github.com/kayabaNerve/hickory-dns", rev = "b64f5bff16cac072c34c274ff8f943d1bf5337f7" }
+hickory-resolver = { git = "https://github.com/kayabaNerve/hickory-dns", rev = "b64f5bff16cac072c34c274ff8f943d1bf5337f7" }
 
 # Patch to include `FromUniformBytes<64>` over `Scalar`
 k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "8293be3f9855eea0936523a9b100f1f69261ea4b" }
