@@ -41,7 +41,7 @@ impl Service<RequestPacket> for SimpleRequest {
         hyper::Request::post(&inner.url)
           .header("Content-Type", "application/json")
           .body(serde_json::to_vec(&req).map_err(TransportError::SerError)?.into())
-          .unwrap(),
+          .map_err(|e| TransportErrorKind::custom(io::Error::other(format!("{e:?}"))))?,
       );
 
       let mut res = inner
