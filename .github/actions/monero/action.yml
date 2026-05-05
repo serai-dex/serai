@@ -23,37 +23,37 @@ runs:
       env:
         VERSION: ${{ inputs.version }}
       run: |
-        OS=${{ runner.os }}
-        ARCH=${{ runner.arch }}
+        OS="${{ runner.os }}"
+        ARCH="${{ runner.arch }}"
 
-        OS=$(echo "$OS" | tr "[:upper:]" "[:lower:]")
-        ARCH=$(echo "$ARCH" | tr "[:upper:]" "[:lower:]")
+        OS=$(echo "${OS}" | tr "[:upper:]" "[:lower:]")
+        ARCH=$(echo "${ARCH}" | tr "[:upper:]" "[:lower:]")
         EXT="tar.bz2"
 
-        if [ "$OS" = "windows" ]; then
+        if [ "${OS}" = "windows" ]; then
           OS="win"
           EXT="zip"
         fi
-        if [ "$ARCH" = "arm64" ]; then
+        if [ "${ARCH}" = "arm64" ]; then
           ARCH="armv8"
         fi
-        if [ "$OS" = "macos" ]; then
+        if [ "${OS}" = "macos" ]; then
           OS="mac"
           # If this is an ARM macOS downloading a historic version, download x64 to run via Rosetta
-          if [ $(echo "${ VERSION }" | cut -d'.' -f2) -lt 18 ]; then
+          if [ $(echo "${VERSION}" | cut -d'.' -f2) -lt 18 ]; then
             ARCH="x64"
           fi
         fi
 
-        FILE=monero-$OS-$ARCH-${ VERSION }.$EXT
+        FILE="monero-${OS}-${ARCH}-${VERSION}.${EXT}"
         mkdir monero-tmp
         cd monero-tmp
-        curl -L https://downloads.getmonero.org/cli/$FILE -o $FILE
-        if [ "$EXT" = "tar.bz2" ]; then
-          tar -xf $FILE
+        curl -L "https://downloads.getmonero.org/cli/${FILE}" -o "${FILE}"
+        if [ "${EXT}" = "tar.bz2" ]; then
+          tar -xf "${FILE}"
         fi
-        if [ "$EXT" = "zip" ]; then
-          unzip $FILE
+        if [ "${EXT}" = "zip" ]; then
+          unzip "${FILE}"
         fi
         cd ..
 
@@ -63,7 +63,7 @@ runs:
     - name: Monero Regtest Daemon
       shell: bash
       run: |
-        PATH="$PATH:$(pwd)"
+        PATH="${PATH}:$(pwd)"
         COMMAND="./orchestration/dev/networks/monero/run.sh"
 
         if [ "${{ runner.os }}" = "Windows" ]; then
