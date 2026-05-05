@@ -307,6 +307,10 @@ jobs:
       - name: Slither
         shell: bash
         run: |
+          # `slither` installs `solc-select`, so we set the environment variable telling
+          # `solc-select` the exact version to use (the one already selected and installed)
+          export SOLC_VERSION="$(solc --version | grep 'Version:' | cut -d' ' -f2 | cut -d'+' -f1)"
+
           sudo apt install -y python3-pip
           python3 -m pip install slither-analyzer==0.11.5
 
