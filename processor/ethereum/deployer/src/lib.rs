@@ -84,7 +84,7 @@ impl Deployer {
         If this is ever unacceptable, the parameterization suggested in case the `gas_price` is
         unacceptable should be implemented.
       */
-      gas_limit: 300_698,
+      gas_limit: 300_674,
       to: TxKind::Create,
       value: U256::ZERO,
       input: initcode,

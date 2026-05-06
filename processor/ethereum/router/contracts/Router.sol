@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity =0.8.34;
 
-import "IERC20.sol";
+import { IERC20 } from "IERC20.sol";
 
-import "Schnorr.sol";
+import { Schnorr } from "Schnorr.sol";
 
-import "IRouter.sol";
+import { IRouter, IRouterWithoutCollisions } from "IRouter.sol";
 
 /*
   The Router directly performs low-level calls in order to have direct control over gas. Since this
@@ -33,10 +33,10 @@ import "IRouter.sol";
 /// @notice Intakes coins for the Serai network and handles relaying batches of transfers out
 contract Router is IRouterWithoutCollisions {
   /// @dev The code hash for a non-empty account without code
-  bytes32 constant ACCOUNT_WITHOUT_CODE_CODEHASH = keccak256("");
+  bytes32 private constant ACCOUNT_WITHOUT_CODE_CODEHASH = keccak256("");
 
   /// @dev The address in transient storage used for the reentrancy guard
-  bytes32 constant REENTRANCY_GUARD_SLOT =
+  bytes32 private constant REENTRANCY_GUARD_SLOT =
     bytes32(uint256(keccak256("ReentrancyGuard Router")) - 1);
 
   /**
@@ -59,7 +59,7 @@ contract Router is IRouterWithoutCollisions {
    *  a case, Serai would have to migrate to a new smart contract using `escapeHatch`. That also
    *  covers all other potential exceptional cases.
    */
-  uint256 constant ERC20_GAS = 100_000;
+  uint256 private constant ERC20_GAS = 100_000;
 
   /**
    * @dev The next nonce used to determine the address of contracts deployed with CREATE. This is
@@ -116,7 +116,8 @@ contract Router is IRouterWithoutCollisions {
     }
   }
 
-  /// @dev Set the next Serai key. This does not read from/write to `_nextNonce`
+  /// @notice Set the next Serai key
+  /// @dev This does not read from/write to `_nextNonce`
   /// @param nonceUpdatedWith The nonce used to set the next key
   /// @param nextSeraiKeyVar The key to set as next
   function _setNextSeraiKey(uint256 nonceUpdatedWith, bytes32 nextSeraiKeyVar) private {
@@ -147,13 +148,16 @@ contract Router is IRouterWithoutCollisions {
     _escapedTo = address(0);
   }
 
+  /// @notice Verify a signature of the calldata, placed immediately after the function selector
   /**
-   * @dev Verify a signature of the calldata, placed immediately after the function selector. The
-   *  calldata should be signed with the chain ID taking the place of the signature's challenge, and
-   *  the signature's response replaced by the contract's address shifted into the high bits with
-   *  the contract's nonce as the low bits.
+   * @dev The calldata should be signed with the chain ID taking the place of the signature's
+   *  challenge, and the signature's response replaced by the contract's address shifted into the
+   *  high bits with the contract's nonce as the low bits.
    */
   /// @param key The key to verify the signature with
+  /// @return nonceUsed The incremental numeric nonce this signature consumed
+  /// @return message The message which was signed
+  /// @return messageHash The hash of the message which was signed
   function verifySignature(bytes32 key)
     private
     returns (uint256 nonceUsed, bytes memory message, bytes32 messageHash)
@@ -265,9 +269,10 @@ contract Router is IRouterWithoutCollisions {
    *
    *  The hex bytes are to cause a collision with `IRouter.updateSeraiKey`.
    */
-  // @param signature The signature by the current key authorizing this update
-  // @param nextSeraiKey The key to update to
   function updateSeraiKey5A8542A2() external {
+    // @param signature The signature by the current key authorizing this update
+    // @param nextSeraiKey The key to update to
+
     (uint256 nonceUsed, bytes memory args,) = verifySignature(_seraiKey);
     /*
       We could replace this with a length check (if we don't simply assume the calldata is valid as
@@ -279,8 +284,9 @@ contract Router is IRouterWithoutCollisions {
 
   /// @notice Confirm the next key representing Serai's Ethereum validators, updating to it
   /// @dev The hex bytes are to cause a collision with `IRouter.confirmSeraiKey`.
-  // @param signature The signature by the next key confirming its validity
   function confirmNextSeraiKey34AC53AC() external {
+    // @param signature The signature by the next key confirming its validity
+
     // Checks
     bytes32 nextSeraiKeyVar = _nextSeraiKey;
     (uint256 nonceUsed,,) = verifySignature(nextSeraiKeyVar);
@@ -290,6 +296,7 @@ contract Router is IRouterWithoutCollisions {
     emit SeraiKeyUpdated(nonceUsed, nextSeraiKeyVar);
   }
 
+  // slither-disable-start reentrancy-events Re-entrancy is a non-issue for this function
   /// @notice Transfer coins into Serai with an instruction
   /// @param coin The coin to transfer in (address(0) if Ether)
   /// @param amount The amount to transfer in (msg.value if Ether)
@@ -297,9 +304,10 @@ contract Router is IRouterWithoutCollisions {
    * @param instruction The encoded `RefundableInInstruction` for Serai to associate with this
    *  transfer in
    */
-  // This function doesn't require nonReentrant as re-entrancy isn't an issue with this function
-  // slither-disable-next-line reentrancy-events
-  function inInstruction(address coin, uint256 amount, bytes memory instruction) external payable {
+  function inInstruction(address coin, uint256 amount, bytes calldata instruction)
+    external
+    payable
+  {
     // Check there is an active key
     if (_seraiKey == bytes32(0)) {
       revert SeraiKeyWasNone();
@@ -353,7 +361,14 @@ contract Router is IRouterWithoutCollisions {
     emit InInstruction(msg.sender, coin, amount, instruction);
   }
 
-  /// @dev Perform an Ether/ERC20 transfer out
+  // slither-disable-end reentrancy-events
+
+  /*
+    This doesn't directly have a loop. `execute` does, which calls this, but `execute` is annotated
+    with this same disabling and is documented as to why it's safe.
+  */
+  // slither-disable-start calls-loop
+  /// @notice Perform an Ether/ERC20 transfer out
   /// @param to The address to transfer the coins to
   /// @param coin The coin to transfer (address(0) if Ether)
   /// @param amount The amount of the coin to transfer
@@ -362,8 +377,6 @@ contract Router is IRouterWithoutCollisions {
    * @return success If the coins were successfully transferred out. For Ethereum, this is if the
    *  call succeeded. For the ERC20, it's if the call succeeded and returned true or nothing.
    */
-  // execute has this annotation yet this still flags (even when it doesn't have its own loop)
-  // slither-disable-next-line calls-loop
   function transferOut(address to, address coin, uint256 amount, bool contractDestination)
     private
     returns (bool success)
@@ -425,10 +438,11 @@ contract Router is IRouterWithoutCollisions {
       success = erc20Success && nonStandardResOrTrue;
     }
   }
+  // slither-disable-end calls-loop
 
   /// @notice The header for an address, when encoded with RLP for the purposes of CREATE
   /// @dev 0x80 + 20, shifted left 30 bytes
-  uint256 constant ADDRESS_HEADER = (0x80 + 20) << (30 * 8);
+  uint256 private constant ADDRESS_HEADER = (0x80 + 20) << (30 * 8);
 
   /// @notice Calculate the next address which will be deployed to by CREATE
   /**
@@ -504,6 +518,7 @@ contract Router is IRouterWithoutCollisions {
     }
   }
 
+  /* solhint-disable gas-calldata-parameters */
   /// @notice Execute some arbitrary code within a secure sandbox
   /**
    * @dev This performs sandboxing by deploying this code with `CREATE`. This is an external
@@ -544,6 +559,13 @@ contract Router is IRouterWithoutCollisions {
     }
   }
 
+  /* solhint-enable gas-calldata-parameters */
+
+  /*
+    - Each individual call is explicitly metered to ensure there isn't a DoS here.
+    - This function is `nonReentrant`.
+  */
+  // slither-disable-start calls-loop,reentrancy-events
   /// @notice Execute a batch of `OutInstruction`s
   /**
    * @dev All `OutInstruction`s in a batch are only for a single coin to simplify handling of the
@@ -557,15 +579,14 @@ contract Router is IRouterWithoutCollisions {
    *  completion for the execution of batches (despite their in-order start of execution) which
    *  isn't a headache worth dealing with.
    *
-   * Re-entrancy is also explicitly required due to how `_smartContractNonce` is handled.
+   *  Non-re-entrancy is also explicitly required due to how `_smartContractNonce` is handled.
    */
-  // @param signature The signature by the current key for Serai's Ethereum validators
-  // @param coin The coin all of these `OutInstruction`s are for
-  // @param fee The fee to pay (in coin) to the caller for their relaying of this batch
-  // @param outs The `OutInstruction`s to act on
-  // Each individual call is explicitly metered to ensure there isn't a DoS here
-  // slither-disable-next-line calls-loop,reentrancy-events
   function execute4DE42904() external nonReentrant {
+    // @param signature The signature by the current key for Serai's Ethereum validators
+    // @param coin The coin all of these `OutInstruction`s are for
+    // @param fee The fee to pay (in coin) to the caller for their relaying of this batch
+    // @param outs The `OutInstruction`s to act on
+
     (uint256 nonceUsed, bytes memory args, bytes32 message) = verifySignature(_seraiKey);
     (,, address coin, uint256 fee, IRouter.OutInstruction[] memory outs) =
       abi.decode(args, (bytes32, bytes32, address, uint256, IRouter.OutInstruction[]));
@@ -655,15 +676,18 @@ contract Router is IRouterWithoutCollisions {
     transferOut(msg.sender, coin, fee, false);
   }
 
+  // slither-disable-end calls-loop,reentrancy-events
+
   /// @notice Escapes to a new smart contract
   /**
    * @dev This should be used upon an invariant being reached or new functionality being needed.
    *
    * The hex bytes are to cause a collision with `IRouter.escapeHatch`.
    */
-  // @param signature The signature by the current key for Serai's Ethereum validators
-  // @param escapeTo The address to escape to
   function escapeHatchDCDD91CC() external {
+    // @param signature The signature by the current key for Serai's Ethereum validators
+    // @param escapeTo The address to escape to
+
     // Verify the signature
     (uint256 nonceUsed, bytes memory args,) = verifySignature(_seraiKey);
 
@@ -707,9 +731,13 @@ contract Router is IRouterWithoutCollisions {
     emit EscapeHatch(nonceUsed, escapeTo);
   }
 
+  /*
+    We allow the `Escaped` events to be out of order on the assumption we'll actually care about
+    the events from where the coins were escaped to, making these solely a pleasantry.
+  */
+  // slither-disable-start reentrancy-events
   /// @notice Escape coins after the escape hatch has been invoked
   /// @param coin The coin to escape
-  // slither-disable-next-line reentrancy-events Out-of-order events aren't an issue here
   function escape(address coin) external {
     if (_escapedTo == address(0)) {
       revert EscapeHatchNotInvoked();
@@ -735,6 +763,8 @@ contract Router is IRouterWithoutCollisions {
     // Since we successfully escaped this amount, emit the event for it
     emit Escaped(coin, amount);
   }
+
+  // slither-disable-end reentrancy-events
 
   /// @notice Fetch the next nonce to use by an action published to this contract
   /// return The next nonce to use by an action published to this contract

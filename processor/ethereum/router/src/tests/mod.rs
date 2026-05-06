@@ -923,7 +923,7 @@ async fn test_gas_increases_then_decreases() {
     resolving this issue.
   */
   let out_instructions = vec![(
-    SeraiEthereumAddress::Contract(ContractDeployment::new(100_240, vec![]).unwrap()),
+    SeraiEthereumAddress::Contract(ContractDeployment::new(100_000, vec![]).unwrap()),
     U256::from(1u8),
   )];
 

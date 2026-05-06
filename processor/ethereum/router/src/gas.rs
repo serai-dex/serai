@@ -164,11 +164,11 @@ impl Router {
     the correct set of prices for the network they're operating on.
   */
   /// The gas used by `confirmSeraiKey`.
-  pub const CONFIRM_NEXT_SERAI_KEY_GAS: u64 = 57_753;
+  pub const CONFIRM_NEXT_SERAI_KEY_GAS: u64 = 57_789;
   /// The gas used by `updateSeraiKey`.
-  pub const UPDATE_SERAI_KEY_GAS: u64 = 60_062;
+  pub const UPDATE_SERAI_KEY_GAS: u64 = 60_098;
   /// The gas used by `escapeHatch`.
-  pub const ESCAPE_HATCH_GAS: u64 = 61_111;
+  pub const ESCAPE_HATCH_GAS: u64 = 61_147;
 
   /// The key to use when performing gas estimations.
   ///

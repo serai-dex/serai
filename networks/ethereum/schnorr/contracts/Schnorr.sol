@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity =0.8.34;
 
+// TODO: Pin the following link to a specific branch/commit once `next` is merged into `develop`
 /// @title A library for verifying Schnorr signatures
 /// @author Luke Parker <lukeparker@serai.exchange>
 /// @author Elizabeth Binks <elizabethjbinks@gmail.com>
@@ -12,7 +13,6 @@ pragma solidity =0.8.34;
  *   See https://github.com/serai-dex/serai/blob/next/networks/ethereum/schnorr/src/tests/premise.rs
  *   for implementation details
  */
-// TODO: Pin above link to a specific branch/commit once `next` is merged into `develop`
 library Schnorr {
   // secp256k1 group order
   uint256 private constant Q = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
@@ -54,6 +54,7 @@ library Schnorr {
       `sa` is not checked to be non-zero yet it does not need to be. The inverse of it is never
       taken.
     */
+    // solhint-disable-next-line var-name-mixedcase
     address R = ecrecover(sa, KEY_PARITY, publicKey, ca);
     // The ecrecover failed
     if (R == address(0)) return false;

@@ -41,8 +41,10 @@ pragma solidity =0.8.34;
 
 /// @title Deployer of contracts for the Serai network
 /// @author Luke Parker <lukeparker@serai.exchange>
+/// @notice Read the contract's source for the exact methodology
 contract Deployer {
-  /// @return The deployment for some (hashed) init code
+  /// @notice The deployment of some init code, indexed by the init code's hash
+  /// @return The address of the deployment
   mapping(bytes32 => address) public deployments;
 
   /// @notice Raised if the provided init code was already prior deployed
@@ -50,6 +52,8 @@ contract Deployer {
   /// @notice Raised if the deployment fails
   error DeploymentFailed();
 
+  // We directly `mload` `initCode` so it _must_ be `memory`
+  /* solhint-disable gas-calldata-parameters */
   /// @notice Deploy the specified init code with `CREATE`
   /// @dev This init code is expected to be unique and not prior deployed
   /// @param initCode The init code to pass to `CREATE`
@@ -89,4 +93,5 @@ contract Deployer {
     // Write the deployment to storage
     deployments[initCodeHash] = createdContract;
   }
+  /* solhint-enable gas-calldata-parameters */
 }

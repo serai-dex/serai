@@ -12,7 +12,7 @@ runs:
 
         # Actually perform the removals
         sudo apt remove -y "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
-        sudo apt remove -y "*nodejs*" "*npm*" "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
+        sudo apt remove -y "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
         sudo apt remove -y "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
 
         sudo apt remove -y --allow-remove-essential -f shim-signed *python3*

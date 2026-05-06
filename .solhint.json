@@ -1,0 +1,13 @@
+{
+  "extends": "solhint:recommended",
+  "rules": {
+    "import-path-check": "off",
+    "function-max-lines": "off",
+    "avoid-low-level-calls": "off",
+    "no-inline-assembly": "off",
+    "func-visibility": [ "warn", { "ignoreConstructors": true } ],
+    "gas-strict-inequalities": "off",
+    "gas-increment-by-one": "off",
+    "gas-indexed-events": "off"
+  }
+}

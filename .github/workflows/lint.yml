@@ -307,12 +307,14 @@ jobs:
       - name: Slither
         shell: bash
         run: |
-          # `slither` installs `solc-select`, so we set the environment variable telling
+          # `slither` requires `solc-select`, so we set the environment variable telling
           # `solc-select` the exact version to use (the one already selected and installed)
           export SOLC_VERSION="$(solc --version | grep 'Version:' | cut -d' ' -f2 | cut -d'+' -f1)"
 
           sudo apt install -y python3-pip
-          python3 -m pip install slither-analyzer==0.11.5
+          python3 -m pip install solc-select==1.2.0 slither-analyzer==0.11.5
+          # Reinstall the desired version but with `solc-select`
+          solc-select install "$SOLC_VERSION"
 
           slither ./networks/ethereum/schnorr/contracts/Schnorr.sol
           slither --include-paths ./networks/ethereum/schnorr/contracts ./networks/ethereum/schnorr/contracts/tests/Schnorr.sol
@@ -323,6 +325,23 @@ jobs:
           cp processor/ethereum/erc20/contracts/IERC20.sol processor/ethereum/router/contracts/
           cd processor/ethereum/router/contracts
           slither Router.sol
+
+  solhint:
+    name: solhint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+        with:
+          persist-credentials: false
+
+      - name: Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: solhint
+        shell: bash
+        run: |
+          npm install -g solhint@6.2.1
+          [ "$(solhint --disc --noPoster --formatter unix $(find -name '*.sol' ! -name 'IERC20.sol' ! -path '*tests*'))" = "" ]
 
   shellcheck:
     name: shellcheck
