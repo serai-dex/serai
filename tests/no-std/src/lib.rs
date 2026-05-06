@@ -25,7 +25,7 @@ pub mod alloc {
   pub use dkg;
   pub use dkg_dealer;
   pub use dkg_recovery;
-  pub use dkg_musig;
+  pub use musig;
   pub use dkg_evrf;
 
   pub use modular_frost;

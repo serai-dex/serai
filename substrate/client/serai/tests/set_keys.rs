@@ -8,7 +8,7 @@ use sp_core::{Pair as _, sr25519::Pair};
 use sp_application_crypto::RuntimePublic as _;
 
 use ciphersuite::{group::GroupEncoding as _, GroupIo, WrappedGroup as _};
-use dkg_musig::{Participant, ThresholdKeys, musig};
+use musig::{Participant, ThresholdKeys, musig};
 use dalek_ff_group::Ristretto;
 use schnorrkel::Schnorrkel;
 

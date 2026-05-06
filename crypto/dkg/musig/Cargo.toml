@@ -1,5 +1,5 @@
 [package]
-name = "dkg-musig"
+name = "musig"
 version = "0.6.0"
 description = "The MuSig key aggregation protocol"
 license = "MIT"

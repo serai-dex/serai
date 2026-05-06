@@ -68,10 +68,6 @@ first-party = true
 audit-as-crates-io = false
 first-party = true
 
-[policy.dkg-musig]
-audit-as-crates-io = false
-first-party = true
-
 [policy.dkg-recovery]
 audit-as-crates-io = false
 first-party = true
@@ -241,6 +237,10 @@ first-party = false
 first-party = false
 
 [policy.multiexp]
+audit-as-crates-io = false
+first-party = true
+
+[policy.musig]
 audit-as-crates-io = false
 first-party = true
 

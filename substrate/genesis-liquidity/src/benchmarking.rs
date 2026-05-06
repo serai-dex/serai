@@ -26,7 +26,7 @@ fn benchmark_signature() {
     *,
   };
   use dalek_ff_group::Ristretto;
-  use dkg_musig::Participant;
+  use musig::Participant;
 
   let mut public_keys = vec![];
   for keyring in [Keyring::Alice, Keyring::Bob, Keyring::Charlie, Keyring::Dave] {
@@ -44,7 +44,7 @@ fn benchmark_signature() {
     let private_key =
       <Ristretto as WrappedGroup>::F::from_repr((&expanded[.. 32]).try_into().unwrap()).unwrap();
     let musig_keys =
-      dkg_musig::musig::<Ristretto>(context, private_key.into(), &public_keys).unwrap();
+      musig::musig::<Ristretto>(context, private_key.into(), &public_keys).unwrap();
     sum_key += **musig_keys
       .view(vec![
         Participant::new(1).unwrap(),

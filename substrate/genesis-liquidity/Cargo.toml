@@ -46,7 +46,7 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc", "std"] }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["alloc", "std"] }
 schnorrkel = { version = "0.11", default-features = false, features = ["alloc", "std"] }
-dkg-musig = { path = "../../crypto/dkg/musig", default-features = false, features = ["std"] }
+musig = { path = "../../crypto/dkg/musig", default-features = false, features = ["std"] }
 
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
 sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }

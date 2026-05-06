@@ -2322,21 +2322,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dkg-musig"
-version = "0.6.0"
-dependencies = [
- "ciphersuite 0.4.2",
- "dalek-ff-group",
- "dkg",
- "dkg-recovery",
- "multiexp",
- "rand_core 0.6.4",
- "std-shims 0.1.5",
- "thiserror 2.0.18",
- "zeroize",
-]
-
-[[package]]
 name = "dkg-recovery"
 version = "0.6.0"
 dependencies = [
@@ -5074,6 +5059,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "musig"
+version = "0.6.0"
+dependencies = [
+ "ciphersuite 0.4.2",
+ "dalek-ff-group",
+ "dkg",
+ "dkg-recovery",
+ "multiexp",
+ "rand_core 0.6.4",
+ "std-shims 0.1.5",
+ "thiserror 2.0.18",
+ "zeroize",
+]
+
+[[package]]
 name = "netlink-packet-core"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7712,11 +7712,11 @@ dependencies = [
  "core-json-derive",
  "core-json-traits",
  "dalek-ff-group",
- "dkg-musig",
  "dockertest",
  "frost-schnorrkel",
  "hex",
  "modular-frost",
+ "musig",
  "rand_core 0.6.4",
  "serai-abi",
  "serai-docker-tests",
@@ -7754,10 +7754,10 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "dalek-ff-group",
- "dkg-musig",
  "frost-schnorrkel",
  "hex",
  "modular-frost",
+ "musig",
  "rand_core 0.6.4",
  "schnorrkel",
  "serai-client-serai",
@@ -8049,10 +8049,10 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "dalek-ff-group",
- "dkg-musig",
  "frame-benchmarking",
  "frame-support",
  "frame-system",
+ "musig",
  "pallet-timestamp",
  "parity-scale-codec",
  "rand_core 0.6.4",
@@ -8174,7 +8174,6 @@ dependencies = [
  "dkg",
  "dkg-dealer",
  "dkg-evrf",
- "dkg-musig",
  "dkg-recovery",
  "embedwards25519",
  "ethereum-schnorr-contract",
@@ -8183,6 +8182,7 @@ dependencies = [
  "minimal-ed448",
  "modular-frost",
  "multiexp",
+ "musig",
  "prime-field",
  "schnorr-signatures",
  "secq256k1",
@@ -8273,8 +8273,8 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "dalek-ff-group",
- "dkg-musig",
  "embedwards25519",
+ "musig",
  "parity-scale-codec",
  "rand_core 0.6.4",
  "schnorr-signatures",

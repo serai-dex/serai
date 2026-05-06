@@ -34,7 +34,7 @@ rand_core = "0.6"
 blake2 = { version = "0.11.0-rc.5", default-features = false }
 ciphersuite = { path = "../../../crypto/ciphersuite" }
 dalek-ff-group = { path = "../../../crypto/dalek-ff-group" }
-dkg-musig = { path = "../../../crypto/dkg/musig" }
+musig = { path = "../../../crypto/dkg/musig" }
 frost = { package = "modular-frost", path = "../../../crypto/frost", features = ["tests"] }
 schnorrkel = { path = "../../../crypto/schnorrkel", package = "frost-schnorrkel" }
 
