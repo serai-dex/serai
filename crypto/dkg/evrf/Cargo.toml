@@ -41,11 +41,6 @@ generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/m
 
 dkg = { path = "..", default-features = false }
 
-ciphersuite-kp256 = { path = "../../ciphersuite/kp256", default-features = false, features = ["alloc"], optional = true }
-secq256k1 = { path = "../../secq256k1", default-features = false, features = ["alloc"], optional = true }
-dalek-ff-group = { path = "../../dalek-ff-group", default-features = false, features = ["alloc"], optional = true }
-embedwards25519 = { path = "../../embedwards25519", default-features = false, features = ["alloc"], optional = true }
-
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["getrandom"] }
 rand = { version = "0.8", default-features = false, features = ["std"] }
@@ -78,13 +73,6 @@ std = [
   "generalized-bulletproofs-ec-gadgets/std",
 
   "dkg/std",
-
-  "ciphersuite-kp256?/std",
-  "secq256k1?/std",
-  "dalek-ff-group?/std",
-  "embedwards25519?/std",
 ]
-secp256k1 = ["dep:ciphersuite-kp256", "dep:secq256k1"]
-ed25519 = ["dep:dalek-ff-group", "dep:embedwards25519"]
 tests = ["rand_core/getrandom"]
 default = ["std"]

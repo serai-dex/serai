@@ -168,6 +168,9 @@ fn permutation(slots: &mut [Option<u16>], limit: u16) -> bool {
 /// This function assumes `keys` contains no entries for which
 /// `keys_i.params().i() == keys_j.params().i()`. It may spuriously error (with incorrect
 /// description) when such keys are passed to it.
+// TODO: Alternatively, a set of size the threshold could reconstruct the entire original
+// polynomial before re-dealing the secret shares and checking their equivalence to the existing
+// secret shares. This would avoid performing a permutation and wouldn't have quadratic complexity.
 pub fn recover_singular_key<C: GroupIo + Id>(
   keys: &[ThresholdKeys<C>],
 ) -> Result<Zeroizing<C::F>, RecoveryError> {
@@ -183,8 +186,8 @@ pub fn recover_singular_key<C: GroupIo + Id>(
   let mut recovered = None;
   while {
     let mut keys = keys.to_vec();
-    for to_remove in to_remove.iter().flatten() {
-      keys.remove(usize::from(*to_remove));
+    for (i, to_remove) in to_remove.iter().flatten().enumerate() {
+      keys.remove(usize::from(*to_remove) - i);
     }
     let recovered_i = recover_key(&keys)?;
     if recovered.is_none() {
@@ -194,7 +197,8 @@ pub fn recover_singular_key<C: GroupIo + Id>(
       Err(RecoveryError::Failure)?;
     }
 
-    u16::try_from(to_remove.len()).map(|limit| permutation(&mut to_remove, limit)).unwrap_or(false)
+    let n = u16::try_from(to_remove.len()).map_err(|_| RecoveryError::Failure)?;
+    permutation(&mut to_remove, n)
   } {}
   Ok(recovered.unwrap())
 }

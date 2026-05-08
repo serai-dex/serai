@@ -10,7 +10,8 @@ use ciphersuite::{
 
 use dkg::Participant;
 
-/// Sample a random, unbiased point on the elliptic curve with an unknown discrete logarithm.
+/// Sample a random, unbiased non-identity point on the elliptic curve with an unknown discrete
+/// logarithm.
 ///
 /// This keeps it simple by using rejection sampling.
 pub(crate) fn sample_point<C: GroupIo>(rng: &mut (impl RngCore + CryptoRng)) -> C::G {
@@ -30,7 +31,7 @@ pub(super) fn polynomial<F: PrimeField + Zeroize>(
   l: Participant,
 ) -> Zeroizing<F> {
   let l = F::from(u64::from(u16::from(l)));
-  // This should never be reached since Participant is explicitly non-zero
+  // This should never be reached since `Participant` is explicitly non-zero
   assert!(l != F::ZERO, "zero participant passed to polynomial");
   let mut share = Zeroizing::new(F::ZERO);
   for (idx, coefficient) in coefficients.iter().rev().enumerate() {
@@ -40,4 +41,19 @@ pub(super) fn polynomial<F: PrimeField + Zeroize>(
     }
   }
   share
+}
+
+#[test]
+fn test_sample_point() {
+  use rand_core::OsRng;
+  use std_shims::collections::HashSet;
+
+  let mut points = HashSet::new();
+  for _ in 0 .. 128 {
+    let point = sample_point::<dalek_ff_group::Ed25519>(&mut OsRng);
+    assert!(bool::from(!point.is_identity()));
+    let point = point.to_bytes();
+    assert!(!points.contains(&point));
+    assert!(points.insert(point));
+  }
 }

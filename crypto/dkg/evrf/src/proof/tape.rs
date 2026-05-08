@@ -69,9 +69,9 @@ impl Tape {
         };
 
         let point = (
-          // x coordinate
+          // `x` coordinate
           self.0.read_one_from_tape(),
-          // y coordinate
+          // `y` coordinate
           self.0.read_one_from_tape(),
         );
 
@@ -102,5 +102,74 @@ impl PedersenCommitmentTape {
     let res = Variable::V(self.pedersen_commitments);
     self.pedersen_commitments += 1;
     res
+  }
+}
+
+#[test]
+fn read_one_from_tape() {
+  let generators = 8;
+  let mut tape = Tape::new(generators);
+  for i in 0 .. 16 {
+    for j in 0 .. 8 {
+      assert_eq!(tape.read_one_from_tape(), Variable::CG { commitment: i, index: j });
+    }
+  }
+}
+
+#[test]
+fn read_from_tape() {
+  let mut tape = Tape::new(8);
+  assert_eq!(
+    <[_; 2]>::from(tape.read_from_tape()),
+    [Variable::CG { commitment: 0, index: 0 }, Variable::CG { commitment: 0, index: 1 }]
+  );
+}
+
+#[test]
+fn read_points_with_common_dlog() {
+  use crate::Ed25519;
+
+  let mut tape = Tape::new(8);
+  for i in 0 .. 4 {
+    assert_eq!(tape.read_points_with_common_dlog::<Ed25519>(i).count(), i);
+  }
+
+  {
+    let mut iter = tape.read_points_with_common_dlog::<Ed25519>(2);
+    let PointWithDlog {
+      dlog: dlog_a,
+      divisor: Divisor { zero: zero_a, x_from_power_of_2: x_from_power_of_2_a, yx: yx_a, y: y_a },
+      point: point_a,
+    } = iter.next().unwrap();
+    let PointWithDlog {
+      dlog: dlog_b,
+      divisor: Divisor { zero: zero_b, x_from_power_of_2: x_from_power_of_2_b, yx: yx_b, y: y_b },
+      point: point_b,
+    } = iter.next().unwrap();
+    assert_eq!(dlog_a, dlog_b);
+    assert_ne!((zero_a, x_from_power_of_2_a, yx_a, y_a), (zero_b, x_from_power_of_2_b, yx_b, y_b));
+    assert_ne!(point_a, point_b);
+  }
+
+  {
+    let PointWithDlog {
+      dlog,
+      divisor: Divisor { zero: _, x_from_power_of_2, yx, y: _ },
+      point: (_, _),
+    } = tape.read_points_with_common_dlog::<Ed25519>(1).next().unwrap();
+    for i in 0 .. 4 {
+      assert_eq!(
+        dlog.len() + (i * (1 + x_from_power_of_2.len() + yx.len() + 1 + 2)),
+        Tape::variables_for_points_with_common_dlog::<Ed25519>(i)
+      );
+    }
+  }
+}
+
+#[test]
+fn allocate_pedersen_commitment() {
+  let mut tape = PedersenCommitmentTape::new();
+  for i in 0 .. 8 {
+    assert_eq!(tape.allocate_pedersen_commitment(), Variable::V(i));
   }
 }

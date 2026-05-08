@@ -25,7 +25,8 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
-dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std", "ed25519"] }
+embedwards25519 = { path = "../../crypto/embedwards25519", default-features = false, features = ["std"] }
+dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false }
 
 monero-wallet = { git = "https://github.com/monero-oxide/monero-oxide", rev = "c8be5d3d1287669946a83fbfcb296ce2a8852e47", default-features = false, features = ["std", "multisig"] }

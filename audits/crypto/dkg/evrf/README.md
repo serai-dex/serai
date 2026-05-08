@@ -35,8 +35,10 @@ this is unnecessary when the resulting key will be biased. Any proof of
 knowledge for the coefficients, as necessary for their extraction within the
 security proofs, would be sufficient.
 
-This idea was presented at the FROST Implementers Round Table in 2024, as
-hosted by Blockchain Commons, as "DKG 576" (in reference to the issue number
+This idea was presented at the
+[FROST Implementers Round Table in 2024](
+  https://developer.blockchaincommons.com/frost/meeting2
+), hosted by Blockchain Commons, as "DKG 576" (in reference to the issue number
 proposing it).
 
 MAGIC Grants contracted HashCloak to formalize Serai's proposal for a DKG and

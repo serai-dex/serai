@@ -1,7 +1,15 @@
 use ciphersuite::*;
-use dkg::{ThresholdKeys, Curves, Secp256k1};
+use dkg::{ThresholdKeys, Curves};
 
 use ethereum_schnorr::PublicKey;
+
+/// Secp256k1, and an elliptic curve defined over its scalar field (secq256k1).
+pub struct Secp256k1;
+impl Curves for Secp256k1 {
+  type ToweringCurve = ciphersuite_kp256::Secp256k1;
+  type EmbeddedCurve = secq256k1::Secq256k1;
+  type EmbeddedCurveParameters = secq256k1::Secq256k1;
+}
 
 pub(crate) struct KeyGenParams;
 impl key_gen::KeyGenParams for KeyGenParams {

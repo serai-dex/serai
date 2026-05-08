@@ -39,7 +39,7 @@ dkg = { path = "../../crypto/dkg", default-features = false, optional = true }
 dkg-dealer = { path = "../../crypto/dkg/dealer", default-features = false, optional = true }
 dkg-recovery = { path = "../../crypto/dkg/recovery", default-features = false, optional = true }
 musig = { path = "../../crypto/dkg/musig", default-features = false, optional = true }
-dkg-evrf = { path = "../../crypto/dkg/evrf", default-features = false, features = ["secp256k1", "ed25519"], optional = true }
+dkg-evrf = { path = "../../crypto/dkg/evrf", default-features = false, optional = true }
 
 modular-frost = { path = "../../crypto/frost", default-features = false, optional = true }
 frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false, optional = true }

@@ -31,6 +31,8 @@ use crate::Curves;
 mod tape;
 use tape::*;
 
+mod reveal;
+
 type EmbeddedPoint<C> = (
   <<<C as Curves>::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::FieldElement,
   <<<C as Curves>::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::FieldElement,
@@ -246,7 +248,7 @@ const ECDHS_PER_PARTICIPANT: usize = 2;
 
 pub(super) struct Proof<C>(PhantomData<C>);
 impl<C: Curves> Proof<C> {
-  fn discrete_log_claims(coefficients: usize, participants: usize) -> usize {
+  const fn discrete_log_claims(coefficients: usize, participants: usize) -> usize {
     /*
       - 1 DLOG to prove the discrete logarithm corresponds to the eVRF public key
       - 2 DLOGs per coefficient in the secret-sharing polynomial
@@ -258,12 +260,13 @@ impl<C: Curves> Proof<C> {
       (DLOGS_PER_ECDH * ECDHS_PER_PARTICIPANT * participants)
   }
 
-  fn expected_multiplications(coefficients: usize, participants: usize) -> usize {
+  const fn expected_multiplications(coefficients: usize, participants: usize) -> usize {
     const MULS_PER_DLOG: usize = 7;
     MULS_PER_DLOG * Self::discrete_log_claims(coefficients, participants)
   }
 
-  pub(crate) fn generators_to_use(coefficients: usize, participants: usize) -> usize {
+  pub(crate) const fn generators_to_use(coefficients: usize, participants: usize) -> usize {
+    let muls = Self::expected_multiplications(coefficients, participants).next_power_of_two();
     /*
       `expected_multiplications` may be as small as 16, which would create an excessive amount of
       vector commitments (as a vector commitment can only commit to as many variables as we have
@@ -272,7 +275,11 @@ impl<C: Curves> Proof<C> {
       We require the actual amount of multiplications to be at least 2048 (even though that
       that 'wastes' thousands of multiplications) to ensure the bandwidth usage remains reasonable.
     */
-    Self::expected_multiplications(coefficients, participants).next_power_of_two().max(2048)
+    if muls < 2048 {
+      2048
+    } else {
+      muls
+    }
   }
 
   fn variables_in_vector_commitments(coefficients: usize, participants: usize) -> usize {
@@ -287,6 +294,7 @@ impl<C: Curves> Proof<C> {
       .div_ceil(Self::generators_to_use(coefficients, participants))
   }
 
+  // TODO: Upstream this to `generalized-bulletproofs`?
   pub(crate) fn transcript_len(coefficients: usize, participants: usize) -> usize {
     // `AI, AO, AS`
     let mut group_elements = 3;
@@ -429,6 +437,16 @@ impl<C: Curves> Proof<C> {
     generator_tables
   }
 
+  /// Prove honest participation in the DKG.
+  ///
+  /// - Prove `coefficients` coefficients were sampled by evaluations of the eVRF with
+  ///   `evrf_private_key`, and committed to correctly.
+  /// - Prove shared secrets were correctly derived, and committed to, for each of the
+  ///   participants' public keys. The exact randomness used for deriving the shared secret will be
+  ///   randomly sampled and should not be expected to be deterministic.
+  ///
+  /// `transcript` MUST _already_ be binding to `participant_public_keys` and the corresponding
+  /// public key for `evrf_public_key`.
   pub(super) fn prove(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C::ToweringCurve>,
@@ -654,29 +672,7 @@ impl<C: Curves> Proof<C> {
     };
     statement.prove(&mut *rng, &mut transcript, witness)?;
 
-    // Push the reveal onto the transcript
-    for commitment in &commitments {
-      transcript.push_point(&(generators.g() * commitment.value));
-    }
-
-    // Prove the openings of the commitments were correct
-    let mut weighted_values = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
-    let mut weighted_blinding_factors = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
-    for commitment in commitments {
-      let weight = transcript.challenge::<C::ToweringCurve>();
-      *weighted_values += commitment.value * weight;
-      *weighted_blinding_factors += commitment.mask * weight;
-    }
-
-    // Produce PoKs for the weighted-sum of the Pedersen commitments' values, blinding factors
-    let r_values = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::random(&mut *rng));
-    let r_blinding_factors =
-      Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::random(&mut *rng));
-    transcript.push_point(&(generators.g() * r_values.deref()));
-    transcript.push_point(&(generators.h() * r_blinding_factors.deref()));
-    let c = transcript.challenge::<C::ToweringCurve>();
-    transcript.push_scalar((c * weighted_values.deref()) + r_values.deref());
-    transcript.push_scalar((c * weighted_blinding_factors.deref()) + r_blinding_factors.deref());
+    Self::reveal(rng, generators, &mut transcript, commitments);
 
     let proof = transcript.complete();
     debug_assert_eq!(
@@ -686,6 +682,15 @@ impl<C: Curves> Proof<C> {
     Ok(ProveResult { coefficients, encryption_keys, proof })
   }
 
+  /// Verify participation in the DKG.
+  ///
+  /// - Prove `coefficients` coefficients were sampled by evaluations of the eVRF with
+  ///   `evrf_private_key`, and committed to correctly.
+  /// - Prove shared secrets were correctly derived, and committed to, for each of the
+  ///   participants' public keys. The exact randomness used for deriving the shared secret will be
+  ///   randomly sampled and should not be expected to be deterministic.
+  ///
+  /// `transcript` MUST _already_ be binding to `participant_public_keys` and `evrf_public_key`.
   #[expect(clippy::too_many_arguments)]
   pub(super) fn verify(
     rng: &mut (impl RngCore + CryptoRng),
@@ -777,56 +782,7 @@ impl<C: Curves> Proof<C> {
       (transcript, ecdh_commitments, pedersen_commitments)
     };
 
-    // Read the openings for each of the Pedersen commitments
-    let mut openings = Vec::with_capacity(pedersen_commitments.len());
-    for _ in 0 .. pedersen_commitments.len() {
-      openings.push(transcript.read_point::<C::ToweringCurve>().map_err(|_| ())?);
-    }
-
-    /*
-      Verify the openings of each of the Pedersen commitments.
-
-      We do this via verifying the prover knows an opening of their Pedersen commitment, minus the
-      claimed opening, over the blinding generator. For efficiency, we take a random combination of
-      all commitments/openings, solely requiring the prover know the single opening for the
-      combination.
-    */
-    {
-      let (weighted_sum_commitments, weighted_sum_openings) = {
-        let mut weighted_sum_commitments = Vec::with_capacity(pedersen_commitments.len());
-        let mut weighted_sum_openings = Vec::with_capacity(pedersen_commitments.len());
-        for (pedersen_commitment, opening) in pedersen_commitments.iter().zip(&openings) {
-          let weight = transcript.challenge::<C::ToweringCurve>();
-          weighted_sum_commitments.push((weight, *pedersen_commitment));
-          weighted_sum_openings.push((weight, *opening));
-        }
-        (
-          multiexp::multiexp_vartime(&weighted_sum_commitments),
-          multiexp::multiexp_vartime(&weighted_sum_openings),
-        )
-      };
-      #[expect(non_snake_case)]
-      let A_values = weighted_sum_openings;
-      #[expect(non_snake_case)]
-      let A_blinding_factors = weighted_sum_commitments - weighted_sum_openings;
-
-      // Verify the proof that the openings were well-defined
-      #[expect(non_snake_case)]
-      let R_values = transcript.read_point::<C::ToweringCurve>().map_err(|_| ())?;
-      #[expect(non_snake_case)]
-      let R_blinding_factors = transcript.read_point::<C::ToweringCurve>().map_err(|_| ())?;
-      let c = transcript.challenge::<C::ToweringCurve>();
-      let s_values = transcript.read_scalar::<C::ToweringCurve>().map_err(|_| ())?;
-      let s_blinding_factors = transcript.read_scalar::<C::ToweringCurve>().map_err(|_| ())?;
-
-      // We don't batch verify these as we can't access the internals of the GBP batch verifier
-      if (R_values + (A_values * c)) != (generators.g() * s_values) {
-        Err(())?;
-      }
-      if (R_blinding_factors + (A_blinding_factors * c)) != (generators.h() * s_blinding_factors) {
-        Err(())?;
-      }
-    }
+    let openings = Self::verify_reveal(rng, verifier, &mut transcript, pedersen_commitments)?;
 
     if !transcript.complete().is_empty() {
       Err(())?;
@@ -836,4 +792,56 @@ impl<C: Curves> Proof<C> {
     let encryption_key_commitments = openings[coefficients.len() ..].to_vec();
     Ok(Verified { coefficients, ecdh_commitments, encryption_key_commitments })
   }
+}
+
+#[test]
+fn proof() {
+  use std::time::Instant;
+  use rand_core::OsRng;
+  use ciphersuite::group::Group as _;
+  use crate::Ed25519;
+
+  const THRESHOLD: u16 = 3;
+  const PARTICIPANTS: u16 = 5;
+
+  let generators = crate::Generators::<Ed25519>::new(THRESHOLD, PARTICIPANTS).0;
+
+  let mut context = [0; 32];
+  OsRng.fill_bytes(&mut context);
+
+  let embedded_private_key =
+    Zeroizing::new(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng));
+
+  #[expect(clippy::as_conversions)]
+  let ecdh_public_keys: [_; PARTICIPANTS as usize] = core::array::from_fn(|_| {
+    <<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::G::random(&mut OsRng)
+  });
+
+  let time = Instant::now();
+  let res = Proof::<Ed25519>::prove(
+    &mut OsRng,
+    &generators,
+    context,
+    THRESHOLD.into(),
+    &ecdh_public_keys,
+    &embedded_private_key,
+  )
+  .unwrap();
+  std::println!("Proving time: {:?}", time.elapsed());
+
+  let time = Instant::now();
+  let mut verifier = Generators::batch_verifier();
+  Proof::<Ed25519>::verify(
+    &mut OsRng,
+    &generators,
+    &mut verifier,
+    context,
+    THRESHOLD.into(),
+    &ecdh_public_keys,
+    <Ed25519 as Curves>::EmbeddedCurve::generator() * *embedded_private_key,
+    &res.proof,
+  )
+  .unwrap();
+  assert!(generators.verify(verifier));
+  std::println!("Verifying time: {:?}", time.elapsed());
 }

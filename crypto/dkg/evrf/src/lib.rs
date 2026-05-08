@@ -37,34 +37,43 @@ pub use curves::*;
 mod proof;
 use proof::*;
 
+mod shares;
+use shares::EncryptedSecretShare;
+
 #[cfg(test)]
 extern crate std;
-#[cfg(test)]
-mod tests;
 
 /// Participation in the DKG.
 ///
 /// `Participation` is meant to be broadcast to all other participants over an authenticated,
-/// reliable broadcast channel.
-#[derive(Clone, PartialEq, Eq, Debug)]
+/// reliable broadcast channel. For consistent parameters, any valid participation from a
+/// participant will encode the same polynomial however (even if the participations serialize
+/// differently).
+#[derive(Clone)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Participation<C: Curves> {
   proof: Vec<u8>,
+  /// These are `(to, share)`.
   encrypted_secret_shares: HashMap<Participant, <C::ToweringCurve as WrappedGroup>::F>,
 }
 
 impl<C: Curves> Participation<C> {
+  /// Read a participation of length variable to the `t, n` parameters.
   pub fn read<R: Read>(reader: &mut R, t: u16, n: u16) -> io::Result<Self> {
     let mut proof = vec![0; Proof::<C>::transcript_len(t.into(), n.into())];
     reader.read_exact(&mut proof)?;
 
     let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
     for i in Participant::iter().take(usize::from(n)) {
-      encrypted_secret_shares.insert(i, <C::ToweringCurve as GroupIo>::read_F(reader)?);
+      assert!(encrypted_secret_shares
+        .insert(i, <C::ToweringCurve as GroupIo>::read_F(reader)?)
+        .is_none());
     }
 
     Ok(Self { proof, encrypted_secret_shares })
   }
 
+  /// Write the participation.
   pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
     writer.write_all(&self.proof)?;
     for i in Participant::iter().take(self.encrypted_secret_shares.len()) {
@@ -115,7 +124,7 @@ pub enum Error {
   },
 }
 
-/// The result of calling `Dkg::verify`.
+/// The result from calling `Dkg::verify`.
 pub enum VerifyResult<C: Curves> {
   /// The DKG participations were valid.
   Valid(Dkg<C>),
@@ -125,21 +134,14 @@ pub enum VerifyResult<C: Curves> {
   NotEnoughParticipants,
 }
 
-/// Struct representing a DKG.
-#[derive(Debug)]
+/// The representation of a completed DKG.
 pub struct Dkg<C: Curves> {
   t: u16,
   n: u16,
   evrf_public_keys: Vec<<C::EmbeddedCurve as WrappedGroup>::G>,
   verification_shares: HashMap<Participant, <C::ToweringCurve as WrappedGroup>::G>,
-  #[expect(clippy::type_complexity)]
-  encrypted_secret_shares: HashMap<
-    Participant,
-    HashMap<
-      Participant,
-      ([<C::EmbeddedCurve as WrappedGroup>::G; 2], <C::ToweringCurve as WrappedGroup>::F),
-    >,
-  >,
+  /// These are `(from, (to, share))`.
+  encrypted_secret_shares: HashMap<Participant, HashMap<Participant, EncryptedSecretShare<C>>>,
 }
 
 impl<C: Curves> Dkg<C> {
@@ -148,20 +150,25 @@ impl<C: Curves> Dkg<C> {
     invocation: [u8; 32],
     evrf_public_keys: &[<C::EmbeddedCurve as WrappedGroup>::G],
     t: u16,
-  ) -> [u8; 32] {
+    n: u16,
+  ) -> Blake2s256 {
     let mut transcript = Blake2s256::new();
     transcript.update(invocation);
+    transcript.update(n.to_le_bytes());
     for key in evrf_public_keys {
       transcript.update(key.to_bytes().as_ref());
     }
     transcript.update(t.to_le_bytes());
-    transcript.finalize().into()
+    transcript
   }
 
   /// Participate in performing the DKG for the specified parameters.
   ///
   /// The context MUST be unique across invocations. Reuse of context will lead to sharing
   /// prior-shared secrets again.
+  ///
+  /// `evrf_public_keys` is the eVRF public keys of the participants in the DKG protocol who are
+  /// eligible to perform a secret-sharing and will also receive shares.
   pub fn participate(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,
@@ -187,16 +194,14 @@ impl<C: Curves> Dkg<C> {
       Err(Error::NotAParticipant)?;
     }
 
-    let transcript = Self::initial_transcript(context, evrf_public_keys, t);
+    let mut transcript = Self::initial_transcript(context, evrf_public_keys, t, n);
     // Bind to the participant
-    let mut per_proof_transcript = Blake2s256::new();
-    per_proof_transcript.update(transcript);
-    per_proof_transcript.update(evrf_public_key.to_bytes());
+    transcript.update(evrf_public_key.to_bytes());
 
     let ProveResult { coefficients, encryption_keys, proof } = match Proof::<C>::prove(
       rng,
       &generators.0,
-      per_proof_transcript.finalize().into(),
+      transcript.finalize().into(),
       usize::from(t),
       evrf_public_keys,
       evrf_private_key,
@@ -212,60 +217,167 @@ impl<C: Curves> Dkg<C> {
     let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
     for (l, encryption_key) in Participant::iter().take(usize::from(n)).zip(encryption_keys) {
       let share = polynomial::<<C::ToweringCurve as WrappedGroup>::F>(&coefficients, l);
-      encrypted_secret_shares.insert(l, *share + *encryption_key);
+      assert!(encrypted_secret_shares.insert(l, *share + *encryption_key).is_none());
     }
 
     Ok(Participation { proof, encrypted_secret_shares })
   }
-}
 
-/// Batch-verifiable statements to verify encrypted secret shares.
-#[expect(clippy::type_complexity)]
-fn verifiable_encryption_statements<C: Curves>(
-  rng: &mut (impl RngCore + CryptoRng),
-  coefficients: &[<C::ToweringCurve as WrappedGroup>::G],
-  encryption_key_commitments: &[<C::ToweringCurve as WrappedGroup>::G],
-  encrypted_secret_shares: &HashMap<Participant, <C::ToweringCurve as WrappedGroup>::F>,
-) -> (
-  <C::ToweringCurve as WrappedGroup>::F,
-  Vec<(<C::ToweringCurve as WrappedGroup>::F, <C::ToweringCurve as WrappedGroup>::G)>,
-) {
-  let mut g_scalar = <C::ToweringCurve as WrappedGroup>::F::ZERO;
-  let mut pairs = Vec::with_capacity(coefficients.len() + encryption_key_commitments.len());
+  #[expect(clippy::too_many_arguments)]
+  fn queue_single_proof_for_batch_verification(
+    rng: &mut (impl RngCore + CryptoRng),
+    generators: &Generators<C>,
+    evrf_verifier: &mut generalized_bulletproofs::BatchVerifier<C::ToweringCurve>,
+    transcript: &Blake2s256,
+    t: u16,
+    evrf_public_keys: &[<C::EmbeddedCurve as WrappedGroup>::G],
+    i: Participant,
+    participation: &Participation<C>,
+  ) -> Result<Verified<C>, ()> {
+    let evrf_public_key = evrf_public_keys[usize::from(u16::from(i)) - 1];
 
-  // Push on the commitments to the polynomial being secret-shared
-  for coefficient in coefficients {
-    // This uses `0` as we'll add to it later, given its fixed position
-    pairs.push((<C::ToweringCurve as WrappedGroup>::F::ZERO, *coefficient));
+    let mut per_proof_transcript = transcript.clone();
+    per_proof_transcript.update(evrf_public_key.to_bytes());
+
+    Proof::<C>::verify(
+      rng,
+      &generators.0,
+      evrf_verifier,
+      per_proof_transcript.finalize().into(),
+      usize::from(t),
+      evrf_public_keys,
+      evrf_public_key,
+      &participation.proof,
+    )
   }
 
-  for (i, encrypted_secret_share) in encrypted_secret_shares {
-    let encryption_key_commitment = encryption_key_commitments[usize::from(u16::from(*i)) - 1];
+  #[expect(clippy::too_many_arguments, clippy::type_complexity)]
+  fn queue_for_batch_verification(
+    rng: &mut (impl RngCore + CryptoRng),
+    generators: &Generators<C>,
+    context: [u8; 32],
+    t: u16,
+    n: u16,
+    evrf_public_keys: &[<C::EmbeddedCurve as WrappedGroup>::G],
+    participations: &HashMap<Participant, Participation<C>>,
+    potentially_valid: &mut HashMap<
+      Participant,
+      (HashMap<Participant, <C::ToweringCurve as WrappedGroup>::F>, Verified<C>),
+    >,
+    faulty: &mut HashSet<Participant>,
+  ) -> generalized_bulletproofs::BatchVerifier<C::ToweringCurve> {
+    let transcript = Self::initial_transcript(context, evrf_public_keys, t, n);
 
-    let weight = <C::ToweringCurve as WrappedGroup>::F::random(&mut *rng);
+    let mut evrf_verifier = generalized_bulletproofs::Generators::batch_verifier();
+    for (i, participation) in participations {
+      // Clone the verifier so if this proof is faulty, it doesn't corrupt the verifier
+      let mut verifier_clone = evrf_verifier.clone();
+      let Ok(data) = Self::queue_single_proof_for_batch_verification(
+        rng,
+        generators,
+        &mut verifier_clone,
+        &transcript,
+        t,
+        evrf_public_keys,
+        *i,
+        participation,
+      ) else {
+        assert!(faulty.insert(*i));
+        continue;
+      };
+      evrf_verifier = verifier_clone;
 
-    /*
-      The encrypted secret share scaling `G`, minus the encryption key commitment, minus the
-      commitment to the secret share, should equal the identity point.
+      assert!(potentially_valid
+        .insert(*i, (participation.encrypted_secret_shares.clone(), data))
+        .is_none());
+    }
+    debug_assert_eq!(potentially_valid.len() + faulty.len(), participations.len());
 
-      We actually subtract the encrypted share to optimize the amount of negations we perform.
-    */
-    g_scalar -= weight * encrypted_secret_share;
-    pairs.push((weight, encryption_key_commitment));
-    // Calculate the commitment to the secret share via the commitments to the polynomial
+    evrf_verifier
+  }
+
+  #[expect(clippy::too_many_arguments, clippy::type_complexity)]
+  fn verify_structurally_valid_proofs(
+    rng: &mut (impl RngCore + CryptoRng),
+    generators: &Generators<C>,
+    context: [u8; 32],
+    t: u16,
+    n: u16,
+    evrf_public_keys: &[<C::EmbeddedCurve as WrappedGroup>::G],
+    participations: &HashMap<Participant, Participation<C>>,
+    potentially_valid: &mut HashMap<
+      Participant,
+      (HashMap<Participant, <C::ToweringCurve as WrappedGroup>::F>, Verified<C>),
+    >,
+    faulty: &mut HashSet<Participant>,
+    evrf_verifier: generalized_bulletproofs::BatchVerifier<C::ToweringCurve>,
+  ) {
+    // Perform the batch verification of the eVRFs
+    if generators.0.verify(evrf_verifier) {
+      return;
+    }
+
+    // If the batch failed, verify them each individually
+    #[cfg(debug_assertions)]
+    let faulty_len_at_start = faulty.len();
+    let transcript = Self::initial_transcript(context, evrf_public_keys, t, n);
+    for (i, participation) in participations {
+      if faulty.contains(i) {
+        continue;
+      }
+
+      let mut evrf_verifier = generalized_bulletproofs::Generators::batch_verifier();
+      Self::queue_single_proof_for_batch_verification(
+        rng,
+        generators,
+        &mut evrf_verifier,
+        &transcript,
+        t,
+        evrf_public_keys,
+        *i,
+        participation,
+      )
+      .expect("evrf failed structural checks yet prover wasn't prior marked faulty");
+      if !generators.0.verify(evrf_verifier) {
+        assert!(potentially_valid.remove(i).is_some());
+        assert!(faulty.insert(*i));
+      }
+    }
+    #[cfg(debug_assertions)]
     {
-      let i = <C::ToweringCurve as WrappedGroup>::F::from(u64::from(u16::from(*i)));
-      (0 .. coefficients.len()).fold(weight, |exp, j| {
-        pairs[j].0 += exp;
-        exp * i
-      });
+      debug_assert!(faulty_len_at_start < faulty.len());
     }
   }
 
-  (g_scalar, pairs)
-}
+  fn participating_weight(
+    participating: impl Iterator<Item = Participant>,
+    evrf_public_keys: &[<C::EmbeddedCurve as WrappedGroup>::G],
+  ) -> usize {
+    let mut participating_weight = 0;
+    let mut evrf_public_keys_mut = evrf_public_keys.to_vec();
+    for i in participating {
+      let evrf_public_key = evrf_public_keys[usize::from(u16::from(i)) - 1];
 
-impl<C: Curves> Dkg<C> {
+      /*
+        Remove this key from the `Vec` to prevent double-counting.
+
+        Double-counting would be a risk if multiple participants shared an eVRF public key and
+        participated. This code does still allow such participants (in order to let participants
+        be weighted), and any one of them participating will count as all participating. This is
+        fine as any one such participant will be able to decrypt the shares for themselves and
+        all other participants with the same key, so this is still a key generated by an amount
+        of participants who could simply reconstruct the key.
+      */
+      let start_len = evrf_public_keys_mut.len();
+      evrf_public_keys_mut.retain(|key| *key != evrf_public_key);
+      let end_len = evrf_public_keys_mut.len();
+      let count = start_len - end_len;
+
+      participating_weight += count;
+    }
+    participating_weight
+  }
+
   /// Check if a batch of `Participation`s are valid.
   ///
   /// If any `Participation` is invalid, the list of all invalid participants will be returned.
@@ -298,126 +410,44 @@ impl<C: Curves> Dkg<C> {
       }
     }
 
-    let mut valid = HashMap::with_capacity(participations.len());
+    let mut potentially_valid = HashMap::with_capacity(participations.len());
     let mut faulty = HashSet::new();
 
-    let transcript = Self::initial_transcript(context, evrf_public_keys, t);
-
-    let mut evrf_verifier = generalized_bulletproofs::Generators::batch_verifier();
-    for (i, participation) in participations {
-      let evrf_public_key = evrf_public_keys[usize::from(u16::from(*i)) - 1];
-
-      let mut per_proof_transcript = Blake2s256::new();
-      per_proof_transcript.update(transcript);
-      per_proof_transcript.update(evrf_public_key.to_bytes());
-
-      // Clone the verifier so if this proof is faulty, it doesn't corrupt the verifier
-      let mut verifier_clone = evrf_verifier.clone();
-      let Ok(data) = Proof::<C>::verify(
-        rng,
-        &generators.0,
-        &mut verifier_clone,
-        per_proof_transcript.finalize().into(),
-        usize::from(t),
-        evrf_public_keys,
-        evrf_public_key,
-        &participation.proof,
-      ) else {
-        faulty.insert(*i);
-        continue;
-      };
-      evrf_verifier = verifier_clone;
-
-      valid.insert(*i, (participation.encrypted_secret_shares.clone(), data));
-    }
-    debug_assert_eq!(valid.len() + faulty.len(), participations.len());
-
-    // Perform the batch verification of the eVRFs
-    if !generators.0.verify(evrf_verifier) {
-      // If the batch failed, verify them each individually
-      for (i, participation) in participations {
-        if faulty.contains(i) {
-          continue;
-        }
-        let mut evrf_verifier = generalized_bulletproofs::Generators::batch_verifier();
-        Proof::<C>::verify(
-          rng,
-          &generators.0,
-          &mut evrf_verifier,
-          context,
-          usize::from(t),
-          evrf_public_keys,
-          evrf_public_keys[usize::from(u16::from(*i)) - 1],
-          &participation.proof,
-        )
-        .expect("evrf failed basic checks yet prover wasn't prior marked faulty");
-        if !generators.0.verify(evrf_verifier) {
-          valid.remove(i);
-          faulty.insert(*i);
-        }
-      }
-    }
-    debug_assert_eq!(valid.len() + faulty.len(), participations.len());
-
-    // Perform the batch verification of the shares
-    let mut sum_encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
-    let mut sum_masks = HashMap::with_capacity(usize::from(n));
-    let mut all_encrypted_secret_shares = HashMap::with_capacity(usize::from(t));
-    {
-      let mut share_verification_statements_actual = HashMap::with_capacity(valid.len());
-      if !{
-        let mut g_scalar = <C::ToweringCurve as WrappedGroup>::F::ZERO;
-        let mut pairs = Vec::with_capacity(valid.len() * (usize::from(t) + evrf_public_keys.len()));
-        for (i, (encrypted_secret_shares, data)) in &valid {
-          let (this_g_scalar, mut these_pairs) = verifiable_encryption_statements::<C>(
-            &mut *rng,
-            &data.coefficients,
-            &data.encryption_key_commitments,
-            encrypted_secret_shares,
-          );
-          // Queue this into our batch
-          g_scalar += this_g_scalar;
-          pairs.extend(&these_pairs);
-
-          // Also push this g_scalar onto `these_pairs` so `these_pairs` can be verified
-          // individually upon error
-          these_pairs.push((this_g_scalar, generators.0.g()));
-          share_verification_statements_actual.insert(*i, these_pairs);
-
-          // Also format this data as we'd need it upon success
-          let mut formatted_encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
-          for (j, enc_share) in encrypted_secret_shares {
-            /*
-              We calculcate verification shares as the sum of the encrypted scalars, minus their
-              masks. This only does one scalar multiplication, and `1+t` point additions (with
-              one negation), and is accordingly much cheaper than interpolating the commitments.
-              This is only possible because we already interpolated the commitments to verify the
-              encrypted secret share.
-            */
-            *sum_encrypted_secret_shares
-              .entry(*j)
-              .or_insert(<C::ToweringCurve as WrappedGroup>::F::ZERO) += enc_share;
-            let j_index = usize::from(u16::from(*j)) - 1;
-            *sum_masks.entry(*j).or_insert(<C::ToweringCurve as WrappedGroup>::G::identity()) +=
-              data.encryption_key_commitments[j_index];
-
-            formatted_encrypted_secret_shares
-              .insert(*j, (data.ecdh_commitments[j_index], *enc_share));
-          }
-          all_encrypted_secret_shares.insert(*i, formatted_encrypted_secret_shares);
-        }
-        pairs.push((g_scalar, generators.0.g()));
-        bool::from(multiexp_vartime(&pairs).is_identity())
-      } {
-        // If the batch failed, verify them each individually
-        for (i, pairs) in share_verification_statements_actual {
-          if !bool::from(multiexp_vartime(&pairs).is_identity()) {
-            valid.remove(&i);
-            faulty.insert(i);
-          }
-        }
-      }
-    }
+    let evrf_verifier = Self::queue_for_batch_verification(
+      rng,
+      generators,
+      context,
+      t,
+      n,
+      evrf_public_keys,
+      participations,
+      &mut potentially_valid,
+      &mut faulty,
+    );
+    debug_assert_eq!(potentially_valid.len() + faulty.len(), participations.len());
+    Self::verify_structurally_valid_proofs(
+      rng,
+      generators,
+      context,
+      t,
+      n,
+      evrf_public_keys,
+      participations,
+      &mut potentially_valid,
+      &mut faulty,
+      evrf_verifier,
+    );
+    debug_assert_eq!(potentially_valid.len() + faulty.len(), participations.len());
+    let shares = shares::verify::<C>(
+      rng,
+      generators,
+      t,
+      n,
+      evrf_public_keys,
+      &mut potentially_valid,
+      &mut faulty,
+    );
+    let valid = potentially_valid;
     debug_assert_eq!(valid.len() + faulty.len(), participations.len());
 
     let mut faulty = faulty.into_iter().collect::<Vec<_>>();
@@ -426,55 +456,26 @@ impl<C: Curves> Dkg<C> {
       return Ok(VerifyResult::Invalid(faulty));
     }
 
-    // We check at least `t` key shares of people have participated in contributing entropy
-    // Since the key shares of the participants exceed `t`, meaning if they're malicious they can
-    // reconstruct the key regardless, this is safe to the threshold
-    {
-      let mut participating_weight = 0;
-      let mut evrf_public_keys_mut = evrf_public_keys.to_vec();
-      for i in valid.keys() {
-        let evrf_public_key = evrf_public_keys[usize::from(u16::from(*i)) - 1];
-
-        /*
-          Remove this key from the `Vec` to prevent double-counting.
-
-          Double-counting would be a risk if multiple participants shared an eVRF public key and
-          participated. This code does still allow such participants (in order to let participants
-          be weighted), and any one of them participating will count as all participating. This is
-          fine as any one such participant will be able to decrypt the shares for themselves and
-          all other participants with the same key, so this is still a key generated by an amount
-          of participants who could simply reconstruct the key.
-        */
-        let start_len = evrf_public_keys_mut.len();
-        evrf_public_keys_mut.retain(|key| *key != evrf_public_key);
-        let end_len = evrf_public_keys_mut.len();
-        let count = start_len - end_len;
-
-        participating_weight += count;
-      }
-      if participating_weight < usize::from(t) {
-        return Ok(VerifyResult::NotEnoughParticipants);
-      }
+    /*
+      We check at least `t` key shares of people have participated in contributing entropy. Since
+      the key shares of the participants exceed `t`, meaning if they're malicious they can
+      reconstruct the key regardless, this is safe to the threshold.
+    */
+    if Self::participating_weight(valid.keys().copied(), evrf_public_keys) < usize::from(t) {
+      return Ok(VerifyResult::NotEnoughParticipants);
     }
 
-    // If we now have `>= t` participations, output the result
+    let shares::Verified { verification_shares, encrypted_secret_shares } = shares.expect(
+      "no one was faulty, participants exceeded the threshold, yet verified shares were `None`",
+    );
 
-    // Calculate each user's verification share
-    let mut verification_shares = HashMap::with_capacity(usize::from(n));
-    for i in Participant::iter().take(usize::from(n)) {
-      verification_shares.insert(
-        i,
-        (<C::ToweringCurve as WrappedGroup>::generator() * sum_encrypted_secret_shares[&i]) -
-          sum_masks[&i],
-      );
-    }
-
+    // As we now have `>= t` participations, output the result
     Ok(VerifyResult::Valid(Dkg {
       t,
       n,
       evrf_public_keys: evrf_public_keys.to_vec(),
       verification_shares,
-      encrypted_secret_shares: all_encrypted_secret_shares,
+      encrypted_secret_shares,
     }))
   }
 
@@ -487,6 +488,8 @@ impl<C: Curves> Dkg<C> {
   ) -> Vec<ThresholdKeys<C::ToweringCurve>> {
     let evrf_public_key =
       <C::EmbeddedCurve as WrappedGroup>::generator() * evrf_private_key.deref();
+
+    // Identify all `Participant`s which belong to this key
     let mut is = Vec::with_capacity(1);
     for (i, evrf_key) in Participant::iter().zip(self.evrf_public_keys.iter()) {
       if *evrf_key == evrf_public_key {
@@ -496,25 +499,18 @@ impl<C: Curves> Dkg<C> {
 
     let mut res = Vec::with_capacity(is.len());
     for i in is {
+      // Decrypt the secret share
       let mut secret_share = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
+      // The key is `from`, which is irrelevant here, hence why we solely iterate the values
       for shares in self.encrypted_secret_shares.values() {
-        let (ecdh_commitments, encrypted_secret_share) = shares[&i];
-
-        let mut ecdh = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
-        for point in ecdh_commitments {
-          let (mut x, mut y) =
-            <C::EmbeddedCurve as WrappedGroup>::G::to_xy(point * evrf_private_key.deref()).unwrap();
-          *ecdh += x;
-          x.zeroize();
-          y.zeroize();
-        }
-        *secret_share += encrypted_secret_share - ecdh.deref();
+        *secret_share += shares[&i].decrypt(evrf_private_key).deref();
       }
       debug_assert_eq!(
         self.verification_shares[&i],
         <C::ToweringCurve as WrappedGroup>::generator() * secret_share.deref()
       );
 
+      // Push it onto the result
       res.push(
         ThresholdKeys::new(
           ThresholdParams::new(self.t, self.n, i).unwrap(),
@@ -527,5 +523,532 @@ impl<C: Curves> Dkg<C> {
     }
 
     res
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn too_many_participants() {
+    use rand_core::OsRng;
+
+    let generators = Generators::<Ed25519>::new(1, 1);
+
+    let mut context = [0; 32];
+    OsRng.fill_bytes(&mut context);
+
+    let priv_key =
+      Zeroizing::new(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng));
+    let pub_keys =
+      vec![<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::generator() * *priv_key; 1 << 16];
+
+    assert_eq!(
+      Dkg::<Ed25519>::participate(&mut OsRng, &generators, context, 1, &pub_keys, &priv_key)
+        .map(|_| ())
+        .unwrap_err(),
+      Error::TooManyParticipants { provided: 1 << 16 }
+    );
+
+    assert_eq!(
+      Dkg::<Ed25519>::verify(&mut OsRng, &generators, context, 1, &pub_keys, &HashMap::new())
+        .map(|_| ())
+        .unwrap_err(),
+      Error::TooManyParticipants { provided: 1 << 16 }
+    );
+  }
+
+  #[test]
+  fn invalid_threshold() {
+    use rand_core::OsRng;
+
+    let generators = Generators::<Ed25519>::new(1, 1);
+
+    let mut context = [0; 32];
+    OsRng.fill_bytes(&mut context);
+
+    let priv_key =
+      Zeroizing::new(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng));
+    let pub_keys =
+      vec![<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::generator() * *priv_key];
+
+    assert_eq!(
+      Dkg::<Ed25519>::participate(&mut OsRng, &generators, context, 2, &pub_keys, &priv_key)
+        .map(|_| ())
+        .unwrap_err(),
+      Error::InvalidThreshold { t: 2, n: 1 }
+    );
+
+    assert_eq!(
+      Dkg::<Ed25519>::verify(&mut OsRng, &generators, context, 2, &pub_keys, &HashMap::new())
+        .map(|_| ())
+        .unwrap_err(),
+      Error::InvalidThreshold { t: 2, n: 1 }
+    );
+  }
+
+  #[test]
+  fn identity() {
+    use rand_core::OsRng;
+
+    let generators = Generators::<Ed25519>::new(1, 1);
+
+    let mut context = [0; 32];
+    OsRng.fill_bytes(&mut context);
+
+    let priv_key =
+      Zeroizing::new(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng));
+    let pub_keys = vec![
+      <<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::generator() * *priv_key,
+      <<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::G::identity(),
+    ];
+
+    assert_eq!(
+      Dkg::<Ed25519>::participate(&mut OsRng, &generators, context, 1, &pub_keys, &priv_key)
+        .map(|_| ())
+        .unwrap_err(),
+      Error::PublicKeyWasIdentity
+    );
+
+    assert_eq!(
+      Dkg::<Ed25519>::verify(&mut OsRng, &generators, context, 1, &pub_keys, &HashMap::new())
+        .map(|_| ())
+        .unwrap_err(),
+      Error::PublicKeyWasIdentity
+    );
+  }
+
+  #[test]
+  fn not_a_participant() {
+    use rand_core::OsRng;
+
+    let generators = Generators::<Ed25519>::new(1, 1);
+
+    let mut context = [0; 32];
+    OsRng.fill_bytes(&mut context);
+
+    let priv_key =
+      Zeroizing::new(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng));
+    let pub_keys = vec![<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::generator()];
+
+    assert_eq!(
+      Dkg::<Ed25519>::participate(&mut OsRng, &generators, context, 1, &pub_keys, &priv_key)
+        .map(|_| ())
+        .unwrap_err(),
+      Error::NotAParticipant
+    );
+  }
+
+  #[test]
+  fn non_existent_participant() {
+    use rand_core::OsRng;
+
+    let generators = Generators::<Ed25519>::new(1, 1);
+
+    let mut context = [0; 32];
+    OsRng.fill_bytes(&mut context);
+
+    let priv_key =
+      Zeroizing::new(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng));
+    let pub_keys =
+      vec![<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::generator() * *priv_key];
+
+    let participation =
+      Dkg::<Ed25519>::participate(&mut OsRng, &generators, context, 1, &pub_keys, &priv_key)
+        .unwrap();
+
+    assert_eq!(
+      Dkg::<Ed25519>::verify(
+        &mut OsRng,
+        &generators,
+        context,
+        1,
+        &pub_keys,
+        &HashMap::from([(Participant::new(2).unwrap(), participation)]),
+      )
+      .map(|_| ())
+      .unwrap_err(),
+      Error::NonExistentParticipant
+    );
+  }
+
+  #[test]
+  fn not_enough_participants() {
+    use rand_core::OsRng;
+    use rand::seq::SliceRandom as _;
+
+    let threshold = 3;
+    let participants = 4;
+    let generators = Generators::<Ed25519>::new(threshold, participants);
+
+    let mut context = [0; 32];
+    OsRng.fill_bytes(&mut context);
+
+    let mut priv_keys = vec![];
+    let mut pub_keys = vec![];
+    for i in 0 .. participants {
+      let priv_key =
+        Zeroizing::new(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng));
+      pub_keys.push(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::generator() * *priv_key);
+      priv_keys.push((Participant::new(1 + i).unwrap(), priv_key));
+    }
+    // Shuffle the private keys so we iterate over a random subset of them
+    priv_keys.shuffle(&mut OsRng);
+
+    let mut participations = HashMap::new();
+    for (i, priv_key) in priv_keys.iter().take(usize::from(threshold)) {
+      // As this has yet to reach the threshold, this should yield `NotEnoughParticipants`
+      assert!(matches!(
+        Dkg::<Ed25519>::verify(
+          &mut OsRng,
+          &generators,
+          context,
+          threshold,
+          &pub_keys,
+          &participations,
+        )
+        .unwrap(),
+        VerifyResult::NotEnoughParticipants
+      ));
+
+      let participation = Dkg::<Ed25519>::participate(
+        &mut OsRng,
+        &generators,
+        context,
+        threshold,
+        &pub_keys,
+        priv_key,
+      )
+      .unwrap();
+
+      assert!(participations.insert(*i, participation).is_none());
+    }
+
+    // Now that it's hit the expected amount of participants, it should `Valid`
+    assert!(matches!(
+      Dkg::<Ed25519>::verify(
+        &mut OsRng,
+        &generators,
+        context,
+        threshold,
+        &pub_keys,
+        &participations
+      )
+      .unwrap(),
+      VerifyResult::Valid(_)
+    ));
+  }
+
+  #[test]
+  fn queue_for_batch_verification() {
+    use rand_core::OsRng;
+
+    let threshold = 3;
+    let participants = 4;
+    let generators = Generators::<Ed25519>::new(threshold, participants);
+
+    let mut context = [0; 32];
+    OsRng.fill_bytes(&mut context);
+
+    let mut priv_keys = vec![];
+    let mut pub_keys = vec![];
+    for i in 0 .. participants {
+      let priv_key =
+        Zeroizing::new(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng));
+      pub_keys.push(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::generator() * *priv_key);
+      priv_keys.push((Participant::new(1 + i).unwrap(), priv_key));
+    }
+
+    let priv_key = &priv_keys[0];
+    let participation = Dkg::<Ed25519>::participate(
+      &mut OsRng,
+      &generators,
+      context,
+      threshold,
+      &pub_keys,
+      &priv_key.1,
+    )
+    .unwrap();
+    let participation = {
+      let mut participation_bytes = vec![];
+      participation.write(&mut participation_bytes).unwrap();
+      // Malleate the proof in a way it'll fail to even be queued for batch verification
+      let start_of_last_element_in_proof =
+        participation_bytes.len() - ((1 + usize::from(participants)) * 32);
+      for byte in &mut participation_bytes
+        [start_of_last_element_in_proof .. (start_of_last_element_in_proof + 32)]
+      {
+        *byte = 0xff;
+      }
+      Participation::<Ed25519>::read(&mut participation_bytes.as_slice(), threshold, participants)
+        .unwrap()
+    };
+
+    let mut potentially_valid = HashMap::new();
+    let mut faulty = HashSet::new();
+    let generalized_bulletproofs::BatchVerifier { g, h, g_bold, h_bold, h_sum, additional } =
+      Dkg::<Ed25519>::queue_for_batch_verification(
+        &mut OsRng,
+        &generators,
+        context,
+        threshold,
+        pub_keys.len().try_into().unwrap(),
+        &pub_keys,
+        &HashMap::from([(priv_key.0, participation)]),
+        &mut potentially_valid,
+        &mut faulty,
+      );
+    assert!(potentially_valid.is_empty());
+    assert_eq!(faulty, HashSet::from([priv_key.0]));
+    // The `BatchVerifier` should not have had the faulty proof accumulated
+    assert!(bool::from(g.is_zero()));
+    assert!(bool::from(h.is_zero()));
+    assert!(g_bold.is_empty());
+    assert!(h_bold.is_empty());
+    assert!(h_sum.is_empty());
+    assert!(additional.is_empty());
+  }
+
+  #[test]
+  fn verify_structurally_valid_proofs() {
+    use rand_core::OsRng;
+
+    let threshold = 3;
+    let participants = 4;
+    let generators = Generators::<Ed25519>::new(threshold, participants);
+
+    let mut context = [0; 32];
+    OsRng.fill_bytes(&mut context);
+
+    let mut priv_keys = vec![];
+    let mut pub_keys = vec![];
+    for i in 0 .. participants {
+      let priv_key =
+        Zeroizing::new(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng));
+      pub_keys.push(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::generator() * *priv_key);
+      priv_keys.push((Participant::new(1 + i).unwrap(), priv_key));
+    }
+
+    let mut participations = HashMap::new();
+    for (i, priv_key) in priv_keys[.. 2].iter().enumerate() {
+      let mut participation = Dkg::<Ed25519>::participate(
+        &mut OsRng,
+        &generators,
+        context,
+        threshold,
+        &pub_keys,
+        &priv_key.1,
+      )
+      .unwrap();
+
+      if i == 0 {
+        participation = {
+          let mut participation_bytes = vec![];
+          participation.write(&mut participation_bytes).unwrap();
+          // Malleate the proof in a way it'll be queued for batch verification but will be invalid
+          let start_of_last_element_in_proof =
+            participation_bytes.len() - ((1 + usize::from(participants)) * 32);
+          participation_bytes[start_of_last_element_in_proof] ^= 1;
+          Participation::<Ed25519>::read(
+            &mut participation_bytes.as_slice(),
+            threshold,
+            participants,
+          )
+          .unwrap()
+        };
+      }
+
+      assert!(participations.insert(priv_key.0, participation).is_none());
+    }
+
+    let mut potentially_valid = HashMap::new();
+    let mut faulty = HashSet::new();
+    let verifier = Dkg::<Ed25519>::queue_for_batch_verification(
+      &mut OsRng,
+      &generators,
+      context,
+      threshold,
+      pub_keys.len().try_into().unwrap(),
+      &pub_keys,
+      &participations,
+      &mut potentially_valid,
+      &mut faulty,
+    );
+    assert_eq!(potentially_valid.len(), 2);
+    assert!(potentially_valid.contains_key(&priv_keys[0].0));
+    assert!(potentially_valid.contains_key(&priv_keys[1].0));
+    assert!(faulty.is_empty());
+    {
+      let generalized_bulletproofs::BatchVerifier { g, h, g_bold, h_bold, h_sum, additional } =
+        &verifier;
+      assert!(bool::from(!g.is_zero()));
+      assert!(bool::from(!h.is_zero()));
+      assert!(!g_bold.is_empty());
+      assert!(!h_bold.is_empty());
+      assert!(!h_sum.is_empty());
+      assert!(!additional.is_empty());
+    }
+
+    Dkg::<Ed25519>::verify_structurally_valid_proofs(
+      &mut OsRng,
+      &generators,
+      context,
+      threshold,
+      pub_keys.len().try_into().unwrap(),
+      &pub_keys,
+      &participations,
+      &mut potentially_valid,
+      &mut faulty,
+      verifier,
+    );
+    assert_eq!(potentially_valid.len(), 1);
+    assert!(potentially_valid.contains_key(&priv_keys[1].0));
+    assert_eq!(faulty, HashSet::from([priv_keys[0].0]));
+  }
+
+  #[test]
+  fn participating_weight() {
+    use rand_core::OsRng;
+
+    let mut pub_keys = vec![];
+    for _ in 0 .. 5 {
+      pub_keys.push(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::G::random(&mut OsRng));
+    }
+
+    assert_eq!(Dkg::<Ed25519>::participating_weight(core::iter::empty(), &pub_keys[.. 0]), 0);
+    assert_eq!(Dkg::<Ed25519>::participating_weight(core::iter::empty(), &pub_keys), 0);
+
+    assert_eq!(
+      Dkg::<Ed25519>::participating_weight([Participant::new(1).unwrap()].into_iter(), &pub_keys),
+      1
+    );
+    assert_eq!(
+      Dkg::<Ed25519>::participating_weight(
+        [Participant::new(1).unwrap(), Participant::new(4).unwrap()].into_iter(),
+        &pub_keys
+      ),
+      2
+    );
+
+    // The first `pub_key` (zero-indexed) corresponds to the first `Participant` (one-indexes)
+    pub_keys[0] = pub_keys[3];
+    // Specifying a single index should count for both participations
+    assert_eq!(
+      Dkg::<Ed25519>::participating_weight([Participant::new(1).unwrap()].into_iter(), &pub_keys),
+      2
+    );
+    // Explicitly specifying both instances should not increase the weight
+    assert_eq!(
+      Dkg::<Ed25519>::participating_weight(
+        [Participant::new(1).unwrap(), Participant::new(4).unwrap()].into_iter(),
+        &pub_keys
+      ),
+      2
+    );
+
+    assert_eq!(Dkg::<Ed25519>::participating_weight(Participant::iter().take(5), &pub_keys), 5);
+  }
+
+  #[test]
+  fn dkg() {
+    use rand_core::OsRng;
+    use rand::seq::SliceRandom as _;
+
+    let max_threshold = 3;
+    let max_participants = 4;
+    let generators = Generators::<Ed25519>::new(max_threshold, max_participants);
+
+    for participants in 1 ..= max_participants {
+      for threshold in 1 ..= max_threshold.min(participants) {
+        let mut context = [0; 32];
+        OsRng.fill_bytes(&mut context);
+
+        let mut priv_keys = vec![];
+        let mut pub_keys = vec![];
+        for i in 0 .. participants {
+          let priv_key = Zeroizing::new(
+            <<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::F::random(&mut OsRng),
+          );
+          pub_keys
+            .push(<<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::generator() * *priv_key);
+          priv_keys.push((Participant::new(1 + i).unwrap(), priv_key));
+        }
+        // Shuffle the private keys so we iterate over a random subset of them
+        priv_keys.shuffle(&mut OsRng);
+
+        let mut participations = HashMap::new();
+        for (i, priv_key) in priv_keys.iter().take(usize::from(threshold)) {
+          let participation = Dkg::<Ed25519>::participate(
+            &mut OsRng,
+            &generators,
+            context,
+            threshold,
+            &pub_keys,
+            priv_key,
+          )
+          .unwrap();
+
+          // Test `read`, `write`
+          {
+            let mut serialized = vec![];
+            participation.write(&mut serialized).unwrap();
+            let mut serialized = serialized.as_slice();
+            assert!(
+              Participation::read(&mut serialized, threshold, participants).unwrap() ==
+                participation
+            );
+            assert!(serialized.is_empty());
+          }
+
+          assert!(participations.insert(*i, participation).is_none());
+        }
+
+        let VerifyResult::Valid(dkg) = Dkg::<Ed25519>::verify(
+          &mut OsRng,
+          &generators,
+          context,
+          threshold,
+          &pub_keys,
+          &participations,
+        )
+        .unwrap() else {
+          panic!("verify didn't return VerifyResult::Valid")
+        };
+
+        let mut group_key = None;
+        let mut verification_shares = None;
+        let mut keys = vec![];
+        for (i, priv_key) in priv_keys {
+          let these_keys = dkg.keys(&priv_key).into_iter().next().unwrap();
+
+          assert_eq!(these_keys.params().i(), i);
+          assert_eq!(these_keys.params().t(), threshold);
+          assert_eq!(these_keys.params().n(), participants);
+
+          group_key = group_key.or(Some(these_keys.group_key()));
+          assert_eq!(Some(these_keys.group_key()), group_key);
+
+          {
+            let these_verification_shares = Participant::iter()
+              .take(usize::from(participants))
+              .map(|i| (i, these_keys.original_verification_share(i)))
+              .collect::<HashMap<_, _>>();
+            verification_shares = verification_shares.or(Some(these_verification_shares.clone()));
+            assert_eq!(Some(these_verification_shares), verification_shares);
+          }
+
+          // Confirm our verification share corresponds to our secret share
+          assert_eq!(
+            <<Ed25519 as Curves>::ToweringCurve as WrappedGroup>::generator() *
+              **these_keys.original_secret_share(),
+            these_keys.original_verification_share(these_keys.params().i())
+          );
+          keys.push(these_keys);
+        }
+
+        let _ = dkg_recovery::recover_singular_key(&keys).unwrap();
+      }
+    }
   }
 }
