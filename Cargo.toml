@@ -41,6 +41,9 @@ members = [
   "networks/ethereum/relayer",
 
   "message-queue",
+  "message-queue/client",
+  "message-queue/server",
+  "message-queue/tests",
 
   "processor/messages",
 
@@ -107,7 +110,6 @@ members = [
 
   "tests/shim-rpc",
   "tests/docker",
-  "tests/message-queue",
   # TODO "tests/processor",
   # TODO "tests/coordinator",
   "tests/substrate",

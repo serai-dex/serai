@@ -7767,7 +7767,7 @@ dependencies = [
  "serai-cosign",
  "serai-db",
  "serai-env",
- "serai-message-queue",
+ "serai-message-queue-client",
  "serai-processor-messages",
  "serai-task",
  "tokio",
@@ -8107,15 +8107,41 @@ dependencies = [
  "ciphersuite 0.4.2",
  "dalek-ff-group",
  "flexible-transcript",
- "hex",
  "rand_core 0.6.4",
  "schnorr-signatures",
+ "serai-primitives",
+ "zeroize",
+]
+
+[[package]]
+name = "serai-message-queue-client"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "ciphersuite 0.4.2",
+ "dalek-ff-group",
+ "hex",
+ "rand_core 0.6.4",
+ "serai-env",
+ "serai-message-queue",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
+name = "serai-message-queue-server"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "ciphersuite 0.4.2",
+ "dalek-ff-group",
+ "hex",
  "serai-db",
  "serai-env",
+ "serai-message-queue",
  "serai-primitives",
  "tokio",
  "zalloc",
- "zeroize",
 ]
 
 [[package]]
@@ -8128,7 +8154,7 @@ dependencies = [
  "hex",
  "rand_core 0.6.4",
  "serai-docker-tests",
- "serai-message-queue",
+ "serai-message-queue-client",
  "serai-primitives",
  "tokio",
  "zeroize",
@@ -8296,7 +8322,7 @@ dependencies = [
  "serai-cosign-types",
  "serai-db",
  "serai-env",
- "serai-message-queue",
+ "serai-message-queue-client",
  "serai-primitives",
  "serai-processor-key-gen",
  "serai-processor-messages",

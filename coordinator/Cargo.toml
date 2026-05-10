@@ -38,7 +38,7 @@ serai-env = { path = "../common/env" }
 serai-task = { path = "../common/task", version = "0.1" }
 
 messages = { package = "serai-processor-messages", path = "../processor/messages" }
-message-queue = { package = "serai-message-queue", path = "../message-queue" }
+message-queue = { package = "serai-message-queue-client", path = "../message-queue/client" }
 tributary-sdk = { path = "./tributary-sdk" }
 
 serai-client-serai = { path = "../substrate/client/serai", default-features = false }

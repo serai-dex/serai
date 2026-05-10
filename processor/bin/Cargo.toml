@@ -41,7 +41,7 @@ scheduler = { package = "serai-processor-scheduler-primitives", path = "../sched
 scanner = { package = "serai-processor-scanner", path = "../scanner" }
 signers = { package = "serai-processor-signers", path = "../signers" }
 
-message-queue = { package = "serai-message-queue", path = "../../message-queue" }
+message-queue = { package = "serai-message-queue-client", path = "../../message-queue/client" }
 
 [features]
 parity-db = ["serai-db/parity-db"]

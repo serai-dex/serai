@@ -26,7 +26,7 @@ use serai_client_serai::{
   },
   Serai,
 };
-use message_queue::{Service, client::MessageQueue};
+use message_queue::{Service, Client as MessageQueue};
 
 use serai_task::{Task, TaskHandle, ContinuallyRan as _};
 
@@ -178,7 +178,7 @@ async fn handle_network(
     let (msg_id, msg) = {
       let msg = message_queue.next(Service::Processor(network)).await;
       // Check this message's sender is as expected
-      assert_eq!(msg.from, Service::Processor(network));
+      assert_eq!(msg.metadata.from, Service::Processor(network));
 
       // Check this message's ID is as expected
       let last = LastProcessorMessage::get(&db, network);
@@ -195,7 +195,7 @@ async fn handle_network(
         continue;
       }
 
-      (msg.id, messages::ProcessorMessage::deserialize(&mut msg.msg.as_slice()).unwrap())
+      (msg.id, messages::ProcessorMessage::deserialize(&mut msg.message.as_slice()).unwrap())
     };
 
     let mut txn = db.txn();

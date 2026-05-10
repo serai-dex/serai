@@ -18,7 +18,7 @@ use tributary_sdk::{
 
 use serai_task::{Task, TaskHandle, DoesNotError, ContinuallyRan};
 
-use message_queue::{Service, Metadata, client::MessageQueue};
+use message_queue::{Service, Metadata, Client as MessageQueue};
 
 use serai_cosign::{Faulted, CosignIntent, Cosigning};
 use serai_coordinator_substrate::{NewSetInformation, SignSlashReport};

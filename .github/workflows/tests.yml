@@ -41,7 +41,9 @@ jobs:
 
       - name: Run Tests
         run: |
-          cargo test --all-features -p serai-message-queue
+          find ./message-queue -name "Cargo.toml" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done
           find ./processor -name "Cargo.toml" | while IFS="\n" read -r manifest; do
             cargo test --all-features --manifest-path $manifest
           done

@@ -1,3 +1,6 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../../README.md")]
+#![deny(missing_docs)]
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 pub(crate) use std::{
@@ -7,7 +10,6 @@ pub(crate) use std::{
 
 use dalek_ff_group::Ristretto;
 pub(crate) use ciphersuite::{group::GroupEncoding, WrappedGroup, GroupCanonicalEncoding};
-pub(crate) use schnorr_signatures::SchnorrSignature;
 
 pub(crate) use serai_primitives::network_id::ExternalNetworkId;
 
@@ -18,8 +20,8 @@ pub(crate) use tokio::{
 
 use serai_db::{Get, DbTxn, Db as _};
 
-pub(crate) use crate::messages::*;
-
+pub use message_queue::*;
+mod queue;
 pub(crate) use crate::queue::Queue;
 
 #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
@@ -37,9 +39,6 @@ mod clippy {
     LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 }
 pub(crate) use self::clippy::*;
-
-mod messages;
-mod queue;
 
 #[global_allocator]
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
@@ -59,16 +58,11 @@ static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
   The message will be ordered by this service, with the order having no guarantees other than
   successful ordering by the time this call returns.
 */
-pub(crate) fn queue_message(
-  db: &mut Db,
-  meta: &Metadata,
-  msg: Vec<u8>,
-  sig: SchnorrSignature<Ristretto>,
-) {
+pub(crate) fn queue_message(db: &mut Db, meta: &Metadata, msg: Vec<u8>, signature: [u8; 64]) {
   {
     let from = KEYS.read().unwrap()[&meta.from];
     assert!(
-      sig.verify(from, message_challenge(meta.from, from, meta.to, &meta.intent, &msg, sig.R))
+      (Request::Queue { metadata: meta.clone(), message: msg.clone(), signature }).verify(from)
     );
   }
 
@@ -103,11 +97,11 @@ pub(crate) fn queue_message(
   let id = queue_lock.queue_message(
     &mut txn,
     QueuedMessage {
-      from: meta.from,
+      metadata: meta.clone(),
+      message: msg,
+      signature,
       // Temporary value which queue_message will override
       id: u64::MAX,
-      msg,
-      sig: sig.serialize(),
     },
   );
 
@@ -135,10 +129,10 @@ pub(crate) fn get_next_message(from: Service, to: Service) -> Option<QueuedMessa
   Acknowledges a message as received and handled, meaning it'll no longer be returned as the next
   message.
 */
-pub(crate) fn ack_message(from: Service, to: Service, id: u64, sig: SchnorrSignature<Ristretto>) {
+pub(crate) fn ack_message(from: Service, to: Service, id: u64, signature: [u8; 64]) {
   {
     let to_key = KEYS.read().unwrap()[&to];
-    assert!(sig.verify(to_key, ack_challenge(to, to_key, from, id, sig.R)));
+    assert!((Request::Acknowledge { from, to, id, signature }).verify(to_key));
   }
 
   // Is it:
@@ -230,16 +224,11 @@ async fn main() {
         let msg = borsh::from_slice(&buf).unwrap();
 
         match msg {
-          MessageQueueRequest::Queue { meta, msg, sig } => {
-            queue_message(
-              &mut db,
-              &meta,
-              msg,
-              SchnorrSignature::<Ristretto>::read(&mut sig.as_slice()).unwrap(),
-            );
+          Request::Queue { metadata, message, signature } => {
+            queue_message(&mut db, &metadata, message, signature);
             let Ok(()) = socket.write_all(&[1]).await else { break };
           }
-          MessageQueueRequest::Next { from, to } => match get_next_message(from, to) {
+          Request::Fetch { from, to } => match get_next_message(from, to) {
             Some(msg) => {
               let Ok(()) = socket.write_all(&[1]).await else { break };
               let msg = borsh::to_vec(&msg).unwrap();
@@ -251,13 +240,8 @@ async fn main() {
               let Ok(()) = socket.write_all(&[0]).await else { break };
             }
           },
-          MessageQueueRequest::Ack { from, to, id, sig } => {
-            ack_message(
-              from,
-              to,
-              id,
-              SchnorrSignature::<Ristretto>::read(&mut sig.as_slice()).unwrap(),
-            );
+          Request::Acknowledge { from, to, id, signature } => {
+            ack_message(from, to, id, signature);
             let Ok(()) = socket.write_all(&[1]).await else { break };
           }
         }

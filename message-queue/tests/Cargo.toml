@@ -26,8 +26,10 @@ ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, fea
 dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 
 serai-primitives = { path = "../../substrate/primitives" }
-serai-message-queue = { path = "../../message-queue" }
 
 tokio = { version = "1", features = ["time"] }
 dockertest = "0.5"
-serai-docker-tests = { path = "../docker" }
+serai-docker-tests = { path = "../../tests/docker" }
+
+[dev-dependencies]
+serai-message-queue-client = { path = "../client" }

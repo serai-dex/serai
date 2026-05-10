@@ -1,11 +1,12 @@
-use core::ops::Deref as _;
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../../README.md")]
+#![deny(missing_docs)]
 
 use zeroize::{Zeroize as _, Zeroizing};
 use rand_core::OsRng;
 
-use dalek_ff_group::Ristretto;
 use ciphersuite::{group::ff::PrimeField, WrappedGroup};
-use schnorr_signatures::SchnorrSignature;
+use dalek_ff_group::Ristretto;
 
 use tokio::{
   io::{AsyncReadExt as _, AsyncWriteExt as _},
@@ -14,36 +15,37 @@ use tokio::{
 
 use serai_env as env;
 
-#[rustfmt::skip]
-use crate::{Service, Metadata, QueuedMessage, MessageQueueRequest, message_challenge, ack_challenge};
+pub use message_queue::*;
 
-pub struct MessageQueue {
-  pub service: Service,
-  priv_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
-  pub_key: <Ristretto as WrappedGroup>::G,
+/// The client for the Message Queue.
+pub struct Client {
+  service: Service,
+  private_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   url: String,
 }
 
-impl MessageQueue {
+impl Client {
+  /// Connect to the Message Queue.
   pub fn new(
     service: Service,
     mut url: String,
-    priv_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
-  ) -> MessageQueue {
+    private_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
+  ) -> Self {
     // Allow MESSAGE_QUEUE_RPC to either be a full URL or just a hostname
-    // While we could stitch together multiple variables, our control over this service makes this
-    // fine
     if !url.contains(':') {
       url += ":2287";
     }
 
-    MessageQueue { service, pub_key: Ristretto::generator() * priv_key.deref(), priv_key, url }
+    Self { service, private_key, url }
   }
 
-  pub fn from_env(service: Service) -> MessageQueue {
+  /// Create a connection to the Message Queue via the definitions from `serai-env`.
+  ///
+  /// This MAY panic if the environment does not have the necessary variables.
+  pub fn from_env(service: Service) -> Self {
     let url = env::var("MESSAGE_QUEUE_RPC").expect("message-queue RPC wasn't specified");
 
-    let priv_key: Zeroizing<<Ristretto as WrappedGroup>::F> = {
+    let private_key: Zeroizing<<Ristretto as WrappedGroup>::F> = {
       let key_str =
         Zeroizing::new(env::var("MESSAGE_QUEUE_KEY").expect("message-queue key wasn't specified"));
       let key_bytes = Zeroizing::new(
@@ -59,10 +61,10 @@ impl MessageQueue {
       key
     };
 
-    Self::new(service, url, priv_key)
+    Self::new(service, url, private_key)
   }
 
-  async fn send(socket: &mut TcpStream, msg: MessageQueueRequest) -> Result<(), String> {
+  async fn send(socket: &mut TcpStream, msg: Request) -> Result<(), String> {
     let msg = borsh::to_vec(&msg).unwrap();
     match socket.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await {
       Ok(()) => {}
@@ -75,24 +77,10 @@ impl MessageQueue {
     Ok(())
   }
 
+  /// Queue a message via the Message Queue.
   pub async fn queue(&self, metadata: Metadata, msg: Vec<u8>) -> Result<(), String> {
-    let nonce = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
-    let nonce_pub = Ristretto::generator() * nonce.deref();
-    let sig = SchnorrSignature::<Ristretto>::sign(
-      &self.priv_key,
-      nonce,
-      message_challenge(
-        metadata.from,
-        self.pub_key,
-        metadata.to,
-        &metadata.intent,
-        &msg,
-        nonce_pub,
-      ),
-    )
-    .serialize();
-
-    let msg = MessageQueueRequest::Queue { meta: metadata, msg, sig };
+    let mut msg = Request::Queue { metadata, message: msg, signature: [0; 64] };
+    msg.sign(&mut OsRng, &self.private_key);
 
     let mut socket = match TcpStream::connect(&self.url).await {
       Ok(socket) => socket,
@@ -107,6 +95,9 @@ impl MessageQueue {
     Ok(())
   }
 
+  /// Queue a message via the Message Queue.
+  ///
+  /// This future will run until the message is successfully queued.
   pub async fn queue_with_retry(&self, metadata: Metadata, msg: Vec<u8>) {
     let mut first = true;
     loop {
@@ -122,8 +113,11 @@ impl MessageQueue {
     }
   }
 
+  /// Fetch the next message from the Message Queue.
   pub async fn next(&self, from: Service) -> QueuedMessage {
-    let msg = MessageQueueRequest::Next { from, to: self.service };
+    let mut msg = Request::Fetch { from, to: self.service };
+    msg.sign(&mut OsRng, &self.private_key);
+
     let mut first = true;
     'outer: loop {
       if !first {
@@ -194,13 +188,13 @@ impl MessageQueue {
       // Verify the sender is sane
       if matches!(self.service, Service::Processor(_)) {
         assert_eq!(
-          msg.from,
+          msg.metadata.from,
           Service::Coordinator,
           "non-coordinator sent us (a processor) a message"
         );
       } else {
         assert!(
-          matches!(msg.from, Service::Processor(_)),
+          matches!(msg.metadata.from, Service::Processor(_)),
           "non-processor sent us (coordinator) a message"
         );
       }
@@ -210,18 +204,13 @@ impl MessageQueue {
     }
   }
 
+  /// Acknowledge the next message from the Message Queue as handled.
+  ///
+  /// This will advance the next message in the queue, causing the message with `id` to no longer
+  /// be yielded.
   pub async fn ack(&self, from: Service, id: u64) {
-    // TODO: Should this use OsRng? Deterministic or deterministic + random may be better.
-    let nonce = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
-    let nonce_pub = Ristretto::generator() * nonce.deref();
-    let sig = SchnorrSignature::<Ristretto>::sign(
-      &self.priv_key,
-      nonce,
-      ack_challenge(self.service, self.pub_key, from, id, nonce_pub),
-    )
-    .serialize();
-
-    let msg = MessageQueueRequest::Ack { from, to: self.service, id, sig };
+    let mut msg = Request::Acknowledge { from, to: self.service, id, signature: [0; 64] };
+    msg.sign(&mut OsRng, &self.private_key);
     let mut first = true;
     loop {
       if !first {

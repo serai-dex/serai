@@ -1,7 +1,7 @@
 [package]
 name = "serai-message-queue"
 version = "0.1.0"
-description = "A message queue for Serai focused on consistency"
+description = "The core of Serai's message queue"
 license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/message-queue"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
@@ -17,30 +17,14 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-# Encoders
-hex = { version = "0.4", default-features = false, features = ["std"] }
-borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
-
-# Libs
 zeroize = { version = "1", default-features = false, features = ["std"] }
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 
-# Cryptography
 transcript = { package = "flexible-transcript", path = "../crypto/transcript", default-features = false, features = ["std"] }
-dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 schnorr-signatures = { path = "../crypto/schnorr", default-features = false, features = ["std"] }
 
-# Uses a single threaded runtime since this shouldn't ever be CPU-bound
-tokio = { version = "1", default-features = false, features = ["rt", "time", "io-util", "net", "macros"] }
-
-zalloc = { path = "../common/zalloc" }
-serai-db = { path = "../common/db", optional = true }
-
-serai-env = { path = "../common/env" }
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 serai-primitives = { path = "../substrate/primitives", default-features = false, features = ["std"] }
-
-[features]
-parity-db = ["serai-db/parity-db"]
-rocksdb = ["serai-db/rocksdb"]

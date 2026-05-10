@@ -15,7 +15,13 @@ pub fn message_queue(
   monero_key: <Ristretto as WrappedGroup>::G,
 ) {
   let setup = mimalloc(Os::Alpine, network.release()) +
-    &build_serai_service("", Os::Alpine, network.release(), network.db(), "serai-message-queue");
+    &build_serai_service(
+      "",
+      Os::Alpine,
+      network.release(),
+      network.db(),
+      "serai-message-queue-server",
+    );
 
   let env_vars = [
     ("COORDINATOR_KEY", hex::encode(coordinator_key.to_bytes())),
@@ -33,12 +39,12 @@ pub fn message_queue(
   let run_message_queue = format!(
     r#"
 # Copy the Message Queue binary and relevant license
-COPY --from=builder --chown=messagequeue /serai/bin/serai-message-queue /bin
+COPY --from=builder --chown=messagequeue /serai/bin/serai-message-queue-server /bin
 COPY --from=builder --chown=messagequeue /serai/AGPL-3.0 .
 
 # Run message-queue
 EXPOSE 2287
-CMD {env_vars_str} serai-message-queue
+CMD {env_vars_str} serai-message-queue-server
 "#
   );
 

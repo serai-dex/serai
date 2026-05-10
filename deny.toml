@@ -49,6 +49,9 @@ exceptions = [
   { allow = ["AGPL-3.0-only"], name = "serai-ethereum-relayer" },
 
   { allow = ["AGPL-3.0-only"], name = "serai-message-queue" },
+  { allow = ["AGPL-3.0-only"], name = "serai-message-queue-client" },
+  { allow = ["AGPL-3.0-only"], name = "serai-message-queue-server" },
+  { allow = ["AGPL-3.0-only"], name = "serai-message-queue-tests" },
 
   { allow = ["AGPL-3.0-only"], name = "serai-processor-messages" },
   { allow = ["AGPL-3.0-only"], name = "serai-processor-primitives" },
@@ -107,7 +110,6 @@ exceptions = [
 
   { allow = ["AGPL-3.0-only"], name = "serai-shim-rpc" },
   { allow = ["AGPL-3.0-only"], name = "serai-docker-tests" },
-  { allow = ["AGPL-3.0-only"], name = "serai-message-queue-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-processor-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-substrate-tests" },

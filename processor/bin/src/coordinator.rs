@@ -15,7 +15,7 @@ use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
 
 use scanner::ScannerFeed;
 
-use message_queue::{Service, Metadata, client::MessageQueue};
+use message_queue::{Service, Metadata, Client as MessageQueue};
 
 create_db! {
   ProcessorBinCoordinator {
@@ -89,7 +89,7 @@ impl Coordinator {
           assert!((saved_messages == prior_msg) || (saved_messages == Some(msg.id)));
           if saved_messages < Some(msg.id) {
             let mut txn = db.txn();
-            ReceivedCoordinatorMessages::send(&mut txn, &msg.msg);
+            ReceivedCoordinatorMessages::send(&mut txn, &msg.message);
             SavedMessages::set(&mut txn, &msg.id);
             txn.commit();
           }

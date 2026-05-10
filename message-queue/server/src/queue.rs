@@ -1,6 +1,10 @@
+use core::str::FromStr as _;
+
 use serai_db::{DbTxn as _, Db};
 
-use crate::messages::*;
+use crate::*;
+
+const MESSAGE_RETENTION: u64 = 10_000;
 
 #[derive(Clone, Debug)]
 pub(crate) struct Queue<D: Db>(pub(crate) D, pub(crate) Service, pub(crate) Service);
@@ -61,8 +65,18 @@ impl<D: Db> Queue<D> {
 
   pub(crate) fn ack_message(&mut self, id: u64) {
     let ack_key = self.last_acknowledged_key();
+
+    let message_retention =
+      serai_env::var("MESSAGE_RETENTION").unwrap_or(format!("{MESSAGE_RETENTION}"));
+    let message_retention =
+      u64::from_str(&message_retention).expect("`MESSAGE_RETENTION` was not a valid `u64`");
+    let old_key = id.checked_sub(message_retention).map(|old| self.message_key(old));
+
     let mut txn = self.0.txn();
     txn.put(ack_key, id.to_le_bytes());
+    if let Some(old_key) = old_key {
+      txn.del(old_key);
+    }
     txn.commit();
   }
 }

@@ -63,7 +63,7 @@ fn basic_functionality() {
 
   use dockertest::DockerTest;
 
-  use serai_message_queue::{Service, Metadata, client::MessageQueue};
+  use serai_message_queue_client::{Service, Metadata, Client};
 
   let mut test = DockerTest::new().with_network(dockertest::Network::Isolated);
   let (coord_key, priv_keys, composition) = instance();
@@ -78,8 +78,7 @@ fn basic_functionality() {
       let rpc = rpc.0.to_string() + ":" + &rpc.1.to_string();
 
       // Queue some messages
-      let coordinator =
-        MessageQueue::new(Service::Coordinator, rpc.clone(), Zeroizing::new(coord_key));
+      let coordinator = Client::new(Service::Coordinator, rpc.clone(), Zeroizing::new(coord_key));
       coordinator
         .queue(
           Metadata {
@@ -108,15 +107,15 @@ fn basic_functionality() {
       }
 
       // Successfully get it
-      let bitcoin = MessageQueue::new(
+      let bitcoin = Client::new(
         Service::Processor(ExternalNetworkId::Bitcoin),
         rpc.clone(),
         Zeroizing::new(priv_keys[&ExternalNetworkId::Bitcoin]),
       );
       let msg = bitcoin.next(Service::Coordinator).await;
-      assert_eq!(msg.from, Service::Coordinator);
+      assert_eq!(msg.metadata.from, Service::Coordinator);
       assert_eq!(msg.id, 0);
-      assert_eq!(&msg.msg, b"Hello, World!");
+      assert_eq!(&msg.message, b"Hello, World!");
 
       // If we don't ack it, it should continue to be returned
       assert_eq!(msg, bitcoin.next(Service::Coordinator).await);
@@ -126,9 +125,9 @@ fn basic_functionality() {
 
       let next_msg = bitcoin.next(Service::Coordinator).await;
       assert!(msg != next_msg);
-      assert_eq!(next_msg.from, Service::Coordinator);
+      assert_eq!(next_msg.metadata.from, Service::Coordinator);
       assert_eq!(next_msg.id, 1);
-      assert_eq!(&next_msg.msg, b"Hello, World, again!");
+      assert_eq!(&next_msg.message, b"Hello, World, again!");
       bitcoin.ack(Service::Coordinator, 1).await;
 
       // No further messages should be available
@@ -150,7 +149,7 @@ fn basic_functionality() {
         .await
         .unwrap();
 
-      let monero = MessageQueue::new(
+      let monero = Client::new(
         Service::Processor(ExternalNetworkId::Monero),
         rpc,
         Zeroizing::new(priv_keys[&ExternalNetworkId::Monero]),

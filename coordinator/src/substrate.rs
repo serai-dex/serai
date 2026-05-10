@@ -14,7 +14,7 @@ use serai_client_serai::abi::primitives::{
   network_id::ExternalNetworkId,
   validator_sets::{Session, ExternalValidatorSet},
 };
-use message_queue::{Service, Metadata, client::MessageQueue};
+use message_queue::{Service, Metadata, Client as MessageQueue};
 
 use tributary_sdk::Tributary;
 
