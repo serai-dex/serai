@@ -74,7 +74,7 @@ impl ciphersuite::GroupCanonicalEncoding for Ristretto {
     dalek_ff_group::Ristretto::from_canonical_bytes(bytes)
   }
 }
-dalek_curve!(Ristretto, IetfRistrettoHram, b"FROST-RISTRETTO255-SHA512-v1", b"chal");
+dalek_curve!(Ristretto, IrtfRistrettoHram, b"FROST-RISTRETTO255-SHA512-v1", b"chal");
 
 pub use dalek_ff_group::Ed25519;
-dalek_curve!(Ed25519, IetfEd25519Hram, b"FROST-ED25519-SHA512-v1", b"");
+dalek_curve!(Ed25519, IrtfEd25519Hram, b"FROST-ED25519-SHA512-v1", b"");

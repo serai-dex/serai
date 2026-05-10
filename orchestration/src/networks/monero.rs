@@ -6,7 +6,7 @@ use crate::{Network, Os, mimalloc, write_dockerfile};
 pub fn monero(orchestration_path: &Path, network: Network) {
   let os = Os::Alpine;
 
-  const MONERO_VERSION: &str = "0.18.4.6";
+  const MONERO_VERSION: &str = "0.18.5.0";
 
   let arch = match std::env::consts::ARCH {
     // We probably would run this without issues yet it's not worth needing to provide support for
@@ -32,7 +32,7 @@ RUN wget https://downloads.getmonero.org/cli/{file}
 RUN tar -xf {file} --strip-components=1
 
 # Download the binary's hashes
-RUN wget https://raw.githubusercontent.com/monero-project/monero-site/ddbaf497941dce722052d9f94c45fd4926a60b9e/downloads/hashes.txt -O SHA256SUMS
+RUN wget https://raw.githubusercontent.com/monero-project/monero-site/5e8d74229b742b54173010e3a676215b6f2fd1d7/downloads/hashes.txt -O SHA256SUMS
 
 # Verify `SHA256SUMS` with GnuPG
 FROM alpine:latest AS gnupg

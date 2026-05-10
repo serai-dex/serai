@@ -17,7 +17,7 @@ use bitcoin::hashes::{HashEngine as _, Hash as _, sha256::Hash as Sha256};
 use frost::{
   curve::{WrappedGroup, Secp256k1},
   Participant, ThresholdKeys, ThresholdView, FrostError,
-  algorithm::{Hram as HramTrait, Algorithm, IetfSchnorr as FrostSchnorr},
+  algorithm::{Hram as HramTrait, Algorithm, IrtfSchnorr as FrostSchnorr},
 };
 
 /// Get the `x` coordinate of a non-infinity point.
@@ -74,7 +74,7 @@ pub(crate) struct Schnorr(FrostSchnorr<Secp256k1, Hram>);
 impl Schnorr {
   /// Construct a Schnorr algorithm continuing the specified transcript.
   pub(crate) fn new() -> Schnorr {
-    Schnorr(FrostSchnorr::ietf())
+    Schnorr(FrostSchnorr::irtf())
   }
 }
 

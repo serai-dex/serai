@@ -10,11 +10,11 @@ Flexible Transcript is a crate offering:
   Currently, this is `DigestTranscript<Blake2b512>` (available via the
   `recommended` feature).
 
-The trait was created while working on an IETF draft which defined an incredibly
+The trait was created while working on an IRTF draft which defined an incredibly
 simple transcript format. Extensions of the protocol would quickly require a
 more competent format, yet implementing the one specified was mandatory to meet
 the specification. Accordingly, the library implementing the draft defined an
-`IetfTranscript`, dropping labels and not allowing successive challenges, yet
+`IrtfTranscript`, dropping labels and not allowing successive challenges, yet
 thanks to the trait, allowed protocols building on top to provide their own
 transcript format as needed.
 

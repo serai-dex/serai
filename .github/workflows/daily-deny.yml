@@ -15,7 +15,7 @@ jobs:
           persist-credentials: false
 
       - name: Install `cargo deny`
-        run: cargo +1.95.0 install --locked cargo-deny --version =0.19.4
+        run: cargo +1.96.0 install --locked cargo-deny --version =0.19.9
 
       - name: Run `cargo deny`
         run: cargo deny -L error --all-features check --hide-inclusion-graph

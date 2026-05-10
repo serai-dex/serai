@@ -16,7 +16,7 @@ runs:
         sudo apt install -y uidmap
 
     - name: Install rootless Docker (Linux)
-      uses: docker/setup-docker-action@b2189fbf2a6592b51fee7cdd93ee2bfaeba733db # 5.1.0
+      uses: docker/setup-docker-action@0234bb73ccb40f0c430b795634f9247e2b5c2d23 # 5.2.0
       if: runner.os == 'Linux'
       with:
         rootless: true
@@ -47,7 +47,7 @@ runs:
         fi
 
     - name: Install Docker (macOS)
-      uses: docker/setup-docker-action@b2189fbf2a6592b51fee7cdd93ee2bfaeba733db # 5.1.0
+      uses: docker/setup-docker-action@0234bb73ccb40f0c430b795634f9247e2b5c2d23 # 5.2.0
       if: runner.os == 'macOS'
       env:
         # m1 chips, as seen in the GitHub CI, don't support nested hardware virtualization.
@@ -68,7 +68,7 @@ runs:
 
     - name: Install `buildx`
       if: runner.os == 'macOS'
-      uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # 4.0.0
+      uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # 4.1.0
       with:
         # This is Docker's default, but `setup-buildx-action` defaults to `docker-container`
         # (for _some_ reason) which means built images won't be loaded into Docker (`--load`) by
@@ -99,7 +99,7 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        Invoke-WebRequest https://github.com/containers/podman/releases/download/v5.8.2/podman-installer-windows-amd64.msi -OutFile podman.msi
+        Invoke-WebRequest https://github.com/containers/podman/releases/download/v5.8.3/podman-installer-windows-amd64.msi -OutFile podman.msi
         Start-Process -Wait -PassThru 'msiexec' -ArgumentList "/package podman.msi /quiet /log podman-msi.log MACHINE_PROVIDER=wsl ALLUSERS=1"
         Get-Content podman-msi.log
 
@@ -118,7 +118,7 @@ runs:
     # accordingly. This requires we be able to run a x86-64 userspace.
     - name: Install x64 Qemu for non-x64 Docker
       if: (runner.os != 'Windows') && (runner.arch != 'X64')
-      uses: docker/setup-qemu-action@ce360397dd3f832beb865e1373c09c0e9f86d70a # 4.0.0
+      uses: docker/setup-qemu-action@06116385d9baf250c9f4dcb4858b16962ea869c3 # 4.1.0
       with:
         platforms: amd64
 

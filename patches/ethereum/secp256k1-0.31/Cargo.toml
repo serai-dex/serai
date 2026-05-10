@@ -1,0 +1,21 @@
+[package]
+name = "secp256k1"
+version = "0.31.99"
+description = "Patch to an empty crate"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/ethereum/secp256k1-0.31"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[features]
+alloc = []
+std = []
+rand = []
+serde = []
+global-context = []
+recovery = []

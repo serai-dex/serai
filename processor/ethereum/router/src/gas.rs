@@ -353,6 +353,7 @@ impl Router {
       Here, we calculate the actual fee, and update the initial gas fee accordingly. We then update
       the fee again, until the initial gas fee stops increasing.
     */
+    // TODO: https://github.com/serai-dex/serai/issues/784
     let initial_gas = |fee, sig| {
       let gas = calculate_initial_tx_gas(
         SPEC_ID,
@@ -362,7 +363,7 @@ impl Router {
         0,
         0,
       );
-      (gas.initial_total_gas, gas.floor_gas)
+      (gas.initial_regular_gas(), gas.floor_gas)
     };
     let (mut current_initial_gas, mut floor_gas) =
       initial_gas(shimmed_fee, abi::Signature::from(&sig));

@@ -42,8 +42,8 @@ jobs:
         shell: bash
         run: |
           # We explicitly download the Linux binary as this script executes over an ELF binary
-          wget https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.4.6.tar.bz2
-          tar -xvf monero-linux-x64-v0.18.4.6.tar.bz2
+          wget https://downloads.getmonero.org/cli/monero-linux-x64-v0.18.5.0.tar.bz2
+          tar -xvf monero-linux-x64-v0.18.5.0.tar.bz2
           mv $(find . -name monerod) .
 
       - name: Verify expected behavior

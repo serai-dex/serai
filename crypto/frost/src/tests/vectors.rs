@@ -13,7 +13,7 @@ use ciphersuite::group::{ff::PrimeField as _, GroupEncoding as _};
 use crate::{
   curve::Curve,
   Participant, ThresholdKeys,
-  algorithm::{Hram, IetfSchnorr},
+  algorithm::{Hram, IrtfSchnorr},
   sign::{
     Writable as _, Nonce, GeneratorCommitments, NonceCommitments, Commitments, Preprocess,
     PreprocessMachine as _, SignMachine as _, SignatureMachine as _, AlgorithmMachine,
@@ -41,9 +41,9 @@ pub struct Vectors {
   pub sig: String,
 }
 
-// Vectors are expected to be formatted per the IETF proof of concept
+// Vectors are expected to be formatted per the IRTF proof of concept
 // The included vectors are directly from
-// https://github.com/cfrg/draft-irtf-cfrg-frost/tree/draft-irtf-cfrg-frost-14/poc
+// https://github.com/cfrg/draft-irtf-cfrg-frost/tree/draft-irtf-cfrg-frost-15/poc
 #[cfg(test)]
 impl From<serde_json::Value> for Vectors {
   fn from(value: serde_json::Value) -> Vectors {
@@ -160,7 +160,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
 
     let mut machines = vec![];
     for i in &vectors.included {
-      machines.push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone())));
+      machines.push((i, AlgorithmMachine::new(IrtfSchnorr::<C, H>::irtf(), keys[i].clone())));
     }
 
     let mut commitments = HashMap::new();
@@ -337,7 +337,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
     // Create the machines
     let mut machines = vec![];
     for i in &vectors.included {
-      machines.push((i, AlgorithmMachine::new(IetfSchnorr::<C, H>::ietf(), keys[i].clone())));
+      machines.push((i, AlgorithmMachine::new(IrtfSchnorr::<C, H>::irtf(), keys[i].clone())));
     }
 
     for (i, machine) in machines {

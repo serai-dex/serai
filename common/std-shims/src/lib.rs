@@ -48,8 +48,7 @@ pub mod prelude {
   pub trait StdShimsDivCeil {
     /// Perform a division which rounds non-integer results up.
     ///
-    /// This function MAY panic when `denominator == 0` or the result is not representable within
-    /// `Self`.
+    /// This function MAY panic when `denominator == 0`.
     fn div_ceil(self, denominator: Self) -> Self;
   }
   #[rustversion::before(1.73)]

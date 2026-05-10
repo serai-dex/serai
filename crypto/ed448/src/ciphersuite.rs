@@ -1,9 +1,9 @@
 use prime_field::subtle::CtOption;
 
-use sha3::{
+use shake::{
   digest::{
-    typenum::U114, block_api::BlockSizeUser, Update, Output, OutputSizeUser, FixedOutput,
-    ExtendableOutput as _, XofReader as _, HashMarker,
+    typenum::U114, Update, Output, OutputSizeUser, FixedOutput, ExtendableOutput as _,
+    XofReader as _, HashMarker,
   },
   Shake256,
 };
@@ -15,12 +15,6 @@ use crate::Point;
 /// Shake256, fixed to a 114-byte output, as used by Ed448.
 #[derive(Clone, Default)]
 pub struct Shake256_114(Shake256);
-impl BlockSizeUser for Shake256_114 {
-  type BlockSize = <Shake256 as BlockSizeUser>::BlockSize;
-  fn block_size() -> usize {
-    Shake256::block_size()
-  }
-}
 impl OutputSizeUser for Shake256_114 {
   type OutputSize = U114;
   fn output_size() -> usize {

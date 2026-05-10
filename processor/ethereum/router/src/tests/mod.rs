@@ -79,8 +79,8 @@ impl CalldataAgnosticGas {
     }
     gas_used +
       (calculate_initial_tx_gas(SpecId::OSAKA, &without_variable_zero_bytes, false, 0, 0, 0)
-        .initial_total_gas -
-        calculate_initial_tx_gas(SpecId::OSAKA, input, false, 0, 0, 0).initial_total_gas)
+        .initial_regular_gas() -
+        calculate_initial_tx_gas(SpecId::OSAKA, input, false, 0, 0, 0).initial_regular_gas())
   }
 }
 

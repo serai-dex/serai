@@ -7,7 +7,7 @@ pub use dkg_recovery::recover_key;
 
 use crate::{
   Curve, Participant, ThresholdKeys, FrostError,
-  algorithm::{Algorithm, Hram, IetfSchnorr},
+  algorithm::{Algorithm, Hram, IrtfSchnorr},
   sign::{Writable as _, PreprocessMachine, SignMachine, SignatureMachine as _, AlgorithmMachine},
 };
 
@@ -239,8 +239,8 @@ pub fn test_schnorr_with_keys<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
 ) {
   const MSG: &[u8] = b"Hello, World!";
 
-  let machines = algorithm_machines(&mut *rng, &IetfSchnorr::<C, H>::ietf(), keys);
-  let sig = sign(&mut *rng, &IetfSchnorr::<C, H>::ietf(), keys.clone(), machines, MSG);
+  let machines = algorithm_machines(&mut *rng, &IrtfSchnorr::<C, H>::irtf(), keys);
+  let sig = sign(&mut *rng, &IrtfSchnorr::<C, H>::irtf(), keys.clone(), machines, MSG);
   let group_key = keys[&Participant::new(1).unwrap()].group_key();
   assert!(sig.verify(group_key, H::hram(&sig.R, &group_key, MSG)));
 }
@@ -266,8 +266,8 @@ pub fn test_offset_schnorr<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &m
     assert_eq!(keys.group_key(), offset_key);
   }
 
-  let machines = algorithm_machines(&mut *rng, &IetfSchnorr::<C, H>::ietf(), &keys);
-  let sig = sign(&mut *rng, &IetfSchnorr::<C, H>::ietf(), keys.clone(), machines, MSG);
+  let machines = algorithm_machines(&mut *rng, &IrtfSchnorr::<C, H>::irtf(), &keys);
+  let sig = sign(&mut *rng, &IrtfSchnorr::<C, H>::irtf(), keys.clone(), machines, MSG);
   let group_key = keys[&Participant::new(1).unwrap()].group_key();
   assert!(sig.verify(offset_key, H::hram(&sig.R, &group_key, MSG)));
 }
@@ -277,7 +277,7 @@ pub fn test_schnorr_blame<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(rng: &mu
   const MSG: &[u8] = b"Hello, World!";
 
   let keys = key_gen(&mut *rng);
-  let machines = algorithm_machines(&mut *rng, &IetfSchnorr::<C, H>::ietf(), &keys);
+  let machines = algorithm_machines(&mut *rng, &IrtfSchnorr::<C, H>::irtf(), &keys);
 
   let (mut machines, shares) = preprocess_and_shares(&mut *rng, machines, |_, _| {}, MSG);
 

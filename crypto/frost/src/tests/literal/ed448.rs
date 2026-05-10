@@ -7,7 +7,7 @@ use ciphersuite::GroupIo as _;
 use schnorr::SchnorrSignature;
 
 use crate::{
-  curve::{Ed448, Ietf8032Ed448Hram, IetfEd448Hram},
+  curve::{Ed448, Irtf8032Ed448Hram, IrtfEd448Hram},
   tests::vectors::{Vectors, test_with_vectors},
 };
 
@@ -51,13 +51,13 @@ fn ed448_8032_vector() {
   let s = Ed448::read_F::<&[u8]>(&mut &sig[57 ..]).unwrap();
 
   assert!(
-    SchnorrSignature::<Ed448> { R, s }.verify(A, Ietf8032Ed448Hram::hram(&context, &R, &A, &msg))
+    SchnorrSignature::<Ed448> { R, s }.verify(A, Irtf8032Ed448Hram::hram(&context, &R, &A, &msg))
   );
 }
 
 #[test]
 fn ed448_vectors() {
-  test_with_vectors::<_, Ed448, IetfEd448Hram>(
+  test_with_vectors::<_, Ed448, IrtfEd448Hram>(
     &mut OsRng,
     &Vectors::from(
       serde_json::from_str::<serde_json::Value>(include_str!("vectors/frost-ed448-shake256.json"))

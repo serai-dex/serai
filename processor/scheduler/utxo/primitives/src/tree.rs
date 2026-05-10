@@ -98,12 +98,10 @@ impl<A: Address> TreeTransaction<A> {
       }
 
       // Now that we have the payments which will survive, reduce them
-      for (i, amount) in amounts.iter_mut().enumerate() {
-        if let Some(amount) = amount {
-          *amount -= adjusted_fee / amounts_len;
-          if i < usize::try_from(adjusted_fee % amounts_len).unwrap() {
-            *amount -= 1;
-          }
+      for (i, amount) in amounts.iter_mut().filter_map(Option::as_mut).enumerate() {
+        *amount -= adjusted_fee / amounts_len;
+        if i < usize::try_from(adjusted_fee % amounts_len).unwrap() {
+          *amount -= 1;
         }
       }
       break;

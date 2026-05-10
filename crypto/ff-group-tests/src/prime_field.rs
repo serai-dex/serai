@@ -329,6 +329,10 @@ pub fn test_root_of_unity<F: PrimeFieldBits>() {
   }
   assert!(bool::from(t.is_odd()), "t wasn't odd");
 
+  assert!(
+    bool::from(F::MULTIPLICATIVE_GENERATOR.sqrt().is_none()),
+    "`MULTIPLICATIVE_GENERATOR` must be a quadratic non-residue"
+  );
   assert_eq!(pow(F::MULTIPLICATIVE_GENERATOR, t), F::ROOT_OF_UNITY, "incorrect root of unity");
   assert_eq!(
     pow(F::ROOT_OF_UNITY, pow(F::from(2u64), F::from(F::S.into()))),

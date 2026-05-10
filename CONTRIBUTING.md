@@ -84,7 +84,6 @@ instances of
 requires `anvil` be present in the user's path. This can be installed along
 with [Foundry](https://github.com/foundry-rs/foundry) as follows:
 
-
 ```sh
 curl -L https://foundry.paradigm.xyz | bash
 foundryup

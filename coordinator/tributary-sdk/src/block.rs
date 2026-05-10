@@ -89,7 +89,7 @@ impl<T: TransactionTrait> ReadWrite for Block<T> {
     reader.read_exact(&mut txs)?;
     let txs = u32::from_le_bytes(txs);
 
-    let mut transactions = Vec::with_capacity(usize::try_from(txs).unwrap());
+    let mut transactions = vec![];
     for _ in 0 .. txs {
       transactions.push(Transaction::read(reader)?);
     }

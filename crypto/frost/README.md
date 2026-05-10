@@ -9,8 +9,7 @@ allows specifying the challenge format. This is intended to easily allow
 integrating with existing systems.
 
 This library offers ciphersuites compatible with the
-[IETF draft](https://github.com/cfrg/draft-irtf-cfrg-frost). Currently, version
-15 is supported.
+[IRTF standard](https://datatracker.ietf.org/doc/rfc9591/).
 
 A variety of testing utilities are provided under the `tests` feature. These
 are provided with no guarantees and may have completely arbitrary behavior,

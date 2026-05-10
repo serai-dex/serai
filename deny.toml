@@ -9,8 +9,8 @@ unmaintained = "all"
 yanked = "deny"
 
 ignore = [
-  "RUSTSEC-2024-0370", # `proc-macro-error` is unmaintained, in-tree due to Substrate/`litep2p`
   "RUSTSEC-2024-0436", # `paste` is unmaintained
+  "RUSTSEC-2026-0173", # `proc-macro-error2` is unmaintained
 ]
 
 [licenses]
@@ -26,7 +26,6 @@ allow = [
 
   # Attribution required
   "MIT",
-  "MITNFA",
   "BSD-2-Clause",
   "BSD-3-Clause",
   "ISC",
@@ -35,7 +34,6 @@ allow = [
   "CDLA-Permissive-2.0",
 
   # Non-invasive copyleft
-  # "MPL-2.0", # Commented as it's not currently in-use within the Serai tree
   "Apache-2.0",
   "Apache-2.0 WITH LLVM-exception",
   "GPL-3.0-or-later WITH Classpath-exception-2.0",
@@ -141,6 +139,13 @@ deny = [
   # https://github.com/RustCrypto/hashes/pull/834
   { name = "cshake", version = "<0.1.1" },
   { name = "sha3", version = ">=0.10.2, <0.10.9" },
+
+  # These re: `multihash` are explained by how we patch `core2` to our own `std-shims`
+
+  # Pulls in `no_std_io2` as a replacement for `core2`
+  { name = "multihash", version = "=0.19.4" },
+  # Inlines `no_std_io2` (or comparable) to avoid a third-party dependency
+  { name = "multihash", version = ">=0.19.5" },
 
   # Legacy which _no one_ should use anymore
   { name = "is-terminal", version = "*" },

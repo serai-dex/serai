@@ -10,11 +10,11 @@ mod mutex_shim {
     use core::ops::{Deref, DerefMut};
 
     // We wrap this in an `Option` so we can consider `None` as poisoned
-    pub(super) struct Mutex<T>(spin::Mutex<Option<T>>);
+    pub(super) struct Mutex<T>(spin::mutex::FairMutex<Option<T>>);
 
     /// An acquired view of a `Mutex`.
     pub struct MutexGuard<'mutex, T> {
-      mutex: spin::MutexGuard<'mutex, Option<T>>,
+      mutex: spin::mutex::FairMutexGuard<'mutex, Option<T>>,
       // This is `Some` for the lifetime of this guard, and is only represented as an `Option` due
       // to needing to move it on `Drop` (which solely gives us a mutable reference to `self`)
       value: Option<T>,
@@ -22,7 +22,7 @@ mod mutex_shim {
 
     impl<T> Mutex<T> {
       pub(super) const fn new(value: T) -> Self {
-        Self(spin::Mutex::new(Some(value)))
+        Self(spin::mutex::FairMutex::new(Some(value)))
       }
 
       pub(super) fn lock(&self) -> MutexGuard<'_, T> {
@@ -30,7 +30,10 @@ mod mutex_shim {
         // Take from the `Mutex` so future acquisitions will see `None` unless this is restored
         let value = mutex.take();
         // Check the prior acquisition did in fact restore the value
-        assert!(value.is_some(), "locking a `spin::Mutex` held by a thread which panicked");
+        assert!(
+          value.is_some(),
+          "locking a `spin::mutex::FairMutex` held by a thread which panicked"
+        );
         MutexGuard { mutex, value }
       }
     }
@@ -85,11 +88,11 @@ mod mutex_shim {
 pub use mutex_shim::{ShimMutex as Mutex, MutexGuard};
 
 #[rustversion::before(1.80)]
-pub use spin::Lazy as LazyLock;
+pub use spin::LazyLock;
 
 #[rustversion::since(1.80)]
 #[cfg(not(feature = "std"))]
-pub use spin::Lazy as LazyLock;
+pub use spin::LazyLock;
 #[rustversion::since(1.80)]
 #[cfg(feature = "std")]
 pub use std::sync::LazyLock;

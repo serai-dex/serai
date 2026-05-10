@@ -13,7 +13,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 [workspace]
 
 [dependencies]
-sha3 = { version = "0.11", default-features = false }
+sha3 = { version = "0.12", default-features = false }
 
 [features]
 zeroize = ["sha3/zeroize"]

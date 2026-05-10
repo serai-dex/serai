@@ -31,8 +31,8 @@ impl<A: Send + Sync + Clone + PartialEq + Debug + WriteAddendum> Addendum for A 
 pub trait Algorithm<C: Curve>: Send + Sync {
   /// The transcript format this algorithm uses.
   ///
-  /// This MUST NOT be the IETF-compatible transcript included in this crate UNLESS this is an
-  /// IETF-specified ciphersuite.
+  /// This MUST NOT be the IRTF-compatible transcript included in this crate UNLESS this is an
+  /// IRTF-specified ciphersuite.
   type Transcript: Sync + Clone + Debug + Transcript;
   /// Serializable addendum, used in algorithms requiring more data than just the nonces.
   type Addendum: Addendum;
@@ -105,17 +105,17 @@ pub trait Algorithm<C: Curve>: Send + Sync {
 mod sealed {
   pub use super::*;
 
-  /// IETF-compliant transcript.
+  /// IRTF-compliant transcript.
   ///
   /// This is incredibly naive and MUST NOT be used within larger protocols. No guarantees are made
-  /// about its safety EXCEPT as used with the IETF-specified FROST ciphersuites.
+  /// about its safety EXCEPT as used with the IRTF-specified FROST ciphersuites.
   #[derive(Clone, Debug)]
-  pub struct IetfTranscript(pub(crate) Vec<u8>);
-  impl Transcript for IetfTranscript {
+  pub struct IrtfTranscript(pub(crate) Vec<u8>);
+  impl Transcript for IrtfTranscript {
     type Challenge = Vec<u8>;
 
-    fn new(_: &'static [u8]) -> IetfTranscript {
-      IetfTranscript(vec![])
+    fn new(_: &'static [u8]) -> IrtfTranscript {
+      IrtfTranscript(vec![])
     }
 
     fn domain_separate(&mut self, _: &[u8]) {}
@@ -134,13 +134,13 @@ mod sealed {
     }
   }
 }
-pub(crate) use sealed::IetfTranscript;
+pub(crate) use sealed::IrtfTranscript;
 
 /// HRAm usable by the included Schnorr signature algorithm to generate challenges.
 pub trait Hram<C: Curve>: Send + Sync + Clone {
   /// HRAm function to generate a challenge.
   ///
-  /// H2 from the IETF draft, despite having a different argument set (not being pre-formatted).
+  /// H2 from the IRTF standard, despite having a different argument set (not being pre-formatted).
   #[expect(non_snake_case)]
   fn hram(R: &C::G, A: &C::G, m: &[u8]) -> C::F;
 }
@@ -155,15 +155,16 @@ pub struct Schnorr<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> {
   _hram: PhantomData<H>,
 }
 
-/// IETF-compliant Schnorr signature algorithm.
+/// IRTF-compliant Schnorr signature algorithm.
 ///
-/// This algorithm specifically uses the transcript format defined in the FROST IETF draft.
+/// This algorithm specifically uses the transcript format defined in the FROST IRTF standard.
 /// It's a naive transcript format not viable for usage in larger protocols, yet is presented here
 /// in order to provide compatibility.
 ///
-/// Usage of this with key offsets will break the intended compatibility as the IETF draft does not
-/// specify a protocol for offsets.
-pub type IetfSchnorr<C, H> = Schnorr<C, IetfTranscript, H>;
+/// Usage of this with derived keys will be equivalent to the IRTF-specified FROST protocol, albeit
+/// executed for the _derived_ key (not the root key, with derivations applied, a slight semantic
+/// difference).
+pub type IrtfSchnorr<C, H> = Schnorr<C, IrtfTranscript, H>;
 
 impl<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> Schnorr<C, T, H> {
   /// Construct a Schnorr algorithm continuing the specified transcript.
@@ -172,12 +173,12 @@ impl<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> Schnorr<C, T, H
   }
 }
 
-impl<C: Curve, H: Hram<C>> IetfSchnorr<C, H> {
-  /// Construct a IETF-compatible Schnorr algorithm.
+impl<C: Curve, H: Hram<C>> IrtfSchnorr<C, H> {
+  /// Construct a IRTF-compatible Schnorr algorithm.
   ///
-  /// Please see the `IetfSchnorr` documentation for the full details of this.
-  pub fn ietf() -> IetfSchnorr<C, H> {
-    Schnorr::new(IetfTranscript(vec![]))
+  /// Please see the `IrtfSchnorr` documentation for the full details of this.
+  pub fn irtf() -> IrtfSchnorr<C, H> {
+    Schnorr::new(IrtfTranscript(vec![]))
   }
 }
 

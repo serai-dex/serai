@@ -191,10 +191,10 @@ primitive-types-12 = { package = "primitive-types", path = "patches/ethereum/pri
 rapidhash = { path = "patches/ethereum/rapidhash" }
 rlp = { path = "patches/ethereum/rlp" }
 secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-0.30" }
+secp256k1-31 = { package = "secp256k1", path = "patches/ethereum/secp256k1-0.31" }
 indexmap = { path = "patches/indexmap" }
 schemars-09 = { package = "schemars", path = "patches/schemars-09" }
 schemars-10 = { package = "schemars", path = "patches/schemars-10" }
-wit-bindgen-rust-macro = { path = "patches/wit-bindgen-rust-macro" }
 
 # Dependencies from monero-oxide which originate from within our own tree, potentially shimmed to account for deviations since publishing
 std-shims = { path = "patches/std-shims" }
@@ -227,6 +227,8 @@ hex_lit = { path = "patches/hex_lit" }
 rustc-hex = { path = "patches/rustc-hex" }
 # `keccak-asm` is liberal with 'use at your risk', yet API-compatible with `sha3`, so we prefer the latter
 keccak-asm = { path = "patches/keccak-asm" }
+# `blake2b_simd` is used by `multihash` and isn't worth it compared to just using `blake2`
+blake2b_simd = { path = "patches/blake2b_simd" }
 
 # `option-ext` is a copyleft library for a single one liner, which we provide ourselves
 option-ext = { path = "patches/option-ext" }

@@ -22,7 +22,7 @@ wallet.
 
 - `crypto`: A series of composable cryptographic libraries built around the
   `ff`/`group` APIs, achieving a variety of tasks. These range from generic
-  libraries for elliptic curve cryptography to our IETF-compliant FROST
+  libraries for elliptic curve cryptography to our IRTF-compliant FROST
   implementation.
 
 - `networks`: Various libraries intended for usage in Serai yet also by the

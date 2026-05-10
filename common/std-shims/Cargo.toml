@@ -18,7 +18,7 @@ workspace = true
 
 [dependencies]
 rustversion = { version = "1", default-features = false }
-spin = { version = "0.10", default-features = false, features = ["use_ticket_mutex", "fair_mutex", "once", "lazy"] }
+spin = { version = "0.12", default-features = false, features = ["use_ticket_mutex", "fair_mutex", "once", "lazylock"] }
 hashbrown = { version = "0.17", default-features = false, features = ["default-hasher", "inline-more"], optional = true }
 
 [features]

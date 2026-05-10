@@ -43,9 +43,9 @@ pub(crate) struct ClonableTransctionMachine {
   pub(crate) action: Action,
 }
 
-type LiteralAlgorithmMachine = AlgorithmMachine<Secp256k1, IetfSchnorr<Secp256k1, EthereumHram>>;
+type LiteralAlgorithmMachine = AlgorithmMachine<Secp256k1, IrtfSchnorr<Secp256k1, EthereumHram>>;
 type LiteralAlgorithmSignMachine =
-  AlgorithmSignMachine<Secp256k1, IetfSchnorr<Secp256k1, EthereumHram>>;
+  AlgorithmSignMachine<Secp256k1, IrtfSchnorr<Secp256k1, EthereumHram>>;
 
 pub(crate) struct ActionSignMachine {
   key: PublicKey,
@@ -54,7 +54,7 @@ pub(crate) struct ActionSignMachine {
 }
 
 type LiteralAlgorithmSignatureMachine =
-  AlgorithmSignatureMachine<Secp256k1, IetfSchnorr<Secp256k1, EthereumHram>>;
+  AlgorithmSignatureMachine<Secp256k1, IrtfSchnorr<Secp256k1, EthereumHram>>;
 
 pub(crate) struct ActionSignatureMachine {
   key: PublicKey,
@@ -72,7 +72,7 @@ impl PreprocessMachine for ClonableTransctionMachine {
     rng: &mut R,
   ) -> (Self::SignMachine, Self::Preprocess) {
     let (machine, preprocess) =
-      AlgorithmMachine::new(IetfSchnorr::<Secp256k1, EthereumHram>::ietf(), self.keys.clone())
+      AlgorithmMachine::new(IrtfSchnorr::<Secp256k1, EthereumHram>::irtf(), self.keys.clone())
         .preprocess(rng);
     (
       ActionSignMachine {

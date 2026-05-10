@@ -129,7 +129,7 @@ Language Model to function.
 This additional statement also stands on technical grounds where the outputs of
 Large Language Models are frequently inaccurate/low quality, yet mask
 themselves as reasonable quality via their presentation, hindering fair
-analysis, harming the contibutor/reviewer process to effect a quality codebase,
+analysis, harming the contributor/reviewer process to effect a quality codebase,
 and potentially overwhelming reviewers due to the volume they're capable of
 outputting (without the expected quality).
 

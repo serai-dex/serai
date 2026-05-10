@@ -19,8 +19,8 @@ impl Curve for Ed448 {
 
 // The RFC-8032 Ed448 challenge function.
 #[derive(Copy, Clone)]
-pub(crate) struct Ietf8032Ed448Hram;
-impl Ietf8032Ed448Hram {
+pub(crate) struct Irtf8032Ed448Hram;
+impl Irtf8032Ed448Hram {
   #[expect(non_snake_case)]
   pub(crate) fn hram(context: &[u8], R: &Ed448, A: &Ed448, m: &[u8]) -> Scalar {
     let mut digest = <Ed448 as WithPreferredHash>::H::new();
@@ -36,10 +36,10 @@ impl Ietf8032Ed448Hram {
 
 /// The challenge function for FROST's Ed448 ciphersuite.
 #[derive(Copy, Clone)]
-pub struct IetfEd448Hram;
-impl Hram<Ed448> for IetfEd448Hram {
+pub struct IrtfEd448Hram;
+impl Hram<Ed448> for IrtfEd448Hram {
   #[expect(non_snake_case)]
   fn hram(R: &Ed448, A: &Ed448, m: &[u8]) -> Scalar {
-    Ietf8032Ed448Hram::hram(&[], R, A, m)
+    Irtf8032Ed448Hram::hram(&[], R, A, m)
   }
 }
