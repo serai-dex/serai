@@ -50,7 +50,8 @@ impl Keystore {
   ///
   /// - `ADDRESS`: The validator's address
   ///
-  /// - `KEY`: The validator's auxiliary key for the Serai network, encoded as hexadecimal bytes
+  /// - `SERAI_AUXILIARY_KEY`: The validator's auxiliary key for the Serai network, encoded as
+  ///   hexadecimal bytes
   ///
   /// Note using a process's environment variables for key material is generally insecure as
   /// unprivileged processes can generally read the environment variables of other processes.
@@ -65,13 +66,13 @@ impl Keystore {
     let address =
       SeraiAddress::from_str(&address).expect("validator address wasn't properly specified");
 
-    let mut key_hex = serai_env::var("KEY")?;
+    let mut key_hex = serai_env::var("SERAI_AUXILIARY_KEY")?;
     if key_hex.trim().is_empty() {
       None?;
     }
     let mut key_bytes = Zeroizing::new([0; 32 + 32]);
     base16ct::mixed::decode(key_hex.as_bytes(), &mut key_bytes[.. 32])
-      .expect("KEY from environment wasn't 32 hex-encoded bytes");
+      .expect("`SERAI_AUXILIARY_KEY` from environment wasn't 32 hex-encoded bytes");
     key_hex.zeroize();
 
     /*

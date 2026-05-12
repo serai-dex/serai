@@ -8582,6 +8582,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "serai-secret-store"
+version = "0.1.0"
+dependencies = [
+ "blake2 0.10.6",
+ "chacha20",
+ "ciphersuite 0.4.2",
+ "curve25519-dalek",
+ "embedwards25519",
+ "rand_core 0.6.4",
+ "secq256k1",
+ "zalloc",
+ "zeroize",
+]
+
+[[package]]
 name = "serai-shim-rpc"
 version = "0.1.0"
 dependencies = [

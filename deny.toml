@@ -40,11 +40,13 @@ allow = [
 ]
 
 exceptions = [
-  { allow = ["AGPL-3.0-only"], name = "serai-env" },
   { allow = ["AGPL-3.0-only"], name = "serai-task" },
 
   { allow = ["AGPL-3.0-only"], name = "ethereum-schnorr-contract" },
   { allow = ["AGPL-3.0-only"], name = "serai-ethereum-relayer" },
+
+  { allow = ["AGPL-3.0-only"], name = "serai-secret-store" },
+  { allow = ["AGPL-3.0-only"], name = "serai-env" },
 
   { allow = ["AGPL-3.0-only"], name = "serai-message-queue" },
   { allow = ["AGPL-3.0-only"], name = "serai-message-queue-client" },

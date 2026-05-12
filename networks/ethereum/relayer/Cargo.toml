@@ -19,8 +19,8 @@ workspace = true
 [dependencies]
 tokio = { version = "1", default-features = false, features = ["rt", "time", "io-util", "net", "macros"] }
 
-serai-env = { path = "../../../common/env" }
 serai-db = { path = "../../../common/db" }
+serai-env = { path = "../../../secret-store/env" }
 
 [features]
 parity-db = ["serai-db/parity-db"]

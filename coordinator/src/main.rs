@@ -336,7 +336,7 @@ async fn main() {
 
   // Read the Serai key from the env
   let serai_key = {
-    let mut key_hex = serai_env::var("SERAI_KEY").expect("Serai key wasn't provided");
+    let mut key_hex = serai_env::var("SERAI_AUXILIARY_KEY").expect("Serai key wasn't provided");
     let mut key_vec = hex::decode(&key_hex).map_err(|_| ()).expect("Serai key wasn't hex-encoded");
     key_hex.zeroize();
     if key_vec.len() != 32 {

@@ -28,6 +28,6 @@ ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, fea
 
 tokio = { version = "1", default-features = false, features = ["rt", "time", "io-util", "net", "macros"] }
 
-serai-env = { path = "../../common/env" }
+serai-env = { path = "../../secret-store/env" }
 
 message-queue = { package = "serai-message-queue", path = "../../message-queue", default-features = false }

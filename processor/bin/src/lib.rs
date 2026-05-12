@@ -88,9 +88,9 @@ fn key_gen<K: KeyGenParams>() -> KeyGen<K> {
     res
   }
   KeyGen::new(
-    read_key_from_env::<<Ristretto as Curves>::EmbeddedCurve>("SUBSTRATE_EVRF_KEY"),
+    read_key_from_env::<<Ristretto as Curves>::EmbeddedCurve>("SUBSTRATE_AUXILIARY_KEY"),
     read_key_from_env::<<K::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve>(
-      "NETWORK_EVRF_KEY",
+      "NETWORK_AUXILIARY_KEY",
     ),
   )
 }

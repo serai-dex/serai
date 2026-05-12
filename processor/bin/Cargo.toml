@@ -30,8 +30,8 @@ serai-cosign = { package = "serai-cosign-types", path = "../../coordinator/cosig
 
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 
-serai-env = { path = "../../common/env" }
 serai-db = { path = "../../common/db" }
+serai-env = { path = "../../secret-store/env" }
 
 messages = { package = "serai-processor-messages", path = "../messages" }
 key-gen = { package = "serai-processor-key-gen", path = "../key-gen" }

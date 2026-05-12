@@ -34,8 +34,8 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 
 zalloc = { path = "../common/zalloc" }
 serai-db = { path = "../common/db" }
-serai-env = { path = "../common/env" }
 serai-task = { path = "../common/task", version = "0.1" }
+serai-env = { path = "../secret-store/env" }
 
 messages = { package = "serai-processor-messages", path = "../processor/messages" }
 message-queue = { package = "serai-message-queue-client", path = "../message-queue/client" }

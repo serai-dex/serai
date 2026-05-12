@@ -5,7 +5,6 @@ members = [
   "common/zalloc",
   "common/patchable-async-sleep",
   "common/db",
-  "common/env",
   "common/task",
   "common/request",
 
@@ -39,6 +38,9 @@ members = [
   "networks/ethereum/schnorr",
   "networks/ethereum/alloy-simple-request-transport",
   "networks/ethereum/relayer",
+
+  "secret-store",
+  "secret-store/env",
 
   "message-queue",
   "message-queue/client",

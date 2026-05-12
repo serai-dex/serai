@@ -10,6 +10,7 @@ on:
       - "common/**"
       - "crypto/**"
       - "networks/**"
+      - "secret-store/**"
       - "message-queue/**"
       - "processor/**"
       - "coordinator/**"
@@ -20,6 +21,7 @@ on:
       - "common/**"
       - "crypto/**"
       - "networks/**"
+      - "secret-store/**"
       - "message-queue/**"
       - "processor/**"
       - "coordinator/**"
@@ -41,6 +43,9 @@ jobs:
 
       - name: Run Tests
         run: |
+          find ./secret-store -name "Cargo.toml" | while IFS="\n" read -r manifest; do
+            cargo test --all-features --manifest-path $manifest
+          done
           find ./message-queue -name "Cargo.toml" | while IFS="\n" read -r manifest; do
             cargo test --all-features --manifest-path $manifest
           done

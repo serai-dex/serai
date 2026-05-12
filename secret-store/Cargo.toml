@@ -1,0 +1,32 @@
+[package]
+name = "serai-secret-store"
+version = "0.1.0"
+description = "A composable service to hold and deal secrets to services"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/secret-store"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+keywords = []
+edition = "2021"
+publish = false
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+zeroize = { version = "1", default-features = false, features = ["alloc"] }
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
+blake2 = { version = "0.10", default-features = false, features = ["std"] }
+# TODO: Enabling the `std` feature adds a new dependency. What's up with that?
+chacha20 = { version = "0.9", default-features = false }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "precomputed-tables"] }
+
+ciphersuite = { path = "../crypto/ciphersuite", default-features = false, features = ["std"] }
+embedwards25519 = { path = "../crypto/embedwards25519", default-features = false, features = ["std"] }
+secq256k1 = { path = "../crypto/secq256k1", default-features = false, features = ["std"] }
+
+zalloc = { path = "../common/zalloc", default-features = false }

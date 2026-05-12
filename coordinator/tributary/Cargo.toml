@@ -40,7 +40,7 @@ serai-coordinator-substrate = { path = "../substrate" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
 
-serai-env = { path = "../../common/env", version = "0.1.0" }
+serai-env = { path = "../../secret-store/env", version = "0.1.0" }
 
 [dev-dependencies]
 rand = { version = "0.8", default-features = false, features = ["std"] }

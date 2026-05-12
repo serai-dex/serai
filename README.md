@@ -29,6 +29,9 @@ wallet.
   wider community. This means they will always support the functionality Serai
   needs, yet won't disadvantage other use-cases when possible.
 
+- `secret-store`: A service to distribute environment variables and secrets to
+  services.
+
 - `message-queue`: An ordered message queue so services can send messages to
   each other, even when the other is offline. This ensures one service's
   downtime doesn't propagate to another service's downtime, while also

@@ -78,7 +78,7 @@ sc-telemetry = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sc-chain-spec = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 sc-utils = { git = "https://github.com/serai-dex/patch-polkadot-sdk" }
 
-serai-env = { path = "../../common/env" }
+serai-env = { path = "../../secret-store/env" }
 
 [features]
 runtime-benchmarks = [
