@@ -18,6 +18,8 @@ use tributary_sdk::{
 
 use serai_task::{Task, TaskHandle, DoesNotError, ContinuallyRan};
 
+use serai_env::Environment;
+
 use message_queue::{Service, Metadata, Client as MessageQueue};
 
 use serai_cosign::{Faulted, CosignIntent, Cosigning};
@@ -467,6 +469,7 @@ async fn scan_on_new_block<CD: DbTrait, TD: DbTrait, P: P2p>(
 /// - Spawn the SignSlashReportTask
 /// - Iterate the scan task whenever a new block occurs (not just on the standard interval)
 pub(crate) async fn spawn_tributary<P: P2p>(
+  env: &Environment,
   db: Db,
   message_queue: Arc<MessageQueue>,
   p2p: P,
@@ -499,7 +502,7 @@ pub(crate) async fn spawn_tributary<P: P2p>(
   }
 
   // Spawn the Tributary
-  let tributary_db = crate::db::tributary_db(set.set);
+  let tributary_db = crate::db::tributary_db(env, set.set);
   let tributary = Tributary::new(
     tributary_db.clone(),
     genesis,

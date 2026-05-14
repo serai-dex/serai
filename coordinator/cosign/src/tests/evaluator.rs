@@ -75,20 +75,18 @@ impl EvaluatorTest {
 /// After a successful task run, all input channels should be consumed and the
 /// `CosignedBlocks` output channel should contain exactly the expected block range.
 fn verify_db_invariants(db: &mut MemDb, expected_cosigned_range: Option<(u64, u64)>) {
-  use serai_env::log::debug;
-
   let current_session = CurrentlyEvaluatedGlobalSession::get(db);
   let block_events_pending = BlockEvents::peek(db).is_some();
   let sessions_pending = GlobalSessionsChannel::peek(db).is_some();
   let cosigned_pending = CosignedBlocks::peek(db).is_some();
 
-  debug!(
+  serai_env::debug!(
     "CurrentlyEvaluatedGlobalSession: {:?}",
     current_session.as_ref().map(|(id, gs)| (hex::encode(id), gs.start_block_number))
   );
-  debug!("BlockEvents pending: {block_events_pending}");
-  debug!("GlobalSessionsChannel pending: {sessions_pending}");
-  debug!("CosignedBlocks pending: {cosigned_pending}");
+  serai_env::debug!("BlockEvents pending: {block_events_pending}");
+  serai_env::debug!("GlobalSessionsChannel pending: {sessions_pending}");
+  serai_env::debug!("CosignedBlocks pending: {cosigned_pending}");
 
   // All input channels should be fully consumed
   assert!(!block_events_pending, "BlockEvents should be fully consumed");
@@ -106,7 +104,7 @@ fn verify_db_invariants(db: &mut MemDb, expected_cosigned_range: Option<(u64, u6
       for expected_block in start ..= end {
         let (block_number, _time, _has_events) = CosignedBlocks::try_recv(&mut txn)
           .unwrap_or_else(|| panic!("expected cosigned block {expected_block}"));
-        debug!("CosignedBlock: block_number={block_number}");
+        serai_env::debug!("CosignedBlock: block_number={block_number}");
         assert_eq!(block_number, expected_block, "cosigned block mismatch");
       }
       assert!(CosignedBlocks::try_recv(&mut txn).is_none(), "unexpected extra cosigned block");

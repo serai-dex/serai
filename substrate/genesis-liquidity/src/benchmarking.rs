@@ -68,7 +68,7 @@ fn benchmark_signature() {
 }
 */
 
-#[allow(clippy::float_arithmetic)]
+#[allow(clippy::disallowed_methods, clippy::float_arithmetic)]
 #[frame_benchmarking::v2::benchmarks(
   where <T as frame_system::Config>::RuntimeOrigin: From<Option<SeraiAddress>>
 )]

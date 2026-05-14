@@ -1,11 +1,13 @@
 use core::{ops::Deref as _, str::FromStr as _};
 
-use zeroize::{Zeroize as _, Zeroizing};
+use zeroize::Zeroizing;
 
 use sp_core::{crypto::*, sr25519};
 use sp_keystore::*;
 
 use serai_abi::primitives::address::SeraiAddress;
+
+use serai_env::Environment;
 
 /// The Serai Keystore.
 ///
@@ -61,19 +63,18 @@ impl Keystore {
   /// This function MAY panic if the environment variables were not set as expected, even if the
   /// environment variables meet the description specified within this function. It is intended
   /// solely for use within the Serai node upon its initialization with no further safety offerred.
-  pub(crate) fn from_env() -> Option<(SeraiAddress, Self)> {
-    let address = serai_env::var("ADDRESS")?;
+  pub(crate) fn from_env(env: &Environment) -> Option<(SeraiAddress, Self)> {
+    let address = env.var("ADDRESS")?;
     let address =
-      SeraiAddress::from_str(&address).expect("validator address wasn't properly specified");
+      SeraiAddress::from_str(address).expect("validator address wasn't properly specified");
 
-    let mut key_hex = serai_env::var("SERAI_AUXILIARY_KEY")?;
+    let key_hex = env.var("SERAI_AUXILIARY_KEY")?;
     if key_hex.trim().is_empty() {
       None?;
     }
     let mut key_bytes = Zeroizing::new([0; 32 + 32]);
     base16ct::mixed::decode(key_hex.as_bytes(), &mut key_bytes[.. 32])
       .expect("`SERAI_AUXILIARY_KEY` from environment wasn't 32 hex-encoded bytes");
-    key_hex.zeroize();
 
     /*
       Fill in the seed used for the nonce with the hash of the private key.

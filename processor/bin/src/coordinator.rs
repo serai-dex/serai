@@ -13,6 +13,8 @@ use serai_cosign::SignedCosign;
 
 use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
 
+use serai_env::Environment;
+
 use scanner::ScannerFeed;
 
 use message_queue::{Service, Metadata, Client as MessageQueue};
@@ -63,12 +65,12 @@ pub(crate) struct Coordinator {
 }
 
 impl Coordinator {
-  pub(crate) fn new<S: ScannerFeed>(db: crate::Db) -> Self {
+  pub(crate) fn new<S: ScannerFeed>(env: &Environment, db: crate::Db) -> Self {
     let (received_message_send, received_message_recv) = mpsc::unbounded_channel();
     let (sent_message_send, mut sent_message_recv) = mpsc::unbounded_channel();
 
     let service = Service::Processor(S::NETWORK);
-    let message_queue = Arc::new(MessageQueue::from_env(service));
+    let message_queue = Arc::new(MessageQueue::from_env(env, service));
 
     // Spawn a task to move messages from the message-queue to our database so we can achieve
     // atomicity. This is the only place we read/ack messages from

@@ -11,6 +11,8 @@ use serai_client_serai::abi::primitives::{
   validator_sets::{Session, ExternalValidatorSet},
 };
 
+use serai_env::Environment;
+
 use serai_cosign::SignedCosign;
 use serai_coordinator_substrate::NewSetInformation;
 use serai_coordinator_tributary::Transaction;
@@ -39,13 +41,13 @@ fn db(path: &str) -> Db {
   db
 }
 
-pub(crate) fn coordinator_db() -> Db {
-  let root_path = serai_env::var("DB_PATH").expect("path to DB wasn't specified");
+pub(crate) fn coordinator_db(env: &Environment) -> Db {
+  let root_path = &**env.var("DB_PATH").expect("path to DB wasn't specified");
   db(&format!("{root_path}/coordinator/db"))
 }
 
-fn tributary_db_folder(set: ExternalValidatorSet) -> String {
-  let root_path = serai_env::var("DB_PATH").expect("path to DB wasn't specified");
+fn tributary_db_folder(env: &Environment, set: ExternalValidatorSet) -> String {
+  let root_path = &**env.var("DB_PATH").expect("path to DB wasn't specified");
   let network = match set.network {
     ExternalNetworkId::Bitcoin => "Bitcoin",
     ExternalNetworkId::Ethereum => "Ethereum",
@@ -54,13 +56,13 @@ fn tributary_db_folder(set: ExternalValidatorSet) -> String {
   format!("{root_path}/tributary-{network}-{}", set.session.0)
 }
 
-pub(crate) fn tributary_db(set: ExternalValidatorSet) -> Db {
-  db(&format!("{}/db", tributary_db_folder(set)))
+pub(crate) fn tributary_db(env: &Environment, set: ExternalValidatorSet) -> Db {
+  db(&format!("{}/db", tributary_db_folder(env, set)))
 }
 
-pub(crate) fn prune_tributary_db(set: ExternalValidatorSet) {
+pub(crate) fn prune_tributary_db(env: &Environment, set: ExternalValidatorSet) {
   serai_env::info!("pruning data directory for tributary {set:?}");
-  let db = tributary_db_folder(set);
+  let db = tributary_db_folder(env, set);
   if fs::exists(&db).expect("couldn't check if tributary DB exists") {
     fs::remove_dir_all(db).unwrap();
   }

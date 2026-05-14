@@ -3,7 +3,7 @@ use std::{
   collections::{HashSet, HashMap},
   time::SystemTime,
   path::PathBuf,
-  fs, env,
+  fs,
   process::Command,
 };
 
@@ -18,7 +18,7 @@ pub fn handle(desc: &str) -> String {
 }
 
 pub fn fresh_logs_folder(first: bool, label: &str) -> String {
-  let logs_path = [env::current_dir().unwrap().to_str().unwrap(), ".test-logs", label]
+  let logs_path = [std::env::current_dir().unwrap().to_str().unwrap(), ".test-logs", label]
     .iter()
     .collect::<std::path::PathBuf>();
   if first {
@@ -34,7 +34,8 @@ pub fn fresh_logs_folder(first: bool, label: &str) -> String {
 
 pub fn log_options(path: String) -> LogOptions {
   LogOptions {
-    action: if env::var("GITHUB_CI") == Ok("true".to_owned()) {
+    #[expect(clippy::disallowed_methods)]
+    action: if std::env::var("GITHUB_CI") == Ok("true".to_owned()) {
       LogAction::Forward
     } else {
       LogAction::ForwardToFile { path }
@@ -263,7 +264,8 @@ pub fn build(name: String) {
 
   println!("Built!");
 
-  if env::var("GITHUB_CI").is_ok() {
+  #[expect(clippy::disallowed_methods)]
+  if std::env::var("GITHUB_CI").is_ok() {
     println!("In CI, so clearing cache to prevent hitting the storage limits.");
     if !Command::new("docker")
       .arg("builder")

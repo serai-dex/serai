@@ -20,6 +20,8 @@ pub(crate) use tokio::{
 
 use serai_db::{Get, DbTxn, Db as _};
 
+use serai_env::Environment;
+
 pub use message_queue::*;
 mod queue;
 pub(crate) use crate::queue::Queue;
@@ -153,21 +155,22 @@ async fn main() {
   serai_env::info!("Starting message-queue service...");
 
   // Open the DB
-  #[expect(unused_variables, unreachable_code)]
-  let db = {
+  #[allow(unused_variables, unreachable_code)]
+  let (env, db) = {
     #[cfg(all(feature = "parity-db", feature = "rocksdb"))]
     panic!("built with parity-db and rocksdb");
+
+    let env = Environment::from_secret_store().await;
+
     #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
-    let db =
-      serai_db::new_parity_db(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+    let db = serai_db::new_parity_db(env.var("DB_PATH").expect("path to DB wasn't specified"));
     #[cfg(feature = "rocksdb")]
-    let db =
-      serai_db::new_rocksdb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
-    db
+    let db = serai_db::new_rocksdb(env.var("DB_PATH").expect("path to DB wasn't specified"));
+    (env, db)
   };
 
   let read_key = |str| {
-    let key = serai_env::var(str)?;
+    let key = env.var(str)?;
 
     let mut repr = <<Ristretto as WrappedGroup>::G as GroupEncoding>::Repr::default();
     repr.as_mut().copy_from_slice(&hex::decode(key).unwrap());
@@ -181,13 +184,13 @@ async fn main() {
       for network in ExternalNetworkId::all() {
         queues.insert(
           (service, Service::Processor(network)),
-          RwLock::new(Queue(db.clone(), service, Service::Processor(network))),
+          RwLock::new(Queue::new(&env, db.clone(), service, Service::Processor(network))),
         );
       }
     } else {
       queues.insert(
         (service, Service::Coordinator),
-        RwLock::new(Queue(db.clone(), service, Service::Coordinator)),
+        RwLock::new(Queue::new(&env, db.clone(), service, Service::Coordinator)),
       );
     }
   };

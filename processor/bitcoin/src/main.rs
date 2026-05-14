@@ -39,11 +39,11 @@ pub(crate) fn hash_bytes(hash: bitcoin_serai::bitcoin::hashes::sha256d::Hash) ->
 
 #[tokio::main]
 async fn main() {
-  let db = bin::init();
+  let (env, db) = bin::init().await;
   let feed = Rpc {
     db: db.clone(),
     rpc: loop {
-      match BRpc::new(bin::url()).await {
+      match BRpc::new(bin::url(&env)).await {
         Ok(rpc) => break rpc,
         Err(e) => {
           log::error!("couldn't connect to the Bitcoin node: {e:?}");
@@ -57,7 +57,8 @@ async fn main() {
   tokio::spawn(TxIndexTask(feed.clone()).continually_run(index_task, vec![]));
   core::mem::forget(index_handle);
 
-  bin::main_loop::<(), _, KeyGenParams, _>(db, feed.clone(), Scheduler::new(Planner), feed).await;
+  bin::main_loop::<(), _, KeyGenParams, _>(env, db, feed.clone(), Scheduler::new(Planner), feed)
+    .await;
 }
 
 /*

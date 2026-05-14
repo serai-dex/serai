@@ -30,6 +30,8 @@ use message_queue::{Service, Client as MessageQueue};
 
 use serai_task::{Task, TaskHandle, ContinuallyRan as _};
 
+use serai_env::Environment;
+
 use serai_cosign::{Faulted, SignedCosign, Cosigning};
 use serai_coordinator_substrate::{
   CanonicalEventStream, EphemeralEventStream, SignSlashReport, SetKeysTask, SignedBatches,
@@ -59,7 +61,7 @@ mod p2p {
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
   zalloc::ZeroizingAlloc(std::alloc::System);
 
-async fn serai() -> Arc<Serai> {
+async fn serai(env: &Environment) -> Arc<Serai> {
   const SERAI_CONNECTION_DELAY: Duration = Duration::from_secs(10);
   const MAX_SERAI_CONNECTION_DELAY: Duration = Duration::from_mins(5);
 
@@ -67,7 +69,7 @@ async fn serai() -> Arc<Serai> {
   loop {
     let Ok(serai) = Serai::new(format!(
       "http://{}:9944",
-      serai_env::var("SERAI_HOSTNAME").expect("Serai hostname wasn't provided")
+      &**env.var("SERAI_HOSTNAME").expect("Serai hostname wasn't provided")
     )) else {
       serai_env::error!("couldn't connect to the Serai node");
       tokio::time::sleep(delay).await;
@@ -334,11 +336,12 @@ async fn main() {
   serai_env::init_logger();
   serai_env::info!("starting coordinator service...");
 
+  let env = Environment::from_secret_store().await;
+
   // Read the Serai key from the env
   let serai_key = {
-    let mut key_hex = serai_env::var("SERAI_AUXILIARY_KEY").expect("Serai key wasn't provided");
-    let mut key_vec = hex::decode(&key_hex).map_err(|_| ()).expect("Serai key wasn't hex-encoded");
-    key_hex.zeroize();
+    let key_hex = env.var("SERAI_AUXILIARY_KEY").expect("Serai key wasn't provided");
+    let mut key_vec = hex::decode(key_hex).map_err(|_| ()).expect("Serai key wasn't hex-encoded");
     if key_vec.len() != 32 {
       key_vec.zeroize();
       panic!("Serai key had an invalid length");
@@ -352,14 +355,14 @@ async fn main() {
   };
 
   // Open the database
-  let mut db = coordinator_db();
+  let mut db = coordinator_db(&env);
 
   let existing_tributaries_at_boot = {
     let mut txn = db.txn();
 
     // Cleanup all historic Tributaries
     while let Some(to_cleanup) = TributaryCleanup::try_recv(&mut txn) {
-      prune_tributary_db(to_cleanup);
+      prune_tributary_db(&env, to_cleanup);
       // Remove the keys to confirm for this network
       KeysToConfirm::take(&mut txn, to_cleanup);
       KeySet::take(&mut txn, to_cleanup);
@@ -388,10 +391,10 @@ async fn main() {
   };
 
   // Connect to the message-queue
-  let message_queue = Arc::new(MessageQueue::from_env(Service::Coordinator));
+  let message_queue = Arc::new(MessageQueue::from_env(&env, Service::Coordinator));
 
   // Connect to the Serai node
-  let serai = serai().await;
+  let serai = serai(&env).await;
 
   let (p2p_add_tributary_send, p2p_add_tributary_recv) = mpsc::unbounded_channel();
   let (p2p_retire_tributary_send, p2p_retire_tributary_recv) = mpsc::unbounded_channel();
@@ -451,6 +454,7 @@ async fn main() {
   // Spawn all Tributaries on-disk
   for tributary in existing_tributaries_at_boot {
     crate::tributary::spawn_tributary(
+      &env,
       db.clone(),
       message_queue.clone(),
       p2p.clone(),
@@ -464,6 +468,7 @@ async fn main() {
   // Handle the events from the Substrate scanner
   tokio::spawn(
     (SubstrateTask {
+      env,
       serai_key: serai_key.clone(),
       db: db.clone(),
       message_queue: message_queue.clone(),

@@ -70,7 +70,7 @@ async fn updates_latest_finalized_block_after_ack_delay() {
     verify_db_invariants(&test.db, Some(2));
   }
 
-  serai_env::log::info!("Blocks 0-2 processed in {:?}", start.elapsed());
+  serai_env::info!("Blocks 0-2 processed in {:?}", start.elapsed());
   let start = Instant::now();
 
   // Timestamps decreasing, given their time_valid already passed during
@@ -91,7 +91,7 @@ async fn updates_latest_finalized_block_after_ack_delay() {
     verify_db_invariants(&test.db, Some(5));
   }
 
-  serai_env::log::info!("Blocks 3-5 processed in {:?}", start.elapsed());
+  serai_env::info!("Blocks 3-5 processed in {:?}", start.elapsed());
   let start = Instant::now();
 
   // Timestamps increasing in order
@@ -112,7 +112,7 @@ async fn updates_latest_finalized_block_after_ack_delay() {
     verify_db_invariants(&test.db, Some(8));
   }
 
-  serai_env::log::info!("Blocks 6-8 processed in {:?}", start.elapsed());
+  serai_env::info!("Blocks 6-8 processed in {:?}", start.elapsed());
 
   // has_events=false blocks are marked as cosigned immediately, no sleep
   {

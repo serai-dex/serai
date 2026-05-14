@@ -20,10 +20,10 @@ use scheduler::{Planner, Scheduler};
 
 #[tokio::main]
 async fn main() {
-  let db = bin::init();
+  let (env, db) = bin::init().await;
   let feed = Rpc {
     rpc: loop {
-      match SimpleRequestTransport::new(bin::url()).await {
+      match SimpleRequestTransport::new(bin::url(&env)).await {
         Ok(rpc) => break rpc,
         Err(e) => {
           log::error!("couldn't connect to the Monero node: {e:?}");
@@ -34,6 +34,7 @@ async fn main() {
   };
 
   bin::main_loop::<(), _, KeyGenParams, _>(
+    env,
     db,
     feed.clone(),
     Scheduler::new(Planner(feed.clone())),

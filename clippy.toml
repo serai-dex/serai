@@ -30,6 +30,19 @@ path = "<ruint::Uint as core::ops::Mul>::mul_assign"
 reason = "`mul_assign` uses wrapping arithmetic when we want checked"
 
 [[disallowed-methods]]
+path = "std::env::var"
+reason = "Use `serai_env::Environment::var` if this isn't in a build script"
+[[disallowed-methods]]
+path = "std::env::var_os"
+reason = "Use `serai_env::Environment::var` if this isn't in a build script"
+[[disallowed-methods]]
+path = "std::env::vars"
+reason = "Use `serai_env::Environment::var` if this isn't in a build script"
+[[disallowed-methods]]
+path = "std::env::vars_os"
+reason = "Use `serai_env::Environment::var` if this isn't in a build script"
+
+[[disallowed-methods]]
 path = "serai_coins_pallet::pallet::Pallet::burn_fn"
 reason = "this method should only be used when not `CoinsInstance`, which isn't enforced at compile-time"
 

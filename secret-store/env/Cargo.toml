@@ -17,5 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+zeroize = { version = "1", default-features = false, features = ["alloc"] }
+
 log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"] }

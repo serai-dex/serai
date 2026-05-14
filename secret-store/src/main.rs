@@ -27,6 +27,7 @@ static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
 const PORT: u16 = 59119;
 
 fn connection_timeout() -> Duration {
+  #[expect(clippy::disallowed_methods)]
   let connection_timeout = env::var("CONNECTION_TIMEOUT")
     .map(|timeout| {
       Duration::from_millis(
@@ -59,8 +60,9 @@ fn services() -> impl Iterator<Item = String> {
 /// Fetch variables for this service via the environment.
 fn env_variables(service: &str) -> impl use<'_> + Iterator<Item = (String, String)> {
   let prefix = format!("{service}_");
-  env::vars()
-    .filter_map(move |(key, value)| key.strip_prefix(&prefix).map(|key| (key.to_owned(), value)))
+  #[expect(clippy::disallowed_methods)]
+  let vars = env::vars();
+  vars.filter_map(move |(key, value)| key.strip_prefix(&prefix).map(|key| (key.to_owned(), value)))
 }
 
 fn all_variables<'a>(
@@ -83,7 +85,10 @@ fn distribute_to_service(
 ) {
   let Ok(mut socket) = EncryptedSocket::new({
     let hostname = {
-      let Ok(mut hostname) = env::var(service) else { return };
+      #[expect(clippy::disallowed_methods)]
+      let Ok(mut hostname) = env::var(service) else {
+        return;
+      };
       assert!(!hostname.contains(':'), "`hostname` specification should omit the port");
       write!(&mut hostname, ":{PORT}").unwrap();
       hostname

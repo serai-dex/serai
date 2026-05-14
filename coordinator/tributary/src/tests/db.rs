@@ -458,7 +458,7 @@ mod tributary_db {
       }
     }
 
-    serai_env::log::info!("start_of_block fuzz: completed 100 iterations");
+    serai_env::info!("start_of_block fuzz: completed 100 iterations");
   }
 
   #[test]

@@ -1,4 +1,4 @@
-use std::{env, fs};
+use std::fs;
 
 use alloy_sol_macro_input::SolInputKind;
 
@@ -19,7 +19,9 @@ fn sol(sol_files: &[&str], file: &str) {
 }
 
 fn main() {
-  let artifacts_path = env::var("OUT_DIR").unwrap().clone() + "/serai-processor-ethereum-router";
+  #[expect(clippy::disallowed_methods)]
+  let artifacts_path =
+    std::env::var("OUT_DIR").unwrap().clone() + "/serai-processor-ethereum-router";
 
   if !fs::exists(&artifacts_path).unwrap() {
     fs::create_dir_all(&artifacts_path).unwrap();

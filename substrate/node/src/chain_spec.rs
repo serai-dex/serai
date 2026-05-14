@@ -33,6 +33,8 @@ use sc_executor::{RuntimeVersionOf, WasmExecutor};
 use sc_chain_spec::{BuildGenesisBlock, GenesisBlockBuilder, ChainSpecBuilder};
 use sc_service::{ChainType, ChainSpec as _, GenericChainSpec as ChainSpec};
 
+use serai_env::Environment;
+
 /// Generate the key pair for the validator corresponding to a development seed.
 ///
 /// This is insecure and MUST NOT be used except testing purposes.
@@ -90,11 +92,13 @@ fn insecure_auxiliary_keys(name: &'static str) -> Vec<SignedEmbeddedEllipticCurv
   ]
 }
 
-fn wasm_binary(dev: bool) -> Vec<u8> {
+fn wasm_binary(env: Option<&Environment>, dev: bool) -> Vec<u8> {
   const DEFAULT_WASM_PATH: &str = "/runtime/serai.wasm";
-  let path = serai_env::var("SERAI_WASM_PATH").unwrap_or(DEFAULT_WASM_PATH.to_owned());
+  let path = env
+    .and_then(|env| env.var("SERAI_WASM_PATH").map(|path| (**path).clone()))
+    .unwrap_or(DEFAULT_WASM_PATH.to_owned());
   if let Ok(binary) = fs::read(&path) {
-    sp_tracing::info!("using {path} for the WASM");
+    sp_tracing::info!("using {} for the WASM", &*path);
     return binary;
   }
 
@@ -128,13 +132,14 @@ fn devnet_genesis(
 
 /// Call Serai's genesis API, used to initialize the on-chain storage.
 fn genesis(
+  env: Option<&Environment>,
   name: &'static str,
   id: &'static str,
   chain_type: ChainType,
   protocol_id: &'static str,
   config: &GenesisConfig,
 ) -> ChainSpec {
-  let bin = wasm_binary(matches!(chain_type, ChainType::Development));
+  let bin = wasm_binary(env, matches!(chain_type, ChainType::Development));
   let hash = sp_core::blake2_256(&bin).to_vec();
 
   let mut chain_spec = ChainSpecBuilder::new(&bin, None)
@@ -164,8 +169,9 @@ fn genesis(
   chain_spec
 }
 
-pub(super) fn solo_config() -> ChainSpec {
+pub(super) fn solo_config(env: Option<&Environment>) -> ChainSpec {
   genesis(
+    env,
     "Solo Network",
     "solo",
     ChainType::Development,
@@ -183,8 +189,9 @@ pub(super) fn solo_config() -> ChainSpec {
   )
 }
 
-pub(super) fn local_config() -> ChainSpec {
+pub(super) fn local_config(env: Option<&Environment>) -> ChainSpec {
   genesis(
+    env,
     "Local Test Network",
     "local",
     ChainType::Local,

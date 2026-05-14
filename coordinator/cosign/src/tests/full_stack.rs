@@ -45,7 +45,7 @@ fn sign_and_intake(
     Ok(()) | Err(IntakeCosignError::StaleCosign) => Ok(()),
     Err(e) if e.temporal() => Err((network, intent)),
     Err(ref e) => {
-      serai_env::log::warn!(
+      serai_env::warn!(
         "intake_cosign error: block={}, network={network:?}, err={e:?}",
         intent.block_number,
       );
@@ -133,7 +133,7 @@ async fn full_stack_fuzzed() {
     let mut event_fuzzer = EventFuzzer::new();
     let blocks = event_fuzzer.generate_blocks_with_keygen(num_blocks);
 
-    serai_env::log::info!(
+    serai_env::info!(
       "Starting full-stack fuzz: 0..{} blocks, {} validators ({i}/{iterations})",
       num_blocks - 1,
       event_fuzzer.validators.len(),
@@ -165,7 +165,7 @@ async fn full_stack_fuzzed() {
     let latest = Cosigning::<MemDb>::latest_cosigned_block_number(&db).unwrap().unwrap();
     assert!(latest >= target, "expected latest cosigned block >= {target}, got {latest}");
 
-    serai_env::log::info!("Full-stack fuzz completed: all {num_blocks} blocks cosigned");
+    serai_env::info!("Full-stack fuzz completed: all {num_blocks} blocks cosigned");
   }
 }
 
@@ -185,7 +185,7 @@ async fn equivocation_halts_protocol() {
     let mut event_fuzzer = EventFuzzer::new();
     let blocks = event_fuzzer.generate_blocks_with_keygen(num_blocks);
 
-    serai_env::log::info!(
+    serai_env::info!(
       "equivocation fuzz: 0..{} blocks, {} validators ({iteration}/{iterations})",
       num_blocks - 1,
       event_fuzzer.validators.len(),
@@ -229,7 +229,7 @@ async fn equivocation_halts_protocol() {
     .await;
 
     if !reached_equivocation_point {
-      serai_env::log::info!(
+      serai_env::info!(
         "equivocation fuzz ({iteration}/{iterations}): no global session formed, skipping"
       );
       continue;
@@ -245,7 +245,7 @@ async fn equivocation_halts_protocol() {
 
     // Find the global session that covers this block via the evaluator's current session
     let Some(global_session_id) = currently_evaluated_global_session(&db) else {
-      serai_env::log::info!(
+      serai_env::info!(
         "equivocation fuzz ({iteration}/{iterations}): no evaluated global session, skipping"
       );
       continue;
@@ -253,7 +253,7 @@ async fn equivocation_halts_protocol() {
     let global_session =
       GlobalSessions::get(&db, global_session_id).expect("evaluated session should exist in DB");
     if equivocation_block < global_session.start_block_number {
-      serai_env::log::info!(
+      serai_env::info!(
         "equivocation fuzz ({iteration}/{iterations}): equivocation block \
          {equivocation_block} predates session start {}, skipping",
         global_session.start_block_number,
@@ -277,7 +277,7 @@ async fn equivocation_halts_protocol() {
       faulty_block_hash = random_block_hash(&mut OsRng);
     }
 
-    serai_env::log::info!(
+    serai_env::info!(
       "equivocation fuzz ({iteration}/{iterations}): block={equivocation_block}, \
        faulty={faulty_networks:?}, faulty_stake={faulty_stake}, threshold={fault_threshold}, \
        will_fault={}",
@@ -304,7 +304,7 @@ async fn equivocation_halts_protocol() {
       cumulative_faulty_stake += net_stake;
       let faulted_now = cumulative_faulty_stake >= fault_threshold;
 
-      serai_env::log::info!(
+      serai_env::info!(
         "faulty cosign {}/{num_faulty} from {faulty_net:?} (stake={net_stake}): \
          cumulative={cumulative_faulty_stake}, threshold={fault_threshold}, faulted={faulted_now}",
         fi + 1,
@@ -327,7 +327,7 @@ async fn equivocation_halts_protocol() {
     }
 
     if faulty_stake < fault_threshold {
-      serai_env::log::info!(
+      serai_env::info!(
         "equivocation fuzz ({iteration}/{iterations}): faulty stake {faulty_stake} below \
          threshold {fault_threshold}, verifying protocol continues"
       );
@@ -362,9 +362,7 @@ async fn equivocation_halts_protocol() {
       "latest_cosigned_block_number should remain Faulted after further operations"
     );
 
-    serai_env::log::info!(
-      "equivocation fuzz ({iteration}/{iterations}): protocol halted as expected"
-    );
+    serai_env::info!("equivocation fuzz ({iteration}/{iterations}): protocol halted as expected");
   }
 }
 
@@ -380,7 +378,7 @@ async fn dos_stall_offline_set() {
 
   let iterations = 5;
   for iteration in 1 ..= iterations {
-    serai_env::log::info!("dos_stall_offline_set iteration {iteration}/{iterations}");
+    serai_env::info!("dos_stall_offline_set iteration {iteration}/{iterations}");
 
     let num_blocks = OsRng.gen_range(10 .. 25);
     let mut event_fuzzer = EventFuzzer::new();
@@ -395,7 +393,7 @@ async fn dos_stall_offline_set() {
       blocks[burn_index] = vec![vec![event_fuzzer.random_burn()]];
     }
 
-    serai_env::log::info!(
+    serai_env::info!(
       "dos_stall fuzz: 0..{} blocks, {} validators ({iteration}/{iterations})",
       num_blocks - 1,
       event_fuzzer.validators.len(),
@@ -448,7 +446,7 @@ async fn dos_stall_offline_set() {
     let stakes_summary: Vec<_> =
       global_session.stakes.iter().map(|(net, &s)| format!("{net:?}={s}")).collect();
 
-    serai_env::log::info!(
+    serai_env::info!(
       "dos_stall ({iteration}/{iterations}): offline={offline_network:?} \
        (stake={offline_stake}), online_weight={online_weight}, threshold={threshold}, \
        all_stakes=[{}]",
@@ -497,7 +495,7 @@ async fn dos_stall_offline_set() {
       tokio::time::sleep(Duration::from_millis(100)).await;
       let after = LatestCosignedBlockNumber::get(&db).unwrap_or(0);
 
-      serai_env::log::info!(
+      serai_env::info!(
         "dos_stall ({iteration}/{iterations}) loop: before={before}, after={after}, \
          pending={}, offline_buf={}",
         pending_intents.len(),
@@ -521,7 +519,7 @@ async fn dos_stall_offline_set() {
     );
     assert!(FaultedSession::get(&db).is_none(), "absence is not equivocation");
 
-    serai_env::log::info!(
+    serai_env::info!(
       "dos_stall ({iteration}/{iterations}): STALL verified at block {stalled_at} \
        (was {step1_latest} after step 1), online_weight={online_weight} < threshold={threshold}"
     );
@@ -545,7 +543,7 @@ async fn dos_stall_offline_set() {
     let recovery_deadline = tokio::time::Instant::now() + Duration::from_mins(2);
     run_honest_cosigning(&db, &mut cosigning, &event_fuzzer, |latest| {
       if tokio::time::Instant::now() >= recovery_deadline {
-        serai_env::log::warn!(
+        serai_env::warn!(
           "dos_stall ({iteration}/{iterations}): recovery timed out, latest={latest:?}"
         );
         return true;
@@ -557,14 +555,14 @@ async fn dos_stall_offline_set() {
     assert!(FaultedSession::get(&db).is_none());
     let final_latest = Cosigning::<MemDb>::latest_cosigned_block_number(&db).unwrap().unwrap();
     if final_latest < target {
-      serai_env::log::warn!(
+      serai_env::warn!(
         "dos_stall ({iteration}/{iterations}): recovery incomplete, \
          stalled_at={stalled_at}, final={final_latest}, target={target}, skipping"
       );
       continue;
     }
 
-    serai_env::log::info!(
+    serai_env::info!(
       "dos_stall ({iteration}/{iterations}): RECOVERED, \
        stalled_at={stalled_at}, final={final_latest}"
     );

@@ -27,6 +27,7 @@ const BUILD_SCRIPT_MARKER: &str = "SERAI_RUNTIME_BUILD_RS";
 /// https://doc.rust-lang.org/1.94.0/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-crates
 /// provides the full list of these.
 fn cargo_env(var: &str) -> String {
+  #[expect(clippy::disallowed_methods)]
   env::var(var).unwrap_or_else(|_| {
     panic!("`build.rs` invoked without the `cargo`-provided `{var}` env var set")
   })
@@ -132,6 +133,7 @@ fn command(bin: &str) -> Command {
     again (where any new sanitization may overwrite values set by `cargo` as part of the build
     process).
   */
+  #[expect(clippy::disallowed_methods)]
   match env::var(BUILD_SCRIPT_MARKER) {
     Ok(_) => return command,
     Err(env::VarError::NotPresent) => {}
@@ -149,6 +151,7 @@ fn command(bin: &str) -> Command {
   // Propagate Window's `SystemRoot` environment variable as required for basic functioning
   // Notably, `git` for Windows won't function at all if this isn't set
   #[cfg(target_family = "windows")]
+  #[expect(clippy::disallowed_methods)]
   if let Ok(root) = env::var("SystemRoot") {
     command.env("SystemRoot", root);
   }
@@ -180,6 +183,7 @@ fn command(bin: &str) -> Command {
     otherwise. Ideally, a cleaner solution would overall.
   */
   for key in ["RUSTUP_HOME", "RUSTUP_TOOLCHAIN"] {
+    #[expect(clippy::disallowed_methods)]
     if let Ok(value) = env::var(key) {
       command.env(key, value);
     }
@@ -215,6 +219,7 @@ fn command(bin: &str) -> Command {
       }
 
       // If vendored sources were declared, ensure our `CARGO_HOME` has such configuration now
+      #[expect(clippy::disallowed_methods)]
       if let Ok(vendor) = env::var("SERAI_RUNTIME_VENDOR") {
         fs::write(config_path, vendor_configuration(&vendor).as_bytes())
           .expect("couldn't write config to use vendored sources");
@@ -233,6 +238,7 @@ fn command(bin: &str) -> Command {
     want to set the linker for the host specifically. There also isn't a trivial way to query the
     _resolved_ linker after all the possible configuration methods are taken into consideration.
   */
+  #[expect(clippy::disallowed_methods)]
   if let Ok(path) = env::var("PATH") {
     command.env("PATH", path);
   }
@@ -245,6 +251,7 @@ fn command(bin: &str) -> Command {
       /src/main.rs#L123-L124
   */
   for key in ["RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "CLIPPY_ARGS", "CLIPPY_TERMINAL_WIDTH"] {
+    #[expect(clippy::disallowed_methods)]
     if let Ok(value) = env::var(key) {
       command.env(key, value);
     }
@@ -365,7 +372,9 @@ fn command(bin: &str) -> Command {
     Specifically, we propagte the network settings, the terminal display settings, and any
     configured logging.
   */
-  for (key, value) in env::vars() {
+  #[expect(clippy::disallowed_methods)]
+  let vars = env::vars();
+  for (key, value) in vars {
     if matches!(
       key.as_str(),
       "CARGO_LOG" | "HTTPS_PROXY" | "https_proxy" | "http_proxy" | "HTTP_TIMEOUT" | "TERM" |
@@ -378,6 +387,7 @@ fn command(bin: &str) -> Command {
   }
 
   // Propagate the `SERAI_PROTOCOL_ID` environment variable, as documented
+  #[expect(clippy::disallowed_methods)]
   if let Ok(protocol_id) = env::var("SERAI_PROTOCOL_ID") {
     command.env("SERAI_PROTOCOL_ID", protocol_id);
   }
@@ -451,6 +461,7 @@ fn rustc_wrapper(mut args: impl Iterator<Item = String>) {
   let mut command = Command::new(&rustc);
 
   // If there's yet another wrapper, proxy the actual `rustc` for it now
+  #[expect(clippy::disallowed_methods)]
   if let Ok(wrapper) = env::var("RUSTC_WORKSPACE_WRAPPER") {
     if rustc == wrapper {
       command.arg(args.next().unwrap());
@@ -544,6 +555,7 @@ fn rustc_wrapper(mut args: impl Iterator<Item = String>) {
 
 fn main() {
   {
+    #[expect(clippy::disallowed_methods)]
     let invoked_by_self = env::var(BUILD_SCRIPT_MARKER).is_ok();
     let mut args = env::args().peekable();
     {
@@ -586,16 +598,22 @@ fn main() {
 which will build the WASM as part of its build process, with the necessary configuration."#,
         cargo_env("PROFILE")
       );
-      assert!(env::var(BUILD_SCRIPT_MARKER).is_ok(), "{}", direct_build_error);
+      #[expect(clippy::disallowed_methods)]
+      {
+        assert!(env::var(BUILD_SCRIPT_MARKER).is_ok(), "{}", direct_build_error);
+      }
 
       // If we're building the WASM blob, the build would've been configured by the parent process
       // and we have nothing to do here other than return.
       return;
     }
-    assert!(
-      env::var(BUILD_SCRIPT_MARKER).is_err(),
-      "build script called from build script for non-WASM target?"
-    );
+    #[expect(clippy::disallowed_methods)]
+    {
+      assert!(
+        env::var(BUILD_SCRIPT_MARKER).is_err(),
+        "build script called from build script for non-WASM target?"
+      );
+    }
   }
 
   // Resolve the features we'll build `serai-runtime` with
@@ -619,11 +637,14 @@ which will build the WASM as part of its build process, with the necessary confi
     This would overwrite any system-provided `RUSTC_WRAPPER`, but that shouldn't be a problem here.
     Tooling such as `clippy` override `RUSTC_WORKSPACE_WRAPPER`, which we respect.
   */
-  assert!(
-    matches!(env::var("RUSTC_WRAPPER"), Err(env::VarError::NotPresent)),
-    "`RUSTC_WRAPPER` set when this build script sets it itself",
-  );
-  build_command.env("RUSTC_WRAPPER", std::env::current_exe().unwrap());
+  #[expect(clippy::disallowed_methods)]
+  {
+    assert!(
+      matches!(env::var("RUSTC_WRAPPER"), Err(env::VarError::NotPresent)),
+      "`RUSTC_WRAPPER` set when this build script sets it itself",
+    );
+  }
+  build_command.env("RUSTC_WRAPPER", env::current_exe().unwrap());
 
   {
     /*

@@ -13,7 +13,7 @@ use tokio::{
   net::TcpStream,
 };
 
-use serai_env as env;
+use serai_env::Environment;
 
 pub use message_queue::*;
 
@@ -42,12 +42,12 @@ impl Client {
   /// Create a connection to the Message Queue via the definitions from `serai-env`.
   ///
   /// This MAY panic if the environment does not have the necessary variables.
-  pub fn from_env(service: Service) -> Self {
-    let url = env::var("MESSAGE_QUEUE_RPC").expect("message-queue RPC wasn't specified");
+  pub fn from_env(env: &Environment, service: Service) -> Self {
+    let url = env.var("MESSAGE_QUEUE_RPC").expect("message-queue RPC wasn't specified");
 
     let private_key: Zeroizing<<Ristretto as WrappedGroup>::F> = {
       let key_str =
-        Zeroizing::new(env::var("MESSAGE_QUEUE_KEY").expect("message-queue key wasn't specified"));
+        env.var("MESSAGE_QUEUE_KEY").expect("message-queue key wasn't specified").clone();
       let key_bytes = Zeroizing::new(
         hex::decode(&key_str).expect("invalid message-queue key specified (wasn't hex)"),
       );
@@ -61,7 +61,7 @@ impl Client {
       key
     };
 
-    Self::new(service, url, private_key)
+    Self::new(service, (**url).clone(), private_key)
   }
 
   async fn send(socket: &mut TcpStream, msg: Request) -> Result<(), String> {

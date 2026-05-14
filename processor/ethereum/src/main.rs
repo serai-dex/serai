@@ -17,7 +17,6 @@ use alloy_provider::{Provider as _, RootProvider};
 
 use serai_primitives::validator_sets::Session;
 
-use serai_env as env;
 use serai_db::{Get, DbTxn, create_db};
 
 use ::primitives::EncodableG;
@@ -59,10 +58,10 @@ impl bin::Hooks for SetInitialKey {
 
 #[tokio::main]
 async fn main() {
-  let db = bin::init();
+  let (env, db) = bin::init().await;
 
   let provider = Arc::new(RootProvider::new(
-    ClientBuilder::default().transport(SimpleRequest::new(bin::url()).unwrap(), true),
+    ClientBuilder::default().transport(SimpleRequest::new(bin::url(&env)).unwrap(), true),
   ));
 
   let chain_id = {
@@ -99,18 +98,20 @@ async fn main() {
     }
   }
 
+  let relayer_url = {
+    let relayer_hostname =
+      (**env.var("ETHEREUM_RELAYER_HOSTNAME").expect("ethereum relayer hostname wasn't specified"))
+        .clone();
+    let relayer_port =
+      env.var("ETHEREUM_RELAYER_PORT").expect("ethereum relayer port wasn't specified");
+    relayer_hostname + ":" + relayer_port
+  };
   bin::main_loop::<SetInitialKey, _, KeyGenParams, _>(
+    env,
     db.clone(),
     rpc,
     Scheduler::<bin::Db>::new(SmartContract { chain_id, router }),
-    TransactionPublisher::new(db, provider, {
-      let relayer_hostname = env::var("ETHEREUM_RELAYER_HOSTNAME")
-        .expect("ethereum relayer hostname wasn't specified")
-        .clone();
-      let relayer_port =
-        env::var("ETHEREUM_RELAYER_PORT").expect("ethereum relayer port wasn't specified");
-      relayer_hostname + ":" + &relayer_port
-    }),
+    TransactionPublisher::new(db, provider, relayer_url),
   )
   .await;
 }

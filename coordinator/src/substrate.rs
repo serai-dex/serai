@@ -20,12 +20,15 @@ use tributary_sdk::Tributary;
 
 use serai_task::ContinuallyRan;
 
+use serai_env::Environment;
+
 use serai_coordinator_tributary::Transaction;
 use serai_coordinator_p2p::P2p;
 
 use crate::{Db, KeySet};
 
 pub(crate) struct SubstrateTask<P: P2p> {
+  pub(crate) env: Environment,
   pub(crate) serai_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   pub(crate) db: Db,
   pub(crate) message_queue: Arc<MessageQueue>,
@@ -149,6 +152,7 @@ impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
         // If we reboot after committing the txn, but before this is called, this will be called
         // on boot
         crate::tributary::spawn_tributary(
+          &self.env,
           self.db.clone(),
           self.message_queue.clone(),
           self.p2p.clone(),

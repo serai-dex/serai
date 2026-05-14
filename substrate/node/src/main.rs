@@ -14,6 +14,8 @@ use serai_abi::primitives::address::SeraiAddress;
 
 use sc_service::{config::*, Role, DatabaseSource, BlocksPruning, PruningMode, Configuration, Task};
 
+use serai_env::Environment;
+
 use clap::Parser;
 
 mod keystore;
@@ -285,16 +287,24 @@ fn main() {
     .unwrap();
 
   // Load our bespoke definition of a keystore
-  let validator_identity_and_keystore: Option<(SeraiAddress, Keystore)> =
-    if let Some((validator_identity, keystore)) = Keystore::from_env() {
-      Some((validator_identity, keystore))
-    } else if let Some(seed) = &dev_key_seed {
-      let pair = Pair::from_string(seed, None).expect("dev key had invalid seed");
-      let validator_identity = chain_spec::validator_identity_for_dev_seed(seed);
-      Some((validator_identity, Keystore::from(pair)))
-    } else {
-      None
-    };
+  let mut env = None;
+  let validator_identity_and_keystore: Option<(SeraiAddress, Keystore)> = if let Some(seed) =
+    &dev_key_seed
+  {
+    let pair = Pair::from_string(seed, None).expect("dev key had invalid seed");
+    let validator_identity = chain_spec::validator_identity_for_dev_seed(seed);
+    Some((validator_identity, Keystore::from(pair)))
+  } else if role.is_authority() {
+    let inner_env = runtime
+      .block_on(tokio::time::timeout(Duration::from_mins(5), Environment::from_secret_store()))
+      .expect("`--validator`, with no dev key, yet couldn't receive secrets from the Secret Store");
+    let (validator_identity, keystore) = Keystore::from_env(&inner_env)
+      .expect("`--validator`, with no dev key, and no environment key");
+    env = Some(inner_env);
+    Some((validator_identity, keystore))
+  } else {
+    None
+  };
   if role.is_authority() {
     assert!(validator_identity_and_keystore.is_some(), "`--validator` yet no keystore provided");
   }
@@ -367,8 +377,8 @@ fn main() {
       runtime_cache_size: 2,
     },
     chain_spec: Box::new(match network {
-      Network::Solo => chain_spec::solo_config(),
-      Network::Local => chain_spec::local_config(),
+      Network::Solo => chain_spec::solo_config(env.as_ref()),
+      Network::Local => chain_spec::local_config(env.as_ref()),
     }),
     wasm_runtime_overrides: None,
 

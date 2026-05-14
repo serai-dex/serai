@@ -15,7 +15,7 @@ use dkg::Curves;
 
 use serai_primitives::validator_sets::Session;
 
-use serai_env as env;
+use serai_env::Environment;
 use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
 
 use primitives::EncodableG;
@@ -49,30 +49,31 @@ pub type Db = serai_db::RocksDB;
 /// Initialize the processor.
 ///
 /// Yields the database.
-pub fn init() -> Db {
+pub async fn init() -> (Environment, Db) {
   serai_env::init_logger();
   serai_env::info!("Starting processor service...");
 
+  let env = Environment::from_secret_store().await;
+
   #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
-  let db =
-    serai_db::new_parity_db(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+  let db = serai_db::new_parity_db(env.var("DB_PATH").expect("path to DB wasn't specified"));
   #[cfg(feature = "rocksdb")]
-  let db = serai_db::new_rocksdb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
-  db
+  let db = serai_db::new_rocksdb(env.var("DB_PATH").expect("path to DB wasn't specified"));
+
+  (env, db)
 }
 
 /// THe URL for the external network's node.
-pub fn url() -> String {
-  let login = env::var("NETWORK_RPC_LOGIN").expect("network RPC login wasn't specified");
-  let hostname = env::var("NETWORK_RPC_HOSTNAME").expect("network RPC hostname wasn't specified");
-  let port = env::var("NETWORK_RPC_PORT").expect("network port domain wasn't specified");
-  "http://".to_owned() + &login + "@" + &hostname + ":" + &port
+pub fn url(env: &Environment) -> String {
+  let login = env.var("NETWORK_RPC_LOGIN").expect("network RPC login wasn't specified");
+  let hostname = env.var("NETWORK_RPC_HOSTNAME").expect("network RPC hostname wasn't specified");
+  let port = env.var("NETWORK_RPC_PORT").expect("network port domain wasn't specified");
+  "http://".to_owned() + login + "@" + hostname + ":" + port
 }
 
-fn key_gen<K: KeyGenParams>() -> KeyGen<K> {
-  fn read_key_from_env<C: WrappedGroup>(label: &'static str) -> Zeroizing<C::F> {
-    let key_hex =
-      Zeroizing::new(env::var(label).unwrap_or_else(|| panic!("{label} wasn't provided")));
+fn key_gen<K: KeyGenParams>(env: &Environment) -> KeyGen<K> {
+  fn read_key_from_env<C: WrappedGroup>(env: &Environment, label: &'static str) -> Zeroizing<C::F> {
+    let key_hex = env.var(label).unwrap_or_else(|| panic!("{label} wasn't provided"));
     let bytes = Zeroizing::new(
       hex::decode(key_hex).unwrap_or_else(|_| panic!("{label} wasn't a valid hex string")),
     );
@@ -88,8 +89,9 @@ fn key_gen<K: KeyGenParams>() -> KeyGen<K> {
     res
   }
   KeyGen::new(
-    read_key_from_env::<<Ristretto as Curves>::EmbeddedCurve>("SUBSTRATE_AUXILIARY_KEY"),
+    read_key_from_env::<<Ristretto as Curves>::EmbeddedCurve>(env, "SUBSTRATE_AUXILIARY_KEY"),
     read_key_from_env::<<K::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve>(
+      env,
       "NETWORK_AUXILIARY_KEY",
     ),
   )
@@ -171,14 +173,15 @@ pub async fn main_loop<
       >,
     >,
 >(
+  env: Environment,
   mut db: Db,
   feed: S,
   scheduler: Sch,
   publisher: impl TransactionPublisher<TransactionFor<Sch::SignableTransaction>>,
 ) {
-  let mut coordinator = Coordinator::new::<S>(db.clone());
+  let mut coordinator = Coordinator::new::<S>(&env, db.clone());
 
-  let mut key_gen = key_gen::<K>();
+  let mut key_gen = key_gen::<K>(&env);
   let mut scanner = Scanner::new(db.clone(), feed.clone(), scheduler.clone()).await;
   let mut signers =
     Signers::<Db, S, Sch, _>::new(db.clone(), coordinator.coordinator_send(), publisher);

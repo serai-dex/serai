@@ -5,6 +5,8 @@ pub(crate) use tokio::{
 
 use serai_db::{Get as _, DbTxn as _, Db as _};
 
+use serai_env::Environment;
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
   serai_env::init_logger();
@@ -15,12 +17,13 @@ async fn main() {
   let db = {
     #[cfg(all(feature = "parity-db", feature = "rocksdb"))]
     panic!("built with parity-db and rocksdb");
+
+    let env = Environment::from_secret_store().await;
+
     #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
-    let db =
-      serai_db::new_parity_db(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+    let db = serai_db::new_parity_db(env.var("DB_PATH").expect("path to DB wasn't specified"));
     #[cfg(feature = "rocksdb")]
-    let db =
-      serai_db::new_rocksdb(&serai_env::var("DB_PATH").expect("path to DB wasn't specified"));
+    let db = serai_db::new_rocksdb(env.var("DB_PATH").expect("path to DB wasn't specified"));
     db
   };
 
