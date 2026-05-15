@@ -211,7 +211,10 @@ pub enum Interpolation<F: Zeroize + PrimeField> {
 }
 
 impl<F: Zeroize + PrimeField> Interpolation<F> {
-  /// The interpolation factor for this participant, within this signing set.
+  /// The interpolation factor for this participant, for the included set of participants.
+  ///
+  /// This MAY panic or return an undefined value for inapplicable choices of `i`, `included` (such
+  /// as a non-existent `i` or a included set of size less than the threshold).
   fn interpolation_factor(&self, i: Participant, included: &[Participant]) -> F {
     match self {
       Interpolation::Constant(c) => c[usize::from(u16::from(i) - 1)],
@@ -368,15 +371,20 @@ impl<C: GroupIo + Id> ThresholdKeys<C> {
     }
 
     match &interpolation {
-      Interpolation::Constant(_) => {
+      Interpolation::Constant(factors) => {
         if params.t() != params.n() {
           Err(DkgError::InapplicableInterpolation("constant interpolation for keys where t != n"))?;
+        }
+        if factors.len() != usize::from(params.n()) {
+          Err(DkgError::InapplicableInterpolation(
+            "constant interpolation for a different amount of participants than present",
+          ))?;
         }
       }
       Interpolation::Lagrange => {}
     }
 
-    let t = (1 ..= params.t()).map(Participant).collect::<Vec<_>>();
+    let t = Participant::iter().take(usize::from(params.t())).collect::<Vec<_>>();
     let group_key =
       t.iter().map(|i| verification_shares[i] * interpolation.interpolation_factor(*i, &t)).sum();
 
@@ -621,7 +629,7 @@ impl<C: GroupIo + Id> ThresholdKeys<C> {
     let secret_share = Zeroizing::new(C::read_F(reader)?);
 
     let mut verification_shares = HashMap::new();
-    for l in (1 ..= n).map(Participant) {
+    for l in Participant::iter().take(usize::from(n)) {
       verification_shares.insert(l, C::read_G(reader)?);
     }
 
