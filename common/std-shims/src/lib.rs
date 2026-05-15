@@ -46,39 +46,55 @@ pub mod prelude {
   #[rustversion::before(1.73)]
   #[doc(hidden)]
   pub trait StdShimsDivCeil {
-    fn div_ceil(self, rhs: Self) -> Self;
+    /// Perform a division which rounds non-integer results up.
+    ///
+    /// This function MAY panic when `denominator == 0` or the result is not representable within
+    /// `Self`.
+    fn div_ceil(self, denominator: Self) -> Self;
   }
   #[rustversion::before(1.73)]
   mod impl_divceil {
     use super::StdShimsDivCeil;
     impl StdShimsDivCeil for u8 {
-      fn div_ceil(self, rhs: Self) -> Self {
-        (self + (rhs - 1)) / rhs
+      fn div_ceil(self, denominator: Self) -> Self {
+        let quotient = self / denominator;
+        let has_remainder = (quotient * denominator) != self;
+        quotient + u8::from(has_remainder)
       }
     }
     impl StdShimsDivCeil for u16 {
-      fn div_ceil(self, rhs: Self) -> Self {
-        (self + (rhs - 1)) / rhs
+      fn div_ceil(self, denominator: Self) -> Self {
+        let quotient = self / denominator;
+        let has_remainder = (quotient * denominator) != self;
+        quotient + Self::from(u8::from(has_remainder))
       }
     }
     impl StdShimsDivCeil for u32 {
-      fn div_ceil(self, rhs: Self) -> Self {
-        (self + (rhs - 1)) / rhs
+      fn div_ceil(self, denominator: Self) -> Self {
+        let quotient = self / denominator;
+        let has_remainder = (quotient * denominator) != self;
+        quotient + Self::from(u8::from(has_remainder))
       }
     }
     impl StdShimsDivCeil for u64 {
-      fn div_ceil(self, rhs: Self) -> Self {
-        (self + (rhs - 1)) / rhs
+      fn div_ceil(self, denominator: Self) -> Self {
+        let quotient = self / denominator;
+        let has_remainder = (quotient * denominator) != self;
+        quotient + Self::from(u8::from(has_remainder))
       }
     }
     impl StdShimsDivCeil for u128 {
-      fn div_ceil(self, rhs: Self) -> Self {
-        (self + (rhs - 1)) / rhs
+      fn div_ceil(self, denominator: Self) -> Self {
+        let quotient = self / denominator;
+        let has_remainder = (quotient * denominator) != self;
+        quotient + Self::from(u8::from(has_remainder))
       }
     }
     impl StdShimsDivCeil for usize {
-      fn div_ceil(self, rhs: Self) -> Self {
-        (self + (rhs - 1)) / rhs
+      fn div_ceil(self, denominator: Self) -> Self {
+        let quotient = self / denominator;
+        let has_remainder = (quotient * denominator) != self;
+        quotient + Self::from(u8::from(has_remainder))
       }
     }
   }
