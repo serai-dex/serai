@@ -339,7 +339,7 @@ impl<Context: TransactionContext, FeeContext: TransactionFeeContext> Applyable
           here.
         */
         let mut actual_weight = Context::SIGNATURE_VERIFICATION_WEIGHT;
-        let _res = frame_support::storage::transactional::with_storage_layer(|| {
+        let res = frame_support::storage::transactional::with_storage_layer(|| {
           for call in calls.0 {
             let call = Context::RuntimeCall::from(call);
             actual_weight = actual_weight.saturating_add(call.get_dispatch_info().call_weight);
@@ -354,10 +354,13 @@ impl<Context: TransactionContext, FeeContext: TransactionFeeContext> Applyable
         });
 
         /*
-          Regardless of if the individual calls succeeded or failed, we want to note this
-          transaction itself was valid, having been properly signed and paid its fee.
+          The transaction itself is valid (signed and fee-paid) regardless of whether the
+          individual calls succeeded or failed, so we always return `Ok(_)` (no
+          `TransactionValidityError`). However, when the inner dispatch failed we surface
+          that to `frame-executive` as `Ok(Err(_))` so it deposits `ExtrinsicFailed` instead
+          of `ExtrinsicSuccess`.
         */
-        Ok(Ok(PostDispatchInfo {
+        let post_info = PostDispatchInfo {
           actual_weight: Some(actual_weight),
           /*
             Because this transaction was queued for inclusion, it should pay its fee.
@@ -365,7 +368,11 @@ impl<Context: TransactionContext, FeeContext: TransactionFeeContext> Applyable
             (with no mechanism to refund it).
           */
           pays_fee: Pays::Yes,
-        }))
+        };
+        match res {
+          Ok(()) => Ok(Ok(post_info)),
+          Err(e) => Ok(Err(sp_runtime::DispatchErrorWithPostInfo { post_info, error: e.error })),
+        }
       }
     };
 

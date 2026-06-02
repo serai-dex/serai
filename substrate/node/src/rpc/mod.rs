@@ -40,7 +40,7 @@ pub(crate) struct FullDeps<P> {
   pub(crate) authority_discovery: Option<sc_authority_discovery::Service>,
 }
 
-pub(crate) fn create_full<P: 'static + TransactionPool<Block = Block>>(
+pub(crate) fn create_full<P: 'static + TransactionPool<Block = Block, Hash = sp_core::H256>>(
   deps: FullDeps<P>,
 ) -> Result<RpcModule<()>, Box<dyn std::error::Error + Send + Sync>> {
   let FullDeps { bootnodes, client, pool, authority_discovery } = deps;
