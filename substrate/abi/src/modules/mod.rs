@@ -17,3 +17,6 @@ pub mod economic_security;
 
 /// Call/Event for `InInstruction`s.
 pub mod in_instructions;
+
+/// Event for `frame-system`.
+pub mod system;

@@ -20,6 +20,7 @@ use abi::{
     coin::{Coin, ExternalCoin},
     address::SeraiAddress,
   },
+  system::TransactionStatus,
   Transaction, Block, Event,
 };
 
@@ -193,6 +194,25 @@ impl Serai {
         &format!(r#"{{ "transaction": "{}" }}"#, hex::encode(borsh::to_vec(transaction).unwrap())),
       )
       .await
+  }
+
+  /// Query the status of a transaction.
+  pub async fn transaction_status(
+    &self,
+    tx_hash: [u8; 32],
+    block: BlockHash,
+  ) -> Result<TransactionStatus, RpcError> {
+    let response: String = self
+      .call(
+        "blockchain/transaction_status",
+        &format!(r#"{{ "tx": "{}", "block": "{block}" }}"#, hex::encode(tx_hash)),
+      )
+      .await?;
+    let bytes = hex::decode(&response).map_err(|_| {
+      RpcError::InvalidNode("node returned non-hex-encoded transaction status".to_owned())
+    })?;
+    TransactionStatus::deserialize(&mut bytes.as_slice())
+      .map_err(|_| RpcError::InvalidNode("node returned invalid transaction status".to_owned()))
   }
 
   /// Fetch the events of a specific block.
