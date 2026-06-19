@@ -344,15 +344,14 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
       }) else {
         return;
       };
+      let tx = Transaction::Tendermint(tx);
 
       // add tx to blockchain and broadcast to peers
       let mut to_broadcast = vec![TRANSACTION_MESSAGE];
       tx.write(&mut to_broadcast).unwrap();
-      if self.blockchain.write().await.add_transaction::<Self>(
-        true,
-        Transaction::Tendermint(tx),
-        &self.signature_scheme(),
-      ) == Ok(true)
+      let signature_scheme = &self.signature_scheme();
+      if self.blockchain.write().await.add_transaction::<Self>(true, tx, signature_scheme) ==
+        Ok(true)
       {
         self.p2p.broadcast(signer.genesis, to_broadcast).await;
       }
