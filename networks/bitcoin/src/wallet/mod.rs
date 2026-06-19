@@ -195,6 +195,7 @@ impl Scanner {
 
   /// Scan a transaction.
   pub fn scan_transaction(&self, tx: &Transaction) -> Vec<ReceivedOutput> {
+    let mut tx_id = None;
     let mut res = Vec::new();
     for (vout, output) in tx.output.iter().enumerate() {
       // If the vout index exceeds 2**32, stop scanning outputs
@@ -204,7 +205,7 @@ impl Scanner {
         res.push(ReceivedOutput {
           offset: *offset,
           output: output.clone(),
-          outpoint: OutPoint::new(tx.compute_txid(), vout),
+          outpoint: OutPoint::new(*tx_id.get_or_insert_with(|| tx.compute_txid()), vout),
         });
       }
     }
