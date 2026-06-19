@@ -210,9 +210,10 @@ impl<T: TransactionTrait> Block<T> {
 
       let current_tx_order = match tx.kind() {
         TransactionKind::Provided(order) => {
-          if provided_or_unsigned_in_chain(tx_hash) {
+          if provided_or_unsigned_in_chain(tx_hash) || included_in_block.contains(&tx_hash) {
             Err(BlockError::ProvidedAlreadyIncluded)?;
           }
+          included_in_block.insert(tx_hash);
 
           if let Some(local) = locally_provided.get_mut(order).and_then(VecDeque::pop_front) {
             // Since this was a provided TX, it must be an application TX
