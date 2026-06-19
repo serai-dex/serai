@@ -277,6 +277,17 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       return false;
     }
 
+    // Verify the block body corresponds to the header
+    {
+      let Block { header, transactions } = &block;
+      if merkle(&transactions.iter().map(Transaction::hash).collect::<Vec<_>>()) !=
+        header.transactions
+      {
+        log::error!("sent a block with a distinct body than its header commits to");
+        return false;
+      }
+    }
+
     let block = TendermintBlock(block.serialize());
     let mut commit_ref = commit.as_slice();
     let Ok(commit) = Commit::<Arc<Validators>>::deserialize_reader(&mut commit_ref) else {
