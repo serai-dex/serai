@@ -457,9 +457,10 @@ mod pallet {
           genesis liquidity, converting the difference into protocol-owned liquidity. The following
           usage of a `div_ceil` ensures the genesis liquidity module is _favored_ and we do not
           convert any more into protocol-owned liquidity than we have outright claim to.
-
-          We know this won't trap as the pool must have liquidity as it has been initialized.
         */
+        if genesis_liquidity_external_after == Amount(0) {
+          Err(Error::<T>::OutsizedAmount)?;
+        }
         let genesis_liquidity_liquidity_tokens_after =
           (u128::from(genesis_liquidity_liquidity_tokens.0) *
             u128::from(genesis_liquidity_external.0))
