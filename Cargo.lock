@@ -1137,7 +1137,6 @@ dependencies = [
  "bitcoin",
  "core-json-derive",
  "core-json-traits",
- "hex",
  "k256",
  "modular-frost",
  "rand_core 0.6.4",

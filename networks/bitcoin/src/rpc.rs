@@ -211,7 +211,7 @@ impl Rpc {
     }
     usize::try_from(
       self
-        .call::<Number>("getblockheader", &format!(r#"["{}"]"#, hex::encode(hash)))
+        .call::<Number>("getblockheader", &format!(r#"["{}"]"#, encode::serialize_hex(hash)))
         .await?
         .height
         .ok_or_else(|| {
@@ -223,7 +223,9 @@ impl Rpc {
 
   /// Get a block by its hash.
   pub async fn get_block(&self, hash: &[u8; 32]) -> Result<Block, RpcError> {
-    let hex = self.call::<String>("getblock", &format!(r#"["{}", 0]"#, hex::encode(hash))).await?;
+    let hex = self
+      .call::<String>("getblock", &format!(r#"["{}", 0]"#, encode::serialize_hex(hash)))
+      .await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)
       .map_err(|_| RpcError::InvalidResponse("node didn't use hex to encode the block"))?;
     let block: Block = encode::deserialize(&bytes)
@@ -267,8 +269,9 @@ impl Rpc {
 
   /// Get a transaction by its hash.
   pub async fn get_transaction(&self, hash: &[u8; 32]) -> Result<Transaction, RpcError> {
-    let hex =
-      self.call::<String>("getrawtransaction", &format!(r#"["{}"]"#, hex::encode(hash))).await?;
+    let hex = self
+      .call::<String>("getrawtransaction", &format!(r#"["{}"]"#, encode::serialize_hex(hash)))
+      .await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)
       .map_err(|_| RpcError::InvalidResponse("node didn't use hex to encode the transaction"))?;
     let tx: Transaction = encode::deserialize(&bytes)

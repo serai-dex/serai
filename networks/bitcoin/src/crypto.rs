@@ -12,7 +12,10 @@ use k256::{
   U256, Scalar, ProjectivePoint,
 };
 
-use bitcoin::hashes::{HashEngine as _, Hash as _, sha256::Hash as Sha256};
+use bitcoin::{
+  hashes::{HashEngine as _, Hash as _, sha256::Hash as Sha256},
+  secp256k1::schnorr::Signature,
+};
 
 use frost::{
   curve::{WrappedGroup, Secp256k1},
@@ -81,7 +84,7 @@ impl Schnorr {
 impl Algorithm<Secp256k1> for Schnorr {
   type Transcript = <FrostSchnorr<Secp256k1, Hram> as Algorithm<Secp256k1>>::Transcript;
   type Addendum = ();
-  type Signature = [u8; 64];
+  type Signature = Signature;
 
   fn transcript(&mut self) -> &mut Self::Transcript {
     self.0.transcript()
@@ -149,7 +152,7 @@ impl Algorithm<Secp256k1> for Schnorr {
       */
       sig.s = <_>::conditional_select(&sum, &-sum, sig.R.to_affine().y_is_odd());
       // Convert to a Bitcoin signature by dropping the byte for the point's sign bit
-      sig.serialize()[1 ..].try_into().unwrap()
+      Signature::from_slice(&sig.serialize()[1 ..]).unwrap()
     })
   }
 
@@ -165,7 +168,6 @@ impl Algorithm<Secp256k1> for Schnorr {
 
 #[test]
 fn algorithm() {
-  use core::str::FromStr as _;
   use rand_core::OsRng;
   use bitcoin::{
     key::{XOnlyPublicKey, Secp256k1 as Context},
@@ -200,12 +202,7 @@ fn algorithm() {
 
       let () = XOnlyPublicKey::from_slice(&x(&group_key))
         .unwrap()
-        .verify(
-          &secp256k1,
-          &TapSighash::hash(MESSAGE).into(),
-          &<_>::from_str(&hex::encode(sig))
-            .expect("couldn't convert produced signature to `secp256k1::Signature`"),
-        )
+        .verify(&secp256k1, &TapSighash::hash(MESSAGE).into(), &sig)
         .unwrap();
     }
   }

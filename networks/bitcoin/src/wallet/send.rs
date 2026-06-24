@@ -457,7 +457,7 @@ impl SignatureMachine<Transaction> for TransactionSignatureMachine {
       )?;
 
       let mut witness = Witness::new();
-      witness.push(sig);
+      witness.push(sig.serialize());
       input.witness = witness;
     }
 
