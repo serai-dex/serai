@@ -136,7 +136,7 @@ impl ReceivedOutput<<Secp256k1 as WrappedGroup>::G, Address> for Output {
     let presumed_origin: Option<ExternalAddress> = self.presumed_origin.clone().map(Into::into);
     presumed_origin.serialize(writer)?;
     self.output.write(writer)?;
-    writer.write_all(&u16::try_from(self.data.len()).unwrap().to_le_bytes())?;
+    writer.write_all(&u32::try_from(self.data.len()).unwrap().to_le_bytes())?;
     writer.write_all(&self.data)
   }
 
@@ -154,10 +154,10 @@ impl ReceivedOutput<<Secp256k1 as WrappedGroup>::G, Address> for Output {
       },
       output: WalletOutput::read(reader)?,
       data: {
-        let mut data_len = [0; 2];
+        let mut data_len = [0; 4];
         reader.read_exact(&mut data_len)?;
 
-        let mut data = vec![0; usize::from(u16::from_le_bytes(data_len))];
+        let mut data = vec![0; usize::try_from(u32::from_le_bytes(data_len)).unwrap()];
         reader.read_exact(&mut data)?;
         data
       },
