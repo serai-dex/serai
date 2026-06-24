@@ -68,12 +68,11 @@ fn signable_transaction<D: Db>(
     gets stuck, this lets anyone create a child transaction spending this output, raising the fee,
     getting the transaction unstuck (via CPFP).
   */
-  payments.push((
-    bitcoin_serai::wallet::address(<Secp256k1 as WrappedGroup>::G::GENERATOR).unwrap(),
-    // This uses the minimum output value allowed, as defined as a constant in bitcoin-serai
-    // TODO: Add a test for this comparing to bitcoin's `minimal_non_dust`
-    bitcoin_serai::wallet::DUST,
-  ));
+  payments.push({
+    let script = bitcoin_serai::wallet::address(<Secp256k1 as WrappedGroup>::G::GENERATOR).unwrap();
+    let dust = BSignableTransaction::dust(&script);
+    (script, dust)
+  });
 
   let change = change
     .map(<Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::change_address);

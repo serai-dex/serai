@@ -17,17 +17,10 @@ use bitcoin::{
   absolute::LockTime,
   script::{PushBytesBuf, ScriptBuf},
   transaction::{Version, Transaction},
-  OutPoint, Sequence, Witness, TxIn, Amount, TxOut,
+  OutPoint, Sequence, Witness, TxIn, Amount, TxOut, FeeRate,
 };
 
 use crate::{crypto::Schnorr, wallet::ReceivedOutput};
-
-#[rustfmt::skip]
-// https://github.com/bitcoin/bitcoin/blob/306ccd4927a2efe325c8d84be1bdb79edeb29b04/src/policy/policy.cpp#L26-L63
-// As the above notes, a lower amount may not be considered dust if contained in a SegWit output
-// This doesn't bother with delineation due to how marginal these values are, and because it isn't
-// worth the complexity to implement differentation
-pub const DUST: u64 = 546;
 
 #[derive(Clone, PartialEq, Eq, Debug, Error)]
 pub enum TransactionError {
@@ -122,11 +115,31 @@ impl SignableTransaction {
       self.tx.output.iter().map(|prevout| prevout.value.to_sat()).sum::<u64>()
   }
 
+  /// The minimum output value this script must have to not be considered dust.
+  #[doc(hidden)]
+  pub fn dust(script: &ScriptBuf) -> u64 {
+    // `bitcoin::policy::DUST_RELAY_TX_FEE` is in fee-per-kilo-virtual-byte
+    const DUST_RELAY_FEE: FeeRate =
+      FeeRate::from_sat_per_vb_u32(bitcoin::policy::DUST_RELAY_TX_FEE / 1000);
+    #[expect(clippy::as_conversions)]
+    const {
+      // Ensure this division didn't perform a truncation
+      assert!(
+        (DUST_RELAY_FEE.to_sat_per_vb_floor() * 1000) ==
+          (bitcoin::policy::DUST_RELAY_TX_FEE as u64)
+      );
+      assert!(DUST_RELAY_FEE.to_sat_per_vb_floor() == DUST_RELAY_FEE.to_sat_per_vb_ceil());
+    }
+
+    // Explicitly use the policy fee-rate as our reference point
+    script.minimal_non_dust_custom(DUST_RELAY_FEE).to_sat()
+  }
+
   /// Create a new [`SignableTransaction`].
   ///
   /// If a change address is specified, any leftover funds will be sent to it if the leftover funds
-  /// exceed the minimum output amount ([`DUST`]). If a change address isn't specified, all
-  /// leftover funds will become part of the paid fee.
+  /// exceed the minimum output amount under policy (i.e. is not dust). If a change address isn't
+  /// specified, all leftover funds will become part of the paid fee.
   ///
   /// If data is specified, an `OP_RETURN` output will be added with it.
   pub fn new(
@@ -140,8 +153,8 @@ impl SignableTransaction {
       Err(TransactionError::NoInputs)?;
     }
 
-    for (_, amount) in payments {
-      if *amount < DUST {
+    for (script, amount) in payments {
+      if *amount < Self::dust(script) {
         Err(TransactionError::DustPayment)?;
       }
     }
@@ -218,7 +231,7 @@ impl SignableTransaction {
       if let Some(value) = input_sat
         .checked_sub(payment_sat)
         .and_then(|remaining| remaining.checked_sub(fee_with_change))
-        .filter(|value| *value >= DUST)
+        .filter(|value| *value >= Self::dust(&change))
       {
         tx_outs.push(TxOut { value: Amount::from_sat(value), script_pubkey: change });
       }
