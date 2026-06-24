@@ -95,6 +95,9 @@ impl Rpc {
   }
 
   /// Perform an arbitrary RPC call.
+  ///
+  /// `method` will be escaped as necessary for the JSON encoding of its string value. `params`
+  /// will be interpolated into the string encoding as-is and MUST be a valid JSON value.
   pub async fn call<Response: 'static + Default + core_json_traits::JsonDeserialize>(
     &self,
     method: &str,
@@ -104,7 +107,13 @@ impl Rpc {
       hyper::Request::post(&self.url)
         .header("Content-Type", "application/json")
         .body(
-          format!(r#"{{ "method": "{method}", "params": {params} }}"#).as_bytes().to_vec().into(),
+          format!(
+            r#"{{ "method": {}, "params": {params} }}"#,
+            core_json_traits::JsonSerialize::serialize(method).collect::<String>()
+          )
+          .as_bytes()
+          .to_vec()
+          .into(),
         )
         .map_err(|_| RpcError::ConnectionError)?,
     );
