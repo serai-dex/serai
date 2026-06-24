@@ -9,7 +9,7 @@ use simple_request::{hyper, Request, TokioClient as Client};
 use bitcoin::{
   hashes::{Hash as _, hex::FromHex},
   consensus::encode,
-  Txid, Transaction, BlockHash, Block,
+  Weight, Txid, Transaction, BlockHash, Block,
 };
 
 #[derive(Clone, Debug)]
@@ -98,6 +98,10 @@ impl Rpc {
   ///
   /// `method` will be escaped as necessary for the JSON encoding of its string value. `params`
   /// will be interpolated into the string encoding as-is and MUST be a valid JSON value.
+  ///
+  /// This method is NOT guaranteed by SemVer and may be removed or modified in a future release.
+  /// No guarantees on the safety nor correctness of bespoke calls made with this function are
+  /// guaranteed.
   pub async fn call<Response: 'static + Default + core_json_traits::JsonDeserialize>(
     &self,
     method: &str,
@@ -118,7 +122,12 @@ impl Rpc {
         .map_err(|_| RpcError::ConnectionError)?,
     );
     request.with_basic_auth();
-    request.set_response_size_limit(Some(100 * 1024 * 1024));
+    const HEX_ENCODED_BLOCK_LEN: u64 = 2 * Weight::MAX_BLOCK.to_wu();
+    // Limit responses to the size of a block, plus an allowance for the structure of the encoding,
+    // doubled to ensure this is sufficient
+    request.set_response_size_limit(Some(
+      2 * (usize::from(u16::MAX) + usize::try_from(HEX_ENCODED_BLOCK_LEN).unwrap()),
+    ));
     let mut res = self
       .client
       .request(request)
@@ -193,13 +202,11 @@ impl Rpc {
 
   /// Get the hash of a block by the block's number.
   pub async fn get_block_hash(&self, number: usize) -> Result<[u8; 32], RpcError> {
-    let mut hash =
+    let hash =
       BlockHash::from_str(&self.call::<String>("getblockhash", &format!("[{number}]")).await?)
         .map_err(|_| RpcError::InvalidResponse("block hash was not valid hex"))?
         .as_raw_hash()
         .to_byte_array();
-    // bitcoin stores the inner bytes in reverse order.
-    hash.reverse();
     Ok(hash)
   }
 
@@ -223,17 +230,18 @@ impl Rpc {
 
   /// Get a block by its hash.
   pub async fn get_block(&self, hash: &[u8; 32]) -> Result<Block, RpcError> {
-    let hex = self
-      .call::<String>("getblock", &format!(r#"["{}", 0]"#, encode::serialize_hex(hash)))
-      .await?;
+    // bitcoin hex-encodes hashes in reverse order
+    let mut hex = *hash;
+    hex.reverse();
+    let hex = encode::serialize_hex(&hex);
+
+    let hex = self.call::<String>("getblock", &format!(r#"["{hex}", 0]"#)).await?;
     let bytes: Vec<u8> = FromHex::from_hex(&hex)
       .map_err(|_| RpcError::InvalidResponse("node didn't use hex to encode the block"))?;
     let block: Block = encode::deserialize(&bytes)
       .map_err(|_| RpcError::InvalidResponse("node sent an improperly serialized block"))?;
 
-    let mut block_hash = *block.block_hash().as_raw_hash().as_byte_array();
-    block_hash.reverse();
-    if hash != &block_hash {
+    if hash != block.block_hash().as_raw_hash().as_byte_array() {
       Err(RpcError::InvalidResponse("node replied with a different block"))?;
     }
 
@@ -265,24 +273,5 @@ impl Rpc {
       Err(RpcError::InvalidResponse("returned TX ID inequals calculated TX ID"))?;
     }
     Ok(txid)
-  }
-
-  /// Get a transaction by its hash.
-  pub async fn get_transaction(&self, hash: &[u8; 32]) -> Result<Transaction, RpcError> {
-    let hex = self
-      .call::<String>("getrawtransaction", &format!(r#"["{}"]"#, encode::serialize_hex(hash)))
-      .await?;
-    let bytes: Vec<u8> = FromHex::from_hex(&hex)
-      .map_err(|_| RpcError::InvalidResponse("node didn't use hex to encode the transaction"))?;
-    let tx: Transaction = encode::deserialize(&bytes)
-      .map_err(|_| RpcError::InvalidResponse("node sent an improperly serialized transaction"))?;
-
-    let mut tx_hash = *tx.compute_txid().as_raw_hash().as_byte_array();
-    tx_hash.reverse();
-    if hash != &tx_hash {
-      Err(RpcError::InvalidResponse("node replied with a different transaction"))?;
-    }
-
-    Ok(tx)
   }
 }

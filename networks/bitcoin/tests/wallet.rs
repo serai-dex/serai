@@ -247,12 +247,10 @@ async_sequential! {
       TxOut { script_pubkey: change_addr, value: Amount::from_sat(change_amount) },
     );
 
-    // This also tests send_raw_transaction and get_transaction, which the RPC test can't
-    // effectively test
+    // This also tests `send_raw_transaction`, which the RPC test can't effectively test
     rpc.send_raw_transaction(&tx).await.unwrap();
     let mut hash = *tx.compute_txid().as_raw_hash().as_byte_array();
     hash.reverse();
-    assert_eq!(tx, rpc.get_transaction(&hash).await.unwrap());
     assert_eq!(expected_id, hash);
   }
 
