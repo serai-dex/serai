@@ -317,15 +317,15 @@ impl<C: Curves> Proof<C> {
   // TODO: Upstream this to `generalized-bulletproofs`?
   pub(crate) fn transcript_len(coefficients: usize, participants: usize) -> usize {
     // `AI, AO, AS`
-    let mut group_elements = 3;
+    let mut towering_group_elements = 3;
     // `tau_x, u, t_caret, a, b`
-    let mut scalar_eleents = 5;
+    let mut towering_scalar_elements = 5;
     // IPA rows
-    group_elements +=
+    towering_group_elements +=
       2 * usize::try_from(Self::generators_to_use(coefficients, participants).ilog2()).unwrap();
 
     // Vector commitments
-    group_elements += {
+    towering_group_elements += {
       let vector_commitments = Self::vector_commitments(coefficients, participants);
       let ni = 2 + (2 * vector_commitments);
       let l_r_poly_len = 1 + ni + 1;
@@ -336,22 +336,26 @@ impl<C: Curves> Proof<C> {
 
     // Commitments (to the coefficients, encrypted secret shares)
     let commitments = coefficients + participants;
-    group_elements += commitments;
+    towering_group_elements += commitments;
 
     // Commitments to the ephemeral scalars used for the ECDHs
-    group_elements += 2 * participants;
+    let embedded_group_elements = 2 * participants;
 
     // Opening of the commitments
-    group_elements += commitments;
+    towering_group_elements += commitments;
 
     // Proof for the opening of the coefficients, commitments to the encryption keys
-    group_elements += 2;
-    scalar_eleents += 2;
+    towering_group_elements += 2;
+    towering_scalar_elements += 2;
 
-    (group_elements *
+    (towering_group_elements *
       <<C::ToweringCurve as WrappedGroup>::G as GroupEncoding>::Repr::default().as_ref().len()) +
-      (scalar_eleents *
-        <<C::ToweringCurve as WrappedGroup>::F as PrimeField>::Repr::default().as_ref().len())
+      (towering_scalar_elements *
+        <<C::ToweringCurve as WrappedGroup>::F as PrimeField>::Repr::default().as_ref().len()) +
+      (embedded_group_elements *
+        <<C::EmbeddedCurve as WrappedGroup>::G as GroupEncoding>::Repr::default()
+          .as_ref()
+          .len())
   }
 
   fn circuit(
