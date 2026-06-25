@@ -1,6 +1,39 @@
-use ciphersuite::group::ff::Field;
+use ciphersuite::group::ff::{Field, FromUniformBytes as _};
 
 use super::*;
+
+/// Sample a random `k'` for a recipient's public key.
+///
+/// Per the eVRF paper, the sum of the two `x` coordinates is a _weighted_ sum, with `k'` used to
+/// weight the second `x` coordinate to achieve a uniform result. During key generation, a
+/// participant is expected to sample and publish a random uniform `k'`.
+///
+/// Instead of extending the communicated length of the verification key, as `k'` is public, we
+/// fix the derivation of `k' = H_{k'}(public_key)`. By treating `H_{k'}` as a random oracle, the
+/// result is still a random, uniform value suitable for our purposes.
+pub(crate) fn k_prime<C: Curves>(
+  public_key: &<C::EmbeddedCurve as WrappedGroup>::G,
+) -> <C::ToweringCurve as WrappedGroup>::F {
+  use blake2::{
+    digest::{array::Array, common::KeySizeUser, KeyInit, Mac as _},
+    Blake2bMac512,
+  };
+
+  <C::ToweringCurve as WrappedGroup>::F::from_uniform_bytes(
+    &<Blake2bMac512 as KeyInit>::new(&{
+      let mut key = Array::<u8, <Blake2bMac512 as KeySizeUser>::KeySize>::default();
+      {
+        let key: &mut [u8] = key.as_mut();
+        key[.. 2].copy_from_slice(b"k'");
+      }
+      key
+    })
+    .chain_update(public_key.to_bytes())
+    .finalize()
+    .into_bytes()
+    .into(),
+  )
+}
 
 /// The scalars which would be used by a Shamir-secret sharing.
 ///
@@ -81,11 +114,19 @@ impl<C: Curves> EncryptedSecretShare<C> {
   ) -> Zeroizing<<C::ToweringCurve as WrappedGroup>::F> {
     let Self { ecdh_commitments, encrypted_secret_share } = self;
 
+    let [ecdh_commitment_0, ecdh_commitment_1] = ecdh_commitments;
     let mut secret_share = Zeroizing::new(encrypted_secret_share);
-    for point in ecdh_commitments {
+    for (weight, ecdh_commitment) in [
+      (<C::ToweringCurve as WrappedGroup>::F::ONE, ecdh_commitment_0),
+      (
+        k_prime::<C>(&(<C::EmbeddedCurve as WrappedGroup>::generator() * evrf_private_key.deref())),
+        ecdh_commitment_1,
+      ),
+    ] {
       let (mut x, mut y) =
-        <C::EmbeddedCurve as WrappedGroup>::G::to_xy(point * evrf_private_key.deref()).unwrap();
-      *secret_share -= x;
+        <C::EmbeddedCurve as WrappedGroup>::G::to_xy(ecdh_commitment * evrf_private_key.deref())
+          .unwrap();
+      *secret_share -= weight * x;
       x.zeroize();
       y.zeroize();
     }
@@ -352,7 +393,8 @@ fn decrypt_encrypted_share() {
         let ecdh_a = recipient_pub_key * ecdh_a;
         let ecdh_b = recipient_pub_key * ecdh_b;
         <<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::G::to_xy(ecdh_a).unwrap().0 +
-          <<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::G::to_xy(ecdh_b).unwrap().0
+          (k_prime::<Ed25519>(&recipient_pub_key) *
+            <<Ed25519 as Curves>::EmbeddedCurve as WrappedGroup>::G::to_xy(ecdh_b).unwrap().0)
       };
       let ciphertext = mask + message;
       EncryptedSecretShare::<Ed25519> { ecdh_commitments, encrypted_secret_share: ciphertext }

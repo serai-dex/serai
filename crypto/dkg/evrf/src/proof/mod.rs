@@ -43,7 +43,10 @@ struct Circuit<
   'circuit,
   C: Curves,
   CG: Iterator<
-    Item = ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
+    Item = (
+      <C::EmbeddedCurve as WrappedGroup>::G,
+      ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
+    ),
   >,
 > {
   curve_spec:
@@ -61,7 +64,10 @@ struct Circuit<
 impl<
     C: Curves,
     CG: Iterator<
-      Item = ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
+      Item = (
+        <C::EmbeddedCurve as WrappedGroup>::G,
+        ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
+      ),
     >,
   > Circuit<'_, C, CG>
 {
@@ -69,7 +75,11 @@ impl<
   ///
   /// This follows the methodology of Protocol 5 from the
   /// [eVRF paper](https://eprint.iacr.org/2024/397.pdf).
-  fn coefficients(&mut self, evrf_public_key: EmbeddedPoint<C>, coefficients: usize) {
+  fn coefficients(
+    &mut self,
+    evrf_public_key: (<C::EmbeddedCurve as WrappedGroup>::G, EmbeddedPoint<C>),
+    coefficients: usize,
+  ) {
     /*
       Read the opening of the prover's eVRF public key, along with all the proofs for the eVRF.
       Each invocation of the eVRF requires performing _two_ Diffie-Hellmans against
@@ -84,22 +94,28 @@ impl<
       &self.challenge,
       &self.challenged_G,
     );
-    self.circuit.equality(LinComb::from(point.x()), &LinComb::empty().constant(evrf_public_key.0));
-    self.circuit.equality(LinComb::from(point.y()), &LinComb::empty().constant(evrf_public_key.1));
+    self
+      .circuit
+      .equality(LinComb::from(point.x()), &LinComb::empty().constant(evrf_public_key.1 .0));
+    self
+      .circuit
+      .equality(LinComb::from(point.y()), &LinComb::empty().constant(evrf_public_key.1 .1));
 
     // Verify the eVRF invocations
+    let k_prime = crate::shares::k_prime::<C>(&evrf_public_key.0);
     for _ in 0 .. coefficients {
       let mut lincomb = LinComb::empty();
-      for challenged_generator in
-        [self.challenged_generators.next().unwrap(), self.challenged_generators.next().unwrap()]
-      {
+      for (weight, (_, challenged_generator)) in [
+        (<C::ToweringCurve as WrappedGroup>::F::ONE, self.challenged_generators.next().unwrap()),
+        (k_prime, self.challenged_generators.next().unwrap()),
+      ] {
         let point = self.circuit.discrete_log(
           self.curve_spec,
           point_with_dlogs.next().unwrap(),
           &self.challenge,
           &challenged_generator,
         );
-        lincomb = lincomb.term(<C::ToweringCurve as WrappedGroup>::F::ONE, point.x());
+        lincomb = lincomb.term(weight, point.x());
       }
       /*
         Constrain the sum of the two `x` coordinates to be equal to the value committed to in a
@@ -173,10 +189,14 @@ impl<
   /// tweak of a recipient's key was still usable as if uniformly sampled.
   fn verifiable_encryption(&mut self, ecdh_commitments: &[EmbeddedPoint<C>; 2]) {
     // Read the public key used for this encryption
-    let challenged_public_key = self.challenged_generators.next().unwrap();
+    let (public_key, challenged_public_key) = self.challenged_generators.next().unwrap();
     // We perform two separate ECDHs, the sum of their `x` coordinates being our encryption key
     let mut lincomb = LinComb::empty();
-    for ecdh_commitment in ecdh_commitments {
+    let [ecdh_commitment_0, ecdh_commitment_1] = ecdh_commitments;
+    for (weight, ecdh_commitment) in [
+      (<C::ToweringCurve as WrappedGroup>::F::ONE, ecdh_commitment_0),
+      (crate::shares::k_prime::<C>(&public_key), ecdh_commitment_1),
+    ] {
       // We open the posted commitment to the ephemeral secret used, and the ECDH value
       let mut point_with_dlogs = self.tape.read_points_with_common_dlog::<C>(2);
 
@@ -200,7 +220,7 @@ impl<
         &self.challenge,
         &challenged_public_key,
       );
-      lincomb = lincomb.term(<C::ToweringCurve as WrappedGroup>::F::ONE, point.x());
+      lincomb = lincomb.term(weight, point.x());
       debug_assert!(point_with_dlogs.next().is_none());
     }
 
@@ -336,10 +356,10 @@ impl<C: Curves> Proof<C> {
 
   fn circuit(
     curve_spec: &CurveSpec<<<C::EmbeddedCurve as WrappedGroup>::G as DivisorCurve>::FieldElement>,
-    evrf_public_key: EmbeddedPoint<C>,
+    evrf_public_key: (<C::EmbeddedCurve as WrappedGroup>::G, EmbeddedPoint<C>),
     coefficients: usize,
     ecdh_commitments: &[[EmbeddedPoint<C>; 2]],
-    generator_tables: &[&GeneratorTable<C>],
+    generator_tables: &[(<C::EmbeddedCurve as WrappedGroup>::G, &GeneratorTable<C>)],
     circuit: &mut BpCircuit<C::ToweringCurve>,
     transcript: &mut impl Transcript,
   ) {
@@ -347,8 +367,11 @@ impl<C: Curves> Proof<C> {
     let generators_to_use = Self::generators_to_use(coefficients, participants);
 
     // Sample the challenge for all the discrete-logarithm claims
-    let (challenge, challenged_generators) =
-      circuit.discrete_log_challenge(transcript, curve_spec, generator_tables);
+    let (challenge, challenged_generators) = circuit.discrete_log_challenge(
+      transcript,
+      curve_spec,
+      &generator_tables.iter().map(|(_generator, table)| *table).collect::<Vec<_>>(),
+    );
 
     /*
       The generator tables, and the challenged generators, will have the following layout:
@@ -356,9 +379,10 @@ impl<C: Curves> Proof<C> {
       - Generators for the eVRFs used to sample the coefficients
       - The participants' public keys, used for performing ECDHs with
     */
-    let mut challenged_generators = challenged_generators.into_iter();
+    let mut challenged_generators =
+      generator_tables.iter().map(|(generator, _table)| *generator).zip(challenged_generators);
     #[expect(non_snake_case)]
-    let challenged_G = challenged_generators.next().unwrap();
+    let (_, challenged_G) = challenged_generators.next().unwrap();
 
     let tape = Tape::new(generators_to_use);
     let pedersen_commitment_tape = PedersenCommitmentTape::new();
@@ -411,7 +435,7 @@ impl<C: Curves> Proof<C> {
   fn generator_tables(
     coefficients_evrf_points: &[<C::EmbeddedCurve as WrappedGroup>::G],
     participants: &[<<C as Curves>::EmbeddedCurve as WrappedGroup>::G],
-  ) -> Vec<GeneratorTable<C>> {
+  ) -> Vec<(<C::EmbeddedCurve as WrappedGroup>::G, GeneratorTable<C>)> {
     let curve_spec = CurveSpec {
       a: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G::a(),
       b: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G::b(),
@@ -420,19 +444,17 @@ impl<C: Curves> Proof<C> {
     let mut generator_tables =
       Vec::with_capacity(1 + coefficients_evrf_points.len() + participants.len());
     {
-      let (x, y) = <C::EmbeddedCurve as WrappedGroup>::G::to_xy(
-        <C::EmbeddedCurve as WrappedGroup>::generator(),
-      )
-      .unwrap();
-      generator_tables.push(GeneratorTable::<C>::new(&curve_spec, x, y));
+      let generator = <C::EmbeddedCurve as WrappedGroup>::generator();
+      let (x, y) = <C::EmbeddedCurve as WrappedGroup>::G::to_xy(generator).unwrap();
+      generator_tables.push((generator, GeneratorTable::<C>::new(&curve_spec, x, y)));
     }
     for generator in coefficients_evrf_points {
       let (x, y) = <C::EmbeddedCurve as WrappedGroup>::G::to_xy(*generator).unwrap();
-      generator_tables.push(GeneratorTable::<C>::new(&curve_spec, x, y));
+      generator_tables.push((*generator, GeneratorTable::<C>::new(&curve_spec, x, y)));
     }
     for generator in participants {
       let (x, y) = <C::EmbeddedCurve as WrappedGroup>::G::to_xy(*generator).unwrap();
-      generator_tables.push(GeneratorTable::<C>::new(&curve_spec, x, y));
+      generator_tables.push((*generator, GeneratorTable::<C>::new(&curve_spec, x, y)));
     }
     generator_tables
   }
@@ -520,7 +542,7 @@ impl<C: Curves> Proof<C> {
       discrete_log(&mut vector_commitment_tape, &evrf_private_key);
 
       // Push the divisor for proving that we're using the correct scalar
-      let (_, evrf_public_key) = discrete_log_claim(
+      let evrf_public_key = discrete_log_claim(
         &mut vector_commitment_tape,
         &evrf_private_key,
         <<C as Curves>::EmbeddedCurve as WrappedGroup>::generator(),
@@ -529,10 +551,16 @@ impl<C: Curves> Proof<C> {
       // Push the divisor for each point we use in the eVRF
       for pair in coefficients_evrf_points.chunks(2) {
         let mut coefficient = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
-        for point in pair {
+        for (weight, point) in [
+          <C::ToweringCurve as WrappedGroup>::F::ONE,
+          crate::shares::k_prime::<C>(&evrf_public_key.0),
+        ]
+        .into_iter()
+        .zip(pair)
+        {
           let (_, (dh_x, _)) =
             discrete_log_claim(&mut vector_commitment_tape, &evrf_private_key, *point);
-          *coefficient += dh_x;
+          *coefficient += weight * dh_x;
         }
         coefficients.push(coefficient);
       }
@@ -550,7 +578,13 @@ impl<C: Curves> Proof<C> {
         <C::ToweringCurve as WrappedGroup>::F::ZERO,
       ); 2];
       let mut encryption_key = Zeroizing::new(<C::ToweringCurve as WrappedGroup>::F::ZERO);
-      for ecdh_commitments_xy_i_j_dest in &mut ecdh_commitments_xy_i {
+      for (weight, ecdh_commitments_xy_i_j_dest) in [
+        <C::ToweringCurve as WrappedGroup>::F::ONE,
+        crate::shares::k_prime::<C>(participant_public_key),
+      ]
+      .into_iter()
+      .zip(&mut ecdh_commitments_xy_i)
+      {
         let mut ecdh_ephemeral_secret;
         loop {
           ecdh_ephemeral_secret =
@@ -580,7 +614,7 @@ impl<C: Curves> Proof<C> {
           &ecdh_ephemeral_secret,
           *participant_public_key,
         );
-        *encryption_key += dh_x;
+        *encryption_key += weight * dh_x;
       }
       ecdh_commitments_xy.push(ecdh_commitments_xy_i);
       encryption_keys.push(encryption_key);
@@ -646,7 +680,7 @@ impl<C: Curves> Proof<C> {
       evrf_public_key,
       coefficients.len(),
       &ecdh_commitments_xy,
-      &generator_tables.iter().collect::<Vec<_>>(),
+      &generator_tables.iter().map(|(generator, table)| (*generator, table)).collect::<Vec<_>>(),
       &mut circuit,
       &mut transcript,
     );
@@ -750,10 +784,10 @@ impl<C: Curves> Proof<C> {
       let mut circuit = BpCircuit::verify();
       Self::circuit(
         &curve_spec,
-        <C::EmbeddedCurve as WrappedGroup>::G::to_xy(evrf_public_key).ok_or(())?,
+        (evrf_public_key, <C::EmbeddedCurve as WrappedGroup>::G::to_xy(evrf_public_key).ok_or(())?),
         coefficients,
         &ecdh_commitments_xy,
-        &generator_tables.iter().collect::<Vec<_>>(),
+        &generator_tables.iter().map(|(generator, table)| (*generator, table)).collect::<Vec<_>>(),
         &mut circuit,
         &mut transcript,
       );
