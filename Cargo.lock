@@ -7930,8 +7930,13 @@ dependencies = [
 name = "serai-env"
 version = "0.1.0"
 dependencies = [
+ "blake2 0.10.6",
+ "chacha20",
+ "curve25519-dalek",
  "env_logger",
  "log",
+ "rand_core 0.6.4",
+ "tokio",
  "zeroize",
 ]
 

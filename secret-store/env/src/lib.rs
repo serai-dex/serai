@@ -1,13 +1,88 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+use std::collections::HashMap;
+
+use zeroize::Zeroizing;
+
 /// Re-export of `log` for direct access (e.g. `serai_env::log::Level`).
 pub use log;
 
-// Obtain a variable from the Serai environment/secret store.
-pub fn var(variable: &str) -> Option<String> {
-  // TODO: Move this to a proper secret store
-  // TODO: Unset this variable
-  std::env::var(variable).ok()
+mod encryption;
+
+/// The environment, as received from the Serai Secret Store.
+pub struct Environment(HashMap<String, Zeroizing<String>>);
+
+impl Environment {
+  /// Receive the environment from the Secret Store.
+  pub async fn from_secret_store() -> Self {
+    let server = tokio::net::TcpListener::bind("0.0.0.0:59119".to_owned())
+      .await
+      .expect("couldn't bind to the expected port for the secret store");
+    'invalid_socket: loop {
+      /*
+        TODO: Check the origin. Right now, a service other than the secret-store can provide
+        secrets, though this is accepted as working with incorrect secrets does not reveal/impact
+        the actual secrets.
+      */
+      let Ok((socket, _origin)) = server.accept().await else { continue 'invalid_socket };
+      let Ok(socket) = encryption::EncryptedSocket::new(socket).await else {
+        continue 'invalid_socket;
+      };
+      let Ok(secrets) = socket.read_all().await else { continue 'invalid_socket };
+      let secrets = Zeroizing::new(secrets);
+
+      // TODO: Support Unicode
+      for c in secrets.iter().copied() {
+        if c > 0x7f {
+          continue 'invalid_socket;
+        }
+      }
+      let mut chars = secrets.iter().copied().map(char::from);
+
+      let mut result = HashMap::new();
+      {
+        match chars.next() {
+          Some('"') => {
+            let mut key = String::new();
+            loop {
+              match chars.next() {
+                Some('"') => break,
+                Some(c) => key.push(c),
+                None => continue 'invalid_socket,
+              }
+            }
+
+            match chars.next() {
+              Some('=') => {}
+              _ => continue 'invalid_socket,
+            }
+            match chars.next() {
+              Some('"') => {}
+              _ => continue 'invalid_socket,
+            }
+
+            let mut value = Zeroizing::new(String::new());
+            loop {
+              match chars.next() {
+                Some('"') => break,
+                Some(c) => value.push(c),
+                None => continue 'invalid_socket,
+              }
+            }
+
+            result.insert(key, value);
+          }
+          Some(_) => continue 'invalid_socket,
+          None => return Environment(result),
+        }
+      }
+    }
+  }
+
+  /// Fetch a variable from the environment.
+  pub fn var(&self, variable: &str) -> Option<&Zeroizing<String>> {
+    self.0.get(variable)
+  }
 }
 
 pub fn init_logger() {

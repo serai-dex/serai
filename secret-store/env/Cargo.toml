@@ -18,6 +18,14 @@ workspace = true
 
 [dependencies]
 zeroize = { version = "1", default-features = false, features = ["alloc"] }
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+
+blake2 = { version = "0.10", default-features = false, features = ["std"] }
+# TODO: Enabling the `std` feature adds a new dependency. What's up with that?
+chacha20 = { version = "0.9", default-features = false }
+curve25519-dalek = { version = "4", default-features = false, features = ["alloc", "precomputed-tables"] }
 
 log = { version = "0.4", default-features = false, features = ["std"] }
 env_logger = { version = "0.10", default-features = false, features = ["humantime"] }
+
+tokio = { version = "1", default-features = false, features = ["net"] }
