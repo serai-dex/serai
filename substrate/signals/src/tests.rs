@@ -219,7 +219,7 @@ fn required_halt_threshold() {
       }
       faulty
     };
-    assert!(faulty != 0);
+    assert_ne!(faulty, 0);
     assert!(faulty <= nodes);
     assert_eq!(
       Signals::required_threshold(&Signal::Halt(ExternalNetworkId::Bitcoin), u64::from(nodes)),

@@ -134,7 +134,7 @@ impl TryFrom<Balance> for ExternalBalance {
 #[test]
 fn amount() {
   assert_eq!(Amount(0), Amount(0));
-  assert!(Amount(0) != Amount(1));
+  assert_ne!(Amount(0), Amount(1));
   assert!(Amount(0) < Amount(1));
   assert!(Amount(1) > Amount(0));
 

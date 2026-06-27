@@ -56,7 +56,7 @@ fn test_non_mutual_key() {
     x_coordinate = x_coordinate.saturating_add(&KU256::ONE);
   };
   let x_coordinate = non_mutual.x();
-  assert!(<Scalar as Reduce<KU256>>::reduce_bytes(&x_coordinate).to_repr() != x_coordinate);
+  assert_ne!(<Scalar as Reduce<KU256>>::reduce_bytes(&x_coordinate).to_repr(), x_coordinate);
 
   // Even point whose x-coordinate isn't mutual to both fields (making it non-zero)
   assert!(PublicKey::new(non_mutual.into()).is_none());

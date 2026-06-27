@@ -20,11 +20,11 @@ fn serialize_signed() {
 #[test]
 fn sig_hash() {
   let (genesis, tx1) = random_signed_transaction(&mut OsRng);
-  assert!(tx1.sig_hash(genesis) != tx1.sig_hash(Blake2s256::digest(genesis).into()));
+  assert_ne!(tx1.sig_hash(genesis), tx1.sig_hash(Blake2s256::digest(genesis).into()));
 
   let (_, tx2) = random_signed_transaction(&mut OsRng);
-  assert!(tx1.hash() != tx2.hash());
-  assert!(tx1.sig_hash(genesis) != tx2.sig_hash(genesis));
+  assert_ne!(tx1.hash(), tx2.hash());
+  assert_ne!(tx1.sig_hash(genesis), tx2.sig_hash(genesis));
 }
 
 #[test]

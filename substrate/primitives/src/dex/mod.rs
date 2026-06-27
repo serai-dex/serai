@@ -119,7 +119,7 @@ impl Premise {
     let current_k = Reserves::product(in_reserve, out_reserve);
     let proposed_in_reserve = u128::from(in_reserve) + u128::from(amount_in.0);
     if proposed_in_reserve == 0 {
-      return Err(Error::KInvariant)?;
+      Err(Error::KInvariant)?;
     }
     let required_proposed_out_reserve = current_k.div_ceil(proposed_in_reserve);
     // If this does not fit in a `u64`, the following substraction would have underflowed
@@ -140,7 +140,7 @@ impl Premise {
     let current_k = Reserves::product(in_reserve, out_reserve);
     let proposed_out_reserve = out_reserve.checked_sub(amount_out.0).ok_or(Error::Underflow)?;
     if proposed_out_reserve == 0 {
-      return Err(Error::KInvariant)?;
+      Err(Error::KInvariant)?;
     }
     let required_proposed_in_reserve = current_k.div_ceil(u128::from(proposed_out_reserve));
     let required_proposed_in_reserve =

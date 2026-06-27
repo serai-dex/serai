@@ -193,7 +193,7 @@ async fn add_signed_unsigned_transaction<TD: DbTrait, P: P2p>(
         .next_nonce(&signed.signer, &order)
         .await
         .expect("signer who is a present validator didn't have a nonce");
-      assert!(next_nonce != signed.nonce);
+      assert_ne!(next_nonce, signed.nonce);
       // We're publishing an old transaction
       if next_nonce > signed.nonce {
         return true;

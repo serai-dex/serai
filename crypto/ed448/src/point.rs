@@ -365,9 +365,9 @@ fn test_group() {
 
 #[test]
 fn generator() {
-  assert!(G.x == G_X);
-  assert!(G.y == G_Y);
-  assert!(recover_x(G.y).unwrap() == G.x);
+  assert_eq!(G.x, G_X);
+  assert_eq!(G.y, G_Y);
+  assert_eq!(recover_x(G.y).unwrap(), G.x);
 }
 
 #[test]

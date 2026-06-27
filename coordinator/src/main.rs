@@ -69,7 +69,7 @@ async fn serai(env: &Environment) -> Arc<Serai> {
   loop {
     let Ok(serai) = Serai::new(format!(
       "http://{}:9944",
-      &**env.var("SERAI_HOSTNAME").expect("Serai hostname wasn't provided")
+      **env.var("SERAI_HOSTNAME").expect("Serai hostname wasn't provided")
     )) else {
       serai_env::error!("couldn't connect to the Serai node");
       tokio::time::sleep(delay).await;

@@ -34,7 +34,7 @@ jobs:
     name: Test various pieces of infrastructure
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
         with:
           persist-credentials: false
 
@@ -63,7 +63,7 @@ jobs:
     name: Test `substrate/` crates (except `client/`)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
         with:
           persist-credentials: false
 
@@ -82,7 +82,7 @@ jobs:
     name: Test `substrate/client` crates
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
         with:
           persist-credentials: false
 

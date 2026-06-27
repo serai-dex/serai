@@ -88,7 +88,8 @@ fn test_deterministically_sign() {
   let mut other_tx = tx.clone();
   other_tx.nonce += 1;
   // Signing a distinct message should yield a distinct signer
-  assert!(
-    signed.recover_signer().unwrap() != deterministically_sign(other_tx).recover_signer().unwrap()
+  assert_ne!(
+    signed.recover_signer().unwrap(),
+    deterministically_sign(other_tx).recover_signer().unwrap()
   );
 }

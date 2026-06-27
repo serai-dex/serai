@@ -291,7 +291,7 @@ impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>, S: Borrow<C::Scalar>> Mul<S> f
         let mut bit = black_box(*bit_ref);
         let res = black_box(u8::from(bit));
         bit.zeroize();
-        debug_assert!((res | 1) == 1);
+        debug_assert!(bool::from((res | 1).ct_eq(&1)));
 
         bit_ref.zeroize();
         res

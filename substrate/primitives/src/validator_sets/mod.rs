@@ -144,7 +144,7 @@ pub enum DeallocationTimeline {
 #[test]
 fn session() {
   assert_eq!(Session(0), Session(0));
-  assert!(Session(0) != Session(1));
+  assert_ne!(Session(0), Session(1));
   assert!(Session(0) < Session(1));
   assert!(Session(1) > Session(0));
 

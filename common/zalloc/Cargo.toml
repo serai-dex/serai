@@ -7,9 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/common/zalloc"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
-# This must be specified with the patch version, else Rust believes `1.77` < `1.77.0` and will
-# refuse to compile due to relying on versions introduced with `1.77.0`
-rust-version = "1.77.0"
+rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true

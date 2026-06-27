@@ -33,6 +33,7 @@ mod ciphersuite;
 
 pub(crate) fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   use core::hint::black_box;
+  use crypto_bigint::CtEq as _;
   use prime_field::zeroize::Zeroize as _;
 
   let bit_ref = black_box(bit_ref);
@@ -40,7 +41,7 @@ pub(crate) fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   let mut bit = black_box(*bit_ref);
   let res = black_box(u8::from(bit));
   bit.zeroize();
-  debug_assert!((res | 1) == 1);
+  debug_assert!(bool::from((res | 1).ct_eq(&1)));
 
   bit_ref.zeroize();
   res

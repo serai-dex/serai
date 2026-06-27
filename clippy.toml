@@ -9,6 +9,39 @@ path = "Option::map_or_else"
 path = "borsh::from_reader"
 reason = "`borsh::from_reader` errors if there's any bytes following the read item, which isn't documented behavior"
 
+[[disallowed-methods]]
+path = "crypto_bigint::Int::jacobi_symbol"
+reason = "https://github.com/RustCrypto/crypto-bigint/issues/1295"
+allow-invalid = true # TODO: Conflict because of `crypto-bigint 0.5`?
+[[disallowed-methods]]
+path = "crypto_bigint::Int::jacobi_symbol_vartime"
+reason = "https://github.com/RustCrypto/crypto-bigint/issues/1295"
+allow-invalid = true # TODO: Conflict because of `crypto-bigint 0.5`?
+[[disallowed-methods]]
+path = "crypto_bigint::Uint::jacobi_symbol"
+reason = "https://github.com/RustCrypto/crypto-bigint/issues/1295"
+allow-invalid = true # TODO: Conflict because of `crypto-bigint 0.5`?
+[[disallowed-methods]]
+path = "crypto_bigint::Uint::jacobi_symbol_vartime"
+reason = "https://github.com/RustCrypto/crypto-bigint/issues/1295"
+allow-invalid = true # TODO: Conflict because of `crypto-bigint 0.5`?
+[[disallowed-methods]]
+path = "crypto_bigint::modular::ConstMontyForm::jacobi_symbol"
+reason = "https://github.com/RustCrypto/crypto-bigint/issues/1295"
+allow-invalid = true # TODO: Conflict because of `crypto-bigint 0.5`?
+[[disallowed-methods]]
+path = "crypto_bigint::modular::ConstMontyForm::jacobi_symbol_vartime"
+reason = "https://github.com/RustCrypto/crypto-bigint/issues/1295"
+allow-invalid = true # TODO: Conflict because of `crypto-bigint 0.5`?
+[[disallowed-methods]]
+path = "crypto_bigint::modular::FixedMontyForm::jacobi_symbol"
+reason = "https://github.com/RustCrypto/crypto-bigint/issues/1295"
+allow-invalid = true # TODO: Conflict because of `crypto-bigint 0.5`?
+[[disallowed-methods]]
+path = "crypto_bigint::modular::FixedMontyForm::jacobi_symbol_vartime"
+reason = "https://github.com/RustCrypto/crypto-bigint/issues/1295"
+allow-invalid = true # TODO: Conflict because of `crypto-bigint 0.5`?
+
 # TODO: https://github.com/rust-lang/rust-clippy/pull/12194
 [[disallowed-methods]]
 path = "<ruint::Uint as core::ops::Add>::add"

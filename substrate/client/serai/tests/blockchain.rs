@@ -177,7 +177,7 @@ async fn blockchain() {
               if i == 0 {
                 assert_eq!(unix_time_in_millis, 0);
               } else {
-                assert!(unix_time_in_millis != 0);
+                assert_ne!(unix_time_in_millis, 0);
               }
 
               // We treat the `consensus_commitment` as opaque, but we do want to make sure it's set

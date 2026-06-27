@@ -5,6 +5,7 @@ runs:
   using: "composite"
   steps:
     - name: Remove unused packages
+      if: runner.os == 'Linux'
       shell: bash
       run: |
         # Ensure the repositories are synced
@@ -21,18 +22,31 @@ runs:
 
         # Reinstall python3 as a general dependency of a functional operating system
         sudo apt install -y python3 --fix-missing
-      if: runner.os == 'Linux'
 
     - name: Remove unused packages
+      if: runner.os == 'macOS'
       shell: bash
       run: |
-        (gem uninstall -aIx) || (exit 0)
-        brew uninstall --force "*msbuild*" "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
-        brew uninstall --force "*nodejs*" "*npm*" "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
-        brew uninstall --force "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
-        brew uninstall --force "*qemu*" "*sql*" "*texinfo*" "*imagemagick*"
+        (gem uninstall -aIx) || true
+
+        for package in \
+          "msbuild" "powershell" "nuget" "bazel" "ansible" "terraform" "heroku" "aws" azure-cli \
+          "nodejs" "npm" "yarn" "java" "kotlin" "golang" "swift" "julia" "fortran" "android" \
+          "apache2" "nginx" "firefox" "chromium" "chrome" "edge" \
+          "qemu" "sql" "texinfo" "imagemagick" \
+        ; do
+          for package in $(brew list --full-name -1 | grep "$package"); do
+            brew uninstall --force "$package" || true
+          done
+        done
+
+        # Remove an untrusted tap present for some reason
+        brew untap aws/tap || true
+        # Explicitly uninstall `xcodes` which no longer offers a binary package for Intel macOS
+        brew uninstall --force xcodes || true
+
         brew cleanup
-      if: runner.os == 'macOS'
+        rm -rf $(brew --cache)
 
     - name: Install dependencies
       shell: bash
@@ -49,6 +63,11 @@ runs:
           [ -d "$HOMEBREW_PREFIX" ]
           ls $HOMEBREW_PREFIX/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
           echo "DYLD_LIBRARY_PATH=$HOMEBREW_PREFIX/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
+
+          # Replace brew rust(up) with rustup
+          brew uninstall --force rustup || true
+          brew uninstall --force rust || true
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y
         fi
 
     - name: Install solc
@@ -80,20 +99,22 @@ runs:
       uses: ./.github/actions/docker
 
     - name: Update system dependencies
+      if: runner.os == 'Linux'
       shell: bash
       run: |
         sudo apt update -y
         sudo apt upgrade -y
         sudo apt autoremove -y
         sudo apt clean -y
-      if: runner.os == 'Linux'
 
     - name: Update system dependencies
+      if: runner.os == 'macOS'
       shell: bash
       run: |
-        brew upgrade
+        brew update || true
+        brew upgrade || true
+        brew cleanup
         rm -rf $(brew --cache)
-      if: runner.os == 'macOS'
 
     - name: Set GitHub CI Environment Variables
       shell: bash

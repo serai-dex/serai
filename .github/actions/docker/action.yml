@@ -82,7 +82,7 @@ runs:
         docker system prune --all --force
 
         # GitHub uses an install script from Microsoft, so we run the complimentary uninstall script
-        Invoke-WebRequest https://raw.githubusercontent.com/microsoft/Windows-Containers/Main/helpful_tools/Install-DockerCE/uninstall-docker-ce.ps1 -OutFile .\uninstall-docker-ce.ps1
+        Invoke-WebRequest https://raw.githubusercontent.com/microsoft/Windows-Containers/3035d0eb6b80499b5f66121c372f1a73e531a6b3/helpful_tools/Install-DockerCE/uninstall-docker-ce.ps1 -OutFile .\uninstall-docker-ce.ps1
         & .\uninstall-docker-ce.ps1 -Force
 
         # These are defined/installed by the GitHub runner image definition
@@ -99,7 +99,7 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        Invoke-WebRequest https://github.com/containers/podman/releases/download/v5.8.3/podman-installer-windows-amd64.msi -OutFile podman.msi
+        Invoke-WebRequest https://github.com/containers/podman/releases/download/v6.0.0/podman-installer-windows-amd64.msi -OutFile podman.msi
         Start-Process -Wait -PassThru 'msiexec' -ArgumentList "/package podman.msi /quiet /log podman-msi.log MACHINE_PROVIDER=wsl ALLUSERS=1"
         Get-Content podman-msi.log
 

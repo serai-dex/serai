@@ -110,6 +110,15 @@ length for the body exceeding the length of the buffer. This is irrelevant to
 our usage though, and I'm not interested in submitting a PR about this.
 """
 
+[[audits.alloy-eip7928]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.4.4 -> 0.4.5"
+notes = """
+This appears to be a breaking change, and to be honest, I'm unclear the intent
+for/use of this function. It seems perfectly safe however.
+"""
+
 [[audits.alloy-eips]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -680,6 +689,11 @@ While I would add such a patch, that wouldn't cover the `array_refs!`,
 `mut_array_refs!` macros.
 """
 
+[[audits.arrayvec]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.7.6 -> 0.7.7"
+
 [[audits.asn1-rs]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -957,6 +971,16 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.15.0 -> 1.16.0"
 
+[[audits.enum-ordinalize]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "4.3.2 -> 4.4.1"
+
+[[audits.enum-ordinalize-derive]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "4.3.2 -> 4.4.1"
+
 [[audits.exit-future]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1087,6 +1111,11 @@ criteria = "safe-to-deploy"
 delta = "0.4.11 -> 0.4.12"
 notes = "I did not confirm the several new numbers have correctly-defined bits."
 
+[[audits.hybrid-array]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.4.12 -> 0.4.13"
+
 [[audits.hyper]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1144,6 +1173,12 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.3.99 -> 0.3.102"
 
+[[audits.js-sys]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.3.102 -> 0.3.103"
+notes = "Solely a version bump"
+
 [[audits.jsonrpsee]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1197,6 +1232,11 @@ delta = "0.1.16 -> 0.1.17"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.4.29 -> 0.4.32"
+
+[[audits.log]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.4.32 -> 0.4.33"
 
 [[audits.lru]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -1505,6 +1545,11 @@ criteria = "safe-to-deploy"
 delta = "0.14.3 -> 0.14.4"
 notes = "Solely a version bump"
 
+[[audits.quinn-proto]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.11.14 -> 0.11.15"
+
 [[audits.rand]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1793,6 +1838,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.23.38 -> 0.23.40"
 
+[[audits.rustls]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.23.40 -> 0.23.41"
+
 [[audits.rustls-native-certs]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1905,6 +1955,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.5.7 -> 1.6.0"
 
+[[audits.time-macros]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.29 -> 0.2.30"
+
 [[audits.toml_edit]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1942,6 +1997,12 @@ criteria = "safe-to-run"
 version = "0.3.1"
 notes = "Undocumented panic prevents `safe-to-deploy`, see https://github.com/seanmonstar/want/pull/5"
 
+[[audits.wasm-bindgen]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.125 -> 0.2.126"
+notes = "Solely a version bump"
+
 [[audits.wasm-bindgen-macro]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1970,6 +2031,12 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.2.122 -> 0.2.125"
 
+[[audits.wasm-bindgen-macro]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.125 -> 0.2.126"
+notes = "Solely a version bump"
+
 [[audits.wasm-bindgen-macro-support]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1979,6 +2046,12 @@ delta = "0.2.121 -> 0.2.122"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.2.122 -> 0.2.125"
+
+[[audits.wasm-bindgen-macro-support]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.125 -> 0.2.126"
+notes = "Solely a version bump"
 
 [[audits.wasm-bindgen-shared]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -2004,6 +2077,12 @@ delta = "0.2.121 -> 0.2.122"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.2.122 -> 0.2.125"
+
+[[audits.wasm-bindgen-shared]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.125 -> 0.2.126"
+notes = "Solely a version bump"
 
 [[audits.web-sys]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -2020,6 +2099,12 @@ notes = "Solely a version bump"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.3.99 -> 0.3.102"
+
+[[audits.web-sys]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.3.102 -> 0.3.103"
+notes = "Solely a version bump"
 
 [[audits.webpki-roots]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -2212,6 +2297,12 @@ trusted-publisher = "github:bytecodealliance/wasmtime"
 start = "2026-01-07"
 end = "2027-04-20"
 notes = "Trusted due to bytecodealliance and infeasibility of auditing"
+
+[[trusted.wasmtime-internal-component-util]]
+criteria = "safe-to-deploy"
+trusted-publisher = "github:bytecodealliance/wasmtime"
+start = "2026-01-07"
+end = "2027-06-24"
 
 [[trusted.wasmtime-internal-core]]
 criteria = "safe-to-deploy"

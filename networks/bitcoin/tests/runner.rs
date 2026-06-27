@@ -19,7 +19,11 @@ pub(crate) async fn rpc() -> Rpc {
         "invalidateblock",
         &format!(
           r#"["{}"]"#,
-          bitcoin::consensus::encode::serialize_hex(&rpc.get_block_hash(1).await.unwrap())
+          bitcoin::consensus::encode::serialize_hex(&{
+            let mut hash = rpc.get_block_hash(1).await.unwrap();
+            hash.reverse();
+            hash
+          })
         ),
       )
       .await

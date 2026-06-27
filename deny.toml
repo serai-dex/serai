@@ -141,6 +141,9 @@ deny = [
   # https://github.com/RustCrypto/hashes/pull/834
   { name = "cshake", version = "<0.1.1" },
   { name = "sha3", version = ">=0.10.2, <0.10.9" },
+  # Incorrect implementation of square roots
+  # https://github.com/RustCrypto/crypto-bigint/issues/1303
+  { name = "crypto-bigint", version = "=0.7.4" },
 
   # These re: `multihash` are explained by how we patch `core2` to our own `std-shims`
 

@@ -144,19 +144,22 @@ impl Network for TestNetwork {
     println!("Slash for {id} due to {event:?}");
   }
 
-  async fn validate(&self, block: &TestBlock) -> Result<(), BlockError> {
-    block.valid
+  fn validate(&self, block: &TestBlock) -> impl Future<Output = Result<(), BlockError>> {
+    core::future::ready(block.valid)
   }
 
-  async fn add_block(
+  fn add_block(
     &mut self,
     block: TestBlock,
     commit: Commit<TestSignatureScheme>,
-  ) -> Option<TestBlock> {
-    println!("Adding {:?}", &block);
+  ) -> impl Future<Output = Option<TestBlock>> {
+    println!("Adding {block:?}");
     block.valid.unwrap();
     assert!(self.verify_commit(block.id(), &commit));
-    Some(TestBlock { id: (u32::from_le_bytes(block.id) + 1).to_le_bytes(), valid: Ok(()) })
+    core::future::ready(Some(TestBlock {
+      id: (u32::from_le_bytes(block.id) + 1).to_le_bytes(),
+      valid: Ok(()),
+    }))
   }
 }
 

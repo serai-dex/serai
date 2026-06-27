@@ -943,7 +943,7 @@ async fn test_gas_increases_then_decreases() {
 
   let fee_per_gas = U256::from(1);
   let (gas, fee) = test.router.execute_gas_and_fee(coin, fee_per_gas, &out_instructions);
-  assert!((U256::from(gas) * fee_per_gas) != fee);
+  assert_ne!((U256::from(gas) * fee_per_gas), fee);
   let (tx, gas_used) =
     test.execute(coin, fee, out_instructions.clone(), vec![true; out_instructions.0.len()]).await;
   let unused_gas = test.gas_unused_by_calls(&tx).await;

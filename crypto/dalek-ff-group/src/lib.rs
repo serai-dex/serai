@@ -33,7 +33,7 @@ fn u8_from_bool(bit_ref: &mut bool) -> u8 {
   #[expect(clippy::cast_lossless, clippy::as_conversions)]
   let res = black_box(bit as u8);
   bit.zeroize();
-  debug_assert!((res | 1) == 1);
+  debug_assert!(bool::from((res | 1).ct_eq(&1)));
 
   bit_ref.zeroize();
   res

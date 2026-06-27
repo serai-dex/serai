@@ -224,7 +224,7 @@ mod pallet {
       assert!(!block_number.is_zero());
       if block_number.is_one() {
         let genesis_time = Core::<T>::current_time();
-        assert!(genesis_time != 0);
+        assert_ne!(genesis_time, 0);
         GenesisTimestamp::<T>::set(Some(genesis_time));
       }
 

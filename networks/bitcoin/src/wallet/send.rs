@@ -302,9 +302,7 @@ impl SignableTransaction {
 
   /// Returns the TX ID of the transaction this will create.
   pub fn txid(&self) -> [u8; 32] {
-    let mut res = self.tx.compute_txid().to_byte_array();
-    res.reverse();
-    res
+    self.tx.compute_txid().to_byte_array()
   }
 
   /// Returns the transaction, sans witness, this will create if signed.

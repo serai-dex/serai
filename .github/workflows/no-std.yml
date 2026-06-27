@@ -30,7 +30,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
         with:
           persist-credentials: false
 
@@ -52,10 +52,11 @@ jobs:
             sudo apt install -y gcc-riscv64-unknown-elf gcc-multilib
           elif [ "$RUNNER_OS" = "macOS" ]; then
             brew tap riscv-software-src/riscv
+            brew trust riscv-software-src/riscv
             brew install riscv-tools
           elif [ "$RUNNER_OS" = "Windows" ]; then
             /C/msys64/usr/bin/pacman.exe -Syu --noconfirm
-            /C/msys64/usr/bin/pacman.exe -S --noconfirm mingw-w64-x86_64-riscv32-unknown-elf-gcc
+            /C/msys64/usr/bin/pacman.exe -S --noconfirm mingw-w64-clang-x86_64-riscv32-unknown-elf-gcc
           fi
 
       - name: Verify no-std builds
@@ -66,7 +67,7 @@ jobs:
           if [ "$RUNNER_OS" = "Linux" ]; then
             export CFLAGS=-I/usr/include
           elif [ "$RUNNER_OS" = "Windows" ]; then
-            export PATH="$PATH:/C/msys64/mingw64/bin"
+            export PATH="$PATH:/C/msys64/clang64/bin"
           fi
 
           cargo +$NIGHTLY_VERSION build --target riscv32imac-unknown-none-elf -Z build-std=core -p serai-no-std-tests

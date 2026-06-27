@@ -246,8 +246,7 @@ async_sequential! {
 
     // This also tests `send_raw_transaction`, which the RPC test can't effectively test
     rpc.send_raw_transaction(&tx).await.unwrap();
-    let mut hash = *tx.compute_txid().as_raw_hash().as_byte_array();
-    hash.reverse();
+    let hash = *tx.compute_txid().as_raw_hash().as_byte_array();
     assert_eq!(expected_id, hash);
   }
 

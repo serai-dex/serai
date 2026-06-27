@@ -41,7 +41,7 @@ fn burn() {
     {
       let root = sp_io::storage::root(state_version);
       // Check `sp_io::TestExternalities` doesn't stub this and it does update upon change
-      assert!(root_at_start != root);
+      assert_ne!(root_at_start, root);
       assert!({
         #[expect(clippy::disallowed_methods)]
         Coins::burn(Some(to).into(), Balance { coin, amount: Amount(5) }).is_err()

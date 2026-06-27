@@ -514,7 +514,7 @@ mod pallet {
           This is impossible to reach, yet would cause the amount _yet to be transferred out_ to
           be credited both as part of the reserves _and_ the amount in if violated.
         */
-        assert!(transfer_from != pool, "swap routed from a coin to itself");
+        assert_ne!(transfer_from, pool, "swap routed from a coin to itself");
         let delta = Balance { coin: swap.r#in(), amount: next_amount };
         Coins::<T>::transfer_fn(transfer_from, pool, delta)?;
         deltas.push(delta);
@@ -600,7 +600,7 @@ mod pallet {
           This is impossible to reach, yet ensures the amount not yet transferred in isn't
           excluded when determining the reserves on the next iteration.
         */
-        assert!(transfer_to != pool, "swap routed to a coin from itself");
+        assert_ne!(transfer_to, pool, "swap routed to a coin from itself");
         let delta = Balance { coin: swap.out(), amount: next_amount };
         Coins::<T>::transfer_fn(pool, transfer_to, delta)?;
         deltas.push(delta);
