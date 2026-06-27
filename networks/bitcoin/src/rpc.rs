@@ -72,7 +72,6 @@ impl Rpc {
       "getblockheader",
       "getblock",
       "sendrawtransaction",
-      "getrawtransaction",
     ]);
     for line in res.split('\n') {
       // This doesn't check if the arguments are as expected
