@@ -23,6 +23,10 @@ impl<C: ShortWeierstrass> Clone for Affine<C> {
 impl<C: ShortWeierstrass> Copy for Affine<C> {}
 
 impl<C: ShortWeierstrass> Affine<C> {
+  /// Try to construct an affine point from a projective point.
+  ///
+  /// This will return `None` if the point does not have an affine representation (i.e. is the
+  /// identity point).
   pub fn try_from(projective: &Projective<C>) -> CtOption<Self> {
     let z_inv = projective.z.invert().unwrap_or(C::FieldElement::ZERO);
     let if_non_identity = Self { x: projective.x * z_inv, y: projective.y * z_inv };

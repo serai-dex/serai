@@ -1,3 +1,4 @@
+use core::fmt::Debug;
 use std_shims::{prelude::*, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
@@ -107,7 +108,7 @@ pub(crate) fn preprocess<
       commitments.insert(i, {
         let mut buf = vec![];
         preprocess.write(&mut buf).unwrap();
-        machine.read_preprocess::<&[u8]>(&mut buf.as_ref()).unwrap()
+        machine.read_preprocess(&mut buf.as_slice()).unwrap()
       });
       (i, machine)
     })
@@ -143,7 +144,7 @@ pub(crate) fn preprocess_and_shares<
       shares.insert(i, {
         let mut buf = vec![];
         share.write(&mut buf).unwrap();
-        machine.read_share::<&[u8]>(&mut buf.as_ref()).unwrap()
+        machine.read_share(&mut buf.as_slice()).unwrap()
       });
       (i, machine)
     })
@@ -154,7 +155,7 @@ pub(crate) fn preprocess_and_shares<
 
 fn sign_internal<
   R: RngCore + CryptoRng,
-  M: PreprocessMachine,
+  M: PreprocessMachine<Signature: PartialEq + Debug>,
   F: FnMut(&mut R, &mut HashMap<Participant, M::SignMachine>),
 >(
   rng: &mut R,
@@ -178,7 +179,10 @@ fn sign_internal<
 /// Execute the signing protocol, without caching any machines. This isn't as comprehensive at
 /// testing as sign, and accordingly isn't preferred, yet is usable for machines not supporting
 /// caching.
-pub fn sign_without_caching<R: RngCore + CryptoRng, M: PreprocessMachine>(
+pub fn sign_without_caching<
+  R: RngCore + CryptoRng,
+  M: PreprocessMachine<Signature: PartialEq + Debug>,
+>(
   rng: &mut R,
   machines: HashMap<Participant, M>,
   msg: &[u8],
@@ -188,7 +192,10 @@ pub fn sign_without_caching<R: RngCore + CryptoRng, M: PreprocessMachine>(
 
 /// Execute the signing protocol, randomly caching various machines to ensure they can cache
 /// successfully.
-pub fn sign_without_clone<R: RngCore + CryptoRng, M: PreprocessMachine>(
+pub fn sign_without_clone<
+  R: RngCore + CryptoRng,
+  M: PreprocessMachine<Signature: PartialEq + Debug>,
+>(
   rng: &mut R,
   mut keys: HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::Keys>,
   mut params: HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::Params>,
@@ -220,7 +227,10 @@ pub fn sign_without_clone<R: RngCore + CryptoRng, M: PreprocessMachine>(
 /// successfully.
 pub fn sign<
   R: RngCore + CryptoRng,
-  M: PreprocessMachine<SignMachine: SignMachine<M::Signature, Params: Clone>>,
+  M: PreprocessMachine<
+    SignMachine: SignMachine<M::Signature, Params: Clone>,
+    Signature: PartialEq + Debug,
+  >,
 >(
   rng: &mut R,
   params: &<M::SignMachine as SignMachine<M::Signature>>::Params,

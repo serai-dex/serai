@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![no_std]
 
 use core::fmt::Debug;
@@ -27,22 +28,30 @@ pub mod tests;
 /// Various errors possible during signing.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Error)]
 pub enum FrostError {
+  /// An internal error.
   #[error("internal error: {0}")]
   InternalError(&'static str),
 
+  /// A participant behaved in a way which was invalid.
   #[error("invalid participant (0 < participant <= {0}, yet participant is {1})")]
   InvalidParticipant(u16, Participant),
+  /// The signing set was invalid.
   #[error("invalid signing set ({0})")]
   InvalidSigningSet(&'static str),
+  /// The amount of participants was invalid.
   #[error("invalid participant quantity (expected {0}, got {1})")]
   InvalidParticipantQuantity(usize, usize),
+  /// A participant was present twice.
   #[error("duplicated participant ({0})")]
   DuplicatedParticipant(Participant),
+  /// An expected participant was omitted.
   #[error("missing participant {0}")]
   MissingParticipant(Participant),
 
+  /// A preprocess was invalid.
   #[error("invalid preprocess (participant {0})")]
   InvalidPreprocess(Participant),
+  /// A share was invalid.
   #[error("invalid share (participant {0})")]
   InvalidShare(Participant),
 }

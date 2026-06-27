@@ -49,8 +49,8 @@ pub struct Signed {
 }
 
 impl ReadWrite for Signed {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let signer = Ristretto::read_G(reader)?;
+  fn read(mut reader: impl io::Read) -> io::Result<Self> {
+    let signer = Ristretto::read_G(&mut reader)?;
 
     let mut nonce = [0; 4];
     reader.read_exact(&mut nonce)?;
@@ -71,7 +71,7 @@ impl ReadWrite for Signed {
     Ok(Signed { signer, nonce, signature })
   }
 
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     // This is either an invalid signature or a private key leak
     if self.signature.R.is_identity().into() {
       Err(io::Error::other("signature nonce was identity"))?;
@@ -83,8 +83,8 @@ impl ReadWrite for Signed {
 }
 
 impl Signed {
-  pub fn read_without_nonce<R: io::Read>(reader: &mut R, nonce: u32) -> io::Result<Self> {
-    let signer = Ristretto::read_G(reader)?;
+  pub fn read_without_nonce(mut reader: impl io::Read, nonce: u32) -> io::Result<Self> {
+    let signer = Ristretto::read_G(&mut reader)?;
 
     let mut signature = SchnorrSignature::<Ristretto>::read(reader)?;
     if signature.R.is_identity().into() {
@@ -98,7 +98,7 @@ impl Signed {
     Ok(Signed { signer, nonce, signature })
   }
 
-  pub fn write_without_nonce<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub fn write_without_nonce(&self, mut writer: impl io::Write) -> io::Result<()> {
     // This is either an invalid signature or a private key leak
     if self.signature.R.is_identity().into() {
       Err(io::Error::other("signature nonce was identity"))?;

@@ -48,7 +48,7 @@ pub fn random_signed_with_nonce<R: RngCore + CryptoRng>(rng: &mut R, nonce: u32)
 pub struct ProvidedTransaction(pub Vec<u8>);
 
 impl ReadWrite for ProvidedTransaction {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+  fn read(mut reader: impl io::Read) -> io::Result<Self> {
     let mut len = [0; 4];
     reader.read_exact(&mut len)?;
     let mut data = vec![0; usize::try_from(u32::from_le_bytes(len)).unwrap()];
@@ -56,7 +56,7 @@ impl ReadWrite for ProvidedTransaction {
     Ok(ProvidedTransaction(data))
   }
 
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     writer.write_all(&u32::try_from(self.0.len()).unwrap().to_le_bytes())?;
     writer.write_all(&self.0)
   }
@@ -98,7 +98,7 @@ pub fn random_provided_transaction<R: RngCore + CryptoRng>(
 pub struct SignedTransaction(pub Vec<u8>, pub Signed);
 
 impl ReadWrite for SignedTransaction {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+  fn read(mut reader: impl io::Read) -> io::Result<Self> {
     let mut len = [0; 4];
     reader.read_exact(&mut len)?;
     let mut data = vec![0; usize::try_from(u32::from_le_bytes(len)).unwrap()];
@@ -107,7 +107,7 @@ impl ReadWrite for SignedTransaction {
     Ok(SignedTransaction(data, Signed::read(reader)?))
   }
 
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     writer.write_all(&u32::try_from(self.0.len()).unwrap().to_le_bytes())?;
     writer.write_all(&self.0)?;
     self.1.write(writer)
@@ -179,7 +179,7 @@ pub async fn tendermint_meta() -> ([u8; 32], Signer, [u8; 32], Arc<Validators>) 
   let validator_id = signer.validator_id().await.unwrap();
 
   // schema
-  let signer_pub = <Ristretto as GroupIo>::read_G::<&[u8]>(&mut validator_id.as_slice()).unwrap();
+  let signer_pub = <Ristretto as GroupIo>::read_G(validator_id.as_slice()).unwrap();
   let validators = Arc::new(Validators::new(genesis, vec![(signer_pub, 1)]).unwrap());
 
   (genesis, signer, validator_id, validators)

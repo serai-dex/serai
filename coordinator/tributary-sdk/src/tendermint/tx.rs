@@ -25,13 +25,13 @@ pub enum TendermintTx {
 }
 
 impl ReadWrite for TendermintTx {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    Evidence::deserialize_reader(reader)
+  fn read(mut reader: impl io::Read) -> io::Result<Self> {
+    Evidence::deserialize_reader(&mut reader)
       .map(TendermintTx::SlashEvidence)
       .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid evidence format"))
   }
 
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     match self {
       TendermintTx::SlashEvidence(ev) => writer.write_all(&borsh::to_vec(&ev).unwrap()),
     }

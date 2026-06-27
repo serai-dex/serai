@@ -14,7 +14,7 @@ use crate::{
 #[test]
 fn serialize_signed() {
   let signed = random_signed(&mut rand::rngs::OsRng);
-  assert_eq!(Signed::read::<&[u8]>(&mut signed.serialize().as_ref()).unwrap(), signed);
+  assert_eq!(Signed::read(signed.serialize().as_slice()).unwrap(), signed);
 }
 
 #[test]

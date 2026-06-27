@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![no_std]
 
 use core::ops::Deref as _;
@@ -8,7 +9,7 @@ extern crate alloc;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
-use std_shims::io::{self, Read, Write};
+use std_shims::io;
 
 #[cfg(feature = "alloc")]
 use rand_core::{RngCore, CryptoRng};
@@ -41,26 +42,37 @@ mod tests;
 /// RFC 8032 has an alternative verification formula for Ed25519, `8R = 8s - 8cX`, which is
 /// intended to handle torsioned nonces/public keys. Due to this library's strict requirements,
 /// such signatures will not be verifiable with this library.
+///
+/// This signature is not inherently validated and must be explicitly verified.
+#[derive(Clone, Copy, Debug, Zeroize)]
 #[expect(non_snake_case)]
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
 pub struct SchnorrSignature<C: GroupIo> {
+  /// The nonce commitment.
   pub R: C::G,
+  /// The response to the challenge.
   pub s: C::F,
 }
+impl<C: GroupIo> PartialEq for SchnorrSignature<C> {
+  fn eq(&self, other: &Self) -> bool {
+    let Self { R, s } = *self;
+    (R == other.R) && (s == other.s)
+  }
+}
+impl<C: GroupIo> Eq for SchnorrSignature<C> {}
 
 impl<C: GroupIo> SchnorrSignature<C> {
-  /// Read a SchnorrSignature from something implementing Read.
-  pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
-    Ok(SchnorrSignature { R: C::read_G(reader)?, s: C::read_F(reader)? })
+  /// Read from something implementing [`io::Read`].
+  pub fn read(mut reader: impl io::Read) -> io::Result<Self> {
+    Ok(SchnorrSignature { R: C::read_G(&mut reader)?, s: C::read_F(&mut reader)? })
   }
 
-  /// Write a SchnorrSignature to something implementing Read.
-  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  /// Write to something implementing [`io::Write`].
+  pub fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     writer.write_all(self.R.to_bytes().as_ref())?;
     writer.write_all(self.s.to_repr().as_ref())
   }
 
-  /// Serialize a SchnorrSignature, returning a `Vec<u8>`.
+  /// Serialize to a `Vec<u8>`.
   #[cfg(feature = "alloc")]
   pub fn serialize(&self) -> Vec<u8> {
     let mut buf = alloc::vec![];

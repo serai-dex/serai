@@ -72,8 +72,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     for hash in current_mempool.chunks(32) {
       let hash: [u8; 32] = hash.try_into().unwrap();
       let tx: Transaction<T> =
-        Transaction::read::<&[u8]>(&mut res.db.get(res.transaction_key(&hash)).unwrap().as_ref())
-          .unwrap();
+        Transaction::read(res.db.get(res.transaction_key(&hash)).unwrap().as_slice()).unwrap();
       debug_assert_eq!(tx.hash(), hash);
 
       match tx {

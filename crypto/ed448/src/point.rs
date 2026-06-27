@@ -207,9 +207,9 @@ impl Group for Point {
       let mut bytes = FieldElement::random(&mut rng).to_repr();
       let mut_ref: &mut [u8] = bytes.as_mut();
       mut_ref[56] |= u8::try_from(rng.next_u32() % 2).unwrap() << 7;
-      let opt = Self::from_bytes(&bytes);
-      if opt.is_some().into() {
-        return opt.unwrap();
+      let Some(point) = Option::<Self>::from(Self::from_bytes(&bytes)) else { continue };
+      if !bool::from(point.is_identity()) {
+        return point;
       }
     }
   }

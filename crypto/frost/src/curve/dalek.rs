@@ -50,6 +50,7 @@ macro_rules! dalek_curve {
   };
 }
 
+/// The IRTF RFC 9591-defined Ristretto ciphersuite.
 /*
   FROST defined Ristretto as using SHA2-512, while Blake2b512 is considered "preferred" by
   `dalek-ff-group`. We define our own ciphersuite for it accordingly.

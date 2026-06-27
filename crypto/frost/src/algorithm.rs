@@ -12,8 +12,11 @@ use transcript::Transcript;
 use crate::{Participant, ThresholdKeys, ThresholdView, Curve, FrostError};
 pub use schnorr::SchnorrSignature;
 
-/// Write an addendum to a writer.
+/// An addendum which can be written.
 pub trait WriteAddendum {
+  /// Write to a writer.
+  ///
+  /// This MUST only error if the underlying `writer` errors.
   fn write<W: Write>(&self, writer: &mut W) -> io::Result<()>;
 }
 
@@ -24,20 +27,23 @@ impl WriteAddendum for () {
 }
 
 /// Trait alias for the requirements to be used as an addendum.
-pub trait Addendum: Send + Sync + Clone + PartialEq + Debug + WriteAddendum {}
-impl<A: Send + Sync + Clone + PartialEq + Debug + WriteAddendum> Addendum for A {}
+pub trait Addendum: Send + Sync + Clone + WriteAddendum {}
+impl<A: Send + Sync + Clone + WriteAddendum> Addendum for A {}
 
 /// Algorithm trait usable by the FROST signing machine to produce signatures.
+///
+/// Implementations MAY expect to only be called by [`AlgorithmMachine`]
+/// (and associated structures) and MAY exhibit undefined behavior if directly invoked.
 pub trait Algorithm<C: Curve>: Send + Sync {
   /// The transcript format this algorithm uses.
   ///
   /// This MUST NOT be the IRTF-compatible transcript included in this crate UNLESS this is an
   /// IRTF-specified ciphersuite.
-  type Transcript: Sync + Clone + Debug + Transcript;
+  type Transcript: Sync + Clone + Transcript;
   /// Serializable addendum, used in algorithms requiring more data than just the nonces.
   type Addendum: Addendum;
   /// The resulting type of the signatures this algorithm will produce.
-  type Signature: Clone + PartialEq + Debug;
+  type Signature: Clone;
 
   /// Obtain a mutable borrow of the underlying transcript.
   fn transcript(&mut self) -> &mut Self::Transcript;

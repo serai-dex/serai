@@ -1,6 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![no_std] // Prevents writing new code, in what should be a simple wrapper, which requires std
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![no_std]
 
 use core::{
   borrow::Borrow,
@@ -15,9 +16,7 @@ use rand_core::RngCore;
 
 use subtle::{Choice, CtOption};
 
-use curve25519_dalek::{
-  edwards::{EdwardsPoint as DEdwardsPoint, CompressedEdwardsY},
-};
+use curve25519_dalek::edwards::EdwardsPoint as DEdwardsPoint;
 pub use curve25519_dalek::{Scalar, ristretto::RistrettoPoint};
 
 use ::ciphersuite::group::{Group, GroupEncoding, prime::PrimeGroup};
@@ -177,8 +176,6 @@ macro_rules! dalek_group {
     $torsion_free: expr,
 
     $Table: ident,
-
-    $DCompressed: ident,
   ) => {
     /// Wrapper around the dalek Point type.
     ///
@@ -187,6 +184,7 @@ macro_rules! dalek_group {
     /// however, which may lead to undefined/computationally-unsafe behavior, and is entirely at
     /// the user's risk.
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+    #[repr(transparent)]
     pub struct $Point(pub $DPoint);
     deref_borrow!($Point, $DPoint);
     constant_time!($Point, $DPoint);
@@ -236,13 +234,10 @@ macro_rules! dalek_group {
       type Repr = [u8; 32];
 
       fn from_bytes(bytes: &Self::Repr) -> CtOption<Self> {
-        let decompressed = $DCompressed(*bytes).decompress();
-        // TODO: Same note on unwrap_or as above
-        let point = decompressed.unwrap_or($DPoint::identity());
-        CtOption::new(
-          $Point(point),
-          choice(black_box(decompressed).is_some()) & choice($torsion_free(point)),
-        )
+        let point = $DPoint::from_bytes(bytes);
+        let valid = point.is_some();
+        let point = point.unwrap_or($DPoint::identity());
+        CtOption::new($Point(point), valid & choice($torsion_free(point)))
       }
 
       fn from_bytes_unchecked(bytes: &Self::Repr) -> CtOption<Self> {
@@ -263,7 +258,6 @@ dalek_group!(
   DEdwardsPoint,
   |point: DEdwardsPoint| point.is_torsion_free(),
   EdwardsBasepointTable,
-  CompressedEdwardsY,
 );
 
 #[test]

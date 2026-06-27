@@ -1,11 +1,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![no_std]
 
-use prime_field::{
-  subtle::{Choice, CtOption},
-  zeroize::Zeroize,
-};
+use prime_field::subtle::{Choice, CtOption};
 use ciphersuite::group::{ff::PrimeField, Group, GroupEncoding};
 
 pub use curve25519_dalek::Scalar as FieldElement;
@@ -19,7 +17,8 @@ prime_field::odd_prime_field!(
   false
 );
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+/// A ciphersuite defined around the embedwards25519 elliptic curve.
+#[derive(Clone, Copy, Debug)]
 pub struct Embedwards25519;
 
 #[expect(deprecated)] // No other way to construct arbitrary `FieldElement` at compile-time :/
@@ -71,6 +70,7 @@ impl ShortWeierstrass for Embedwards25519 {
   }
 }
 
+/// A point on the embedwards25519 elliptic curve.
 pub type Point = Projective<Embedwards25519>;
 
 impl ciphersuite::WrappedGroup for Embedwards25519 {

@@ -33,7 +33,7 @@ async fn serialize_tendermint() {
   // make a tendermint tx with random evidence
   let (_, signer, _, _) = tendermint_meta().await;
   let tx = random_evidence_tx::<N>(signer.into(), TendermintBlock(vec![])).await;
-  let res = TendermintTx::read::<&[u8]>(&mut tx.serialize().as_ref()).unwrap();
+  let res = TendermintTx::read(tx.serialize().as_slice()).unwrap();
   assert_eq!(res, tx);
 }
 
@@ -292,9 +292,8 @@ async fn conflicting_msgs_evidence_tx() {
     ));
 
     // update schema so that we don't fail due to invalid signature
-    let signer_pub = <Ristretto as GroupIo>::read_G::<&[u8]>(&mut signer_id.as_slice()).unwrap();
-    let signer_pub_2 =
-      <Ristretto as GroupIo>::read_G::<&[u8]>(&mut signed_id_2.as_slice()).unwrap();
+    let signer_pub = <Ristretto as GroupIo>::read_G(signer_id.as_slice()).unwrap();
+    let signer_pub_2 = <Ristretto as GroupIo>::read_G(signed_id_2.as_slice()).unwrap();
     let validators =
       Arc::new(Validators::new(genesis, vec![(signer_pub, 1), (signer_pub_2, 1)]).unwrap());
 

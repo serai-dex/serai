@@ -1,11 +1,11 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![no_std]
 
 use sha2::digest::array::{typenum::U33, Array};
 use k256::elliptic_curve::{
   subtle::{Choice, CtOption, ConstantTimeEq as _, ConditionallySelectable as _},
-  zeroize::Zeroize,
   group::{ff::PrimeField, Group, GroupEncoding},
   sec1::Tag,
 };
@@ -21,13 +21,9 @@ pub use k256::Scalar as FieldElement;
 
 use short_weierstrass::{ShortWeierstrass, Affine, Projective};
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// A ciphersuite defined around the secq256k1 elliptic curve.
+#[derive(Clone, Copy, Debug)]
 pub struct Secq256k1;
-impl Zeroize for Secq256k1 {
-  fn zeroize(&mut self) {
-    let Self = self;
-  }
-}
 
 impl ShortWeierstrass for Secq256k1 {
   type FieldElement = FieldElement;
@@ -106,6 +102,7 @@ impl ShortWeierstrass for Secq256k1 {
   }
 }
 
+/// A point on the secq256k1 elliptic curve.
 pub type Point = Projective<Secq256k1>;
 
 impl ciphersuite::WrappedGroup for Secq256k1 {

@@ -165,12 +165,12 @@ impl ReceivedOutput<<Secp256k1 as WrappedGroup>::G, Address> for Output {
 
     Ok(match kind[0] {
       0 => {
-        let key = Secp256k1::read_G(reader)?;
+        let key = Secp256k1::read_G(&mut *reader)?;
         let instruction = EthereumInInstruction::deserialize_reader(reader)?;
         Self::Output { key, instruction }
       }
       1 => {
-        let key = Secp256k1::read_G(reader)?;
+        let key = Secp256k1::read_G(&mut *reader)?;
         let mut nonce = [0; 8];
         reader.read_exact(&mut nonce)?;
         let nonce = u64::from_le_bytes(nonce);

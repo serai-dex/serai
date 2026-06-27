@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![no_std]
 
 pub use subtle;
@@ -195,6 +196,7 @@ macro_rules! odd_prime_field_with_specific_repr {
 
         /// A field automatically generated with `prime-field`.
         #[derive(Clone, Copy, Eq, Debug)]
+        #[repr(transparent)]
         pub struct $name(Underlying);
 
         impl Default for $name {
@@ -475,6 +477,7 @@ macro_rules! odd_prime_field_with_specific_repr {
         /// The encoded representation of a `$name`.
         // This is required to be bespoke to satisfy `Default`.
         #[derive(Clone, Copy)]
+        #[repr(transparent)]
         pub struct Repr([u8; MODULUS_BYTES]);
         impl Default for Repr {
           fn default() -> Self {
@@ -609,7 +612,8 @@ macro_rules! odd_prime_field_with_specific_repr {
 /// representation and the encoding. It MAY have a "0x" prefix, if preferred.
 ///
 /// `multiplicative_generator_as_be_hex` MAY have a "0x" prefix. It MAY be short and of a length
-/// less than `modulus_as_be_hex`.
+/// less than `modulus_as_be_hex`. It MUST meet the requirements as stated in the documentation for
+/// [`ff::PrimeField::MULTIPLICATIVE_GENERATOR`].
 ///
 /// `big_endian` controls if the encoded representation will be big-endian or not.
 #[macro_export]

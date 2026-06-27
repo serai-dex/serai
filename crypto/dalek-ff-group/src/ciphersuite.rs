@@ -1,5 +1,3 @@
-use zeroize::Zeroize;
-
 use sha2::Sha512;
 use blake2::Blake2b512;
 
@@ -8,7 +6,7 @@ use ::ciphersuite::{group::Group, *};
 use crate::*;
 
 /// Ciphersuite for Ristretto.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+#[derive(Clone, Copy, Debug)]
 pub struct Ristretto;
 impl WrappedGroup for Ristretto {
   type F = Scalar;
@@ -30,7 +28,7 @@ impl GroupCanonicalEncoding for Ristretto {
 }
 
 /// Ciphersuite for Ed25519.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+#[derive(Clone, Copy, Debug)]
 pub struct Ed25519;
 impl WrappedGroup for Ed25519 {
   type F = Scalar;

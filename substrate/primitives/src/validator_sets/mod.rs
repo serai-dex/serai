@@ -105,8 +105,7 @@ impl ValidatorSet {
     let mut decompressed_keys = vec![];
     for key in deduplicated_keys {
       decompressed_keys.push(
-        <Ristretto as GroupIo>::read_G::<&[u8]>(&mut key.0.as_slice())
-          .map_err(|_| MusigKeyError::InvalidKey)?,
+        <Ristretto as GroupIo>::read_G(key.0.as_slice()).map_err(|_| MusigKeyError::InvalidKey)?,
       );
     }
 

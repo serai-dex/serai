@@ -41,7 +41,7 @@ impl NonceTransaction {
 }
 
 impl ReadWrite for NonceTransaction {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+  fn read(mut reader: impl io::Read) -> io::Result<Self> {
     let mut nonce = [0; 4];
     reader.read_exact(&mut nonce)?;
     let nonce = u32::from_le_bytes(nonce);
@@ -52,7 +52,7 @@ impl ReadWrite for NonceTransaction {
     Ok(NonceTransaction::new(nonce, distinguisher[0]))
   }
 
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     writer.write_all(&self.0.to_le_bytes())?;
     writer.write_all(&[self.1])
   }

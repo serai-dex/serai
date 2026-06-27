@@ -1,11 +1,12 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![no_std]
 
 use core::ops::Deref as _;
 use std_shims::{
   prelude::*,
-  io::{self, Read, Write},
+  io,
   collections::{HashSet, HashMap},
 };
 
@@ -50,23 +51,32 @@ extern crate std;
 /// participant will encode the same polynomial however (even if the participations serialize
 /// differently).
 #[derive(Clone)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct Participation<C: Curves> {
   proof: Vec<u8>,
-  /// These are `(to, share)`.
+  // These are `(to, share)`.
   encrypted_secret_shares: HashMap<Participant, <C::ToweringCurve as WrappedGroup>::F>,
 }
 
+#[cfg(test)]
+impl<C: Curves> PartialEq for Participation<C> {
+  fn eq(&self, other: &Self) -> bool {
+    let Self { proof, encrypted_secret_shares } = self;
+    (proof == &other.proof) && (encrypted_secret_shares == &other.encrypted_secret_shares)
+  }
+}
+#[cfg(test)]
+impl<C: Curves> Eq for Participation<C> {}
+
 impl<C: Curves> Participation<C> {
   /// Read a participation of length variable to the `t, n` parameters.
-  pub fn read<R: Read>(reader: &mut R, t: u16, n: u16) -> io::Result<Self> {
+  pub fn read(mut reader: impl io::Read, t: u16, n: u16) -> io::Result<Self> {
     let mut proof = vec![0; Proof::<C>::transcript_len(t.into(), n.into())];
     reader.read_exact(&mut proof)?;
 
     let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
     for i in Participant::iter().take(usize::from(n)) {
       assert!(encrypted_secret_shares
-        .insert(i, <C::ToweringCurve as GroupIo>::read_F(reader)?)
+        .insert(i, <C::ToweringCurve as GroupIo>::read_F(&mut reader)?)
         .is_none());
     }
 
@@ -74,7 +84,7 @@ impl<C: Curves> Participation<C> {
   }
 
   /// Write the participation.
-  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     writer.write_all(&self.proof)?;
     for i in Participant::iter().take(self.encrypted_secret_shares.len()) {
       writer.write_all(self.encrypted_secret_shares[&i].to_repr().as_ref())?;

@@ -109,7 +109,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
 
   pub(crate) fn block_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Block<T>> {
     db.get(Self::block_key(&genesis, block))
-      .map(|bytes| Block::<T>::read::<&[u8]>(&mut bytes.as_slice()).unwrap())
+      .map(|bytes| Block::<T>::read(bytes.as_slice()).unwrap())
   }
 
   pub(crate) fn commit_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Vec<u8>> {

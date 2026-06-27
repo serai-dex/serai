@@ -93,15 +93,15 @@ impl<P: KeyGenParams> KeyGenDb<P> {
         .substrate_evrf_public_keys
         .into_iter()
         .map(|key| {
-          <<Ristretto as Curves>::EmbeddedCurve as GroupIo>::read_G(&mut key.as_slice()).unwrap()
+          <<Ristretto as Curves>::EmbeddedCurve as GroupIo>::read_G(key.as_slice()).unwrap()
         })
         .collect(),
       network_evrf_public_keys: params
         .network_evrf_public_keys
         .into_iter()
         .map(|key| {
-          <<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as GroupIo>::read_G::<&[u8]>(
-            &mut key.as_ref(),
+          <<P::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as GroupIo>::read_G(
+            key.as_slice(),
           )
           .unwrap()
         })

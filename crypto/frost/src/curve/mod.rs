@@ -1,8 +1,5 @@
 use core::{ops::Deref as _, convert::AsRef};
-use std_shims::{
-  prelude::*,
-  io::{self, Read},
-};
+use std_shims::{prelude::*, io};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -134,7 +131,7 @@ pub trait Curve: GroupIo + Ciphersuite {
 
   /// Read a point from a reader, rejecting identity.
   #[expect(non_snake_case)]
-  fn read_G<R: Read>(reader: &mut R) -> io::Result<Self::G> {
+  fn read_G(reader: impl io::Read) -> io::Result<Self::G> {
     let res = <Self as GroupIo>::read_G(reader)?;
     if res.is_identity().into() {
       Err(io::Error::other("identity point"))?;

@@ -6,11 +6,7 @@
 // Each nonce remains of the form (d, e) and made into a proper nonce with d + (e * b)
 
 use core::ops::Deref as _;
-use std_shims::{
-  prelude::*,
-  io::{self, Read, Write},
-  collections::HashMap,
-};
+use std_shims::{prelude::*, io, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -29,26 +25,47 @@ use crate::{curve::Curve, Participant};
 pub(crate) struct Nonce<C: Curve>(pub(crate) [Zeroizing<C::F>; 2]);
 
 // Commitments to a specific generator for this binomial nonce
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone)]
 pub(crate) struct GeneratorCommitments<C: Curve>(pub(crate) [C::G; 2]);
 impl<C: Curve> GeneratorCommitments<C> {
-  fn read<R: Read>(reader: &mut R) -> io::Result<GeneratorCommitments<C>> {
-    Ok(GeneratorCommitments([<C as Curve>::read_G(reader)?, <C as Curve>::read_G(reader)?]))
+  fn read(mut reader: impl io::Read) -> io::Result<GeneratorCommitments<C>> {
+    Ok(GeneratorCommitments([
+      <C as Curve>::read_G(&mut reader)?,
+      <C as Curve>::read_G(&mut reader)?,
+    ]))
   }
 
-  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     writer.write_all(self.0[0].to_bytes().as_ref())?;
     writer.write_all(self.0[1].to_bytes().as_ref())
   }
 }
 
+// TODO: Remove
+impl<C: Curve> PartialEq for GeneratorCommitments<C> {
+  fn eq(&self, other: &Self) -> bool {
+    let Self(commitments) = self;
+    commitments == &other.0
+  }
+}
+impl<C: Curve> Eq for GeneratorCommitments<C> {}
+
 // A single nonce's commitments
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub(crate) struct NonceCommitments<C: Curve> {
   // Called generators as these commitments are indexed by generator later on
   // So to get the commitments for the first generator, it'd be commitments.generators[0]
   pub(crate) generators: Vec<GeneratorCommitments<C>>,
 }
+
+// TODO: Remove
+impl<C: Curve> PartialEq for NonceCommitments<C> {
+  fn eq(&self, other: &Self) -> bool {
+    let Self { generators } = self;
+    generators == &other.generators
+  }
+}
+impl<C: Curve> Eq for NonceCommitments<C> {}
 
 impl<C: Curve> NonceCommitments<C> {
   pub(crate) fn new<R: RngCore + CryptoRng>(
@@ -72,17 +89,17 @@ impl<C: Curve> NonceCommitments<C> {
     (nonce, NonceCommitments { generators: commitments })
   }
 
-  fn read<R: Read>(reader: &mut R, generators: &[C::G]) -> io::Result<NonceCommitments<C>> {
+  fn read(mut reader: impl io::Read, generators: &[C::G]) -> io::Result<NonceCommitments<C>> {
     Ok(NonceCommitments {
       generators: (0 .. generators.len())
-        .map(|_| GeneratorCommitments::read(reader))
+        .map(|_| GeneratorCommitments::read(&mut reader))
         .collect::<Result<_, _>>()?,
     })
   }
 
-  fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     for generator in &self.generators {
-      generator.write(writer)?;
+      generator.write(&mut writer)?;
     }
     Ok(())
   }
@@ -97,12 +114,21 @@ impl<C: Curve> NonceCommitments<C> {
 }
 
 /// Commitments for all the nonces across all their generators.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 pub(crate) struct Commitments<C: Curve> {
   // Called nonces as these commitments are indexed by nonce
   // So to get the commitments for the first nonce, it'd be commitments.nonces[0]
   pub(crate) nonces: Vec<NonceCommitments<C>>,
 }
+
+// TODO: Remove
+impl<C: Curve> PartialEq for Commitments<C> {
+  fn eq(&self, other: &Self) -> bool {
+    let Self { nonces } = self;
+    nonces == &other.nonces
+  }
+}
+impl<C: Curve> Eq for Commitments<C> {}
 
 impl<C: Curve> Commitments<C> {
   pub(crate) fn new<R: RngCore + CryptoRng>(
@@ -131,17 +157,17 @@ impl<C: Curve> Commitments<C> {
     }
   }
 
-  pub(crate) fn read<R: Read>(reader: &mut R, generators: &[Vec<C::G>]) -> io::Result<Self> {
+  pub(crate) fn read(mut reader: impl io::Read, generators: &[Vec<C::G>]) -> io::Result<Self> {
     let nonces = (0 .. generators.len())
-      .map(|i| NonceCommitments::read(reader, &generators[i]))
+      .map(|i| NonceCommitments::read(&mut reader, &generators[i]))
       .collect::<Result<Vec<NonceCommitments<C>>, _>>()?;
 
     Ok(Commitments { nonces })
   }
 
-  pub(crate) fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub(crate) fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     for nonce in &self.nonces {
-      nonce.write(writer)?;
+      nonce.write(&mut writer)?;
     }
     Ok(())
   }

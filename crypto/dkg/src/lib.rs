@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![no_std]
 
 use core::{
@@ -582,7 +583,7 @@ impl<C: GroupIo + Id> ThresholdKeys<C> {
   }
 
   /// Read keys from a type satisfying `std::io::Read`.
-  pub fn read<R: io::Read>(reader: &mut R) -> io::Result<ThresholdKeys<C>> {
+  pub fn read(mut reader: impl io::Read) -> io::Result<ThresholdKeys<C>> {
     {
       let different = || io::Error::other("deserializing ThresholdKeys for another curve");
 
@@ -618,7 +619,7 @@ impl<C: GroupIo + Id> ThresholdKeys<C> {
       0 => Interpolation::Constant({
         let mut res = Vec::with_capacity(usize::from(n));
         for _ in 0 .. n {
-          res.push(C::read_F(reader)?);
+          res.push(C::read_F(&mut reader)?);
         }
         res
       }),
@@ -626,11 +627,11 @@ impl<C: GroupIo + Id> ThresholdKeys<C> {
       _ => Err(io::Error::other("invalid interpolation method"))?,
     };
 
-    let secret_share = Zeroizing::new(C::read_F(reader)?);
+    let secret_share = Zeroizing::new(C::read_F(&mut reader)?);
 
     let mut verification_shares = HashMap::new();
     for l in Participant::iter().take(usize::from(n)) {
-      verification_shares.insert(l, C::read_G(reader)?);
+      verification_shares.insert(l, C::read_G(&mut reader)?);
     }
 
     ThresholdKeys::new(

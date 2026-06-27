@@ -64,8 +64,8 @@ impl BorshSerialize for Signed {
 }
 impl BorshDeserialize for Signed {
   fn deserialize_reader<R: io::Read>(reader: &mut R) -> Result<Self, io::Error> {
-    let signer = Ristretto::read_G(reader)?;
-    let signature = SchnorrSignature::read(reader)?;
+    let signer = Ristretto::read_G(&mut *reader)?;
+    let signature = SchnorrSignature::read(&mut *reader)?;
     Ok(Self { signer, signature })
   }
 }
@@ -232,11 +232,11 @@ pub enum Transaction {
 }
 
 impl ReadWrite for Transaction {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    Self::deserialize_reader(reader)
+  fn read(mut reader: impl io::Read) -> io::Result<Self> {
+    Self::deserialize_reader(&mut reader)
   }
 
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write(&self, writer: impl io::Write) -> io::Result<()> {
     borsh::to_writer(writer, self)
   }
 }

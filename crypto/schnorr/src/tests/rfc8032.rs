@@ -47,10 +47,8 @@ const VECTORS: [(&str, &str, &str); 5] = [
 #[test]
 fn test_rfc8032() {
   for vector in VECTORS {
-    let key = Ed25519::read_G::<&[u8]>(&mut hex::decode(vector.0).unwrap().as_ref()).unwrap();
-    let sig =
-      SchnorrSignature::<Ed25519>::read::<&[u8]>(&mut hex::decode(vector.2).unwrap().as_ref())
-        .unwrap();
+    let key = Ed25519::read_G(hex::decode(vector.0).unwrap().as_slice()).unwrap();
+    let sig = SchnorrSignature::<Ed25519>::read(hex::decode(vector.2).unwrap().as_slice()).unwrap();
     let hram = Sha512::new_with_prefix(
       [sig.R.to_bytes().as_ref(), &key.to_bytes(), &hex::decode(vector.1).unwrap()].concat(),
     );

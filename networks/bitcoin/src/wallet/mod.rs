@@ -121,8 +121,8 @@ impl ReceivedOutput {
   }
 
   /// Read a [`ReceivedOutput`] from a generic satisfying [`Read`].
-  pub fn read<R: Read>(r: &mut R) -> io::Result<ReceivedOutput> {
-    let offset = Secp256k1::read_F(r)?;
+  pub fn read(mut reader: impl Read) -> io::Result<ReceivedOutput> {
+    let offset = Secp256k1::read_F(&mut reader)?;
 
     struct BitcoinRead<R: Read>(R);
     impl<R: Read> bitcoin::io::Read for BitcoinRead<R> {
@@ -133,19 +133,20 @@ impl ReceivedOutput {
           .map_err(|e| bitcoin::io::Error::new(bitcoin::io::ErrorKind::Other, e.to_string()))
       }
     }
-    let mut r = BitcoinRead(r);
+    let mut reader = BitcoinRead(reader);
 
-    let output = TxOut::consensus_decode(&mut r).map_err(|_| io::Error::other("invalid TxOut"))?;
+    let output =
+      TxOut::consensus_decode(&mut reader).map_err(|_| io::Error::other("invalid TxOut"))?;
     let outpoint =
-      OutPoint::consensus_decode(&mut r).map_err(|_| io::Error::other("invalid OutPoint"))?;
+      OutPoint::consensus_decode(&mut reader).map_err(|_| io::Error::other("invalid OutPoint"))?;
     Ok(ReceivedOutput { offset, output, outpoint })
   }
 
   /// Write a [`ReceivedOutput`] to a generic satisfying [`Write`].
-  pub fn write<W: Write>(&self, w: &mut W) -> io::Result<()> {
-    w.write_all(&self.offset.to_bytes())?;
-    w.write_all(&serialize(&self.output))?;
-    w.write_all(&serialize(&self.outpoint))
+  pub fn write(&self, mut writer: impl Write) -> io::Result<()> {
+    writer.write_all(&self.offset.to_bytes())?;
+    writer.write_all(&serialize(&self.output))?;
+    writer.write_all(&serialize(&self.outpoint))
   }
 
   /// Serialize a [`ReceivedOutput`] to a `Vec<u8>`.

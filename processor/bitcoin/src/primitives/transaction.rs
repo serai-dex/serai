@@ -97,12 +97,12 @@ impl scheduler::SignableTransaction for SignableTransaction {
       reader.read_exact(&mut input_len)?;
       let mut inputs = vec![];
       for _ in 0 .. u32::from_le_bytes(input_len) {
-        inputs.push(ReceivedOutput::read(reader)?);
+        inputs.push(ReceivedOutput::read(&mut *reader)?);
       }
       inputs
     };
 
-    let payments = Vec::<(Vec<u8>, u64)>::deserialize_reader(reader)?;
+    let payments = Vec::<(Vec<u8>, u64)>::deserialize_reader(&mut *reader)?;
     let change = <_>::deserialize_reader(reader)?;
     let fee_per_vbyte = <_>::deserialize_reader(reader)?;
 
@@ -119,13 +119,13 @@ impl scheduler::SignableTransaction for SignableTransaction {
   fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
     writer.write_all(&u32::try_from(self.inputs.len()).unwrap().to_le_bytes())?;
     for input in &self.inputs {
-      input.write(writer)?;
+      input.write(&mut *writer)?;
     }
 
     for payment in &self.payments {
       (payment.0.as_script().as_bytes(), payment.1).serialize(writer)?;
     }
-    self.change.serialize(writer)?;
+    self.change.serialize(&mut *writer)?;
     self.fee_per_vbyte.serialize(writer)?;
 
     Ok(())

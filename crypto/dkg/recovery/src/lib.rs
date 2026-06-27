@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![no_std]
 
 use core::ops::{Deref as _, DerefMut as _};
@@ -20,7 +21,12 @@ pub enum RecoveryError {
   NoKeysProvided,
   /// Not enough keys were provided.
   #[error("not enough keys provided (threshold required {required}, provided {provided})")]
-  NotEnoughKeysProvided { required: u16, provided: usize },
+  NotEnoughKeysProvided {
+    /// The amount of keys which were required.
+    required: u16,
+    /// The amount of keys which were provided.
+    provided: usize,
+  },
   /// The keys had inconsistent parameters.
   #[error("keys had inconsistent parameters")]
   InconsistentParameters,

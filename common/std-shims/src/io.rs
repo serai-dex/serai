@@ -124,6 +124,12 @@ mod shims {
     }
   }
 
+  impl<W: Write> Write for &mut W {
+    fn write(&mut self, buf: &[u8]) -> Result<usize> {
+      W::write(*self, buf)
+    }
+  }
+
   #[cfg(feature = "alloc")]
   impl Write for Vec<u8> {
     fn write(&mut self, buf: &[u8]) -> Result<usize> {

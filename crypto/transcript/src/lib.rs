@@ -1,5 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![no_std]
 
 use zeroize::ZeroizeOnDrop;
@@ -17,6 +18,7 @@ pub mod tests;
 
 /// A transcript trait valid over a variety of transcript formats.
 pub trait Transcript: Send + Clone {
+  /// A challenge sampled from the transcript.
   type Challenge: Send + Sync + Clone + AsRef<[u8]>;
 
   /// Create a new transcript with the specified name.

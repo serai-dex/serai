@@ -1,9 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("lib.md")]
+#![deny(missing_docs)]
 #![no_std]
 
 use core::fmt::Debug;
-use std_shims::io::{self, Read};
+use std_shims::io;
 
 use subtle::{CtOption, ConstantTimeEq, ConditionallySelectable};
 use zeroize::Zeroize;
@@ -19,7 +20,11 @@ use group::{
 };
 use group::GroupEncoding;
 
+/// A wrapper trait for [`group::ff::FromUniformBytes`] which relaxes from `[u8; N]` to `T`.
+///
+/// This is present solely as a workaround for the lack of `generic_const_exprs`.
 pub trait FromUniformBytes<T> {
+  /// Convert a sequence of uniformly-distributed bytes into a uniformly-distributed field element.
   fn from_uniform_bytes(bytes: &T) -> Self;
 }
 impl<const N: usize, F: group::ff::FromUniformBytes<N>> FromUniformBytes<[u8; N]> for F {
@@ -52,9 +57,7 @@ impl<
 ///
 /// This avoids having to re-implement all of the `Group` traits on the wrapper.
 // TODO: Remove these bounds
-pub trait WrappedGroup:
-  'static + Send + Sync + Clone + Copy + PartialEq + Eq + Debug + Zeroize
-{
+pub trait WrappedGroup: 'static + Send + Sync + Clone + Copy + Debug {
   /// Scalar field element type.
   // This is available via `G::Scalar` yet `WG::G::Scalar` is ambiguous, forcing horrific accesses
   type F: F;
@@ -71,10 +74,10 @@ impl<Gr: G<Scalar: F>> WrappedGroup for Gr {
   }
 }
 
-/// An ID for an object.
+/// An ID for an elliptic curve/ciphersuite.
 pub trait Id {
-  // The ID.
-  const ID: &'static [u8];
+  /// The ID.
+  const ID: &[u8];
 }
 
 /// A group with a preferred hash function.
@@ -83,22 +86,36 @@ pub trait WithPreferredHash:
   F: FromUniformBytes<<<Self::H as OutputSizeUser>::OutputSize as ArraySize>::ArrayType<u8>>,
 >
 {
+  /// The preferred cryptographically-secure hash function for usage with this elliptic curve.
+  ///
+  /// The output of this hash function MUST be of the necessary length to derive uniform scalar
+  /// field elements.
   type H: Send + Clone + Digest + HashMarker;
+
+  /// Hash the specified `data` into a uniformly-distributed scalar field element.
+  ///
+  /// This hashes the data as-is with no modifications nor prefixing nor contextualization.
   #[expect(non_snake_case)]
-  fn hash_to_F(data: &[u8]) -> Self::F {
+  fn hash_to_F(data: impl AsRef<[u8]>) -> Self::F {
     Self::F::from_uniform_bytes(&Self::H::digest(data).into())
   }
 }
 
 /// A group which always encodes points canonically and supports decoding points while checking
-/// they have a canonical encoding.
+/// they were canonically encoded.
+///
+/// This exists as [`group::ff::PrimeField::from_repr`] does assert the input was
+/// canonically-encoded but [`group::GroupEncoding::from_bytes`] does not, with no alternative
+/// function to accomplish this.
 pub trait GroupCanonicalEncoding: WrappedGroup {
   /// Decode a point from its canonical encoding.
   ///
   /// Returns `None` if the point was invalid or not the encoding wasn't canonical.
   ///
   /// If `<Self::G as GroupEncoding>::from_bytes` already only accepts canonical encodings, this
-  /// SHOULD be overriden with `<Self::G as GroupEncoding>::from_bytes(bytes)`.
+  /// SHOULD be overriden with `<Self::G as GroupEncoding>::from_bytes(bytes)`. The provided
+  /// implementation will re-encode the point and compare it to the original encoding to check
+  /// they're equivalent.
   fn from_canonical_bytes(bytes: &<Self::G as GroupEncoding>::Repr) -> CtOption<Self::G> {
     let res = Self::G::from_bytes(bytes).unwrap_or(Self::generator());
     // Safe due to the bound points are always encoded canonically
@@ -107,11 +124,11 @@ pub trait GroupCanonicalEncoding: WrappedGroup {
   }
 }
 
-/// `std::io` extensions for `GroupCanonicalEncoding.`
+/// [`std::io`] extensions for [`GroupCanonicalEncoding`].
 #[expect(non_snake_case)]
 pub trait GroupIo: GroupCanonicalEncoding {
-  /// Read a canonical field element from something implementing `std::io::Read`.
-  fn read_F<R: Read>(reader: &mut R) -> io::Result<Self::F> {
+  /// Read a canonically-encoded scalar field element from something implementing [`std::io::Read`].
+  fn read_F(mut reader: impl io::Read) -> io::Result<Self::F> {
     let mut bytes = <Self::F as PrimeField>::Repr::default();
     reader.read_exact(bytes.as_mut())?;
 
@@ -123,8 +140,8 @@ pub trait GroupIo: GroupCanonicalEncoding {
     res
   }
 
-  /// Read a canonical point from something implementing `std::io::Read`.
-  fn read_G<R: Read>(reader: &mut R) -> io::Result<Self::G> {
+  /// Read a canonically-encoded point from something implementing [`std::io::Read`].
+  fn read_G(mut reader: impl io::Read) -> io::Result<Self::G> {
     let mut bytes = <Self::G as GroupEncoding>::Repr::default();
     reader.read_exact(bytes.as_mut())?;
 

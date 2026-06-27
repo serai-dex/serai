@@ -24,14 +24,14 @@ fn ed448_8032_vector() {
   let context = hex::decode("666f6f").unwrap();
 
   #[expect(non_snake_case)]
-  let A = Ed448::read_G::<&[u8]>(
-    &mut hex::decode(
+  let A = Ed448::read_G(
+    hex::decode(
       "43ba28f430cdff456ae531545f7ecd0ac834a55d9358c0372bfa0c6c".to_owned() +
         "6798c0866aea01eb00742802b8438ea4cb82169c235160627b4c3a94" +
         "80",
     )
     .unwrap()
-    .as_ref(),
+    .as_slice(),
   )
   .unwrap();
 
@@ -47,8 +47,8 @@ fn ed448_8032_vector() {
   )
   .unwrap();
   #[expect(non_snake_case)]
-  let R = Ed448::read_G::<&[u8]>(&mut sig.as_ref()).unwrap();
-  let s = Ed448::read_F::<&[u8]>(&mut &sig[57 ..]).unwrap();
+  let R = Ed448::read_G(sig.as_slice()).unwrap();
+  let s = Ed448::read_F(&sig[57 ..]).unwrap();
 
   assert!(
     SchnorrSignature::<Ed448> { R, s }.verify(A, Irtf8032Ed448Hram::hram(&context, &R, &A, &msg))

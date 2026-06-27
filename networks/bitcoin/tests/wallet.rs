@@ -60,10 +60,7 @@ async fn send_and_get_output(rpc: &Rpc, scanner: &Scanner, key: ProjectivePoint)
   assert_eq!(outputs[0].outpoint(), &OutPoint::new(block.txdata[0].compute_txid(), 0));
   assert_eq!(outputs[0].value(), block.txdata[0].output[0].value.to_sat());
 
-  assert_eq!(
-    ReceivedOutput::read::<&[u8]>(&mut outputs[0].serialize().as_ref()).unwrap(),
-    outputs[0]
-  );
+  assert_eq!(ReceivedOutput::read(outputs[0].serialize().as_slice()).unwrap(), outputs[0]);
 
   outputs.swap_remove(0)
 }
@@ -218,7 +215,7 @@ async_sequential! {
     let outputs = scanner.scan_transaction(&tx);
     for (o, output) in outputs.iter().enumerate() {
       assert_eq!(output.outpoint(), &OutPoint::new(tx.compute_txid(), u32::try_from(o).unwrap()));
-      assert_eq!(&ReceivedOutput::read::<&[u8]>(&mut output.serialize().as_ref()).unwrap(), output);
+      assert_eq!(&ReceivedOutput::read(output.serialize().as_slice()).unwrap(), output);
     }
 
     assert_eq!(outputs[0].offset(), Scalar::ZERO);

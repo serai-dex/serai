@@ -74,7 +74,7 @@ pub enum Transaction<T: TransactionTrait> {
 }
 
 impl<T: TransactionTrait> ReadWrite for Transaction<T> {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+  fn read(mut reader: impl io::Read) -> io::Result<Self> {
     let mut kind = [0];
     reader.read_exact(&mut kind)?;
     match kind[0] {
@@ -89,7 +89,7 @@ impl<T: TransactionTrait> ReadWrite for Transaction<T> {
       _ => Err(io::Error::other("invalid transaction type")),
     }
   }
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     match self {
       Transaction::Tendermint(tx) => {
         writer.write_all(&[0])?;
@@ -121,8 +121,8 @@ impl<T: TransactionTrait> Transaction<T> {
 
 /// An item which can be read and written.
 pub trait ReadWrite: Sized {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self>;
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()>;
+  fn read(reader: impl io::Read) -> io::Result<Self>;
+  fn write(&self, writer: impl io::Write) -> io::Result<()>;
 
   fn serialize(&self) -> Vec<u8> {
     // BlockHeader is 64 bytes and likely the smallest item in this system
@@ -321,7 +321,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
   pub async fn handle_message(&self, msg: &[u8]) -> bool {
     match msg.first() {
       Some(&TRANSACTION_MESSAGE) => {
-        let Ok(tx) = Transaction::read::<&[u8]>(&mut &msg[1 ..]) else {
+        let Ok(tx) = Transaction::read(&msg[1 ..]) else {
           log::error!("received invalid transaction message");
           return false;
         };

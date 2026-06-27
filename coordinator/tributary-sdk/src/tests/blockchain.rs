@@ -402,7 +402,7 @@ async fn block_tx_ordering() {
     Provided(Box<ProvidedTransaction>),
   }
   impl ReadWrite for SignedTx {
-    fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    fn read(mut reader: impl io::Read) -> io::Result<Self> {
       let mut kind = [0];
       reader.read_exact(&mut kind)?;
       match kind[0] {
@@ -412,7 +412,7 @@ async fn block_tx_ordering() {
       }
     }
 
-    fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
       match self {
         SignedTx::Signed(signed) => {
           writer.write_all(&[0])?;

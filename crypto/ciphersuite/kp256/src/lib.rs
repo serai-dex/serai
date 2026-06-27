@@ -1,7 +1,7 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
 #![no_std]
-
-use zeroize::Zeroize;
 
 use sha2::Sha512;
 
@@ -26,7 +26,7 @@ macro_rules! kp_curve {
       }
     }
     impl Id for $Ciphersuite {
-      const ID: &'static [u8] = $ID;
+      const ID: &[u8] = $ID;
     }
     impl WithPreferredHash for $Ciphersuite {
       type H = Sha512;
@@ -36,7 +36,7 @@ macro_rules! kp_curve {
 }
 
 /// Ciphersuite for Secp256k1.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+#[derive(Clone, Copy, Debug)]
 pub struct Secp256k1;
 kp_curve!("secp256k1", k256, Secp256k1, b"secp256k1");
 #[test]
@@ -45,7 +45,7 @@ fn test_secp256k1() {
 }
 
 /// Ciphersuite for P-256.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+#[derive(Clone, Copy, Debug)]
 pub struct P256;
 kp_curve!("p256", p256, P256, b"P-256");
 #[test]

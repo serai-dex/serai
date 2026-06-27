@@ -1,7 +1,4 @@
-use std_shims::{
-  prelude::*,
-  io::{self, Read, Write},
-};
+use std_shims::{prelude::*, io};
 
 use zeroize::Zeroize;
 
@@ -34,23 +31,23 @@ pub struct SchnorrAggregate<C: GroupIo + WithPreferredHash> {
 
 impl<C: GroupIo + WithPreferredHash> SchnorrAggregate<C> {
   /// Read a SchnorrAggregate from something implementing Read.
-  pub fn read<R: Read>(reader: &mut R) -> io::Result<Self> {
+  pub fn read(mut reader: impl io::Read) -> io::Result<Self> {
     let mut len = [0; 4];
     reader.read_exact(&mut len)?;
 
     #[expect(non_snake_case)]
     let mut Rs = vec![];
     for _ in 0 .. u32::from_le_bytes(len) {
-      Rs.push(C::read_G(reader)?);
+      Rs.push(C::read_G(&mut reader)?);
     }
 
-    Ok(SchnorrAggregate { Rs, s: C::read_F(reader)? })
+    Ok(SchnorrAggregate { Rs, s: C::read_F(&mut reader)? })
   }
 
   /// Write a SchnorrAggregate to something implementing Write.
   ///
   /// This will panic if more than 4 billion signatures were aggregated.
-  pub fn write<W: Write>(&self, writer: &mut W) -> io::Result<()> {
+  pub fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     writer.write_all(
       &u32::try_from(self.Rs.len())
         .expect("more than 4 billion signatures in aggregate")
@@ -70,6 +67,7 @@ impl<C: GroupIo + WithPreferredHash> SchnorrAggregate<C> {
     buf
   }
 
+  /// The list of nonce commitments within this aggregate signature.
   #[expect(non_snake_case)]
   pub fn Rs(&self) -> &[C::G] {
     self.Rs.as_slice()

@@ -56,14 +56,14 @@ pub struct BlockHeader {
 }
 
 impl ReadWrite for BlockHeader {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+  fn read(mut reader: impl io::Read) -> io::Result<Self> {
     let mut header = BlockHeader { parent: [0; 32], transactions: [0; 32] };
     reader.read_exact(&mut header.parent)?;
     reader.read_exact(&mut header.transactions)?;
     Ok(header)
   }
 
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+  fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
     writer.write_all(&self.parent)?;
     writer.write_all(&self.transactions)
   }
@@ -82,8 +82,8 @@ pub struct Block<T: TransactionTrait> {
 }
 
 impl<T: TransactionTrait> ReadWrite for Block<T> {
-  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
-    let header = BlockHeader::read(reader)?;
+  fn read(mut reader: impl io::Read) -> io::Result<Self> {
+    let header = BlockHeader::read(&mut reader)?;
 
     let mut txs = [0; 4];
     reader.read_exact(&mut txs)?;
@@ -91,17 +91,17 @@ impl<T: TransactionTrait> ReadWrite for Block<T> {
 
     let mut transactions = vec![];
     for _ in 0 .. txs {
-      transactions.push(Transaction::read(reader)?);
+      transactions.push(Transaction::read(&mut reader)?);
     }
 
     Ok(Block { header, transactions })
   }
 
-  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    self.header.write(writer)?;
+  fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
+    self.header.write(&mut writer)?;
     writer.write_all(&u32::try_from(self.transactions.len()).unwrap().to_le_bytes())?;
     for tx in &self.transactions {
-      tx.write(writer)?;
+      tx.write(&mut writer)?;
     }
     Ok(())
   }

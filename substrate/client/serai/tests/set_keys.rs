@@ -58,17 +58,14 @@ pub async fn set_keys(
 ) -> BlockHash {
   let mut pub_keys = vec![];
   for pair in pairs {
-    let public_key =
-      <Ristretto as GroupIo>::read_G::<&[u8]>(&mut pair.public().0.as_ref()).unwrap();
+    let public_key = <Ristretto as GroupIo>::read_G(pair.public().0.as_slice()).unwrap();
     pub_keys.push(public_key);
   }
 
   let mut musig_keys = HashMap::new();
   for i in 0 .. pairs.len() {
-    let secret_key = <Ristretto as GroupIo>::read_F::<&[u8]>(
-      &mut pairs[i].as_ref().secret.to_bytes()[.. 32].as_ref(),
-    )
-    .unwrap();
+    let secret_key =
+      <Ristretto as GroupIo>::read_F(&pairs[i].as_ref().secret.to_bytes()[.. 32]).unwrap();
     assert_eq!(Ristretto::generator() * secret_key, pub_keys[i]);
 
     let keys = musig::<Ristretto>(

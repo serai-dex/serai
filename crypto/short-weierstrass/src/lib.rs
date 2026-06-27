@@ -1,7 +1,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![no_std]
+#![deny(missing_docs)]
 #![expect(non_snake_case)]
+#![no_std]
 
 use core::fmt::Debug;
 

@@ -65,8 +65,8 @@ impl<D: Db, T: Transaction> ProvidedTransactions<D, T> {
     let currently_provided = res.db.get(res.current_provided_key()).unwrap_or(vec![]);
     let mut i = 0;
     while i < currently_provided.len() {
-      let tx = T::read::<&[u8]>(
-        &mut res.db.get(res.transaction_key(&currently_provided[i .. (i + 32)])).unwrap().as_ref(),
+      let tx = T::read(
+        res.db.get(res.transaction_key(&currently_provided[i .. (i + 32)])).unwrap().as_slice(),
       )
       .unwrap();
 

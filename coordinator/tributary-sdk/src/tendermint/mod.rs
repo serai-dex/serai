@@ -180,10 +180,10 @@ impl SignatureScheme for Validators {
     if !self.weights.contains_key(&validator) {
       return false;
     }
-    let Ok(validator_point) = Ristretto::read_G::<&[u8]>(&mut validator.as_ref()) else {
+    let Ok(validator_point) = Ristretto::read_G(validator.as_slice()) else {
       return false;
     };
-    let Ok(actual_sig) = SchnorrSignature::<Ristretto>::read::<&[u8]>(&mut sig.as_ref()) else {
+    let Ok(actual_sig) = SchnorrSignature::<Ristretto>::read(sig.as_slice()) else {
       return false;
     };
     actual_sig.verify(validator_point, challenge(self.genesis, validator, &sig[.. 32], msg))
@@ -199,7 +199,7 @@ impl SignatureScheme for Validators {
 
     let mut aggregator = SchnorrAggregator::<Ristretto>::new(DST);
     for (key, sig) in validators.iter().zip(sigs) {
-      let actual_sig = SchnorrSignature::<Ristretto>::read::<&[u8]>(&mut sig.as_ref()).unwrap();
+      let actual_sig = SchnorrSignature::<Ristretto>::read(sig.as_slice()).unwrap();
       let challenge = challenge(self.genesis, *key, actual_sig.R.to_bytes().as_ref(), msg);
       aggregator.aggregate(challenge, actual_sig);
     }
@@ -214,7 +214,7 @@ impl SignatureScheme for Validators {
     msg: &[u8],
     sig: &Self::AggregateSignature,
   ) -> bool {
-    let Ok(aggregate) = SchnorrAggregate::<Ristretto>::read::<&[u8]>(&mut sig.as_slice()) else {
+    let Ok(aggregate) = SchnorrAggregate::<Ristretto>::read(sig.as_slice()) else {
       return false;
     };
 
@@ -232,7 +232,7 @@ impl SignatureScheme for Validators {
       signers
         .iter()
         .zip(challenges)
-        .map(|(s, c)| (<Ristretto as GroupIo>::read_G(&mut s.as_slice()).unwrap(), c))
+        .map(|(s, c)| (<Ristretto as GroupIo>::read_G(s.as_slice()).unwrap(), c))
         .collect::<Vec<_>>()
         .as_slice(),
     )
@@ -266,7 +266,7 @@ pub struct TendermintBlock(pub Vec<u8>);
 impl BlockTrait for TendermintBlock {
   type Id = [u8; 32];
   fn id(&self) -> Self::Id {
-    BlockHeader::read::<&[u8]>(&mut self.0.as_ref()).unwrap().hash()
+    BlockHeader::read(self.0.as_slice()).unwrap().hash()
   }
 }
 
@@ -363,8 +363,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
     block: &Self::Block,
   ) -> impl Send + Future<Output = Result<(), TendermintBlockError>> {
     async move {
-      let block =
-        Block::read::<&[u8]>(&mut block.0.as_ref()).map_err(|_| TendermintBlockError::Fatal)?;
+      let block = Block::read(block.0.as_slice()).map_err(|_| TendermintBlockError::Fatal)?;
       self
         .blockchain
         .read()
@@ -417,7 +416,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
       // Tendermint should only produce valid commits
       assert!(self.verify_commit(serialized_block.id(), &commit));
 
-      let Ok(block) = Block::read::<&[u8]>(&mut serialized_block.0.as_ref()) else {
+      let Ok(block) = Block::read(serialized_block.0.as_slice()) else {
         return invalid_block();
       };
 

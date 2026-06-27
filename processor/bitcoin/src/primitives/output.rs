@@ -132,19 +132,19 @@ impl ReceivedOutput<<Secp256k1 as WrappedGroup>::G, Address> for Output {
   }
 
   fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    self.kind.write(writer)?;
+    self.kind.write(&mut *writer)?;
     let presumed_origin: Option<ExternalAddress> = self.presumed_origin.clone().map(Into::into);
     presumed_origin.serialize(writer)?;
-    self.output.write(writer)?;
+    self.output.write(&mut *writer)?;
     writer.write_all(&u32::try_from(self.data.len()).unwrap().to_le_bytes())?;
     writer.write_all(&self.data)
   }
 
-  fn read<R: io::Read>(mut reader: &mut R) -> io::Result<Self> {
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
     Ok(Output {
-      kind: OutputType::read(reader)?,
+      kind: OutputType::read(&mut *reader)?,
       presumed_origin: {
-        Option::<ExternalAddress>::deserialize_reader(&mut reader)
+        Option::<ExternalAddress>::deserialize_reader(&mut *reader)
           .map_err(|e| io::Error::other(format!("couldn't decode ExternalAddress: {e:?}")))?
           .map(|address| {
             Address::try_from(address)
@@ -152,7 +152,7 @@ impl ReceivedOutput<<Secp256k1 as WrappedGroup>::G, Address> for Output {
           })
           .transpose()?
       },
-      output: WalletOutput::read(reader)?,
+      output: WalletOutput::read(&mut *reader)?,
       data: {
         let mut data_len = [0; 4];
         reader.read_exact(&mut data_len)?;

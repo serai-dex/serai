@@ -23,21 +23,32 @@ use crate::{
 
 /// Vectors for a ciphersuite.
 pub struct Vectors {
+  /// The threshold.
   pub threshold: u16,
 
+  /// The group's hex-encoded secret key.
   pub group_secret: String,
+  /// The group's hex-encoded verification key.
   pub group_key: String,
+  /// The group's hex-encoded secret key shares.
   pub shares: Vec<String>,
 
+  /// The signed message.
   pub msg: String,
+  /// The signing set.
   pub included: Vec<Participant>,
 
+  /// The hex-encoded randomness used for each nonce.
   pub nonce_randomness: Vec<[String; 2]>,
+  /// The hex-encoded nonces.
   pub nonces: Vec<[String; 2]>,
+  /// The hex-encoded commitments for the nonces.
   pub commitments: Vec<[String; 2]>,
 
+  /// The hex-encoded signature shares.
   pub sig_shares: Vec<String>,
 
+  /// The hex-encoded signature.
   pub sig: String,
 }
 
@@ -108,7 +119,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<Participant,
   let shares = vectors
     .shares
     .iter()
-    .map(|secret| C::read_F::<&[u8]>(&mut hex::decode(secret).unwrap().as_ref()).unwrap())
+    .map(|secret| C::read_F(hex::decode(secret).unwrap().as_slice()).unwrap())
     .collect::<Vec<_>>();
   let verification_shares = shares.iter().map(|secret| C::generator() * secret).collect::<Vec<_>>();
 
@@ -127,7 +138,7 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<Participant,
       serialized.extend(share.to_bytes().as_ref());
     }
 
-    let these_keys = ThresholdKeys::<C>::read::<&[u8]>(&mut serialized.as_ref()).unwrap();
+    let these_keys = ThresholdKeys::<C>::read(serialized.as_slice()).unwrap();
     assert_eq!(these_keys.params().t(), vectors.threshold);
     assert_eq!(usize::from(these_keys.params().n()), shares.len());
     let participant = Participant::new(i).unwrap();
@@ -151,10 +162,8 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
   let keys = vectors_to_multisig_keys::<C>(vectors);
   {
     let group_key =
-      <C as Curve>::read_G::<&[u8]>(&mut hex::decode(&vectors.group_key).unwrap().as_ref())
-        .unwrap();
-    let secret =
-      C::read_F::<&[u8]>(&mut hex::decode(&vectors.group_secret).unwrap().as_ref()).unwrap();
+      <C as Curve>::read_G(hex::decode(&vectors.group_key).unwrap().as_slice()).unwrap();
+    let secret = C::read_F(hex::decode(&vectors.group_secret).unwrap().as_slice()).unwrap();
     assert_eq!(C::generator() * secret, group_key);
     assert_eq!(*recover_key(&keys.values().cloned().collect::<Vec<_>>()).unwrap(), secret);
 
@@ -169,9 +178,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
       .enumerate()
       .map(|(c, (i, machine))| {
         let nonce = |i| {
-          Zeroizing::new(
-            C::read_F::<&[u8]>(&mut hex::decode(&vectors.nonces[c][i]).unwrap().as_ref()).unwrap(),
-          )
+          Zeroizing::new(C::read_F(hex::decode(&vectors.nonces[c][i]).unwrap().as_slice()).unwrap())
         };
         let nonces = [nonce(0), nonce(1)];
         let these_commitments =
@@ -206,13 +213,13 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
         commitments.insert(
           *i,
           machine
-            .read_preprocess::<&[u8]>(
+            .read_preprocess(
               &mut [
                 these_commitments[0].to_bytes().as_ref(),
                 these_commitments[1].to_bytes().as_ref(),
               ]
               .concat()
-              .as_ref(),
+              .as_slice(),
             )
             .unwrap(),
         );
@@ -236,7 +243,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
         };
         assert_eq!(share, hex::decode(&vectors.sig_shares[c]).unwrap());
 
-        shares.insert(*i, machine.read_share::<&[u8]>(&mut share.as_ref()).unwrap());
+        shares.insert(*i, machine.read_share(&mut share.as_slice()).unwrap());
         (i, machine)
       })
       .collect::<Vec<_>>();
@@ -278,9 +285,8 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
     let l = usize::from(u16::from(*l));
 
     // Shares are a zero-indexed array of all participants, hence l - 1
-    let share = Zeroizing::new(
-      C::read_F::<&[u8]>(&mut hex::decode(&vectors.shares[l - 1]).unwrap().as_ref()).unwrap(),
-    );
+    let share =
+      Zeroizing::new(C::read_F(hex::decode(&vectors.shares[l - 1]).unwrap().as_slice()).unwrap());
 
     let randomness = vectors.nonce_randomness[i]
       .iter()
@@ -289,9 +295,7 @@ pub fn test_with_vectors<R: RngCore + CryptoRng, C: Curve, H: Hram<C>>(
 
     let nonces = vectors.nonces[i]
       .iter()
-      .map(|nonce| {
-        Zeroizing::new(C::read_F::<&[u8]>(&mut hex::decode(nonce).unwrap().as_ref()).unwrap())
-      })
+      .map(|nonce| Zeroizing::new(C::read_F(hex::decode(nonce).unwrap().as_slice()).unwrap()))
       .collect::<Vec<_>>();
 
     for (randomness, nonce) in randomness.iter().zip(&nonces) {
