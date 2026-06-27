@@ -1,5 +1,6 @@
 name: Monthly Nightly Update
 permissions:
+  contents: write
   pull-requests: write
 
 on:
@@ -11,7 +12,7 @@ jobs:
     name: Update the nightly version of Rust used to this month's
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # 6.0.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
         with:
           persist-credentials: false
           submodules: "recursive"
@@ -33,7 +34,7 @@ jobs:
           git push -u origin $(date +"nightly-%Y-%m")
 
       - name: Pull Request
-        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # 9.0.0
         with:
           script: |
             const { repo, owner } = context.repo;

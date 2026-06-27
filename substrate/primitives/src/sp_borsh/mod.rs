@@ -71,7 +71,7 @@ macro_rules! borsh_as_scale {
               self.0.on_before_alloc_mem(bytes.len()).and_then(|()| self.0.read(bytes))
             {
               self.1 = Some(e);
-              return Err(borsh::io::Error::other(""))?;
+              Err(borsh::io::Error::other(""))?;
             }
             Ok(bytes.len())
           }

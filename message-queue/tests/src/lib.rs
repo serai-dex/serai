@@ -124,7 +124,7 @@ fn basic_functionality() {
       bitcoin.ack(Service::Coordinator, 0).await;
 
       let next_msg = bitcoin.next(Service::Coordinator).await;
-      assert!(msg != next_msg);
+      assert_ne!(msg, next_msg);
       assert_eq!(next_msg.metadata.from, Service::Coordinator);
       assert_eq!(next_msg.id, 1);
       assert_eq!(&next_msg.message, b"Hello, World, again!");

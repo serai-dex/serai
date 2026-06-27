@@ -67,7 +67,7 @@ fn oraclize_values() {
         Amount((crate::GENESIS_SRI.0 * percent) / 100)
       );
       let supply = LiquidityTokens::supply(coin);
-      assert!(supply != Amount(0));
+      assert_ne!(supply, Amount(0));
       assert_eq!(
         LiquidityTokens::balance(serai_abi::genesis_liquidity::address(coin), coin),
         supply

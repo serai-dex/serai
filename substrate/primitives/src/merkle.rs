@@ -166,7 +166,7 @@ fn unbalanced_merkle_tree() {
     // If the tree has branches...
     if i > 1 {
       // Changing the tag should change the root hash
-      assert!(with_new != UnbalancedMerkleTree::new(tag.wrapping_add(1), list_of_hashes.clone()));
+      assert_ne!(with_new, UnbalancedMerkleTree::new(tag.wrapping_add(1), list_of_hashes.clone()));
     }
 
     // Push a new hash onto the list for the next iteration

@@ -22,7 +22,7 @@ hex = "0.4"
 zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
-curve25519-dalek = { version = "4", features = ["rand_core"] }
+curve25519-dalek = { version = ">= 4.0, < 4.2", features = ["rand_core"] }
 
 bitcoin-serai = { path = "../../networks/bitcoin" }
 monero-simple-request-rpc = { path = "../../networks/monero/rpc/simple-request" }

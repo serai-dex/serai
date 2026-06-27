@@ -29,7 +29,7 @@ fn mint() {
     {
       let root = sp_io::storage::root(state_version);
       // Check `sp_io::TestExternalities` doesn't stub this and it does update upon change
-      assert!(root_at_start != root);
+      assert_ne!(root_at_start, root);
       assert!(Coins::mint(to, Balance { coin, amount: Amount(1) }).is_err());
       assert_eq!(sp_io::storage::root(state_version), root);
     }
@@ -95,6 +95,6 @@ fn allow_mint() {
       GenesisLiquidityTokens::mint(to, balance).unwrap_err(),
       crate::Error::<Test, GenesisLiquidityTokensInstance>::MintNotAllowed
     ));
-    assert!(root == sp_io::storage::root(state_version));
+    assert_eq!(root, sp_io::storage::root(state_version));
   });
 }

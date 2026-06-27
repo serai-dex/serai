@@ -55,7 +55,7 @@ fn verify_nonces<C: Curve>(nonces: &[Vec<C::G>]) {
   assert_eq!(nonces[1][0] * C::F::from(3), nonces[1][1]);
   assert_eq!(nonces[1][0] * C::F::from(4), nonces[1][2]);
 
-  assert!(nonces[0][0] != nonces[1][0]);
+  assert_ne!(nonces[0][0], nonces[1][0]);
 }
 
 impl<C: Curve> Algorithm<C> for MultiNonce<C> {
@@ -98,7 +98,7 @@ impl<C: Curve> Algorithm<C> for MultiNonce<C> {
 
     // Verify we actually have two nonces and that they're distinct
     assert_eq!(nonces.len(), 2);
-    assert!(nonces[0] != nonces[1]);
+    assert_ne!(nonces[0], nonces[1]);
 
     // Save the nonce sums for later so we can check they're consistent with the call to verify
     assert!(self.nonces.is_none());

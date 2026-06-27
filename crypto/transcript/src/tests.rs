@@ -76,11 +76,11 @@ pub fn test_transcript<T: Transcript<Challenge: PartialEq>>() {
     let mut t = t();
     let s1 = t.rng_seed(b"s");
     let s2 = t.rng_seed(b"s");
-    assert!(s1 != s2);
+    assert_ne!(s1, s2);
   }
 
   // Ensure distinct RNG seed labels produce distinct seeds
-  assert!(t().rng_seed(b"a") != t().rng_seed(b"b"));
+  assert_ne!(t().rng_seed(b"a"), t().rng_seed(b"b"));
 }
 
 #[test]

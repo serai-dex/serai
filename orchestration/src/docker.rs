@@ -24,7 +24,7 @@ pub fn build(orchestration_path: &Path, network: Network, name: &str) {
     dockerfile_path = dockerfile_path.join(name).join("Dockerfile");
   }
 
-  println!("Building {}...", &name);
+  println!("Building {name}...");
 
   if !Command::new("docker")
     .current_dir(&repo_path)

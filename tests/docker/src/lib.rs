@@ -214,7 +214,7 @@ pub fn build(name: String) {
     }
   }
 
-  println!("Building {}...", &name);
+  println!("Building {name}...");
 
   // Version which always prints
   if !Command::new("docker")

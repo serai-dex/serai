@@ -47,7 +47,7 @@ fn transfer() {
     // Transferring more than one has should fail, with no changes to the state
     {
       let root = sp_io::storage::root(state_version);
-      assert!(root != root_at_start);
+      assert_ne!(root, root_at_start);
       assert!({
         #[expect(clippy::disallowed_methods)]
         Coins::transfer(Some(alice).into(), bob, Balance { coin, amount: Amount(5) }).is_err()

@@ -107,7 +107,7 @@ impl TryFrom<u16> for KeyShares {
 fn key_shares() {
   assert_eq!(KeyShares::ZERO, KeyShares(0));
   assert_eq!(KeyShares::ONE, KeyShares(1));
-  assert!(KeyShares::ZERO != KeyShares::ONE);
+  assert_ne!(KeyShares::ZERO, KeyShares::ONE);
 
   assert_eq!(u32::from(KeyShares::MAX_PER_SET), KeyShares::MAX_PER_SET_U32);
   assert_eq!(u64::from(KeyShares::MAX_PER_SET), KeyShares::MAX_PER_SET_U64);

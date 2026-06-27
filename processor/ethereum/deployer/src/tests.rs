@@ -68,7 +68,7 @@ async fn test_deployer() {
         provider.get_code_at(deployed_deployer).await.unwrap(),
         provider.get_code_at(Deployer::address()).await.unwrap(),
       );
-      assert!(deployed_deployer != Deployer::address());
+      assert_ne!(deployed_deployer, Deployer::address());
     }
 
     // Verify deploying the same init code multiple times fails

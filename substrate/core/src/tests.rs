@@ -283,7 +283,7 @@ fn historical_blocks() {
     }
 
     // Check `frame-system` doesn't prune the genesis block's hash
-    assert!(System::block_hash(0) != Default::default());
+    assert_ne!(System::block_hash(0), Default::default());
     // Check `frame-system` has started pruning blocks however
     assert_eq!(System::block_hash(1), Default::default());
   });
@@ -297,7 +297,7 @@ fn time() {
     new_block();
 
     let first_time = Timestamp::get();
-    assert!(first_time != 0);
+    assert_ne!(first_time, 0);
     assert_eq!(Core::current_time(), first_time);
 
     end_block();

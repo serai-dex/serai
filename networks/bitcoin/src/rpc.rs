@@ -204,32 +204,32 @@ impl Rpc {
     let hash =
       BlockHash::from_str(&self.call::<String>("getblockhash", &format!("[{number}]")).await?)
         .map_err(|_| RpcError::InvalidResponse("block hash was not valid hex"))?
-        .as_raw_hash()
         .to_byte_array();
     Ok(hash)
   }
 
   /// Get a block's number by its hash.
   pub async fn get_block_number(&self, hash: &[u8; 32]) -> Result<usize, RpcError> {
+    // Bitcoin treats hashes as little-endian but prints them as big-endian
+    let mut hex = *hash;
+    hex.reverse();
+    let hex = encode::serialize_hex(&hex);
+
     #[derive(Default, core_json_derive::JsonDeserialize)]
     struct Number {
       height: Option<u64>,
     }
     usize::try_from(
-      self
-        .call::<Number>("getblockheader", &format!(r#"["{}"]"#, encode::serialize_hex(hash)))
-        .await?
-        .height
-        .ok_or_else(|| {
-          RpcError::InvalidResponse("`getblockheader` did not include `height` field")
-        })?,
+      self.call::<Number>("getblockheader", &format!(r#"["{hex}"]"#)).await?.height.ok_or_else(
+        || RpcError::InvalidResponse("`getblockheader` did not include `height` field"),
+      )?,
     )
     .map_err(|_| RpcError::InvalidResponse("block number exceeded usize::MAX"))
   }
 
   /// Get a block by its hash.
   pub async fn get_block(&self, hash: &[u8; 32]) -> Result<Block, RpcError> {
-    // bitcoin hex-encodes hashes in reverse order
+    // Bitcoin treats hashes as little-endian but prints them as big-endian
     let mut hex = *hash;
     hex.reverse();
     let hex = encode::serialize_hex(&hex);

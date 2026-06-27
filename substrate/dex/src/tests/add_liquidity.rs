@@ -26,7 +26,7 @@ fn add_liquidity() {
     {
       let root = sp_io::storage::root(state_version);
       // Check `sp_io::TestExternalities` doesn't stub this and it does update upon change
-      assert!(root_at_start != root);
+      assert_ne!(root_at_start, root);
       assert_eq!(
         Dex::add_liquidity(
           Some(alice).into(),

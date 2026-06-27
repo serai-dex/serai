@@ -9,7 +9,7 @@ extern crate alloc;
 extern crate std;
 
 use zeroize::Zeroize;
-use subtle::ConditionallySelectable;
+use subtle::{ConstantTimeEq as _, ConditionallySelectable};
 
 use ff::PrimeFieldBits;
 use group::Group;
@@ -46,7 +46,7 @@ mod underlying {
     #[expect(clippy::cast_lossless, clippy::as_conversions)]
     let res = black_box(bit as u8);
     bit.zeroize();
-    debug_assert!((res | 1) == 1);
+    debug_assert!(bool::from((res | 1).ct_eq(&1)));
 
     bit_ref.zeroize();
     res
