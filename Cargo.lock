@@ -8136,6 +8136,7 @@ dependencies = [
  "embedwards25519",
  "log",
  "modular-frost",
+ "monero-ed25519",
  "monero-simple-request-rpc",
  "monero-wallet",
  "rand_chacha 0.3.1",
@@ -8447,6 +8448,7 @@ dependencies = [
  "serai-processor-messages",
  "serai-processor-primitives",
  "serai-processor-scheduler-primitives",
+ "tempfile",
  "tokio",
 ]
 

@@ -138,3 +138,74 @@ impl TransactionPublisher<Transaction> for Rpc {
     async move { self.rpc.publish_transaction(&tx.0).await }
   }
 }
+
+#[cfg(test)]
+mod tests {
+  use core::future::Future;
+  use scanner::{ScannerFeed, tests};
+
+  use monero_wallet::{address::Network, ViewPair};
+  use monero_ed25519::{CompressedPoint, Scalar};
+  use monero_simple_request_rpc::{SimpleRequestTransport, prelude::*};
+
+  use zeroize::Zeroizing;
+
+  static DAEMON_URL: &'static str = "http://serai:seraidex@127.0.0.1:18081";
+
+  async fn add_block(rpc: &MoneroDaemon<SimpleRequestTransport>, block_count: usize) {
+    rpc
+      .generate_blocks(
+        &ViewPair::new(CompressedPoint::G.decompress().unwrap(), Zeroizing::new(Scalar::ONE))
+          .unwrap()
+          .legacy_address(Network::Mainnet),
+        block_count,
+      )
+      .await
+      .unwrap();
+  }
+
+  async fn reset_chain(rpc: &MoneroDaemon<SimpleRequestTransport>) {
+    let high_block_no = rpc.latest_block_number().await.unwrap();
+    if high_block_no == 0 {
+      return;
+    }
+
+    static DEFAULT_HIGH_RES_LIMIT: usize = 1000;
+
+    let pop_n_blocks = format!(r#"{{"nblocks":{}}}"#, high_block_no);
+    rpc.rpc_call("pop_blocks", Some(pop_n_blocks), DEFAULT_HIGH_RES_LIMIT).await.unwrap();
+    rpc.json_rpc_call("flush_txpool", None, DEFAULT_HIGH_RES_LIMIT).await.unwrap();
+  }
+
+  #[derive(Clone)]
+  struct DaemonHelper {
+    pub(crate) rpc: MoneroDaemon<SimpleRequestTransport>,
+  }
+
+  impl tests::DaemonHelper for DaemonHelper {
+    fn reset_chain(&self) -> impl Send + Future<Output = ()> {
+      async move { reset_chain(&self.rpc).await }
+    }
+
+    fn add_block(&self) -> impl Send + Future<Output = ()> {
+      async move { add_block(&self.rpc, 1).await }
+    }
+
+    /// We consider a Monero block "finalized" once it has 10 confirmations.
+    fn setup_finalized_block(&self) -> impl Send + Future<Output = ()> {
+      async move { add_block(&self.rpc, crate::Rpc::CONFIRMATIONS.try_into().unwrap()).await }
+    }
+  }
+
+  #[tokio::test]
+  async fn test_scanner() {
+    // TODO: initialize a docker monerod instance for this test specifically
+
+    let rpc = SimpleRequestTransport::new(DAEMON_URL.to_string()).await.unwrap();
+    let feed = crate::Rpc { rpc: rpc.clone() };
+
+    let daemon = DaemonHelper { rpc };
+
+    tests::index_task_tests(feed.clone(), daemon).await;
+  }
+}
