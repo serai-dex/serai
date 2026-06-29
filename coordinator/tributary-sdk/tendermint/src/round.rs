@@ -5,7 +5,6 @@ use std::{
 };
 
 use futures_util::{FutureExt as _, future};
-use patchable_async_sleep::sleep;
 
 use crate::{
   time::CanonicalInstant,
@@ -71,7 +70,7 @@ impl<N: Network> RoundData<N> {
       let timeout = self.timeouts.get(&step).copied();
       (async move {
         if let Some(timeout) = timeout {
-          sleep(timeout.saturating_duration_since(Instant::now())).await;
+          N::sleep(timeout.saturating_duration_since(Instant::now())).await;
         } else {
           future::pending::<()>().await;
         }

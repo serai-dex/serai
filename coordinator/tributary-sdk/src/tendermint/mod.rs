@@ -1,4 +1,4 @@
-use core::{ops::Deref as _, future::Future};
+use core::{ops::Deref as _, time::Duration, future::Future};
 use std::{sync::Arc, collections::HashMap};
 
 use subtle::ConstantTimeEq as _;
@@ -299,6 +299,10 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
   // kept low.
   const BLOCK_PROCESSING_TIME: u32 = BLOCK_PROCESSING_TIME;
   const LATENCY_TIME: u32 = LATENCY_TIME;
+
+  async fn sleep(duration: Duration) {
+    tokio::time::sleep(duration).await;
+  }
 
   fn signer(&self) -> Arc<Signer> {
     self.signer.clone()

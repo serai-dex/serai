@@ -122,6 +122,10 @@ impl Network for TestNetwork {
   const BLOCK_PROCESSING_TIME: u32 = 2000;
   const LATENCY_TIME: u32 = 1000;
 
+  async fn sleep(duration: Duration) {
+    sleep(duration).await;
+  }
+
   fn signer(&self) -> TestSigner {
     TestSigner(self.0)
   }

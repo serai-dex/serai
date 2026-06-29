@@ -1,7 +1,17 @@
 # Simple Request
 
-A simple alternative to reqwest, supporting HTTPS, intended to support a
-majority of use cases with a fraction of the dependency tree.
+A simple library for making HTTP requests.
 
-This library is built directly around `hyper`, `hyper-rustls`, and does require
-`tokio`. Support for `async-std` would be welcome.
+This intends to be sufficient as an alternative to
+[`reqwest`](https://docs.rs/reqwest) for a large amount of use-cases, but with
+a small fraction of the dependencies.
+
+### Implementation
+
+`simple-request` is built directly on top of [`hyper`](https://docs.rs/hyper),
+and with the `tls` feature, supports TLS via
+[`hyper-rustls`](https://docs.rs/hyper-rustls).
+
+`simple-request` is runtime agnostic but `hyper` does force the inclusion of `tokio`
+in the dependency tree. For context, please see
+[this issue](https://github.com/serai-dex/serai/issues/682).

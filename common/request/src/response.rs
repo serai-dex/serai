@@ -13,11 +13,9 @@ use futures_util::{Stream as _, StreamExt as _};
 
 use crate::{Client, Error};
 
+/// An HTTP response.
 #[derive(Debug)]
-pub struct Response<
-  'client,
-  E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>,
-> {
+pub struct Response<'client, E> {
   pub(crate) response: hyper::Response<Incoming>,
   pub(crate) size_limit: Option<usize>,
   // Borrows the client so its async task lives as long as this response exists.
@@ -25,22 +23,27 @@ pub struct Response<
   pub(crate) client: &'client Client<E>,
 }
 
-impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>>
-  Response<'_, E>
-{
+// TODO: Relax `Send` bound
+impl<E: Executor<Pin<Box<dyn Send + Future<Output = ()>>>>> Response<'_, E> {
+  /// The HTTP status of this response.
   pub fn status(&self) -> StatusCode {
     self.response.status()
   }
+
+  /// This response's headers.
   pub fn headers(&self) -> &HeaderMap<HeaderValue> {
     self.response.headers()
   }
+
+  /// This response's body.
+  // TODO: Return an async read?
   pub async fn body(self) -> Result<impl std::io::Read, Error> {
     let mut body = self.response.into_body().into_data_stream();
     let mut res: Vec<u8> = vec![];
     loop {
       if let Some(size_limit) = self.size_limit {
         let (lower, upper) = body.size_hint();
-        if res.len().wrapping_add(upper.unwrap_or(lower)) > size_limit.min(usize::MAX - 1) {
+        if res.len().saturating_add(upper.unwrap_or(lower)) > size_limit.min(usize::MAX - 1) {
           Err(Error::ConnectionError("response exceeded size limit".into()))?;
         }
       }

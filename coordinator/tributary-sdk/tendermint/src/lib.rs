@@ -15,7 +15,6 @@ use futures_util::{
   FutureExt as _, StreamExt as _, SinkExt as _,
   future::{self, Fuse},
 };
-use patchable_async_sleep::sleep;
 
 use serai_db::{Get as _, DbTxn as _, Db as _};
 
@@ -370,7 +369,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
       "sleeping until round ends in {}ms",
       time_until_round_end.as_millis(),
     );
-    sleep(time_until_round_end).await;
+    N::sleep(time_until_round_end).await;
 
     // Clear the message tape
     {
@@ -886,7 +885,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
 
         // If the last block hasn't ended yet, sleep until it has
         if !negative {
-          sleep(time_until).await;
+          N::sleep(time_until).await;
         }
 
         let signer = network.signer();
@@ -943,7 +942,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
   pub async fn run(mut self) {
     log::debug!(target: "tendermint", "running TendermintMachine");
 
-    let mut rebroadcast_future = Box::pin(sleep(Duration::from_secs(60))).fuse();
+    let mut rebroadcast_future = Box::pin(N::sleep(Duration::from_secs(60))).fuse();
     loop {
       // Also create a future for if the queue has a message
       // Does not pop_front as if another message has higher priority, its future will be handled
@@ -1046,7 +1045,7 @@ impl<N: Network + 'static> TendermintMachine<N> {
           }
 
           // Reset the rebroadcast future
-          rebroadcast_future = Box::pin(sleep(core::time::Duration::from_secs(60))).fuse();
+          rebroadcast_future = Box::pin(N::sleep(core::time::Duration::from_secs(60))).fuse();
 
           None
         },

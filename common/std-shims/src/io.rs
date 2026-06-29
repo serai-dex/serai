@@ -8,7 +8,9 @@ mod shims {
   /// The kind of error.
   #[derive(Clone, Copy, PartialEq, Eq, Debug)]
   pub enum ErrorKind {
+    /// The stream unexpectedly hit EOF.
     UnexpectedEof,
+    /// Another kind of error occurred.
     Other,
   }
 
@@ -27,10 +29,12 @@ mod shims {
   }
   impl CoreError for Error {}
 
+  /// A trait for that which can be converted into `Box<dyn Send + Sync + Error>`.
   #[cfg(not(feature = "alloc"))]
   pub trait IntoBoxSendSyncError {}
   #[cfg(not(feature = "alloc"))]
   impl<I> IntoBoxSendSyncError for I {}
+  /// A trait for that which can be converted into `Box<dyn Send + Sync + Error>`.
   #[cfg(feature = "alloc")]
   pub trait IntoBoxSendSyncError: Into<Box<dyn Send + Sync + CoreError>> {}
   #[cfg(feature = "alloc")]
@@ -71,11 +75,15 @@ mod shims {
     }
   }
 
+  /// A result with `io::Error`.
   pub type Result<T> = core::result::Result<T, Error>;
 
+  /// A shim for [`std::io::Read`](https://doc.rust-lang.org/1.96.0/std/io/trait.Read.html).
   pub trait Read {
+    /// Read into the buffer, returning the amount of bytes read.
     fn read(&mut self, buf: &mut [u8]) -> Result<usize>;
 
+    /// Read the exact amount of bytes in the buffer into the buffer.
     fn read_exact(&mut self, buf: &mut [u8]) -> Result<()> {
       let read = self.read(buf)?;
       if read != buf.len() {
@@ -100,8 +108,11 @@ mod shims {
     }
   }
 
+  /// A shim for [`std::io::BufRead`](https://doc.rust-lang.org/1.96.0/std/io/trait.BufRead.html).
   pub trait BufRead: Read {
+    /// Fill the internal buffer, returning a reference to it.
     fn fill_buf(&mut self) -> Result<&[u8]>;
+    /// Consume `amt` bytes from the buffer.
     fn consume(&mut self, amt: usize);
   }
 
@@ -114,8 +125,11 @@ mod shims {
     }
   }
 
+  /// A shim for [`std::io::Write`](https://doc.rust-lang.org/1.96.0/std/io/trait.Write.html).
   pub trait Write {
+    /// Write the buffer, returning the amount of bytes written.
     fn write(&mut self, buf: &[u8]) -> Result<usize>;
+    /// Write all of the bytes.
     fn write_all(&mut self, buf: &[u8]) -> Result<()> {
       if self.write(buf)? != buf.len() {
         Err(Error::new(ErrorKind::UnexpectedEof, "writer ran out of bytes"))?;

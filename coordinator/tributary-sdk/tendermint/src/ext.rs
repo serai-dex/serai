@@ -1,4 +1,4 @@
-use core::{hash::Hash, fmt::Debug, future::Future};
+use core::{hash::Hash, fmt::Debug, time::Duration, future::Future};
 use std::{sync::Arc, collections::HashSet};
 
 use thiserror::Error;
@@ -249,6 +249,9 @@ pub trait Network: Sized + Send + Sync {
   ///
   /// BLOCK_PROCESSING_TIME + (3 * LATENCY_TIME) must be divisible by 1000.
   const LATENCY_TIME: u32;
+
+  /// The asynchronous sleep implementation.
+  fn sleep(duration: Duration) -> impl Send + Future<Output = ()>;
 
   /// The block time, in seconds. Defined as the processing time plus three times the latency.
   fn block_time() -> u32 {

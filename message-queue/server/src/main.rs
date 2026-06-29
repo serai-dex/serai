@@ -44,7 +44,7 @@ pub(crate) use self::clippy::*;
 
 #[global_allocator]
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
-  zalloc::ZeroizingAlloc(std::alloc::System);
+  zalloc::ZeroizingAlloc::wrap(std::alloc::System);
 
 // queue RPC method
 /*

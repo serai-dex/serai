@@ -1,7 +1,8 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![cfg_attr(feature = "std", expect(clippy::std_instead_of_core))]
 #![no_std]
-#![allow(clippy::alloc_instead_of_core, clippy::std_instead_of_core, clippy::std_instead_of_alloc)]
 
 #[cfg(not(feature = "alloc"))]
 pub use core::*;
@@ -12,6 +13,8 @@ pub use core::{alloc, borrow, ffi, fmt, slice, str, task};
 #[rustversion::before(1.81)]
 pub mod error {
   use core::fmt::Debug::Display;
+  /// A shim for
+  /// [`core::error::Error`](https://doc.rust-lang.org/1.96.0/core/error/trait.Error.html).
   pub trait Error: Debug + Display {}
 }
 #[cfg(not(feature = "std"))]
@@ -20,19 +23,20 @@ pub use core::error;
 
 #[cfg(feature = "alloc")]
 extern crate alloc as extern_alloc;
-#[cfg(all(feature = "alloc", not(feature = "std")))]
+#[cfg(feature = "alloc")]
 pub use extern_alloc::{alloc, borrow, boxed, ffi, fmt, rc, slice, str, string, task, vec, format};
 #[cfg(feature = "std")]
 extern crate std;
-#[cfg(feature = "std")]
-pub use std::{alloc, borrow, boxed, error, ffi, fmt, rc, slice, str, string, task, vec, format};
 
+/// A shim for [`std::collections`](https://doc.rust-lang.org/1.96.0/std/collections).
 pub mod collections;
+/// A shim for [`std::io`](https://doc.rust-lang.org/1.96.0/std/io).
 pub mod io;
+/// A shim for [`std::sync`](https://doc.rust-lang.org/1.96.0/std/sync).
 pub mod sync;
 
+/// A shim for [`std::prelude`](https://doc.rust-lang.org/1.96.0/std/prelude).
 pub mod prelude {
-  // Shim the `std` prelude
   #[cfg(feature = "alloc")]
   pub use extern_alloc::{
     format, vec,

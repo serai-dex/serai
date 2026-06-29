@@ -1,7 +1,7 @@
 [package]
 name = "zalloc"
 version = "0.1.0"
-description = "An allocator wrapper which zeroizes memory on dealloc"
+description = "An allocator which zeroizes all memory on deallocation"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/common/zalloc"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
@@ -17,12 +17,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-zeroize = { version = "^1.5", default-features = false }
-
-[build-dependencies]
-rustversion = { version = "1", default-features = false }
+zeroize = { version = "1.8.2", default-features = false }
 
 [features]
-std = ["zeroize/std"]
+alloc = ["zeroize/alloc"]
+std = ["alloc", "zeroize/std"]
 default = ["std"]
 allocator = []

@@ -14,9 +14,6 @@ implementation of the [academic protocol](https://arxiv.org/pdf/1807.04938.pdf).
   being under Serai, which uses Substrate, which uses SCALE. Accordingly, when
   deciding which of the three (mutually incompatible) options to support...
 
-- The only supported runtime is tokio due to requiring a `sleep` implementation.
-  Ideally, the runtime choice will be moved to a feature in the future.
-
 - It is possible for `add_block` to be called on a block which failed (or never
   went through in the first place) validation. This is a break from the paper
   which is accepted here. This is for two reasons.

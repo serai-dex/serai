@@ -21,7 +21,7 @@ use encryption::EncryptedSocket;
 
 #[global_allocator]
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
-  zalloc::ZeroizingAlloc(std::alloc::System);
+  zalloc::ZeroizingAlloc::wrap(std::alloc::System);
 
 // 5132 ^ (((b'sec'[0] << 14) | (b'sec'[1] << 7) | (b'sec'[2])) % (1 << 16))
 const PORT: u16 = 59119;

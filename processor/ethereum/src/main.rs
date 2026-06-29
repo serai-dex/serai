@@ -5,7 +5,7 @@
 
 #[global_allocator]
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
-  zalloc::ZeroizingAlloc(std::alloc::System);
+  zalloc::ZeroizingAlloc::wrap(std::alloc::System);
 
 use core::time::Duration;
 use std::sync::{Arc, OnceLock};

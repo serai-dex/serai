@@ -54,7 +54,7 @@ mod docker;
 
 #[global_allocator]
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
-  zalloc::ZeroizingAlloc(std::alloc::System);
+  zalloc::ZeroizingAlloc::wrap(std::alloc::System);
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, PartialOrd, Ord, Hash)]
 pub enum Network {

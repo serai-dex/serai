@@ -1,8 +1,6 @@
 pub use core::sync::atomic;
-#[cfg(all(feature = "alloc", not(feature = "std")))]
-pub use extern_alloc::sync::{Arc, Weak};
-#[cfg(feature = "std")]
-pub use std::sync::{Arc, Weak};
+#[cfg(feature = "alloc")]
+pub use extern_alloc::sync::*;
 
 mod mutex_shim {
   #[cfg(not(feature = "std"))]

@@ -3,7 +3,6 @@ resolver = "2"
 members = [
   "common/std-shims",
   "common/zalloc",
-  "common/patchable-async-sleep",
   "common/db",
   "common/task",
   "common/request",

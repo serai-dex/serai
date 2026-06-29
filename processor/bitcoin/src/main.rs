@@ -4,7 +4,7 @@
 
 #[global_allocator]
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
-  zalloc::ZeroizingAlloc(std::alloc::System);
+  zalloc::ZeroizingAlloc::wrap(std::alloc::System);
 
 use bitcoin_serai::rpc::Rpc as BRpc;
 

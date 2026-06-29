@@ -1,9 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
-#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+#![deny(missing_docs)]
 
 use core::{pin::Pin, future::Future};
-use std::sync::Arc;
+extern crate alloc;
+use alloc::sync::Arc;
 
 use futures_util::FutureExt as _;
 use ::tokio::sync::Mutex;
@@ -23,13 +24,21 @@ pub use request::*;
 mod response;
 pub use response::*;
 
+/// An error with an HTTP connection/request/response.
+// TODO: Diversify based on context?
 #[derive(Debug)]
 pub enum Error {
+  /// The URI was invalid.
   InvalidUri,
+  /// The URI lacked a host.
   MissingHost,
+  /// THe request's host was inconsistent with the client's.
   InconsistentHost,
-  ConnectionError(Box<dyn Send + Sync + std::error::Error>),
+  /// An error with the connection occurred.
+  ConnectionError(Box<dyn Send + Sync + core::error::Error>),
+  /// An error propagated from `hyper`.
   Hyper(hyper::Error),
+  /// An error propagated from `hyper-util`.
   HyperUtil(hyper_util::client::legacy::Error),
 }
 
@@ -39,9 +48,7 @@ type Connector = HttpConnector;
 type Connector = HttpsConnector<HttpConnector>;
 
 #[derive(Clone, Debug)]
-enum Connection<
-  E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>,
-> {
+enum Connection<E> {
   ConnectionPool(HyperClient<Connector, Full<Bytes>>),
   Connection {
     executor: E,
@@ -52,33 +59,21 @@ enum Connection<
 }
 
 /// An HTTP client.
-///
-/// `tls` is only guaranteed to work when using the `tokio` executor. Instantiating a client when
-/// the `tls` feature is active without using the `tokio` executor will cause errors.
 #[derive(Clone, Debug)]
-pub struct Client<
-  E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>,
-> {
+pub struct Client<E> {
   connection: Connection<E>,
 }
 
-impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Output = ()>>>>>
-  Client<E>
-{
+impl<E: Executor<Pin<Box<dyn Send + Future<Output = ()>>>>> Client<E> {
+  #[cfg_attr(
+    not(all(feature = "tls", not(feature = "webpki-roots"))),
+    expect(clippy::unnecessary_wraps)
+  )]
   fn connector() -> Result<Connector, Error> {
     let mut res = HttpConnector::new();
     res.set_keepalive(Some(core::time::Duration::from_secs(60)));
     res.set_nodelay(true);
     res.set_reuse_address(true);
-
-    #[cfg(feature = "tls")]
-    if core::any::TypeId::of::<E>() !=
-      core::any::TypeId::of::<hyper_util::rt::tokio::TokioExecutor>()
-    {
-      Err(Error::ConnectionError(
-        "`tls` feature enabled but not using the `tokio` executor".into(),
-      ))?;
-    }
 
     #[cfg(feature = "tls")]
     res.enforce_http(false);
@@ -100,7 +95,11 @@ impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Outpu
     Ok(res)
   }
 
-  pub fn with_executor_and_connection_pool(executor: E) -> Result<Client<E>, Error> {
+  /// Create a new connection-pooling client over an async executor.
+  pub fn with_executor_and_connection_pool(executor: E) -> Result<Client<E>, Error>
+  where
+    E: 'static + Send + Sync + Clone,
+  {
     Ok(Client {
       connection: Connection::ConnectionPool(
         HyperClient::builder(executor)
@@ -110,6 +109,7 @@ impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Outpu
     })
   }
 
+  /// Create a new connection over an async executor.
   pub fn with_executor_and_without_connection_pool(
     executor: E,
     host: &str,
@@ -130,6 +130,7 @@ impl<E: 'static + Send + Sync + Clone + Executor<Pin<Box<dyn Send + Future<Outpu
     })
   }
 
+  /// Make an HTTP request.
   pub async fn request<R: Into<Request>>(&self, request: R) -> Result<Response<'_, E>, Error> {
     let request: Request = request.into();
     let Request { mut request, response_size_limit } = request;
@@ -206,12 +207,15 @@ mod tokio {
   use hyper_util::rt::tokio::TokioExecutor;
   use super::*;
 
+  /// A [`Client`] which uses [`tokio`](https://docs.rs/tokio) for the executor.
   pub type TokioClient = Client<TokioExecutor>;
   impl Client<TokioExecutor> {
+    /// Create a new connection-pooling client over an async executor.
     pub fn with_connection_pool() -> Result<Self, Error> {
       Self::with_executor_and_connection_pool(TokioExecutor::new())
     }
 
+    /// Create a new connection over an async executor.
     pub fn without_connection_pool(host: &str) -> Result<Self, Error> {
       Self::with_executor_and_without_connection_pool(TokioExecutor::new(), host)
     }

@@ -59,7 +59,7 @@ mod p2p {
 // already
 #[global_allocator]
 static ALLOCATOR: zalloc::ZeroizingAlloc<std::alloc::System> =
-  zalloc::ZeroizingAlloc(std::alloc::System);
+  zalloc::ZeroizingAlloc::wrap(std::alloc::System);
 
 async fn serai(env: &Environment) -> Arc<Serai> {
   const SERAI_CONNECTION_DELAY: Duration = Duration::from_secs(10);
