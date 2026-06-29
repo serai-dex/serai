@@ -1,6 +1,6 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use core::{marker::PhantomData, fmt::Debug, future::Future};
+use core::{marker::PhantomData, fmt::Debug, future::Future, time::Duration};
 use std::{sync::Arc, io};
 
 use zeroize::Zeroizing;
@@ -212,7 +212,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     })
   }
 
-  pub fn block_time() -> u32 {
+  pub fn block_time() -> Duration {
     TendermintNetwork::<D, T, P>::block_time()
   }
 

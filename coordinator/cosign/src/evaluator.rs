@@ -197,9 +197,9 @@ pub(crate) struct CosignEvaluatorTask<D: Db, R: RequestNotableCosigns> {
 
 impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, R> {
   #[cfg(test)]
-  const DELAY_BETWEEN_ITERATIONS: u64 = 1;
+  const DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_secs(1);
   #[cfg(test)]
-  const MAX_DELAY_BETWEEN_ITERATIONS: u64 = 5;
+  const MAX_DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_secs(5);
 
   type Error = String;
 

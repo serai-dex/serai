@@ -238,27 +238,21 @@ pub trait Network: Sized + Send + Sync {
   /// Type used for ordered blocks of information.
   type Block: Block;
 
-  /// Maximum block processing time in milliseconds.
+  /// Maximum block processing time.
   ///
   /// This should include both the time to download the block and the actual processing time.
-  ///
-  /// BLOCK_PROCESSING_TIME + (3 * LATENCY_TIME) must be divisible by 1000.
-  // TODO: Redefine as Duration
-  const BLOCK_PROCESSING_TIME: u32;
-  /// Network latency time in milliseconds.
-  ///
-  /// BLOCK_PROCESSING_TIME + (3 * LATENCY_TIME) must be divisible by 1000.
-  const LATENCY_TIME: u32;
+  const BLOCK_PROCESSING_TIME: Duration;
+  /// Network latency time.
+  const LATENCY_TIME: Duration;
 
   /// The asynchronous sleep implementation.
   fn sleep(duration: Duration) -> impl Send + Future<Output = ()>;
 
-  /// The block time, in seconds. Defined as the processing time plus three times the latency.
-  fn block_time() -> u32 {
-    let raw = Self::BLOCK_PROCESSING_TIME + (3 * Self::LATENCY_TIME);
-    let res = raw / 1000;
-    assert_eq!(res * 1000, raw);
-    res
+  /// The time per block.
+  ///
+  /// This is defined as the block's processing time plus three times the latency.
+  fn block_time() -> Duration {
+    Self::BLOCK_PROCESSING_TIME + (3 * Self::LATENCY_TIME)
   }
 
   /// Return a handle on the signer in use, usable for the entire lifetime of the machine.

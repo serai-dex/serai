@@ -1,4 +1,6 @@
 use core::future::Future;
+#[cfg(test)]
+use core::time::Duration;
 use std::{sync::Arc, collections::HashMap};
 
 use blake2::{Digest as _, Blake2b256};
@@ -73,9 +75,9 @@ pub(crate) struct CosignIntendTask<D: Db> {
 
 impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
   #[cfg(test)]
-  const DELAY_BETWEEN_ITERATIONS: u64 = 1;
+  const DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_secs(1);
   #[cfg(test)]
-  const MAX_DELAY_BETWEEN_ITERATIONS: u64 = 5;
+  const MAX_DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_secs(5);
 
   type Error = String;
 

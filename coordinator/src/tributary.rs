@@ -490,8 +490,8 @@ pub(crate) async fn spawn_tributary<P: P2p>(
   // be a couple of minutes stale. While the Tributary will still function with a start time in the
   // past, the Tributary will immediately incur round timeouts. We reduce these by adding a
   // constant delay of a couple of minutes.
-  const TRIBUTARY_START_TIME_DELAY: u64 = 120;
-  let start_time = set.declaration_time + TRIBUTARY_START_TIME_DELAY;
+  const TRIBUTARY_START_TIME_DELAY: Duration = Duration::from_mins(2);
+  let start_time = set.declaration_time + TRIBUTARY_START_TIME_DELAY.as_secs();
 
   let mut tributary_validators = Vec::with_capacity(set.validators.len());
   for (validator, weight) in set.validators.iter().copied() {

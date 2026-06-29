@@ -38,7 +38,7 @@ impl<D: Db, S: ScannerFeed> IndexTask<D, S> {
             Ok(block) => break block,
             Err(e) => {
               log::warn!("IndexTask couldn't fetch start block {start_block}: {e:?}");
-              tokio::time::sleep(core::time::Duration::from_secs(delay)).await;
+              tokio::time::sleep(delay).await;
               delay += Self::DELAY_BETWEEN_ITERATIONS;
               delay = delay.min(Self::MAX_DELAY_BETWEEN_ITERATIONS);
             }

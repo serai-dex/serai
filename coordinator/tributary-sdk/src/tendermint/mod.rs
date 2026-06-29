@@ -281,9 +281,10 @@ pub struct TendermintNetwork<D: Db, T: TransactionTrait, P: P2p> {
   pub(crate) p2p: P,
 }
 
-pub const BLOCK_PROCESSING_TIME: u32 = 999;
-pub const LATENCY_TIME: u32 = 1667;
-pub const TARGET_BLOCK_TIME: u32 = BLOCK_PROCESSING_TIME + (3 * LATENCY_TIME);
+pub const BLOCK_PROCESSING_TIME: Duration = Duration::from_millis(999);
+pub const LATENCY_TIME: Duration = Duration::from_millis(1667);
+pub const TARGET_BLOCK_TIME: Duration =
+  BLOCK_PROCESSING_TIME.checked_add(LATENCY_TIME.checked_mul(3).unwrap()).unwrap();
 
 impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> {
   type Db = D;
@@ -297,8 +298,8 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network for TendermintNetwork<D, T, P> 
   // The block time is the latency on message delivery (where a message is some piece of data
   // embedded in a transaction) times three plus the block processing time, hence why it should be
   // kept low.
-  const BLOCK_PROCESSING_TIME: u32 = BLOCK_PROCESSING_TIME;
-  const LATENCY_TIME: u32 = LATENCY_TIME;
+  const BLOCK_PROCESSING_TIME: Duration = BLOCK_PROCESSING_TIME;
+  const LATENCY_TIME: Duration = LATENCY_TIME;
 
   async fn sleep(duration: Duration) {
     tokio::time::sleep(duration).await;

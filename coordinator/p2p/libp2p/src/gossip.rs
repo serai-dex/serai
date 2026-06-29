@@ -42,22 +42,30 @@ pub(crate) type Behavior = Behaviour<IdentityTransform, AllowAllSubscriptionFilt
 pub(crate) fn new_behavior() -> Behavior {
   // The latency used by the Tendermint protocol, used here as the gossip epoch duration
   // libp2p-rs defaults to 1 second, whereas ours will be ~2
-  let heartbeat_interval = tributary_sdk::tendermint::LATENCY_TIME;
+  const HEARTBEAT_INTERVAL: Duration = tributary_sdk::tendermint::LATENCY_TIME;
   // The amount of heartbeats which will occur within a single Tributary block
-  let heartbeats_per_block =
-    tributary_sdk::tendermint::TARGET_BLOCK_TIME.div_ceil(heartbeat_interval);
+  #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+  const HEARTBEATS_PER_BLOCK: u32 = tributary_sdk::tendermint::TARGET_BLOCK_TIME
+    .as_millis()
+    .div_ceil(HEARTBEAT_INTERVAL.as_millis()) as u32;
   // libp2p-rs defaults to 5, whereas ours will be ~8
-  let heartbeats_to_keep = 2 * heartbeats_per_block;
+  const HEARTBEATS_TO_KEEP_U32: u32 = 2 * HEARTBEATS_PER_BLOCK;
+  #[expect(clippy::as_conversions)]
+  const HEARTBEATS_TO_KEEP: usize = HEARTBEATS_TO_KEEP_U32 as usize;
   // libp2p-rs defaults to 3 whereas ours will be ~4
-  let heartbeats_to_gossip = heartbeats_per_block;
+  #[expect(clippy::as_conversions)]
+  const HEARTBEATS_TO_GOSSIP: usize = HEARTBEATS_PER_BLOCK as usize;
+  // Track duplicates in the cache for the lifetime of the heartbeats
+  const DUPLICATE_CACHE_TIME: Duration =
+    HEARTBEAT_INTERVAL.checked_mul(HEARTBEATS_TO_KEEP_U32).unwrap();
 
   let config = ConfigBuilder::default()
     .protocol_id_prefix(LIBP2P_PROTOCOL)
-    .history_length(usize::try_from(heartbeats_to_keep).unwrap())
-    .history_gossip(usize::try_from(heartbeats_to_gossip).unwrap())
-    .heartbeat_interval(Duration::from_millis(heartbeat_interval.into()))
+    .history_length(HEARTBEATS_TO_KEEP)
+    .history_gossip(HEARTBEATS_TO_GOSSIP)
+    .heartbeat_interval(HEARTBEAT_INTERVAL)
     .max_transmit_size(MAX_LIBP2P_GOSSIP_MESSAGE_SIZE)
-    .duplicate_cache_time(Duration::from_millis((heartbeats_to_keep * heartbeat_interval).into()))
+    .duplicate_cache_time(DUPLICATE_CACHE_TIME)
     .validation_mode(ValidationMode::Anonymous)
     // Uses a content based message ID to avoid duplicates as much as possible
     .message_id_fn(|msg| {

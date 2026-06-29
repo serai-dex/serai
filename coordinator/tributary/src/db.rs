@@ -1,3 +1,4 @@
+use core::time::Duration;
 use std::collections::HashMap;
 
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -288,13 +289,19 @@ db_channel!(
 
 // 5 minutes
 #[cfg(not(feature = "longer-reattempts"))]
-pub(crate) const BASE_REATTEMPT_DELAY: u32 =
-  (5u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+pub(crate) const BASE_REATTEMPT_DELAY: u32 = Duration::from_mins(5)
+  .as_millis()
+  .div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME.as_millis())
+  as u32;
 
 // 10 minutes, intended for latent environments like the GitHub CI
 #[cfg(feature = "longer-reattempts")]
-pub(crate) const BASE_REATTEMPT_DELAY: u32 =
-  (10u32 * 60 * 1000).div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME);
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+pub(crate) const BASE_REATTEMPT_DELAY: u32 = Duration::from_mins(10)
+  .as_millis()
+  .div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME.as_millis())
+  as u32;
 
 pub(crate) struct TributaryDb;
 impl TributaryDb {

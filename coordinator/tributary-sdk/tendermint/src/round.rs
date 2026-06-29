@@ -1,8 +1,4 @@
-use std::{
-  marker::PhantomData,
-  time::{Duration, Instant},
-  collections::HashMap,
-};
+use std::{marker::PhantomData, time::Instant, collections::HashMap};
 
 use futures_util::{FutureExt as _, future};
 
@@ -34,14 +30,11 @@ impl<N: Network> RoundData<N> {
   fn timeout(&self, step: Step) -> CanonicalInstant {
     let adjusted_block = N::BLOCK_PROCESSING_TIME * (self.number.0 + 1);
     let adjusted_latency = N::LATENCY_TIME * (self.number.0 + 1);
-    let offset = Duration::from_millis(
-      (match step {
-        Step::Propose => adjusted_block + adjusted_latency,
-        Step::Prevote => adjusted_block + (2 * adjusted_latency),
-        Step::Precommit => adjusted_block + (3 * adjusted_latency),
-      })
-      .into(),
-    );
+    let offset = match step {
+      Step::Propose => adjusted_block + adjusted_latency,
+      Step::Prevote => adjusted_block + (2 * adjusted_latency),
+      Step::Precommit => adjusted_block + (3 * adjusted_latency),
+    };
     self.start_time + offset
   }
 

@@ -80,12 +80,12 @@ impl Debug for DoesNotError {
 
 /// A task to be continually ran.
 pub trait ContinuallyRan: Sized + Send {
-  /// The amount of seconds before this task should be polled again.
-  const DELAY_BETWEEN_ITERATIONS: u64 = 5;
-  /// The maximum amount of seconds before this task should be run again.
+  /// The amount of time before this task should be polled again.
+  const DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_secs(5);
+  /// The maximum amount of time before this task should be run again.
   ///
   /// Upon error, the amount of time waited will be linearly increased until this limit.
-  const MAX_DELAY_BETWEEN_ITERATIONS: u64 = 120;
+  const MAX_DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_mins(2);
 
   /// The error potentially yielded upon running an iteration of this task.
   type Error: Debug;
@@ -108,7 +108,7 @@ pub trait ContinuallyRan: Sized + Send {
       // The current number of seconds to sleep before running the task again
       // We increment this upon errors in order to not flood the logs with errors
       let mut current_sleep_before_next_task = default_sleep_before_next_task;
-      let increase_sleep_before_next_task = |current_sleep_before_next_task: &mut u64| {
+      let increase_sleep_before_next_task = |current_sleep_before_next_task: &mut Duration| {
         let new_sleep = *current_sleep_before_next_task + default_sleep_before_next_task;
         // Set a limit of sleeping **at most** two minutes
         // use min to get the smallest value: either new_sleep, or 2 minutes. Never greater
@@ -152,7 +152,7 @@ pub trait ContinuallyRan: Sized + Send {
           It isn't worth the effort when patchable_async_sleep::sleep will still resolve to tokio
         */
         tokio::select! {
-          () = tokio::time::sleep(Duration::from_secs(current_sleep_before_next_task)) => {},
+          () = tokio::time::sleep(current_sleep_before_next_task) => {},
           msg = task.run_now.recv() => {
             // Check if this is firing because the handle was dropped
             if msg.is_none() {

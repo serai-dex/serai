@@ -13,9 +13,17 @@ use serai_task::ContinuallyRan;
 use crate::{Heartbeat, Peer as _, P2p};
 
 // Amount of blocks in a minute
-#[expect(clippy::as_conversions)]
-const BLOCKS_PER_MINUTE: usize =
-  (60 / (tributary_sdk::tendermint::TARGET_BLOCK_TIME / 1000)) as usize;
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+const BLOCKS_PER_MINUTE: usize = {
+  let minute = Duration::from_mins(1).as_millis();
+  let result = minute.div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME.as_millis()) as usize;
+  // Ensure this can be round-tripped and no truncation actually occurred
+  assert!(
+    tributary_sdk::tendermint::TARGET_BLOCK_TIME.checked_mul(result as u32).unwrap().as_millis() ==
+      minute
+  );
+  result
+};
 
 /// The minimum amount of blocks to include/included within a batch, assuming there's blocks to
 /// include in the batch.

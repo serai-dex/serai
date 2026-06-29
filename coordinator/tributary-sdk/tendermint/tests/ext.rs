@@ -119,8 +119,8 @@ impl Network for TestNetwork {
   type Weights = TestWeights;
   type Block = TestBlock;
 
-  const BLOCK_PROCESSING_TIME: u32 = 2000;
-  const LATENCY_TIME: u32 = 1000;
+  const BLOCK_PROCESSING_TIME: Duration = Duration::from_secs(2);
+  const LATENCY_TIME: Duration = Duration::from_secs(1);
 
   async fn sleep(duration: Duration) {
     sleep(duration).await;

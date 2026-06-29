@@ -1,4 +1,4 @@
-use core::{borrow::Borrow, future::Future};
+use core::{borrow::Borrow, future::Future, time::Duration};
 use std::{
   sync::Arc,
   collections::{HashSet, HashMap},
@@ -206,8 +206,8 @@ impl UpdateValidatorsTask {
 
 impl ContinuallyRan for UpdateValidatorsTask {
   // Only run every minute, not the default of every five seconds
-  const DELAY_BETWEEN_ITERATIONS: u64 = 60;
-  const MAX_DELAY_BETWEEN_ITERATIONS: u64 = 5 * 60;
+  const DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_mins(1);
+  const MAX_DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_mins(5);
 
   type Error = RpcError;
 
