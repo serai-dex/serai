@@ -1,6 +1,6 @@
-# serai-shim-rpc
+# serai-mock-rpc
 
-In-process **shim RPC node**, wire-compatible with the production `Serai` RPC serai (`serai-client-serai`).
+In-process **mock Serai RPC node**, wire-compatible with the production `Serai` RPC serai (`serai-client-serai`).
 
 - Binds to an ephemeral `127.0.0.1` port and implements some RPC methods the real node exposes (`blockchain/*`, `validator-sets/*`, ...);
 - Lets tests **pre-populate blocks with arbitrary events** (allocations, SetDecided, SetKeys, etc.) so the exact scenario is fully controlled;
@@ -10,15 +10,15 @@ In-process **shim RPC node**, wire-compatible with the production `Serai` RPC se
 ## Example
 
 ```rust
-use serai_shim_rpc::{SeraiShimRpc, ShimState};
+use serai_mock_rpc::{MockSeraiRpc, MockSeraiState};
 use serai_client_serai::Serai;
 
-let mut state = ShimState::default();
+let mut state = MockSeraiState::default();
 state.make_block(0, vec![vec![]]);
 state.make_block(1, vec![vec![allocation_event(...), set_keys_event(...)]]);
 
-let shim_serai = SeraiShimRpc::start(state).await;
-let serai = Serai::new(shim_serai.url()).unwrap();
+let mock_serai = MockSeraiRpc::start(state).await;
+let serai = Serai::new(mock_serai.url()).unwrap();
 
 let latest = serai.latest_finalized_block_number().await.unwrap();
 assert_eq!(latest, 1);

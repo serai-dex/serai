@@ -245,7 +245,7 @@ impl TransactionPlanner<Rpc, ()> for Planner {
               singular_spent_output,
               eventuality: MEventuality::from(tx.1),
             },
-            auxilliary: (),
+            auxiliary: (),
           }
         }
         Err(SendError::NotEnoughFunds { .. }) => panic!("failed to successfully amortize the fee"),

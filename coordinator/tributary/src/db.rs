@@ -3,15 +3,14 @@ use std::collections::HashMap;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::{
-  BlockHash,
-  validator_sets::{KeyShares, ExternalValidatorSet},
-  address::SeraiAddress,
-};
+use dkg::Participant;
+use serai_coordinator_substrate::TributaryValidatorSetInfo;
+use serai_primitives::{BlockHash, validator_sets::ExternalValidatorSet};
+
+use messages::sign::{VariantSignId, SignId};
 
 use serai_db::*;
 use serai_cosign_types::CosignIntent;
-use messages::sign::{VariantSignId, SignId};
 
 use crate::transaction::SigningProtocolRound;
 
@@ -20,8 +19,8 @@ use crate::transaction::SigningProtocolRound;
 pub enum Topic {
   /// Vote to remove a participant
   RemoveParticipant {
-    /// The participant to remove
-    participant: SeraiAddress,
+    /// The participant to remove. Stored as the tributary index of participation
+    participant: Participant,
   },
 
   // DkgParticipation isn't represented here as participations are immediately sent to the
@@ -48,7 +47,7 @@ pub enum Topic {
   },
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Debug, PartialEq)]
 pub(crate) enum Participating {
   Participated,
   Everyone,
@@ -61,13 +60,15 @@ impl Topic {
     match self {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round: _ } => Some(Topic::DkgConfirmation {
-        attempt: attempt + 1,
+        attempt: attempt.checked_add(1)?,
         round: SigningProtocolRound::Preprocess,
       }),
       Topic::SlashReport => None,
-      Topic::Sign { id, attempt, round: _ } => {
-        Some(Topic::Sign { id, attempt: attempt + 1, round: SigningProtocolRound::Preprocess })
-      }
+      Topic::Sign { id, attempt, round: _ } => Some(Topic::Sign {
+        id,
+        attempt: attempt.checked_add(1)?,
+        round: SigningProtocolRound::Preprocess,
+      }),
     }
   }
 
@@ -78,7 +79,7 @@ impl Topic {
       Topic::RemoveParticipant { .. } => None,
       Topic::DkgConfirmation { attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          let next_attempt = attempt + 1;
+          let next_attempt = attempt.checked_add(1)?;
           Some((
             next_attempt,
             Topic::DkgConfirmation {
@@ -92,7 +93,7 @@ impl Topic {
       Topic::SlashReport => None,
       Topic::Sign { id, attempt, round } => match round {
         SigningProtocolRound::Preprocess => {
-          let next_attempt = attempt + 1;
+          let next_attempt = attempt.checked_add(1)?;
           Some((
             next_attempt,
             Topic::Sign { id, attempt: next_attempt, round: SigningProtocolRound::Preprocess },
@@ -204,18 +205,6 @@ impl Topic {
     }
   }
 
-  pub(crate) fn required_participation(&self, n: u16) -> u16 {
-    // All of our current topics require 2/3rds participation
-    let _ = self;
-
-    let wide = u32::from(n);
-    let fraction_lt_input =
-      wide.checked_mul(2).expect("widened integer overflowed when multiplied by `2`") / 3;
-    let result_lte_input = fraction_lt_input + 1;
-    u16::try_from(result_lte_input)
-      .expect("value less than or equal to `u16` input wasn't itself valid as a `u16`")
-  }
-
   pub(crate) fn participating(&self) -> Participating {
     #[expect(clippy::match_same_arms)]
     match self {
@@ -236,25 +225,26 @@ pub(crate) enum DataSet<D: Borshy> {
   /// (non-existent, not ready, prior handled, not participating, etc.)
   None,
   /// The data set was ready and we are participating in this event
-  Participating(HashMap<SeraiAddress, D>),
+  Participating(HashMap<Participant, D>),
 }
 
 create_db!(
   CoordinatorTributary {
-    // The last handled tributary block's (number, hash)
+    // The last handled tributary block's (number, hash).
     LastHandledTributaryBlock: (set: ExternalValidatorSet) -> (u64, [u8; 32]),
 
-    // The slash points a validator has accrued, with u32::MAX representing a fatal slash.
-    SlashPoints: (set: ExternalValidatorSet, validator: SeraiAddress) -> u32,
+    // The slash points a participant has accrued, with u32::MAX representing a fatal slash.
+    ParticipantTributarySlashPoints: (set: ExternalValidatorSet, participant: Participant) -> u32,
 
-    // The cosign intent for a Substrate block
-    CosignIntents: (set: ExternalValidatorSet, substrate_block_hash: BlockHash) -> CosignIntent,
+    // The cosign intent per Substrate block hashes.
+    SubstrateCosignIntents:
+      (set: ExternalValidatorSet, substrate_block_hash: BlockHash) -> CosignIntent,
     // The latest Substrate block to cosign.
     LatestSubstrateBlockToCosign: (set: ExternalValidatorSet) -> BlockHash,
     // The hash of the block we're actively cosigning.
-    ActivelyCosigning: (set: ExternalValidatorSet) -> BlockHash,
+    ActivelyCosigningHash: (set: ExternalValidatorSet) -> BlockHash,
     // If this block has already been cosigned.
-    Cosigned: (set: ExternalValidatorSet, substrate_block_hash: BlockHash) -> (),
+    IsSubstrateCosigned: (set: ExternalValidatorSet, substrate_block_hash: BlockHash) -> (),
 
     // The plans to recognize upon a `Transaction::SubstrateBlock` being included on-chain.
     SubstrateBlockPlans: (
@@ -263,21 +253,21 @@ create_db!(
     ) -> Vec<[u8; 32]>,
 
     // The weight accumulated for a topic.
-    AccumulatedWeight: (set: ExternalValidatorSet, topic: Topic) -> u16,
+    TopicsAccumulatedWeight: (set: ExternalValidatorSet, topic: Topic) -> u16,
     // The entries accumulated for a topic, by validator.
-    Accumulated: <D: Borshy>(
+    TopicsParticipantAccumulatedEntries: <D: Borshy>(
       set: ExternalValidatorSet,
       topic: Topic,
-      validator: SeraiAddress
+      participant: Participant
     ) -> D,
 
     // Topics to be recognized as of a certain block number due to the reattempt protocol.
-    Reattempt: (set: ExternalValidatorSet, block_number: u64) -> Vec<Topic>,
+    BlocksReattemptTopics: (set: ExternalValidatorSet, block_number: u64) -> Vec<Topic>,
   }
 );
 
 db_channel!(
-  CoordinatorTributary {
+  CoordinatorTributaryChannels {
     // Messages to send to the processor
     ProcessorMessages: (set: ExternalValidatorSet) -> messages::CoordinatorMessage,
     // Messages for the DKG confirmation
@@ -333,11 +323,14 @@ impl TributaryDb {
   ) {
     LatestSubstrateBlockToCosign::set(txn, set, &substrate_block_hash);
   }
-  pub(crate) fn actively_cosigning(
+  pub(crate) fn get_actively_cosigning_hash(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
   ) -> Option<BlockHash> {
-    ActivelyCosigning::get(txn, set)
+    ActivelyCosigningHash::get(txn, set)
+  }
+  pub(crate) fn is_actively_cosigning(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> bool {
+    Self::get_actively_cosigning_hash(txn, set).is_some()
   }
   pub(crate) fn start_cosigning(
     txn: &mut impl DbTxn,
@@ -346,10 +339,10 @@ impl TributaryDb {
     substrate_block_number: u64,
   ) {
     assert!(
-      ActivelyCosigning::get(txn, set).is_none(),
-      "starting cosigning while already cosigning"
+      !Self::is_actively_cosigning(txn, set),
+      "starting cosigning while set is already cosigning"
     );
-    ActivelyCosigning::set(txn, set, &substrate_block_hash);
+    ActivelyCosigningHash::set(txn, set, &substrate_block_hash);
 
     Self::recognize_topic(
       txn,
@@ -362,43 +355,45 @@ impl TributaryDb {
     );
   }
   pub(crate) fn finish_cosigning(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
-    assert!(
-      ActivelyCosigning::take(txn, set).is_some(),
-      "tried to finish cosigning but wasn't actively cosigning"
-    );
+    ActivelyCosigningHash::take(txn, set)
+      .expect("tried to finish cosigning but set wasn't actively cosigning");
   }
   pub(crate) fn mark_cosigned(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
     substrate_block_hash: BlockHash,
   ) {
-    Cosigned::set(txn, set, substrate_block_hash, &());
+    IsSubstrateCosigned::set(txn, set, substrate_block_hash, &());
   }
-  pub(crate) fn cosigned(
+  pub(crate) fn is_cosigned(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
     substrate_block_hash: BlockHash,
   ) -> bool {
-    Cosigned::get(txn, set, substrate_block_hash).is_some()
+    IsSubstrateCosigned::get(txn, set, substrate_block_hash).is_some()
   }
 
-  pub(crate) fn recognize_topic(txn: &mut impl DbTxn, set: ExternalValidatorSet, topic: Topic) {
-    AccumulatedWeight::set(txn, set, topic, &0);
-    RecognizedTopics::send(txn, set, &topic);
-  }
-  pub(crate) fn recognized(getter: &impl Get, set: ExternalValidatorSet, topic: Topic) -> bool {
-    AccumulatedWeight::get(getter, set, topic).is_some()
-  }
-  /// The next topic which required recognition which has now been recognized by this Tributary.
-  pub(crate) fn try_recv_topic_requiring_recognition(
+  /// The next topic requiring recognition which has been recognized by this Tributary.
+  pub fn try_recv_topic_requiring_recognition(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
   ) -> Option<Topic> {
     RecognizedTopics::try_recv(txn, set)
   }
+  pub(crate) fn recognize_topic(txn: &mut impl DbTxn, set: ExternalValidatorSet, topic: Topic) {
+    TopicsAccumulatedWeight::set(txn, set, topic, &0);
+    RecognizedTopics::send(txn, set, &topic);
+  }
+  pub(crate) fn is_topic_recognized(
+    getter: &impl Get,
+    set: ExternalValidatorSet,
+    topic: Topic,
+  ) -> bool {
+    TopicsAccumulatedWeight::get(getter, set, topic).is_some()
+  }
 
   pub(crate) fn start_of_block(txn: &mut impl DbTxn, set: ExternalValidatorSet, block_number: u64) {
-    for topic in Reattempt::take(txn, set, block_number).unwrap_or(vec![]) {
+    for topic in BlocksReattemptTopics::take(txn, set, block_number).unwrap_or(vec![]) {
       /*
         TODO: Slash all people who preprocessed but didn't share, and add a delay to their
         participations in future protocols. When we call accumulate, if the participant has no
@@ -428,46 +423,49 @@ impl TributaryDb {
   pub(crate) fn fatal_slash(
     txn: &mut impl DbTxn,
     set: ExternalValidatorSet,
-    validator: SeraiAddress,
+    participant: Participant,
     #[cfg_attr(coverage, allow(unused_variables))] reason: &str,
   ) {
-    serai_env::warn!("{validator} fatally slashed: {reason}");
-    SlashPoints::set(txn, set, validator, &u32::MAX);
+    serai_env::warn!("{participant:?} fatally slashed: {reason}");
+    ParticipantTributarySlashPoints::set(txn, set, participant, &u32::MAX);
   }
 
   pub(crate) fn is_fatally_slashed(
     getter: &impl Get,
     set: ExternalValidatorSet,
-    validator: SeraiAddress,
+    participant: Participant,
   ) -> bool {
-    SlashPoints::get(getter, set, validator).unwrap_or(0) == u32::MAX
+    ParticipantTributarySlashPoints::get(getter, set, participant).unwrap_or(0) == u32::MAX
   }
 
-  #[expect(clippy::too_many_arguments)]
   pub(crate) fn accumulate<D: Borshy>(
     txn: &mut impl DbTxn,
-    set: ExternalValidatorSet,
-    validators: &[SeraiAddress],
-    total_weight: u16,
+    tributary_validator_set_info: &TributaryValidatorSetInfo,
     block_number: u64,
     topic: Topic,
-    validator: SeraiAddress,
-    validator_weight: u16,
+    participant: Participant,
     data: &D,
   ) -> DataSet<D> {
-    // This function will only be called once for a (validator, topic) tuple due to how we handle
+    let weight = tributary_validator_set_info
+      .tributary_validator_set
+      .get_tributary_validator_by_consensus_index(&participant)
+      .unwrap()
+      .weight;
+    let set = tributary_validator_set_info.set;
+
+    // This function will only be called once for a (topic, participant) tuple due to how we handle
     // nonces on transactions (deterministically to the topic)
     assert!(
-      txn.get(Accumulated::<D>::key(set, topic, validator)).is_none(),
-      "accumulate called twice for the same (validator, topic) tuple",
+      txn.get(TopicsParticipantAccumulatedEntries::<D>::key(set, topic, participant)).is_none(),
+      "accumulate called twice for the same (topic, participant) tuple"
     );
 
-    let accumulated_weight = AccumulatedWeight::get(txn, set, topic);
+    let accumulated_weight = TopicsAccumulatedWeight::get(txn, set, topic);
     if topic.requires_recognition() && accumulated_weight.is_none() {
       Self::fatal_slash(
         txn,
         set,
-        validator,
+        participant,
         "participated in unrecognized topic which requires recognition",
       );
       return DataSet::None;
@@ -479,20 +477,23 @@ impl TributaryDb {
     if let Some(preceding_topic) = preceding_topic {
       // Use a raw key-existence check instead of `Accumulated::<D>::get` because the preceding
       // topic may have stored a different type (e.g. preprocess is [u8; 64], share is [u8; 32])
-      if txn.get(Accumulated::<D>::key(set, preceding_topic, validator)).is_none() {
+      if txn
+        .get(TopicsParticipantAccumulatedEntries::<D>::key(set, preceding_topic, participant))
+        .is_none()
+      {
         Self::fatal_slash(
           txn,
           set,
-          validator,
+          participant,
           "participated in topic without participating in prior",
         );
         return DataSet::None;
       }
     }
 
-    let required_participation = topic.required_participation(total_weight);
+    let required_participation =
+      tributary_validator_set_info.tributary_validator_set.required_participation();
 
-    // TODO:
     // The complete lack of validation on the data by these NOPs opens the potential for spam here
 
     // If we've already accumulated past the threshold, NOP
@@ -501,32 +502,31 @@ impl TributaryDb {
     }
     // If this is for an old attempt, NOP
     if let Some(next_attempt_topic) = topic.next_attempt_topic() {
-      if AccumulatedWeight::get(txn, set, next_attempt_topic).is_some() {
+      if TopicsAccumulatedWeight::get(txn, set, next_attempt_topic).is_some() {
         return DataSet::None;
       }
     }
 
     // Accumulate the data
-    const {
-      // If this is true, the following addition won't trip unless we're accumulating past the max
-      assert!(KeyShares::MAX_PER_SET < u16::MAX);
-    }
-    accumulated_weight += validator_weight;
-    AccumulatedWeight::set(txn, set, topic, &accumulated_weight);
-    Accumulated::set(txn, set, topic, validator, data);
+    accumulated_weight = accumulated_weight.checked_add(weight).unwrap_or_else(|| {
+      panic!("accumulated {accumulated_weight} overflowed adding weight {weight}");
+    });
+    TopicsAccumulatedWeight::set(txn, set, topic, &accumulated_weight);
+    TopicsParticipantAccumulatedEntries::<D>::set(txn, set, topic, participant, data);
 
     // Check if we now cross the weight threshold
     if accumulated_weight >= required_participation {
       // Queue this for re-attempt after enough time passes
       let reattempt_topic = topic.reattempt_topic();
       if let Some((attempt, reattempt_topic)) = reattempt_topic {
-        // Linearly scale the time for the protocol with the attempt number, up to 10x
+        // Linearly scale the time for the protocol with the attempt number
         let blocks_till_reattempt = attempt.min(10).saturating_mul(u64::from(BASE_REATTEMPT_DELAY));
 
         let recognize_at = block_number + blocks_till_reattempt;
-        let mut queued = Reattempt::get(txn, set, recognize_at).unwrap_or(Vec::with_capacity(1));
+        let mut queued =
+          BlocksReattemptTopics::get(txn, set, recognize_at).unwrap_or(Vec::with_capacity(1));
         queued.push(reattempt_topic);
-        Reattempt::set(txn, set, recognize_at, &queued);
+        BlocksReattemptTopics::set(txn, set, recognize_at, &queued);
       }
 
       // Register the succeeding topic
@@ -535,19 +535,20 @@ impl TributaryDb {
         Self::recognize_topic(txn, set, succeeding_topic);
       }
 
-      // Fetch and return all participations
-      let mut data_set = HashMap::with_capacity(validators.len());
-      for validator in validators {
-        if let Some(data) = Accumulated::<D>::get(txn, set, topic, *validator) {
-          // Clean this data up if there's not a re-attempt topic
-          // If there is a re-attempt topic, we clean it up upon re-attempt
+      let len_of_participants =
+        tributary_validator_set_info.tributary_validator_set.consensus_tributary_validators.len();
+      let mut data_set = HashMap::with_capacity(len_of_participants);
+      for i in 1 ..= len_of_participants + 1 {
+        let i_participant = Participant::new(u16::try_from(i).unwrap()).unwrap();
+        if let Some(data) = TopicsParticipantAccumulatedEntries::get(txn, set, topic, i_participant)
+        {
           if reattempt_topic.is_none() {
-            Accumulated::<D>::del(txn, set, topic, *validator);
+            TopicsParticipantAccumulatedEntries::<D>::del(txn, set, topic, i_participant);
           }
-          data_set.insert(*validator, data);
+          data_set.insert(i_participant, data);
         }
       }
-      let participated = data_set.contains_key(&validator);
+      let participated = data_set.contains_key(&participant);
       match topic.participating() {
         Participating::Participated => {
           if participated {

@@ -1,4 +1,4 @@
-use crate::{delay::*, evaluator::*, tests::*};
+use crate::{delay::*, evaluator, tests::*};
 
 fn now_secs() -> u64 {
   now_timestamp().as_secs()
@@ -7,6 +7,8 @@ fn now_secs() -> u64 {
 struct DelayTest {
   db: MemDb,
 }
+
+impl_serai_task_test_struct!(DelayTest, { db: db });
 
 impl Default for DelayTest {
   fn default() -> Self {
@@ -34,16 +36,31 @@ impl DelayTest {
 /// After a successful task run, `CosignedBlocks` should be consumed and
 /// `LatestCosignedBlockNumber` point to the expected last block number.
 fn verify_db_invariants(db: &MemDb, expected_latest_block: Option<u64>) {
-  let actual = LatestCosignedBlockNumber::get(db);
-  let cosigned_pending = CosignedBlocks::peek(db).is_some();
+  use serai_env::log::debug;
 
-  assert_eq!(actual, expected_latest_block, "LatestCosignedBlockNumber mismatch");
+  let cosigned_pending = evaluator::CosignedBlocks::peek(db).is_some();
+  debug!("evaluator::CosignedBlocks: {cosigned_pending}");
   assert!(!cosigned_pending, "CosignedBlocks should be fully consumed");
+
+  let latest_cosigned_block_number = LatestCosignedBlockNumber::get(db);
+  debug!("LatestCosignedBlockNumber: {latest_cosigned_block_number:?}");
+  assert_eq!(
+    latest_cosigned_block_number, expected_latest_block,
+    "LatestCosignedBlockNumber mismatch"
+  );
+}
+
+#[test]
+fn constants() {
+  assert_eq!(
+    ACKNOWLEDGEMENT_DELAY,
+    Duration::from_secs(BROADCAST_FREQUENCY.as_secs() + SYNCHRONY_EXPECTATION.as_secs())
+  );
 }
 
 #[tokio::test]
 async fn updates_latest_finalized_block_after_ack_delay() {
-  *INIT_LOGGER;
+  let mut rng = new_test_rng();
   let (mut test, start) = DelayTest::new();
 
   // Returns false (made no progress) on no CosignedBlocks
@@ -59,9 +76,9 @@ async fn updates_latest_finalized_block_after_ack_delay() {
 
     {
       let now = now_secs();
-      CosignedBlocks::send(&mut txn, &(0, now, true));
-      CosignedBlocks::send(&mut txn, &(1, now, true));
-      CosignedBlocks::send(&mut txn, &(2, now, true));
+      evaluator::CosignedBlocks::send(&mut txn, &(0, now, true));
+      evaluator::CosignedBlocks::send(&mut txn, &(1, now, true));
+      evaluator::CosignedBlocks::send(&mut txn, &(2, now, true));
       txn.commit();
     }
 
@@ -80,9 +97,9 @@ async fn updates_latest_finalized_block_after_ack_delay() {
 
     {
       let now = now_secs();
-      CosignedBlocks::send(&mut txn, &(3, now, true));
-      CosignedBlocks::send(&mut txn, &(4, now - 5, true));
-      CosignedBlocks::send(&mut txn, &(5, now - 10, true));
+      evaluator::CosignedBlocks::send(&mut txn, &(3, now, true));
+      evaluator::CosignedBlocks::send(&mut txn, &(4, now - 5, true));
+      evaluator::CosignedBlocks::send(&mut txn, &(5, now - 10, true));
       txn.commit();
     }
 
@@ -101,9 +118,9 @@ async fn updates_latest_finalized_block_after_ack_delay() {
 
     {
       let now = now_secs();
-      CosignedBlocks::send(&mut txn, &(6, now, true));
-      CosignedBlocks::send(&mut txn, &(7, now + 5, true));
-      CosignedBlocks::send(&mut txn, &(8, now + 10, true));
+      evaluator::CosignedBlocks::send(&mut txn, &(6, now, true));
+      evaluator::CosignedBlocks::send(&mut txn, &(7, now + 5, true));
+      evaluator::CosignedBlocks::send(&mut txn, &(8, now + 10, true));
       txn.commit();
     }
 
@@ -118,9 +135,9 @@ async fn updates_latest_finalized_block_after_ack_delay() {
   {
     let mut txn = test.db.txn();
     // the time_evaluated timestamp doesn't matter here since it will be skipped
-    CosignedBlocks::send(&mut txn, &(9, OsRng.next_u64(), false));
-    CosignedBlocks::send(&mut txn, &(10, OsRng.next_u64(), false));
-    CosignedBlocks::send(&mut txn, &(11, OsRng.next_u64(), false));
+    evaluator::CosignedBlocks::send(&mut txn, &(9, rng.next_u64(), false));
+    evaluator::CosignedBlocks::send(&mut txn, &(10, rng.next_u64(), false));
+    evaluator::CosignedBlocks::send(&mut txn, &(11, rng.next_u64(), false));
     txn.commit();
 
     let start = Instant::now();
@@ -143,13 +160,13 @@ async fn does_not_regress_and_skips_if_not_a_later_block() {
   {
     {
       let mut txn = test.db.txn();
-      CosignedBlocks::send(&mut txn, &(1, now_secs(), true));
-      CosignedBlocks::send(&mut txn, &(2, now_secs(), true));
+      evaluator::CosignedBlocks::send(&mut txn, &(1, now_secs(), true));
+      evaluator::CosignedBlocks::send(&mut txn, &(2, now_secs(), true));
 
       // Sent out of order below
-      CosignedBlocks::send(&mut txn, &(4, now_secs(), true));
+      evaluator::CosignedBlocks::send(&mut txn, &(4, now_secs(), true));
       // 3 will be skipped after 4 was processed
-      CosignedBlocks::send(&mut txn, &(3, now_secs(), true));
+      evaluator::CosignedBlocks::send(&mut txn, &(3, now_secs(), true));
 
       txn.commit();
     }
@@ -165,7 +182,7 @@ async fn does_not_regress_and_skips_if_not_a_later_block() {
     {
       let mut txn = test.db.txn();
       // Sends the same previous block number
-      CosignedBlocks::send(&mut txn, &(4, now_secs(), true));
+      evaluator::CosignedBlocks::send(&mut txn, &(4, now_secs(), true));
       txn.commit();
     }
 
@@ -179,13 +196,14 @@ async fn does_not_regress_and_skips_if_not_a_later_block() {
 
 #[tokio::test]
 async fn respects_acknowledgement_delay() {
+  let mut rng = new_test_rng();
   let mut test = DelayTest::default();
-  let block_number = OsRng.next_u64();
+  let block_number = rng.next_u64();
 
   let now = now_secs();
   {
     let mut txn = test.db.txn();
-    CosignedBlocks::send(&mut txn, &(block_number, now, true));
+    evaluator::CosignedBlocks::send(&mut txn, &(block_number, now, true));
     txn.commit();
   }
 

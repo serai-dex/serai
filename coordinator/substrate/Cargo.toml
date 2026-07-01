@@ -18,9 +18,12 @@ workspace = true
 
 [dependencies]
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+schnorrkel = { version = "0.11", default-features = false }
 
 blake2 = { version = "0.11.0-rc.5", default-features = false, features = ["alloc"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
+ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["alloc"] }
 
 serai-client-serai = { path = "../../substrate/client/serai", default-features = false }
 
@@ -32,3 +35,20 @@ serai-task = { path = "../../common/task", version = "0.1" }
 serai-cosign = { path = "../cosign", version = "0.1" }
 
 messages = { package = "serai-processor-messages", version = "0.1", path = "../../processor/messages" }
+
+serai-env = { path = "../../common/env" }
+serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std", "test-helpers"] }
+serai-tributary-types = { path = "../tributary/types" }
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+rand = { version = "0.8", default-features = false, features = ["std"] }
+rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+bitvec = { version = "1", default-features = false, features = ["std"] }
+serai-cosign = { path = "../cosign", features = ["test-helpers"] }
+serai-mock-rpc = { path = "../../tests/mock-serai-rpc" }
+serai-abi = { path = "../../substrate/abi", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt", "time"] }
+
+[features]
+test-helpers = []

@@ -36,6 +36,7 @@ serai-task = { path = "../../common/task", version = "0.1" }
 tributary-sdk = { path = "../tributary-sdk" }
 
 serai-cosign-types = { path = "../cosign/types" }
+serai-tributary-types = { path = "types" }
 serai-coordinator-substrate = { path = "../substrate" }
 
 messages = { package = "serai-processor-messages", path = "../../processor/messages" }
@@ -53,6 +54,11 @@ tokio = { version = "1", default-features = false, features = ["rt", "time", "ma
 
 serai-task = { path = "../../common/task", features = ["test-helpers"] }
 serai-substrate-tests = { path = "../../tests/substrate" }
+serai-coordinator-substrate = { path = "../substrate", features = ["test-helpers"] }
+
+serai-mock-rpc = { path = "../../tests/mock-serai-rpc" }
+
+serai-tributary-types = { path = "types", features = ["test-helpers"] }
 
 [features]
 longer-reattempts = []

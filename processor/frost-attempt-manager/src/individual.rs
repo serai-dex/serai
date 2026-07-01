@@ -104,7 +104,6 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
 
     let mut our_preprocesses = HashMap::with_capacity(self.root.len());
     let mut preprocessed = Vec::with_capacity(self.root.len());
-    let mut preprocesses = Vec::with_capacity(self.root.len());
     for (i, machine) in self.root.iter().enumerate() {
       let (machine, preprocess) = machine.clone().preprocess(&mut OsRng);
       preprocessed.push(machine);
@@ -117,15 +116,14 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
           u16::from(self.start_i) + u16::try_from(i).expect("signing with 2**16 machines"),
         )
         .expect("start_i + i exceeded the valid indexes for a Participant"),
-        this_preprocess.clone(),
+        this_preprocess,
       );
-      preprocesses.push(this_preprocess);
     }
-    assert!(self.preprocessed.insert(attempt, (preprocessed, our_preprocesses)).is_none());
+    assert!(self.preprocessed.insert(attempt, (preprocessed, our_preprocesses.clone())).is_none());
 
     vec![ProcessorMessage::Preprocesses {
       id: SignId { session: self.session, id: self.id, attempt },
-      preprocesses,
+      preprocesses: our_preprocesses,
     }]
   }
 
@@ -170,7 +168,6 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
 
     let mut our_shares = HashMap::with_capacity(self.root.len());
     let mut shared = Vec::with_capacity(machines.len());
-    let mut shares = Vec::with_capacity(machines.len());
     for (i, machine) in machines.into_iter().enumerate() {
       let i = Participant::new(
         u16::from(self.start_i) + u16::try_from(i).expect("signing with 2**16 machines"),
@@ -205,18 +202,17 @@ impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
       let mut this_share = Vec::with_capacity(32);
       share.write(&mut this_share).unwrap();
 
-      our_shares.insert(i, this_share.clone());
-      shares.push(this_share);
+      our_shares.insert(i, this_share);
     }
 
-    assert!(self.shared.insert(attempt, (shared.swap_remove(0), our_shares)).is_none());
+    assert!(self.shared.insert(attempt, (shared.swap_remove(0), our_shares.clone())).is_none());
     log::debug!(
       "successfully handled preprocesses for signing protocol {:?}, sending shares",
       self.id,
     );
     msgs.push(ProcessorMessage::Shares {
       id: SignId { session: self.session, id: self.id, attempt },
-      shares,
+      shares: our_shares,
     });
     msgs
   }

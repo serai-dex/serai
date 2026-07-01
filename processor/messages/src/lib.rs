@@ -66,7 +66,12 @@ pub mod key_gen {
     /// Instructs the Processor to begin the key generation process.
     ///
     /// This is sent by the Coordinator when it creates the Tributary.
-    GenerateKey { session: Session, threshold: u16, evrf_public_keys: Vec<([u8; 32], Vec<u8>)> },
+    GenerateKey {
+      session: Session,
+      threshold: u16,
+      substrate_evrf_public_keys: Vec<[u8; 32]>,
+      network_evrf_public_keys: Vec<Vec<u8>>,
+    },
     /// Received participations for the specified key generation protocol.
     ///
     /// This is sent by the Coordinator's Tributary scanner.
@@ -84,11 +89,17 @@ pub mod key_gen {
   impl core::fmt::Debug for CoordinatorMessage {
     fn fmt(&self, fmt: &mut core::fmt::Formatter<'_>) -> Result<(), core::fmt::Error> {
       match self {
-        CoordinatorMessage::GenerateKey { session, threshold, evrf_public_keys } => fmt
+        CoordinatorMessage::GenerateKey {
+          session,
+          threshold,
+          substrate_evrf_public_keys,
+          network_evrf_public_keys,
+        } => fmt
           .debug_struct("CoordinatorMessage::GenerateKey")
           .field("session", &session)
           .field("threshold", &threshold)
-          .field("evrf_public_keys.len()", &evrf_public_keys.len())
+          .field("substrate_evrf_public_keys.len()", &substrate_evrf_public_keys.len())
+          .field("network_evrf_public_keys.len()", &network_evrf_public_keys.len())
           .finish_non_exhaustive(),
         CoordinatorMessage::Participation { session, participant, .. } => fmt
           .debug_struct("CoordinatorMessage::Participation")
@@ -234,12 +245,20 @@ pub mod sign {
     // Created preprocesses for the specified signing protocol.
     Preprocesses {
       id: SignId,
-      preprocesses: Vec<Vec<u8>>,
+      #[borsh(
+        serialize_with = "borsh_serialize_participant_map",
+        deserialize_with = "borsh_deserialize_participant_map"
+      )]
+      preprocesses: HashMap<Participant, Vec<u8>>,
     },
     // Signed shares for the specified signing protocol.
     Shares {
       id: SignId,
-      shares: Vec<Vec<u8>>,
+      #[borsh(
+        serialize_with = "borsh_serialize_participant_map",
+        deserialize_with = "borsh_deserialize_participant_map"
+      )]
+      shares: HashMap<Participant, Vec<u8>>,
     },
   }
 }
@@ -288,20 +307,15 @@ pub mod substrate {
   }
 
   #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+  /// All messages sent by the Coordinator's Substrate canonical event stream.
   pub enum CoordinatorMessage {
     /// Keys set on the Serai blockchain.
-    ///
-    /// This is sent by the Coordinator's Substrate canonical event stream.
     SetKeys { serai_time: u64, session: Session, key_pair: KeyPair },
     /// Slashes reported on the Serai blockchain OR the process timed out.
     ///
-    /// This is the final message for a session,
-    ///
-    /// This is sent by the Coordinator's Substrate canonical event stream.
+    /// This is the final message for a session.
     SlashesReported { session: Session },
-    /// A block from Serai with relevance to this processor.
-    ///
-    /// This is sent by the Coordinator's Substrate canonical event stream.
+    /// A canonical block from Serai, with relevance to this processor.
     Block {
       serai_block_number: u64,
       batch: Option<ExecutedBatch>,

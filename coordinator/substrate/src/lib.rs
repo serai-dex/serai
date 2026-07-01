@@ -3,15 +3,8 @@
 #![deny(missing_docs)]
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use std::collections::HashMap;
-
+use blake2::{digest::typenum::U32, Digest as _, Blake2b};
 use borsh::{BorshSerialize, BorshDeserialize};
-
-use blake2::{
-  digest::{typenum::U32, Digest as _},
-  Blake2b,
-};
-use dkg::Participant;
 
 use serai_client_serai::abi::{
   primitives::{
@@ -19,7 +12,6 @@ use serai_client_serai::abi::{
     network_id::ExternalNetworkId,
     validator_sets::{Session, ExternalValidatorSet, KeyShares, SlashReport},
     crypto::{Signature, KeyPair},
-    address::SeraiAddress,
     instructions::SignedBatch,
   },
   Transaction,
@@ -29,87 +21,41 @@ use serai_db::*;
 
 mod canonical;
 pub use canonical::CanonicalEventStream;
-use canonical::last_indexed_batch_id;
 mod ephemeral;
 pub use ephemeral::EphemeralEventStream;
 
 mod set_keys;
+use serai_tributary_types::TributaryValidatorSet;
 pub use set_keys::SetKeysTask;
 mod publish_batch;
 pub use publish_batch::PublishBatchTask;
 mod publish_slash_report;
 pub use publish_slash_report::PublishSlashReportTask;
 
+/// Test helpers and fixtures.
+#[cfg(test)]
+pub mod tests;
+
+#[cfg(any(test, feature = "test-helpers"))]
+/// Test helpers and fixtures.
+pub mod test_helpers;
+
 /// The information for a new set.
 #[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
-#[borsh(init = init_participant_indexes)]
-pub struct NewSetInformation {
+pub struct TributaryValidatorSetInfo {
   /// The set.
   pub set: ExternalValidatorSet,
   /// The Serai block which declared it.
   pub serai_block: [u8; 32],
   /// The time of the block which declared it, in seconds since the epoch.
   pub declaration_time: u64,
-  /// The threshold to use.
-  pub threshold: u16,
-  /// The validators, with the amount of key shares they have.
-  pub validators: Vec<(SeraiAddress, u16)>,
-  /// The eVRF public keys.
-  ///
-  /// This will have the necessary copies of the keys proper for each validator's weight,
-  /// accordingly syncing up with `participant_indexes`.
-  pub evrf_public_keys: Vec<([u8; 32], Vec<u8>)>,
-  /// The participant indexes, indexed by their validator.
-  #[borsh(skip)]
-  pub participant_indexes: HashMap<SeraiAddress, Vec<Participant>>,
-  /// The validators, indexed by their participant indexes.
-  #[borsh(skip)]
-  pub participant_indexes_reverse_lookup: HashMap<Participant, SeraiAddress>,
+  /// The structure of validators viewed by the coordinator and processor perspectives
+  /// Each entry contains auxiliary keys (substrate and network) with weight.
+  /// Accordingly syncs up participant indexes and reverse lookup fields.
+  pub tributary_validator_set: TributaryValidatorSet,
 }
 
-impl NewSetInformation {
-  fn init_participant_indexes(&mut self) {
-    let mut next_i = 1;
-    self.participant_indexes = HashMap::with_capacity(self.validators.len());
-    self.participant_indexes_reverse_lookup = HashMap::with_capacity(self.validators.len());
-    for (validator, weight) in &self.validators {
-      let mut these_is = Vec::with_capacity((*weight).into());
-      for _ in 0 .. *weight {
-        let this_i = Participant::new(next_i).unwrap();
-        next_i += 1;
-
-        these_is.push(this_i);
-        self.participant_indexes_reverse_lookup.insert(this_i, *validator);
-      }
-      self.participant_indexes.insert(*validator, these_is);
-    }
-  }
-
-  /// Create a new [`NewSetInformation`].
-  pub fn new(
-    set: ExternalValidatorSet,
-    serai_block: [u8; 32],
-    declaration_time: u64,
-    threshold: u16,
-    validators: Vec<(SeraiAddress, u16)>,
-    evrf_public_keys: Vec<([u8; 32], Vec<u8>)>,
-  ) -> Self {
-    let mut result = Self {
-      set,
-      serai_block,
-      declaration_time,
-      threshold,
-      validators,
-      evrf_public_keys,
-      participant_indexes: Default::default(),
-      participant_indexes_reverse_lookup: Default::default(),
-    };
-    result.init_participant_indexes();
-    result
-  }
-}
-
-impl NewSetInformation {
+impl TributaryValidatorSetInfo {
   /// The hash to use for the genesis of the corresponding Tributary.
   pub fn tributary_genesis(&self) -> [u8; 32] {
     // This MUST only hash data completely deterministic to the Substrate blockchain.
@@ -121,26 +67,27 @@ mod _public_db {
   use super::*;
 
   db_channel!(
-    CoordinatorSubstrate {
+    CoordinatorSubstrateChannels {
       // Canonical messages to send to the processor
       Canonical: (network: ExternalNetworkId) -> messages::substrate::CoordinatorMessage,
 
       // Relevant new set, from an ephemeral event stream
-      NewSet: () -> NewSetInformation,
-      // Potentially relevant sign slash report, from an ephemeral event stream
-      SignSlashReport: (set: ExternalValidatorSet) -> (),
+      EphemeralNewDecidedSet: () -> TributaryValidatorSetInfo,
+      // Potentially relevant sign slash report notification, after an ephemeral event stream
+      // sees an Accepted Handover event for a given session.
+      EphemeralSetHasToSignSlashReport: (set: ExternalValidatorSet) -> (),
 
-      // Signed batches to publish onto the Serai network
-      SignedBatches: (network: ExternalNetworkId) -> SignedBatch,
+      // Signed batches from the processor to publish onto the Serai network
+      NetworksProcessorSignedBatches: (network: ExternalNetworkId) -> SignedBatch,
     }
   );
 
   create_db!(
     CoordinatorSubstrate {
       // Keys to set on the Serai network
-      Keys: (network: ExternalNetworkId) -> (Session, Transaction),
+      NetworksSetKeysTransaction: (network: ExternalNetworkId) -> (Session, Transaction),
       // Slash reports to publish onto the Serai network
-      SlashReports: (network: ExternalNetworkId) -> (Session, Transaction),
+      NetworksSlashReportsTransaction: (network: ExternalNetworkId) -> (Session, Transaction),
     }
   );
 }
@@ -165,14 +112,14 @@ impl Canonical {
 }
 
 /// The channel for new set events emitted by an ephemeral event stream.
-pub struct NewSet;
-impl NewSet {
-  pub(crate) fn send(txn: &mut impl DbTxn, msg: &NewSetInformation) {
-    _public_db::NewSet::send(txn, msg);
+pub struct EphemeralNewDecidedSet;
+impl EphemeralNewDecidedSet {
+  pub(crate) fn send(txn: &mut impl DbTxn, msg: &TributaryValidatorSetInfo) {
+    _public_db::EphemeralNewDecidedSet::send(txn, msg);
   }
   /// Try to receive a new set's information, returning `None` if there is none to receive.
-  pub fn try_recv(txn: &mut impl DbTxn) -> Option<NewSetInformation> {
-    _public_db::NewSet::try_recv(txn)
+  pub fn try_recv(txn: &mut impl DbTxn) -> Option<TributaryValidatorSetInfo> {
+    _public_db::EphemeralNewDecidedSet::try_recv(txn)
   }
 }
 
@@ -180,21 +127,21 @@ impl NewSet {
 ///
 /// These notifications MAY be for irrelevant validator sets. The only guarantee is the
 /// notifications for all relevant validator sets will be included.
-pub struct SignSlashReport;
-impl SignSlashReport {
+pub struct EphemeralSetHasToSignSlashReport;
+impl EphemeralSetHasToSignSlashReport {
   pub(crate) fn send(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
-    _public_db::SignSlashReport::send(txn, set, &());
+    _public_db::EphemeralSetHasToSignSlashReport::send(txn, set, &());
   }
   /// Try to receive a notification to sign a slash report, returning `None` if there is none to
   /// receive.
   pub fn try_recv(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Option<()> {
-    _public_db::SignSlashReport::try_recv(txn, set)
+    _public_db::EphemeralSetHasToSignSlashReport::try_recv(txn, set)
   }
 }
 
 /// The keys to set on Serai.
-pub struct Keys;
-impl Keys {
+pub struct NetworksSetKeysTransaction;
+impl NetworksSetKeysTransaction {
   /// Set the keys to report for a validator set.
   ///
   /// This only saves the most recent keys as only a single session is eligible to have its keys
@@ -207,7 +154,9 @@ impl Keys {
     signature: Signature,
   ) {
     // If we have a more recent pair of keys, don't write this historic one
-    if let Some((existing_session, _)) = _public_db::Keys::get(txn, set.network) {
+    if let Some((existing_session, _)) =
+      _public_db::NetworksSetKeysTransaction::get(txn, set.network)
+    {
       if existing_session.0 >= set.session.0 {
         return;
       }
@@ -219,31 +168,31 @@ impl Keys {
       signature_participants,
       signature,
     );
-    _public_db::Keys::set(txn, set.network, &(set.session, tx));
+    _public_db::NetworksSetKeysTransaction::set(txn, set.network, &(set.session, tx));
   }
   pub(crate) fn take(
     txn: &mut impl DbTxn,
     network: ExternalNetworkId,
   ) -> Option<(Session, Transaction)> {
-    _public_db::Keys::take(txn, network)
+    _public_db::NetworksSetKeysTransaction::take(txn, network)
   }
 }
 
 /// The signed batches to publish onto Serai.
-pub struct SignedBatches;
-impl SignedBatches {
+pub struct NetworksProcessorSignedBatches;
+impl NetworksProcessorSignedBatches {
   /// Send a `SignedBatch` to publish onto Serai.
   pub fn send(txn: &mut impl DbTxn, batch: &SignedBatch) {
-    _public_db::SignedBatches::send(txn, batch.batch.network(), batch);
+    _public_db::NetworksProcessorSignedBatches::send(txn, batch.batch.network(), batch);
   }
   pub(crate) fn try_recv(txn: &mut impl DbTxn, network: ExternalNetworkId) -> Option<SignedBatch> {
-    _public_db::SignedBatches::try_recv(txn, network)
+    _public_db::NetworksProcessorSignedBatches::try_recv(txn, network)
   }
 }
 
 /// The slash reports to publish onto Serai.
-pub struct SlashReports;
-impl SlashReports {
+pub struct NetworksSlashReports;
+impl NetworksSlashReports {
   /// Set the slashes to report for a validator set.
   ///
   /// This only saves the most recent slashes as only a single session is eligible to have its
@@ -255,19 +204,21 @@ impl SlashReports {
     signature: Signature,
   ) {
     // If we have a more recent slash report, don't write this historic one
-    if let Some((existing_session, _)) = _public_db::SlashReports::get(txn, set.network) {
+    if let Some((existing_session, _)) =
+      _public_db::NetworksSlashReportsTransaction::get(txn, set.network)
+    {
       if existing_session.0 >= set.session.0 {
         return;
       }
     }
 
     let tx = serai_client_serai::ValidatorSets::report_slashes(set, slash_report, signature);
-    _public_db::SlashReports::set(txn, set.network, &(set.session, tx));
+    _public_db::NetworksSlashReportsTransaction::set(txn, set.network, &(set.session, tx));
   }
   pub(crate) fn take(
     txn: &mut impl DbTxn,
     network: ExternalNetworkId,
   ) -> Option<(Session, Transaction)> {
-    _public_db::SlashReports::take(txn, network)
+    _public_db::NetworksSlashReportsTransaction::take(txn, network)
   }
 }

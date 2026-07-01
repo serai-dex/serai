@@ -8,6 +8,8 @@ use core::{
   time::Duration,
 };
 
+use futures::stream::{StreamExt as _, FuturesOrdered};
+
 use tokio::sync::mpsc;
 
 mod type_name;
@@ -140,7 +142,7 @@ pub trait ContinuallyRan: Sized + Send {
             // Get the type name
             let type_name = type_name::strip_type_name(core::any::type_name::<Self>());
             // Print the error as a warning, prefixed by the task's type
-            log::warn!("{type_name}: {e:?}");
+            serai_env::warn!("{type_name}: {e:?}");
             increase_sleep_before_next_task(&mut current_sleep_before_next_task);
           }
         }
@@ -156,11 +158,88 @@ pub trait ContinuallyRan: Sized + Send {
           msg = task.run_now.recv() => {
             // Check if this is firing because the handle was dropped
             if msg.is_none() {
-              break;
+              break
             }
           },
         }
       }
+    }
+  }
+}
+
+/// A trait for processing a range of futures with a prefetch pipeline.
+///
+/// Implementors define how to fetch a single item ([`fetch_item`]) and how to process it
+/// ([`process_item`]). The provided [`process_range`] method handles the pipeline: it prefetches
+/// [`ITEMS_TO_PROCESS_AT_ONCE`] items ahead using `FuturesOrdered` to minimize RPC latency,
+/// then processes each item in order to increase throughput.
+pub trait FuturesRangeProcessor: ContinuallyRan {
+  /// The decoded data for a single item, produced by [`fetch_item`] and consumed by
+  /// [`process_item`].
+  type Item: Send;
+
+  /// How many items to prefetch ahead via concurrent RPC calls.
+  const ITEMS_TO_PROCESS_AT_ONCE: u64;
+
+  /// Fetch a single item by number.
+  fn fetch_item(
+    &self,
+    number: u64,
+  ) -> impl Send + 'static + Future<Output = Result<(u64, Self::Item), Self::Error>>;
+
+  /// Process a single item that has already been fetched.
+  fn process_item(&mut self, number: u64, item: Self::Item) -> Result<(), Self::Error>;
+
+  /// Process a range of items from `start` to `end` (inclusive) using a prefetch pipeline.
+  ///
+  /// Returns `Ok(true)` if at least one item was processed, `Ok(false)` if `start > end`.
+  fn process_range(
+    &mut self,
+    start: u64,
+    end: u64,
+  ) -> impl Send + Future<Output = Result<bool, Self::Error>>
+  where
+    Self::Error: Send,
+  {
+    async move {
+      async fn with_test_delay<F: core::future::Future>(future: F) -> F::Output {
+        #[cfg(any(test, feature = "test-helpers"))]
+        if std::env::var("NO_TASK_RANGE_DELAY").is_err() {
+          tokio::time::sleep(core::time::Duration::from_nanos(10)).await;
+        }
+        future.await
+      }
+
+      let mut made_progress = false;
+      if start > end {
+        return Ok(made_progress);
+      }
+
+      // FuturesOrdered can be bad practice due to potentially causing tiemouts if it isn't
+      // sufficiently polled. Considering our processing loop is minimal and it does poll this,
+      // it's fine.
+      let mut set = FuturesOrdered::new();
+
+      for i in start ..= end.min(start + Self::ITEMS_TO_PROCESS_AT_ONCE) {
+        set.push_back(with_test_delay(self.fetch_item(i)));
+      }
+
+      for number in start ..= end {
+        // Get the next item in our queue
+        let (popped_number, item) = set.next().await.unwrap()?;
+        assert_eq!(number, popped_number);
+
+        // Re-populate the queue
+        let next_queue_item = number + Self::ITEMS_TO_PROCESS_AT_ONCE + 1;
+        if next_queue_item <= end {
+          set.push_back(with_test_delay(self.fetch_item(next_queue_item)));
+        }
+
+        self.process_item(number, item)?;
+        made_progress = true;
+      }
+
+      Ok(made_progress)
     }
   }
 }

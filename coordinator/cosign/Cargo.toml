@@ -31,18 +31,21 @@ serai-task = { path = "../../common/task", version = "0.1" }
 
 serai-cosign-types = { path = "./types" }
 
+rand_core = { version = "0.6", default-features = false }
+
+[features]
+test-helpers = ["serai-task/test-helpers", "serai-cosign-types/test-helpers"]
+
 [dev-dependencies]
 hex = { version = "0.4", default-features = false }
-
-rand_core = { version = "0.6", default-features = false }
 rand = { version = "0.8", default-features = false }
 
 schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
 
-serai-primitives = { path = "../../substrate/primitives", features = ["test-helpers"] }
 serai-abi = { path = "../../substrate/abi", default-features = false, features = ["std"] }
 
 serai-cosign-types = { path = "./types", features = ["test-helpers"] }
 serai-task = { path = "../../common/task", features = ["test-helpers"] }
+serai-db = { path = "../../common/db", features = ["test-helpers"] }
 
-serai-shim-rpc = { path = "../../tests/shim-rpc" }
+serai-mock-rpc = { path = "../../tests/mock-serai-rpc" }

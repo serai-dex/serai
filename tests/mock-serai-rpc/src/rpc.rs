@@ -1,10 +1,11 @@
+//! JSON-RPC method handlers mirroring the real Serai node.
+
 use serai_abi::{
   primitives::{
     BlockHash,
     network_id::{ExternalNetworkId, NetworkId},
     validator_sets::{ExternalValidatorSet, Session, ValidatorSet},
   },
-  Event,
 };
 
 use serde::Deserialize;
@@ -13,7 +14,7 @@ use jsonrpsee::{
   types::{error::ErrorObjectOwned, params::Params},
 };
 
-use crate::state::{SharedState, ShimState};
+use crate::state::{SharedState, MockSeraiState};
 
 /// Typed RPC errors mirroring `substrate/node/src/rpc/utils.rs`.
 enum Error {
@@ -48,7 +49,7 @@ impl From<Error> for ErrorObjectOwned {
 /// Mirrors `substrate/node/src/rpc/utils.rs`:
 /// - `{ "block": "hex_hash" }` = lookup by hash
 /// - `{ "block": 123 }` = lookup by number
-fn resolve_block_hash(params: &Params, state: &ShimState) -> Result<Option<BlockHash>, Error> {
+fn resolve_block_hash(params: &Params, state: &MockSeraiState) -> Result<Option<BlockHash>, Error> {
   #[derive(Deserialize)]
   struct BlockByHash {
     block: String,
@@ -199,18 +200,16 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
       if let Some(err) = state.errors.check_block_hash("blockchain/events", &block_hash) {
         return Err(Error::Internal(err.to_owned()));
       }
-      let events = state.events_by_hash.get(&block_hash).cloned().unwrap_or_else(|| vec![vec![]]);
-      Ok(
-        events
-          .into_iter()
-          .map(|events_per_tx: Vec<Event>| {
-            events_per_tx
-              .into_iter()
-              .map(|event| hex::encode(borsh::to_vec(&event).unwrap()))
-              .collect::<Vec<_>>()
-          })
-          .collect::<Vec<Vec<String>>>(),
-      )
+      if let Some(&number) = state.block_number_by_hash.get(&block_hash) {
+        if let Some(err) = state.errors.check_block_number("blockchain/events", number) {
+          return Err(Error::Internal(err.to_owned()));
+        }
+      }
+      let events = state.events_by_hash.get(&block_hash).cloned().unwrap_or_else(Vec::new);
+      Ok(vec![events
+        .into_iter()
+        .map(|event| hex::encode(borsh::to_vec(&event).unwrap()))
+        .collect::<Vec<String>>()])
     })
     .map_err(|e| Error::Internal(e.to_string()))?;
 
@@ -283,6 +282,50 @@ pub fn build_rpc_module(state: SharedState) -> Result<RpcModule<SharedState>, Er
       let network = parse_network(&params)?;
       let vs = state.validator_sets_for_block(&block_hash);
       Ok(vs.validators.get(&network).map(|v| v.iter().map(ToString::to_string).collect::<Vec<_>>()))
+    })
+    .map_err(|e| Error::Internal(e.to_string()))?;
+
+  module
+    .register_async_method("validator-sets/pending_slash_report", async |params, state, _ext| {
+      let state = state.read().await;
+      if let Some(err) = state.errors.check_random_failure("validator-sets/pending_slash_report") {
+        return Err(Error::Internal(err));
+      }
+      if let Some(err) = state.errors.check_method("validator-sets/pending_slash_report") {
+        return Err(Error::Internal(err.to_owned()));
+      }
+      let Some(block_hash) = resolve_block_hash(&params, &state)? else {
+        return Err(Error::InvalidStateReference);
+      };
+      let set = parse_set(&params)?;
+      let vs = state.validator_sets_for_block(&block_hash);
+      Ok(vs.pending_slash_reports.get(&set.network).copied().unwrap_or(true))
+    })
+    .map_err(|e| Error::Internal(e.to_string()))?;
+
+  module
+    .register_async_method("blockchain/publish_transaction", async |params, state, _ext| {
+      {
+        let state_read = state.read().await;
+        if let Some(err) = state_read.errors.check_random_failure("blockchain/publish_transaction")
+        {
+          return Err(Error::Internal(err));
+        }
+        if let Some(err) = state_read.errors.check_method("blockchain/publish_transaction") {
+          return Err(Error::Internal(err.clone()));
+        }
+      }
+      #[derive(Deserialize)]
+      struct Tx {
+        transaction: String,
+      }
+      let tx: Tx = params
+        .parse()
+        .map_err(|_| Error::InvalidRequest(r#"missing "transaction" field"#.to_owned()))?;
+      let tx_bytes = hex::decode(&tx.transaction)
+        .map_err(|_| Error::InvalidRequest("transaction wasn't valid hex".to_owned()))?;
+      state.write().await.published_transactions.push(tx_bytes);
+      Ok(())
     })
     .map_err(|e| Error::Internal(e.to_string()))?;
 

@@ -5,9 +5,13 @@ use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_primitives::{BlockHash, crypto::Public, network_id::ExternalNetworkId};
 
+#[cfg(test)]
+/// Test suite.
+pub mod tests;
+
 #[cfg(any(test, feature = "test-helpers"))]
 /// Test helpers and fixtures.
-pub mod tests;
+pub mod test_helpers;
 
 /// The schnorrkel context to used when signing a cosign.
 pub const COSIGN_CONTEXT: &[u8] = b"/serai/coordinator/cosign";
@@ -16,7 +20,7 @@ pub const COSIGN_CONTEXT: &[u8] = b"/serai/coordinator/cosign";
 #[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct CosignIntent {
   /// The global session this cosign is being performed under.
-  pub global_session: [u8; 32],
+  pub global_cosigning_session: [u8; 32],
   /// The number of the block to cosign.
   pub block_number: u64,
   /// The hash of the block to cosign.
@@ -29,7 +33,7 @@ pub struct CosignIntent {
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Cosign {
   /// The global session this cosign is being performed under.
-  pub global_session: [u8; 32],
+  pub global_cosigning_session: [u8; 32],
   /// The number of the block to cosign.
   pub block_number: u64,
   /// The hash of the block to cosign.
@@ -41,8 +45,13 @@ pub struct Cosign {
 impl CosignIntent {
   /// Convert this into a `Cosign`.
   pub fn into_cosign(self, cosigner: ExternalNetworkId) -> Cosign {
-    let CosignIntent { global_session, block_number, block_hash, notable: _ } = self;
-    Cosign { global_session, block_number, block_hash, cosigner }
+    let CosignIntent {
+      global_cosigning_session: global_session,
+      block_number,
+      block_hash,
+      notable: _,
+    } = self;
+    Cosign { global_cosigning_session: global_session, block_number, block_hash, cosigner }
   }
 }
 

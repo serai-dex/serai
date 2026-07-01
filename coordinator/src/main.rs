@@ -7,10 +7,7 @@ use zeroize::{Zeroize as _, Zeroizing};
 use rand_core::{RngCore as _, OsRng};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::{
-  group::{ff::PrimeField as _, GroupEncoding as _},
-  *,
-};
+use ciphersuite::{group::ff::PrimeField as _, *};
 
 use borsh::BorshDeserialize as _;
 
@@ -22,7 +19,6 @@ use serai_client_serai::{
     crypto::{Public, ExternalKey, KeyPair},
     network_id::ExternalNetworkId,
     validator_sets::ExternalValidatorSet,
-    address::SeraiAddress,
   },
   Serai,
 };
@@ -34,8 +30,8 @@ use serai_env::Environment;
 
 use serai_cosign::{Faulted, SignedCosign, Cosigning};
 use serai_coordinator_substrate::{
-  CanonicalEventStream, EphemeralEventStream, SignSlashReport, SetKeysTask, SignedBatches,
-  PublishBatchTask, SlashReports, PublishSlashReportTask,
+  CanonicalEventStream, EphemeralEventStream, EphemeralSetHasToSignSlashReport, SetKeysTask,
+  NetworksProcessorSignedBatches, PublishBatchTask, NetworksSlashReports, PublishSlashReportTask,
 };
 use serai_coordinator_tributary::{SigningProtocolRound, Signed, Transaction, SubstrateBlockPlans};
 
@@ -231,12 +227,20 @@ async fn handle_network(
           );
         }
         messages::key_gen::ProcessorMessage::Blame { session, participant } => {
-          RemoveParticipant::send(&mut txn, ExternalValidatorSet { network, session }, participant);
+          RemoveParticipantMessagesFromProcessor::send(
+            &mut txn,
+            ExternalValidatorSet { network, session },
+            participant,
+          );
         }
       },
       messages::ProcessorMessage::Sign(msg) => match msg {
         messages::sign::ProcessorMessage::InvalidParticipant { session, participant } => {
-          RemoveParticipant::send(&mut txn, ExternalValidatorSet { network, session }, participant);
+          RemoveParticipantMessagesFromProcessor::send(
+            &mut txn,
+            ExternalValidatorSet { network, session },
+            participant,
+          );
         }
         messages::sign::ProcessorMessage::Preprocesses { id, preprocesses } => {
           let set = ExternalValidatorSet { network, session: id.session };
@@ -283,14 +287,14 @@ async fn handle_network(
           SignedCosigns::send(&mut txn, &cosign);
         }
         messages::coordinator::ProcessorMessage::SignedBatch { batch } => {
-          SignedBatches::send(&mut txn, &batch);
+          NetworksProcessorSignedBatches::send(&mut txn, &batch);
         }
         messages::coordinator::ProcessorMessage::SignedSlashReport {
           session,
           slash_report,
           signature,
         } => {
-          SlashReports::set(
+          NetworksSlashReports::set(
             &mut txn,
             ExternalValidatorSet { network, session },
             slash_report,
@@ -334,12 +338,12 @@ async fn handle_network(
 async fn main() {
   // Initialize the logger
   serai_env::init_logger();
-  serai_env::info!("starting coordinator service...");
+  serai_env::info!("Starting coordinator service...");
 
   let env = Environment::from_secret_store().await;
 
   // Read the Serai key from the env
-  let serai_key = {
+  let private_serai_auxiliary_key = {
     let key_hex = env.var("SERAI_AUXILIARY_KEY").expect("Serai key wasn't provided");
     let mut key_vec = hex::decode(key_hex).map_err(|_| ()).expect("Serai key wasn't hex-encoded");
     if key_vec.len() != 32 {
@@ -367,14 +371,14 @@ async fn main() {
       KeysToConfirm::take(&mut txn, to_cleanup);
       KeySet::take(&mut txn, to_cleanup);
       // Drain the cosign intents created for this set
-      while !Cosigning::<Db>::intended_cosigns(&mut txn, to_cleanup).is_empty() {}
+      while !Cosigning::<Db>::all_intended_cosigns_for_network(&mut txn, to_cleanup).is_empty() {}
       // Drain the transactions to publish for this set
       while TributaryTransactionsFromProcessorMessages::try_recv(&mut txn, to_cleanup).is_some() {}
       while TributaryTransactionsFromDkgConfirmation::try_recv(&mut txn, to_cleanup).is_some() {}
       // Drain the participants to remove for this set
-      while RemoveParticipant::try_recv(&mut txn, to_cleanup).is_some() {}
+      while RemoveParticipantMessagesFromProcessor::try_recv(&mut txn, to_cleanup).is_some() {}
       // Remove the SignSlashReport notification
-      SignSlashReport::try_recv(&mut txn, to_cleanup);
+      EphemeralSetHasToSignSlashReport::try_recv(&mut txn, to_cleanup);
     }
 
     // Remove retired Tributaries from ActiveTributaries
@@ -402,18 +406,18 @@ async fn main() {
 
   // Spawn the P2P network
   let p2p = {
-    let serai_keypair = {
-      let mut key_bytes = serai_key.to_bytes();
+    let serai_auxiliary_keypair = {
+      let mut private_serai_auxiliary_key_bytes = private_serai_auxiliary_key.to_bytes();
       // Schnorrkel SecretKey is the key followed by 32 bytes of entropy for nonces
       let mut expanded_key = Zeroizing::new([0; 64]);
-      expanded_key.as_mut_slice()[.. 32].copy_from_slice(&key_bytes);
+      expanded_key.as_mut_slice()[.. 32].copy_from_slice(&private_serai_auxiliary_key_bytes);
       OsRng.fill_bytes(&mut expanded_key.as_mut_slice()[32 ..]);
-      key_bytes.zeroize();
+      private_serai_auxiliary_key_bytes.zeroize();
       Zeroizing::new(
         schnorrkel::SecretKey::from_bytes(expanded_key.as_slice()).unwrap().to_keypair(),
       )
     };
-    let p2p = p2p::Libp2p::new(&serai_keypair, serai.clone());
+    let p2p = p2p::Libp2p::new(&serai_auxiliary_keypair, serai.clone());
     tokio::spawn(p2p::run::<Db, Transaction, _>(
       db.clone(),
       p2p.clone(),
@@ -436,7 +440,7 @@ async fn main() {
     EphemeralEventStream::new(
       db.clone(),
       serai.clone(),
-      SeraiAddress((<Ristretto as WrappedGroup>::generator() * serai_key.deref()).to_bytes()),
+      <Ristretto as WrappedGroup>::generator() * private_serai_auxiliary_key.deref(),
     )
     .continually_run(substrate_ephemeral_task_def, vec![substrate_task]),
   );
@@ -460,7 +464,7 @@ async fn main() {
       p2p.clone(),
       &p2p_add_tributary_send,
       tributary,
-      serai_key.clone(),
+      private_serai_auxiliary_key.clone(),
     )
     .await;
   }
@@ -469,7 +473,7 @@ async fn main() {
   tokio::spawn(
     (SubstrateTask {
       env,
-      serai_key: serai_key.clone(),
+      private_serai_auxiliary_key,
       db: db.clone(),
       message_queue: message_queue.clone(),
       p2p: p2p.clone(),

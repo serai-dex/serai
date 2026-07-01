@@ -11,6 +11,7 @@ use dkg::*;
 use serai_db::{DbTxn as _, Db as _, MemDb};
 
 use serai_primitives::validator_sets::Session;
+use serai_tributary_types::{TributaryValidator, TributaryValidatorSet};
 use messages::key_gen::*;
 use serai_processor_key_gen::{Ristretto, KeyGen, KeyGenParams};
 
@@ -22,7 +23,7 @@ fn test_valid_participants_inner<K: KeyGenParams>() {
   let random_session = Session(OsRng.next_u64() as u32);
 
   let mut states = vec![];
-  let mut evrf_public_keys = vec![];
+  let mut tributary_validators = vec![];
 
   for _ in 0 .. PARTICIPANTS {
     let db = MemDb::new();
@@ -35,28 +36,42 @@ fn test_valid_participants_inner<K: KeyGenParams>() {
       ),
     );
 
-    evrf_public_keys.push((
-      (<<Ristretto as Curves>::EmbeddedCurve as WrappedGroup>::generator() * *substrate_evrf_key)
-        .to_bytes(),
+    let serai_aux_pub = (<<Ristretto as Curves>::ToweringCurve as WrappedGroup>::generator() *
+      <<Ristretto as Curves>::ToweringCurve as WrappedGroup>::F::random(&mut OsRng))
+    .to_bytes();
+    let substrate_pub = (<<Ristretto as Curves>::EmbeddedCurve as WrappedGroup>::generator() *
+      *substrate_evrf_key)
+      .to_bytes();
+    let network_pub =
       (<<K::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as WrappedGroup>::generator() *
         *network_evrf_key)
         .to_bytes()
         .as_ref()
-        .to_vec(),
-    ));
+        .to_vec();
 
+    tributary_validators.push(TributaryValidator::new(
+      serai_aux_pub,
+      substrate_pub,
+      network_pub,
+      1,
+    ));
     states.push((db, KeyGen::<K>::new(substrate_evrf_key.clone(), network_evrf_key.clone())));
   }
+  let tributary_validator_set = TributaryValidatorSet::new(tributary_validators);
 
   let mut participations = Vec::with_capacity(usize::from(PARTICIPANTS));
   for (db, key_gen) in &mut states {
     let mut txn = db.txn();
+    let substrate_evrf_public_keys =
+      tributary_validator_set.evrf_networks_substrate_keys().to_vec();
+    let network_evrf_public_keys = tributary_validator_set.evrf_networks_external_keys().to_vec();
     let mut messages = key_gen.handle(
       &mut txn,
       CoordinatorMessage::GenerateKey {
         session: random_session,
         threshold: THRESHOLD,
-        evrf_public_keys: evrf_public_keys.clone(),
+        substrate_evrf_public_keys,
+        network_evrf_public_keys,
       },
     );
     txn.commit();
@@ -115,7 +130,7 @@ fn test_some_bad_participants_inner<K: KeyGenParams>() {
       .unwrap();
 
   let mut states = vec![];
-  let mut evrf_public_keys = vec![];
+  let mut tributary_validators = vec![];
 
   for i in 0 .. PARTICIPANTS {
     let db = MemDb::new();
@@ -129,6 +144,9 @@ fn test_some_bad_participants_inner<K: KeyGenParams>() {
     );
 
     if Participant::new(1 + i).unwrap() == zero_pub_keys {
+      let serai_aux_pub = (<<Ristretto as Curves>::ToweringCurve as WrappedGroup>::generator() *
+        <<Ristretto as Curves>::ToweringCurve as WrappedGroup>::F::random(&mut OsRng))
+      .to_bytes();
       let mut zero_ristretto_pub =
         <<<Ristretto as Curves>::EmbeddedCurve as WrappedGroup>::G as GroupEncoding>::Repr::default(
         );
@@ -149,20 +167,35 @@ fn test_some_bad_participants_inner<K: KeyGenParams>() {
           *b = 0;
         }
       }
-      evrf_public_keys.push((zero_ristretto_pub, zero_external_pub.as_ref().to_vec()));
+      tributary_validators.push(TributaryValidator::new(
+        serai_aux_pub,
+        zero_ristretto_pub,
+        zero_external_pub.as_ref().to_vec(),
+        1,
+      ));
     } else {
-      evrf_public_keys.push((
-        (<<Ristretto as Curves>::EmbeddedCurve as WrappedGroup>::generator() * *substrate_evrf_key)
-          .to_bytes(),
+      let serai_aux_pub = (<<Ristretto as Curves>::ToweringCurve as WrappedGroup>::generator() *
+        <<Ristretto as Curves>::ToweringCurve as WrappedGroup>::F::random(&mut OsRng))
+      .to_bytes();
+      let substrate_pub = (<<Ristretto as Curves>::EmbeddedCurve as WrappedGroup>::generator() *
+        *substrate_evrf_key)
+        .to_bytes();
+      let network_pub =
         (<<K::ExternalNetworkCiphersuite as Curves>::EmbeddedCurve as WrappedGroup>::generator() *
           *network_evrf_key)
           .to_bytes()
           .as_ref()
-          .to_vec(),
+          .to_vec();
+      tributary_validators.push(TributaryValidator::new(
+        serai_aux_pub,
+        substrate_pub,
+        network_pub,
+        1,
       ));
     }
     states.push((db, KeyGen::<K>::new(substrate_evrf_key.clone(), network_evrf_key.clone())));
   }
+  let tributary_validator_set = TributaryValidatorSet::new(tributary_validators);
 
   let mut participations = Vec::with_capacity(usize::from(PARTICIPANTS));
   for (i, (db, key_gen)) in states.iter_mut().enumerate() {
@@ -172,12 +205,16 @@ fn test_some_bad_participants_inner<K: KeyGenParams>() {
     }
 
     let mut txn = db.txn();
+    let substrate_evrf_public_keys =
+      tributary_validator_set.evrf_networks_substrate_keys().to_vec();
+    let network_evrf_public_keys = tributary_validator_set.evrf_networks_external_keys().to_vec();
     let mut messages = key_gen.handle(
       &mut txn,
       CoordinatorMessage::GenerateKey {
         session: random_session,
         threshold: THRESHOLD,
-        evrf_public_keys: evrf_public_keys.clone(),
+        substrate_evrf_public_keys,
+        network_evrf_public_keys,
       },
     );
     txn.commit();

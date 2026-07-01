@@ -77,6 +77,7 @@ members = [
   "coordinator/cosign",
   "coordinator/substrate",
   "coordinator/tributary",
+  "coordinator/tributary/types",
   "coordinator/p2p",
   "coordinator/p2p/libp2p",
   "coordinator",
@@ -109,7 +110,7 @@ members = [
 
   "tests/no-std",
 
-  "tests/shim-rpc",
+  "tests/mock-serai-rpc",
   "tests/docker",
   # TODO "tests/processor",
   # TODO "tests/coordinator",

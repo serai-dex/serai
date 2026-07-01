@@ -1,75 +1,63 @@
 use core::marker::PhantomData;
 
-use schnorr::SchnorrSignature;
+use std::collections::HashMap;
 
-use serai_primitives::test_helpers::{random_block_hash, random_vec_u8};
+use dkg::Participant;
+
+use serai_mock_rpc::new_test_rng;
+use serai_primitives::{
+  test_helpers::{random_block_hash, random_vec_u8},
+};
 
 use serai_db::{Db as _, DbTxn, MemDb};
+use serai_tributary_types::test_helpers::u16_to_participant;
 use tributary_sdk::{
   tendermint::tx::TendermintTx, Evidence, Transaction as TributaryTransaction, BlockHeader, Block,
 };
 
 use serai_cosign_types::CosignIntent;
-use crate::{db::CosignIntents as DbCosignIntents, *};
+use crate::{db::SubstrateCosignIntents as DbCosignIntents, *};
 use super::*;
 
 fn new_scan_block<'a, TDT: DbTxn>(
   txn: &'a mut TDT,
-  set_info: &'a NewSetInformation,
-  validators: &'a [SeraiAddress],
-  total_weight: u16,
-  validator_weights: &'a HashMap<SeraiAddress, u16>,
+  tributary_validator_set_info: &'a TributaryValidatorSetInfo,
 ) -> ScanBlock<'a, MemDb, TDT, NopP2p> {
   ScanBlock {
     _td: PhantomData,
     _p2p: PhantomData,
     tributary_txn: txn,
-    set: set_info,
-    validators,
-    total_weight,
-    validator_weights,
-  }
-}
-
-/// Create a Signed with the given signer key and a random signature.
-fn random_signed_for_key(signer: <Ristretto as WrappedGroup>::G) -> Signed {
-  Signed {
-    signer,
-    signature: SchnorrSignature {
-      R: Ristretto::generator() * <Ristretto as WrappedGroup>::F::random(&mut OsRng),
-      s: <Ristretto as WrappedGroup>::F::random(&mut OsRng),
-    },
+    tributary_validator_set_info,
   }
 }
 
 #[test]
 fn potentially_start_cosign() {
-  let (_, validator_data, validators, weights, total_weight) =
-    setup_test_validators_and_weights_with_keys();
-  let set_info = new_test_set_info(&validator_data);
-  let set = set_info.set;
+  let mut rng = new_test_rng();
+  let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+  let set = tributary_validator_set_info.set;
 
   // Already actively cosigning: should not replace the actively cosigning block
   {
     let mut db = MemDb::new();
-    let initial_block_hash = random_block_hash(&mut OsRng);
+    let initial_block_hash = random_block_hash(&mut rng);
 
     {
       let mut txn = db.txn();
-      TributaryDb::start_cosigning(&mut txn, set, initial_block_hash, OsRng.next_u64());
-      let new_block_hash = random_block_hash(&mut OsRng);
+      TributaryDb::start_cosigning(&mut txn, set, initial_block_hash, rng.next_u64());
+      let new_block_hash = random_block_hash(&mut rng);
       TributaryDb::set_latest_substrate_block_to_cosign(&mut txn, set, new_block_hash);
       txn.commit();
     }
 
     let mut txn = db.txn();
     {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
       scan_block.potentially_start_cosign();
     }
 
     // Did not replace initial_block_hash for new_block_hash
-    assert_eq!(TributaryDb::actively_cosigning(&mut txn, set), Some(initial_block_hash));
+    assert_eq!(TributaryDb::get_actively_cosigning_hash(&mut txn, set), Some(initial_block_hash));
   }
 
   // No TributaryDb::latest_substrate_block_to_cosign block: nop
@@ -77,16 +65,16 @@ fn potentially_start_cosign() {
     let mut db = MemDb::new();
     let mut txn = db.txn();
     {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
       scan_block.potentially_start_cosign();
     }
-    assert!(TributaryDb::actively_cosigning(&mut txn, set).is_none());
+    assert!(TributaryDb::get_actively_cosigning_hash(&mut txn, set).is_none());
   }
 
   // Already cosigned: nop
   {
     let mut db = MemDb::new();
-    let initial_block_hash = random_block_hash(&mut OsRng);
+    let initial_block_hash = random_block_hash(&mut rng);
 
     {
       let mut txn = db.txn();
@@ -97,21 +85,25 @@ fn potentially_start_cosign() {
 
     let mut txn = db.txn();
     {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
       scan_block.potentially_start_cosign();
     }
 
-    assert!(TributaryDb::actively_cosigning(&mut txn, set).is_none());
+    assert!(TributaryDb::get_actively_cosigning_hash(&mut txn, set).is_none());
   }
 
   // Ready to cosign: starts cosigning and sends processor message
   {
     let mut db = MemDb::new();
-    let block_hash = random_block_hash(&mut OsRng);
-    let global_session = random_bytes(&mut OsRng);
+    let block_hash = random_block_hash(&mut rng);
+    let global_session = random_bytes(&mut rng);
 
-    let intent =
-      CosignIntent { global_session, block_number: OsRng.next_u64(), block_hash, notable: false };
+    let intent = CosignIntent {
+      global_cosigning_session: global_session,
+      block_number: rng.next_u64(),
+      block_hash,
+      notable: false,
+    };
 
     {
       let mut txn = db.txn();
@@ -122,7 +114,7 @@ fn potentially_start_cosign() {
 
     let mut txn = db.txn();
     {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
       scan_block.potentially_start_cosign();
     }
 
@@ -133,22 +125,22 @@ fn potentially_start_cosign() {
   // Panics when stored intent's block_hash differs from latest_substrate_block_to_cosign
   {
     let mut db = MemDb::new();
-    let block_hash = random_block_hash(&mut OsRng);
-    let global_session = random_bytes(&mut OsRng);
+    let block_hash = random_block_hash(&mut rng);
+    let global_session = random_bytes(&mut rng);
 
     {
       let mut txn = db.txn();
       TributaryDb::set_latest_substrate_block_to_cosign(&mut txn, set, block_hash);
 
-      let new_block_hash = random_block_hash(&mut OsRng);
+      let new_block_hash = random_block_hash(&mut rng);
       DbCosignIntents::set(
         &mut txn,
         set,
         // Store the intent under block_hash (the key `CosignIntents::take` will look up)
         block_hash,
         &CosignIntent {
-          global_session,
-          block_number: OsRng.next_u64(),
+          global_cosigning_session: global_session,
+          block_number: rng.next_u64(),
           // but the intent's block_hash field is a new_block_hash
           block_hash: new_block_hash,
           notable: false,
@@ -159,7 +151,7 @@ fn potentially_start_cosign() {
 
     let result = std::panic::catch_unwind(move || {
       let mut txn = db.txn();
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
       scan_block.potentially_start_cosign();
     });
     let err = result.expect_err("should panic on differing intent block hash");
@@ -173,11 +165,15 @@ fn potentially_start_cosign() {
 
 #[test]
 fn accumulate_dkg_confirmation() {
-  let (_, validator_data, validators, weights, total_weight) =
-    setup_test_validators_and_weights_with_keys();
-  let (v1, v2, v3) = (validators[0], validators[1], validators[2]);
-  let set_info = new_test_set_info(&validator_data);
-  let set = set_info.set;
+  let mut rng = new_test_rng();
+  let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+  let set = tributary_validator_set_info.set;
+
+  let k1_participant = u16_to_participant(1);
+  let k2_participant = u16_to_participant(2);
+  let k3_participant = u16_to_participant(3);
+  let k4_participant = u16_to_participant(4);
+
   let topic = Topic::DkgConfirmation { attempt: 0, round: SigningProtocolRound::Preprocess };
 
   // Panics if the topic isn't DkgConfirmation
@@ -186,12 +182,12 @@ fn accumulate_dkg_confirmation() {
     let mut txn = db.txn();
 
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
       scan_block.accumulate_dkg_confirmation(
-        OsRng.next_u64(),
-        Topic::RemoveParticipant { participant: random_serai_address(&mut OsRng) },
-        &random_vec_u8(&mut OsRng, 4 ..= 4),
-        validators[0],
+        rng.next_u64(),
+        Topic::RemoveParticipant { participant: Participant::new(u16::MAX).unwrap() },
+        &random_vec_u8(&mut rng, 4 ..= 4),
+        k1_participant,
       );
     }));
 
@@ -202,18 +198,23 @@ fn accumulate_dkg_confirmation() {
   {
     let mut db = MemDb::new();
     let mut txn = db.txn();
-    let block_number = OsRng.next_u64();
+    let block_number = rng.next_u64();
 
     {
-      let data1 = random_vec_u8(&mut OsRng, 4 ..= 4);
-      let data2 = random_vec_u8(&mut OsRng, 4 ..= 4);
-      let data3 = random_vec_u8(&mut OsRng, 4 ..= 4);
+      let data1 = random_vec_u8(&mut rng, 4 ..= 4);
+      let data2 = random_vec_u8(&mut rng, 4 ..= 4);
+      let data3 = random_vec_u8(&mut rng, 4 ..= 4);
 
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
 
-      assert!(scan_block.accumulate_dkg_confirmation(block_number, topic, &data1, v1).is_none());
-      assert!(scan_block.accumulate_dkg_confirmation(block_number, topic, &data2, v2).is_none());
-      let result = scan_block.accumulate_dkg_confirmation(block_number, topic, &data3, v3);
+      assert!(scan_block
+        .accumulate_dkg_confirmation(block_number, topic, &data1, k1_participant)
+        .is_none());
+      assert!(scan_block
+        .accumulate_dkg_confirmation(block_number, topic, &data2, k2_participant)
+        .is_none());
+      let result =
+        scan_block.accumulate_dkg_confirmation(block_number, topic, &data3, k3_participant);
 
       let (sign_id, data_set) = result.expect("third accumulation should cross threshold");
 
@@ -223,31 +224,21 @@ fn accumulate_dkg_confirmation() {
         "SignId must match what dkg_confirmation_sign_id produces"
       );
 
-      // Participants are 1-indexed by list position, not by weight-based indices
+      // The `data_set` from `accumulate_dkg_confirmation` is `HashMap<Participant, Vec<u8>>`
+      // The keys are the DkgParticipants (1-indexed by position in the validator list).
       assert_eq!(data_set.len(), 3);
-      assert_eq!(data_set[&Participant::new(1).unwrap()], data1);
-      assert_eq!(data_set[&Participant::new(2).unwrap()], data2);
-      assert_eq!(data_set[&Participant::new(3).unwrap()], data3);
-    }
+      assert!(data_set.contains_key(&Participant::new(1).unwrap()));
+      assert!(data_set.contains_key(&Participant::new(2).unwrap()));
+      assert!(data_set.contains_key(&Participant::new(3).unwrap()));
 
-    // Past threshold: further accumulations from a new validator are nops
-    {
-      // Add a 4th validator so we have a fresh signer after threshold is crossed.
-      // TODO: The set should have 4 validators from the start do we don't have a conflict here
-      let v4 = random_serai_address(&mut OsRng);
-      let mut validator_data_4 = validator_data.clone();
-      validator_data_4.push((v4, 1));
-      let validators_4: Vec<SeraiAddress> = validator_data_4.iter().map(|(a, _)| *a).collect();
-      let mut weights_4 = weights.clone();
-      weights_4.insert(v4, 1);
-      let set_info_4 = new_test_set_info(&validator_data_4);
-
-      let data4 = random_vec_u8(&mut OsRng, 4 ..= 4);
-
+      // Past threshold: further accumulations should be nops (weight >= threshold check)
       {
-        let mut scan_block = new_scan_block(&mut txn, &set_info_4, &validators_4, 4, &weights_4);
+        // Use a participant that hasn't accumulated yet to avoid the duplicate assertion
+        let data4 = random_vec_u8(&mut rng, 4 ..= 4);
         assert!(
-          scan_block.accumulate_dkg_confirmation(block_number, topic, &data4, v4).is_none(),
+          scan_block
+            .accumulate_dkg_confirmation(block_number, topic, &data4, k4_participant)
+            .is_none(),
           "accumulation after threshold should be a NOP"
         );
       }
@@ -260,28 +251,27 @@ mod handle_application_tx {
 
   #[test]
   fn dont_handle_signed_kind_from_fatally_slashed() {
-    let (_, validator_data, validators, weights, total_weight) =
-      setup_test_validators_and_weights_with_keys();
-    let set_info = new_test_set_info(&validator_data);
-    let set = set_info.set;
-    let default_signer = SeraiAddress(Signed::default().signer().to_bytes());
+    let mut rng = new_test_rng();
+    let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+    let set = tributary_validator_set_info.set;
+    // Get the participant index of the first validator
+    let default_participant = Participant::new(1).unwrap();
 
     let mut db = MemDb::new();
 
     {
       let mut txn = db.txn();
-      TributaryDb::fatal_slash(&mut txn, set, default_signer, "test reason");
-      assert!(TributaryDb::is_fatally_slashed(&txn, set, default_signer));
+      TributaryDb::fatal_slash(&mut txn, set, default_participant, "test reason");
+      assert!(TributaryDb::is_fatally_slashed(&txn, set, default_participant,));
       txn.commit();
     }
 
-    for tx in all_signed_transactions_and_attempts(Signed::default()) {
+    for tx in all_signed_transactions_and_attempts(&mut rng, Signed::default(), None) {
       let mut txn = db.txn();
 
       {
-        let mut scan_block =
-          new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-        scan_block.handle_application_tx(OsRng.next_u64(), tx.clone());
+        let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+        scan_block.handle_application_tx(rng.next_u64(), tx.clone());
       }
 
       assert!(
@@ -293,87 +283,107 @@ mod handle_application_tx {
 
   #[test]
   fn remove_participant() {
-    let (_, validator_data, validators, weights, total_weight) =
-      setup_test_validators_and_weights_with_keys();
-    let set_info = new_test_set_info(&validator_data);
-    let set = set_info.set;
-    let default_signer = SeraiAddress(Signed::default().signer().to_bytes());
-
+    let mut rng = new_test_rng();
     // The signer is fatally slashed if the participant voted to be removed is nonexistent
     {
+      let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+      let set = tributary_validator_set_info.set;
+      let first_participant = u16_to_participant(1);
+
       let mut db = MemDb::new();
       let mut txn = db.txn();
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
 
-      let nonexistent = random_serai_address(&mut OsRng);
+      let nonexistent = Participant::new(u16::MAX).unwrap();
 
       scan_block.handle_application_tx(
-        OsRng.next_u64(),
-        Transaction::RemoveParticipant { participant: nonexistent, signed: Signed::default() },
+        rng.next_u64(),
+        Transaction::RemoveParticipant {
+          participant: nonexistent,
+          signed: random_signed_for_validator(
+            &mut rng,
+            &tributary_validator_set_info,
+            first_participant,
+          ),
+        },
       );
 
-      assert!(TributaryDb::is_fatally_slashed(&txn, set, default_signer));
+      assert!(TributaryDb::is_fatally_slashed(&txn, set, first_participant));
     }
 
     // Valid RemoveParticipant accumulates weight and eventually crosses threshold
     {
-      let (keys_addrs, validator_data, validators, weights, _) = setup_n_validators_with_keys(3);
-      let set_info = new_test_set_info(&validator_data);
-      let set = set_info.set;
-      let (key0, addr0) = keys_addrs[0];
-      let (key1, _) = keys_addrs[1];
-      let (key2, _) = keys_addrs[2];
+      let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+      let set = tributary_validator_set_info.set;
+      let first_participant = u16_to_participant(1);
+      let second_participant = u16_to_participant(2);
+      let third_participant = u16_to_participant(3);
 
-      let target = addr0;
-      let block_number = OsRng.next_u64();
+      let block_number = rng.next_u64();
 
       let mut db = MemDb::new();
       let mut txn = db.txn();
 
       // First vote: topic is recognized, target not yet slashed
       {
-        let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+        let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
         scan_block.handle_application_tx(
           block_number,
           Transaction::RemoveParticipant {
-            participant: target,
-            signed: random_signed_for_key(key0),
+            participant: first_participant,
+            signed: random_signed_for_validator(
+              &mut rng,
+              &tributary_validator_set_info,
+              first_participant,
+            ),
           },
         );
       }
       assert!(
-        RecognizedTopics::recognized(&txn, set, Topic::RemoveParticipant { participant: target }),
+        RecognizedTopics::is_topic_recognized(
+          &txn,
+          set,
+          Topic::RemoveParticipant { participant: first_participant }
+        ),
         "RemoveParticipant topic should be recognized after handling the tx"
       );
       assert!(
-        !TributaryDb::is_fatally_slashed(&txn, set, target),
+        !TributaryDb::is_fatally_slashed(&txn, set, first_participant),
         "target should not be fatally slashed after one vote"
       );
 
       // Threshold crossed, target gets fatally slashed
       {
-        let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, 3, &weights);
+        let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
         scan_block.handle_application_tx(
           block_number,
           Transaction::RemoveParticipant {
-            participant: target,
-            signed: random_signed_for_key(key1),
+            participant: first_participant,
+            signed: random_signed_for_validator(
+              &mut rng,
+              &tributary_validator_set_info,
+              second_participant,
+            ),
           },
         );
         assert!(
-          !TributaryDb::is_fatally_slashed(scan_block.tributary_txn, set, target),
+          !TributaryDb::is_fatally_slashed(scan_block.tributary_txn, set, first_participant),
           "target should not be fatally slashed after two votes"
         );
         scan_block.handle_application_tx(
           block_number,
           Transaction::RemoveParticipant {
-            participant: target,
-            signed: random_signed_for_key(key2),
+            participant: first_participant,
+            signed: random_signed_for_validator(
+              &mut rng,
+              &tributary_validator_set_info,
+              third_participant,
+            ),
           },
         );
       }
       assert!(
-        TributaryDb::is_fatally_slashed(&txn, set, target),
+        TributaryDb::is_fatally_slashed(&txn, set, first_participant),
         "target should be fatally slashed after threshold is crossed"
       );
     }
@@ -382,22 +392,25 @@ mod handle_application_tx {
   #[test]
   fn dkg_participation() {
     let mut db = MemDb::new();
+    let mut rng = new_test_rng();
 
-    let (keys_addrs, validator_data, validators, weights, total_weight) =
-      setup_test_validators_and_weights_with_keys();
-    let set_info = new_test_set_info(&validator_data);
-    let set = set_info.set;
-    let (signer_key, _) = keys_addrs[0];
+    let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+    let set = tributary_validator_set_info.set;
+    let first_participant = u16_to_participant(1);
 
     let mut txn = db.txn();
 
     {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
       scan_block.handle_application_tx(
-        OsRng.next_u64(),
+        rng.next_u64(),
         Transaction::DkgParticipation {
-          participation: vec![1, 2, 3],
-          signed: random_signed_for_key(signer_key),
+          participation: vec![1, 2, 3, 4],
+          signed: random_signed_for_validator(
+            &mut rng,
+            &tributary_validator_set_info,
+            first_participant,
+          ),
         },
       );
     }
@@ -408,29 +421,34 @@ mod handle_application_tx {
 
   #[test]
   fn dkg_confirmation_preprocess() {
-    let (keys_addrs, validator_data, validators, weights, total_weight) =
-      setup_test_validators_and_weights_with_keys();
-    let set_info = new_test_set_info(&validator_data);
-    let set = set_info.set;
-    let (key0, key1, key2) = (keys_addrs[0].0, keys_addrs[1].0, keys_addrs[2].0);
+    let mut rng = new_test_rng();
+    let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+    let set = tributary_validator_set_info.set;
 
     let mut db = MemDb::new();
     let mut txn = db.txn();
-    let block_number = OsRng.next_u64();
+    let block_number = rng.next_u64();
 
     {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      for (i, key) in [key0, key1, key2].into_iter().enumerate() {
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+      for (i_participant, _) in
+        tributary_validator_set_info.tributary_validator_set.consensus_participants()
+      {
         scan_block.handle_application_tx(
           block_number,
           Transaction::DkgConfirmationPreprocess {
             attempt: 0,
-            preprocess: random_bytes(&mut OsRng),
-            signed: random_signed_for_key(key),
+            preprocess: random_bytes(&mut rng),
+            signed: random_signed_for_validator(
+              &mut rng,
+              &tributary_validator_set_info,
+              i_participant,
+            ),
           },
         );
-        if i != 2 {
-          // Below threshold: no DkgConfirmationMessages sent
+        // With 4 validators weight 1 each, required_participation = 2.
+        // Participant 1 is below threshold; participant 2 crosses it.
+        if u16::from(i_participant) == 1 {
           assert!(DkgConfirmationMessages::try_recv(scan_block.tributary_txn, set).is_none());
         }
       }
@@ -442,30 +460,34 @@ mod handle_application_tx {
 
   #[test]
   fn dkg_confirmation_share() {
-    let (keys_addrs, validator_data, validators, weights, total_weight) =
-      setup_test_validators_and_weights_with_keys();
-    let set_info = new_test_set_info(&validator_data);
-    let set = set_info.set;
-    let (key0, addr0) = keys_addrs[0];
-    let (key1, key2) = (keys_addrs[1].0, keys_addrs[2].0);
+    let mut rng = new_test_rng();
+    let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+    let set = tributary_validator_set_info.set;
+    let first_participant = u16_to_participant(1);
+    let second_participant = u16_to_participant(2);
+    let third_participant = u16_to_participant(3);
 
     // Share without preceding preprocess participation -> fatal slash
     {
       let mut db = MemDb::new();
       let mut txn = db.txn();
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
 
       scan_block.handle_application_tx(
-        OsRng.next_u64(),
+        rng.next_u64(),
         Transaction::DkgConfirmationShare {
           attempt: 0,
-          share: random_bytes(&mut OsRng),
-          signed: random_signed_for_key(key0),
+          share: random_bytes(&mut rng),
+          signed: random_signed_for_validator(
+            &mut rng,
+            &tributary_validator_set_info,
+            first_participant,
+          ),
         },
       );
 
       assert!(
-        TributaryDb::is_fatally_slashed(&txn, set, addr0),
+        TributaryDb::is_fatally_slashed(&txn, set, first_participant),
         "share without preceding preprocess should fatally slash"
       );
     }
@@ -473,18 +495,24 @@ mod handle_application_tx {
     // Full preprocess->share flow
     let mut db = MemDb::new();
     let mut txn = db.txn();
-    let block_number = OsRng.next_u64();
+    let block_number = rng.next_u64();
 
     // All 3 validators submit preprocesses (threshold crossed -> DkgConfirmationMessages sent)
     {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      for (i, key) in [key0, key1, key2].into_iter().enumerate() {
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+      for (i, participant) in
+        [first_participant, second_participant, third_participant].into_iter().enumerate()
+      {
         scan_block.handle_application_tx(
           block_number,
           Transaction::DkgConfirmationPreprocess {
             attempt: 0,
-            preprocess: random_bytes(&mut OsRng),
-            signed: random_signed_for_key(key),
+            preprocess: random_bytes(&mut rng),
+            signed: random_signed_for_validator(
+              &mut rng,
+              &tributary_validator_set_info,
+              participant,
+            ),
           },
         );
         if i != 2 {
@@ -500,14 +528,20 @@ mod handle_application_tx {
 
     // Threshold crossed: sends DkgConfirmationMessages (Shares)
     {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      for (i, key) in [key0, key1, key2].into_iter().enumerate() {
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+      for (i, participant) in
+        [first_participant, second_participant, third_participant].into_iter().enumerate()
+      {
         scan_block.handle_application_tx(
           block_number,
           Transaction::DkgConfirmationShare {
             attempt: 0,
-            share: random_bytes(&mut OsRng),
-            signed: random_signed_for_key(key),
+            share: random_bytes(&mut rng),
+            signed: random_signed_for_validator(
+              &mut rng,
+              &tributary_validator_set_info,
+              participant,
+            ),
           },
         );
         if i != 2 {
@@ -527,16 +561,19 @@ mod handle_application_tx {
 
   #[test]
   fn cosign() {
-    let (_, validator_data, validators, weights, total_weight) =
-      setup_test_validators_and_weights_with_keys();
-    let set_info = new_test_set_info(&validator_data);
-    let set = set_info.set;
+    let mut rng = new_test_rng();
+    let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+    let set = tributary_validator_set_info.set;
 
-    let block_hash = random_block_hash(&mut OsRng);
-    let global_session = random_bytes(&mut OsRng);
+    let block_hash = random_block_hash(&mut rng);
+    let global_session = random_bytes(&mut rng);
 
-    let intent =
-      CosignIntent { global_session, block_number: OsRng.next_u64(), block_hash, notable: false };
+    let intent = CosignIntent {
+      global_cosigning_session: global_session,
+      block_number: rng.next_u64(),
+      block_hash,
+      notable: false,
+    };
 
     // Sets LatestSubstrateBlockToCosign and starts cosigning
     {
@@ -548,91 +585,88 @@ mod handle_application_tx {
       }
 
       let mut txn = db.txn();
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
 
       scan_block.handle_application_tx(
-        OsRng.next_u64(),
+        rng.next_u64(),
         Transaction::Cosign { substrate_block_hash: block_hash },
       );
 
       assert_eq!(TributaryDb::latest_substrate_block_to_cosign(&txn, set), Some(block_hash));
-      assert_eq!(TributaryDb::actively_cosigning(&mut txn, set), Some(block_hash));
+      assert_eq!(TributaryDb::get_actively_cosigning_hash(&mut txn, set), Some(block_hash));
       assert!(ProcessorMessages::try_recv(&mut txn, set).is_some());
     }
 
     // When already cosigning, updates LatestSubstrateBlockToCosign but doesn't replace active
     {
       let mut db = MemDb::new();
-      let first_hash = random_block_hash(&mut OsRng);
-      let second_hash = random_block_hash(&mut OsRng);
+      let first_hash = random_block_hash(&mut rng);
+      let second_hash = random_block_hash(&mut rng);
 
       {
         let mut txn = db.txn();
-        TributaryDb::start_cosigning(&mut txn, set, first_hash, OsRng.next_u64());
+        TributaryDb::start_cosigning(&mut txn, set, first_hash, rng.next_u64());
         txn.commit();
       }
 
       let mut txn = db.txn();
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
 
       scan_block.handle_application_tx(
-        OsRng.next_u64(),
+        rng.next_u64(),
         Transaction::Cosign { substrate_block_hash: second_hash },
       );
 
       assert_eq!(TributaryDb::latest_substrate_block_to_cosign(&txn, set), Some(second_hash));
-      assert_eq!(TributaryDb::actively_cosigning(&mut txn, set), Some(first_hash));
+      assert_eq!(TributaryDb::get_actively_cosigning_hash(&mut txn, set), Some(first_hash));
     }
   }
 
   #[test]
   fn cosigned() {
-    let (_, validator_data, validators, weights, total_weight) =
-      setup_test_validators_and_weights_with_keys();
-    let set_info = new_test_set_info(&validator_data);
-    let set = set_info.set;
+    let mut rng = new_test_rng();
+    let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+    let set = tributary_validator_set_info.set;
 
     // Marks block as cosigned
     {
       let mut db = MemDb::new();
       let mut txn = db.txn();
-      let block_hash = random_block_hash(&mut OsRng);
+      let block_hash = random_block_hash(&mut rng);
 
       {
-        let mut scan_block =
-          new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+        let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
         scan_block.handle_application_tx(
-          OsRng.next_u64(),
+          rng.next_u64(),
           Transaction::Cosigned { substrate_block_hash: block_hash },
         );
       }
 
-      assert!(TributaryDb::cosigned(&mut txn, set, block_hash));
+      assert!(TributaryDb::is_cosigned(&mut txn, set, block_hash));
     }
 
     // Finishes active cosign when matching block
     {
       let mut db = MemDb::new();
-      let block_hash = random_block_hash(&mut OsRng);
+      let block_hash = random_block_hash(&mut rng);
 
       {
         let mut txn = db.txn();
-        TributaryDb::start_cosigning(&mut txn, set, block_hash, OsRng.next_u64());
+        TributaryDb::start_cosigning(&mut txn, set, block_hash, rng.next_u64());
         txn.commit();
       }
 
       let mut txn = db.txn();
-      assert_eq!(TributaryDb::actively_cosigning(&mut txn, set), Some(block_hash));
+      assert_eq!(TributaryDb::get_actively_cosigning_hash(&mut txn, set), Some(block_hash));
 
       {
-        let mut scan_block =
-          new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+        let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
         scan_block.handle_application_tx(
-          OsRng.next_u64(),
+          rng.next_u64(),
           Transaction::Cosigned { substrate_block_hash: block_hash },
         );
       }
-      assert!(TributaryDb::actively_cosigning(&mut txn, set).is_none());
+      assert!(TributaryDb::get_actively_cosigning_hash(&mut txn, set).is_none());
     }
 
     // Does not finish active cosign when block doesn't match
@@ -652,39 +686,37 @@ mod handle_application_tx {
     */
     {
       let mut db = MemDb::new();
-      let active_hash = random_block_hash(&mut OsRng);
-      let other_hash = random_block_hash(&mut OsRng);
+      let active_hash = random_block_hash(&mut rng);
+      let other_hash = random_block_hash(&mut rng);
 
       {
         let mut txn = db.txn();
-        TributaryDb::start_cosigning(&mut txn, set, active_hash, OsRng.next_u64());
+        TributaryDb::start_cosigning(&mut txn, set, active_hash, rng.next_u64());
         txn.commit();
       }
 
       let mut txn = db.txn();
       {
-        let mut scan_block =
-          new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+        let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
         scan_block.handle_application_tx(
-          OsRng.next_u64(),
+          rng.next_u64(),
           Transaction::Cosigned { substrate_block_hash: other_hash },
         );
       }
-      assert_eq!(TributaryDb::actively_cosigning(&mut txn, set), Some(active_hash));
-      assert!(TributaryDb::cosigned(&mut txn, set, other_hash));
+      assert_eq!(TributaryDb::get_actively_cosigning_hash(&mut txn, set), Some(active_hash));
+      assert!(TributaryDb::is_cosigned(&mut txn, set, other_hash));
     }
   }
 
   #[test]
   fn substrate_block() {
-    let (_, validator_data, validators, weights, total_weight) =
-      setup_test_validators_and_weights_with_keys();
-    let set_info = new_test_set_info(&validator_data);
-    let set = set_info.set;
+    let mut rng = new_test_rng();
+    let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+    let set = tributary_validator_set_info.set;
 
     let mut db = MemDb::new();
-    let block_hash = random_block_hash(&mut OsRng);
-    let plans = vec![random_bytes(&mut OsRng), random_bytes(&mut OsRng)];
+    let block_hash = random_block_hash(&mut rng);
+    let plans = vec![random_bytes(&mut rng), random_bytes(&mut rng)];
 
     {
       let mut txn = db.txn();
@@ -694,35 +726,34 @@ mod handle_application_tx {
 
     let mut txn = db.txn();
     {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
       scan_block
-        .handle_application_tx(OsRng.next_u64(), Transaction::SubstrateBlock { hash: block_hash });
+        .handle_application_tx(rng.next_u64(), Transaction::SubstrateBlock { hash: block_hash });
     }
 
     for plan in &plans {
       let topic = initial_sign_topic(VariantSignId::Transaction(*plan));
-      assert!(RecognizedTopics::recognized(&txn, set, topic));
+      assert!(RecognizedTopics::is_topic_recognized(&txn, set, topic));
     }
   }
 
   #[test]
   fn batch() {
-    let (_, validator_data, validators, weights, total_weight) =
-      setup_test_validators_and_weights_with_keys();
-    let set_info = new_test_set_info(&validator_data);
-    let set = set_info.set;
+    let mut rng = new_test_rng();
+    let tributary_validator_set_info = setup_n_validators(&mut rng, 5);
+    let set = tributary_validator_set_info.set;
 
     let mut db = MemDb::new();
-    let batch_hash = random_bytes(&mut OsRng);
+    let batch_hash = random_bytes(&mut rng);
 
     let mut txn = db.txn();
     {
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_application_tx(OsRng.next_u64(), Transaction::Batch { hash: batch_hash });
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+      scan_block.handle_application_tx(rng.next_u64(), Transaction::Batch { hash: batch_hash });
     }
 
     let topic = initial_sign_topic(VariantSignId::Batch(batch_hash));
-    assert!(RecognizedTopics::recognized(&txn, set, topic));
+    assert!(RecognizedTopics::is_topic_recognized(&txn, set, topic));
   }
 
   mod slash_report {
@@ -730,36 +761,37 @@ mod handle_application_tx {
 
     #[test]
     fn wrong_length() {
-      let num_validators = OsRng.gen_range(4u16 .. 10);
-      let mut wrong_len = OsRng.gen_range(1u16 .. 20);
+      let mut rng = new_test_rng();
+      let num_validators = rng.gen_range(4u16 .. 10);
+      let mut wrong_len = rng.gen_range(1u16 .. 20);
       if wrong_len == num_validators {
         wrong_len = if wrong_len == 1 { 2 } else { wrong_len - 1 };
       }
 
-      let (keys_addrs, validator_data, validators, weights, total_weight) =
-        setup_n_validators_with_keys(num_validators);
-      let set_info = new_test_set_info(&validator_data);
-      let set = set_info.set;
+      let tributary_validator_set_info = setup_n_validators(&mut rng, num_validators);
+      let set = tributary_validator_set_info.set;
+      let first_participant = u16_to_participant(1);
 
       let mut db = MemDb::new();
       let mut txn = db.txn();
 
-      let (signer_key, signer_addr) = keys_addrs[0];
-
       {
-        let mut scan_block =
-          new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+        let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
         scan_block.handle_application_tx(
-          OsRng.next_u64(),
+          rng.next_u64(),
           Transaction::SlashReport {
             slash_points: vec![0; usize::from(wrong_len)],
-            signed: random_signed_for_key(signer_key),
+            signed: random_signed_for_validator(
+              &mut rng,
+              &tributary_validator_set_info,
+              first_participant,
+            ),
           },
         );
       }
 
       assert!(
-        TributaryDb::is_fatally_slashed(&txn, set, signer_addr),
+        TributaryDb::is_fatally_slashed(&txn, set, first_participant),
         "signer should be fatally slashed for wrong-length slash report",
       );
       assert!(
@@ -770,13 +802,12 @@ mod handle_application_tx {
 
     #[test]
     fn fatal_slash_as_reported_median() {
-      let num_validators = OsRng.gen_range(4u16 .. 10);
-      let num_reports = usize::from(Topic::SlashReport.required_participation(num_validators));
+      let mut rng = new_test_rng();
+      let num_validators = rng.gen_range(4u16 .. 10);
+      let num_reports = usize::from(required_participation(num_validators));
 
-      let (keys_addrs, validator_data, validators, weights, total_weight) =
-        setup_n_validators_with_keys(num_validators);
-      let set_info = new_test_set_info(&validator_data);
-      let set = set_info.set;
+      let tributary_validator_set_info = setup_n_validators(&mut rng, num_validators);
+      let set = tributary_validator_set_info.set;
 
       let mut report = vec![0u32; usize::from(num_validators)];
       report[0] = u32::MAX;
@@ -786,15 +817,18 @@ mod handle_application_tx {
       let mut txn = db.txn();
 
       {
-        let mut scan_block =
-          new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+        let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
         for (i, report) in reports.iter().enumerate() {
-          let (key, _) = keys_addrs[i];
+          let participant = u16_to_participant(u16::try_from(i + 1).unwrap());
           scan_block.handle_application_tx(
-            OsRng.next_u64(),
+            rng.next_u64(),
             Transaction::SlashReport {
               slash_points: report.clone(),
-              signed: random_signed_for_key(key),
+              signed: random_signed_for_validator(
+                &mut rng,
+                &tributary_validator_set_info,
+                participant,
+              ),
             },
           );
         }
@@ -845,32 +879,34 @@ mod handle_application_tx {
 
       #[test]
       fn fuzz_slash_report_even_validators() {
+        let mut rng = new_test_rng();
         for _ in 0 .. 200 {
           // random even: 4, 6, 8, or 10
-          let n = OsRng.gen_range(2u16 ..= 5) * 2;
-          let num_reports = Topic::SlashReport.required_participation(n);
+          let n = rng.gen_range(2u16 ..= 5) * 2;
+          let num_reports = required_participation(n);
 
-          let (keys_addrs, validator_data, validators, weights, total_weight) =
-            setup_n_validators_with_keys(n);
-          let set_info = new_test_set_info(&validator_data);
-          let set = set_info.set;
+          let tributary_validator_set_info = setup_n_validators(&mut rng, n);
+          let set = tributary_validator_set_info.set;
 
-          let reports = random_slash_reports(&mut OsRng, n, num_reports);
+          let reports = random_slash_reports(&mut rng, n, num_reports);
           let expected = expected_slash_report(n, &reports);
 
           let mut db = MemDb::new();
           let mut txn = db.txn();
 
           {
-            let mut scan_block =
-              new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+            let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
             for (i, report) in reports.iter().enumerate() {
-              let (key, _) = keys_addrs[i];
+              let participant = u16_to_participant(u16::try_from(i + 1).unwrap());
               scan_block.handle_application_tx(
-                OsRng.next_u64(),
+                rng.next_u64(),
                 Transaction::SlashReport {
                   slash_points: report.clone(),
-                  signed: random_signed_for_key(key),
+                  signed: random_signed_for_validator(
+                    &mut rng,
+                    &tributary_validator_set_info,
+                    participant,
+                  ),
                 },
               );
             }
@@ -883,6 +919,7 @@ mod handle_application_tx {
                 session: set.session,
                 slash_report: expected
                   .into_iter()
+                  .filter(|points| *points != 0 || *points == u32::MAX)
                   .map(|points| if points == u32::MAX {
                     Slash::Fatal
                   } else {
@@ -897,7 +934,7 @@ mod handle_application_tx {
 
           let sign_topic = initial_sign_topic(VariantSignId::SlashReport);
           assert!(
-            RecognizedTopics::recognized(&txn, set, sign_topic),
+            RecognizedTopics::is_topic_recognized(&txn, set, sign_topic),
             "SlashReport sign topic should be recognized",
           );
         }
@@ -905,32 +942,34 @@ mod handle_application_tx {
 
       #[test]
       fn fuzz_slash_report_odd_validators() {
+        let mut rng = new_test_rng();
         for _ in 0 .. 200 {
           // random odd: 5, 7, 9, or 11
-          let n = OsRng.gen_range(2u16 ..= 5) * 2 + 1;
-          let num_reports = Topic::SlashReport.required_participation(n);
+          let n = rng.gen_range(2u16 ..= 5) * 2 + 1;
+          let num_reports = required_participation(n);
 
-          let (keys_addrs, validator_data, validators, weights, total_weight) =
-            setup_n_validators_with_keys(n);
-          let set_info = new_test_set_info(&validator_data);
-          let set = set_info.set;
+          let tributary_validator_set_info = setup_n_validators(&mut rng, n);
+          let set = tributary_validator_set_info.set;
 
-          let reports = random_slash_reports(&mut OsRng, n, num_reports);
+          let reports = random_slash_reports(&mut rng, n, num_reports);
           let expected = expected_slash_report(n, &reports);
 
           let mut db = MemDb::new();
           let mut txn = db.txn();
 
           {
-            let mut scan_block =
-              new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+            let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
             for (i, report) in reports.iter().enumerate() {
-              let (key, _) = keys_addrs[i];
+              let participant = u16_to_participant(u16::try_from(i + 1).unwrap());
               scan_block.handle_application_tx(
-                OsRng.next_u64(),
+                rng.next_u64(),
                 Transaction::SlashReport {
                   slash_points: report.clone(),
-                  signed: random_signed_for_key(key),
+                  signed: random_signed_for_validator(
+                    &mut rng,
+                    &tributary_validator_set_info,
+                    participant,
+                  ),
                 },
               );
             }
@@ -943,6 +982,7 @@ mod handle_application_tx {
                 session: set.session,
                 slash_report: expected
                   .into_iter()
+                  .filter(|points| *points != 0 || *points == u32::MAX)
                   .map(|points| if points == u32::MAX {
                     Slash::Fatal
                   } else {
@@ -955,7 +995,7 @@ mod handle_application_tx {
             ))
           );
           let sign_topic = initial_sign_topic(VariantSignId::SlashReport);
-          assert!(RecognizedTopics::recognized(&txn, set, sign_topic));
+          assert!(RecognizedTopics::is_topic_recognized(&txn, set, sign_topic));
         }
       }
     }
@@ -963,14 +1003,13 @@ mod handle_application_tx {
 
   #[test]
   fn sign() {
-    let (keys_addrs, validator_data, validators, weights, total_weight) =
-      setup_test_validators_and_weights_with_keys();
-    let set_info = new_test_set_info(&validator_data);
-    let set = set_info.set;
-    let (key0, addr0) = keys_addrs[0];
-    let (key1, key2) = (keys_addrs[1].0, keys_addrs[2].0);
+    let mut rng = new_test_rng();
 
-    let sign_id = VariantSignId::Transaction(random_bytes(&mut OsRng));
+    let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+    let set = tributary_validator_set_info.set;
+    let first_participant = u16_to_participant(1);
+
+    let sign_id = VariantSignId::Transaction(random_bytes(&mut rng));
     let topic = initial_sign_topic(sign_id);
 
     // Wrong data length: signer has weight 1 but submits 2 entries -> fatal slash
@@ -979,19 +1018,26 @@ mod handle_application_tx {
       let mut txn = db.txn();
       TributaryDb::recognize_topic(&mut txn, set, topic);
 
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
       scan_block.handle_application_tx(
-        OsRng.next_u64(),
+        rng.next_u64(),
         Transaction::Sign {
           id: sign_id,
           attempt: 0,
           round: SigningProtocolRound::Preprocess,
-          data: vec![vec![1], vec![2]],
-          signed: random_signed_for_key(key0),
+          data: HashMap::from([
+            (Participant::new(1).unwrap(), vec![1]),
+            (Participant::new(2).unwrap(), vec![2]),
+          ]),
+          signed: random_signed_for_validator(
+            &mut rng,
+            &tributary_validator_set_info,
+            first_participant,
+          ),
         },
       );
 
-      assert!(TributaryDb::is_fatally_slashed(&txn, set, addr0));
+      assert!(TributaryDb::is_fatally_slashed(&txn, set, first_participant));
     }
 
     // Valid data: threshold crossing sends ProcessorMessage
@@ -1001,17 +1047,22 @@ mod handle_application_tx {
       TributaryDb::recognize_topic(&mut txn, set, topic);
 
       {
-        let mut scan_block =
-          new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-        for key in [key0, key1, key2] {
+        let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+        for (i_participant, _) in
+          tributary_validator_set_info.tributary_validator_set.consensus_participants()
+        {
           scan_block.handle_application_tx(
-            OsRng.next_u64(),
+            rng.next_u64(),
             Transaction::Sign {
               id: sign_id,
               attempt: 0,
               round: SigningProtocolRound::Preprocess,
-              data: vec![vec![1, 2, 3]],
-              signed: random_signed_for_key(key),
+              data: HashMap::from([(Participant::new(1).unwrap(), vec![1, 2, 3])]),
+              signed: random_signed_for_validator(
+                &mut rng,
+                &tributary_validator_set_info,
+                i_participant,
+              ),
             },
           );
         }
@@ -1027,13 +1078,14 @@ mod handle_application_tx {
   /// and stores preceding data), then accumulating shares to threshold.
   #[test]
   fn sign_share_sends_shares_message() {
-    let (keys_addrs, validator_data, validators, weights, total_weight) =
-      setup_test_validators_and_weights_with_keys();
-    let set_info = new_test_set_info(&validator_data);
-    let set = set_info.set;
-    let (key0, key1, key2) = (keys_addrs[0].0, keys_addrs[1].0, keys_addrs[2].0);
+    let mut rng = new_test_rng();
+    let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+    let set = tributary_validator_set_info.set;
+    let first_participant = u16_to_participant(1);
+    let second_participant = u16_to_participant(2);
+    let third_participant = u16_to_participant(3);
 
-    let sign_id = VariantSignId::Transaction(random_bytes(&mut OsRng));
+    let sign_id = VariantSignId::Transaction(random_bytes(&mut rng));
     let preprocess_topic = initial_sign_topic(sign_id);
     let share_topic = Topic::Sign { id: sign_id, attempt: 0, round: SigningProtocolRound::Share };
 
@@ -1046,17 +1098,21 @@ mod handle_application_tx {
     // Step 1: All validators submit preprocesses, crossing threshold.
     // This auto-recognizes the Share topic (succeeding_topic) and stores preprocess data.
     {
-      let block_number = OsRng.next_u64();
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      for key in [key0, key1, key2] {
+      let block_number = rng.next_u64();
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+      for participant in [first_participant, second_participant, third_participant] {
         scan_block.handle_application_tx(
           block_number,
           Transaction::Sign {
             id: sign_id,
             attempt: 0,
             round: SigningProtocolRound::Preprocess,
-            data: vec![vec![1, 2, 3]],
-            signed: random_signed_for_key(key),
+            data: HashMap::from([(Participant::new(1).unwrap(), vec![1, 2, 3])]),
+            signed: random_signed_for_validator(
+              &mut rng,
+              &tributary_validator_set_info,
+              participant,
+            ),
           },
         );
       }
@@ -1067,21 +1123,25 @@ mod handle_application_tx {
     assert!(ProcessorMessages::try_recv(&mut txn, set).is_some());
 
     // Share topic should now be recognized
-    assert!(RecognizedTopics::recognized(&txn, set, share_topic));
+    assert!(RecognizedTopics::is_topic_recognized(&txn, set, share_topic));
 
     // Step 2: All validators submit shares, crossing threshold -> sends Shares message.
     {
-      let block_number = OsRng.next_u64();
-      let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      for key in [key0, key1, key2] {
+      let block_number = rng.next_u64();
+      let mut scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+      for participant in [first_participant, second_participant, third_participant] {
         scan_block.handle_application_tx(
           block_number,
           Transaction::Sign {
             id: sign_id,
             attempt: 0,
             round: SigningProtocolRound::Share,
-            data: vec![vec![4, 5, 6]],
-            signed: random_signed_for_key(key),
+            data: HashMap::from([(Participant::new(1).unwrap(), vec![4, 5, 6])]),
+            signed: random_signed_for_validator(
+              &mut rng,
+              &tributary_validator_set_info,
+              participant,
+            ),
           },
         );
       }
@@ -1093,36 +1153,33 @@ mod handle_application_tx {
     assert!(msg.is_some(), "expected Shares processor message");
 
     // No validators should be slashed
-    for v in &validators {
-      assert!(!TributaryDb::is_fatally_slashed(&txn, set, *v));
+    for participant in [first_participant, second_participant, third_participant] {
+      assert!(!TributaryDb::is_fatally_slashed(&txn, set, participant));
     }
   }
 }
 
 #[test]
 fn handle_block() {
-  let (keys_addrs, validator_data, validators, weights, total_weight) =
-    setup_n_validators_with_keys(3);
-  let set_info = new_test_set_info(&validator_data);
-  let set = set_info.set;
-  let addr0 = validator_data[0].0;
-  let signed = random_signed_for_key(keys_addrs[0].0);
+  let mut rng = new_test_rng();
+  let tributary_validator_set_info = setup_n_validators(&mut rng, 4);
+  let set = tributary_validator_set_info.set;
+  let first_participant = u16_to_participant(1);
+  let signed =
+    random_signed_for_validator(&mut rng, &tributary_validator_set_info, first_participant);
 
   // Empty block only calls start of block
   {
     let mut db = MemDb::new();
     let mut txn = db.txn();
     let block = Block {
-      header: BlockHeader {
-        parent: random_bytes(&mut OsRng),
-        transactions: random_bytes(&mut OsRng),
-      },
+      header: BlockHeader { parent: random_bytes(&mut rng), transactions: random_bytes(&mut rng) },
       transactions: vec![],
     };
 
     {
-      let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(OsRng.next_u64(), block);
+      let scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+      scan_block.handle_block(rng.next_u64(), block);
     }
     assert_no_pending_messages(&mut txn, set);
   }
@@ -1130,28 +1187,27 @@ fn handle_block() {
   // Each application transaction type passes through handle_block.
   // Signed transactions use a real validator key so participant_indexes lookups succeed.
   // Cosign and SubstrateBlock need external state populated before they can run.
-  for tx in all_signed_transactions_and_attempts(signed) {
+  let n_validators =
+    tributary_validator_set_info.tributary_validator_set.consensus_tributary_validators.len();
+  for tx in all_signed_transactions_and_attempts(&mut rng, signed, Some(n_validators)) {
     let mut db = MemDb::new();
     let mut txn = db.txn();
 
     let block_txs = vec![TributaryTransaction::Application(tx)];
     let block = Block {
-      header: BlockHeader {
-        parent: random_bytes(&mut OsRng),
-        transactions: random_bytes(&mut OsRng),
-      },
+      header: BlockHeader { parent: random_bytes(&mut rng), transactions: random_bytes(&mut rng) },
       transactions: block_txs.clone(),
     };
 
     {
-      let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(OsRng.next_u64(), block);
+      let scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+      scan_block.handle_block(rng.next_u64(), block);
     }
     assert_block_side_effects(&mut txn, set, &block_txs);
   }
 
   // Provided transactions that need preconditions
-  for tx in all_provided_transactions() {
+  for tx in all_provided_transactions(&mut rng) {
     let mut db = MemDb::new();
     let mut txn = db.txn();
 
@@ -1162,15 +1218,15 @@ fn handle_block() {
           &mut txn,
           set,
           &CosignIntent {
-            global_session: random_bytes(&mut OsRng),
-            block_number: OsRng.next_u64(),
+            global_cosigning_session: random_bytes(&mut rng),
+            block_number: rng.next_u64(),
             block_hash: *substrate_block_hash,
             notable: false,
           },
         );
       }
       Transaction::SubstrateBlock { hash } => {
-        let plans = vec![random_bytes(&mut OsRng)];
+        let plans = vec![random_bytes(&mut rng)];
         SubstrateBlockPlans::set(&mut txn, set, *hash, &plans);
       }
       // `Cosigned`, `Batch` are provided but do not require pre-existing state
@@ -1186,28 +1242,30 @@ fn handle_block() {
 
     let block_txs = vec![TributaryTransaction::Application(tx)];
     let block = Block {
-      header: BlockHeader {
-        parent: random_bytes(&mut OsRng),
-        transactions: random_bytes(&mut OsRng),
-      },
+      header: BlockHeader { parent: random_bytes(&mut rng), transactions: random_bytes(&mut rng) },
       transactions: block_txs.clone(),
     };
 
     {
-      let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(OsRng.next_u64(), block);
+      let scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+      scan_block.handle_block(rng.next_u64(), block);
     }
     assert_block_side_effects(&mut txn, set, &block_txs);
   }
 
   // Each Tendermint SlashEvidence type fatally slashes the sender
   {
+    // Get the serai_networks_auxiliary_key of the first validator for evidence
+    let first_validator =
+      tributary_validator_set_info.tributary_validator_set.consensus_tributary_validators[0]
+        .serai_networks_auxiliary_key;
+
     let all_evidence = [
-      Evidence::InvalidPrecommit(make_signed_message_bytes(addr0.0)),
-      Evidence::InvalidValidRound(make_signed_message_bytes(addr0.0)),
+      Evidence::InvalidPrecommit(make_signed_message_bytes(first_validator)),
+      Evidence::InvalidValidRound(make_signed_message_bytes(first_validator)),
       Evidence::ConflictingMessages(
-        make_signed_message_bytes(addr0.0),
-        make_signed_message_bytes(addr0.0),
+        make_signed_message_bytes(first_validator),
+        make_signed_message_bytes(first_validator),
       ),
     ];
 
@@ -1217,18 +1275,18 @@ fn handle_block() {
 
       let block = Block {
         header: BlockHeader {
-          parent: random_bytes(&mut OsRng),
-          transactions: random_bytes(&mut OsRng),
+          parent: random_bytes(&mut rng),
+          transactions: random_bytes(&mut rng),
         },
         transactions: vec![TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(evidence))],
       };
 
       {
-        let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
+        let scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
         scan_block.handle_block(1, block);
       }
       assert!(
-        TributaryDb::is_fatally_slashed(&txn, set, addr0),
+        TributaryDb::is_fatally_slashed(&txn, set, first_participant),
         "SlashEvidence should fatally slash the sender",
       );
 
@@ -1242,55 +1300,55 @@ fn handle_block() {
     let mut db = MemDb::new();
     let mut txn = db.txn();
 
-    let num_txs = OsRng.gen_range(1usize ..= 8);
+    let num_txs = rng.gen_range(1usize ..= 8);
     let mut transactions = Vec::with_capacity(num_txs);
     let mut has_evidence = false;
     let mut batch_hashes = vec![];
 
     for _ in 0 .. num_txs {
-      if OsRng.gen_bool(0.5) {
+      if rng.gen_bool(0.5) {
         // Random Tendermint evidence type
-        let evidence = match OsRng.gen_range(0u8 .. 3) {
-          0 => Evidence::InvalidPrecommit(make_signed_message_bytes(addr0.0)),
-          1 => Evidence::InvalidValidRound(make_signed_message_bytes(addr0.0)),
+        let first_validator =
+          tributary_validator_set_info.tributary_validator_set.consensus_tributary_validators[0]
+            .serai_networks_auxiliary_key;
+        let evidence = match rng.gen_range(0u8 .. 3) {
+          0 => Evidence::InvalidPrecommit(make_signed_message_bytes(first_validator)),
+          1 => Evidence::InvalidValidRound(make_signed_message_bytes(first_validator)),
           _ => Evidence::ConflictingMessages(
-            make_signed_message_bytes(addr0.0),
-            make_signed_message_bytes(addr0.0),
+            make_signed_message_bytes(first_validator),
+            make_signed_message_bytes(first_validator),
           ),
         };
         transactions.push(TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(evidence)));
         has_evidence = true;
       } else {
         // Random application transaction, use Batch so we can assert recognition
-        let hash = random_bytes(&mut OsRng);
+        let hash = random_bytes(&mut rng);
         batch_hashes.push(hash);
         transactions.push(TributaryTransaction::Application(Transaction::Batch { hash }));
       }
     }
 
     let block = Block {
-      header: BlockHeader {
-        parent: random_bytes(&mut OsRng),
-        transactions: random_bytes(&mut OsRng),
-      },
+      header: BlockHeader { parent: random_bytes(&mut rng), transactions: random_bytes(&mut rng) },
       transactions: transactions.clone(),
     };
 
     {
-      let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(OsRng.next_u64(), block);
+      let scan_block = new_scan_block(&mut txn, &tributary_validator_set_info);
+      scan_block.handle_block(rng.next_u64(), block);
     }
 
     if has_evidence {
       assert!(
-        TributaryDb::is_fatally_slashed(&txn, set, addr0),
+        TributaryDb::is_fatally_slashed(&txn, set, first_participant),
         "SlashEvidence should fatally slash the sender in mixed blocks",
       );
     }
     for hash in &batch_hashes {
       let topic = initial_sign_topic(VariantSignId::Batch(*hash));
       assert!(
-        RecognizedTopics::recognized(&txn, set, topic),
+        RecognizedTopics::is_topic_recognized(&txn, set, topic),
         "Batch should be recognized regardless of other txs in the block",
       );
     }

@@ -173,7 +173,7 @@ impl<D: Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Plan
         Ok(tx) => Ok(PlannedTransaction {
           signable: tx.0,
           eventuality: Eventuality { txid: tx.1.txid(), singular_spent_output },
-          auxilliary: EffectedReceivedOutputs({
+          auxiliary: EffectedReceivedOutputs({
             let tx = tx.1.transaction();
             let scanner = scanner(key);
 

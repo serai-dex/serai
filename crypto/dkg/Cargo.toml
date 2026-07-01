@@ -25,6 +25,8 @@ std-shims = { version = "0.1", path = "../../common/std-shims", default-features
 
 ciphersuite = { path = "../ciphersuite", version = "^0.4.1", default-features = false, features = ["alloc"] }
 
+borsh = { version = "1", default-features = false, features = ["derive"] }
+
 [features]
 std = [
   "thiserror/std",

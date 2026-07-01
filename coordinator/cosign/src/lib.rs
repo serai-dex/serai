@@ -6,13 +6,20 @@
 use core::{fmt::Debug, future::Future};
 use std::{sync::Arc, collections::HashMap, time::Instant};
 
+#[cfg(test)]
+use tokio::task::JoinHandle;
+
 use blake2::{Digest as _, Blake2s256};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use serai_client_serai::{
   abi::primitives::{
-    BlockHash, crypto::Public, network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet,
+    BlockHash,
+    crypto::{Public, EmbeddedEllipticCurveKeys as AuxiliaryKeysStruct, SeraiNetworksAuxiliaryKey},
+    network_id::{NetworkId, ExternalNetworkId},
+    validator_sets::ExternalValidatorSet,
+    address::SeraiAddress,
   },
   Serai,
 };
@@ -23,7 +30,51 @@ use serai_task::*;
 pub use serai_cosign_types::*;
 
 /// The cosigns which are intended to be performed.
-mod intend;
+pub mod intend;
+
+/// Get the latest indexed `NetworkId::Serai` auxiliary key for a validator.
+/// Indexed by the cosign intend task and used through the coordinator as its identity.
+pub fn serai_networks_auxiliary_key(
+  getter: &impl Get,
+  identity: SeraiAddress,
+) -> SeraiNetworksAuxiliaryKey {
+  intend::serai_networks_auxiliary_key(getter, identity)
+}
+
+/// The auxiliary keys indexed as an Event::SetEmbeddedEllipticCurveKeys
+pub struct AuxiliaryKeys;
+impl AuxiliaryKeys {
+  /// Try to get stored AuxiliaryKeys per validator,
+  /// returns `None` if auxiliary keys have not been indexed by intend.
+  pub fn get(
+    getter: &impl Get,
+    network: NetworkId,
+    identity: SeraiAddress,
+  ) -> Option<AuxiliaryKeysStruct> {
+    intend::AuxiliaryKeys::get(getter, network, identity)
+  }
+}
+
+/// Validators of a given network in a decided but not yet active cosigning set,
+///
+/// These are validators for sets which have been decided on-chain (via `SetDecided`) but have
+/// not yet been activated (via `SetKeys`). Once `SetKeys` is processed, the entry is removed.
+pub struct PendingValidators;
+impl PendingValidators {
+  /// Try to get stored PendingValidators per external validator set,
+  /// returns `None` if pending validators have not been indexed by intend.
+  pub fn get(
+    getter: &impl Get,
+    set: ExternalValidatorSet,
+  ) -> Option<Vec<SeraiNetworksAuxiliaryKey>> {
+    intend::NetworksPendingValidators::get(getter, set)
+  }
+  /// Check whether a given validator set is still pending activation.
+  pub fn is_pending(getter: &impl Get, set: ExternalValidatorSet) -> bool {
+    Self::get(getter, set).is_some()
+  }
+}
+
 /// The evaluator of the cosigns.
 mod evaluator;
 /// The task to delay acknowledgement of the cosigns.
@@ -35,10 +86,30 @@ use delay::LatestCosignedBlockNumber;
 #[cfg(test)]
 pub mod tests;
 
-/// A 'global session', defined as all validator sets used for cosigning at a given moment.
+/// Utilities for seeding the cosign DB in tests and test-helper contexts.
+#[cfg(any(test, feature = "test-helpers"))]
+pub mod test_helpers;
+
+pub(crate) const COSIGN_FAULT_THRESHOLD_NUMERATOR: u128 = 17;
+pub(crate) const COSIGN_FAULT_THRESHOLD_DENOMINATOR: u128 = 100;
+
+/// Calculate the minimum threshold required for faulting a cosigning session.
+pub(crate) fn cosign_fault_threshold(total_stake: u64) -> u64 {
+  const {
+    assert!(crate::COSIGN_FAULT_THRESHOLD_NUMERATOR < crate::COSIGN_FAULT_THRESHOLD_DENOMINATOR);
+  }
+  u64::try_from(
+    (u128::from(total_stake) * crate::COSIGN_FAULT_THRESHOLD_NUMERATOR) /
+      crate::COSIGN_FAULT_THRESHOLD_DENOMINATOR,
+  )
+  .expect("threshold < 1") +
+    1
+}
+
+/// A 'global cosigning session': all validator sets used for cosigning at a given moment.
 ///
-/// We evaluate cosign faults within a global session. This ensures even if cosigners cosign
-/// distinct blocks at distinct positions within a global session, we still identify the faults.
+/// We evaluate cosign faults within a global cosigning session. Even if cosigners cosign
+/// distinct blocks at distinct positions within a session, we still identify the faults.
 /*
   There is the attack where a validator set is given an alternate blockchain with a key generation
   event at block #n, while most validator sets are given a blockchain with a key generation event
@@ -46,23 +117,24 @@ pub mod tests;
   cosigns on the primary blockchain, and detecting the faults, if they use the keys as of the block
   prior to the block being cosigned.
 
-  We solve this by binding cosigns to a global session ID, which has a specific start block, and
-  reading the keys from the start block. This means that so long as all validator sets agree on the
-  start of a global session, they can verify all cosigns produced by that session, regardless of
-  how it advances. Since agreeing on the start of a global session is mandated, there's no way to
-  have validator sets follow two distinct global sessions without breaking the bounds of the
-  cosigning protocol.
+  We solve this by binding cosigns to a global cosigning session ID, which has a specific start
+  block, and reading the keys from the start block. This means that so long as all validator sets
+  agree on the start of a global cosigning session, they can verify all cosigns produced by that
+  session, regardless of how it advances. Since agreeing on the start of a global cosigning session
+  is mandated, there's no way to have validator sets follow two distinct global cosigning sessions
+  without breaking the bounds of the cosigning protocol.
 */
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
-pub(crate) struct GlobalSession {
+#[derive(Clone, Debug, BorshSerialize, BorshDeserialize)]
+pub(crate) struct GlobalCosigningSession {
   pub(crate) start_block_number: u64,
-  pub(crate) sets: Vec<ExternalValidatorSet>,
+  pub(crate) cosigning_sets: Vec<ExternalValidatorSet>,
   pub(crate) keys: HashMap<ExternalNetworkId, Public>,
   pub(crate) stakes: HashMap<ExternalNetworkId, u64>,
   pub(crate) total_stake: u64,
 }
-impl GlobalSession {
-  pub(crate) fn id(mut cosigners: Vec<ExternalValidatorSet>) -> [u8; 32] {
+type GlobalCosigningSessionId = [u8; 32];
+impl GlobalCosigningSession {
+  pub(crate) fn id(mut cosigners: Vec<ExternalValidatorSet>) -> GlobalCosigningSessionId {
     cosigners.sort_by_key(|a| borsh::to_vec(a).unwrap());
     Blake2s256::digest(borsh::to_vec(&cosigners).unwrap()).into()
   }
@@ -132,14 +204,15 @@ create_db! {
 
     // An index of Substrate blocks
     SubstrateBlockHash: (block_number: u64) -> BlockHash,
-    // A mapping from a global session's ID to its relevant information.
-    GlobalSessions: (global_session: [u8; 32]) -> GlobalSession,
-    // The last block to be cosigned by a global session.
-    GlobalSessionsLastBlock: (global_session: [u8; 32]) -> u64,
-    // The latest global session intended.
+    // A mapping from a global cosigning session's ID to its relevant information.
+    GlobalCosigningSessions:
+      (global_cosigning_session: GlobalCosigningSessionId) -> GlobalCosigningSession,
+    // The last block to have been cosigned by a global cosigning session.
+    GlobalCosigningSessionsLastBlock: (global_cosigning_session: GlobalCosigningSessionId) -> u64,
+    // The latest global cosigning session intended.
     //
-    // This is distinct from the latest global session for which we've evaluated the cosigns for.
-    LatestGlobalSessionIntended: () -> [u8; 32],
+    // This is distinct from the latest global cosigning session for which we've evaluated cosigns.
+    LatestGlobalCosigningSessionIntended: () -> GlobalCosigningSessionId,
 
     // The following are managed by the `intake_cosign` function present in this file
 
@@ -148,18 +221,18 @@ create_db! {
     // This will only be populated with cosigns predating or during the most recent global session
     // to have its start cosigned.
     //
-    // The global session changes upon a notable block, causing each global session to have exactly
-    // one notable block. All validator sets will explicitly produce a cosign for their notable
-    // block, causing the latest cosigned block for a global session to either be the global
+    // The global cosigning session changes upon a notable block, causing each session to have
+    // exactly one notable block. All validator sets will explicitly produce a cosign for their
+    // notable block, causing the latest cosigned block for a session to either be the global
     // session's notable cosigns or the network's latest cosigns.
-    NetworksLatestCosignedBlock: (
-      global_session: [u8; 32],
+    NetworksLatestCosignedBlockIntaken: (
+      global_cosigning_session: GlobalCosigningSessionId,
       network: ExternalNetworkId
     ) -> SignedCosign,
     // Cosigns received for blocks not locally recognized as finalized.
-    Faults: (global_session: [u8; 32]) -> Vec<SignedCosign>,
-    // The global session which faulted.
-    FaultedSession: () -> [u8; 32],
+    Faults: (global_cosigning_session: GlobalCosigningSessionId) -> Vec<SignedCosign>,
+    // The global cosigning session which faulted.
+    FaultedCosigningSession: () -> GlobalCosigningSessionId,
   }
 }
 
@@ -168,10 +241,10 @@ pub trait RequestNotableCosigns: 'static + Send + Sync {
   /// The error type which may be encountered when requesting notable cosigns.
   type Error: Debug;
 
-  /// Request the notable cosigns for this global session.
+  /// Request the notable cosigns for this global cosigning session.
   fn request_notable_cosigns(
     &self,
-    global_session: [u8; 32],
+    global_cosigning_session: GlobalCosigningSessionId,
   ) -> impl Send + Future<Output = Result<(), Self::Error>>;
 }
 
@@ -186,17 +259,17 @@ pub enum IntakeCosignError {
   NotYetIndexedBlock,
   /// A later cosign for this cosigner has already been handled
   StaleCosign,
-  /// The cosign's global session isn't recognized
+  /// The cosign's global cosigning session isn't recognized
   UnrecognizedGlobalSession,
-  /// The cosign is for a block before its global session starts
+  /// The cosign is for a block before its global cosigning session starts
   BeforeGlobalSessionStart,
-  /// The cosign is for a block after its global session ends
+  /// The cosign is for a block after its global cosigning session ends
   AfterGlobalSessionEnd,
-  /// The cosign's signing network wasn't a participant in this global session
+  /// The cosign's signing network wasn't a participant in this global cosigning session
   NonParticipatingNetwork,
   /// The cosign had an invalid signature
   InvalidSignature,
-  /// The cosign is for a global session which has yet to have its declaration block cosigned
+  /// The cosign is for a session which has yet to have its declaration block cosigned
   FutureGlobalSession,
 }
 
@@ -219,20 +292,37 @@ impl IntakeCosignError {
 /// The interface to manage cosigning with.
 pub struct Cosigning<D: Db> {
   db: D,
+  #[cfg(test)]
+  join_handles: Vec<JoinHandle<()>>,
 }
+#[cfg(test)]
+impl<D: Db> Drop for Cosigning<D> {
+  fn drop(&mut self) {
+    for handle in self.join_handles.drain(..) {
+      handle.abort();
+    }
+  }
+}
+
 impl<D: Db> Cosigning<D> {
   #[cfg(test)]
   /// Create a cosigning handle using an already-initialized database.
   ///
   /// This does not spawn any background tasks; use `Cosigning::spawn` for the full service.
   pub fn new(db: D) -> Self {
-    Self { db }
+    Self {
+      db,
+      #[cfg(test)]
+      join_handles: vec![],
+    }
   }
 
   /// Spawn the tasks to intend and evaluate cosigns.
   ///
   /// The database specified must only be used with a singular instance of the Serai network, and
   /// only used once at any given time.
+  #[cfg(not(test))]
+  #[allow(clippy::cfg_not_test)]
   pub fn spawn<R: RequestNotableCosigns>(
     db: D,
     serai: Arc<Serai>,
@@ -266,17 +356,55 @@ impl<D: Db> Cosigning<D> {
     Self { db }
   }
 
-  /// The latest cosigned block number.
+  /// Test-only variant of `spawn` that accepts a `test_label` for log identification.
+  #[cfg(test)]
+  pub fn spawn_with_handles<R: RequestNotableCosigns>(
+    db: D,
+    serai: Arc<Serai>,
+    request: R,
+    tasks_to_run_upon_cosigning_blocks: Vec<TaskHandle>,
+  ) -> Self {
+    let (intend_task, intend_task_handle) = Task::new();
+    core::mem::forget(intend_task_handle);
+
+    let (evaluator_task, evaluator_task_handle) = Task::new();
+    let (delay_task, delay_task_handle) = Task::new();
+    let join_handles = vec![
+      tokio::spawn(
+        (intend::CosignIntendTask { db: db.clone(), serai })
+          .continually_run(intend_task, vec![evaluator_task_handle]),
+      ),
+      tokio::spawn(
+        (evaluator::CosignEvaluatorTask {
+          db: db.clone(),
+          request,
+          last_request_for_cosigns: Instant::now(),
+        })
+        .continually_run(evaluator_task, vec![delay_task_handle]),
+      ),
+      tokio::spawn(
+        (delay::CosignDelayTask { db: db.clone() })
+          .continually_run(delay_task, tasks_to_run_upon_cosigning_blocks),
+      ),
+    ];
+
+    Self { db, join_handles }
+  }
+
+  /// Try to get the latest cosigned block number.
+  /// Returns an `Err(Faulted)` if a faulted cosigning session exists.
   pub fn latest_cosigned_block_number(getter: &impl Get) -> Result<Option<u64>, Faulted> {
-    if FaultedSession::get(getter).is_some() {
+    if FaultedCosigningSession::get(getter).is_some() {
       Err(Faulted)?;
     }
 
     Ok(LatestCosignedBlockNumber::get(getter))
   }
 
-  /// Fetch a cosigned Substrate block's hash by its block number.
-  pub fn cosigned_block(
+  /// Try to fetch a cosigned Substrate block's hash by its block number.
+  /// Returns an `Err(Faulted)` if a faulted cosigning session exists.
+  /// Returns `None` if the block by number has not been cosigned yet.
+  pub fn get_cosigned_blocks_hash(
     getter: &impl Get,
     block_number: u64,
   ) -> Result<Option<BlockHash>, Faulted> {
@@ -289,20 +417,23 @@ impl<D: Db> Cosigning<D> {
 
     Ok(Some(
       SubstrateBlockHash::get(getter, block_number)
-        .unwrap_or_else(|| panic!("cosigned block {block_number} but didn't index it")),
+        .unwrap_or_else(|| panic!("cosigned the block {block_number} but didn't index it")),
     ))
   }
 
-  /// Fetch the notable cosigns for a global session in order to respond to requests.
+  /// Fetch notable cosigns for every network of a global cosigning session,
+  /// in order to respond to requests.
   ///
-  /// If this global session hasn't produced any notable cosigns, this will return the latest
+  /// If this session hasn't produced any notable cosigns, this will return the latest
   /// cosigns for this session.
-  pub fn notable_or_latest_cosigns(
+  pub fn all_networks_notable_or_latest_cosigns(
     getter: &impl Get,
-    global_session: [u8; 32],
+    global_cosigning_session: GlobalCosigningSessionId,
   ) -> Vec<SignedCosign> {
     ExternalNetworkId::all()
-      .filter_map(|network| NetworksLatestCosignedBlock::get(getter, global_session, network))
+      .filter_map(|network| {
+        NetworksLatestCosignedBlockIntaken::get(getter, global_cosigning_session, network)
+      })
       .collect()
   }
 
@@ -311,63 +442,77 @@ impl<D: Db> Cosigning<D> {
   /// This will be the most recent cosigns in case the initial broadcast failed, or the faulty
   /// cosigns in case of a fault, in order to induce identification of the fault by others.
   pub fn cosigns_to_rebroadcast(&self) -> Vec<SignedCosign> {
-    if let Some(faulted) = FaultedSession::get(&self.db) {
-      let mut cosigns = Faults::get(&self.db, faulted).expect("faulted with no faults");
+    if let Some(existing_faulted_cosigning_session) = FaultedCosigningSession::get(&self.db) {
+      let mut cosigns =
+        Faults::get(&self.db, existing_faulted_cosigning_session).expect("faulted with no faults");
       // Also include all of our recognized-as-honest cosigns in an attempt to induce fault
       // identification in those who see the faulty cosigns as honest
       cosigns.extend(
-        Self::notable_or_latest_cosigns(&self.db, faulted)
+        Self::all_networks_notable_or_latest_cosigns(&self.db, existing_faulted_cosigning_session)
           .into_iter()
-          .filter(|c| c.cosign.global_session == faulted),
+          .filter(|c| c.cosign.global_cosigning_session == existing_faulted_cosigning_session),
       );
-      cosigns
-    } else {
-      let Some(global_session) = evaluator::currently_evaluated_global_session(&self.db) else {
-        return vec![];
-      };
-      Self::notable_or_latest_cosigns(&self.db, global_session)
+
+      return cosigns;
     }
+
+    if let Some(current_global_cosigning_session_evaluating) =
+      evaluator::current_global_cosigning_session_evaluating(&self.db)
+    {
+      return Self::all_networks_notable_or_latest_cosigns(
+        &self.db,
+        current_global_cosigning_session_evaluating,
+      );
+    }
+
+    vec![]
   }
 
-  /// Intake a cosign.
+  /// Try to intake a cosign, or fails with [`IntakeCosignError`].
   //
   // Takes `&mut self` as this should only be called once at any given moment.
   pub fn intake_cosign(&mut self, signed_cosign: &SignedCosign) -> Result<(), IntakeCosignError> {
     let cosign = &signed_cosign.cosign;
-    let network = cosign.cosigner;
+    let network_for_cosign = cosign.cosigner;
 
     // Check our indexed blockchain includes a block with this block number
     let Some(indexed_block_hash) = SubstrateBlockHash::get(&self.db, cosign.block_number) else {
       Err(IntakeCosignError::NotYetIndexedBlock)?
     };
-    let faulty = cosign.block_hash != indexed_block_hash;
+    let is_cosign_faulty = cosign.block_hash != indexed_block_hash;
 
-    // Check this isn't a dated cosign within its global session (as it would be if rebroadcasted)
-    if !faulty {
-      if let Some(existing) =
-        NetworksLatestCosignedBlock::get(&self.db, cosign.global_session, network)
-      {
-        if existing.cosign.block_number >= cosign.block_number {
+    // Check this isn't a dated cosign within its session (as it would be if rebroadcasted)
+    if !is_cosign_faulty {
+      if let Some(networks_latest_cosigned_block) = NetworksLatestCosignedBlockIntaken::get(
+        &self.db,
+        cosign.global_cosigning_session,
+        network_for_cosign,
+      ) {
+        if networks_latest_cosigned_block.cosign.block_number >= cosign.block_number {
           Err(IntakeCosignError::StaleCosign)?;
         }
       }
     }
 
-    let Some(global_session) = GlobalSessions::get(&self.db, cosign.global_session) else {
+    let Some(global_cosigning_session_for_cosign) =
+      GlobalCosigningSessions::get(&self.db, cosign.global_cosigning_session)
+    else {
       Err(IntakeCosignError::UnrecognizedGlobalSession)?
     };
 
-    // Check the cosigned block number is in range to the global session
-    if cosign.block_number < global_session.start_block_number {
-      // Cosign is for a block predating the global session
+    // Check the cosigned block number is in range to the global cosigning session
+    if cosign.block_number < global_cosigning_session_for_cosign.start_block_number {
+      // Cosign is for a block predating the global cosigning session
       Err(IntakeCosignError::BeforeGlobalSessionStart)?;
     }
-    if !faulty {
+    if !is_cosign_faulty {
       // This prevents a malicious validator set, on the same chain, from producing a cosign after
       // their final block, replacing their notable cosign
-      if let Some(last_block) = GlobalSessionsLastBlock::get(&self.db, cosign.global_session) {
+      if let Some(last_block) =
+        GlobalCosigningSessionsLastBlock::get(&self.db, cosign.global_cosigning_session)
+      {
         if cosign.block_number > last_block {
-          // Cosign is for a block after the last block this global session should have signed
+          // Cosign is for a block after the last block this session should have signed
           Err(IntakeCosignError::AfterGlobalSessionEnd)?;
         }
       }
@@ -375,39 +520,58 @@ impl<D: Db> Cosigning<D> {
 
     // Check the cosign's signature
     {
-      let key =
-        *global_session.keys.get(&network).ok_or(IntakeCosignError::NonParticipatingNetwork)?;
+      let key = *global_cosigning_session_for_cosign
+        .keys
+        .get(&network_for_cosign)
+        .ok_or(IntakeCosignError::NonParticipatingNetwork)?;
       if !signed_cosign.verify_signature(key) {
         Err(IntakeCosignError::InvalidSignature)?;
       }
     }
 
-    // Since we verified this cosign's signature, and have a chain sufficiently long, handle the
-    // cosign
+    // Since we verified this cosign's signature, and have a chain valid and sufficiently long,
+    // handle the cosign
 
     let mut txn = self.db.txn();
 
-    if !faulty {
-      // If this is for a future global session, we don't acknowledge this cosign at this time
+    if !is_cosign_faulty {
+      // If this is for a future session, we don't acknowledge this cosign at this time
       let latest_cosigned_block_number = LatestCosignedBlockNumber::get(&txn).unwrap_or(0);
-      // This global session starts the block *after* its declaration, so we want to check if the
+      // This session starts the block *after* its declaration, so we want to check if the
       // block declaring it was cosigned
-      if (global_session.start_block_number - 1) > latest_cosigned_block_number {
+      if (global_cosigning_session_for_cosign.start_block_number - 1) > latest_cosigned_block_number
+      {
         Err(IntakeCosignError::FutureGlobalSession)?;
       }
 
       // This is safe as it's in-range and newer, as prior checked since it isn't faulty
-      NetworksLatestCosignedBlock::set(&mut txn, cosign.global_session, network, signed_cosign);
+      NetworksLatestCosignedBlockIntaken::set(
+        &mut txn,
+        cosign.global_cosigning_session,
+        network_for_cosign,
+        signed_cosign,
+      );
     } else {
-      let mut faults = Faults::get(&txn, cosign.global_session).unwrap_or(vec![]);
+      let mut existing_global_cosigning_sessions_faults =
+        Faults::get(&txn, cosign.global_cosigning_session).unwrap_or(vec![]);
+
+      let session_has_prior_network_faults = existing_global_cosigning_sessions_faults
+        .iter()
+        .any(|cosign| cosign.cosign.cosigner == network_for_cosign);
+
       // Only handle this as a fault if this set wasn't prior faulty
-      if !faults.iter().any(|cosign| cosign.cosign.cosigner == network) {
-        faults.push(signed_cosign.clone());
-        Faults::set(&mut txn, cosign.global_session, &faults);
+      if !session_has_prior_network_faults {
+        existing_global_cosigning_sessions_faults.push(signed_cosign.clone());
+
+        Faults::set(
+          &mut txn,
+          cosign.global_cosigning_session,
+          &existing_global_cosigning_sessions_faults,
+        );
 
         let mut weight_cosigned = 0;
-        for fault in &faults {
-          let stake = global_session
+        for fault in &existing_global_cosigning_sessions_faults {
+          let stake = global_cosigning_session_for_cosign
             .stakes
             .get(&fault.cosign.cosigner)
             .expect("cosigner with recognized key didn't have a stake entry saved");
@@ -415,8 +579,10 @@ impl<D: Db> Cosigning<D> {
         }
 
         // Check if the sum weight means a fault has occurred
-        if weight_cosigned >= ((global_session.total_stake * 17) / 100) {
-          FaultedSession::set(&mut txn, &cosign.global_session);
+        if weight_cosigned >=
+          cosign_fault_threshold(global_cosigning_session_for_cosign.total_stake)
+        {
+          FaultedCosigningSession::set(&mut txn, &cosign.global_cosigning_session);
         }
       }
     }
@@ -430,13 +596,16 @@ impl<D: Db> Cosigning<D> {
   /// All cosigns intended, up to and including the next notable cosign, are returned.
   ///
   /// This will drain the internal channel and not re-yield these intentions again.
-  pub fn intended_cosigns(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Vec<CosignIntent> {
-    let mut res: Vec<CosignIntent> = vec![];
+  pub fn all_intended_cosigns_for_network(
+    txn: &mut impl DbTxn,
+    set: ExternalValidatorSet,
+  ) -> Vec<CosignIntent> {
+    let mut intended_cosigns: Vec<CosignIntent> = vec![];
     // While we have yet to find a notable cosign...
-    while !res.last().map(|cosign| cosign.notable).unwrap_or(false) {
-      let Some(intent) = intend::IntendedCosigns::try_recv(txn, set) else { break };
-      res.push(intent);
+    while !intended_cosigns.last().map(|cosign| cosign.notable).unwrap_or(false) {
+      let Some(intent) = intend::NetworksIntendedCosigns::try_recv(txn, set) else { break };
+      intended_cosigns.push(intent);
     }
-    res
+    intended_cosigns
   }
 }

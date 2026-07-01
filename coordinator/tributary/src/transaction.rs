@@ -1,5 +1,5 @@
 use core::{ops::Deref as _, fmt::Debug};
-use std::io;
+use std::{collections::HashMap, io};
 
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
@@ -14,9 +14,12 @@ use schnorr::SchnorrSignature;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use serai_primitives::{BlockHash, validator_sets::KeyShares, address::SeraiAddress};
+use serai_primitives::{BlockHash, validator_sets::KeyShares};
+use dkg::Participant;
 
-use messages::sign::VariantSignId;
+use messages::{
+  sign::VariantSignId, borsh_serialize_participant_map, borsh_deserialize_participant_map,
+};
 
 use tributary_sdk::{
   ReadWrite,
@@ -50,7 +53,9 @@ impl SigningProtocolRound {
 /// All of our nonces are deterministic to the type of transaction and fields within.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Signed {
-  /// The signer.
+  /// The participant index for the tributary protocol.
+  pub participant: Participant,
+  /// The signer. The public key of a NetworkId::Serai auxiliary key.
   pub(crate) signer: <Ristretto as WrappedGroup>::G,
   /// The signature.
   pub(crate) signature: SchnorrSignature<Ristretto>,
@@ -58,33 +63,31 @@ pub struct Signed {
 
 impl BorshSerialize for Signed {
   fn serialize<W: io::Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+    writer.write_all(self.participant.to_bytes().as_ref())?;
     writer.write_all(self.signer.to_bytes().as_ref())?;
     self.signature.write(writer)
   }
 }
 impl BorshDeserialize for Signed {
   fn deserialize_reader<R: io::Read>(reader: &mut R) -> Result<Self, io::Error> {
+    let participant = Participant::deserialize_reader(&mut *reader)?;
     let signer = Ristretto::read_G(&mut *reader)?;
     let signature = SchnorrSignature::read(&mut *reader)?;
-    Ok(Self { signer, signature })
+    Ok(Self { participant, signer, signature })
   }
 }
 
 impl Signed {
-  /// Fetch the signer.
-  pub(crate) fn signer(&self) -> <Ristretto as WrappedGroup>::G {
-    self.signer
-  }
-
   /// Provide a nonce to convert a `Signed` into a `tributary::Signed`.
-  pub(crate) fn to_tributary_signed(self, nonce: u32) -> TributarySigned {
-    TributarySigned { signer: self.signer, nonce, signature: self.signature }
+  pub(crate) fn to_tributary_signed(self, round: SigningProtocolRound) -> TributarySigned {
+    TributarySigned { signer: self.signer, nonce: round.nonce(), signature: self.signature }
   }
 }
 
 impl Default for Signed {
   fn default() -> Self {
     Self {
+      participant: Participant::new(1).unwrap(),
       signer: <Ristretto as WrappedGroup>::G::identity(),
       signature: SchnorrSignature {
         R: <Ristretto as WrappedGroup>::G::identity(),
@@ -103,8 +106,8 @@ impl Default for Signed {
 pub enum Transaction {
   /// A vote to remove a participant for invalid behavior
   RemoveParticipant {
-    /// The participant to remove
-    participant: SeraiAddress,
+    /// The participant to remove. Stored as the tributary index of participation.
+    participant: Participant,
     /// The transaction's signer and signature
     signed: Signed,
   },
@@ -217,7 +220,11 @@ pub enum Transaction {
     ///
     /// There will be `n` blobs of data where `n` is the amount of key shares the validator sending
     /// this transaction has.
-    data: Vec<Vec<u8>>,
+    #[borsh(
+      serialize_with = "borsh_serialize_participant_map",
+      deserialize_with = "borsh_deserialize_participant_map"
+    )]
+    data: HashMap<Participant, Vec<u8>>,
     /// The transaction's signer and signature
     signed: Signed,
   },
@@ -233,7 +240,7 @@ pub enum Transaction {
 
 impl ReadWrite for Transaction {
   fn read(mut reader: impl io::Read) -> io::Result<Self> {
-    Self::deserialize_reader(&mut reader)
+    borsh::BorshDeserialize::deserialize_reader(&mut reader)
   }
 
   fn write(&self, writer: impl io::Write) -> io::Result<()> {
@@ -246,20 +253,20 @@ impl TransactionTrait for Transaction {
     match self {
       Transaction::RemoveParticipant { participant, signed } => TransactionKind::Signed(
         borsh::to_vec(&(b"RemoveParticipant".as_slice(), participant)).unwrap(),
-        signed.to_tributary_signed(0),
+        signed.to_tributary_signed(SigningProtocolRound::Preprocess),
       ),
 
       Transaction::DkgParticipation { signed, .. } => TransactionKind::Signed(
         borsh::to_vec(b"DkgParticipation".as_slice()).unwrap(),
-        signed.to_tributary_signed(0),
+        signed.to_tributary_signed(SigningProtocolRound::Preprocess),
       ),
       Transaction::DkgConfirmationPreprocess { attempt, signed, .. } => TransactionKind::Signed(
         borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
-        signed.to_tributary_signed(SigningProtocolRound::Preprocess.nonce()),
+        signed.to_tributary_signed(SigningProtocolRound::Preprocess),
       ),
       Transaction::DkgConfirmationShare { attempt, signed, .. } => TransactionKind::Signed(
         borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
-        signed.to_tributary_signed(SigningProtocolRound::Share.nonce()),
+        signed.to_tributary_signed(SigningProtocolRound::Share),
       ),
 
       Transaction::Cosign { .. } => TransactionKind::Provided("Cosign"),
@@ -268,13 +275,13 @@ impl TransactionTrait for Transaction {
       Transaction::Batch { .. } => TransactionKind::Provided("Batch"),
 
       Transaction::Sign { id, attempt, round, signed, .. } => TransactionKind::Signed(
-        borsh::to_vec(&(b"Sign".as_slice(), id, attempt)).unwrap(),
-        signed.to_tributary_signed(round.nonce()),
+        borsh::to_vec(&(b"Sign".as_slice(), id, attempt, signed.participant)).unwrap(),
+        signed.to_tributary_signed(*round),
       ),
 
       Transaction::SlashReport { signed, .. } => TransactionKind::Signed(
         borsh::to_vec(b"SlashReport".as_slice()).unwrap(),
-        signed.to_tributary_signed(0),
+        signed.to_tributary_signed(SigningProtocolRound::Preprocess),
       ),
     }
   }
@@ -324,6 +331,22 @@ impl TransactionTrait for Transaction {
 }
 
 impl Transaction {
+  /// Fetch a reference to the signer data if this is a signed transaction.
+  pub(crate) fn signed(&self) -> Option<&Signed> {
+    match self {
+      Transaction::RemoveParticipant { signed, .. } |
+      Transaction::DkgParticipation { signed, .. } |
+      Transaction::DkgConfirmationPreprocess { signed, .. } |
+      Transaction::DkgConfirmationShare { signed, .. } |
+      Transaction::Sign { signed, .. } |
+      Transaction::SlashReport { signed, .. } => Some(signed),
+      Transaction::Cosign { .. } |
+      Transaction::Cosigned { .. } |
+      Transaction::SubstrateBlock { .. } |
+      Transaction::Batch { .. } => None,
+    }
+  }
+
   /// The topic in the database for this transaction.
   pub fn topic(&self) -> Option<Topic> {
     #[expect(clippy::match_same_arms)] // This doesn't make semantic sense here
@@ -363,7 +386,7 @@ impl Transaction {
     genesis: [u8; 32],
     key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   ) {
-    fn signed(tx: &mut Transaction) -> &mut Signed {
+    fn signed_strict(tx: &mut Transaction) -> &mut Signed {
       #[expect(clippy::match_same_arms)] // This doesn't make semantic sense here
       match tx {
         Transaction::RemoveParticipant { ref mut signed, .. } |
@@ -389,7 +412,7 @@ impl Transaction {
 
     {
       // Set the signer and the nonce
-      let signed = signed(self);
+      let signed = signed_strict(self);
       signed.signer = Ristretto::generator() * key.deref();
       signed.signature.R = <Ristretto as WrappedGroup>::generator() * sig_nonce.deref();
     }
@@ -398,6 +421,6 @@ impl Transaction {
     let sig_hash = self.sig_hash(genesis);
 
     // Sign the signature
-    signed(self).signature = SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
+    signed_strict(self).signature = SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
   }
 }

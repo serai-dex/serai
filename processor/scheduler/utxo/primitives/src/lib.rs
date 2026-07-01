@@ -19,8 +19,8 @@ pub struct PlannedTransaction<S: ScannerFeed, ST: SignableTransaction, A> {
   pub signable: ST,
   /// The Eventuality to watch for.
   pub eventuality: EventualityFor<S>,
-  /// The auxilliary data for this transaction.
-  pub auxilliary: A,
+  /// The auxiliary data for this transaction.
+  pub auxiliary: A,
 }
 
 /// A planned transaction which was created via amortizing the fee.
@@ -36,8 +36,8 @@ pub struct AmortizePlannedTransaction<S: ScannerFeed, ST: SignableTransaction, A
   pub signable: ST,
   /// The Eventuality to watch for.
   pub eventuality: EventualityFor<S>,
-  /// The auxilliary data for this transaction.
-  pub auxilliary: A,
+  /// The auxiliary data for this transaction.
+  pub auxiliary: A,
 }
 
 /// An object able to plan a transaction.
@@ -234,14 +234,14 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
       let effected_payments = payments.iter().map(|payment| payment.balance().amount).collect();
       let has_change = change.is_some();
 
-      let PlannedTransaction { signable, eventuality, auxilliary } =
+      let PlannedTransaction { signable, eventuality, auxiliary } =
         self.plan(reference_block, inputs, payments, change).await?;
       Ok(Some(AmortizePlannedTransaction {
         effected_payments,
         has_change,
         signable,
         eventuality,
-        auxilliary,
+        auxiliary,
       }))
     }
   }

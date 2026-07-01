@@ -12,14 +12,11 @@ use frost_schnorrkel::{
 
 use serai_db::{DbTxn as _, Db as DbTrait};
 
-use serai_client_serai::abi::primitives::{
-  validator_sets::{ExternalValidatorSet, ValidatorSet},
-  address::SeraiAddress,
-};
+use serai_client_serai::abi::primitives::validator_sets::{ExternalValidatorSet, ValidatorSet};
 
 use serai_task::{DoesNotError, ContinuallyRan};
 
-use serai_coordinator_substrate::{NewSetInformation, Keys};
+use serai_coordinator_substrate::{TributaryValidatorSetInfo, NetworksSetKeysTransaction};
 use serai_coordinator_tributary::{Transaction, DkgConfirmationMessages};
 
 use crate::{KeysToConfirm, KeySet, TributaryTransactionsFromDkgConfirmation};
@@ -28,19 +25,20 @@ fn schnorrkel() -> Schnorrkel {
   Schnorrkel::new(b"substrate") // TODO: Pull the constant for this
 }
 
-fn our_i(
-  set: &NewSetInformation,
-  key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
-  data: &HashMap<Participant, Vec<u8>>,
+fn our_consensus_i(
+  set: &TributaryValidatorSetInfo,
+  private_serai_auxiliary_key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
+  preprocesses: &HashMap<Participant, Vec<u8>>,
 ) -> Participant {
-  let public = SeraiAddress((Ristretto::generator() * key.deref()).to_bytes());
+  let our_public_serai_auxiliary_key = Ristretto::generator() * private_serai_auxiliary_key.deref();
 
   let mut our_i = None;
-  for participant in data.keys() {
-    let validator_index = usize::from(u16::from(*participant) - 1);
-    let (validator, _weight) = set.validators[validator_index];
-    if validator == public {
-      our_i = Some(*participant);
+  for i_participant_index in preprocesses.keys() {
+    if set.tributary_validator_set.get_evrf_index_matches_serai_auxiliary(
+      i_participant_index,
+      &our_public_serai_auxiliary_key.to_bytes(),
+    ) {
+      our_i = Some(*i_participant_index);
     }
   }
   our_i.unwrap()
@@ -111,7 +109,7 @@ enum Signer {
   Preprocess { attempt: u64, seed: CachedPreprocess, preprocess: [u8; 64] },
   Share {
     attempt: u64,
-    musig_validators: Vec<SeraiAddress>,
+    musig_validators: Vec<<Ristretto as WrappedGroup>::G>,
     share: [u8; 32],
     machine: Box<AlgorithmSignatureMachine<Ristretto, Schnorrkel>>,
   },
@@ -121,29 +119,39 @@ enum Signer {
 pub(crate) struct ConfirmDkgTask<CD: DbTrait, TD: DbTrait> {
   db: CD,
 
-  set: NewSetInformation,
+  tributary_validator_set_info: TributaryValidatorSetInfo,
   tributary_db: TD,
 
-  key: Zeroizing<<Ristretto as WrappedGroup>::F>,
+  private_serai_auxiliary_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   signer: Option<Signer>,
 }
 
 impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
   pub(crate) fn new(
     db: CD,
-    set: NewSetInformation,
+    tributary_validator_set_info: TributaryValidatorSetInfo,
     tributary_db: TD,
-    key: Zeroizing<<Ristretto as WrappedGroup>::F>,
+    private_serai_auxiliary_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   ) -> Self {
-    Self { db, set, tributary_db, key, signer: None }
+    Self {
+      db,
+      tributary_validator_set_info,
+      tributary_db,
+      private_serai_auxiliary_key,
+      signer: None,
+    }
   }
 
-  fn slash(db: &mut CD, set: ExternalValidatorSet, validator: SeraiAddress) {
+  fn slash(
+    db: &mut CD,
+    tributary_validator_set_info: &TributaryValidatorSetInfo,
+    participant: Participant,
+  ) {
     let mut txn = db.txn();
     TributaryTransactionsFromDkgConfirmation::send(
       &mut txn,
-      set,
-      &Transaction::RemoveParticipant { participant: validator, signed: Default::default() },
+      tributary_validator_set_info.set,
+      &Transaction::RemoveParticipant { participant, signed: Default::default() },
     );
     txn.commit();
   }
@@ -152,15 +160,20 @@ impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
     db: &mut CD,
     set: ExternalValidatorSet,
     attempt: u64,
-    key: Zeroizing<<Ristretto as WrappedGroup>::F>,
+    private_serai_auxiliary_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
     signer: &mut Option<Signer>,
   ) {
     // Perform the preprocess
-    let public_key = Ristretto::generator() * key.deref();
+    let public_serai_auxiliary_key = Ristretto::generator() * private_serai_auxiliary_key.deref();
     let (machine, preprocess) = AlgorithmMachine::new(
       schnorrkel(),
       // We use a 1-of-1 Musig here as we don't know who will actually be in this Musig yet
-      musig(ValidatorSet::from(set).musig_context(), key, &[public_key]).unwrap(),
+      musig(
+        ValidatorSet::from(set).musig_context(),
+        private_serai_auxiliary_key,
+        &[public_serai_auxiliary_key],
+      )
+      .unwrap(),
     )
     .preprocess(&mut OsRng);
     // We take the preprocess so we can use it in a distinct machine with the actual Musig
@@ -193,20 +206,30 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
       let mut made_progress = false;
 
       // If we were sent a key to set, create the signer for it
-      if self.signer.is_none() && KeysToConfirm::get(&self.db, self.set.set).is_some() {
+      if self.signer.is_none() &&
+        KeysToConfirm::get(&self.db, self.tributary_validator_set_info.set).is_some()
+      {
         // Create and publish the initial preprocess
-        Self::preprocess(&mut self.db, self.set.set, 0, self.key.clone(), &mut self.signer);
+        Self::preprocess(
+          &mut self.db,
+          self.tributary_validator_set_info.set,
+          0,
+          self.private_serai_auxiliary_key.clone(),
+          &mut self.signer,
+        );
 
         made_progress = true;
       }
 
       // If we have keys to confirm, handle all messages from the tributary
-      if let Some(key_pair) = KeysToConfirm::get(&self.db, self.set.set) {
+      if let Some(key_pair) = KeysToConfirm::get(&self.db, self.tributary_validator_set_info.set) {
         // Handle all messages from the Tributary
         loop {
           let mut tributary_txn = self.tributary_db.txn();
-          let Some(msg) = DkgConfirmationMessages::try_recv(&mut tributary_txn, self.set.set)
-          else {
+          let Some(msg) = DkgConfirmationMessages::try_recv(
+            &mut tributary_txn,
+            self.tributary_validator_set_info.set,
+          ) else {
             break;
           };
 
@@ -217,9 +240,9 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
               // Create and publish the preprocess for the specified attempt
               Self::preprocess(
                 &mut self.db,
-                self.set.set,
+                self.tributary_validator_set_info.set,
                 attempt,
-                self.key.clone(),
+                self.private_serai_auxiliary_key.clone(),
                 &mut self.signer,
               );
             }
@@ -239,30 +262,28 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
               };
 
               // Determine the MuSig key signed with
-              let musig_validators = {
-                let mut ordered_participants = preprocesses.keys().copied().collect::<Vec<_>>();
-                ordered_participants.sort_by_key(|participant| u16::from(*participant));
+              let musig_public_keys = {
+                let mut ordered_evrf_participants =
+                  preprocesses.keys().copied().collect::<Vec<_>>();
+                ordered_evrf_participants.sort_by_key(|participant| u16::from(*participant));
 
-                let mut res = vec![];
-                for participant in ordered_participants {
-                  let (validator, _weight) =
-                    self.set.validators[usize::from(u16::from(participant) - 1)];
-                  res.push(validator);
-                }
-                res
+                ordered_evrf_participants
+                  .iter()
+                  .filter_map(|participant| {
+                    self
+                      .tributary_validator_set_info
+                      .tributary_validator_set
+                      .get_tributary_validator_by_consensus_index(participant)
+                  })
+                  .map(|tributary_validator| {
+                    tributary_validator.get_serai_networks_auxiliary_key().0
+                  })
+                  .collect::<Vec<<Ristretto as WrappedGroup>::G>>()
               };
 
-              let musig_public_keys = musig_validators
-                .iter()
-                .map(|key| {
-                  Ristretto::read_G(&mut key.0.as_slice())
-                    .expect("Serai validator had invalid public key")
-                })
-                .collect::<Vec<_>>();
-
               let keys = musig(
-                ValidatorSet::from(self.set.set).musig_context(),
-                self.key.clone(),
+                ValidatorSet::from(self.tributary_validator_set_info.set).musig_context(),
+                self.private_serai_auxiliary_key.clone(),
                 &musig_public_keys,
               )
               .unwrap();
@@ -273,7 +294,11 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
               assert_eq!(preprocess.as_slice(), preprocess_from_cache.serialize().as_slice());
 
               // Ensure this is a consistent signing session
-              let our_i = our_i(&self.set, &self.key, &preprocesses);
+              let our_i = our_consensus_i(
+                &self.tributary_validator_set_info,
+                &self.private_serai_auxiliary_key,
+                &preprocesses,
+              );
               let consistent = (attempt == our_attempt) &&
                 (preprocesses.remove(&our_i).unwrap().as_slice() == preprocess.as_slice());
               if !consistent {
@@ -288,11 +313,7 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                 Ok(preprocesses) => preprocesses,
                 // This yields the *original participant index*
                 Err(participant) => {
-                  Self::slash(
-                    &mut self.db,
-                    self.set.set,
-                    self.set.validators[usize::from(u16::from(participant) - 1)].0,
-                  );
+                  Self::slash(&mut self.db, &self.tributary_validator_set_info, participant);
                   tributary_txn.commit();
                   break;
                 }
@@ -301,16 +322,15 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
               // Calculate our share
               let (machine, share) = match handle_frost_error(machine.sign(
                 preprocesses,
-                &ExternalValidatorSet::set_keys_message(&self.set.set, &key_pair),
+                &ExternalValidatorSet::set_keys_message(
+                  &self.tributary_validator_set_info.set,
+                  &key_pair,
+                ),
               )) {
                 Ok((machine, share)) => (machine, share),
                 // This yields the *musig participant index*
                 Err(participant) => {
-                  Self::slash(
-                    &mut self.db,
-                    self.set.set,
-                    musig_validators[usize::from(u16::from(participant) - 1)],
-                  );
+                  Self::slash(&mut self.db, &self.tributary_validator_set_info, participant);
                   tributary_txn.commit();
                   break;
                 }
@@ -321,14 +341,14 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
               let mut txn = self.db.txn();
               TributaryTransactionsFromDkgConfirmation::send(
                 &mut txn,
-                self.set.set,
+                self.tributary_validator_set_info.set,
                 &Transaction::DkgConfirmationShare { attempt, share, signed: Default::default() },
               );
               txn.commit();
 
               self.signer = Some(Signer::Share {
                 attempt,
-                musig_validators,
+                musig_validators: musig_public_keys,
                 share,
                 machine: Box::new(machine),
               });
@@ -345,7 +365,11 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
               };
 
               // Ensure this is a consistent signing session
-              let our_i = our_i(&self.set, &self.key, &shares);
+              let our_i = our_consensus_i(
+                &self.tributary_validator_set_info,
+                &self.private_serai_auxiliary_key,
+                &shares,
+              );
               let consistent = (attempt == our_attempt) &&
                 (shares.remove(&our_i).unwrap().as_slice() == share.as_slice());
               if !consistent {
@@ -360,11 +384,7 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                 Ok(shares) => shares,
                 // This yields the *original participant index*
                 Err(participant) => {
-                  Self::slash(
-                    &mut self.db,
-                    self.set.set,
-                    self.set.validators[usize::from(u16::from(participant) - 1)].0,
-                  );
+                  Self::slash(&mut self.db, &self.tributary_validator_set_info, participant);
                   tributary_txn.commit();
                   break;
                 }
@@ -378,8 +398,14 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                     use bitvec::prelude::*;
                     signature_participants = bitvec![u8, Lsb0; 0; 0];
                     let mut i = 0;
-                    for (validator, _) in &self.set.validators {
-                      if Some(validator) == musig_validators.get(i) {
+                    for i_tributary_validator in &self
+                      .tributary_validator_set_info
+                      .tributary_validator_set
+                      .consensus_tributary_validators
+                    {
+                      if Some(&(i_tributary_validator.get_serai_networks_auxiliary_key()).0) ==
+                        musig_validators.get(i)
+                      {
                         signature_participants.push(true);
                         i += 1;
                       } else {
@@ -391,9 +417,9 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                   // This is safe to call multiple times as it'll just change which *valid*
                   // signature to publish
                   let mut txn = self.db.txn();
-                  Keys::set(
+                  NetworksSetKeysTransaction::set(
                     &mut txn,
-                    self.set.set,
+                    self.tributary_validator_set_info.set,
                     key_pair.clone(),
                     signature_participants
                       .try_into()
@@ -404,11 +430,7 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
                 }
                 // This yields the *musig participant index*
                 Err(participant) => {
-                  Self::slash(
-                    &mut self.db,
-                    self.set.set,
-                    musig_validators[usize::from(u16::from(participant) - 1)],
-                  );
+                  Self::slash(&mut self.db, &self.tributary_validator_set_info, participant);
                   tributary_txn.commit();
                   break;
                 }
@@ -423,13 +445,13 @@ impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
       }
 
       // Check if the key has been set on Serai
-      if KeysToConfirm::get(&self.db, self.set.set).is_some() &&
-        KeySet::get(&self.db, self.set.set).is_some()
+      if KeysToConfirm::get(&self.db, self.tributary_validator_set_info.set).is_some() &&
+        KeySet::get(&self.db, self.tributary_validator_set_info.set).is_some()
       {
         // Take the keys to confirm so we never instantiate the signer again
         let mut txn = self.db.txn();
-        KeysToConfirm::take(&mut txn, self.set.set);
-        KeySet::take(&mut txn, self.set.set);
+        KeysToConfirm::take(&mut txn, self.tributary_validator_set_info.set);
+        KeySet::take(&mut txn, self.tributary_validator_set_info.set);
         txn.commit();
 
         // Drop our own signer

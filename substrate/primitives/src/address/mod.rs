@@ -29,7 +29,7 @@ const HUMAN_READABLE_PART: bech32::Hrp = bech32::Hrp::parse_unchecked("sri");
 /// The 32-byte blob within it is used as an identifier for the account and when verifying
 /// signatures, a commitment to the signing key for the account.
 #[rustfmt::skip]
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[derive(Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(
   feature = "scale",
@@ -88,6 +88,12 @@ impl From<crate::crypto::Public> for SeraiAddress {
 impl From<SeraiAddress> for crate::crypto::Public {
   fn from(address: SeraiAddress) -> Self {
     Public::from(address).into()
+  }
+}
+
+impl core::fmt::Debug for SeraiAddress {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    core::fmt::Display::fmt(self, f)
   }
 }
 

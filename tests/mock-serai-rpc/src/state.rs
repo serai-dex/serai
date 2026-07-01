@@ -1,7 +1,10 @@
+//! Shared mutable state backing the mock Serai RPC node.
+
 use std::{
   sync::Arc,
   collections::{HashSet, HashMap},
   time::SystemTime,
+  fmt::Write as _,
 };
 
 use rand_core::{RngCore as _, OsRng};
@@ -69,11 +72,11 @@ impl ErrorInjection {
   }
 }
 
-/// The shared mutable state backing the shim RPC node.
-pub struct ShimState {
+/// The shared mutable state backing the mock Serai RPC node.
+pub struct MockSeraiState {
   pub blocks_by_number: HashMap<u64, Block>,
   pub block_number_by_hash: HashMap<BlockHash, u64>,
-  pub events_by_hash: HashMap<BlockHash, Vec<Vec<Event>>>,
+  pub events_by_hash: HashMap<BlockHash, Vec<Event>>,
   pub builds_upon: IncrementalUnbalancedMerkleTree,
   pub published_transactions: Vec<Vec<u8>>,
   pub default_validator_sets: ValidatorSetsState,
@@ -83,7 +86,7 @@ pub struct ShimState {
   pub missing_blocks: HashSet<u64>,
 }
 
-impl Default for ShimState {
+impl Default for MockSeraiState {
   fn default() -> Self {
     Self {
       blocks_by_number: HashMap::new(),
@@ -99,9 +102,13 @@ impl Default for ShimState {
   }
 }
 
-impl ShimState {
+impl MockSeraiState {
   /// Construct a block and register it.
-  pub fn make_block(&mut self, number: u64, events: Vec<Vec<Event>>) -> BlockHash {
+  pub fn make_block(
+    &mut self,
+    number: u64,
+    events: Vec<Vec<Event>>,
+  ) -> (BlockHash, Vec<Event>, Block) {
     let block = Block {
       header: Header::V1(HeaderV1 {
         number,
@@ -126,11 +133,25 @@ impl ShimState {
       Blake2b256::new_with_prefix([BLOCK_LEAF_TAG]).chain_update(block_hash.0).finalize().into(),
     );
 
+    let events: Vec<Event> = events.into_iter().flatten().collect();
     self.block_number_by_hash.insert(block_hash, number);
-    self.blocks_by_number.insert(number, block);
-    self.events_by_hash.insert(block_hash, events);
+    self.blocks_by_number.insert(number, block.clone());
+    self.events_by_hash.insert(block_hash, events.clone());
 
-    block_hash
+    // Per-block logging when MOCK_SERAI_DUMP_BLOCKS=1
+    if Self::dump_env_enabled() {
+      let event_count = events.len();
+      serai_env::log::info!(
+        "[MOCK_SERAI] block #{number} (hash: 0x{}, {} event(s))",
+        hex::encode(block_hash.0),
+        event_count,
+      );
+      for (i, event) in events.iter().enumerate() {
+        serai_env::log::info!("[MOCK_SERAI]   [{i}] {event:?}");
+      }
+    }
+
+    (block_hash, events, block)
   }
 
   /// The latest finalized block number.
@@ -138,16 +159,24 @@ impl ShimState {
     self.blocks_by_number.keys().copied().max()
   }
 
-  /// Create a block whose `builds_upon` header value comes from an empty tree,
-  /// making it invalid with respect to the actual chain.
+  /// Create a block whose `builds_upon` header value differs from any valid chain value
+  /// by flipping a single bit, making it invalid with respect to the actual chain.
   ///
   /// Unlike [`Self::make_block`], this does **not** advance the internal
   /// `builds_upon` state, so subsequent calls to `make_block` remain valid.
-  pub fn make_non_linear_block(&mut self, number: u64, events: Vec<Vec<Event>>) -> BlockHash {
+  pub fn make_non_linear_block(
+    &mut self,
+    number: u64,
+    events: Vec<Vec<Event>>,
+  ) -> (BlockHash, Vec<Event>, Block) {
+    let mut builds_upon_root = self.builds_upon.clone().calculate(BLOCK_BRANCH_TAG).root;
+    builds_upon_root[0] ^= 1; // Flip bit 0 to create a near-valid but non-chain root
+    let builds_upon = UnbalancedMerkleTree { root: builds_upon_root };
+
     let block = Block {
       header: Header::V1(HeaderV1 {
         number,
-        builds_upon: IncrementalUnbalancedMerkleTree::new().calculate(BLOCK_BRANCH_TAG),
+        builds_upon,
         proposer: SeraiAddress([0; 32]),
         unix_time_in_millis: u64::try_from(
           SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis(),
@@ -162,12 +191,26 @@ impl ShimState {
 
     let block_hash = block.header.hash();
 
+    let events: Vec<Event> = events.into_iter().flatten().collect();
     // Register the block but do not update builds_upon
     self.block_number_by_hash.insert(block_hash, number);
-    self.blocks_by_number.insert(number, block);
-    self.events_by_hash.insert(block_hash, events);
+    self.blocks_by_number.insert(number, block.clone());
+    self.events_by_hash.insert(block_hash, events.clone());
 
-    block_hash
+    // Per-block logging when MOCK_SERAI_DUMP_BLOCKS=1
+    if Self::dump_env_enabled() {
+      let event_count = events.len();
+      serai_env::log::info!(
+        "[MOCK_SERAI] non-linear block #{number} (hash: 0x{}, {} event(s))",
+        hex::encode(block_hash.0),
+        event_count,
+      );
+      for (i, event) in events.iter().enumerate() {
+        serai_env::log::info!("[MOCK_SERAI]   [{i}] {event:?}");
+      }
+    }
+
+    (block_hash, events, block)
   }
 
   /// Remove a block from all maps.
@@ -188,7 +231,49 @@ impl ShimState {
   pub fn validator_sets_for_block(&self, hash: &BlockHash) -> &ValidatorSetsState {
     self.validator_sets_by_block.get(hash).unwrap_or(&self.default_validator_sets)
   }
+
+  /// Return a human-readable dump of all blocks and their events as a single string.
+  ///
+  /// Useful for embedding in assertion failure messages or logging on test failure.
+  pub fn dump_blocks(&self) -> String {
+    let mut out = String::new();
+    let count = self.blocks_by_number.len();
+
+    // Collect and sort block numbers
+    let mut numbers: Vec<u64> = self.blocks_by_number.keys().copied().collect();
+    numbers.sort_unstable();
+
+    let _ = writeln!(out, "--- Mock Serai block dump ({count} blocks) ---");
+    for &number in &numbers {
+      let block = &self.blocks_by_number[&number];
+      let hash = block.header.hash();
+      let events = self.events_by_hash.get(&hash).map(std::vec::Vec::as_slice).unwrap_or(&[]);
+      let _ = writeln!(
+        out,
+        "block #{number} (hash: 0x{}): {} events",
+        hex::encode(hash.0),
+        events.len(),
+      );
+      for (i, event) in events.iter().enumerate() {
+        let _ = writeln!(out, "  [{i}] {event:?}");
+      }
+    }
+    out
+  }
+
+  /// Log all blocks and their events via the `log` crate at INFO level.
+  ///
+  /// Controlled by the `MOCK_SERAI_DUMP_BLOCKS` env var: if set to `"1"` this method is
+  /// automatically called whenever a block is created via [`make_block`](Self::make_block).
+  pub fn log_dump(&self) {
+    serai_env::log::info!("{}", self.dump_blocks());
+  }
+
+  /// Check whether per-block logging is enabled via `MOCK_SERAI_DUMP_BLOCKS`.
+  fn dump_env_enabled() -> bool {
+    serai_env::var("MOCK_SERAI_DUMP_BLOCKS").as_deref().is_some()
+  }
 }
 
 /// Thread-safe shared state handle.
-pub type SharedState = Arc<RwLock<ShimState>>;
+pub type SharedState = Arc<RwLock<MockSeraiState>>;
