@@ -82,6 +82,7 @@ exceptions = [
   { allow = ["AGPL-3.0-only"], name = "serai-cosign" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-substrate" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-tributary" },
+  { allow = ["AGPL-3.0-only"], name = "serai-tributary-types" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-p2p" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-libp2p-p2p" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator" },
@@ -108,7 +109,7 @@ exceptions = [
 
   { allow = ["AGPL-3.0-only"], name = "serai-orchestrator" },
 
-  { allow = ["AGPL-3.0-only"], name = "serai-shim-rpc" },
+  { allow = ["AGPL-3.0-only"], name = "serai-mock-rpc" },
   { allow = ["AGPL-3.0-only"], name = "serai-docker-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-processor-tests" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-tests" },

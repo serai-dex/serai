@@ -1,4 +1,8 @@
-use core::ops::Deref as _;
+use core::{
+  ops::Deref as _,
+  fmt,
+  hash::{Hash, Hasher},
+};
 
 use rand_core::{RngCore, CryptoRng};
 
@@ -33,6 +37,69 @@ pub enum EmbeddedEllipticCurve {
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(EmbeddedEllipticCurve);
 
+/// Wrapper for <Ristretto as WrappedGroup>::G to be stored on DBs
+/// with added support for BorshSerialize and BorshDeserialize
+#[derive(Copy, Clone, PartialEq, Eq)]
+pub struct SeraiNetworksAuxiliaryKey(pub <Ristretto as WrappedGroup>::G);
+
+impl SeraiNetworksAuxiliaryKey {
+  /// Converts this element into its byte encoding.
+  pub fn to_bytes(&self) -> <<Ristretto as WrappedGroup>::G as GroupEncoding>::Repr {
+    self.0.to_bytes()
+  }
+}
+
+impl Hash for SeraiNetworksAuxiliaryKey {
+  fn hash<H: Hasher>(&self, hasher: &mut H) {
+    self.to_bytes().hash(hasher);
+  }
+}
+
+impl PartialOrd for SeraiNetworksAuxiliaryKey {
+  fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+    Some(self.cmp(other))
+  }
+}
+
+impl Ord for SeraiNetworksAuxiliaryKey {
+  fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+    self.to_bytes().as_ref().cmp(other.to_bytes().as_ref())
+  }
+}
+
+impl fmt::Debug for SeraiNetworksAuxiliaryKey {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "SeraiNetworksAuxiliaryKey({})", hex::encode(self.to_bytes().as_ref()))
+  }
+}
+
+impl SeraiNetworksAuxiliaryKey {
+  /// Get helper from bytes
+  pub fn from_bytes(
+    bytes: <<Ristretto as WrappedGroup>::G as GroupEncoding>::Repr,
+  ) -> io::Result<Self> {
+    let r = Option::<<Ristretto as WrappedGroup>::G>::from(Ristretto::from_canonical_bytes(&bytes))
+      .ok_or_else(|| io::Error::other("invalid point"))?;
+    Ok(Self(r))
+  }
+}
+
+impl BorshSerialize for SeraiNetworksAuxiliaryKey {
+  fn serialize<W: io::Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+    writer.write_all(self.0.to_bytes().as_ref())
+  }
+}
+impl BorshDeserialize for SeraiNetworksAuxiliaryKey {
+  fn deserialize_reader<R: io::Read>(reader: &mut R) -> Result<Self, io::Error> {
+    let mut bytes = <<Ristretto as WrappedGroup>::G as GroupEncoding>::Repr::default();
+    reader.read_exact(bytes.as_mut())?;
+    let key =
+      Option::<<Ristretto as WrappedGroup>::G>::from(Ristretto::from_canonical_bytes(&bytes))
+        .ok_or_else(|| io::Error::other("invalid point"))?;
+    Ok(Self(key))
+  }
+}
+
 /// Key(s) on embedded elliptic curve(s).
 ///
 /// These are used by validators for external networks as part of their Distributed Key Generation
@@ -43,7 +110,7 @@ crate::borsh_as_scale!(EmbeddedEllipticCurve);
 /// elliptic curves validators for external networks use in their Distributed Key Generation
 /// protocols. The presence here is an artifact of the development timeline, where this struct
 /// SHOULD be renamed to `AuxiliaryKeys`.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize)]
+#[derive(Clone, Copy, PartialEq, Eq, Zeroize)]
 pub enum EmbeddedEllipticCurveKeys {
   /// The key to use for the validator's identity.
   Serai(<<Ristretto as WrappedGroup>::G as GroupEncoding>::Repr),
@@ -59,6 +126,35 @@ pub enum EmbeddedEllipticCurveKeys {
   ),
   /// The embedded elliptic curve key for a Monero validator.
   Monero(<<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr),
+}
+
+impl fmt::Debug for EmbeddedEllipticCurveKeys {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Serai(key) => {
+        write!(f, "Serai({})", hex::encode(key.as_slice()))
+      }
+      Self::Bitcoin(substrate, external) => {
+        write!(
+          f,
+          "Bitcoin({}, {})",
+          hex::encode(substrate.as_slice()),
+          hex::encode(external.as_slice())
+        )
+      }
+      Self::Ethereum(substrate, external) => {
+        write!(
+          f,
+          "Ethereum({}, {})",
+          hex::encode(substrate.as_slice()),
+          hex::encode(external.as_slice())
+        )
+      }
+      Self::Monero(key) => {
+        write!(f, "Monero({})", hex::encode(key.as_slice()))
+      }
+    }
+  }
 }
 
 impl EmbeddedEllipticCurveKeys {
@@ -133,7 +229,7 @@ impl scale::MaxEncodedLen for EmbeddedEllipticCurveKeys {
 ///
 /// The proofs of knowledge assert that the validator setting these keys, knows these keys, and
 /// that the keys themselves are valid and well-formed.
-#[derive(Clone, PartialEq, Eq, Debug, Zeroize)]
+#[derive(Clone, PartialEq, Eq, Zeroize)]
 pub enum SignedEmbeddedEllipticCurveKeys {
   /// The signed key to use for the validator's identity.
   Serai(<<Ristretto as WrappedGroup>::G as GroupEncoding>::Repr, [u8; 64]),
@@ -153,6 +249,39 @@ pub enum SignedEmbeddedEllipticCurveKeys {
   ),
   /// The signed embedded elliptic curve key for a Monero validator.
   Monero(<<Embedwards25519 as WrappedGroup>::G as GroupEncoding>::Repr, [u8; 64]),
+}
+
+impl fmt::Debug for SignedEmbeddedEllipticCurveKeys {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Self::Serai(key, sig) => {
+        write!(f, "Serai({}, {})", hex::encode(key.as_slice()), hex::encode(sig))
+      }
+      Self::Bitcoin(e, s, e_sig, s_sig) => {
+        write!(
+          f,
+          "Bitcoin({}, {}, {}, {})",
+          hex::encode(e.as_slice()),
+          hex::encode(s.as_slice()),
+          hex::encode(e_sig),
+          hex::encode(s_sig)
+        )
+      }
+      Self::Ethereum(e, s, e_sig, s_sig) => {
+        write!(
+          f,
+          "Ethereum({}, {}, {}, {})",
+          hex::encode(e.as_slice()),
+          hex::encode(s.as_slice()),
+          hex::encode(e_sig),
+          hex::encode(s_sig)
+        )
+      }
+      Self::Monero(e, e_sig) => {
+        write!(f, "Monero({}, {})", hex::encode(e.as_ref()), hex::encode(e_sig))
+      }
+    }
+  }
 }
 
 impl SignedEmbeddedEllipticCurveKeys {

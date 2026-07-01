@@ -14,7 +14,7 @@ use serai_client_serai::abi::primitives::{
 use serai_env::Environment;
 
 use serai_cosign::SignedCosign;
-use serai_coordinator_substrate::NewSetInformation;
+use serai_coordinator_substrate::TributaryValidatorSetInfo;
 use serai_coordinator_tributary::Transaction;
 
 #[cfg(all(feature = "parity-db", not(feature = "rocksdb")))]
@@ -71,7 +71,7 @@ pub(crate) fn prune_tributary_db(env: &Environment, set: ExternalValidatorSet) {
 create_db! {
   Coordinator {
     // The currently active Tributaries
-    ActiveTributaries: () -> Vec<NewSetInformation>,
+    ActiveTributaries: () -> Vec<TributaryValidatorSetInfo>,
     // The latest Tributary to have been retired for a network
     // Since Tributaries are retired sequentially, this is informative to if any Tributary has been
     // retired
@@ -105,8 +105,10 @@ mod _internal_db {
       TributaryTransactionsFromProcessorMessages: (set: ExternalValidatorSet) -> Transaction,
       // Tributary transactions to publish from the DKG confirmation task
       TributaryTransactionsFromDkgConfirmation: (set: ExternalValidatorSet) -> Transaction,
-      // Participants to remove
-      RemoveParticipant: (set: ExternalValidatorSet) -> u16,
+      // Participants to remove. the Participant is an index in the processor evrf signing protocol
+      // And the tributary matches the pre-generated and cached evrf Participant to its evrf keys
+      // in order to find the tributary validator behind it to slash it, if voted to.
+      RemoveParticipantMessagesFromProcessor: (set: ExternalValidatorSet) -> u16,
     }
   }
 }
@@ -137,16 +139,16 @@ impl TributaryTransactionsFromDkgConfirmation {
   }
 }
 
-pub(crate) struct RemoveParticipant;
-impl RemoveParticipant {
+pub(crate) struct RemoveParticipantMessagesFromProcessor;
+impl RemoveParticipantMessagesFromProcessor {
   pub(crate) fn send(txn: &mut impl DbTxn, set: ExternalValidatorSet, participant: Participant) {
     // If this set has yet to be retired, send this transaction
     if RetiredTributary::get(txn, set.network).map(|session| session.0) < Some(set.session.0) {
-      _internal_db::RemoveParticipant::send(txn, set, &u16::from(participant));
+      _internal_db::RemoveParticipantMessagesFromProcessor::send(txn, set, &u16::from(participant));
     }
   }
   pub(crate) fn try_recv(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Option<Participant> {
-    _internal_db::RemoveParticipant::try_recv(txn, set)
+    _internal_db::RemoveParticipantMessagesFromProcessor::try_recv(txn, set)
       .map(|i| Participant::new(i).expect("sent invalid participant index for removal"))
   }
 }

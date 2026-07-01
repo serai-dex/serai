@@ -93,7 +93,7 @@ fn handle_notable_cosigns_request<D: Db>(
   global_session: [u8; 32],
   channel: oneshot::Sender<Vec<SignedCosign>>,
 ) {
-  let cosigns = Cosigning::<D>::notable_or_latest_cosigns(db, global_session);
+  let cosigns = Cosigning::<D>::all_networks_notable_or_latest_cosigns(db, global_session);
   channel.send(cosigns).expect("channel listening for cosign oneshot response was dropped?");
 }
 

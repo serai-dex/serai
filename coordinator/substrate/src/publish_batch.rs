@@ -1,3 +1,5 @@
+//! Publish batch task, receives new batches from the processor and attempts to publish
+//! to the Serai chain.
 use core::future::Future;
 use std::sync::Arc;
 
@@ -9,12 +11,10 @@ use serai_client_serai::{
 use serai_db::{Get, DbTxn, Db, create_db};
 use serai_task::ContinuallyRan;
 
-use crate::SignedBatches;
-
 create_db!(
-  CoordinatorSubstrate {
+  CoordinatorSubstratePublishBatch {
     LastPublishedBatch: (network: ExternalNetworkId) -> u32,
-    BatchesToPublish: (network: ExternalNetworkId, batch: u32) -> SignedBatch,
+    PendingBatchesToPublish: (network: ExternalNetworkId, batch: u32) -> SignedBatch,
   }
 );
 
@@ -37,49 +37,60 @@ impl<D: Db> ContinuallyRan for PublishBatchTask<D> {
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
-      // Read from SignedBatches, which is sequential, into our own mapping
+      // Read from crate::NetworksProcessorSignedBatches, which is sequential, into our own mapping
       loop {
         let mut txn = self.db.txn();
-        let Some(batch) = SignedBatches::try_recv(&mut txn, self.network) else {
+        let Some(batch) = crate::NetworksProcessorSignedBatches::try_recv(&mut txn, self.network)
+        else {
           break;
         };
 
         // If this is a Batch not yet published, save it into our unordered mapping
         if LastPublishedBatch::get(&txn, self.network) < Some(batch.batch.id()) {
-          BatchesToPublish::set(&mut txn, self.network, batch.batch.id(), &batch);
+          PendingBatchesToPublish::set(&mut txn, self.network, batch.batch.id(), &batch);
         }
 
         txn.commit();
       }
 
       // Synchronize our last published batch with the Serai network's
-      let next_to_publish = {
+      let next_batch_to_publish = {
         let mut txn = self.db.txn();
-        let last_batch = crate::last_indexed_batch_id(&txn, self.network);
-        let mut our_last_batch = LastPublishedBatch::get(&txn, self.network);
-        while our_last_batch < last_batch {
-          let next_batch = our_last_batch.map(|batch| batch + 1).unwrap_or(0);
-          // Clean up the Batch to publish since it's already been published
-          BatchesToPublish::take(&mut txn, self.network, next_batch);
-          our_last_batch = Some(next_batch);
+        let last_indexed_batch = crate::canonical::last_indexed_batch_id(&txn, self.network);
+        let mut our_last_published_batch = LastPublishedBatch::get(&txn, self.network);
+
+        while our_last_published_batch < last_indexed_batch {
+          let next_batch_that_needs_publish =
+            our_last_published_batch.map(|batch| batch + 1).unwrap_or(0);
+
+          // Clean up the pending Batch to publish since it's already been published
+          PendingBatchesToPublish::take(&mut txn, self.network, next_batch_that_needs_publish);
+          our_last_published_batch = Some(next_batch_that_needs_publish);
         }
-        if let Some(last_batch) = our_last_batch {
-          LastPublishedBatch::set(&mut txn, self.network, &last_batch);
+
+        if let Some(last_published_batch) = our_last_published_batch {
+          LastPublishedBatch::set(&mut txn, self.network, &last_published_batch);
         }
         txn.commit();
-        last_batch.map(|batch| batch + 1).unwrap_or(0)
+
+        // return next_batch_to_publish as the 1 increment of serai's latest batch indexed
+        last_indexed_batch.map(|batch| batch + 1).unwrap_or(0)
       };
 
-      let made_progress =
-        if let Some(batch) = BatchesToPublish::get(&self.db, self.network, next_to_publish) {
-          self
-            .serai
-            .publish_transaction(&serai_client_serai::InInstructions::execute_batch(batch))
-            .await?;
-          true
-        } else {
-          false
-        };
+      let mut made_progress = false;
+
+      if let Some(new_pending_batch) =
+        PendingBatchesToPublish::get(&self.db, self.network, next_batch_to_publish)
+      {
+        self
+          .serai
+          .publish_transaction(&serai_client_serai::InInstructions::execute_batch(
+            new_pending_batch,
+          ))
+          .await?;
+        made_progress = true;
+      }
+
       Ok(made_progress)
     }
   }

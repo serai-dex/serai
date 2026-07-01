@@ -1,3 +1,4 @@
+use core::fmt;
 use zeroize::Zeroize;
 
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -13,9 +14,15 @@ pub use embedded_elliptic_curve_keys::*;
 /// the idea this 32-byte blob will be used as a public key.
 ///
 /// This is approximate to [`sp_core::sr25519::Public`] but implements the APIs from `borsh`.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Zeroize, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(feature = "scale", derive(scale::MaxEncodedLen))]
 pub struct Public(pub [u8; 32]);
+
+impl fmt::Debug for Public {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "Public({})", hex::encode(self.0))
+  }
+}
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(Public);
 
@@ -41,8 +48,14 @@ impl scale::EncodeLike<Public> for sp_core::sr25519::Public {}
 /// solely associates the idea this 64-byte blob will be used as a signature.
 ///
 /// This is approximate to [`sp_core::sr25519::Signature`] but implements the APIs from `borsh`.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Zeroize, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Zeroize, BorshSerialize, BorshDeserialize)]
 pub struct RistrettoSignature(pub [u8; 64]);
+
+impl fmt::Debug for RistrettoSignature {
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    write!(f, "RistrettoSignature({})", hex::encode(self.0))
+  }
+}
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(RistrettoSignature);
 

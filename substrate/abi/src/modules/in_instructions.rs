@@ -33,9 +33,9 @@ impl Call {
   }
 }
 
-// This is the smallest bound with a 4-byte length prefix.
+/// This is the smallest bound with a 4-byte length prefix.
 #[expect(clippy::as_conversions)]
-const IN_INSTRUCTION_RESULTS_BOUND: u64 = (u16::MAX as u64) + 1;
+pub const IN_INSTRUCTION_RESULTS_BOUND: u64 = (u16::MAX as u64) + 1;
 
 /// An event from the `InInstruction`s module.
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]

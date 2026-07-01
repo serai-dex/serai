@@ -17,8 +17,14 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-log = { version = "0.4", default-features = false, features = ["std"] }
+serai-env = { path = "../env", version = "0.1.0" }
 tokio = { version = "1", default-features = false, features = ["macros", "sync", "time"] }
+futures = { version = "0.3", default-features = false, features = ["std"] }
+serai-client-serai = { path = "../../substrate/client/serai" }
+serai-mock-rpc = { path = "../../tests/mock-serai-rpc" }
+serai-db = { path = "../db" }
 
 [features]
 test-helpers = []
+alloc = []
+default = ["alloc"]

@@ -9,6 +9,8 @@ use core::{
 };
 use std_shims::{prelude::*, sync::Arc, collections::HashMap, io};
 
+use borsh::{BorshSerialize, BorshDeserialize};
+
 use zeroize::{Zeroize, Zeroizing};
 
 use ciphersuite::{
@@ -20,8 +22,22 @@ use ciphersuite::{
 };
 
 /// The ID of a participant, defined as a non-zero u16.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Zeroize, BorshSerialize)]
 pub struct Participant(u16);
+
+impl BorshDeserialize for Participant {
+  fn deserialize_reader<R: borsh::io::Read>(reader: &mut R) -> borsh::io::Result<Self> {
+    let mut bytes = [0; 2];
+    reader.read_exact(&mut bytes)?;
+    let val = u16::from_le_bytes(bytes);
+    if val == 0 {
+      Err(borsh::io::Error::other("invalid participant index 0"))
+    } else {
+      Ok(Participant(val))
+    }
+  }
+}
+
 impl Participant {
   /// Create a new Participant identifier from a u16.
   pub const fn new(i: u16) -> Option<Participant> {

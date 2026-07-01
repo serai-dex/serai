@@ -16,6 +16,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+std-shims = { path = "../../common/std-shims", version = "0.1.1", default-features = false }
+
 rand_core = { version = "0.6", default-features = false }
 
 zeroize = { version = "^1.5", features = ["derive"] }
@@ -35,6 +37,7 @@ dkg = { package = "musig", path = "../../crypto/dkg/musig", default-features = f
 schnorrkel = { version = "0.11", default-features = false }
 
 bech32 = { version = "0.11", default-features = false }
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
@@ -61,7 +64,8 @@ std = [
 
   "schnorrkel/std",
 
-  "bech32/std"
+  "bech32/std",
+  "hex/std"
 ]
 scale = ["dep:scale", "sp-core/serde"]
 # This feature is not intended for public consumption and is not covered by any guarantees (SemVer, safety)

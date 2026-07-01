@@ -8,7 +8,7 @@ use dalek_ff_group::Ristretto;
 
 use tokio::sync::mpsc;
 
-use serai_db::{DbTxn as _, Db as _};
+use serai_db::{DbTxn, Db as _};
 
 use serai_client_serai::abi::primitives::{
   network_id::ExternalNetworkId,
@@ -29,13 +29,33 @@ use crate::{Db, KeySet};
 
 pub(crate) struct SubstrateTask<P: P2p> {
   pub(crate) env: Environment,
-  pub(crate) serai_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
+  pub(crate) private_serai_auxiliary_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   pub(crate) db: Db,
   pub(crate) message_queue: Arc<MessageQueue>,
   pub(crate) p2p: P,
   pub(crate) p2p_add_tributary:
     mpsc::UnboundedSender<(ExternalValidatorSet, Tributary<Db, Transaction, P>)>,
   pub(crate) p2p_retire_tributary: mpsc::UnboundedSender<ExternalValidatorSet>,
+}
+
+impl<P: P2p> SubstrateTask<P> {
+  // Helper to calculate next session to be retired
+  fn next_session_to_be_retired(txn: &impl DbTxn, network: ExternalNetworkId) -> Session {
+    let prior_retired = crate::db::RetiredTributary::get(txn, network);
+    prior_retired.map(|session| Session(session.0 + 1)).unwrap_or(Session(0))
+  }
+  // Helper to retire a session
+  fn retire_session(
+    txn: &mut impl DbTxn,
+    network: ExternalNetworkId,
+    session: Session,
+    p2p_retire_tributary: &mpsc::UnboundedSender<ExternalValidatorSet>,
+  ) {
+    crate::db::RetiredTributary::set(txn, network, &session);
+    p2p_retire_tributary
+      .send(ExternalValidatorSet { network, session })
+      .expect("p2p retire_tributary channel dropped?");
+  }
 }
 
 impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
@@ -58,15 +78,9 @@ impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
               KeySet::set(&mut txn, ExternalValidatorSet { network, session }, &());
             }
             messages::substrate::CoordinatorMessage::SlashesReported { session } => {
-              let prior_retired = crate::db::RetiredTributary::get(&txn, network);
-              let next_to_be_retired =
-                prior_retired.map(|session| Session(session.0 + 1)).unwrap_or(Session(0));
-              assert_eq!(session, next_to_be_retired);
-              crate::db::RetiredTributary::set(&mut txn, network, &session);
-              self
-                .p2p_retire_tributary
-                .send(ExternalValidatorSet { network, session })
-                .expect("p2p retire_tributary channel dropped?");
+              let next_session_to_be_retired = Self::next_session_to_be_retired(&txn, network);
+              assert_eq!(session, next_session_to_be_retired);
+              Self::retire_session(&mut txn, network, session, &self.p2p_retire_tributary);
             }
             messages::substrate::CoordinatorMessage::Block { .. } => {}
           }
@@ -87,38 +101,37 @@ impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
       // Handle the NewSet events
       loop {
         let mut txn = self.db.txn();
-        let Some(new_set) = serai_coordinator_substrate::NewSet::try_recv(&mut txn) else { break };
+        let Some(tributary_validator_set_info) =
+          serai_coordinator_substrate::EphemeralNewDecidedSet::try_recv(&mut txn)
+        else {
+          break;
+        };
+        let ExternalValidatorSet { network, session } = tributary_validator_set_info.set;
 
-        if let Some(historic_session) = new_set.set.session.0.checked_sub(2) {
-          // We should have retired this session if we're here
-          if crate::db::RetiredTributary::get(&txn, new_set.set.network).map(|session| session.0) <
-            Some(historic_session)
-          {
-            /*
-              If we haven't, it's because we're processing the NewSet event before the retiry
-              event from the Canonical event stream. This happens if the Canonical event, and
-              then the NewSet event, is fired while we're already iterating over NewSet events.
+        if let Some(historical_session) = session.0.checked_sub(2) {
+          let next_session_to_be_retired = Self::next_session_to_be_retired(&txn, network);
 
-              We break, dropping the txn, restoring this NewSet to the database, so we'll only
-              handle it once a future iteration of this loop handles the retiry event.
-            */
-            break;
+          // We should retire the historical session if we're here
+          if next_session_to_be_retired.0 == historical_session {
+            Self::retire_session(
+              &mut txn,
+              network,
+              next_session_to_be_retired,
+              &self.p2p_retire_tributary,
+            );
           }
 
           /*
             Queue this historical Tributary for deletion.
 
-            We explicitly don't queue this upon Tributary retire, instead here, to give time to
-            investigate retired Tributaries if questions are raised post-retiry. This gives a
-            week (the duration of the following session) after the Tributary has been retired to
-            make a backup of the data directory for any investigations.
+            We explicitly don't queue this upon SlashesReported, instead here, to give time to
+            investigate slashed reported Tributaries if questions are raised post-slash reported.
+            This gives a week (the duration of the following session) after the Tributary has been
+            slash reported to make a backup of the data directory for any investigations.
           */
           crate::db::TributaryCleanup::send(
             &mut txn,
-            &ExternalValidatorSet {
-              network: new_set.set.network,
-              session: Session(historic_session),
-            },
+            &ExternalValidatorSet { network, session: Session(historical_session) },
           );
         }
 
@@ -126,20 +139,24 @@ impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
         {
           let mut active_tributaries =
             crate::db::ActiveTributaries::get(&txn).unwrap_or(Vec::with_capacity(1));
-          active_tributaries.push(new_set.clone());
+          active_tributaries.push(tributary_validator_set_info.clone());
           crate::db::ActiveTributaries::set(&mut txn, &active_tributaries);
         }
 
         // Send GenerateKey to the processor
+        let tributary_validator_set = &tributary_validator_set_info.tributary_validator_set;
         let msg = messages::key_gen::CoordinatorMessage::GenerateKey {
-          session: new_set.set.session,
-          threshold: new_set.threshold,
-          evrf_public_keys: new_set.evrf_public_keys.clone(),
+          session: tributary_validator_set_info.set.session,
+          threshold: tributary_validator_set.evrf_threshold(),
+          substrate_evrf_public_keys: tributary_validator_set
+            .evrf_networks_substrate_keys()
+            .to_vec(),
+          network_evrf_public_keys: tributary_validator_set.evrf_networks_external_keys().to_vec(),
         };
         let msg = messages::CoordinatorMessage::from(msg);
         let metadata = Metadata {
           from: Service::Coordinator,
-          to: Service::Processor(new_set.set.network),
+          to: Service::Processor(network),
           intent: msg.intent(),
         };
         let msg = borsh::to_vec(&msg).unwrap();
@@ -157,8 +174,8 @@ impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
           self.message_queue.clone(),
           self.p2p.clone(),
           &self.p2p_add_tributary,
-          new_set,
-          self.serai_key.clone(),
+          tributary_validator_set_info,
+          self.private_serai_auxiliary_key.clone(),
         )
         .await;
 

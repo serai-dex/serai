@@ -9,6 +9,8 @@ use tributary_sdk::{
   ReadWrite as _, Evidence, tendermint::tx::TendermintTx, Transaction as TributaryTransaction,
   BlockHeader, Block, Tributary,
 };
+use serai_tributary_types::{TributaryValidator, TributaryValidatorSet};
+use serai_coordinator_substrate::test_helpers::random_tributary_validator_set_info;
 use super::*;
 
 /// Create a Tributary with a single validator.
@@ -18,22 +20,30 @@ use super::*;
 async fn make_tributary(
   db: MemDb,
   weights: &[u16],
-) -> (NewSetInformation, Tributary<MemDb, Transaction, NopP2p>) {
+) -> (TributaryValidatorSetInfo, Tributary<MemDb, Transaction, NopP2p>) {
+  let mut rng = new_test_rng();
   let mut key = None;
   let mut validator_keys = vec![];
-  let mut validators = vec![];
+  let mut tributary_validators = vec![];
   for weight in weights.iter().copied() {
-    let this_key = random_key(&mut OsRng);
+    let this_key = random_key(&mut rng);
     let pub_key = <Ristretto as WrappedGroup>::generator() * *this_key;
     key = Some(this_key);
     validator_keys.push((pub_key, u64::from(weight)));
-    let addr = SeraiAddress(pub_key.to_bytes());
-    validators.push((addr, weight));
+    // Build a TributaryValidator matching the generated key
+    tributary_validators.push(TributaryValidator::new(
+      pub_key.to_bytes(),
+      pub_key.to_bytes(),
+      pub_key.to_bytes().to_vec(),
+      weight,
+    ));
   }
-  let set_info = new_test_set_info(&validators);
+  let tributary_validator_set = TributaryValidatorSet::new(tributary_validators);
+  let tributary_validator_set_info =
+    random_tributary_validator_set_info(&mut rng, tributary_validator_set);
   let tributary = Tributary::<MemDb, Transaction, NopP2p>::new(
     db,
-    set_info.tributary_genesis(),
+    tributary_validator_set_info.tributary_genesis(),
     // Use a past start_time so TendermintMachine::new doesn't sleep waiting for block end time
     1,
     key.unwrap(),
@@ -42,7 +52,7 @@ async fn make_tributary(
   )
   .await
   .expect("Tributary::new returned `None`?");
-  (set_info, tributary)
+  (tributary_validator_set_info, tributary)
 }
 
 #[tokio::test]
@@ -56,11 +66,12 @@ async fn new_scan_tributary_task() {
       ScanTributaryTask::<MemDb, NopP2p>::new(db.clone(), set_info.clone(), tributary.reader());
 
     assert_eq!(task.set.set, set_info.set);
-    assert_eq!(task.validators.len(), 1);
-    assert_eq!(task.validators[0], set_info.validators[0].0);
-    assert_eq!(task.total_weight, 3);
-    assert_eq!(task.validator_weights.len(), 1);
-    assert_eq!(task.validator_weights[&set_info.validators[0].0], 3);
+    assert_eq!(task.set.tributary_validator_set.consensus_tributary_validators.len(), 1);
+    assert_eq!(
+      task.set.tributary_validator_set.consensus_tributary_validators[0].networks_substrate_key,
+      set_info.tributary_validator_set.consensus_tributary_validators[0].networks_substrate_key
+    );
+    assert_eq!(task.set.tributary_validator_set.total_weight(), 3);
   }
 
   // Multiple validators with different weights
@@ -71,12 +82,11 @@ async fn new_scan_tributary_task() {
       ScanTributaryTask::<MemDb, NopP2p>::new(db.clone(), set_info.clone(), tributary.reader());
 
     assert_eq!(task.set.set, set_info.set);
-    assert_eq!(task.validators.len(), 3);
-    assert_eq!(task.total_weight, 7);
-    assert_eq!(task.validator_weights.len(), 3);
-    assert_eq!(task.validator_weights[&set_info.validators[0].0], 1);
-    assert_eq!(task.validator_weights[&set_info.validators[1].0], 2);
-    assert_eq!(task.validator_weights[&set_info.validators[2].0], 4);
+    assert_eq!(task.set.tributary_validator_set.consensus_tributary_validators.len(), 3);
+    assert_eq!(task.set.tributary_validator_set.total_weight(), 7);
+    assert_eq!(task.set.tributary_validator_set.consensus_tributary_validators[0].weight, 1);
+    assert_eq!(task.set.tributary_validator_set.consensus_tributary_validators[1].weight, 2);
+    assert_eq!(task.set.tributary_validator_set.consensus_tributary_validators[2].weight, 4);
   }
 }
 
@@ -133,6 +143,7 @@ fn inject_block(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn scan_tributary_task_run_iteration() {
+  let mut rng = new_test_rng();
   // No blocks committed yet: returns false
   {
     let db = MemDb::new();
@@ -144,29 +155,35 @@ async fn scan_tributary_task_run_iteration() {
 
   {
     let mut db = MemDb::new();
-    let (set_info, tributary) = make_tributary(db.clone(), &[1]).await;
-    let genesis = set_info.tributary_genesis();
+    let (tributary_validator_set_info, tributary) = make_tributary(db.clone(), &[1]).await;
+    let genesis = tributary_validator_set_info.tributary_genesis();
 
     // Wait for at least one real committed block
     wait_for_block_after(&tributary, &genesis).await;
 
     // Create one task that persists across the remaining steps so each run_iteration
     // continues from where the previous one left off.
-    let mut task =
-      ScanTributaryTask::<MemDb, NopP2p>::new(db.clone(), set_info.clone(), tributary.reader());
+    let mut task = ScanTributaryTask::<MemDb, NopP2p>::new(
+      db.clone(),
+      tributary_validator_set_info.clone(),
+      tributary.reader(),
+    );
 
     // Processes committed block(s) and records progress
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
     let (last_handled_block_number, last_handled_block_hash) =
-      TributaryDb::last_handled_tributary_block(&db, set_info.set).unwrap();
+      TributaryDb::last_handled_tributary_block(&db, tributary_validator_set_info.set).unwrap();
     assert!(last_handled_block_number >= 1, "expected at least block 1 to be handled");
 
     // Processes block with provided and signed txs - inject after the actual last handled block
     let batch_tx =
-      TributaryTransaction::Application(Transaction::Batch { hash: random_bytes(&mut OsRng) });
+      TributaryTransaction::Application(Transaction::Batch { hash: random_bytes(&mut rng) });
     let fake_evidence = TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(
-      Evidence::InvalidPrecommit(make_signed_message_bytes(set_info.validators[0].0 .0)),
+      Evidence::InvalidPrecommit(make_signed_message_bytes(
+        tributary_validator_set_info.tributary_validator_set.consensus_tributary_validators[0]
+          .networks_substrate_key,
+      )),
     ));
     let block_txs = vec![fake_evidence, batch_tx];
 
@@ -188,7 +205,7 @@ async fn scan_tributary_task_run_iteration() {
     TaskTest::task_runs_once_and_matches_progress(&mut task, true).await;
 
     let mut txn = db.txn();
-    assert_block_side_effects(&mut txn, set_info.set, &block_txs);
+    assert_block_side_effects(&mut txn, tributary_validator_set_info.set, &block_txs);
   }
 
   // Errors when locally provided txs are missing
@@ -197,7 +214,7 @@ async fn scan_tributary_task_run_iteration() {
     let (set_info, tributary) = make_tributary(db.clone(), &[1]).await;
     let genesis = set_info.tributary_genesis();
 
-    let cosign_tx = Transaction::Cosign { substrate_block_hash: random_block_hash(&mut OsRng) };
+    let cosign_tx = Transaction::Cosign { substrate_block_hash: random_block_hash(&mut rng) };
     tributary.provide_transaction(cosign_tx).await.unwrap();
 
     // Wait for a block that includes the provided transaction

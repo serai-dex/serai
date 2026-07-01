@@ -6,6 +6,10 @@ pub use create_db::*;
 mod mem;
 pub use mem::*;
 
+/// Test helpers for verifying database invariants.
+#[cfg(any(test, feature = "test-helpers"))]
+pub mod test_helpers;
+
 #[cfg(feature = "rocksdb")]
 mod rocks;
 #[cfg(feature = "rocksdb")]

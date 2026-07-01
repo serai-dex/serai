@@ -34,6 +34,7 @@ frost = { package = "modular-frost", path = "../../crypto/frost", default-featur
 
 # Substrate
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
+serai-tributary-types = { path = "../../coordinator/tributary/types" }
 
 # Encoders
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }

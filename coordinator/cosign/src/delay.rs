@@ -1,10 +1,10 @@
+//! The task to delay acknowledgement of the cosigns.
 use core::future::Future;
 use std::time::{Duration, SystemTime};
 
 use serai_db::*;
 use serai_task::{DoesNotError, ContinuallyRan};
-
-use crate::evaluator::CosignedBlocks;
+use crate::evaluator;
 
 #[expect(clippy::cfg_not_test)]
 #[cfg(not(test))]
@@ -16,9 +16,9 @@ pub const BROADCAST_FREQUENCY: Duration = Duration::from_secs(6);
 
 #[expect(clippy::cfg_not_test)]
 #[cfg(not(test))]
-const SYNCHRONY_EXPECTATION: Duration = Duration::from_secs(10);
+pub(crate) const SYNCHRONY_EXPECTATION: Duration = Duration::from_secs(10);
 #[cfg(test)]
-const SYNCHRONY_EXPECTATION: Duration = Duration::from_secs(1);
+pub(crate) const SYNCHRONY_EXPECTATION: Duration = Duration::from_secs(1);
 
 pub(crate) const ACKNOWLEDGEMENT_DELAY: Duration =
   Duration::from_secs(BROADCAST_FREQUENCY.as_secs() + SYNCHRONY_EXPECTATION.as_secs());
@@ -30,7 +30,7 @@ pub(crate) fn now_timestamp() -> Duration {
 }
 
 create_db!(
-  SubstrateCosignDelay {
+  CosignDelay {
     // The latest block number marked as cosigned by the delay task.
     // Cosigned after a delay if it had events and cosigns,
     // simply marked as cosigned if the block had no events and no cosigns.
@@ -53,13 +53,14 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         let latest_cosigned_block_number = LatestCosignedBlockNumber::get(&self.db).unwrap_or(0);
 
         let mut txn = self.db.txn();
-        let Some((block_number, time_evaluated, has_events)) = CosignedBlocks::try_recv(&mut txn)
+        let Some((block_number, time_evaluated, has_cosigns)) =
+          evaluator::CosignedBlocks::try_recv(&mut txn)
         else {
           break;
         };
 
         // Defensive check, not likely to happen but does not allow regressing
-        if block_number <= latest_cosigned_block_number {
+        if block_number > 0 && block_number <= latest_cosigned_block_number {
           serai_env::warn!(
             "attempting to delay #{block_number} when #{} was already cosigned",
             latest_cosigned_block_number,
@@ -69,8 +70,8 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
           continue;
         }
 
-        // No events means no cosigns to wait for, mark as cosigned immediately
-        if !has_events {
+        // No cosigns to wait p2p synchrony for, mark as cosigned immediately
+        if !has_cosigns {
           LatestCosignedBlockNumber::set(&mut txn, &block_number);
           txn.commit();
           made_progress = true;
@@ -95,8 +96,8 @@ impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
         let mut txn = self.db.txn();
         // Consume block to continue
         assert_eq!(
-          Some((block_number, time_evaluated, has_events)),
-          CosignedBlocks::try_recv(&mut txn)
+          Some((block_number, time_evaluated, has_cosigns)),
+          evaluator::CosignedBlocks::try_recv(&mut txn)
         );
         LatestCosignedBlockNumber::set(&mut txn, &block_number);
         txn.commit();

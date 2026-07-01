@@ -1,3 +1,5 @@
+//! Publish slash reports task, receives new signed slash reports from the processor and
+//! attempts to publish to the Serai chain.
 use core::future::Future;
 use std::sync::Arc;
 
@@ -13,7 +15,7 @@ use serai_client_serai::{
 
 use serai_task::ContinuallyRan;
 
-use crate::SlashReports;
+use crate::NetworksSlashReports;
 
 /// Publish slash reports from `SlashReports` onto Serai.
 pub struct PublishSlashReportTask<D: Db> {
@@ -26,37 +28,43 @@ impl<D: Db> PublishSlashReportTask<D> {
   pub fn new(db: D, serai: Arc<Serai>) -> Self {
     Self { db, serai }
   }
-}
 
-impl<D: Db> PublishSlashReportTask<D> {
   // Returns if a slash report was successfully published
   async fn publish(&mut self, network: ExternalNetworkId) -> Result<bool, String> {
     let mut txn = self.db.txn();
-    let Some((session, slash_report)) = SlashReports::take(&mut txn, network) else {
+    let Some((session, this_networks_slash_report)) = NetworksSlashReports::take(&mut txn, network)
+    else {
       // No slash report to publish
       return Ok(false);
     };
 
     // This uses the latest finalized block, not the latest cosigned block, which should be
     // fine as in the worst case, the only impact is no longer attempting TX publication
-    let serai = self.serai.state().await.map_err(|e| format!("{e:?}"))?;
-    let session_after_slash_report = Session(session.0 + 1);
-    let current_session =
-      serai.current_session(network.into()).await.map_err(|e| format!("{e:?}"))?;
-    let current_session = current_session.map(|session| session.0);
-    // Only attempt to publish the slash report for session #n while session #n+1 is still
-    // active
-    // TODO: Fix this. It's actually up until #n+2
-    let session_after_slash_report_retired = current_session > Some(session_after_slash_report.0);
-    if session_after_slash_report_retired {
+    let serai =
+      self.serai.state().await.map_err(|e| format!("RPC error fetching serai state: {e:?}"))?;
+
+    let current_networks_session = serai
+      .current_session(network.into())
+      .await
+      .map_err(|e| format!("RPC error fetching current session: {e:?}"))?;
+    let current_networks_session = current_networks_session.map(|session| session.0);
+
+    // The timely session after this slash report represents the timeline as we only attempt
+    // to publish the slash report for session #n while session #n+2 is still active
+    let timely_session_after_this_slash_report = Session(session.0 + 2);
+
+    let is_current_slash_report_session_historic =
+      current_networks_session > Some(timely_session_after_this_slash_report.0);
+    if is_current_slash_report_session_historic {
+      // This slash report was not published in a timely manner, do not attempt publication
       // Commit the txn to drain this slash report from the database and not try it again later
       txn.commit();
       return Ok(false);
     }
 
-    if Some(session_after_slash_report.0) != current_session {
+    if Some(timely_session_after_this_slash_report.0) != current_networks_session {
       // We already checked the current session wasn't greater, and they're not equal
-      assert!(current_session < Some(session_after_slash_report.0));
+      assert!(current_networks_session < Some(timely_session_after_this_slash_report.0));
       // This would mean the Serai node is resyncing and is behind where it prior was
       Err("have a slash report for a session Serai has yet to retire".to_owned())?;
     }
@@ -65,14 +73,14 @@ impl<D: Db> PublishSlashReportTask<D> {
     if !serai
       .pending_slash_report(ExternalValidatorSet { network, session })
       .await
-      .map_err(|e| format!("{e:?}"))?
+      .map_err(|e| format!("RPC error fetching pending slash report: {e:?}"))?
     {
       txn.commit();
       return Ok(false);
     }
 
     // Since this slash report is still pending, publish it
-    match self.serai.publish_transaction(&slash_report).await {
+    match self.serai.publish_transaction(&this_networks_slash_report).await {
       Ok(()) => {
         txn.commit();
         Ok(true)
@@ -94,12 +102,12 @@ impl<D: Db> ContinuallyRan for PublishSlashReportTask<D> {
     async move {
       let mut made_progress = false;
       let mut error = None;
-      for network in ExternalNetworkId::all() {
-        let network_res = self.publish(network).await;
+      for i_network in ExternalNetworkId::all() {
+        let networks_response = self.publish(i_network).await;
         // We made progress if any network successfully published their slash report
-        made_progress |= network_res == Ok(true);
+        made_progress |= networks_response == Ok(true);
         // We want to yield the first error *after* attempting for every network
-        error = error.or(network_res.err());
+        error = error.or(networks_response.err());
       }
       // Yield the error
       if let Some(error) = error {

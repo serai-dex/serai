@@ -98,7 +98,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
       TransactionsToSign::<P::SignableTransaction>::send(txn, &key, &planned.signable);
       eventualities.push(planned.eventuality);
-      Self::accumulate_outputs(txn, planned.auxilliary.0, false);
+      Self::accumulate_outputs(txn, planned.auxiliary.0, false);
 
       // Reload the outputs for the next loop iteration
       outputs = Db::<S>::outputs(txn, key, coin).unwrap();
@@ -270,7 +270,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
         Self::accumulate_outputs(
           txn,
           planned
-            .auxilliary
+            .auxiliary
             .0
             .iter()
             .filter(|output| output.kind() == OutputType::Change)
@@ -278,8 +278,8 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
             .collect(),
           false,
         );
-        planned.auxilliary.0.retain(|output| output.kind() == OutputType::Branch);
-        planned.auxilliary.0
+        planned.auxiliary.0.retain(|output| output.kind() == OutputType::Branch);
+        planned.auxiliary.0
       };
 
       // Now execute each layer of the tree
@@ -340,7 +340,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
             TreeTransaction::Leaves { .. } => {}
             // If this was a branch, handle its children
             TreeTransaction::Branch { mut children, .. } => {
-              branch_outputs.append(&mut planned.auxilliary.0);
+              branch_outputs.append(&mut planned.auxiliary.0);
               tree.append(&mut children);
             }
           }
@@ -388,7 +388,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
     TransactionsToSign::<P::SignableTransaction>::send(txn, &from, &planned.signable);
     eventualities.get_mut(&from_bytes).unwrap().push(planned.eventuality);
-    Self::accumulate_outputs(txn, planned.auxilliary.0, false);
+    Self::accumulate_outputs(txn, planned.auxiliary.0, false);
 
     Ok(())
   }

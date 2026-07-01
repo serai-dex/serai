@@ -75,10 +75,21 @@ impl UnbalancedMerkleTree {
 }
 
 /// An unbalanced Merkle tree which is incrementally created.
-#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct IncrementalUnbalancedMerkleTree {
   /// (number of children under branch, branch hash)
   branches: Vec<(u64, [u8; 32])>,
+}
+
+impl core::fmt::Debug for IncrementalUnbalancedMerkleTree {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    f.debug_struct("IncrementalUnbalancedMerkleTree")
+      .field(
+        "branches",
+        &self.branches.iter().map(|(count, hash)| (*count, hex::encode(hash))).collect::<Vec<_>>(),
+      )
+      .finish()
+  }
 }
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(IncrementalUnbalancedMerkleTree);

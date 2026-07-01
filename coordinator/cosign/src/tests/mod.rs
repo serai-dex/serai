@@ -2,21 +2,20 @@ use std::{
   collections::HashMap,
   sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
-    Arc, LazyLock,
+    Arc,
   },
   time::{Duration, Instant},
 };
 
-use borsh::{BorshSerialize, BorshDeserialize};
-
-use rand_core::{RngCore, CryptoRng, OsRng};
+use rand_core::{RngCore, CryptoRng};
 use rand::{Rng as _, seq::SliceRandom as _};
 
 use serai_client_serai::{
   abi::{
+    self,
     primitives::{
-      crypto::*, address::SeraiAddress, network_id::*, balance::*, validator_sets::*,
-      test_helpers::*,
+      self as serai_primitives, crypto::*, address::SeraiAddress, network_id::*, balance::*,
+      validator_sets::*, test_helpers::*,
     },
     validator_sets::Event,
   },
@@ -26,29 +25,39 @@ use serai_client_serai::{
 use serai_db::{DbTxn, Db as _, MemDb};
 use serai_task::{
   ContinuallyRan, Task,
-  test_helpers::{IntoTask, TaskTest},
+  test_helpers::{IntoTask, TaskTest, IntoMockSerai},
+  impl_serai_task_test_struct,
 };
 use serai_cosign_types::{
   SignedCosign,
-  tests::{
-    random_external_network_id, random_global_session, random_cosign_intent, random_cosign,
-    sign_cosign,
-  },
+  test_helpers::{random_cosign_intent, random_cosign, sign_cosign},
 };
 
-use serai_shim_rpc::{*, event_fuzzer::*};
+pub use serai_mock_rpc::{
+  block_events_fuzzer::BlockEventsFuzzer, new_test_rng, test_helpers::random_subset,
+};
 
-use crate::{GlobalSession, RequestNotableCosigns};
+pub(crate) use crate::test_helpers::random_global_cosigning_session_id;
+
+use crate::RequestNotableCosigns;
+
+/// Generate a random non-empty subset of [`ExternalValidatorSet`]s for testing.
+pub(crate) fn random_external_validator_sets<R: RngCore + CryptoRng>(
+  rng: &mut R,
+) -> Vec<ExternalValidatorSet> {
+  let mut networks = all_external_networks();
+  random_subset(rng, &mut networks);
+  networks
+    .iter()
+    .map(|&network| ExternalValidatorSet { network, session: Session(rng.next_u32()) })
+    .collect()
+}
 
 mod intend;
 mod evaluator;
 mod delay;
 mod cosigning;
 mod full_stack;
-
-static INIT_LOGGER: LazyLock<()> = LazyLock::new(|| {
-  serai_env::init_logger();
-});
 
 #[derive(Clone)]
 struct TestRequest {
@@ -83,38 +92,5 @@ impl RequestNotableCosigns for TestRequest {
         Ok(())
       }
     }
-  }
-}
-
-/// Create a [`SeraiShimRpc`] and an [`Arc<Serai>`] to use it.
-async fn setup_shim_serai() -> (SeraiShimRpc, Arc<Serai>) {
-  let shim_serai = SeraiShimRpc::start(ShimState::default()).await;
-  let serai = Arc::new(Serai::new(shim_serai.url()).unwrap());
-  (shim_serai, serai)
-}
-
-fn default_test_validator_set() -> ExternalValidatorSet {
-  ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) }
-}
-fn random_validator_set<R: RngCore + CryptoRng>(rng: &mut R) -> ExternalValidatorSet {
-  ExternalValidatorSet {
-    network: random_external_network_id(rng),
-    session: Session(rng.next_u32()),
-  }
-}
-
-/// Build a single-network [`GlobalSession`] from the given components.
-fn build_global_session(
-  set: ExternalValidatorSet,
-  public: Public,
-  stake: u64,
-  start_block_number: u64,
-) -> GlobalSession {
-  GlobalSession {
-    start_block_number,
-    sets: vec![set],
-    keys: HashMap::from([(set.network, public)]),
-    stakes: HashMap::from([(set.network, stake)]),
-    total_stake: stake,
   }
 }
