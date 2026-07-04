@@ -1,4 +1,4 @@
-use core::{future::Future, time::Duration};
+use core::{future::Future, num::NonZero, time::Duration};
 use std::sync::Arc;
 
 use zeroize::Zeroizing;
@@ -486,33 +486,22 @@ pub(crate) async fn spawn_tributary<P: P2p>(
 
   let genesis = set.tributary_genesis();
 
-  // Since the Serai block will be finalized, then cosigned, before we handle this, this time will
-  // be a couple of minutes stale. While the Tributary will still function with a start time in the
-  // past, the Tributary will immediately incur round timeouts. We reduce these by adding a
-  // constant delay of a couple of minutes.
-  const TRIBUTARY_START_TIME_DELAY: Duration = Duration::from_mins(2);
-  let start_time = set.declaration_time + TRIBUTARY_START_TIME_DELAY.as_secs();
-
   let mut tributary_validators = Vec::with_capacity(set.validators.len());
   for (validator, weight) in set.validators.iter().copied() {
     let validator_key = <Ristretto as GroupIo>::read_G(&mut validator.0.as_slice())
       .expect("Serai validator had an invalid public key");
-    let weight = u64::from(weight);
-    tributary_validators.push((validator_key, weight));
+    tributary_validators.push((
+      validator_key,
+      NonZero::new(weight).expect("Serai declared validator without any weight"),
+    ));
   }
 
   // Spawn the Tributary
   let tributary_db = crate::db::tributary_db(env, set.set);
-  let tributary = Tributary::new(
-    tributary_db.clone(),
-    genesis,
-    start_time,
-    serai_key.clone(),
-    tributary_validators,
-    p2p,
-  )
-  .await
-  .unwrap();
+  let tributary =
+    Tributary::new(tributary_db.clone(), genesis, serai_key.clone(), tributary_validators, p2p)
+      .await
+      .unwrap();
   let reader = tributary.reader();
 
   // Inform the P2P network

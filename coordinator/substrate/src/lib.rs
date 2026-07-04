@@ -48,8 +48,6 @@ pub struct NewSetInformation {
   pub set: ExternalValidatorSet,
   /// The Serai block which declared it.
   pub serai_block: [u8; 32],
-  /// The time of the block which declared it, in seconds since the epoch.
-  pub declaration_time: u64,
   /// The threshold to use.
   pub threshold: u16,
   /// The validators, with the amount of key shares they have.
@@ -89,7 +87,6 @@ impl NewSetInformation {
   pub fn new(
     set: ExternalValidatorSet,
     serai_block: [u8; 32],
-    declaration_time: u64,
     threshold: u16,
     validators: Vec<(SeraiAddress, u16)>,
     evrf_public_keys: Vec<([u8; 32], Vec<u8>)>,
@@ -97,7 +94,6 @@ impl NewSetInformation {
     let mut result = Self {
       set,
       serai_block,
-      declaration_time,
       threshold,
       validators,
       evrf_public_keys,

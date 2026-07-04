@@ -176,7 +176,7 @@ pub async fn tendermint_meta() -> ([u8; 32], Signer, [u8; 32], Arc<Validators>) 
   let genesis = new_genesis();
   let signer =
     Signer::new(genesis, Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng)));
-  let validator_id = signer.validator_id().await.unwrap();
+  let validator_id = signer.validator().await.unwrap();
 
   // schema
   let signer_pub = <Ristretto as GroupIo>::read_G(validator_id.as_slice()).unwrap();
@@ -187,7 +187,7 @@ pub async fn tendermint_meta() -> ([u8; 32], Signer, [u8; 32], Arc<Validators>) 
 
 pub async fn signed_from_data<N: Network>(
   signer: <N::SignatureScheme as SignatureScheme>::Signer,
-  signer_id: N::ValidatorId,
+  signer_id: N::Validator,
   block_number: u64,
   round_number: u32,
   data: DataFor<N>,
@@ -209,7 +209,7 @@ pub async fn random_evidence_tx<N: Network>(
   // Creates a TX with an invalid valid round number
   // TODO: Use a random failure reason
   let data = Data::Proposal(Some(RoundNumber(0)), b);
-  let signer_id = signer.validator_id().await.unwrap();
+  let signer_id = signer.validator().await.unwrap();
   let signed = signed_from_data::<N>(signer, signer_id, 0, 0, data).await;
   TendermintTx::SlashEvidence(Evidence::InvalidValidRound(borsh::to_vec(&signed).unwrap()))
 }

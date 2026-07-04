@@ -62,7 +62,6 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
       // These are all the events which generate canonical messages
       struct EphemeralEvents {
         block_hash: BlockHash,
-        time: u64,
         embedded_elliptic_curve_keys_events: Vec<serai_client_serai::abi::validator_sets::Event>,
         set_decided_events: Vec<serai_client_serai::abi::validator_sets::Event>,
         accepted_handover_events: Vec<serai_client_serai::abi::validator_sets::Event>,
@@ -94,17 +93,11 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
               events.validator_sets().set_decided_events().cloned().collect::<Vec<_>>();
             let accepted_handover_events =
               events.validator_sets().accepted_handover_events().cloned().collect::<Vec<_>>();
-            let Some(block) = serai.block(block_hash).await.map_err(|e| format!("{e:?}"))? else {
-              Err(format!("Serai node didn't have cosigned block #{block_number}"))?
-            };
 
-            // We use time in seconds, not milliseconds, here
-            let time = block.header.unix_time_in_millis() / 1000;
             Ok((
               block_number,
               EphemeralEvents {
                 block_hash,
-                time,
                 embedded_elliptic_curve_keys_events,
                 set_decided_events,
                 accepted_handover_events,
@@ -224,7 +217,6 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
             let mut new_set = NewSetInformation {
               set,
               serai_block: block.block_hash.0,
-              declaration_time: block.time,
               // TODO: This should be inlined into the Processor's key gen code
               // It's legacy from when we removed participants from the key gen
               threshold: ((total_weight * 2) / 3) + 1,

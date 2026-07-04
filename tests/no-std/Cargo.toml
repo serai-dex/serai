@@ -44,6 +44,8 @@ dkg-evrf = { path = "../../crypto/dkg/evrf", default-features = false, optional 
 modular-frost = { path = "../../crypto/frost", default-features = false, optional = true }
 frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false, optional = true }
 
+tendermint-machine = { path = "../../coordinator/tributary-sdk/tendermint", default-features = false }
+
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, optional = true }
 
 ethereum-schnorr-contract = { path = "../../networks/ethereum/schnorr", default-features = false }
@@ -78,6 +80,8 @@ alloc = [
 
   "modular-frost",
   "frost-schnorrkel",
+
+  "tendermint-machine/alloc",
 
   "bitcoin-serai",
 

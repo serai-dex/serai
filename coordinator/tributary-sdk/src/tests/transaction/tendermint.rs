@@ -276,7 +276,7 @@ async fn conflicting_msgs_evidence_tx() {
 
     let signer_2 =
       Signer::new(genesis, Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng)));
-    let signed_id_2 = signer_2.validator_id().await.unwrap();
+    let signed_id_2 = signer_2.validator().await.unwrap();
     let signed_2 = signed_from_data::<N>(
       signer_2.into(),
       signed_id_2,

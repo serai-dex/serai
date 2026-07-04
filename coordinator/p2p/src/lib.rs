@@ -149,12 +149,8 @@ pub async fn run<TD: Db, Tx: TransactionTrait, P: P2p>(
 
         let (heartbeat_task_def, heartbeat_task) = Task::new();
         tokio::spawn(
-          (HeartbeatTask {
-            set,
-            tributary: tributary.clone(),
-            reader: reader.clone(),
-            p2p: p2p.clone(),
-          }).continually_run(heartbeat_task_def, vec![])
+          HeartbeatTask::new(set, tributary.clone(), reader.clone(), p2p.clone())
+            .continually_run(heartbeat_task_def, vec![])
         );
         heartbeat_tasks.insert(set, heartbeat_task);
 

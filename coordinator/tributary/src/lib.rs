@@ -19,10 +19,7 @@ use serai_db::*;
 use serai_task::ContinuallyRan;
 
 use tributary_sdk::{
-  tendermint::{
-    tx::{TendermintTx, Evidence, decode_signed_message},
-    TendermintNetwork,
-  },
+  tendermint::{tx::TendermintTx, TendermintNetwork},
   Signed as TributarySigned, TransactionKind, TransactionTrait as _,
   Transaction as TributaryTransaction, Block, TributaryReader, P2p,
 };
@@ -576,27 +573,14 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
 
     for tx in block.transactions {
       match tx {
-        TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(ev)) => {
-          // Since the evidence is on the chain, it will have already been validated
-          // We can just punish the signer
-          let data = match ev {
-            Evidence::ConflictingMessages(first, second) => (first, Some(second)),
-            Evidence::InvalidPrecommit(first) | Evidence::InvalidValidRound(first) => (first, None),
-          };
-          let msgs = (
-            decode_signed_message::<TendermintNetwork<TD, Transaction, P>>(&data.0).unwrap(),
-            data.1.as_ref().map(|data| {
-              decode_signed_message::<TendermintNetwork<TD, Transaction, P>>(data).unwrap()
-            }),
-          );
-
+        TributaryTransaction::Tendermint(tendermint_tx) => {
           // Since anything with evidence is fundamentally faulty behavior, not just temporal
           // errors, mark the node as fatally slashed
           TributaryDb::fatal_slash(
             self.tributary_txn,
             self.set.set,
-            SeraiAddress(msgs.0.msg.sender),
-            &format!("invalid tendermint messages: {msgs:?}"),
+            SeraiAddress(tendermint_tx.slashed()),
+            &format!("invalid tendermint messages: {tendermint_tx:?}"),
           );
         }
         TributaryTransaction::Application(tx) => {

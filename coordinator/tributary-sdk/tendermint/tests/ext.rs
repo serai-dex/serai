@@ -1,209 +1,241 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use core::future::Future;
-use std::{
-  sync::Arc,
-  time::{UNIX_EPOCH, SystemTime, Duration},
-};
+use core::{num::NonZero, future::Future, time::Duration};
+use std::{sync::Arc, collections::HashMap};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use futures_util::sink::SinkExt as _;
-use tokio::{sync::RwLock, time::sleep};
+use tokio::sync::RwLock;
 
 use serai_db::MemDb;
 
 use tendermint_machine::{
-  ext::*, SignedMessageFor, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
-  SlashEvent, TendermintMachine, TendermintHandle,
+  SignatureScheme, Signer, Block, Commit, InvalidBlock, Blockchain, MessageFor, Network,
+  SlashReason, Tendermint, TendermintHandle,
 };
 
-type TestValidatorId = u16;
-type TestBlockId = [u8; 4];
+type TestValidator = u16;
+// This is not a cryptographic hash and is solely for testing purposes
+type TestBlockHash = [u8; 4];
 
 struct TestSigner(u16);
+#[expect(clippy::unused_async_trait_impl)]
 impl Signer for TestSigner {
-  type ValidatorId = TestValidatorId;
+  type Validator = TestValidator;
+  // This is not a cryptographic signature and is solely for testing purposes
   type Signature = [u8; 32];
 
-  fn validator_id(&self) -> impl Send + Future<Output = Option<TestValidatorId>> {
-    async move { Some(self.0) }
+  async fn validator(&self) -> TestValidator {
+    self.0
   }
 
-  fn sign(&self, msg: &[u8]) -> impl Send + Future<Output = [u8; 32]> {
-    async move {
-      let mut sig = [0; 32];
-      sig[.. 2].copy_from_slice(&self.0.to_le_bytes());
-      sig[2 .. (2 + 30.min(msg.len()))].copy_from_slice(&msg[.. 30.min(msg.len())]);
-      sig
+  async fn sign(
+    &self,
+    message: impl Send + IntoIterator<Item = impl AsRef<[u8]>>,
+  ) -> Self::Signature {
+    let mut sig = [0; 32];
+    sig[.. 2].copy_from_slice(&self.0.to_le_bytes());
+
+    let mut concat_message: Vec<u8> = vec![];
+    for chunk in message {
+      concat_message.extend(chunk.as_ref());
     }
+    let message = concat_message;
+    sig[2 .. (2 + 30.min(message.len()))].copy_from_slice(&message[.. 30.min(message.len())]);
+
+    sig
   }
 }
 
 #[derive(Clone)]
 struct TestSignatureScheme;
 impl SignatureScheme for TestSignatureScheme {
-  type ValidatorId = TestValidatorId;
+  type Validator = TestValidator;
   type Signature = [u8; 32];
   type AggregateSignature = Vec<[u8; 32]>;
-  type Signer = TestSigner;
 
-  fn verify(&self, validator: u16, msg: &[u8], sig: &[u8; 32]) -> bool {
-    (sig[.. 2] == validator.to_le_bytes()) && (sig[2 ..] == [msg, &[0; 30]].concat()[.. 30])
-  }
-
-  fn aggregate(
+  fn verify(
     &self,
-    _: &[Self::ValidatorId],
-    _: &[u8],
-    sigs: &[Self::Signature],
-  ) -> Self::AggregateSignature {
-    sigs.to_vec()
-  }
-
-  fn verify_aggregate(
-    &self,
-    signers: &[TestValidatorId],
-    msg: &[u8],
-    sigs: &Vec<[u8; 32]>,
+    validator: &Self::Validator,
+    message: impl IntoIterator<Item = impl AsRef<[u8]>>,
+    signature: &Self::Signature,
   ) -> bool {
-    assert_eq!(signers.len(), sigs.len());
-    for sig in signers.iter().zip(sigs.iter()) {
-      assert!(self.verify(*sig.0, msg, sig.1));
+    let mut concat_message: Vec<u8> = vec![];
+    for chunk in message {
+      concat_message.extend(chunk.as_ref());
+    }
+    let message = concat_message;
+
+    signature.as_slice() ==
+      [
+        validator.to_le_bytes().as_slice(),
+        &message[.. 30.min(message.len())],
+        &vec![0; 30_usize.saturating_sub(message.len())],
+      ]
+      .concat()
+      .as_slice()
+  }
+
+  fn aggregate<'sig>(
+    &self,
+    _message: impl IntoIterator<Item = impl AsRef<[u8]>>,
+    signatures: impl IntoIterator<Item = (&'sig Self::Validator, &'sig Self::Signature)>,
+  ) -> Self::AggregateSignature
+  where
+    Self::Validator: 'sig,
+    Self::Signature: 'sig,
+  {
+    signatures.into_iter().map(|(_validator, signature)| *signature).collect::<Vec<_>>()
+  }
+
+  fn verify_aggregate<'sig>(
+    &self,
+    signers: impl IntoIterator<Item = &'sig Self::Validator>,
+    message: impl IntoIterator<Item = impl AsRef<[u8]>>,
+    aggregate_signature: &Self::AggregateSignature,
+  ) -> bool
+  where
+    Self::Validator: 'sig,
+  {
+    let mut concat_message = vec![];
+    for chunk in message {
+      concat_message.extend(chunk.as_ref());
+    }
+    let message = concat_message;
+
+    let signers = signers.into_iter().copied().collect::<Vec<_>>();
+    if signers.len() != aggregate_signature.len() {
+      return false;
+    }
+    for (signer, signature) in signers.iter().zip(aggregate_signature) {
+      if !self.verify(signer, core::iter::once(message.as_slice()), signature) {
+        return false;
+      }
     }
     true
   }
 }
 
-struct TestWeights;
-impl Weights for TestWeights {
-  type ValidatorId = TestValidatorId;
-
-  fn total_weight(&self) -> u64 {
-    4
-  }
-  fn weight(&self, id: TestValidatorId) -> u64 {
-    [1; 4][usize::from(id)]
-  }
-
-  fn proposer(&self, number: BlockNumber, round: RoundNumber) -> TestValidatorId {
-    TestValidatorId::try_from((number.0 + u64::from(round.0)) % 4).unwrap()
-  }
-}
-
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 struct TestBlock {
-  id: TestBlockId,
-  valid: Result<(), BlockError>,
+  id: TestBlockHash,
+  valid: bool,
 }
 
 impl Block for TestBlock {
-  type Id = TestBlockId;
+  type Hash = TestBlockHash;
 
-  fn id(&self) -> TestBlockId {
+  fn hash(&self) -> TestBlockHash {
     self.id
   }
 }
 
-#[expect(clippy::type_complexity)]
-struct TestNetwork(
-  u16,
-  Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>, SyncedBlockResultReceiver)>>>,
-);
+struct TestNetwork {
+  validator_set: HashMap<u16, NonZero<u16>>,
+  all_validators: Arc<RwLock<Vec<TendermintHandle<Self>>>>,
+}
 
-impl Network for TestNetwork {
-  type Db = MemDb;
-
-  type ValidatorId = TestValidatorId;
+impl Blockchain for TestNetwork {
+  type Validator = u16;
+  type ValidatorSet = HashMap<u16, NonZero<u16>>;
   type SignatureScheme = TestSignatureScheme;
-  type Weights = TestWeights;
   type Block = TestBlock;
 
-  const BLOCK_PROCESSING_TIME: Duration = Duration::from_secs(2);
-  const LATENCY_TIME: Duration = Duration::from_secs(1);
+  type BlockProposal = core::future::Ready<Self::Block>;
 
-  async fn sleep(duration: Duration) {
-    sleep(duration).await;
+  fn genesis(&self) -> impl Send + AsRef<[u8]> {
+    []
   }
 
-  fn signer(&self) -> TestSigner {
-    TestSigner(self.0)
+  fn validator_set(&self) -> &Self::ValidatorSet {
+    &self.validator_set
   }
 
-  fn signature_scheme(&self) -> TestSignatureScheme {
-    TestSignatureScheme
+  fn signature_scheme(&self) -> &Self::SignatureScheme {
+    &TestSignatureScheme
   }
 
-  fn weights(&self) -> TestWeights {
-    TestWeights
-  }
-
-  async fn broadcast(&mut self, msg: SignedMessageFor<Self>) {
-    for (messages, _, _) in self.1.write().await.iter_mut() {
-      messages.send(msg.clone()).await.unwrap();
-    }
-  }
-
-  async fn slash(&mut self, id: TestValidatorId, event: SlashEvent) {
-    println!("Slash for {id} due to {event:?}");
-  }
-
-  fn validate(&self, block: &TestBlock) -> impl Future<Output = Result<(), BlockError>> {
-    core::future::ready(block.valid)
+  fn validate(
+    &self,
+    _proposer: Self::Validator,
+    block: &Self::Block,
+  ) -> impl Send + Future<Output = Result<(), InvalidBlock>> {
+    core::future::ready(if block.valid { Ok(()) } else { Err(InvalidBlock) })
   }
 
   fn add_block(
     &mut self,
-    block: TestBlock,
-    commit: Commit<TestSignatureScheme>,
-  ) -> impl Future<Output = Option<TestBlock>> {
-    println!("Adding {block:?}");
-    block.valid.unwrap();
-    assert!(self.verify_commit(block.id(), &commit));
-    core::future::ready(Some(TestBlock {
-      id: (u32::from_le_bytes(block.id) + 1).to_le_bytes(),
-      valid: Ok(()),
+    block: Self::Block,
+    commit: Commit<Self::SignatureScheme>,
+  ) -> impl Send + Future<Output = Self::BlockProposal> {
+    assert!(block.valid);
+    assert!(commit.verify(
+      self.validator_set(),
+      self.signature_scheme(),
+      self.genesis(),
+      block.hash()
+    ));
+    let added = u32::from_le_bytes(block.id);
+    println!("Added block #{added}");
+    core::future::ready(core::future::ready(TestBlock {
+      id: (added + 1).to_le_bytes(),
+      valid: true,
     }))
+  }
+
+  fn missed_proposal(&self, _proposer: Self::Validator) {}
+
+  fn slash(
+    &self,
+    _validator: Self::Validator,
+    _slash_reason: SlashReason<<Self::SignatureScheme as SignatureScheme>::Signature, Self::Block>,
+  ) {
+    panic!("test environment incurred a slash")
+  }
+}
+
+impl Network<u16, [u8; 32], TestBlock> for TestNetwork {
+  const LATENCY_TIME: Duration = Duration::from_secs(1);
+  const BLOCK_DOWNLOADING_TIME: Duration = Duration::from_secs(1);
+  const BLOCK_PROCESSING_TIME: Duration = Duration::from_secs(1);
+
+  fn sleep(duration: Duration) -> impl Send + Future<Output = ()> {
+    tokio::time::sleep(duration)
+  }
+
+  async fn broadcast(&mut self, message: MessageFor<TestNetwork>) {
+    for handle in self.all_validators.write().await.iter_mut() {
+      let _ = handle.message(message.clone()).await;
+    }
   }
 }
 
 impl TestNetwork {
-  async fn new(
-    validators: usize,
-    start_time: u64,
-  ) -> Arc<RwLock<Vec<(MessageSender<Self>, SyncedBlockSender<Self>, SyncedBlockResultReceiver)>>>
-  {
+  async fn spawn(validators: usize) {
+    let validator_set = (0 .. u16::try_from(validators).unwrap())
+      .map(|validator| (validator, NonZero::new(1).unwrap()))
+      .collect::<HashMap<_, _>>();
+
     let arc = Arc::new(RwLock::new(vec![]));
-    {
-      let mut write = arc.write().await;
-      for i in 0 .. validators {
-        let i = u16::try_from(i).unwrap();
-        let TendermintHandle { messages, synced_block, synced_block_result, machine } =
-          TendermintMachine::new(
-            MemDb::new(),
-            TestNetwork(i, arc.clone()),
-            [0; 32],
-            BlockNumber(1),
-            start_time,
-            TestBlock { id: 1u32.to_le_bytes(), valid: Ok(()) },
-          )
-          .await;
-        tokio::spawn(machine.run());
-        write.push((messages, synced_block, synced_block_result));
-      }
+
+    for i in 0 .. validators {
+      let i = u16::try_from(i).unwrap();
+      let (handle, process) = Tendermint::process(
+        TestNetwork { validator_set: validator_set.clone(), all_validators: arc.clone() },
+        TestSigner(i),
+        MemDb::new(),
+        TestNetwork { validator_set: validator_set.clone(), all_validators: arc.clone() },
+        TestBlock { id: 1u32.to_le_bytes(), valid: true },
+      )
+      .await;
+      tokio::spawn(process);
+      arc.write().await.push(handle);
     }
-    arc
   }
 }
 
 #[tokio::test]
-async fn test_machine() {
-  TestNetwork::new(4, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs()).await;
-  sleep(Duration::from_secs(30)).await;
-}
-
-#[tokio::test]
-async fn test_machine_with_historic_start_time() {
-  TestNetwork::new(4, SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() - 60).await;
-  sleep(Duration::from_secs(30)).await;
+async fn test() {
+  TestNetwork::spawn(4).await;
+  tokio::time::sleep(Duration::from_secs(20)).await;
 }

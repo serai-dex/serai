@@ -6,7 +6,7 @@ use rand::{RngCore as _, rngs::OsRng};
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;
 
-use tendermint::ext::Commit;
+use tendermint::Commit;
 
 use serai_db::MemDb;
 

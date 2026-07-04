@@ -5,7 +5,7 @@ use ciphersuite::{group::GroupEncoding as _, *};
 
 use serai_db::{DbTxn as _, Db};
 
-use tendermint::ext::{Network, Commit};
+use tendermint::{SignatureScheme, Blockchain};
 
 use crate::{
   ACCOUNT_MEMPOOL_LIMIT, ReadWrite as _,
@@ -16,7 +16,7 @@ use crate::{
   Transaction,
 };
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Debug)]
 pub(crate) struct Mempool<D: Db, T: TransactionTrait> {
   db: D,
   genesis: [u8; 32],
@@ -106,16 +106,16 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
 
   // Returns Ok(true) if new, Ok(false) if an already present unsigned, or the error.
   pub(crate) fn add<
-    N: Network,
+    N: Blockchain<Validator = [u8; 32], SignatureScheme: SignatureScheme<Signature = [u8; 64]>>,
     F: FnOnce(<Ristretto as WrappedGroup>::G, Vec<u8>) -> Option<u32>,
   >(
     &mut self,
     blockchain_next_nonce: F,
     internal: bool,
     tx: Transaction<T>,
+    validator_set: &N::ValidatorSet,
     schema: &N::SignatureScheme,
     unsigned_in_chain: impl Fn([u8; 32]) -> bool,
-    commit: impl Fn(u64) -> Option<Commit<N::SignatureScheme>>,
   ) -> Result<bool, TransactionError> {
     match &tx {
       Transaction::Tendermint(tendermint_tx) => {
@@ -128,7 +128,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
         }
 
         // verify the tx
-        verify_tendermint_tx::<N>(tendermint_tx, schema, commit)?;
+        verify_tendermint_tx::<N>(tendermint_tx, self.genesis, validator_set, schema)?;
       }
       Transaction::Application(app_tx) => {
         match app_tx.kind() {

@@ -7,7 +7,7 @@ use ciphersuite::{group::Group as _, *};
 use schnorr::SchnorrSignature;
 
 use serai_db::MemDb;
-use tendermint::ext::Commit;
+use tendermint::Commit;
 
 use crate::{
   ReadWrite, BlockError, Block, Transaction,

@@ -1,40 +1,43 @@
 use std::io;
 
-use borsh::BorshDeserialize as _;
+use borsh::{BorshSerialize as _, BorshDeserialize as _};
 
 use blake2::{Digest as _, Blake2s256};
 
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;
 
+use tendermint::{SignatureScheme, Blockchain, SlashReason};
+
 use crate::{
-  transaction::{Transaction, TransactionKind, TransactionError},
   ReadWrite,
+  transaction::{Transaction, TransactionKind, TransactionError},
+  TendermintBlock,
 };
 
-use tendermint::{
-  verify_tendermint_evidence,
-  ext::{Network, Commit},
-};
+#[derive(Clone, Debug)]
+pub struct TendermintTx {
+  pub(crate) validator: [u8; 32],
+  pub(crate) slash_reason: SlashReason<[u8; 64], TendermintBlock>,
+}
 
-pub use tendermint::{Evidence, decode_signed_message};
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub enum TendermintTx {
-  SlashEvidence(Evidence),
+impl TendermintTx {
+  pub fn slashed(&self) -> [u8; 32] {
+    self.validator
+  }
 }
 
 impl ReadWrite for TendermintTx {
   fn read(mut reader: impl io::Read) -> io::Result<Self> {
-    Evidence::deserialize_reader(&mut reader)
-      .map(TendermintTx::SlashEvidence)
-      .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "invalid evidence format"))
+    let validator = <[u8; 32]>::deserialize_reader(&mut reader)?;
+    let slash_reason = SlashReason::deserialize_reader(&mut reader)?;
+    Ok(TendermintTx { validator, slash_reason })
   }
 
   fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
-    match self {
-      TendermintTx::SlashEvidence(ev) => writer.write_all(&borsh::to_vec(&ev).unwrap()),
-    }
+    let Self { validator, slash_reason } = self;
+    validator.serialize(&mut writer)?;
+    slash_reason.serialize(&mut writer)
   }
 }
 
@@ -50,9 +53,7 @@ impl Transaction for TendermintTx {
   }
 
   fn sig_hash(&self, _genesis: [u8; 32]) -> <Ristretto as WrappedGroup>::F {
-    match self {
-      TendermintTx::SlashEvidence(_) => panic!("sig_hash called on slash evidence transaction"),
-    }
+    panic!("sig_hash called on slash evidence transaction")
   }
 
   fn verify(&self) -> Result<(), TransactionError> {
@@ -60,17 +61,17 @@ impl Transaction for TendermintTx {
   }
 }
 
-pub(crate) fn verify_tendermint_tx<N: Network>(
+pub(crate) fn verify_tendermint_tx<
+  N: Blockchain<Validator = [u8; 32], SignatureScheme: SignatureScheme<Signature = [u8; 64]>>,
+>(
   tx: &TendermintTx,
+  genesis: [u8; 32],
+  validator_set: &N::ValidatorSet,
   schema: &N::SignatureScheme,
-  commit: impl Fn(u64) -> Option<Commit<N::SignatureScheme>>,
 ) -> Result<(), TransactionError> {
   tx.verify()?;
 
-  match tx {
-    TendermintTx::SlashEvidence(ev) => verify_tendermint_evidence::<N>(ev, schema, commit)
-      .map_err(|_| TransactionError::InvalidContent)?,
-  }
-
-  Ok(())
+  tx.slash_reason
+    .verify(genesis, validator_set, schema, tx.validator)
+    .map_err(|_| TransactionError::InvalidContent)
 }

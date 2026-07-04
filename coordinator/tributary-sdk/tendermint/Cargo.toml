@@ -3,10 +3,10 @@ name = "tendermint-machine"
 version = "0.2.0"
 description = "An implementation of the Tendermint state machine in Rust"
 license = "MIT"
-repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/tendermint"
+repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/tributary-sdk/tendermint"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.91"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -16,17 +16,17 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-thiserror = { version = "2", default-features = false, features = ["std"] }
+pin-project-lite = { version = "0.2", default-features = false }
 
-hex = { version = "0.4", default-features = false, features = ["std"] }
-log = { version = "0.4", default-features = false, features = ["std"] }
+borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
 
-borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
-
-futures-util = { version = "0.3", default-features = false, features = ["std", "async-await-macro", "sink", "channel"] }
-futures-channel = { version = "0.3", default-features = false, features = ["std", "sink"] }
-
-serai-db = { path = "../../../common/db", version = "0.1", default-features = false }
+async-channel = { version = "2", default-features = false, optional = true }
+serai-db = { path = "../../../common/db", version = "0.1", default-features = false, optional = true }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["sync", "rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "macros"] }
+
+[features]
+alloc = ["borsh"]
+std = ["alloc", "borsh/std", "async-channel", "serai-db"]
+default = ["std"]

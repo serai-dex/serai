@@ -1,6 +1,3 @@
-#[cfg(test)]
-mod tendermint;
-
 mod transaction;
 pub use transaction::*;
 
