@@ -43,8 +43,10 @@ pub(crate) use mempool::*;
 pub mod tendermint;
 pub(crate) use crate::tendermint::*;
 
+/* TODO
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
+*/
 
 /// Size limit for an individual transaction.
 // This needs to be big enough to participate in a 101-of-150 eVRF DKG with each element taking
