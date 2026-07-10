@@ -289,11 +289,9 @@ impl<B: Blockchain> State<B> {
             the trade-off we _may_ have some more round failures than we would have had if we had
             an unbounded amount of memory.
           */
-          self
-          .valid
-          .as_ref()
-          .is_some_and(|(round_number, _block)| (*round_number) == valid_round) &&
-          {
+          self.valid.as_ref().is_some_and(|(round_number, block)| {
+            ((*round_number) == valid_round) && (block.hash() == proposal.hash())
+          }) && {
             // L29, where we've already checked `valid(v)`
             match &self.locked {
               Some((locked_round, locked_value)) => {
