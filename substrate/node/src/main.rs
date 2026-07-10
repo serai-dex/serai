@@ -126,7 +126,7 @@ fn node_key(keystore: Option<&Keystore>) -> NodeKeyConfig {
         now start using keys, derived in any manner, with other protocols such as the P2P layer
         however.
       */
-      Zeroizing::new(sp_core::blake2_256(&node_key_entropy))
+      Zeroizing::new(sp_crypto_hashing::blake2_256(&node_key_entropy))
     }
 
     // If we do not have a keystore, generate a seed now
@@ -143,7 +143,7 @@ fn node_key(keystore: Option<&Keystore>) -> NodeKeyConfig {
   loop {
     use sc_network::config::{Secret, ed25519::SecretKey};
     let Ok(node_key) = SecretKey::try_from_bytes(seed.clone()) else {
-      *seed = sp_core::blake2_256(seed.as_slice());
+      *seed = sp_crypto_hashing::blake2_256(seed.as_slice());
       continue;
     };
     return NodeKeyConfig::Ed25519(Secret::Input(node_key));

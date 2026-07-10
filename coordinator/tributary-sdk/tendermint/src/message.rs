@@ -54,29 +54,27 @@ impl<A: AggregateSignature> fmt::Debug for ValidRound<A> {
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 pub(crate) enum Data<S: Signature, A: AggregateSignature, B: Block> {
   Proposal {
-    #[borsh(bound(
-      serialize = "A: borsh::BorshSerialize",
-      deserialize = "A: borsh::BorshDeserialize"
-    ))]
     valid_round: Option<ValidRound<A>>,
-    #[borsh(bound(
-      serialize = "B: borsh::BorshSerialize",
-      deserialize = "B: borsh::BorshDeserialize"
-    ))]
     proposal: B,
   },
   Prevote {
-    #[borsh(bound(
-      serialize = "B::Hash: borsh::BorshSerialize",
-      deserialize = "B::Hash: borsh::BorshDeserialize"
-    ))]
+    #[cfg_attr(
+      feature = "alloc",
+      borsh(bound(
+        serialize = "B::Hash: borsh::BorshSerialize",
+        deserialize = "B::Hash: borsh::BorshDeserialize"
+      ))
+    )]
     block: Option<B::Hash>,
   },
   Precommit {
-    #[borsh(bound(
-      serialize = "S: borsh::BorshSerialize, B::Hash: borsh::BorshSerialize",
-      deserialize = "S: borsh::BorshDeserialize, B::Hash: borsh::BorshDeserialize"
-    ))]
+    #[cfg_attr(
+      feature = "alloc",
+      borsh(bound(
+        serialize = "S: borsh::BorshSerialize, B::Hash: borsh::BorshSerialize",
+        deserialize = "S: borsh::BorshDeserialize, B::Hash: borsh::BorshDeserialize"
+      ))
+    )]
     block_and_precommit_signature: Option<(B::Hash, S)>,
   },
 }
@@ -218,20 +216,21 @@ pub struct Message<V: Validator, S: Signature, A: AggregateSignature, B: Block> 
   pub(crate) validator: V,
   pub(crate) block_number: BlockNumber,
   pub(crate) round_number: RoundNumber,
-  #[borsh(bound(
-    serialize = "
-      S: borsh::BorshSerialize,
-      A: borsh::BorshSerialize,
-      B: borsh::BorshSerialize,
-      B::Hash: borsh::BorshSerialize
-    ",
-    deserialize = "
-      S: borsh::BorshDeserialize,
-      A: borsh::BorshDeserialize,
-      B: borsh::BorshDeserialize,
-      B::Hash: borsh::BorshDeserialize
-    "
-  ))]
+  #[cfg_attr(
+    feature = "alloc",
+    borsh(bound(
+      serialize = "
+        A: borsh::BorshSerialize,
+        B: borsh::BorshSerialize,
+        B::Hash: borsh::BorshSerialize
+      ",
+      deserialize = "
+        A: borsh::BorshDeserialize,
+        B: borsh::BorshDeserialize,
+        B::Hash: borsh::BorshDeserialize
+      "
+    ))
+  )]
   pub(crate) data: Data<S, A, B>,
   pub(crate) signature: S,
 }

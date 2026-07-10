@@ -36,7 +36,7 @@ impl<E: Executor<Pin<Box<dyn Send + Future<Output = ()>>>>> Response<'_, E> {
   }
 
   /// This response's body.
-  // TODO: Return an async read?
+  // TODO: Return an async read? `BodyExt::into_stream`
   pub async fn body(self) -> Result<impl std::io::Read, Error> {
     let mut body = self.response.into_body().into_data_stream();
     let mut res: Vec<u8> = vec![];

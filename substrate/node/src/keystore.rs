@@ -93,7 +93,7 @@ impl Keystore {
       and not a key holder by virtue of recovering the private key. We forsake such ideals for the
       practicality of this and independent requirement for comprehensive post-quantum policy.
     */
-    let nonce_seed = Zeroizing::new(sp_core::blake2_256(&key_bytes[.. 32]));
+    let nonce_seed = Zeroizing::new(sp_crypto_hashing::blake2_256(&key_bytes[.. 32]));
     key_bytes[32 ..].copy_from_slice(nonce_seed.as_slice());
 
     let res = Self::from(sr25519::Pair::from(

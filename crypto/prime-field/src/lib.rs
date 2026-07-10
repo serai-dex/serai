@@ -97,10 +97,12 @@ pub mod __prime_field_private {
 /// Construct a odd-prime field with a specified `Repr`.
 ///
 /// The length of the `modulus_as_be_hex` string will effect the size of the underlying
-/// representation and the encoding. It MAY have a "0x" prefix, if preferred.
+/// representation and the encoding. It MAY have a "0x" prefix, if preferred. It MUST encode an odd
+/// prime number.
 ///
 /// `multiplicative_generator_as_be_hex` MAY have a "0x" prefix. It MAY be short and of a length
-/// less than `modulus_as_be_hex`.
+/// less than `modulus_as_be_hex`. It MUST meet the requirements as stated in the documentation for
+/// [`ff::PrimeField::MULTIPLICATIVE_GENERATOR`].
 ///
 /// `big_endian` controls if the encoded representation will be big-endian or not.
 ///
@@ -609,7 +611,8 @@ macro_rules! odd_prime_field_with_specific_repr {
 /// Construct a odd-prime field.
 ///
 /// The length of the `modulus_as_be_hex` string will effect the size of the underlying
-/// representation and the encoding. It MAY have a "0x" prefix, if preferred.
+/// representation and the encoding. It MAY have a "0x" prefix, if preferred. It MUST encode an odd
+/// prime number.
 ///
 /// `multiplicative_generator_as_be_hex` MAY have a "0x" prefix. It MAY be short and of a length
 /// less than `modulus_as_be_hex`. It MUST meet the requirements as stated in the documentation for

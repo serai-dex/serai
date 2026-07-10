@@ -163,6 +163,17 @@ deny = [
   { name = "libp2p-floodsub", version = "*" },
 ]
 
+[bans.std-replacements]
+scope = "all"
+ignore-rust-version = "all"
+# TODO
+ignore = [
+  "cfg-if",
+  "num_cpus",
+  "once_cell",
+  "pin-utils"
+]
+
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"

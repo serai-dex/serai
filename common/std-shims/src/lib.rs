@@ -1,7 +1,6 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
-#![cfg_attr(feature = "std", expect(clippy::std_instead_of_core))]
 #![no_std]
 
 #[cfg(not(feature = "alloc"))]

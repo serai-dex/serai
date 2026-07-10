@@ -6,7 +6,9 @@ use alloy_consensus::TxLegacy;
 use alloy_rpc_types_eth::{TransactionInput, TransactionRequest};
 use alloy_provider::Provider as _;
 
-use revm::{primitives::hardfork::SpecId, interpreter::gas::calculate_initial_tx_gas};
+use revm::{
+  primitives::hardfork::SpecId, context::Cfg as _, interpreter::gas::calculate_initial_tx_gas,
+};
 
 use crate::tests::Test;
 
@@ -71,8 +73,21 @@ async fn test_create_address() {
 
     // Check the function is constant-gas
     let gas_used = test.provider.estimate_gas(call).await.unwrap();
-    let initial_gas =
-      calculate_initial_tx_gas(SpecId::OSAKA, &input, false, 0, 0, 0).initial_regular_gas();
+    let initial_gas = calculate_initial_tx_gas(
+      SpecId::OSAKA,
+      &input,
+      false,
+      0,
+      0,
+      0,
+      revm::context::CfgEnv::new_with_spec(SpecId::OSAKA).is_amsterdam_eip2780_enabled().then_some(
+        revm::context_interface::cfg::gas_params::Eip2780TxInfo {
+          value: U256::ZERO,
+          is_self_transfer: false,
+        },
+      ),
+    )
+    .initial_regular_gas();
     let this_call = gas_used - initial_gas;
     if gas.is_none() {
       gas = Some(this_call);

@@ -126,7 +126,7 @@ impl Header {
   }
   /// Get the hash of the header.
   pub fn hash(&self) -> BlockHash {
-    BlockHash(sp_core::blake2_256(&borsh::to_vec(self).unwrap()))
+    BlockHash(sp_crypto_hashing::blake2_256(&borsh::to_vec(self).unwrap()))
   }
 }
 

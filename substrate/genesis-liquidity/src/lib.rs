@@ -1,6 +1,8 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
+#![expect(unit_bindings, clippy::ignored_unit_patterns, clippy::let_unit_value)]
+#![expect(deprecated)] // TODO: `ValidateUnsigned`
 
 extern crate alloc;
 

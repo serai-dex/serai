@@ -1,6 +1,6 @@
 use core::str::FromStr as _;
 
-use serai_db::{DbTxn as _, Db};
+use serai_db::Db;
 
 use serai_env::Environment;
 

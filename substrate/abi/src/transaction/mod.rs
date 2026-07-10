@@ -202,7 +202,7 @@ impl Transaction {
         serialization = &serialization[.. (serialization.len() - signature_serialized_len)];
       }
     }
-    sp_core::blake2_256(serialization)
+    sp_crypto_hashing::blake2_256(serialization)
   }
 }
 
@@ -307,7 +307,10 @@ fn serialize() {
         .unwrap(),
       transaction
     );
-    assert_eq!(transaction.hash(), sp_core::blake2_256(&borsh::to_vec(&transaction).unwrap()));
+    assert_eq!(
+      transaction.hash(),
+      sp_crypto_hashing::blake2_256(&borsh::to_vec(&transaction).unwrap())
+    );
   }
 
   SignedCalls::try_from(vec![]).unwrap_err();
@@ -337,7 +340,7 @@ fn serialize() {
     );
     assert_eq!(
       transaction.hash(),
-      sp_core::blake2_256(&borsh::to_vec(&(calls, &explicit_context)).unwrap())
+      sp_crypto_hashing::blake2_256(&borsh::to_vec(&(calls, &explicit_context)).unwrap())
     );
   }
   SignedCalls::try_from(vec![unsigned_call]).unwrap_err();

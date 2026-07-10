@@ -151,7 +151,7 @@ impl From<&SubstrateHeader> for Header {
             .as_ref()
             .map(|digest| digest.events_commitment)
             .unwrap_or(UnbalancedMerkleTree::EMPTY),
-          consensus_commitment: sp_core::blake2_256(&header.consensus.encode()),
+          consensus_commitment: sp_crypto_hashing::blake2_256(&header.consensus.encode()),
         })
       }
     }
@@ -434,7 +434,7 @@ fn header_from_substrate_header() {
       SubstrateHeader::new(0, [0; 32].into(), [0; 32].into(), [0; 32].into(), Digest { logs });
     let consensus_commitment = match &substrate_header {
       SubstrateHeader::V1(substrate_header) => {
-        sp_core::blake2_256(&substrate_header.consensus.encode())
+        sp_crypto_hashing::blake2_256(&substrate_header.consensus.encode())
       }
     };
     (Header::from(&substrate_header), consensus_commitment)

@@ -3,7 +3,7 @@ use std_shims::{prelude::*, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
 
-use ciphersuite::{GroupIo, Id};
+use ciphersuite::GroupIo;
 pub use dkg_recovery::recover_key;
 
 use crate::{
@@ -29,7 +29,7 @@ pub const PARTICIPANTS: u16 = 5;
 pub const THRESHOLD: u16 = ((PARTICIPANTS * 2) / 3) + 1;
 
 /// Create a key, for testing purposes.
-pub fn key_gen<R: RngCore + CryptoRng, C: GroupIo + Id>(
+pub fn key_gen<R: RngCore + CryptoRng, C: GroupIo>(
   rng: &mut R,
 ) -> HashMap<Participant, ThresholdKeys<C>> {
   let res = dkg_dealer::key_gen::<R, C>(rng, THRESHOLD, PARTICIPANTS).unwrap();

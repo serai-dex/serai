@@ -24,7 +24,11 @@ pub(super) fn wasm_rustflags() -> String {
   ///
   /// `--export-table` causes the linker to export the function table from our artifact, allowing
   /// our VM to identify what function we want to call by its name.
-  const WASM: &str = "-C link-arg=--export-table";
+  ///
+  /// `--export=__heap_base` is needed for Substrate's `FreeingBumpHeapAllocator` which expects to
+  /// be able to find this constant. This was inherently exported historically but became explicit
+  /// with <https://github.com/rust-lang/rust/pull/156174>.
+  const WASM: &str = "-C link-arg=--export-table -C link-arg=--export=__heap_base";
   /// The compilation arguments required due to <https://github.com/rust-lang/rust/issues/145491>.
   const ONE_45491: &str =
     "-C link-arg=--mllvm=-mcpu=mvp -C link-arg=--mllvm=-mattr=+mutable-globals";

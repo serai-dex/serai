@@ -3,10 +3,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![expect(
   let_underscore_drop,
+  unit_bindings,
   clippy::as_conversions,
   clippy::cast_possible_truncation,
+  clippy::ignored_unit_patterns,
+  clippy::let_unit_value,
   clippy::semicolon_if_nothing_returned
 )]
+#![expect(deprecated)] // TODO: `ValidateUnsigned`
 
 //! This pallet is likely the most complicated of all of Serai's pallets. In order to ensure it's
 //! maintainable, the logic within it is broken into several sections which each intend to have

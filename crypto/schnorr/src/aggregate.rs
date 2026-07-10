@@ -123,6 +123,10 @@ impl<C: GroupIo + WithPreferredHash> SchnorrAggregator<C> {
   }
 
   /// Aggregate a signature.
+  ///
+  /// The challenge must be properly crafted, which means being binding to the public key, nonce,
+  /// and any message. Failure to do so will let a malicious adversary to forge signatures for
+  /// different keys/messages.
   pub fn aggregate(&mut self, challenge: C::F, sig: SchnorrSignature<C>) {
     self.digest.append_message(b"challenge", challenge.to_repr());
     self.sigs.push(sig);

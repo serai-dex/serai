@@ -258,7 +258,7 @@ fn historical_blocks() {
         hashes
           .iter()
           .map(|hash| {
-            sp_core::blake2_256(
+            sp_io::hashing::blake2_256(
               &borsh::to_vec(&(serai_abi::BLOCK_LEAF_TAG, <[u8; 32]>::from(*hash))).unwrap(),
             )
           })
@@ -369,7 +369,7 @@ fn block_flow() {
         TRANSACTION_COMMITMENT_BRANCH_TAG,
         transactions
           .iter()
-          .map(|(transaction_hash, _events)| sp_core::blake2_256(
+          .map(|(transaction_hash, _events)| sp_io::hashing::blake2_256(
             &borsh::to_vec(&(TRANSACTION_COMMITMENT_LEAF_TAG, transaction_hash)).unwrap()
           ))
           .collect::<Vec<_>>()
@@ -383,7 +383,7 @@ fn block_flow() {
         transactions
           .iter()
           .map(|(transaction_hash, events)| {
-            sp_core::blake2_256(
+            sp_io::hashing::blake2_256(
               &borsh::to_vec(&(
                 EVENTS_COMMITMENT_LEAF_TAG,
                 transaction_hash,
@@ -392,7 +392,7 @@ fn block_flow() {
                   events
                     .iter()
                     .map(|event| {
-                      sp_core::blake2_256(
+                      sp_io::hashing::blake2_256(
                         &borsh::to_vec(&(TRANSACTION_EVENTS_COMMITMENT_LEAF_TAG, event)).unwrap(),
                       )
                     })

@@ -18,7 +18,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
           persist-credentials: false
 
@@ -89,7 +89,7 @@ jobs:
     name: cargo docs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
           persist-credentials: false
 
@@ -120,12 +120,12 @@ jobs:
     name: cargo deny
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
           persist-credentials: false
 
       - name: Install cargo deny
-        run: cargo +1.96.0 install --locked cargo-deny --version =0.19.9
+        run: cargo +1.97.1 install --locked cargo-deny --version =0.20.2
 
       - name: Run cargo deny
         run: cargo deny -L error --all-features check --hide-inclusion-graph
@@ -134,7 +134,7 @@ jobs:
     name: cargo fmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
           persist-credentials: false
 
@@ -158,7 +158,7 @@ jobs:
         shell: bash
         run: |
           VERSION=4072e48705af9d93e3c0f6e29e93b5e9a40caed8 # 1.7.1
-          cargo +1.96.0 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked forge
+          cargo +1.97.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked forge
 
       - name: Run forge fmt
         shell: bash
@@ -175,20 +175,20 @@ jobs:
     name: cargo machete
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
           persist-credentials: false
 
       - name: Verify all dependencies are in use
         run: |
-          cargo +1.96.0 install --locked cargo-machete --version =0.9.2
-          cargo +1.96.0 machete
+          cargo +1.97.1 install --locked cargo-machete --version =0.9.2
+          cargo +1.97.1 machete
 
   msrv:
     name: cargo msrv
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
           persist-credentials: false
 
@@ -197,7 +197,7 @@ jobs:
       - name: Verify claimed `rust-version`
         shell: bash
         run: |
-          cargo +1.96.0 install --locked cargo-msrv --version =0.19.3
+          cargo +1.97.1 install --locked cargo-msrv --version =0.19.3
 
           # Remove `patches/{home, getrandom}` as they force the entire workspace to Rust 1.85(+)
           echo "$(cat ./Cargo.toml | grep -v 'patches/home' | grep -v 'patches/getrandom')" > ./Cargo.toml
@@ -281,12 +281,12 @@ jobs:
     name: cargo vet
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
           persist-credentials: false
 
       - name: Install cargo vet
-        run: cargo +1.96.0 install --locked cargo-vet --git https://github.com/kayabaNerve/cargo-vet --rev d2fb27daaeb839e5fa4f6b28c5cdd4a9185542b5
+        run: cargo +1.97.1 install --locked cargo-vet --git https://github.com/kayabaNerve/cargo-vet --rev d2fb27daaeb839e5fa4f6b28c5cdd4a9185542b5
 
       - name: Run cargo vet
         run: |
@@ -297,7 +297,7 @@ jobs:
     name: slither
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
           persist-credentials: false
 
@@ -330,7 +330,7 @@ jobs:
     name: solhint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
           persist-credentials: false
 
@@ -347,7 +347,7 @@ jobs:
     name: shellcheck
     runs-on: ubuntu-slim
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
           persist-credentials: false
 
@@ -368,7 +368,7 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # 7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
           persist-credentials: false
 

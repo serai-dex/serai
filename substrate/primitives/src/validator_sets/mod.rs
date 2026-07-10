@@ -82,7 +82,7 @@ pub enum MusigKeyError {
 impl ValidatorSet {
   /// The MuSig context for this validator set.
   pub fn musig_context(&self) -> [u8; 32] {
-    sp_core::blake2_256(&borsh::to_vec(&(b"ValidatorSets-musig_key", self)).unwrap())
+    sp_crypto_hashing::blake2_256(&borsh::to_vec(&(b"ValidatorSets-musig_key", self)).unwrap())
   }
 
   /// The MuSig public key for a validator set.

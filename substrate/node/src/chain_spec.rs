@@ -41,7 +41,7 @@ use serai_env::Environment;
 ///
 /// Note the development seed itself is used as the _auxiliary key_ used to operate the node with.
 pub(super) fn validator_identity_for_dev_seed(dev_seed: &str) -> SeraiAddress {
-  Pair::from_seed(&sp_core::blake2_256(dev_seed.as_bytes())).public().into()
+  Pair::from_seed(&sp_crypto_hashing::blake2_256(dev_seed.as_bytes())).public().into()
 }
 
 /// Create an insecure key pair from a name alone.
@@ -55,7 +55,7 @@ fn insecure_keypair_from_name(name: &'static str) -> Pair {
 ///
 /// This will have effectively no entropy and MUST NOT be used except for testing purposes.
 fn insecure_account_from_name(name: &'static str) -> SeraiAddress {
-  Pair::from_seed(&sp_core::blake2_256(format!("//{name}").as_bytes())).public().into()
+  Pair::from_seed(&sp_crypto_hashing::blake2_256(format!("//{name}").as_bytes())).public().into()
 }
 
 /// Create a list of insecure auxiliary keys for the specified validator.
@@ -140,7 +140,7 @@ fn genesis(
   config: &GenesisConfig,
 ) -> ChainSpec {
   let bin = wasm_binary(env, matches!(chain_type, ChainType::Development));
-  let hash = sp_core::blake2_256(&bin).to_vec();
+  let hash = sp_crypto_hashing::blake2_256(&bin).to_vec();
 
   let mut chain_spec = ChainSpecBuilder::new(&bin, None)
     .with_name(name)
@@ -158,7 +158,10 @@ fn genesis(
       &RuntimeCode { code_fetcher: &code_fetcher, heap_pages: None, hash },
       "GenesisApi_build",
       &config.encode(),
-      CallContext::Onchain,
+      CallContext::Onchain {
+        // We set import as true as this effectively is 'importing' the genesis block
+        import: true,
+      },
     )
     .0
     .unwrap();
@@ -250,7 +253,8 @@ pub(super) fn genesis_block(
   // Manually extract the `Digest` from `frame-system` as Substrate won't yield it for us
   // TODO: While this is technically fine, it'd be better to use a `RuntimeApi`
   let digest = {
-    let digest_key = [sp_core::twox_128(b"System"), sp_core::twox_128(b"Digest")].concat();
+    let digest_key =
+      [sp_crypto_hashing::twox_128(b"System"), sp_crypto_hashing::twox_128(b"Digest")].concat();
     Digest::decode(&mut storage.top.get(&digest_key).expect("`System Digest` not set").as_slice())
       .expect("failed to decode `System Digest`")
   };

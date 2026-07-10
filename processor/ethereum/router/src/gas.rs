@@ -3,7 +3,6 @@ use core::convert::Infallible;
 use k256::{Scalar, ProjectivePoint};
 
 use alloy_core::primitives::{Address, U256, Bytes};
-use alloy_sol_types::SolCall as _;
 
 use revm::{
   primitives::hardfork::SpecId,
@@ -343,7 +342,7 @@ impl Router {
           panic!("estimated execute transaction failed: {res:?}")
         }
       };
-    gas += gas_estimator.into_inspector().unused_gas;
+    gas += gas_estimator.inspector.unused_gas;
 
     /*
       The transaction pays an initial gas fee which is dependent on the length of the calldata and
@@ -362,6 +361,12 @@ impl Router {
         0,
         0,
         0,
+        gas_estimator.ctx.cfg().is_amsterdam_eip2780_enabled().then_some(
+          revm::context_interface::cfg::gas_params::Eip2780TxInfo {
+            value: U256::ZERO,
+            is_self_transfer: false,
+          },
+        ),
       );
       (gas.initial_regular_gas(), gas.floor_gas)
     };

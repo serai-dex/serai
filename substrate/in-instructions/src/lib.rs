@@ -1,6 +1,8 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
+#![expect(unit_bindings, clippy::ignored_unit_patterns, clippy::let_unit_value)]
+#![expect(deprecated)] // TODO: `ValidateUnsigned`
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -869,7 +871,9 @@ mod pallet {
         publishing_session,
         id: batch.id(),
         external_network_block_hash: batch.external_network_block_hash(),
-        in_instructions_hash: sp_core::blake2_256(&borsh::to_vec(batch.instructions()).unwrap()),
+        in_instructions_hash: sp_io::hashing::blake2_256(
+          &borsh::to_vec(batch.instructions()).unwrap(),
+        ),
         in_instruction_results: in_instruction_results
           .try_into()
           .expect("`Batch` had more instructions than allowed results"),

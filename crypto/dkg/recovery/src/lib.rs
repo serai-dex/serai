@@ -9,7 +9,7 @@ use alloc::{vec::Vec, vec};
 
 use zeroize::Zeroizing;
 
-use ciphersuite::{GroupIo, Id};
+use ciphersuite::GroupIo;
 
 pub use dkg::*;
 
@@ -43,7 +43,7 @@ pub enum RecoveryError {
 /// This function assumes `keys` contains no entries for which
 /// `keys_i.params().i() == keys_j.params().i()`. It may spuriously error (with incorrect
 /// description) when such keys are passed to it.
-pub fn recover_key<C: GroupIo + Id>(
+pub fn recover_key<C: GroupIo>(
   keys: &[ThresholdKeys<C>],
 ) -> Result<Zeroizing<C::F>, RecoveryError> {
   let included = keys.iter().map(|keys| keys.params().i()).collect::<Vec<_>>();
@@ -177,7 +177,7 @@ fn permutation(slots: &mut [Option<u16>], limit: u16) -> bool {
 // TODO: Alternatively, a set of size the threshold could reconstruct the entire original
 // polynomial before re-dealing the secret shares and checking their equivalence to the existing
 // secret shares. This would avoid performing a permutation and wouldn't have quadratic complexity.
-pub fn recover_singular_key<C: GroupIo + Id>(
+pub fn recover_singular_key<C: GroupIo>(
   keys: &[ThresholdKeys<C>],
 ) -> Result<Zeroizing<C::F>, RecoveryError> {
   let t_present = keys.len();

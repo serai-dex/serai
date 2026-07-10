@@ -73,10 +73,7 @@ fn benchmark_signature() {
   where <T as frame_system::Config>::RuntimeOrigin: From<Option<SeraiAddress>>
 )]
 mod benchmarks {
-  use serai_abi::{
-    primitives::{coin::*, balance::*, address::*},
-    TransactionContext as _,
-  };
+  use serai_abi::TransactionContext as _;
 
   use frame_benchmarking::impl_test_function;
 

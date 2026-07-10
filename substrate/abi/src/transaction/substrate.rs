@@ -1,3 +1,5 @@
+#![expect(deprecated)] // TODO: `ValidateUnsigned`
+
 use core::{marker::PhantomData, fmt::Debug, time::Duration};
 use alloc::vec;
 

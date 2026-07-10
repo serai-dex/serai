@@ -41,15 +41,19 @@ mod benchmarks {
     // Mark all networks as having achieved economic security so we can add liquidity
     for network in ExternalNetworkId::all() {
       sp_io::storage::set(
-        &(sp_core::twox_128(b"ValidatorSets"), sp_core::twox_128(b"CurrentSession"), network)
+        &(
+          sp_io::hashing::twox_128(b"ValidatorSets"),
+          sp_io::hashing::twox_128(b"CurrentSession"),
+          network,
+        )
           .encode(),
         &Session(0).encode(),
       );
 
       sp_io::storage::set(
         &(
-          sp_core::twox_128(b"EconomicSecurity"),
-          sp_core::twox_128(b"AchievedEconomicSecurity"),
+          sp_io::hashing::twox_128(b"EconomicSecurity"),
+          sp_io::hashing::twox_128(b"AchievedEconomicSecurity"),
           network,
         )
           .encode(),
@@ -60,8 +64,8 @@ mod benchmarks {
     // Set the oraclization key for the `Batch` to the identity to make the signature trivial
     sp_io::storage::set(
       &(
-        sp_core::twox_128(b"ValidatorSets"),
-        sp_core::twox_128(b"OraclizationKeys"),
+        sp_io::hashing::twox_128(b"ValidatorSets"),
+        sp_io::hashing::twox_128(b"OraclizationKeys"),
         ExternalValidatorSet { network: ExternalNetworkId::Bitcoin, session: Session(0) },
       )
         .encode(),

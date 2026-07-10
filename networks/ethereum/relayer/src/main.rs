@@ -13,7 +13,7 @@ async fn main() {
   serai_env::info!("Starting Ethereum relayer server...");
 
   // Open the DB
-  #[expect(unused_variables, unreachable_code)]
+  #[expect(unreachable_code)]
   let db = {
     #[cfg(all(feature = "parity-db", feature = "rocksdb"))]
     panic!("built with parity-db and rocksdb");

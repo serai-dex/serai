@@ -19,7 +19,7 @@ borsh_as_scale!(RegisteredRetirementSignal);
 impl RegisteredRetirementSignal {
   /// The ID of this signal.
   pub fn id(&self) -> SignalId {
-    sp_core::blake2_256(&borsh::to_vec(self).unwrap())
+    sp_io::hashing::blake2_256(&borsh::to_vec(self).unwrap())
   }
 }
 

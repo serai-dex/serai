@@ -59,7 +59,7 @@ impl SeraiAddress {
   // The alternative would be to massage this until its not a valid point, which isn't worth the
   // computational expense as this should be a hard problem for outputs which happen to be points.
   pub fn system(label: impl AsRef<[u8]>) -> Self {
-    Self(sp_core::blake2_256(label.as_ref()))
+    Self(sp_crypto_hashing::blake2_256(label.as_ref()))
   }
 }
 

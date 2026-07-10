@@ -30,7 +30,7 @@ impl<
   ///
   /// Panics if no Merkle tree was present.
   pub fn append<L: BorshSerialize>(leaf: &L) {
-    let leaf = sp_core::blake2_256(&borsh::to_vec(&(LEAF_TAG, leaf)).unwrap());
+    let leaf = sp_io::hashing::blake2_256(&borsh::to_vec(&(LEAF_TAG, leaf)).unwrap());
 
     T::mutate(|value| {
       let tree = value.as_mut().unwrap();
@@ -98,7 +98,7 @@ mod tests {
         OsRng.fill_bytes(&mut leaf);
 
         let () = IncrementalUnbalancedMerkleTree::<Storage, 1, 0>::append(&leaf);
-        leaves.push(sp_core::blake2_256(&borsh::to_vec(&(0u8, leaf)).unwrap()));
+        leaves.push(sp_io::hashing::blake2_256(&borsh::to_vec(&(0u8, leaf)).unwrap()));
 
         assert_eq!(
           IncrementalUnbalancedMerkleTree::<Storage, 1, 0>::get(),

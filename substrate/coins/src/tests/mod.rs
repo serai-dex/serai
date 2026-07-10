@@ -160,11 +160,13 @@ impl State {
   }
 
   fn supply_root_key(pallet: &[u8]) -> Vec<u8> {
-    [sp_core::twox_128(pallet).as_slice(), sp_core::twox_128(b"Supply").as_slice()].concat()
+    [sp_io::hashing::twox_128(pallet).as_slice(), sp_io::hashing::twox_128(b"Supply").as_slice()]
+      .concat()
   }
 
   fn balances_root_key(pallet: &[u8]) -> Vec<u8> {
-    [sp_core::twox_128(pallet).as_slice(), sp_core::twox_128(b"Balances").as_slice()].concat()
+    [sp_io::hashing::twox_128(pallet).as_slice(), sp_io::hashing::twox_128(b"Balances").as_slice()]
+      .concat()
   }
 
   fn length_of_map(root_key: &[u8]) -> usize {
@@ -208,7 +210,7 @@ impl State {
           &mut sp_io::storage::get(
             &[
               Self::balances_root_key(pallet).as_slice(),
-              (sp_core::blake2_128(&address.0), address, coin).encode().as_slice(),
+              (sp_io::hashing::blake2_128(&address.0), address, coin).encode().as_slice(),
             ]
             .concat(),
           )

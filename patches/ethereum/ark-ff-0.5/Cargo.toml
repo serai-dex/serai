@@ -1,0 +1,16 @@
+[package]
+name = "ark-ff"
+version = "0.5.99"
+description = "Patch to an empty crate"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/ethereum/ark-ff-0.5"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[features]
+std = []

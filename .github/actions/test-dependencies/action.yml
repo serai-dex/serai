@@ -5,7 +5,7 @@ inputs:
   monero-version:
     description: "Monero version to download and run as a regtest node"
     required: false
-    default: v0.18.5.0
+    default: v0.18.5.1
 
   bitcoin-version:
     description: "Bitcoin version to download and run as a regtest node"
@@ -22,7 +22,7 @@ runs:
       shell: bash
       run: |
         VERSION=4072e48705af9d93e3c0f6e29e93b5e9a40caed8 # 1.7.1
-        cargo +1.96.0 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked anvil
+        cargo +1.97.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked anvil
 
     - name: Run a Monero Regtest Node
       uses: ./.github/actions/monero

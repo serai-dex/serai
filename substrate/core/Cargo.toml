@@ -24,6 +24,7 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"] }
 
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
 frame-system = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 frame-support = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
@@ -42,6 +43,7 @@ std = [
   "scale/std",
 
   "sp-core/std",
+  "sp-io/std",
 
   "frame-system/std",
   "frame-support/std",

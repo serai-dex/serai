@@ -3,7 +3,7 @@ use core::future::Future;
 use core::time::Duration;
 use std::{sync::Arc, collections::HashMap};
 
-use blake2::{Digest as _, Blake2b256};
+use blake2::Blake2b256;
 
 use serai_client_serai::{
   abi::{
@@ -20,7 +20,6 @@ use serai_client_serai::{
   Serai,
 };
 
-use serai_db::*;
 use serai_task::ContinuallyRan;
 
 use crate::*;

@@ -16,7 +16,7 @@ use ciphersuite::{
     ff::{Field as _, PrimeField},
     GroupEncoding as _,
   },
-  GroupIo, Id,
+  GroupIo,
 };
 
 /// The ID of a participant, defined as a non-zero u16.
@@ -248,7 +248,7 @@ impl<F: Zeroize + PrimeField> Interpolation<F> {
 /// heap-allocated pointer to minimize copies on the stack (`ThresholdKeys`, the publicly exposed
 /// type).
 #[derive(Clone, PartialEq, Eq)]
-struct ThresholdCore<C: GroupIo + Id> {
+struct ThresholdCore<C: GroupIo> {
   params: ThresholdParams,
   group_key: C::G,
   verification_shares: HashMap<Participant, C::G>,
@@ -256,7 +256,7 @@ struct ThresholdCore<C: GroupIo + Id> {
   secret_share: Zeroizing<C::F>,
 }
 
-impl<C: GroupIo + Id> fmt::Debug for ThresholdCore<C> {
+impl<C: GroupIo> fmt::Debug for ThresholdCore<C> {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt
       .debug_struct("ThresholdCore")
@@ -268,7 +268,7 @@ impl<C: GroupIo + Id> fmt::Debug for ThresholdCore<C> {
   }
 }
 
-impl<C: GroupIo + Id> Zeroize for ThresholdCore<C> {
+impl<C: GroupIo> Zeroize for ThresholdCore<C> {
   fn zeroize(&mut self) {
     let Self { params, group_key, verification_shares, interpolation, secret_share } = self;
 
@@ -284,7 +284,7 @@ impl<C: GroupIo + Id> Zeroize for ThresholdCore<C> {
 
 /// Threshold keys usable for signing.
 #[derive(Clone, Debug, Zeroize)]
-pub struct ThresholdKeys<C: GroupIo + Id> {
+pub struct ThresholdKeys<C: GroupIo> {
   // Core keys.
   #[zeroize(skip)]
   core: Arc<Zeroizing<ThresholdCore<C>>>,
@@ -297,7 +297,7 @@ pub struct ThresholdKeys<C: GroupIo + Id> {
 
 /// View of keys, interpolated and with the expected linear combination taken for usage.
 #[derive(Clone)]
-pub struct ThresholdView<C: GroupIo + Id> {
+pub struct ThresholdView<C: GroupIo> {
   interpolation: Interpolation<C::F>,
   scalar: C::F,
   offset: C::F,
@@ -308,7 +308,7 @@ pub struct ThresholdView<C: GroupIo + Id> {
   verification_shares: HashMap<Participant, C::G>,
 }
 
-impl<C: GroupIo + Id> fmt::Debug for ThresholdView<C> {
+impl<C: GroupIo> fmt::Debug for ThresholdView<C> {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt
       .debug_struct("ThresholdView")
@@ -323,7 +323,7 @@ impl<C: GroupIo + Id> fmt::Debug for ThresholdView<C> {
   }
 }
 
-impl<C: GroupIo + Id> Zeroize for ThresholdView<C> {
+impl<C: GroupIo> Zeroize for ThresholdView<C> {
   fn zeroize(&mut self) {
     let Self {
       interpolation,
@@ -351,7 +351,7 @@ impl<C: GroupIo + Id> Zeroize for ThresholdView<C> {
   }
 }
 
-impl<C: GroupIo + Id> ThresholdKeys<C> {
+impl<C: GroupIo> ThresholdKeys<C> {
   /// Create a new set of ThresholdKeys.
   pub fn new(
     params: ThresholdParams,
@@ -548,8 +548,6 @@ impl<C: GroupIo + Id> ThresholdKeys<C> {
   ///
   /// This will not include the ephemeral scalar/offset.
   pub fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
-    writer.write_all(&u32::try_from(C::ID.len()).unwrap().to_le_bytes())?;
-    writer.write_all(C::ID)?;
     writer.write_all(&self.core.params.t.to_le_bytes())?;
     writer.write_all(&self.core.params.n.to_le_bytes())?;
     writer.write_all(&self.core.params.i.to_bytes())?;
@@ -583,23 +581,10 @@ impl<C: GroupIo + Id> ThresholdKeys<C> {
   }
 
   /// Read keys from a type satisfying `std::io::Read`.
+  ///
+  /// This will check the contained values are syntactically valid but does not enforce any actual
+  /// relationship nor the consistency of these values.
   pub fn read(mut reader: impl io::Read) -> io::Result<ThresholdKeys<C>> {
-    {
-      let different = || io::Error::other("deserializing ThresholdKeys for another curve");
-
-      let mut id_len = [0; 4];
-      reader.read_exact(&mut id_len)?;
-      if u32::try_from(C::ID.len()).unwrap().to_le_bytes() != id_len {
-        Err(different())?;
-      }
-
-      let mut id = vec![0; C::ID.len()];
-      reader.read_exact(&mut id)?;
-      if id != C::ID {
-        Err(different())?;
-      }
-    }
-
     let (t, n, i) = {
       let mut read_u16 = || -> io::Result<u16> {
         let mut value = [0; 2];
@@ -613,7 +598,7 @@ impl<C: GroupIo + Id> ThresholdKeys<C> {
       )
     };
 
-    let mut interpolation = [0];
+    let mut interpolation = [0xff];
     reader.read_exact(&mut interpolation)?;
     let interpolation = match interpolation[0] {
       0 => Interpolation::Constant({
@@ -644,7 +629,7 @@ impl<C: GroupIo + Id> ThresholdKeys<C> {
   }
 }
 
-impl<C: GroupIo + Id> ThresholdView<C> {
+impl<C: GroupIo> ThresholdView<C> {
   /// Return the scalar applied to this view.
   pub fn scalar(&self) -> C::F {
     self.scalar

@@ -65,7 +65,9 @@ struct CalldataAgnosticGas;
 impl CalldataAgnosticGas {
   #[must_use]
   fn calculate(input: &[u8], mut constant_zero_bytes: usize, gas_used: u64) -> u64 {
-    use revm::{primitives::hardfork::SpecId, interpreter::gas::calculate_initial_tx_gas};
+    use revm::{
+      primitives::hardfork::SpecId, context::Cfg as _, interpreter::gas::calculate_initial_tx_gas,
+    };
 
     let mut without_variable_zero_bytes = Vec::with_capacity(input.len());
     for byte in input {
@@ -78,9 +80,36 @@ impl CalldataAgnosticGas {
       }
     }
     gas_used +
-      (calculate_initial_tx_gas(SpecId::OSAKA, &without_variable_zero_bytes, false, 0, 0, 0)
-        .initial_regular_gas() -
-        calculate_initial_tx_gas(SpecId::OSAKA, input, false, 0, 0, 0).initial_regular_gas())
+      (calculate_initial_tx_gas(
+        SpecId::OSAKA,
+        &without_variable_zero_bytes,
+        false,
+        0,
+        0,
+        0,
+        revm::context::CfgEnv::new_with_spec(SpecId::OSAKA)
+          .is_amsterdam_eip2780_enabled()
+          .then_some(revm::context_interface::cfg::gas_params::Eip2780TxInfo {
+            value: U256::ZERO,
+            is_self_transfer: false,
+          }),
+      )
+      .initial_regular_gas() -
+        calculate_initial_tx_gas(
+          SpecId::OSAKA,
+          input,
+          false,
+          0,
+          0,
+          0,
+          revm::context::CfgEnv::new_with_spec(SpecId::OSAKA)
+            .is_amsterdam_eip2780_enabled()
+            .then_some(revm::context_interface::cfg::gas_params::Eip2780TxInfo {
+              value: U256::ZERO,
+              is_self_transfer: false,
+            }),
+        )
+        .initial_regular_gas())
   }
 }
 

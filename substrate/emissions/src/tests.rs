@@ -400,7 +400,8 @@ fn test_post_economic_security_external() {
 
     let set_burnt_fees = |network: ExternalCoin, amount: u128| {
       sp_io::storage::set(
-        &(sp_core::twox_128(b"Dex"), sp_core::twox_128(b"BurntFees"), network).encode(),
+        &(sp_io::hashing::twox_128(b"Dex"), sp_io::hashing::twox_128(b"BurntFees"), network)
+          .encode(),
         &amount.encode(),
       );
     };

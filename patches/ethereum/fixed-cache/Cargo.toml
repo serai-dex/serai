@@ -1,0 +1,18 @@
+[package]
+name = "fixed-cache"
+version = "0.1.99"
+description = "Patch to a cache which caches nothing"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/ethereum/fixed-cache"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[features]
+alloc = []
+std = []
+stats = []

@@ -1,0 +1,17 @@
+[package]
+name = "alloy-chains"
+version = "0.2.99"
+description = "Patch to a minimal alternative implementation"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/ethereum/alloy-chains"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[features]
+std = []
+serde = []

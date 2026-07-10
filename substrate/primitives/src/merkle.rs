@@ -37,7 +37,7 @@ impl UnbalancedMerkleTree {
     let mut preimage = [tag; 65];
     preimage[1 .. 33].copy_from_slice(left);
     preimage[33 ..].copy_from_slice(right);
-    sp_core::blake2_256(&preimage)
+    sp_crypto_hashing::blake2_256(&preimage)
   }
 
   /// Create a new Merkle tree from a set of leaves.

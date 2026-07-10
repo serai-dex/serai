@@ -245,7 +245,7 @@ impl<Storage: DelayedDeallocationsStorage> DelayedDeallocations for Storage {
 #[cfg(test)]
 pub(crate) mod mock {
   use frame_support::{pallet_prelude::*, traits::StorageInstance};
-  use serai_abi::primitives::{network_id::NetworkId, validator_sets::*};
+  use serai_abi::primitives::network_id::NetworkId;
   use super::*;
   use crate::MockStorage;
 

@@ -206,7 +206,7 @@ impl SignedEmbeddedEllipticCurveKeys {
       })
       .flat_map(<[_]>::iter),
     );
-    sp_core::hashing::blake2_512(&transcript)
+    sp_crypto_hashing::blake2_512(&transcript)
   }
 
   /// Verify these key(s)' signature(s), returning the key(s) if valid.
@@ -662,7 +662,7 @@ fn serialize() {
       }
       assert!(wrote_nonce);
       assert_eq!(
-        sp_core::blake2_512(&transcript),
+        sp_crypto_hashing::blake2_512(&transcript),
         signed_embedded_elliptic_curve_keys.transcript(validator)
       );
     }

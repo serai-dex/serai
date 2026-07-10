@@ -23,6 +23,7 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 
 bitvec = { version = "1", default-features = false, features = ["alloc"] }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
+sp-crypto-hashing = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
@@ -50,6 +51,7 @@ std = [
 
   "bitvec/std",
   "scale?/std",
+  "sp-crypto-hashing/std",
   "sp-core/std",
 
   "ciphersuite/std",
