@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use dalek_ff_group::Ristretto;
 use ciphersuite::{group::GroupEncoding as _, *};
 
-use serai_db::{DbTxn as _, Db};
+use serai_db::{Transaction as _, Db};
 
 use tendermint::{SignatureScheme, Blockchain};
 
@@ -17,7 +17,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub(crate) struct Mempool<D: Db, T: TransactionTrait> {
+pub(crate) struct Mempool<D: 'static + Send + Sync + Db, T: TransactionTrait> {
   db: D,
   genesis: [u8; 32],
 
@@ -26,12 +26,12 @@ pub(crate) struct Mempool<D: Db, T: TransactionTrait> {
   txs_per_signer: HashMap<[u8; 32], u32>,
 }
 
-impl<D: Db, T: TransactionTrait> Mempool<D, T> {
+impl<D: 'static + Send + Sync + Db, T: TransactionTrait> Mempool<D, T> {
   fn transaction_key(&self, hash: &[u8]) -> Vec<u8> {
-    D::key(b"tributary_mempool", b"transaction", [self.genesis.as_ref(), hash].concat())
+    crate::D_key(b"tributary_mempool", b"transaction", [self.genesis.as_ref(), hash].concat())
   }
   fn current_mempool_key(&self) -> Vec<u8> {
-    D::key(b"tributary_mempool", b"current", self.genesis)
+    crate::D_key(b"tributary_mempool", b"current", self.genesis)
   }
 
   // save given tx to the mempool db
@@ -39,12 +39,13 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     let tx_hash = tx.hash();
     let transaction_key = self.transaction_key(&tx_hash);
     let current_mempool_key = self.current_mempool_key();
-    let mut current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
+    let mut current_mempool =
+      self.db.get(&current_mempool_key).map(|bytes| bytes.as_ref().to_vec()).unwrap_or(vec![]);
 
     let mut txn = self.db.txn();
-    txn.put(transaction_key, tx.serialize());
+    txn.set(transaction_key, tx.serialize());
     current_mempool.extend(tx_hash);
-    txn.put(current_mempool_key, current_mempool);
+    txn.set(current_mempool_key, current_mempool);
     txn.commit();
 
     self.txs.insert(tx_hash, tx);
@@ -67,12 +68,13 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
       txs_per_signer: HashMap::new(),
     };
 
-    let current_mempool = res.db.get(res.current_mempool_key()).unwrap_or(vec![]);
+    let current_mempool =
+      res.db.get(res.current_mempool_key()).map(|bytes| bytes.as_ref().to_vec()).unwrap_or(vec![]);
 
     for hash in current_mempool.chunks(32) {
       let hash: [u8; 32] = hash.try_into().unwrap();
       let tx: Transaction<T> =
-        Transaction::read(res.db.get(res.transaction_key(&hash)).unwrap().as_slice()).unwrap();
+        Transaction::read(res.db.get(res.transaction_key(&hash)).unwrap().as_ref()).unwrap();
       debug_assert_eq!(tx.hash(), hash);
 
       match tx {
@@ -227,7 +229,8 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   pub(crate) fn remove(&mut self, tx: &[u8; 32]) {
     let transaction_key = self.transaction_key(tx);
     let current_mempool_key = self.current_mempool_key();
-    let current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
+    let current_mempool =
+      self.db.get(&current_mempool_key).map(|bytes| bytes.as_ref().to_vec()).unwrap_or(vec![]);
 
     let mut i = 0;
     while i < current_mempool.len() {
@@ -242,7 +245,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     txn.del(transaction_key);
     if i != current_mempool.len() {
       txn
-        .put(current_mempool_key, [&current_mempool[.. i], &current_mempool[(i + 32) ..]].concat());
+        .set(current_mempool_key, [&current_mempool[.. i], &current_mempool[(i + 32) ..]].concat());
     }
     txn.commit();
 

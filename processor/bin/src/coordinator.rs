@@ -11,7 +11,7 @@ use serai_primitives::{
 
 use serai_cosign::SignedCosign;
 
-use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
+use serai_db::{Transaction as DbTxn, Db as _};
 
 use serai_env::Environment;
 
@@ -19,14 +19,14 @@ use scanner::ScannerFeed;
 
 use message_queue::{Service, Metadata, Client as MessageQueue};
 
-create_db! {
+serai_db::schema! {
   ProcessorBinCoordinator {
     SavedMessages: () -> u64,
   }
 }
 
-db_channel! {
-  ProcessorBinCoordinator {
+serai_db::channel! {
+  ProcessorBinCoordinatorChannels {
     ReceivedCoordinatorMessages: () -> Vec<u8>,
   }
 }
@@ -34,7 +34,7 @@ db_channel! {
 // A lock to access SentCoordinatorMessages::send
 static SEND_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
-db_channel! {
+serai_db::channel! {
   ProcessorBinCoordinator {
     SentCoordinatorMessages: () -> messages::ProcessorMessage,
   }

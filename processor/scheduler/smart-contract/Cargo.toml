@@ -24,7 +24,7 @@ group = { version = "0.13", default-features = false }
 
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-serai-db = { path = "../../../common/db" }
+serai-db = { path = "../../../common/db", default-features = false, features = ["std", "schema"] }
 
 primitives = { package = "serai-processor-primitives", path = "../../primitives" }
 scanner = { package = "serai-processor-scanner", path = "../../scanner" }

@@ -18,7 +18,7 @@ pub(crate) use tokio::{
   net::TcpListener,
 };
 
-use serai_db::{Get, DbTxn, Db as _};
+use serai_db::{Get, Transaction as DbTxn, Db as _};
 
 use serai_env::Environment;
 
@@ -93,7 +93,7 @@ pub(crate) fn queue_message(db: &mut Db, meta: &Metadata, msg: Vec<u8>, signatur
     );
     return;
   }
-  DbTxn::put(&mut txn, intent_key, []);
+  DbTxn::set(&mut txn, intent_key, []);
 
   // Queue it
   let id = queue_lock.queue_message(

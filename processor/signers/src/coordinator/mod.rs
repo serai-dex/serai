@@ -1,6 +1,6 @@
 use core::future::Future;
 
-use serai_db::{DbTxn as _, Db};
+use serai_db::{Transaction as _, Db};
 
 use primitives::task::ContinuallyRan;
 
@@ -9,18 +9,18 @@ use crate::{db::*, Coordinator};
 mod db;
 
 // Fetches messages to send the coordinator and sends them.
-pub(crate) struct CoordinatorTask<D: Db, C: Coordinator> {
+pub(crate) struct CoordinatorTask<D: 'static + Send + Sync + Db, C: Coordinator> {
   db: D,
   coordinator: C,
 }
 
-impl<D: Db, C: Coordinator> CoordinatorTask<D, C> {
+impl<D: 'static + Send + Sync + Db, C: Coordinator> CoordinatorTask<D, C> {
   pub(crate) fn new(db: D, coordinator: C) -> Self {
     Self { db, coordinator }
   }
 }
 
-impl<D: Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
+impl<D: 'static + Send + Sync + Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

@@ -1,7 +1,7 @@
 use core::future::Future;
 use std::time::{Duration, SystemTime};
 
-use serai_db::*;
+use serai_db::{Transaction as _, Db};
 use serai_task::{DoesNotError, ContinuallyRan};
 
 use crate::evaluator::CosignedBlocks;
@@ -29,7 +29,7 @@ pub(crate) fn now_timestamp() -> Duration {
     .expect("current time was less than the epoch")
 }
 
-create_db!(
+serai_db::schema!(
   SubstrateCosignDelay {
     // The latest block number marked as cosigned by the delay task.
     // Cosigned after a delay if it had events and cosigns,
@@ -39,11 +39,11 @@ create_db!(
 );
 
 /// A task to delay acknowledgement of cosigns.
-pub(crate) struct CosignDelayTask<D: Db> {
+pub(crate) struct CosignDelayTask<D: 'static + Send + Sync + Db> {
   pub(crate) db: D,
 }
 
-impl<D: Db> ContinuallyRan for CosignDelayTask<D> {
+impl<D: 'static + Send + Sync + Db> ContinuallyRan for CosignDelayTask<D> {
   type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

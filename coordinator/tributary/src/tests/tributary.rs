@@ -1,4 +1,4 @@
-use serai_db::{Db as _, DbTxn as _, MemDb};
+use serai_db::{Db as _, Transaction as _, MemDb};
 use crate::{Transaction, SlashPoints, TributaryDb, slash_report_transaction};
 use super::*;
 

@@ -1,7 +1,6 @@
 use std::{path::Path, fs};
 
-pub(crate) use serai_db::{Get, DbTxn, Db as DbTrait};
-use serai_db::{create_db, db_channel};
+pub(crate) use serai_db::{Transaction as DbTxn, Db as DbTrait};
 
 use dkg::Participant;
 
@@ -68,7 +67,7 @@ pub(crate) fn prune_tributary_db(env: &Environment, set: ExternalValidatorSet) {
   }
 }
 
-create_db! {
+serai_db::schema! {
   Coordinator {
     // The currently active Tributaries
     ActiveTributaries: () -> Vec<NewSetInformation>,
@@ -87,7 +86,7 @@ create_db! {
   }
 }
 
-db_channel! {
+serai_db::channel! {
   Coordinator {
     // Cosigns we produced
     SignedCosigns: () -> SignedCosign,
@@ -99,7 +98,7 @@ db_channel! {
 mod _internal_db {
   use super::*;
 
-  db_channel! {
+  serai_db::channel! {
     Coordinator {
       // Tributary transactions to publish from the Processor messages
       TributaryTransactionsFromProcessorMessages: (set: ExternalValidatorSet) -> Transaction,

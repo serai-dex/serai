@@ -4,7 +4,7 @@ use std::io::{self, Read as _, Write as _};
 use group::GroupEncoding;
 
 use borsh::{BorshSerialize, BorshDeserialize};
-use serai_db::{Get, DbTxn, create_db, db_channel};
+use serai_db::{Get, Transaction as DbTxn};
 
 use serai_primitives::{
   validator_sets::Session,
@@ -72,7 +72,7 @@ impl<S: ScannerFeed> OutputWithInInstruction<S> {
   }
 }
 
-create_db!(
+serai_db::schema!(
   ScannerGlobal {
     StartBlock: () -> u64,
 
@@ -328,7 +328,7 @@ pub(crate) struct ReceiverScanData<S: ScannerFeed> {
   pub(crate) returns: Vec<Return<S>>,
 }
 
-db_channel! {
+serai_db::channel! {
   ScannerScanEventuality {
     ScannedBlock: () -> Vec<u8>,
   }
@@ -475,7 +475,7 @@ struct BlockBoundInInstructions {
   returnable_in_instructions: Vec<u8>,
 }
 
-db_channel! {
+serai_db::channel! {
   ScannerScanBatch {
     InInstructions: () -> BlockBoundInInstructions,
   }
@@ -546,7 +546,7 @@ pub(crate) struct BatchData<K: BorshSerialize + BorshDeserialize> {
   pub(crate) batch: Batch,
 }
 
-db_channel! {
+serai_db::channel! {
   ScannerBatchReport {
     BatchToReport: <K: Borshy>() -> BatchData<K>,
   }
@@ -563,7 +563,7 @@ impl<S: ScannerFeed> BatchToReportDb<S> {
   }
 }
 
-db_channel! {
+serai_db::channel! {
   ScannerSubstrateEventuality {
     Burns: (acknowledged_block: u64) -> Vec<OutInstructionWithBalance>,
   }
@@ -597,9 +597,7 @@ impl SubstrateToEventualityDb {
 mod _public_db {
   use serai_primitives::instructions::Batch;
 
-  use serai_db::{Get, DbTxn, create_db, db_channel};
-
-  db_channel! {
+  serai_db::channel! {
     ScannerPublic {
       BatchesToSign: (key: &[u8]) -> Batch,
       AcknowledgedBatches: (key: &[u8]) -> u32,

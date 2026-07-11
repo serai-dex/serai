@@ -3,7 +3,7 @@ use core::marker::PhantomData;
 use group::GroupEncoding;
 
 use borsh::{BorshSerialize, BorshDeserialize};
-use serai_db::{Get, DbTxn, create_db, db_channel};
+use serai_db::{Get, Transaction as DbTxn};
 
 use serai_primitives::instructions::OutInstructionWithBalance;
 
@@ -35,13 +35,13 @@ pub(crate) enum Action<S: ScannerFeed> {
   QueueBurns(Vec<OutInstructionWithBalance>),
 }
 
-create_db!(
+serai_db::schema!(
   ScannerSubstrate {
     LastAcknowledgedBatch: () -> u32,
   }
 );
 
-db_channel!(
+serai_db::channel!(
   ScannerSubstrate {
     Actions: () -> ActionEncodable,
   }

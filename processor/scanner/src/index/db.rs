@@ -1,6 +1,6 @@
-use serai_db::{Get, DbTxn, create_db};
+use serai_db::{Get, Transaction as DbTxn};
 
-create_db!(
+serai_db::schema!(
   ScannerIndex {
     // A lookup of a block's number to its ID
     BlockId: (number: u64) -> [u8; 32],

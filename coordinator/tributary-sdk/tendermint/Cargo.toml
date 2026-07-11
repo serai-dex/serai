@@ -21,7 +21,7 @@ pin-project-lite = { version = "0.2", default-features = false }
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
 
 async-channel = { version = "2", default-features = false, optional = true }
-serai-db = { path = "../../../common/db", version = "0.1", default-features = false, optional = true }
+serai-db = { path = "../../../common/db", version = "0.2", default-features = false, features = ["std", "schema"], optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "macros"] }

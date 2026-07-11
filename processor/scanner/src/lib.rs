@@ -8,7 +8,7 @@ use std::{io, collections::HashMap};
 use group::GroupEncoding;
 
 use borsh::{BorshSerialize as _, BorshDeserialize as _};
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get, Transaction as DbTxn, Db};
 
 use serai_primitives::{
   network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount,
@@ -378,7 +378,11 @@ impl<S: ScannerFeed> Scanner<S> {
   /// This will begin its execution, spawning several asynchronous tasks.
   ///
   /// This will return None if the Scanner was never initialized.
-  pub async fn new(db: impl Db, feed: S, scheduler: impl Scheduler<S>) -> Option<Self> {
+  pub async fn new(
+    db: impl 'static + Send + Sync + Db,
+    feed: S,
+    scheduler: impl Scheduler<S>,
+  ) -> Option<Self> {
     let start_block = ScannerGlobalDb::<S>::start_block(&db)?;
 
     let index_task = index::IndexTask::new(db.clone(), feed.clone(), start_block).await;
@@ -420,7 +424,7 @@ impl<S: ScannerFeed> Scanner<S> {
   ///
   /// This passes through to `Scanner::new` if prior called.
   pub async fn initialize(
-    mut db: impl Db,
+    mut db: impl 'static + Send + Sync + Db,
     feed: S,
     scheduler: impl Scheduler<S>,
     start_block: u64,

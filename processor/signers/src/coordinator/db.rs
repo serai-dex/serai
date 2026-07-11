@@ -1,6 +1,4 @@
-use serai_db::{Get, DbTxn, create_db};
-
-create_db! {
+serai_db::schema! {
   SignersCoordinator {
     LastPublishedBatch: () -> u32,
   }

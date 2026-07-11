@@ -124,8 +124,8 @@ fn inject_block(
   let block_key =
     MemDb::key(b"tributary_blockchain", b"block", [genesis.as_ref(), block_hash.as_ref()].concat());
 
-  txn.put(block_after_key, block_hash);
-  txn.put(block_key, serialized);
+  txn.set(block_after_key, block_hash);
+  txn.set(block_key, serialized);
   txn.commit();
 
   block_hash
@@ -180,8 +180,8 @@ async fn scan_tributary_task_run_iteration() {
     );
     {
       let mut txn = db.txn();
-      txn.put(&local_qty_key, 1u32.to_le_bytes());
-      txn.put(block_qty_key, 1u32.to_le_bytes());
+      txn.set(&local_qty_key, 1u32.to_le_bytes());
+      txn.set(block_qty_key, 1u32.to_le_bytes());
       txn.commit();
     }
 

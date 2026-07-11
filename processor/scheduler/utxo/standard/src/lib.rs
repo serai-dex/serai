@@ -12,7 +12,7 @@ use serai_primitives::{
   balance::{Amount, ExternalBalance},
 };
 
-use serai_db::DbTxn;
+use serai_db::Transaction as DbTxn;
 
 use primitives::{ReceivedOutput as _, Payment};
 use scanner::{

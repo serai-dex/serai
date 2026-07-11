@@ -29,7 +29,7 @@ group = { version = "0.13", default-features = false }
 log = { version = "0.4", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 
-serai-db = { path = "../../common/db" }
+serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
 
 messages = { package = "serai-processor-messages", path = "../messages" }
 

@@ -88,7 +88,7 @@ pub trait P2p:
   fn cosign(&self) -> impl Send + Future<Output = SignedCosign>;
 }
 
-fn handle_notable_cosigns_request<D: Db>(
+fn handle_notable_cosigns_request<D: 'static + Send + Sync + Db>(
   db: &D,
   global_session: [u8; 32],
   channel: oneshot::Sender<Vec<SignedCosign>>,
@@ -97,7 +97,7 @@ fn handle_notable_cosigns_request<D: Db>(
   channel.send(cosigns).expect("channel listening for cosign oneshot response was dropped?");
 }
 
-fn handle_heartbeat<D: Db, T: TransactionTrait>(
+fn handle_heartbeat<D: 'static + Send + Sync + Db, T: TransactionTrait>(
   reader: &TributaryReader<D, T>,
   mut latest_block_hash: [u8; 32],
   channel: oneshot::Sender<Vec<TributaryBlockWithCommit>>,
@@ -129,8 +129,8 @@ fn handle_heartbeat<D: Db, T: TransactionTrait>(
 /// `add_tributary`'s and `retire_tributary's senders, along with `send_cosigns`'s receiver, must
 /// never be dropped. `retire_tributary` is not required to only be instructed with added
 /// Tributaries.
-pub async fn run<TD: Db, Tx: TransactionTrait, P: P2p>(
-  db: impl Db,
+pub async fn run<TD: 'static + Send + Sync + Db, Tx: TransactionTrait, P: P2p>(
+  db: impl 'static + Send + Sync + Db,
   p2p: P,
   mut add_tributary: mpsc::UnboundedReceiver<(ExternalValidatorSet, Tributary<TD, Tx, P>)>,
   mut retire_tributary: mpsc::UnboundedReceiver<ExternalValidatorSet>,

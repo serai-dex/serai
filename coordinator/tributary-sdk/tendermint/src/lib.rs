@@ -101,7 +101,7 @@ mod tendermint {
     We expect this property, causing us to use `async-channel`.
   */
   use async_channel::{Sender, Receiver};
-  use serai_db::{DbTxn as _, Db};
+  use serai_db::{Transaction as _, Db};
 
   use crate::{
     BlockNumber, ValidatorSet as _, SignatureScheme, Block as _, Commit, Blockchain, MessageFor,
@@ -288,20 +288,15 @@ mod tendermint {
     /// 2) The process terminates, so that the Tendermint process will be re-initialized from the
     ///    disk before any further use
     pub async fn process<
-      B: 'static
-        + Send
-        + Sync
-        + Blockchain<SignatureScheme: SignatureScheme<AggregateSignature: Clone>>,
-      S: 'static
-        + Send
+      B: Send + Sync + Blockchain<SignatureScheme: SignatureScheme<AggregateSignature: Clone>>,
+      S: Send
         + Sync
         + Signer<
           Validator = B::Validator,
           Signature = <B::SignatureScheme as SignatureScheme>::Signature,
         >,
-      D: Db,
-      N: 'static
-        + Send
+      D: Send + Db,
+      N: Send
         + Network<
           B::Validator,
           <B::SignatureScheme as SignatureScheme>::Signature,

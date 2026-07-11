@@ -40,5 +40,5 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 
 # Application
 log = { version = "0.4", default-features = false, features = ["std"] }
-serai-db = { path = "../../common/db" }
+serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
 messages = { package = "serai-processor-messages", path = "../messages" }

@@ -16,7 +16,7 @@ use dkg::Curves;
 use serai_primitives::validator_sets::Session;
 
 use serai_env::Environment;
-use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
+use serai_db::{Transaction as DbTxn, Db as _};
 
 use primitives::EncodableG;
 use ::key_gen::{Ristretto, KeyGenParams, KeyGen};
@@ -27,13 +27,13 @@ use signers::{TransactionPublisher, Signers};
 mod coordinator;
 use coordinator::Coordinator;
 
-create_db! {
+serai_db::schema! {
   ProcessorBin {
     ExternalKeyForSessionForSigners: <K: GroupEncoding>(session: Session) -> EncodableG<K>,
   }
 }
 
-db_channel! {
+serai_db::channel! {
   ProcessorBin {
     KeyToActivate: <K: GroupEncoding>() -> EncodableG<K>
   }

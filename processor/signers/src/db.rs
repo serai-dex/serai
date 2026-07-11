@@ -3,13 +3,11 @@ use serai_primitives::{
   validator_sets::{Session, SlashReport as SlashReportStruct},
 };
 
-use serai_db::{Get, DbTxn, create_db, db_channel};
-
 use serai_cosign::{Cosign as CosignStruct, SignedCosign};
 
 use messages::sign::{ProcessorMessage, CoordinatorMessage};
 
-create_db! {
+serai_db::schema! {
   SignersGlobal {
     RegisteredKeys: () -> Vec<Session>,
     SerializedKeys: (session: Session) -> Vec<u8>,
@@ -20,7 +18,7 @@ create_db! {
   }
 }
 
-db_channel! {
+serai_db::channel! {
   SignersGlobal {
     Cosign: (session: Session) -> SignedCosign,
 

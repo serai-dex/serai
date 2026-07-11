@@ -19,7 +19,7 @@ workspace = true
 [dependencies]
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-serai-db = { path = "../../common/db", version = "0.1" }
+serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
 
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 serai-cosign = { path = "../cosign" }

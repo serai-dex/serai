@@ -17,7 +17,7 @@ use serai_client_serai::{
   Serai,
 };
 
-use serai_db::*;
+use serai_db::{Get, Transaction as DbTxn, Db};
 use serai_task::*;
 
 pub use serai_cosign_types::*;
@@ -126,7 +126,7 @@ mod has_events_ord {
   }
 }
 
-create_db! {
+serai_db::schema! {
   Cosign {
     // The following are populated by the intend task and used throughout the library
 
@@ -217,10 +217,10 @@ impl IntakeCosignError {
 }
 
 /// The interface to manage cosigning with.
-pub struct Cosigning<D: Db> {
+pub struct Cosigning<D: 'static + Send + Sync + Db> {
   db: D,
 }
-impl<D: Db> Cosigning<D> {
+impl<D: 'static + Send + Sync + Db> Cosigning<D> {
   #[cfg(test)]
   /// Create a cosigning handle using an already-initialized database.
   ///

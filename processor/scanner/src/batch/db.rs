@@ -4,7 +4,7 @@ use std::io::{Read as _, Write as _};
 use group::GroupEncoding;
 
 use borsh::{BorshSerialize, BorshDeserialize};
-use serai_db::{Get, DbTxn, create_db};
+use serai_db::{Get, Transaction as DbTxn};
 
 use serai_primitives::{balance::ExternalBalance, validator_sets::Session};
 
@@ -19,7 +19,7 @@ pub(crate) struct BatchInfo<K: BorshSerialize> {
   pub(crate) in_instructions_hash: [u8; 32],
 }
 
-create_db!(
+serai_db::schema!(
   ScannerBatch {
     // The next block to create batches for
     NextBlockToBatch: () -> u64,

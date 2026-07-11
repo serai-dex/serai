@@ -9,10 +9,10 @@ use frost::{
 
 use serai_primitives::validator_sets::Session;
 
-use serai_db::{Get, DbTxn, Db, create_db};
+use serai_db::{Transaction as DbTxn, Db};
 use messages::sign::{VariantSignId, SignId, ProcessorMessage};
 
-create_db!(
+serai_db::schema!(
   FrostAttemptManager {
     Attempted: (session: Session, id: VariantSignId) -> u64,
   }
@@ -20,7 +20,7 @@ create_db!(
 
 /// An instance of a signing protocol with re-attempts handled internally.
 #[expect(clippy::type_complexity)]
-pub(crate) struct SigningProtocol<D: Db, M: Clone + PreprocessMachine> {
+pub(crate) struct SigningProtocol<D: 'static + Send + Sync + Db, M: Clone + PreprocessMachine> {
   db: D,
   // The session this signing protocol is being conducted by.
   session: Session,
@@ -42,7 +42,7 @@ pub(crate) struct SigningProtocol<D: Db, M: Clone + PreprocessMachine> {
   >,
 }
 
-impl<D: Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
+impl<D: 'static + Send + Sync + Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
   /// Create a new signing protocol.
   pub(crate) fn new(
     db: D,

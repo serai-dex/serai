@@ -16,6 +16,17 @@ use ::tendermint::{Blockchain as _, MessageFor};
 pub use ::tendermint::SlashReason;
 
 use serai_db::Db;
+#[allow(non_snake_case)]
+fn D_key(schema: &'static [u8], field: &'static [u8], args: impl AsRef<[u8]>) -> Vec<u8> {
+  [
+    [u8::try_from(schema.len()).unwrap()].as_slice(),
+    schema,
+    [u8::try_from(field.len()).unwrap()].as_slice(),
+    field,
+    args.as_ref(),
+  ]
+  .concat()
+}
 
 use tokio::sync::RwLock;
 
@@ -147,7 +158,7 @@ impl<P: P2p> P2p for Arc<P> {
 }
 
 #[derive(Clone)]
-pub struct Tributary<D: Db, T: TransactionTrait, P: P2p> {
+pub struct Tributary<D: 'static + Send + Sync + Db, T: TransactionTrait, P: P2p> {
   db: D,
 
   genesis: [u8; 32],
@@ -156,7 +167,7 @@ pub struct Tributary<D: Db, T: TransactionTrait, P: P2p> {
   handle: Arc<RwLock<TendermintHandle<TendermintNetwork<D, T, P>>>>,
 }
 
-impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
+impl<D: 'static + Send + Sync + Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
   pub async fn new(
     db: D,
     genesis: [u8; 32],
@@ -326,8 +337,12 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
 }
 
 #[derive(Clone)]
-pub struct TributaryReader<D: Db, T: TransactionTrait>(D, [u8; 32], PhantomData<T>);
-impl<D: Db, T: TransactionTrait> TributaryReader<D, T> {
+pub struct TributaryReader<D: 'static + Send + Sync + Db, T: TransactionTrait>(
+  D,
+  [u8; 32],
+  PhantomData<T>,
+);
+impl<D: 'static + Send + Sync + Db, T: TransactionTrait> TributaryReader<D, T> {
   pub fn genesis(&self) -> [u8; 32] {
     self.1
   }

@@ -1,12 +1,9 @@
 use core::time::Duration;
-use alloc::vec::Vec;
 use std::time::{Instant, SystemTime};
-
-use serai_db::{Get, DbTxn};
 
 use crate::{Borshy, SignatureScheme, ValidRound, Blockchain};
 
-serai_db::create_db!(TributaryState {
+serai_db::schema!(TributaryState {
   BlockNumber: (genesis: &[u8]) -> crate::BlockNumber,
 
   RoundNumber: (genesis: &[u8]) -> crate::RoundNumber,

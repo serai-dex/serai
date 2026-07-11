@@ -1,7 +1,6 @@
-use alloc::vec::Vec;
 use std::collections::HashMap;
 
-use serai_db::{Get, DbTxn};
+use serai_db::{Get, Transaction};
 
 use crate::{
   Borshy, SignatureScheme, ValidatorSet, BlockNumber, RoundNumber, Block, Commit, Blockchain,
@@ -16,7 +15,7 @@ use crate::{
   numbers as a form of time-to-live. If a value is loaded with disparate block, round numbers, it
   is considered stale and ignored.
 */
-serai_db::create_db!(TendermintRoundMetrics {
+serai_db::schema!(TendermintRoundMetrics {
   Proposal: <Block: Borshy>(genesis: &[u8]) -> (
     (BlockNumber, RoundNumber),
     (Option<RoundNumber>, Block)
@@ -264,7 +263,7 @@ impl<B: Blockchain> RoundMetrics<B> {
     &mut self,
     genesis: impl AsRef<[u8]>,
     validator_set: &impl ValidatorSet<Validator = B::Validator>,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
     proposer: B::Validator,
     valid_round: Option<RoundNumber>,
     proposal: B::Block,
@@ -313,7 +312,7 @@ impl<B: Blockchain> RoundMetrics<B> {
     &mut self,
     genesis: impl AsRef<[u8]>,
     validator_set: &impl ValidatorSet<Validator = B::Validator>,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
     validator: B::Validator,
     block: Option<<B::Block as Block>::Hash>,
     signature: <B::SignatureScheme as SignatureScheme>::Signature,
@@ -366,7 +365,7 @@ impl<B: Blockchain> RoundMetrics<B> {
     &mut self,
     genesis: impl AsRef<[u8]>,
     validator_set: &impl ValidatorSet<Validator = B::Validator>,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
     validator: B::Validator,
     block_and_precommit_signature: Option<(
       <B::Block as Block>::Hash,
@@ -421,7 +420,7 @@ impl<B: Blockchain> RoundMetrics<B> {
     &mut self,
     genesis: impl AsRef<[u8]>,
     validator_set: &impl ValidatorSet<Validator = B::Validator>,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
     message: MessageFor<B>,
   ) {
     let Message { validator, block_number, round_number, data, signature } = message;
@@ -470,12 +469,14 @@ impl<B: Blockchain> RoundMetrics<B> {
     */
     struct DummyTxn;
     impl Get for DummyTxn {
-      fn get(&self, _key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-        unimplemented!()
+      #[expect(unused, clippy::diverging_sub_expression)]
+      fn get(&self, _key: impl AsRef<[u8]>) -> Option<impl AsRef<[u8]>> {
+        let result: Option<[u8; 0]> = unimplemented!();
+        result
       }
     }
-    impl DbTxn for DummyTxn {
-      fn put(&mut self, _key: impl AsRef<[u8]>, _value: impl AsRef<[u8]>) {}
+    impl Transaction for DummyTxn {
+      fn set(&mut self, _key: impl AsRef<[u8]>, _value: impl AsRef<[u8]>) {}
       fn del(&mut self, _key: impl AsRef<[u8]>) {}
       fn commit(self) {}
     }

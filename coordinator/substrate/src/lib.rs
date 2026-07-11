@@ -25,7 +25,7 @@ use serai_client_serai::abi::{
   Transaction,
 };
 
-use serai_db::*;
+use serai_db::Transaction as DbTxn;
 
 mod canonical;
 pub use canonical::CanonicalEventStream;
@@ -116,7 +116,7 @@ impl NewSetInformation {
 mod _public_db {
   use super::*;
 
-  db_channel!(
+  serai_db::channel!(
     CoordinatorSubstrate {
       // Canonical messages to send to the processor
       Canonical: (network: ExternalNetworkId) -> messages::substrate::CoordinatorMessage,
@@ -131,7 +131,7 @@ mod _public_db {
     }
   );
 
-  create_db!(
+  serai_db::schema!(
     CoordinatorSubstrate {
       // Keys to set on the Serai network
       Keys: (network: ExternalNetworkId) -> (Session, Transaction),

@@ -32,7 +32,7 @@ pub(crate) struct Set {
   pub(crate) stake: Amount,
 }
 
-create_db!(
+serai_db::schema!(
   CosignIntend {
     ScanCosignFrom: () -> u64,
     BuildsUpon: () -> IncrementalUnbalancedMerkleTree,
@@ -48,7 +48,7 @@ pub(crate) struct BlockEventData {
   pub(crate) has_events: HasEvents,
 }
 
-db_channel! {
+serai_db::channel! {
   CosignIntendChannels {
     GlobalSessionsChannel: () -> ([u8; 32], GlobalSession),
     BlockEvents: () -> BlockEventData,
@@ -68,12 +68,12 @@ fn cosigning_sets(getter: &impl Get) -> Vec<(ExternalValidatorSet, Public, Amoun
 }
 
 /// A task to determine which blocks we should intend to cosign.
-pub(crate) struct CosignIntendTask<D: Db> {
+pub(crate) struct CosignIntendTask<D: 'static + Send + Sync + Db> {
   pub(crate) db: D,
   pub(crate) serai: Arc<Serai>,
 }
 
-impl<D: Db> ContinuallyRan for CosignIntendTask<D> {
+impl<D: 'static + Send + Sync + Db> ContinuallyRan for CosignIntendTask<D> {
   #[cfg(test)]
   const DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_secs(1);
   #[cfg(test)]

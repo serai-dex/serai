@@ -137,7 +137,7 @@ fn all_transactions() -> Vec<Transaction> {
 }
 
 /// Assert that no messages remain in either the processor or DKG confirmation queues.
-fn assert_no_pending_messages(txn: &mut impl serai_db::DbTxn, set: ExternalValidatorSet) {
+fn assert_no_pending_messages(txn: &mut impl serai_db::Transaction, set: ExternalValidatorSet) {
   assert!(
     crate::ProcessorMessages::try_recv(txn, set).is_none(),
     "unexpected remaining `ProcessorMessages`",
@@ -163,7 +163,7 @@ fn initial_sign_topic(id: VariantSignId) -> Topic {
 /// - The cosign topic is recognized (`AccumulatedWeight` initialized).
 /// - The cosign topic was queued for recognition (`RecognizedTopics`).
 fn assert_start_cosigning_invariants(
-  txn: &mut impl serai_db::DbTxn,
+  txn: &mut impl serai_db::Transaction,
   set: ExternalValidatorSet,
   block_hash: serai_primitives::BlockHash,
   block_number: u64,
@@ -202,7 +202,7 @@ fn make_signed_message_bytes(sender: [u8; 32]) -> Vec<u8> {
 /// Some transactions produce messages on first submission (DkgParticipation, Cosign, SlashReport).
 /// This function drains those expected messages before calling `assert_no_pending_messages`.
 fn assert_block_side_effects(
-  txn: &mut impl serai_db::DbTxn,
+  txn: &mut impl serai_db::Transaction,
   set: ExternalValidatorSet,
   transactions: &[tributary_sdk::Transaction<Transaction>],
 ) {

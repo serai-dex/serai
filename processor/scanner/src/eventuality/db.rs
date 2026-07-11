@@ -2,13 +2,13 @@ use core::marker::PhantomData;
 
 use borsh::BorshSerialize;
 
-use serai_db::{Get, DbTxn, create_db};
+use serai_db::{Get, Transaction as DbTxn};
 
 use primitives::{EncodableG, ReceivedOutput, Eventuality as _, EventualityTracker};
 
 use crate::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor};
 
-create_db!(
+serai_db::schema!(
   ScannerEventuality {
     // The next block to check for resolving eventualities
     NextToCheckForEventualitiesBlock: () -> u64,

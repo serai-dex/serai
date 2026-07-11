@@ -10,12 +10,12 @@ use serai_client_serai::{
 
 use messages::substrate::{InInstructionResult, ExecutedBatch, CoordinatorMessage};
 
-use serai_db::*;
+use serai_db::{Transaction as DbTxn, Db};
 use serai_task::ContinuallyRan;
 
 use serai_cosign::Cosigning;
 
-create_db!(
+serai_db::schema!(
   CoordinatorSubstrateCanonical {
     NextBlock: () -> u64,
     LastIndexedBatchId: (network: ExternalNetworkId) -> u32,
@@ -23,12 +23,12 @@ create_db!(
 );
 
 /// The event stream for canonical events.
-pub struct CanonicalEventStream<D: Db> {
+pub struct CanonicalEventStream<D: 'static + Send + Sync + Db> {
   db: D,
   serai: Arc<Serai>,
 }
 
-impl<D: Db> CanonicalEventStream<D> {
+impl<D: 'static + Send + Sync + Db> CanonicalEventStream<D> {
   /// Create a new canonical event stream.
   ///
   /// Only one of these may exist over the provided database.
@@ -37,7 +37,7 @@ impl<D: Db> CanonicalEventStream<D> {
   }
 }
 
-impl<D: Db> ContinuallyRan for CanonicalEventStream<D> {
+impl<D: 'static + Send + Sync + Db> ContinuallyRan for CanonicalEventStream<D> {
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

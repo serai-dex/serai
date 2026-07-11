@@ -8,7 +8,7 @@ use frost::{Participant, sign::PreprocessMachine};
 
 use serai_primitives::validator_sets::Session;
 
-use serai_db::{DbTxn, Db};
+use serai_db::{Transaction as DbTxn, Db};
 use messages::sign::{VariantSignId, ProcessorMessage, CoordinatorMessage};
 
 mod individual;
@@ -28,14 +28,14 @@ pub enum Response<M: PreprocessMachine> {
 }
 
 /// A manager of attempts for a variety of signing protocols.
-pub struct AttemptManager<D: Db, M: Clone + PreprocessMachine> {
+pub struct AttemptManager<D: 'static + Send + Sync + Db, M: Clone + PreprocessMachine> {
   db: D,
   session: Session,
   start_i: Participant,
   active: HashMap<VariantSignId, SigningProtocol<D, M>>,
 }
 
-impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
+impl<D: 'static + Send + Sync + Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
   /// Create a new attempt manager.
   ///
   /// This will not restore any signing sessions from the database. Those must be re-registered.

@@ -26,9 +26,9 @@ serai-client-serai = { path = "../../substrate/client/serai", default-features =
 
 futures = { version = "0.3", default-features = false, features = ["std"] }
 
-serai-db = { path = "../../common/db", version = "0.1.1" }
-serai-task = { path = "../../common/task", version = "0.1" }
+serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
+serai-task = { path = "../../common/task" }
 
-serai-cosign = { path = "../cosign", version = "0.1" }
+serai-cosign = { path = "../cosign" }
 
 messages = { package = "serai-processor-messages", version = "0.1", path = "../../processor/messages" }

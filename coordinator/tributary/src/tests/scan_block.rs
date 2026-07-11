@@ -4,7 +4,7 @@ use schnorr::SchnorrSignature;
 
 use serai_primitives::test_helpers::{random_block_hash, random_vec_u8};
 
-use serai_db::{Db as _, DbTxn, MemDb};
+use serai_db::{Db as _, Transaction as DbTxn, MemDb};
 use tributary_sdk::{
   tendermint::tx::TendermintTx, Evidence, Transaction as TributaryTransaction, BlockHeader, Block,
 };

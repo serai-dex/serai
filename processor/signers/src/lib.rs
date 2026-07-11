@@ -16,7 +16,7 @@ use serai_primitives::{
   instructions::SignedBatch,
 };
 
-use serai_db::{DbTxn, Db};
+use serai_db::{Transaction as DbTxn, Db};
 
 use serai_cosign::{Cosign, SignedCosign};
 
@@ -109,7 +109,7 @@ struct Tasks {
 /// The signers used by a processor.
 #[expect(non_snake_case)]
 pub struct Signers<
-  D: Db,
+  D: 'static + Send + Sync + Db,
   S: ScannerFeed,
   Sch: Scheduler<S>,
   P: TransactionPublisher<TransactionFor<SignableTransactionFor<S, Sch>>>,
@@ -139,7 +139,7 @@ type SignableTransactionFor<S, Sch> = <Sch as Scheduler<S>>::SignableTransaction
   memory until the session is retired entirely.
 */
 impl<
-    D: Db,
+    D: 'static + Send + Sync + Db,
     S: ScannerFeed,
     Sch: Scheduler<S>,
     P: TransactionPublisher<TransactionFor<SignableTransactionFor<S, Sch>>>,

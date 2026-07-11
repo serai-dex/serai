@@ -33,7 +33,7 @@ hex = { version = "0.4", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 zalloc = { path = "../common/zalloc" }
-serai-db = { path = "../common/db" }
+serai-db = { path = "../common/db", default-features = false, features = ["std", "schema"] }
 serai-task = { path = "../common/task", version = "0.1" }
 serai-env = { path = "../secret-store/env" }
 

@@ -9,7 +9,7 @@ use serai_primitives::{
 };
 
 use messages::sign::{SignId, VariantSignId};
-use serai_db::{Db as _, DbTxn, MemDb};
+use serai_db::{Db as _, Transaction as DbTxn, MemDb};
 use crate::{
   transaction::SigningProtocolRound,
   db::{*, ProcessorMessages, DkgConfirmationMessages},

@@ -25,4 +25,4 @@ frost = { package = "modular-frost", path = "../../../crypto/frost", default-fea
 
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-serai-db = { path = "../../../common/db" }
+serai-db = { path = "../../../common/db", default-features = false, features = ["std", "schema"] }

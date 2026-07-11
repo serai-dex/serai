@@ -15,7 +15,7 @@ use serai_primitives::{
   address::SeraiAddress,
 };
 
-use serai_db::*;
+use serai_db::{Get, Transaction as DbTxn, Db};
 use serai_task::ContinuallyRan;
 
 use tributary_sdk::{
@@ -131,7 +131,7 @@ impl SubstrateBlockPlans {
   }
 }
 
-struct ScanBlock<'a, TD: Db, TDT: DbTxn, P: P2p> {
+struct ScanBlock<'a, TD: 'static + Send + Sync + Db, TDT: DbTxn, P: P2p> {
   _td: PhantomData<TD>,
   _p2p: PhantomData<P>,
   tributary_txn: &'a mut TDT,
@@ -140,7 +140,7 @@ struct ScanBlock<'a, TD: Db, TDT: DbTxn, P: P2p> {
   total_weight: u16,
   validator_weights: &'a HashMap<SeraiAddress, u16>,
 }
-impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
+impl<TD: 'static + Send + Sync + Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
   fn potentially_start_cosign(&mut self) {
     // Don't start a new cosigning instance if we're actively running one
     if TributaryDb::actively_cosigning(self.tributary_txn, self.set.set).is_some() {
@@ -594,7 +594,7 @@ impl<TD: Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
 }
 
 /// The task to scan the Tributary, populating `ProcessorMessages`.
-pub struct ScanTributaryTask<TD: Db, P: P2p> {
+pub struct ScanTributaryTask<TD: 'static + Send + Sync + Db, P: P2p> {
   tributary_db: TD,
   set: NewSetInformation,
   validators: Vec<SeraiAddress>,
@@ -604,7 +604,7 @@ pub struct ScanTributaryTask<TD: Db, P: P2p> {
   _p2p: PhantomData<P>,
 }
 
-impl<TD: Db, P: P2p> ScanTributaryTask<TD, P> {
+impl<TD: 'static + Send + Sync + Db, P: P2p> ScanTributaryTask<TD, P> {
   /// Create a new instance of this task.
   ///
   /// This will panic if the Tributary read does not correspond to the set.
@@ -640,7 +640,7 @@ impl<TD: Db, P: P2p> ScanTributaryTask<TD, P> {
   }
 }
 
-impl<TD: Db, P: P2p> ContinuallyRan for ScanTributaryTask<TD, P> {
+impl<TD: 'static + Send + Sync + Db, P: P2p> ContinuallyRan for ScanTributaryTask<TD, P> {
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

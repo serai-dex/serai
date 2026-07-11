@@ -9,7 +9,7 @@ use dkg::*;
 use serai_primitives::validator_sets::Session;
 
 use borsh::{BorshSerialize, BorshDeserialize};
-use serai_db::{Get, DbTxn};
+use serai_db::{Get, Transaction as DbTxn};
 
 use crate::{Ristretto, KeyGenParams};
 
@@ -46,9 +46,7 @@ pub(crate) struct Participations {
 mod _db {
   use serai_primitives::validator_sets::Session;
 
-  use serai_db::{Get, DbTxn, create_db};
-
-  create_db!(
+  serai_db::schema!(
     KeyGen {
       Params: (session: &Session) -> super::RawParams,
       Participations: (session: &Session) -> super::Participations,

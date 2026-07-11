@@ -4,7 +4,7 @@ use std::collections::{VecDeque, HashMap};
 use dalek_ff_group::Ristretto;
 use ciphersuite::{group::GroupEncoding as _, *};
 
-use serai_db::{Get as _, DbTxn as _, Db};
+use serai_db::{Get as _, Transaction as _, Db};
 
 use tendermint::{SignatureScheme, Blockchain as BlockchainT};
 
@@ -14,7 +14,7 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
+pub(crate) struct Blockchain<D: 'static + Send + Sync + Db, T: TransactionTrait> {
   db: Option<D>,
   genesis: [u8; 32],
 
@@ -28,37 +28,41 @@ pub(crate) struct Blockchain<D: Db, T: TransactionTrait> {
   pub(crate) next_block_notifications: VecDeque<tokio::sync::oneshot::Sender<()>>,
 }
 
-impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
+impl<D: 'static + Send + Sync + Db, T: TransactionTrait> Blockchain<D, T> {
   fn tip_key(genesis: [u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"tip", genesis)
+    crate::D_key(b"tributary_blockchain", b"tip", genesis)
   }
   fn block_number_key(&self) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"block_number", self.genesis)
+    crate::D_key(b"tributary_blockchain", b"block_number", self.genesis)
   }
   fn block_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"block", [genesis, hash].concat())
+    crate::D_key(b"tributary_blockchain", b"block", [genesis, hash].concat())
   }
   fn block_hash_key(genesis: &[u8], block_number: u64) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"block_hash", [genesis, &block_number.to_le_bytes()].concat())
+    crate::D_key(
+      b"tributary_blockchain",
+      b"block_hash",
+      [genesis, &block_number.to_le_bytes()].concat(),
+    )
   }
   fn commit_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"commit", [genesis, hash].concat())
+    crate::D_key(b"tributary_blockchain", b"commit", [genesis, hash].concat())
   }
   fn block_after_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"block_after", [genesis, hash].concat())
+    crate::D_key(b"tributary_blockchain", b"block_after", [genesis, hash].concat())
   }
   fn unsigned_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"unsigned_included", [genesis, hash].concat())
+    crate::D_key(b"tributary_blockchain", b"unsigned_included", [genesis, hash].concat())
   }
   fn provided_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    D::key(b"tributary_blockchain", b"provided_included", [genesis, hash].concat())
+    crate::D_key(b"tributary_blockchain", b"provided_included", [genesis, hash].concat())
   }
   fn next_nonce_key(
     genesis: &[u8; 32],
     signer: &<Ristretto as WrappedGroup>::G,
     order: &[u8],
   ) -> Vec<u8> {
-    D::key(
+    crate::D_key(
       b"tributary_blockchain",
       b"next_nonce",
       [genesis.as_slice(), signer.to_bytes().as_slice(), order].concat(),
@@ -88,8 +92,8 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       let db = res.db.as_ref().unwrap();
       db.get(res.block_number_key()).map(|number| (number, db.get(Self::tip_key(genesis)).unwrap()))
     } {
-      res.block_number = u64::from_le_bytes(block_number.try_into().unwrap());
-      res.tip.copy_from_slice(&tip);
+      res.block_number = u64::from_le_bytes(block_number.as_ref().try_into().unwrap());
+      res.tip.copy_from_slice(tip.as_ref());
     }
 
     res
@@ -104,16 +108,15 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
   }
 
   pub(crate) fn block_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Block<T>> {
-    db.get(Self::block_key(&genesis, block))
-      .map(|bytes| Block::<T>::read(bytes.as_slice()).unwrap())
+    db.get(Self::block_key(&genesis, block)).map(|bytes| Block::<T>::read(bytes.as_ref()).unwrap())
   }
 
   pub(crate) fn commit_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Vec<u8>> {
-    db.get(Self::commit_key(&genesis, block))
+    db.get(Self::commit_key(&genesis, block)).map(|bytes| bytes.as_ref().to_vec())
   }
 
   pub(crate) fn block_after(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<[u8; 32]> {
-    db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.try_into().unwrap())
+    db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.as_ref().try_into().unwrap())
   }
 
   pub(crate) fn locally_provided_txs_in_block(
@@ -123,18 +126,24 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     order: &str,
   ) -> bool {
     let local_key = ProvidedTransactions::<D, T>::locally_provided_quantity_key(genesis, order);
-    let local =
-      db.get(local_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
+    let local = db
+      .get(local_key)
+      .map(|bytes| u32::from_le_bytes(bytes.as_ref().try_into().unwrap()))
+      .unwrap_or(0);
     let block_key =
       ProvidedTransactions::<D, T>::block_provided_quantity_key(genesis, block, order);
-    let block =
-      db.get(block_key).map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap())).unwrap_or(0);
+    let block = db
+      .get(block_key)
+      .map(|bytes| u32::from_le_bytes(bytes.as_ref().try_into().unwrap()))
+      .unwrap_or(0);
 
     local >= block
   }
 
   pub(crate) fn tip_from_db(db: &D, genesis: [u8; 32]) -> [u8; 32] {
-    db.get(Self::tip_key(genesis)).map(|bytes| bytes.try_into().unwrap()).unwrap_or(genesis)
+    db.get(Self::tip_key(genesis))
+      .map(|bytes| bytes.as_ref().try_into().unwrap())
+      .unwrap_or(genesis)
   }
 
   pub(crate) fn add_transaction<
@@ -158,7 +167,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
       |signer, order| {
         self.participants.contains_key(&signer.to_bytes()).then(|| {
           db.get(Self::next_nonce_key(&self.genesis, &signer, &order))
-            .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+            .map(|bytes| u32::from_le_bytes(bytes.as_ref().try_into().unwrap()))
             .unwrap_or(0)
         })
       },
@@ -188,7 +197,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
         .as_ref()
         .unwrap()
         .get(Self::next_nonce_key(&self.genesis, signer, order))
-        .map(|bytes| u32::from_le_bytes(bytes.try_into().unwrap()))
+        .map(|bytes| u32::from_le_bytes(bytes.as_ref().try_into().unwrap()))
         .unwrap_or(0)
     })
   }
@@ -242,9 +251,9 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
           let key = Self::next_nonce_key(&self.genesis, signer, order);
           let next = txn
             .get(&key)
-            .map(|next_nonce| u32::from_le_bytes(next_nonce.try_into().unwrap()))
+            .map(|next_nonce| u32::from_le_bytes(next_nonce.as_ref().try_into().unwrap()))
             .unwrap_or(0);
-          txn.put(key, (next + 1).to_le_bytes());
+          txn.set(key, (next + 1).to_le_bytes());
           next
         })
       },
@@ -288,35 +297,35 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     let mut txn = db.txn();
 
     self.tip = block.hash();
-    txn.put(Self::tip_key(self.genesis), self.tip);
+    txn.set(Self::tip_key(self.genesis), self.tip);
 
     self.block_number += 1;
-    txn.put(self.block_number_key(), self.block_number.to_le_bytes());
+    txn.set(self.block_number_key(), self.block_number.to_le_bytes());
 
-    txn.put(Self::block_hash_key(&self.genesis, self.block_number), self.tip);
+    txn.set(Self::block_hash_key(&self.genesis, self.block_number), self.tip);
 
-    txn.put(Self::block_key(&self.genesis, &self.tip), block.serialize());
-    txn.put(Self::commit_key(&self.genesis, &self.tip), commit);
+    txn.set(Self::block_key(&self.genesis, &self.tip), block.serialize());
+    txn.set(Self::commit_key(&self.genesis, &self.tip), commit);
 
-    txn.put(Self::block_after_key(&self.genesis, &block.parent()), block.hash());
+    txn.set(Self::block_after_key(&self.genesis, &block.parent()), block.hash());
 
     for tx in &block.transactions {
       match tx.kind() {
         TransactionKind::Provided(order) => {
           let hash = tx.hash();
           self.provided.complete(&mut txn, order, self.tip, hash);
-          txn.put(Self::provided_included_key(&self.genesis, &hash), []);
+          txn.set(Self::provided_included_key(&self.genesis, &hash), []);
         }
         TransactionKind::Unsigned => {
           let hash = tx.hash();
           // Save as included on chain
-          txn.put(Self::unsigned_included_key(&self.genesis, &hash), []);
+          txn.set(Self::unsigned_included_key(&self.genesis, &hash), []);
           // remove from the mempool
           self.mempool.remove(&hash);
         }
         TransactionKind::Signed(order, Signed { signer, nonce, .. }) => {
           let next_nonce = nonce + 1;
-          txn.put(Self::next_nonce_key(&self.genesis, &signer, &order), next_nonce.to_le_bytes());
+          txn.set(Self::next_nonce_key(&self.genesis, &signer, &order), next_nonce.to_le_bytes());
           self.mempool.remove(&tx.hash());
         }
       }

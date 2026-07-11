@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use group::GroupEncoding as _;
 
-use serai_db::{Get, DbTxn, create_db};
+use serai_db::Transaction as DbTxn;
 
 use primitives::{ReceivedOutput as _, Payment};
 use scanner::{
@@ -16,7 +16,7 @@ use scanner::{
 };
 use scheduler_primitives::*;
 
-create_db! {
+serai_db::schema! {
   SmartContractScheduler {
     NextNonce: () -> u64,
   }

@@ -9,7 +9,7 @@ use serai_primitives::{
   address::SeraiAddress,
 };
 
-use serai_db::*;
+use serai_db::{Get, Transaction as DbTxn};
 use serai_cosign_types::CosignIntent;
 use messages::sign::{VariantSignId, SignId};
 
@@ -239,7 +239,7 @@ pub(crate) enum DataSet<D: Borshy> {
   Participating(HashMap<SeraiAddress, D>),
 }
 
-create_db!(
+serai_db::schema!(
   CoordinatorTributary {
     // The last handled tributary block's (number, hash)
     LastHandledTributaryBlock: (set: ExternalValidatorSet) -> (u64, [u8; 32]),
@@ -276,7 +276,7 @@ create_db!(
   }
 );
 
-db_channel!(
+serai_db::channel!(
   CoordinatorTributary {
     // Messages to send to the processor
     ProcessorMessages: (set: ExternalValidatorSet) -> messages::CoordinatorMessage,

@@ -9,7 +9,7 @@ use group::GroupEncoding as _;
 
 use serai_primitives::{coin::ExternalCoin, balance::Amount};
 
-use serai_db::DbTxn;
+use serai_db::Transaction as DbTxn;
 
 use primitives::{OutputType, ReceivedOutput as _, Payment};
 use scanner::{

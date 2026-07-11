@@ -26,7 +26,7 @@ ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, fea
 tokio = { version = "1", default-features = false, features = ["rt", "time", "io-util", "net", "macros"] }
 
 zalloc = { path = "../../common/zalloc" }
-serai-db = { path = "../../common/db", optional = true }
+serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
 
 serai-env = { path = "../../secret-store/env" }
 

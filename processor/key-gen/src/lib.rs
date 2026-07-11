@@ -20,7 +20,7 @@ use dkg::*;
 use serai_primitives::validator_sets::Session;
 use messages::key_gen::*;
 
-use serai_db::{Get, DbTxn};
+use serai_db::{Get, Transaction as DbTxn};
 
 mod generators;
 use generators::generators;

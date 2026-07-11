@@ -1,7 +1,7 @@
 use core::future::Future;
 use std::sync::Arc;
 
-use serai_db::{DbTxn as _, Db};
+use serai_db::{Transaction as _, Db};
 
 use serai_client_serai::{
   abi::primitives::{network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet},
@@ -13,19 +13,19 @@ use serai_task::ContinuallyRan;
 use crate::Keys;
 
 /// Set keys from `Keys` on Serai.
-pub struct SetKeysTask<D: Db> {
+pub struct SetKeysTask<D: 'static + Send + Sync + Db> {
   db: D,
   serai: Arc<Serai>,
 }
 
-impl<D: Db> SetKeysTask<D> {
+impl<D: 'static + Send + Sync + Db> SetKeysTask<D> {
   /// Create a task to publish slash reports onto Serai.
   pub fn new(db: D, serai: Arc<Serai>) -> Self {
     Self { db, serai }
   }
 }
 
-impl<D: Db> ContinuallyRan for SetKeysTask<D> {
+impl<D: 'static + Send + Sync + Db> ContinuallyRan for SetKeysTask<D> {
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

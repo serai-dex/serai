@@ -33,7 +33,7 @@ schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", versi
 hex = { version = "0.4", default-features = false, features = ["std"] }
 log = { version = "0.4", default-features = false, features = ["std"] }
 
-serai-db = { path = "../../common/db", version = "0.1" }
+serai-db = { path = "../../common/db", version = "0.2", default-features = false, features = ["std", "schema"] }
 
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 tendermint = { package = "tendermint-machine", path = "./tendermint", version = "0.2", default-features = false, features = ["std"] }

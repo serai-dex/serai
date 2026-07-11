@@ -13,7 +13,7 @@ use blake2::{Digest as _, Blake2s256};
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;
 
-use serai_db::{DbTxn as _, Db as _, MemDb};
+use serai_db::{Transaction as _, Db as _, MemDb};
 
 use crate::{
   ReadWrite, TransactionKind,

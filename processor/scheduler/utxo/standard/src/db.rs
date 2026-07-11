@@ -7,13 +7,13 @@ use serai_primitives::{
   balance::{Amount, ExternalBalance},
 };
 
-use serai_db::{Get, DbTxn, create_db, db_channel};
+use serai_db::{Get, Transaction as DbTxn};
 
 use primitives::{Payment, ReceivedOutput as _};
 use utxo_scheduler_primitives::TreeTransaction;
 use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor};
 
-create_db! {
+serai_db::schema! {
   UtxoScheduler {
     OperatingCosts: (coin: ExternalCoin) -> Amount,
     SerializedOutputs: (key: &[u8], coin: ExternalCoin) -> Vec<u8>,
@@ -22,7 +22,7 @@ create_db! {
 }
 
 #[rustfmt::skip]
-db_channel! {
+serai_db::channel! {
   UtxoScheduler {
     PendingBranch: <S: ScannerFeed>(key: &[u8], balance: ExternalBalance) -> TreeTransaction<AddressFor<S>>,
   }

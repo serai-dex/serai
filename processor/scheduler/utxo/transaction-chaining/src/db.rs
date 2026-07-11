@@ -4,12 +4,12 @@ use group::GroupEncoding as _;
 
 use serai_primitives::{coin::ExternalCoin, balance::Amount};
 
-use serai_db::{Get, DbTxn, create_db};
+use serai_db::{Get, Transaction as DbTxn};
 
 use primitives::{Payment, ReceivedOutput};
 use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor};
 
-create_db! {
+serai_db::schema! {
   TransactionChainingScheduler {
     OperatingCosts: (coin: ExternalCoin) -> Amount,
     SerializedOutputs: (key: &[u8], coin: ExternalCoin) -> Vec<u8>,

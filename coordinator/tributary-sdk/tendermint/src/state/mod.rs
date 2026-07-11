@@ -7,7 +7,7 @@ use alloc::{boxed::Box, sync::Arc};
 use std::{collections::HashMap, time::Instant};
 
 use borsh::{BorshSerialize, BorshDeserialize};
-use serai_db::DbTxn;
+use serai_db::Transaction;
 
 use crate::{
   SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, Commit, Blockchain, Signer,
@@ -161,7 +161,7 @@ impl<B: Blockchain> State<B> {
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
   ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
     let validator_set = blockchain.validator_set();
 
@@ -212,7 +212,7 @@ impl<B: Blockchain> State<B> {
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
     block: Option<<B::Block as Block>::Hash>,
   ) -> MessageFor<B> {
     let genesis = blockchain.genesis();
@@ -257,7 +257,7 @@ impl<B: Blockchain> State<B> {
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
   ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
     if !matches!(self.step, Step::Propose) {
       None?;
@@ -315,7 +315,7 @@ impl<B: Blockchain> State<B> {
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
     block_and_precommit_signature: Option<(
       <B::Block as Block>::Hash,
       <B::SignatureScheme as SignatureScheme>::Signature,
@@ -357,7 +357,7 @@ impl<B: Blockchain> State<B> {
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
   ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
     /*
       L36
@@ -445,7 +445,7 @@ impl<B: Blockchain> State<B> {
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
   ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
     // L22-L33
     let prevote_some_message = self.prevote_some_message(blockchain, signer, txn).await;
@@ -529,7 +529,7 @@ impl<B: Blockchain> State<B> {
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
     round: RoundNumber,
   ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
     debug_assert!(
@@ -615,7 +615,7 @@ impl<B: Blockchain> State<B> {
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
     proposal: B::Block,
   ) -> (Self, impl IntoIterator<IntoIter: Send, Item = MessageFor<B>>) {
     let (init, mut state) = {
@@ -714,7 +714,7 @@ impl<B: Blockchain> State<B> {
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
     message: MessageFor<B>,
   ) -> Result<impl IntoIterator<IntoIter: Send, Item = MessageFor<B>>, MessageError> {
     // If this is historic or for a future block, ignore this message
@@ -887,7 +887,7 @@ impl<
     >,
   >(
     self,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
   ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
     let Self { state, blockchain, signer } = self;
 
@@ -999,7 +999,7 @@ impl<B: Blockchain> State<B> {
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
     block: B::Block,
     commit: Commit<B::SignatureScheme>,
   ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
@@ -1078,7 +1078,7 @@ impl<B: Blockchain> State<B> {
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
-    txn: &mut impl DbTxn,
+    txn: &mut impl Transaction,
   ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
     let Some((block, commit)) = self.round_metrics.commit(blockchain) else {
       return None.into_iter().flatten();

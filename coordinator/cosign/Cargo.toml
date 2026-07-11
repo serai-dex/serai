@@ -26,8 +26,8 @@ serai-env = { path = "../../secret-store/env", version = "0.1.0" }
 
 tokio = { version = "1", default-features = false }
 
-serai-db = { path = "../../common/db", version = "0.1.1" }
-serai-task = { path = "../../common/task", version = "0.1" }
+serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
+serai-task = { path = "../../common/task" }
 
 serai-cosign-types = { path = "./types" }
 

@@ -1,6 +1,6 @@
 use core::{marker::PhantomData, future::Future};
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get, Transaction as DbTxn, Db};
 
 use serai_primitives::instructions::{OutInstruction, OutInstructionWithBalance};
 
@@ -38,18 +38,18 @@ pub(crate) fn queue_queue_burns<S: ScannerFeed>(
   them until we're able to process them.
 */
 #[expect(non_snake_case)]
-pub(crate) struct SubstrateTask<D: Db, S: ScannerFeed> {
+pub(crate) struct SubstrateTask<D: 'static + Send + Sync + Db, S: ScannerFeed> {
   db: D,
   _S: PhantomData<S>,
 }
 
-impl<D: Db, S: ScannerFeed> SubstrateTask<D, S> {
+impl<D: 'static + Send + Sync + Db, S: ScannerFeed> SubstrateTask<D, S> {
   pub(crate) fn new(db: D) -> Self {
     Self { db, _S: PhantomData }
   }
 }
 
-impl<D: Db, S: ScannerFeed> ContinuallyRan for SubstrateTask<D, S> {
+impl<D: 'static + Send + Sync + Db, S: ScannerFeed> ContinuallyRan for SubstrateTask<D, S> {
   type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

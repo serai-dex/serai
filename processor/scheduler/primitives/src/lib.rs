@@ -8,7 +8,7 @@ use std::io;
 use ciphersuite::{group::GroupEncoding, *};
 use frost::{dkg::ThresholdKeys, sign::PreprocessMachine};
 
-use serai_db::DbTxn;
+use serai_db::Transaction as DbTxn;
 
 /// A transaction.
 pub trait Transaction: Sized + Send {
@@ -47,9 +47,7 @@ pub trait SignableTransaction: 'static + Sized + Send + Sync + Clone {
 pub type TransactionFor<ST> = <ST as SignableTransaction>::Transaction;
 
 mod db {
-  use serai_db::{Get, DbTxn, create_db, db_channel};
-
-  db_channel! {
+  serai_db::channel! {
     SchedulerPrimitives {
       TransactionsToSign: (key: &[u8]) -> Vec<u8>,
     }

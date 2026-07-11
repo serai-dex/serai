@@ -14,14 +14,14 @@ use serai_client_serai::{
   Serai,
 };
 
-use serai_db::*;
+use serai_db::{Transaction as _, Db};
 use serai_task::ContinuallyRan;
 
 use serai_cosign::Cosigning;
 
 use crate::NewSetInformation;
 
-create_db!(
+serai_db::schema!(
   CoordinatorSubstrateEphemeral {
     NextBlock: () -> u64,
     EmbeddedEllipticCurveKeys: (
@@ -32,13 +32,13 @@ create_db!(
 );
 
 /// The event stream for ephemeral events.
-pub struct EphemeralEventStream<D: Db> {
+pub struct EphemeralEventStream<D: 'static + Send + Sync + Db> {
   db: D,
   serai: Arc<Serai>,
   validator: SeraiAddress,
 }
 
-impl<D: Db> EphemeralEventStream<D> {
+impl<D: 'static + Send + Sync + Db> EphemeralEventStream<D> {
   /// Create a new ephemeral event stream.
   ///
   /// Only one of these may exist over the provided database.
@@ -47,7 +47,7 @@ impl<D: Db> EphemeralEventStream<D> {
   }
 }
 
-impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
+impl<D: 'static + Send + Sync + Db> ContinuallyRan for EphemeralEventStream<D> {
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

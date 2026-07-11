@@ -309,7 +309,7 @@ impl BlockTrait for TendermintBlock {
 }
 
 #[derive(Clone, Debug)]
-pub struct TendermintNetwork<D: Db, T: TransactionTrait, P: P2p> {
+pub struct TendermintNetwork<D: 'static + Send + Sync + Db, T: TransactionTrait, P: P2p> {
   pub(crate) genesis: [u8; 32],
   pub(crate) last_addition: Instant,
 
@@ -319,7 +319,9 @@ pub struct TendermintNetwork<D: Db, T: TransactionTrait, P: P2p> {
   pub(crate) p2p: P,
 }
 
-impl<D: Db, T: TransactionTrait, P: P2p> BlockchainTrait for TendermintNetwork<D, T, P> {
+impl<D: 'static + Send + Sync + Db, T: TransactionTrait, P: P2p> BlockchainTrait
+  for TendermintNetwork<D, T, P>
+{
   type Validator = [u8; 32];
   type ValidatorSet = HashMap<Self::Validator, NonZero<u16>>;
   type SignatureScheme = Validators;
@@ -493,7 +495,7 @@ pub const TARGET_BLOCK_TIME: Duration = BLOCK_DOWNLOADING_TIME
   .checked_add(LATENCY_TIME.checked_mul(3).unwrap())
   .unwrap();
 
-impl<D: Db, T: TransactionTrait, P: P2p>
+impl<D: 'static + Send + Sync + Db, T: TransactionTrait, P: P2p>
   Network<
     [u8; 32],
     <Validators as SignatureScheme>::Signature,

@@ -38,7 +38,7 @@ zalloc = { path = "../../common/zalloc" }
 log = { version = "0.4", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "sync", "time", "macros"] }
 
-serai-db = { path = "../../common/db" }
+serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
 
 key-gen = { package = "serai-processor-key-gen", path = "../key-gen" }
 

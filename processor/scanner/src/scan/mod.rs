@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use borsh::BorshDeserialize as _;
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get, Transaction as DbTxn, Db};
 
 #[rustfmt::skip]
 use serai_primitives::instructions::{RefundableInInstruction, InInstruction, InInstructionWithBalance};
@@ -75,12 +75,12 @@ fn in_instruction_from_output<S: ScannerFeed>(
   )
 }
 
-pub(crate) struct ScanTask<D: Db, S: ScannerFeed> {
+pub(crate) struct ScanTask<D: 'static + Send + Sync + Db, S: ScannerFeed> {
   db: D,
   feed: S,
 }
 
-impl<D: Db, S: ScannerFeed> ScanTask<D, S> {
+impl<D: 'static + Send + Sync + Db, S: ScannerFeed> ScanTask<D, S> {
   pub(crate) fn new(mut db: D, feed: S, start_block: u64) -> Self {
     if ScanDb::<S>::next_to_scan_for_outputs_block(&db).is_none() {
       // Initialize the DB
@@ -93,7 +93,7 @@ impl<D: Db, S: ScannerFeed> ScanTask<D, S> {
   }
 }
 
-impl<D: Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
+impl<D: 'static + Send + Sync + Db, S: ScannerFeed> ContinuallyRan for ScanTask<D, S> {
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
