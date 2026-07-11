@@ -4,7 +4,7 @@ use std::time::{Instant, SystemTime};
 
 use serai_db::{Get, DbTxn};
 
-use crate::{Borshy, Blockchain};
+use crate::{Borshy, SignatureScheme, ValidRound, Blockchain};
 
 serai_db::create_db!(TributaryState {
   BlockNumber: (genesis: &[u8]) -> crate::BlockNumber,
@@ -14,7 +14,10 @@ serai_db::create_db!(TributaryState {
   PendingPrecommitTimeout: (genesis: &[u8]) -> u64,
   Step: (genesis: &[u8]) -> super::Step,
 
-  Valid: <Block: Borshy>(genesis: &[u8]) -> (crate::RoundNumber, Block),
+  Valid: <B: Blockchain>(genesis: &[u8]) -> (
+    ValidRound<<B::SignatureScheme as SignatureScheme>::AggregateSignature>,
+    B::Block
+  ),
 
   Locked: <Hash: Borshy>(genesis: &[u8]) -> (crate::RoundNumber, Hash),
 

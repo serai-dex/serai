@@ -41,7 +41,7 @@ trait Borshy: borsh::BorshSerialize + borsh::BorshDeserialize {}
 impl<B: borsh::BorshSerialize + borsh::BorshDeserialize> Borshy for B {}
 
 /// A view over the network used for consensus.
-pub trait Network<V: Validator, S: Signature, B: Block>: Sized {
+pub trait Network<V: Validator, S: Signature, A: AggregateSignature, B: Block>: Sized {
   /// The expected average-case latency of the network.
   ///
   /// This should be sufficient for a supermajority of validators to communicate, in the average
@@ -79,7 +79,7 @@ pub trait Network<V: Validator, S: Signature, B: Block>: Sized {
   /// broadcast with any specific security properties, though failure for this message to be
   /// delivered to a sufficient amount of other validators in a timely fashion will cause consensus
   /// to stall until the timeout for a round exceeds the latency of this network.
-  fn broadcast(&mut self, message: Message<V, S, B>) -> impl Send + Future<Output = ()>;
+  fn broadcast(&mut self, message: Message<V, S, A, B>) -> impl Send + Future<Output = ()>;
 }
 
 #[cfg(feature = "std")]
@@ -125,7 +125,12 @@ mod tendermint {
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
     D: Db,
-    N: Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+    N: Network<
+      B::Validator,
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      B::Block,
+    >,
   > {
     sync: Receiver<(B::Block, Commit<B::SignatureScheme>)>,
     message: Receiver<MessageFor<B>>,
@@ -144,7 +149,12 @@ mod tendermint {
         Signature = <B::SignatureScheme as SignatureScheme>::Signature,
       >,
       D: Db,
-      N: Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+      N: Network<
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
     > TendermintProcess<B, S, D, N>
   {
     async fn run(&mut self) {
@@ -235,6 +245,7 @@ mod tendermint {
               }
               Err(
                 MessageError::Stale |
+                MessageError::Future |
                 MessageError::NotValidator |
                 MessageError::InvalidSignature |
                 MessageError::AlreadyHandled,
@@ -291,7 +302,12 @@ mod tendermint {
       D: Db,
       N: 'static
         + Send
-        + Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+        + Network<
+          B::Validator,
+          <B::SignatureScheme as SignatureScheme>::Signature,
+          <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+          B::Block,
+        >,
     >(
       blockchain: B,
       signer: S,

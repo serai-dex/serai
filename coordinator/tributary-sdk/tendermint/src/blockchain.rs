@@ -171,6 +171,10 @@ pub trait Blockchain {
   fn slash(
     &self,
     validator: Self::Validator,
-    slash_reason: SlashReason<<Self::SignatureScheme as SignatureScheme>::Signature, Self::Block>,
+    slash_reason: SlashReason<
+      <Self::SignatureScheme as SignatureScheme>::Signature,
+      <Self::SignatureScheme as SignatureScheme>::AggregateSignature,
+      Self::Block,
+    >,
   );
 }

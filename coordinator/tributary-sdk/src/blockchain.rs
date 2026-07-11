@@ -141,7 +141,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     N: BlockchainT<
       Validator = [u8; 32],
       ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-      SignatureScheme: SignatureScheme<Signature = [u8; 64]>,
+      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
     >,
   >(
     &mut self,
@@ -197,7 +197,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     N: BlockchainT<
       Validator = [u8; 32],
       ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-      SignatureScheme: SignatureScheme<Signature = [u8; 64]>,
+      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
     >,
   >(
     &mut self,
@@ -217,7 +217,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     N: BlockchainT<
       Validator = [u8; 32],
       ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-      SignatureScheme: SignatureScheme<Signature = [u8; 64]>,
+      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
     >,
   >(
     &self,
@@ -263,7 +263,7 @@ impl<D: Db, T: TransactionTrait> Blockchain<D, T> {
     N: BlockchainT<
       Validator = [u8; 32],
       ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-      SignatureScheme: SignatureScheme<Signature = [u8; 64]>,
+      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
     >,
   >(
     &mut self,

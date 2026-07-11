@@ -4,8 +4,8 @@ use crate::{BlockNumber, RoundNumber};
 
 /// A validator ID.
 ///
-/// This is effectively a trait alias where a potential validator ID is any type which meets all of
-/// these bounds, and this is implemented for all such types.
+/// This is effectively a trait alias where a potential validator ID is any type which satisfies
+/// all of these bounds, and this is implemented for all such types.
 ///
 /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
@@ -23,7 +23,7 @@ impl<V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + crate::Bors
 /// A representation of a signature.
 ///
 /// This is effectively a trait alias where a potential representation of a signature is any type
-/// which meets all of these bounds, and this is implemented for all such types.
+/// which satisfies all of these bounds, and this is implemented for all such types.
 ///
 /// The `AsRef<[u8]>` implementation MUST return a slice with a consistent length for _any_
 /// value, meaning it's _constant_.
@@ -38,14 +38,18 @@ impl<S: Send + Sync + Clone + AsRef<[u8]> + crate::Borshy> Signature for S {}
 /// A representation of an aggregate signature.
 ///
 /// This is effectively a trait alias where a potential representation of an aggregate signature is
-/// any type which meets all of these bounds, and this is implemented for all such types.
+/// any type which satisfies all of these bounds, and this is implemented for all such types.
 ///
 /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
 /// value which was successfully serialized, from a well-formed reader.
 #[expect(private_bounds)]
-pub trait AggregateSignature: Send + Sync + crate::Borshy {}
-impl<S: Send + Sync + crate::Borshy> AggregateSignature for S {}
+pub trait AggregateSignature: Send + Sync + Clone + AsRef<[u8]> + crate::Borshy {}
+impl<S: Send + Sync + Clone + AsRef<[u8]> + crate::Borshy> AggregateSignature for S {}
+
+/// The aggregate signature was invalid.
+#[derive(Debug)]
+pub struct InvalidAggregateSignature;
 
 /// A signer for a validator.
 pub trait Signer {
@@ -98,10 +102,11 @@ pub trait SignatureScheme {
   type Signature: Signature;
   /// The type used to represent an aggregate signature.
   ///
-  /// This may be an aggregated BLS signature, or a
+  /// This may be a one-round threshold signature, an aggregated BLS signature, a
   /// [half-aggregated Schnorr signature](https://eprint.iacr.org/2021/350) (as implemented in the
   /// [`schnorr-signatures`](https://docs.rs/schnorr-signatures) crate), a succinct proof, or
-  /// simply the list of individual signatures (without any actual aggregation).
+  /// simply the list of individual signatures (without any actual aggregation). It MUST have the
+  /// context over _both_ the participating signers _and_ the signatures however.
   type AggregateSignature: AggregateSignature;
 
   /// Verify a signature from the validator in question.
@@ -115,7 +120,7 @@ pub trait SignatureScheme {
     signature: &Self::Signature,
   ) -> bool;
 
-  /// Aggregate signatures.
+  /// Aggregate signatures from a set of validators of sum weight satisfying the threshold.
   ///
   /// The message is singular, expected to be consistent across all signatures, and the
   /// concatenation of each byte slice yielded by the iterator.
@@ -131,18 +136,21 @@ pub trait SignatureScheme {
     Self::Validator: 'sig,
     Self::Signature: 'sig;
 
-  /// Verify an aggregate signature (over the same message) for this list of signers.
+  /// Verify an aggregate signature.
   ///
   /// The message is the concatenation of each byte slice yielded by the iterator.
-  #[must_use]
-  fn verify_aggregate<'sig>(
+  ///
+  /// The return result MUST be the set of validators which participated in producing this
+  /// signature (in any order, without multiple inclusions). If this is a threshold signature where
+  /// the signing key's reconstruction threshold is equal to Tendermint's threshold, this MAY
+  /// return any set of validators with weight greater than or equal to Tendermint's threshold,
+  /// even if that set was not necessarily the set which participated in producing the aggregate
+  /// signature.
+  fn verify_aggregate(
     &self,
-    signers: impl IntoIterator<Item = &'sig Self::Validator>,
     message: impl IntoIterator<Item = impl AsRef<[u8]>>,
     aggregate_signature: &Self::AggregateSignature,
-  ) -> bool
-  where
-    Self::Validator: 'sig;
+  ) -> Result<impl IntoIterator<Item = Self::Validator>, InvalidAggregateSignature>;
 }
 
 impl<S: SignatureScheme> SignatureScheme for &S {
@@ -171,16 +179,12 @@ impl<S: SignatureScheme> SignatureScheme for &S {
     S::aggregate(self, message, signatures)
   }
 
-  fn verify_aggregate<'sig>(
+  fn verify_aggregate(
     &self,
-    signers: impl IntoIterator<Item = &'sig Self::Validator>,
     message: impl IntoIterator<Item = impl AsRef<[u8]>>,
     aggregate_signature: &Self::AggregateSignature,
-  ) -> bool
-  where
-    Self::Validator: 'sig,
-  {
-    S::verify_aggregate(self, signers, message, aggregate_signature)
+  ) -> Result<impl IntoIterator<Item = Self::Validator>, InvalidAggregateSignature> {
+    S::verify_aggregate(self, message, aggregate_signature)
   }
 }
 

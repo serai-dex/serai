@@ -4,8 +4,8 @@ use std::collections::HashMap;
 use serai_db::{Get, DbTxn};
 
 use crate::{
-  Borshy, SignatureScheme, ValidatorSet, BlockNumber, RoundNumber, Block, Commit, Blockchain, Data,
-  Evidence, SlashReason, Message, MessageFor,
+  Borshy, SignatureScheme, ValidatorSet, BlockNumber, RoundNumber, Block, Commit, Blockchain,
+  ValidRound, Data, Evidence, SlashReason, Message, MessageFor,
 };
 
 /*
@@ -24,10 +24,11 @@ serai_db::create_db!(TendermintRoundMetrics {
 
   Prevote: <
     Validator: Borshy,
-    Hash: Borshy
+    Hash: Borshy,
+    Signature: Borshy
   >(genesis: &[u8], validator: &Validator) -> (
     (BlockNumber, RoundNumber),
-    Option<Hash>
+    (Option<Hash>, Signature)
   ),
 
   Precommit: <
@@ -69,7 +70,11 @@ pub(super) struct RoundMetrics<B: Blockchain> {
   /// The weight of the prevotes which have been observed for `None` this round.
   observed_prevotes_for_none: u16,
   /// The prevotes which have been observed for this round.
-  observed_prevotes: HashMap<B::Validator, Option<<B::Block as Block>::Hash>>,
+  #[expect(clippy::type_complexity)]
+  observed_prevotes: HashMap<
+    B::Validator,
+    (Option<<B::Block as Block>::Hash>, <B::SignatureScheme as SignatureScheme>::Signature),
+  >,
 
   /// The weight of the precommits which have been observed this round.
   observed_precommits_weight: u16,
@@ -99,10 +104,39 @@ impl<B: Blockchain> RoundMetrics<B> {
       proposal,
     })
   }
-  /// The weight of the prevotes which have been observed for the proposal this round.
+  /// The prevotes which have been observed for the proposal this round.
+  ///
+  /// This returns `Some(ValidRound { .. })` if the amount of observed prevotes satisfy the
+  /// threshold and `None` otherwise.
   #[must_use]
-  pub(super) fn observed_prevotes_for_proposal(&self) -> u16 {
-    self.observed_prevotes_for_proposal
+  pub(super) fn observed_prevotes_for_proposal(
+    &self,
+    blockchain: &B,
+  ) -> Option<ValidRound<<B::SignatureScheme as SignatureScheme>::AggregateSignature>> {
+    if self.observed_prevotes_for_proposal < blockchain.validator_set().threshold() {
+      None?;
+    }
+
+    let (_proposer, _valid_round, proposal) = self
+      .observed_proposal
+      .as_ref()
+      .expect("observed prevotes for a proposal but didn't have the proposal?");
+    let proposal = proposal.hash();
+
+    Some(ValidRound {
+      round_number: self.round_number,
+      aggregate_signature: blockchain.signature_scheme().aggregate(
+        MessageFor::<B>::signature_message(
+          blockchain.genesis(),
+          self.block_number,
+          self.round_number,
+          &Data::Prevote { block: Some(proposal) },
+        ),
+        self.observed_prevotes.iter().filter_map(|(validator, (block, signature))| {
+          ((*block) == Some(proposal)).then_some((validator, signature))
+        }),
+      ),
+    })
   }
   /// The weight of the prevotes which have been observed for `None` this round.
   #[must_use]
@@ -188,7 +222,6 @@ impl<B: Blockchain> RoundMetrics<B> {
       Commit {
         block_number: self.block_number,
         round_number: self.round_number,
-        validators,
         aggregate_signature,
       },
     ))
@@ -251,7 +284,7 @@ impl<B: Blockchain> RoundMetrics<B> {
       Note we wouldn't have tallied them already as these prevotes, now for the observed proposal,
       weren't for the observed proposal prior to it being set just now (as it was `None`).
     */
-    for (validator, block) in &self.observed_prevotes {
+    for (validator, (block, _signature)) in &self.observed_prevotes {
       if (*block) == Some(proposal_hash) {
         self.observed_prevotes_for_proposal +=
           validator_set.weight(validator).map(u16::from).unwrap_or(0);
@@ -283,18 +316,19 @@ impl<B: Blockchain> RoundMetrics<B> {
     txn: &mut impl DbTxn,
     validator: B::Validator,
     block: Option<<B::Block as Block>::Hash>,
+    signature: <B::SignatureScheme as SignatureScheme>::Signature,
   ) -> bool {
     match self.observed_prevotes.entry(validator) {
       // If this validator already had a prevote accumulated, return immediately
       std::collections::hash_map::Entry::Occupied(_) => return false,
       // Insert this as this validator's prevote
       std::collections::hash_map::Entry::Vacant(entry) => {
-        let _ = entry.insert(block);
+        let _ = entry.insert((block, signature.clone()));
         Prevote::set(
           txn,
           genesis.as_ref(),
           &validator,
-          &((self.block_number, self.round_number), block),
+          &((self.block_number, self.round_number), (block, signature)),
         );
       }
     }
@@ -374,6 +408,8 @@ impl<B: Blockchain> RoundMetrics<B> {
 
   /// Accumulate a message into the round's metrics.
   ///
+  /// The message MUST be for the current block, round numbers.
+  ///
   /// Messages with `Data::Proposal` MUST have been validated to have the correct proposer AND a
   /// valid `locked_round` value.
   ///
@@ -388,15 +424,25 @@ impl<B: Blockchain> RoundMetrics<B> {
     txn: &mut impl DbTxn,
     message: MessageFor<B>,
   ) {
-    let Message { validator, data, .. } = message;
+    let Message { validator, block_number, round_number, data, signature } = message;
+    debug_assert_eq!(self.block_number, block_number);
+    debug_assert_eq!(self.round_number, round_number);
+
     match data {
       Data::Proposal { valid_round, proposal } => {
         if self.observed_proposal.is_none() {
-          self.accumulate_proposal(genesis, validator_set, txn, validator, valid_round, proposal);
+          self.accumulate_proposal(
+            genesis,
+            validator_set,
+            txn,
+            validator,
+            valid_round.map(|ValidRound { round_number, aggregate_signature: _ }| round_number),
+            proposal,
+          );
         }
       }
       Data::Prevote { block } => {
-        let _ = self.accumulate_prevote(genesis, validator_set, txn, validator, block);
+        let _ = self.accumulate_prevote(genesis, validator_set, txn, validator, block, signature);
       }
       Data::Precommit { block_and_precommit_signature } => {
         let _ = self.accumulate_precommit(
@@ -463,8 +509,11 @@ impl<B: Blockchain> RoundMetrics<B> {
     }
 
     for validator in validator_set.validators() {
-      if let Some((ttl, block)) =
-        Prevote::<B::Validator, <B::Block as Block>::Hash>::get(getter, genesis.as_ref(), validator)
+      if let Some((ttl, (block, signature))) = Prevote::<
+        B::Validator,
+        <B::Block as Block>::Hash,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+      >::get(getter, genesis.as_ref(), validator)
       {
         if ttl == (block_number, round_number) {
           assert!(result.accumulate_prevote(
@@ -473,6 +522,7 @@ impl<B: Blockchain> RoundMetrics<B> {
             &mut DummyTxn,
             *validator,
             block,
+            signature
           ));
         }
       }
@@ -507,19 +557,21 @@ impl<B: Blockchain> RoundMetrics<B> {
 ///
 /// This returns `false` otherwise and emits a slash for the validator who sent this message.
 ///
-/// This meets the requirements to then invoke [`RoundMetrics::accumulate`] with this message.
+/// This satisfies the requirements specifically necessary for proposals before invoking
+/// [`RoundMetrics::accumulate`].
 #[must_use]
 pub(super) fn structurally_validate_if_proposal<B: Blockchain>(
   blockchain: &B,
-  block_number: BlockNumber,
-  round_number: RoundNumber,
   message: &MessageFor<B>,
 ) -> bool {
   match &message.data {
     Data::Proposal { valid_round, proposal } => {
-      let valid_round = *valid_round;
-      let structurally_valid = (valid_round < Some(round_number)) &&
-        (message.validator == blockchain.validator_set().proposer(block_number, round_number));
+      let structurally_valid = (valid_round
+        .as_ref()
+        .map(|ValidRound { round_number, aggregate_signature: _ }| *round_number) <
+        Some(message.round_number)) &&
+        (message.validator ==
+          blockchain.validator_set().proposer(message.block_number, message.round_number));
       if !structurally_valid {
         blockchain.slash(
           message.validator,
@@ -527,7 +579,7 @@ pub(super) fn structurally_validate_if_proposal<B: Blockchain>(
             block_number: message.block_number,
             round_number: message.round_number,
             evidence: Evidence::InvalidProposal {
-              valid_round,
+              valid_round: valid_round.clone(),
               proposal: proposal.hash(),
               signature: message.signature.clone(),
             },

@@ -1,7 +1,10 @@
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
 use core::{num::NonZero, future::Future, time::Duration};
-use std::{sync::Arc, collections::HashMap};
+use std::{
+  sync::Arc,
+  collections::{HashSet, HashMap},
+};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
@@ -10,8 +13,8 @@ use tokio::sync::RwLock;
 use serai_db::MemDb;
 
 use tendermint_machine::{
-  SignatureScheme, Signer, Block, Commit, InvalidBlock, Blockchain, MessageFor, Network,
-  SlashReason, Tendermint, TendermintHandle,
+  InvalidAggregateSignature, SignatureScheme, Signer, Block, Commit, InvalidBlock, Blockchain,
+  MessageFor, Network, SlashReason, Tendermint, TendermintHandle,
 };
 
 type TestValidator = u16;
@@ -52,7 +55,7 @@ struct TestSignatureScheme;
 impl SignatureScheme for TestSignatureScheme {
   type Validator = TestValidator;
   type Signature = [u8; 32];
-  type AggregateSignature = Vec<[u8; 32]>;
+  type AggregateSignature = Vec<u8>;
 
   fn verify(
     &self,
@@ -85,34 +88,46 @@ impl SignatureScheme for TestSignatureScheme {
     Self::Validator: 'sig,
     Self::Signature: 'sig,
   {
-    signatures.into_iter().map(|(_validator, signature)| *signature).collect::<Vec<_>>()
+    borsh::to_vec(&signatures.into_iter().collect::<Vec<_>>()).unwrap()
   }
 
-  fn verify_aggregate<'sig>(
+  fn verify_aggregate(
     &self,
-    signers: impl IntoIterator<Item = &'sig Self::Validator>,
     message: impl IntoIterator<Item = impl AsRef<[u8]>>,
     aggregate_signature: &Self::AggregateSignature,
-  ) -> bool
-  where
-    Self::Validator: 'sig,
-  {
+  ) -> Result<impl IntoIterator<Item = Self::Validator>, InvalidAggregateSignature> {
     let mut concat_message = vec![];
     for chunk in message {
       concat_message.extend(chunk.as_ref());
     }
     let message = concat_message;
 
-    let signers = signers.into_iter().copied().collect::<Vec<_>>();
-    if signers.len() != aggregate_signature.len() {
-      return false;
-    }
-    for (signer, signature) in signers.iter().zip(aggregate_signature) {
+    let aggregate_signature = {
+      let mut aggregate_signature_slice = aggregate_signature.as_slice();
+      let Ok(aggregate_signature) = Vec::<(Self::Validator, Self::Signature)>::deserialize_reader(
+        &mut aggregate_signature_slice,
+      ) else {
+        Err(InvalidAggregateSignature)?
+      };
+      // Check this aggregate didn't have any trailing bytes
+      if !aggregate_signature_slice.is_empty() {
+        Err(InvalidAggregateSignature)?;
+      }
+      aggregate_signature
+    };
+
+    let mut signers = HashSet::new();
+    for (signer, signature) in &aggregate_signature {
+      // Check this signer wasn't present multiple times
+      if !signers.insert(signer) {
+        Err(InvalidAggregateSignature)?;
+      }
+      // Check the signature was valid
       if !self.verify(signer, core::iter::once(message.as_slice()), signature) {
-        return false;
+        Err(InvalidAggregateSignature)?;
       }
     }
-    true
+    Ok(aggregate_signature.into_iter().map(|(signer, _)| signer))
   }
 }
 
@@ -188,13 +203,24 @@ impl Blockchain for TestNetwork {
   fn slash(
     &self,
     _validator: Self::Validator,
-    _slash_reason: SlashReason<<Self::SignatureScheme as SignatureScheme>::Signature, Self::Block>,
+    slash_reason: SlashReason<
+      <Self::SignatureScheme as SignatureScheme>::Signature,
+      <Self::SignatureScheme as SignatureScheme>::AggregateSignature,
+      Self::Block,
+    >,
   ) {
-    panic!("test environment incurred a slash")
+    panic!("test environment incurred a slash: {slash_reason:?}")
   }
 }
 
-impl Network<u16, [u8; 32], TestBlock> for TestNetwork {
+impl
+  Network<
+    u16,
+    <TestSignatureScheme as SignatureScheme>::Signature,
+    <TestSignatureScheme as SignatureScheme>::AggregateSignature,
+    TestBlock,
+  > for TestNetwork
+{
   const LATENCY_TIME: Duration = Duration::from_secs(1);
   const BLOCK_DOWNLOADING_TIME: Duration = Duration::from_secs(1);
   const BLOCK_PROCESSING_TIME: Duration = Duration::from_secs(1);

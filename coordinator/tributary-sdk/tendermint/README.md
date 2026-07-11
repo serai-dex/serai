@@ -68,6 +68,53 @@ for this library to emit slashes (with evidence) for equivocations, though this
 is accepted as detecting equivocations is inherently only possible under
 certain synchrony conditions.
 
+### Complexity
+
+Tendermint presents as having three steps per round, where:
+
+- Each message is of size independent to the set
+- Each round is of quadratic complexity, due to the second and third steps
+  having `n` validators send messages to all `n` other validators
+- The amount of rounds (assuming synchrony) is bounded by the set size
+
+This effects a consensus protocol with cubic communication complexity.
+
+This implementation slightly differs in order to achieve its desired bounds on
+memory usage. For the first step, which is generally of linear complexity as a
+single proposer sends one message of size independent to the set to all other
+validators, this library also includes an aggregate signature which serves as
+justification for the proposal's choice of "valid round" (a historical round
+which did not produce a commit but for which a sufficient amount of validators
+did vote for the proposal). If the aggregate signature is naïve, and simply the
+list of signatures intended to be aggregated, then this messages becomes of
+size _linear_ to the set, causing this step to have quadratic complexity
+(instead of linear). This is accepted as the resulting protocol maintains the
+exact same complexity.
+
+If the aggregate signature is a threshold signature, then the aggregate
+signature may have size independent to the set however. This would presumably
+require first running a Distributed Key Generation (DKG) protocol, where the
+threshold signing protocol would have to execute in just one round
+(such as with BLS signatures), and restore the original complexity for the
+first step of each round (and enable producing smaller commits). Unfortunately,
+a DKG generally itself requires consensus, creating a chicken-and-egg problem
+(where a DKG is needed to instantiate consensus but itself requires consensus).
+One solution may be to run Tendermint _without threshold signatures_ in order
+to perform a DKG, before spawning a new consensus instance
+_with threshold signatures_ which benefits from the increased performance.
+Such strategies are out-of-scope to this library, as are the further
+optimizations threshold signatures enable (consensus protocols which are of
+quadratic complexity in total, not cubic).
+
+This matters to the user as messages, as exchanged over the P2P layer, are not
+of size independent to the set (without more complicated signature schemes, as
+distinct from the Tendermint protocol as described). Additionally, the evidence
+within slash reasons may contain an aggregate signature and suffer the same
+complexity. The evidence within slash reasons does substitute any referenced
+blocks with just their hashes though, making the slash reasons of size
+independent to the block size (a practical optimization which may allow placing
+slash reasons within blocks).
+
 ### Crash Safety
 
 This library intends to be _sound and maintain liveness_ so long as its

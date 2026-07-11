@@ -1,5 +1,10 @@
 use core::{ops::Deref as _, future::Future, time::Duration, num::NonZero};
-use std::{sync::Arc, collections::HashMap, time::Instant};
+use std::{
+  sync::Arc,
+  io::Read as _,
+  collections::{HashSet, HashMap},
+  time::Instant,
+};
 
 use subtle::ConstantTimeEq as _;
 use zeroize::{Zeroize as _, Zeroizing};
@@ -20,8 +25,8 @@ use serai_db::Db;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 use tendermint::{
-  SignatureScheme, Signer as SignerTrait, Block as BlockTrait, InvalidBlock, Commit,
-  Blockchain as BlockchainTrait, Message, SlashReason, Network,
+  InvalidAggregateSignature, SignatureScheme, Signer as SignerTrait, Block as BlockTrait,
+  InvalidBlock, Commit, Blockchain as BlockchainTrait, MessageFor, SlashReason, Network,
 };
 
 use tokio::sync::RwLock;
@@ -212,59 +217,85 @@ impl SignatureScheme for Validators {
     }
     let message = concat_message;
 
+    let mut signers = vec![];
     let mut aggregator = SchnorrAggregator::<Ristretto>::new(DST);
     for (key, sig) in signatures {
+      signers.push(key);
       let actual_sig = SchnorrSignature::<Ristretto>::read(sig.as_slice()).unwrap();
       let challenge = challenge(self.genesis, *key, actual_sig.R.to_bytes().as_ref(), &message);
       aggregator.aggregate(challenge, actual_sig);
     }
 
     let aggregate = aggregator.complete().unwrap();
-    aggregate.serialize()
+
+    let mut result = aggregate.serialize();
+    for signer in signers {
+      result.extend(signer);
+    }
+    result
   }
 
-  fn verify_aggregate<'sig>(
+  fn verify_aggregate(
     &self,
-    signers: impl IntoIterator<Item = &'sig Self::Validator>,
     message: impl IntoIterator<Item = impl AsRef<[u8]>>,
     aggregate_signature: &Self::AggregateSignature,
-  ) -> bool
-  where
-    Self::Validator: 'sig,
-  {
-    let signers = signers.into_iter().collect::<Vec<_>>();
-
+  ) -> Result<impl IntoIterator<Item = Self::Validator>, InvalidAggregateSignature> {
     let mut concat_message: Vec<u8> = vec![];
     for chunk in message {
       concat_message.extend(chunk.as_ref());
     }
     let message = concat_message;
 
-    // TODO: Bound the length of this
-    let Ok(aggregate_signature) =
-      SchnorrAggregate::<Ristretto>::read(aggregate_signature.as_slice())
-    else {
-      return false;
-    };
+    let (aggregate_signature, signers) = {
+      // TODO: Bound the length of this
+      let mut aggregate_signature_slice = aggregate_signature.as_slice();
+      let Ok(aggregate_signature) =
+        SchnorrAggregate::<Ristretto>::read(&mut aggregate_signature_slice)
+      else {
+        Err(InvalidAggregateSignature)?
+      };
 
-    if signers.len() != aggregate_signature.Rs().len() {
-      return false;
-    }
+      let signers = {
+        let mut signers_set = HashSet::new();
+        let mut signers = vec![];
+        for _ in 0 .. aggregate_signature.Rs().len() {
+          let mut signer = [0xff; 32];
+          let Ok(()) = aggregate_signature_slice.read_exact(&mut signer) else {
+            Err(InvalidAggregateSignature)?
+          };
+          if !signers_set.insert(signer) {
+            Err(InvalidAggregateSignature)?;
+          }
+          signers.push(signer);
+        }
+        signers
+      };
+
+      if !aggregate_signature_slice.is_empty() {
+        Err(InvalidAggregateSignature)?;
+      }
+
+      (aggregate_signature, signers)
+    };
 
     let mut challenges = vec![];
     for (key, nonce) in signers.iter().zip(aggregate_signature.Rs()) {
-      challenges.push(challenge(self.genesis, **key, nonce.to_bytes().as_ref(), &message));
+      challenges.push(challenge(self.genesis, *key, nonce.to_bytes().as_ref(), &message));
     }
 
-    aggregate_signature.verify(
+    if !aggregate_signature.verify(
       DST,
       signers
-        .into_iter()
+        .iter()
         .zip(challenges)
         .map(|(s, c)| (<Ristretto as GroupIo>::read_G(s.as_slice()).unwrap(), c))
         .collect::<Vec<_>>()
         .as_slice(),
-    )
+    ) {
+      Err(InvalidAggregateSignature)?;
+    }
+
+    Ok(signers.into_iter())
   }
 }
 
@@ -423,7 +454,11 @@ impl<D: Db, T: TransactionTrait, P: P2p> BlockchainTrait for TendermintNetwork<D
   fn slash(
     &self,
     validator: Self::Validator,
-    slash_reason: SlashReason<<Self::SignatureScheme as SignatureScheme>::Signature, Self::Block>,
+    slash_reason: SlashReason<
+      <Self::SignatureScheme as SignatureScheme>::Signature,
+      <Self::SignatureScheme as SignatureScheme>::AggregateSignature,
+      Self::Block,
+    >,
   ) {
     // TODO
     tokio::runtime::Handle::current().block_on(async move {
@@ -458,8 +493,13 @@ pub const TARGET_BLOCK_TIME: Duration = BLOCK_DOWNLOADING_TIME
   .checked_add(LATENCY_TIME.checked_mul(3).unwrap())
   .unwrap();
 
-impl<D: Db, T: TransactionTrait, P: P2p> Network<[u8; 32], [u8; 64], TendermintBlock>
-  for TendermintNetwork<D, T, P>
+impl<D: Db, T: TransactionTrait, P: P2p>
+  Network<
+    [u8; 32],
+    <Validators as SignatureScheme>::Signature,
+    <Validators as SignatureScheme>::AggregateSignature,
+    TendermintBlock,
+  > for TendermintNetwork<D, T, P>
 {
   const BLOCK_DOWNLOADING_TIME: Duration = BLOCK_DOWNLOADING_TIME;
   const BLOCK_PROCESSING_TIME: Duration = BLOCK_PROCESSING_TIME;
@@ -469,10 +509,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Network<[u8; 32], [u8; 64], TendermintB
     tokio::time::sleep(duration).await;
   }
 
-  fn broadcast(
-    &mut self,
-    msg: Message<[u8; 32], [u8; 64], TendermintBlock>,
-  ) -> impl Send + Future<Output = ()> {
+  fn broadcast(&mut self, msg: MessageFor<Self>) -> impl Send + Future<Output = ()> {
     async move {
       let mut to_broadcast = vec![TENDERMINT_MESSAGE];
       msg.serialize(&mut to_broadcast).unwrap();

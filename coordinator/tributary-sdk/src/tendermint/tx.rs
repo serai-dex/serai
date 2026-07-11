@@ -18,7 +18,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct TendermintTx {
   pub(crate) validator: [u8; 32],
-  pub(crate) slash_reason: SlashReason<[u8; 64], TendermintBlock>,
+  pub(crate) slash_reason: SlashReason<[u8; 64], Vec<u8>, TendermintBlock>,
 }
 
 impl TendermintTx {
@@ -62,7 +62,10 @@ impl Transaction for TendermintTx {
 }
 
 pub(crate) fn verify_tendermint_tx<
-  N: Blockchain<Validator = [u8; 32], SignatureScheme: SignatureScheme<Signature = [u8; 64]>>,
+  N: Blockchain<
+    Validator = [u8; 32],
+    SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+  >,
 >(
   tx: &TendermintTx,
   genesis: [u8; 32],

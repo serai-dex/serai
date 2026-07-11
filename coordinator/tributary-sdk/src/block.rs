@@ -167,7 +167,10 @@ impl<T: TransactionTrait> Block<T> {
 
   #[expect(clippy::too_many_arguments)]
   pub(crate) fn verify<
-    N: Blockchain<Validator = [u8; 32], SignatureScheme: SignatureScheme<Signature = [u8; 64]>>,
+    N: Blockchain<
+      Validator = [u8; 32],
+      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+    >,
     G: GAIN,
   >(
     &self,

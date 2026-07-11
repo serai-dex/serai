@@ -106,7 +106,10 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
 
   // Returns Ok(true) if new, Ok(false) if an already present unsigned, or the error.
   pub(crate) fn add<
-    N: Blockchain<Validator = [u8; 32], SignatureScheme: SignatureScheme<Signature = [u8; 64]>>,
+    N: Blockchain<
+      Validator = [u8; 32],
+      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+    >,
     F: FnOnce(<Ristretto as WrappedGroup>::G, Vec<u8>) -> Option<u32>,
   >(
     &mut self,

@@ -59,6 +59,7 @@ pub const ACCOUNT_MEMPOOL_LIMIT: u32 = 50;
 /// Block size limit.
 // This targets a growth limit of roughly 30 GB a day, under load, in order to prevent a malicious
 // participant from flooding disks and causing out of space errors in order processes.
+// TODO: Slash reasons for sufficiently large validator sets may exceed this
 pub const BLOCK_SIZE_LIMIT: usize = 2_001_000;
 
 pub(crate) const TENDERMINT_MESSAGE: u8 = 0;

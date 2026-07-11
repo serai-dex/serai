@@ -1,10 +1,9 @@
-use crate::{BlockNumber, RoundNumber, ValidatorSet, SignatureScheme, Signer};
+use crate::{BlockNumber, RoundNumber, Validator, ValidatorSet, SignatureScheme, Signer};
 
 /// A commit for a specific block.
 ///
-/// In order for this to be valid, the list of validators MUST have weight exceeding the threshold
-/// and the signature MUST be valid.
-#[cfg(feature = "alloc")]
+/// In order for this to be valid, the signature MUST be valid and aggregated from signatures by
+/// validators whose weight passes the threshold.
 #[derive(Debug)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 pub struct Commit<S: SignatureScheme> {
@@ -17,46 +16,40 @@ pub struct Commit<S: SignatureScheme> {
   /// block, with differing `round_number` values, without a break in soundness.
   pub(crate) round_number: RoundNumber,
 
-  /// The validators which participated in creating this commit.
-  ///
-  /// This is not a canonical list and there may be multiple valid commits, for the same block,
-  /// with differing `validators`, without a break in soundness.
-  pub(crate) validators: alloc::vec::Vec<S::Validator>,
-
-  /// The aggregate signature to confirm the listed validators actually signed this commit.
+  /// The aggregate signature by the validators used to create this commit.
   pub(crate) aggregate_signature: S::AggregateSignature,
 }
 
-#[cfg(feature = "alloc")]
 impl<S: SignatureScheme<AggregateSignature: Clone>> Clone for Commit<S> {
   fn clone(&self) -> Self {
     Self {
       block_number: self.block_number,
       round_number: self.round_number,
-      validators: self.validators.clone(),
       aggregate_signature: self.aggregate_signature.clone(),
     }
   }
 }
 
-/// A commit for a specific block.
+/// Check if a list of validators have a sum weight satisfying the threshold.
 ///
-/// In order for this to be valid, the list of validators MUST have weight exceeding the threshold
-/// and the signature MUST be valid.
-#[cfg(not(feature = "alloc"))]
-#[derive(Debug, Clone)]
-pub struct Commit<S: SignatureScheme> {
-  /*
-    Preserve the struct definition on `alloc`, for the methods which do not take a `self`
-    parameter, but prevent it from being constructed as we do need `alloc` for this.
-  */
-  _never: core::convert::Infallible,
-  _signature_scheme: core::marker::PhantomData<S>,
+/// This returns `false` if any validator present was not actually a validator. This DOES NOT check
+/// the validators were unique however.
+#[must_use]
+pub(crate) fn validators_satisfy_threshold<V: Validator>(
+  validators: impl IntoIterator<Item = V>,
+  validator_set: impl ValidatorSet<Validator = V>,
+) -> bool {
+  // Ensure every validator is in fact a validator and their sum weight satisfies the threshold
+  validators
+    .into_iter()
+    .try_fold(0u16, |accum, validator| {
+      validator_set.weight(&validator).map(|weight| accum + u16::from(weight))
+    })
+    .is_some_and(|sum| sum >= validator_set.threshold())
 }
 
 impl<S: SignatureScheme> Commit<S> {
   /// The block number this commit is for.
-  #[cfg(feature = "alloc")]
   #[must_use]
   pub fn block_number(&self) -> BlockNumber {
     self.block_number
@@ -124,60 +117,23 @@ impl<S: SignatureScheme> Commit<S> {
   }
 
   /// Verify a commit.
-  #[cfg(feature = "alloc")]
   #[must_use]
   pub fn verify(
     &self,
-    validators: &impl ValidatorSet<Validator = S::Validator>,
+    validator_set: &impl ValidatorSet<Validator = S::Validator>,
     signature_scheme: &S,
     genesis: impl Send + Sync + AsRef<[u8]>,
     block_hash: impl Send + Sync + AsRef<[u8]>,
   ) -> bool {
-    /*
-      Ensure no validators were present multiple times.
-
-      When `std` is enabled, we use a `HashSet` to perform this check with complexity presumed
-      `O(n log n)`. When `std` isn't enabled, we iterate over the allocation to perform this check
-      with `O(n^2)` complexity.
-
-      As we assume `alloc`, we _could_ use a `BTreeSet` to still achieve `O(n log n)` complexity
-      (ignoring the DoS concerns). This is a fine trade-off for a restricted environment though.
-    */
-    #[cfg(feature = "std")]
-    {
-      if self.validators.iter().collect::<std::collections::HashSet<_>>().len() !=
-        self.validators.len()
-      {
-        return false;
-      }
-    }
-    #[cfg(not(feature = "std"))]
-    {
-      for v in 0 .. self.validators.len() {
-        for w in (v + 1) .. self.validators.len() {
-          if self.validators[v] == self.validators[w] {
-            return false;
-          }
-        }
-      }
-    }
-
     // Ensure the signature was valid
-    if !signature_scheme.verify_aggregate(
-      &self.validators,
+    let Ok(validators) = signature_scheme.verify_aggregate(
       Self::signature_message(genesis, self.block_number, self.round_number, block_hash),
       &self.aggregate_signature,
-    ) {
+    ) else {
       return false;
-    }
+    };
 
-    // Ensure every listed validator was in fact a validator and their weight exceeds the threshold
-    self
-      .validators
-      .iter()
-      .try_fold(0u16, |accum, validator| {
-        validators.weight(validator).map(|weight| accum + u16::from(weight))
-      })
-      .is_some_and(|sum| sum >= validators.threshold())
+    // Ensure the signers satisfy the threshold
+    validators_satisfy_threshold(validators, validator_set)
   }
 }

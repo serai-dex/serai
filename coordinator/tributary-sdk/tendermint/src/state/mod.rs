@@ -11,7 +11,7 @@ use serai_db::DbTxn;
 
 use crate::{
   SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, Commit, Blockchain, Signer,
-  Data, Message, MessageFor, MessageError, EquivocatingData, Evidence, SlashReason, Network,
+  ValidRound, Data, MessageFor, MessageError, EquivocatingData, Evidence, SlashReason, Network,
 };
 
 mod block_proposal;
@@ -97,7 +97,9 @@ pub(crate) struct State<B: Blockchain> {
   ///
   /// The formal description initializes this to `(-1, null)`, though we represent such a case as
   /// `None`.
-  valid: Option<(RoundNumber, B::Block)>,
+  #[expect(clippy::type_complexity)]
+  valid:
+    Option<(ValidRound<<B::SignatureScheme as SignatureScheme>::AggregateSignature>, B::Block)>,
 
   /// The locked value and round, if one has been decided.
   ///
@@ -146,7 +148,12 @@ impl<B: Blockchain> State<B> {
   /// This corresponds to L14-L19.
   #[must_use]
   async fn proposal_message<
-    N: Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+    N: Network<
+      B::Validator,
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      B::Block,
+    >,
   >(
     &mut self,
     blockchain: &B,
@@ -166,7 +173,7 @@ impl<B: Blockchain> State<B> {
 
     let (valid_round, proposal) = (match &self.valid {
       // L15-L16
-      Some((valid_round, block)) => Some((Some(*valid_round), block.clone())),
+      Some((valid_round, block)) => Some((Some(valid_round.clone()), block.clone())),
       // L17-L18
       None => (crate::Or { f1: self.proposal.as_mut(), f2: N::sleep(N::BLOCK_PROCESSING_TIME) })
         .await
@@ -181,11 +188,11 @@ impl<B: Blockchain> State<B> {
       validator_set,
       txn,
       proposer,
-      valid_round,
+      valid_round.as_ref().map(|ValidRound { round_number, aggregate_signature: _ }| *round_number),
       proposal.clone(),
     );
     Some(
-      Message::sign(
+      MessageFor::<B>::sign(
         signer,
         genesis,
         self.block_number,
@@ -210,18 +217,8 @@ impl<B: Blockchain> State<B> {
   ) -> MessageFor<B> {
     let genesis = blockchain.genesis();
     let validator = signer.validator().await;
-    assert!(self.round_metrics.accumulate_prevote(
-      &genesis,
-      blockchain.validator_set(),
-      txn,
-      validator,
-      block
-    ));
-    let _ = self.pending_step_timeout.take();
-    db::PendingStepTimeout::del(txn, genesis.as_ref());
-    self.step = Step::Prevote;
-    db::Step::set(txn, genesis.as_ref(), &self.step);
-    let result = Message::sign(
+
+    let result = MessageFor::<B>::sign(
       signer,
       &genesis,
       self.block_number,
@@ -229,6 +226,21 @@ impl<B: Blockchain> State<B> {
       Data::Prevote { block },
     )
     .await;
+
+    assert!(self.round_metrics.accumulate_prevote(
+      &genesis,
+      blockchain.validator_set(),
+      txn,
+      validator,
+      block,
+      result.signature.clone()
+    ));
+
+    let _ = self.pending_step_timeout.take();
+    db::PendingStepTimeout::del(txn, genesis.as_ref());
+    self.step = Step::Prevote;
+    db::Step::set(txn, genesis.as_ref(), &self.step);
+
     self.our_latest_message = Some(result.clone());
     db::OurLatestMessage::<B>::set(txn, genesis.as_ref(), &result);
     result
@@ -273,32 +285,17 @@ impl<B: Blockchain> State<B> {
           - we have the proposal
           - the metrics bound that we only accumulate proposals from the right proposer and with a
             syntactically correct `valid_round`
-          leaving this solely to check we have the necessary prevotes.
+          - the `ValidRound` contains evidence of sufficient prevotes having existed for this
+            round, and block, and was already verified
+          leaving this with nothing further to check in order to correspond to this line.
         */
-        Some(valid_round) => {
-          /*
-            If we received `2f + 1` prevotes during `valid_round`, in a sufficiently timely
-            fashion, then we would have set `self.valid_round` to `valid_round`.
-
-            Note we should technically check if `valid_round` is present within the _set_ of every
-            round we considered valid. This is unnecessary as it's indistinguishable between if we
-            recognized this round as valid but were faulty and voted `None`, as we may be doing
-            now, and if we simply did not receive this round's proposal in time.
-
-            The result of this is that we achieve our desired bound on memory consumption, but with
-            the trade-off we _may_ have some more round failures than we would have had if we had
-            an unbounded amount of memory.
-          */
-          self.valid.as_ref().is_some_and(|(round_number, block)| {
-            ((*round_number) == valid_round) && (block.hash() == proposal.hash())
-          }) && {
-            // L29, where we've already checked `valid(v)`
-            match &self.locked {
-              Some((locked_round, locked_value)) => {
-                ((*locked_round) <= valid_round) || (proposal.hash() == (*locked_value))
-              }
-              None => true,
+        Some(round_number) => {
+          // L29, where we've already checked `valid(v)`
+          match &self.locked {
+            Some((locked_round, locked_value)) => {
+              ((*locked_round) <= round_number) || (proposal.hash() == (*locked_value))
             }
+            None => true,
           }
         }
       }))
@@ -336,7 +333,7 @@ impl<B: Blockchain> State<B> {
     db::PendingStepTimeout::del(txn, genesis.as_ref());
     self.step = Step::Precommit;
     db::Step::set(txn, genesis.as_ref(), &self.step);
-    let result = Message::sign(
+    let result = MessageFor::<B>::sign(
       signer,
       &genesis,
       self.block_number,
@@ -368,7 +365,7 @@ impl<B: Blockchain> State<B> {
       Note this defers `valid(v)` to if a supermajority of validators have prevoted for it and
       therefore believe this value is valid.
     */
-    let proposal = {
+    let (proposal, valid_round) = {
       if !matches!(self.step, Step::Prevote | Step::Precommit) {
         None?;
       }
@@ -377,12 +374,11 @@ impl<B: Blockchain> State<B> {
         "for the first time", implemented via checking if we've already written to `self.valid`
         (as we always will whenever we execute this hook)
       */
-      #[allow(clippy::nonminimal_bool)] // If the written condition isn't satisfied, terminate now
-      if !self
-        .valid
-        .as_ref()
-        .is_none_or(|(round_number, _block)| (*round_number) < self.round_number)
-      {
+      if self.valid.as_ref().is_some_and(
+        |(ValidRound { round_number, aggregate_signature: _ }, _block)| {
+          (*round_number) >= self.round_number
+        },
+      ) {
         None?;
       }
 
@@ -390,20 +386,17 @@ impl<B: Blockchain> State<B> {
       let ObservedProposal { proposer: _, valid_round: _, proposal } =
         self.round_metrics.observed_proposal()?;
 
-      let validator_set = blockchain.validator_set();
-      if self.round_metrics.observed_prevotes_for_proposal() < validator_set.threshold() {
-        None?;
-      }
+      let valid_round = self.round_metrics.observed_prevotes_for_proposal(blockchain)?;
 
-      proposal
+      (proposal, valid_round)
     };
 
     let genesis = blockchain.genesis();
 
     // L42-L43
     {
-      let valid = (self.round_number, proposal.clone());
-      db::Valid::set(txn, genesis.as_ref(), &valid);
+      let valid = (valid_round, proposal.clone());
+      db::Valid::<B>::set(txn, genesis.as_ref(), &valid);
       self.valid = Some(valid);
     }
 
@@ -439,7 +432,12 @@ impl<B: Blockchain> State<B> {
   /// This corresponds to L22-L48.
   #[must_use]
   async fn respond<
-    N: Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+    N: Network<
+      B::Validator,
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      B::Block,
+    >,
   >(
     &mut self,
     blockchain: &B,
@@ -518,7 +516,12 @@ impl<B: Blockchain> State<B> {
   // L11-L21
   #[must_use]
   async fn start_round<
-    N: Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+    N: Network<
+      B::Validator,
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      B::Block,
+    >,
   >(
     &mut self,
     blockchain: &B,
@@ -600,7 +603,12 @@ impl<B: Blockchain> State<B> {
 
   // L01-L10
   pub(super) async fn new<
-    N: Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+    N: Network<
+      B::Validator,
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      B::Block,
+    >,
   >(
     blockchain: &B,
     signer: &impl Signer<
@@ -648,7 +656,7 @@ impl<B: Blockchain> State<B> {
           .map(db::timeout_from_ms_since_epoch),
         step,
 
-        valid: db::Valid::get(getter, genesis),
+        valid: db::Valid::<B>::get(getter, genesis),
         locked: db::Locked::get(getter, genesis),
 
         round_metrics: RoundMetrics::new(
@@ -693,7 +701,12 @@ impl<B: Blockchain> State<B> {
   ///
   /// This future is NOT cancel-safe.
   pub(crate) async fn message<
-    N: Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+    N: Network<
+      B::Validator,
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      B::Block,
+    >,
   >(
     &mut self,
     blockchain: &B,
@@ -705,9 +718,13 @@ impl<B: Blockchain> State<B> {
     message: MessageFor<B>,
   ) -> Result<impl IntoIterator<IntoIter: Send, Item = MessageFor<B>>, MessageError> {
     // If this is historic or for a future block, ignore this message
-    if (message.block_number != self.block_number) || (message.round_number < self.round_number) {
+    if (message.block_number < self.block_number) || (message.round_number < self.round_number) {
       Err(MessageError::Stale)?;
     }
+    if message.block_number > self.block_number {
+      Err(MessageError::Future)?;
+    }
+    debug_assert_eq!(message.block_number, self.block_number);
 
     // Verify this message's signature(s)
     message.verify_signatures(blockchain)?;
@@ -820,12 +837,7 @@ impl<B: Blockchain> State<B> {
         })
       {
         for message in round_messages.messages() {
-          if structurally_validate_if_proposal::<B>(
-            blockchain,
-            self.block_number,
-            self.round_number,
-            &message,
-          ) {
+          if structurally_validate_if_proposal::<B>(blockchain, &message) {
             self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
           }
         }
@@ -837,12 +849,7 @@ impl<B: Blockchain> State<B> {
 
     // This MAY accumulate this message twice if we just jumped ahead, but this is fine
     if (message.round_number == self.round_number) &&
-      structurally_validate_if_proposal::<B>(
-        blockchain,
-        self.block_number,
-        self.round_number,
-        &message,
-      )
+      structurally_validate_if_proposal::<B>(blockchain, &message)
     {
       self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
     }
@@ -872,7 +879,12 @@ impl<
 {
   /// This future is NOT cancel-safe.
   pub(crate) async fn respond<
-    N: Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+    N: Network<
+      B::Validator,
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      B::Block,
+    >,
   >(
     self,
     txn: &mut impl DbTxn,
@@ -927,7 +939,12 @@ impl<B: Blockchain> State<B> {
     'state,
     'blockchain,
     'signer,
-    N: Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+    N: Network<
+      B::Validator,
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      B::Block,
+    >,
     S: Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
@@ -969,7 +986,12 @@ impl<B: Blockchain> State<B> {
   // L51-L54
   #[must_use]
   pub(crate) async fn commit<
-    N: Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+    N: Network<
+      B::Validator,
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      B::Block,
+    >,
   >(
     &mut self,
     blockchain: &mut B,
@@ -1021,7 +1043,7 @@ impl<B: Blockchain> State<B> {
       round_metrics.reset(*block_number, *round_number);
 
       *valid = None;
-      db::Valid::<B::Block>::del(txn, genesis.as_ref());
+      db::Valid::<B>::del(txn, genesis.as_ref());
       *locked = None;
       db::Locked::<<B::Block as Block>::Hash>::del(txn, genesis.as_ref());
 
@@ -1043,7 +1065,12 @@ impl<B: Blockchain> State<B> {
   // L49-L54
   #[must_use]
   pub(crate) async fn attempt_commit<
-    N: Network<B::Validator, <B::SignatureScheme as SignatureScheme>::Signature, B::Block>,
+    N: Network<
+      B::Validator,
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      B::Block,
+    >,
   >(
     &mut self,
     blockchain: &mut B,

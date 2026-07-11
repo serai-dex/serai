@@ -1,22 +1,62 @@
 use core::fmt;
 
 use crate::{
-  BlockNumber, RoundNumber, Validator, ValidatorSet, Signature, SignatureScheme, Signer, Block,
-  Commit, Blockchain,
+  BlockNumber, RoundNumber, Validator, ValidatorSet, Signature, AggregateSignature,
+  SignatureScheme, Signer, Block, Commit, Blockchain,
 };
+
+/// A valid round.
+///
+/// This is not just the specification of the valid round but also the evidence needed to convince
+/// other validators this round was valid. This allows each validator to only store their view of
+/// the valid round, with a bounded amount of memory, yet to recognize the proposer's argument for
+/// the valid round without issue.
+///
+/// This does increase the amount communicated by the proposer, but maintains the same `O(n^2)`
+/// communication complexity for each round as here we have the single proposer sending a message
+/// of size `n` to `n` other participants, while the following rounds have `n` participants sending
+/// messages of size `1` to `n` other participants. This assumes the aggregate signature is of size
+/// linear to the individual signatures, such as by a naïve concatenation into a list, though with
+/// threshold signatures or similar, this could be of equal complexity to the traditional concept
+/// of a proposal message.
+#[derive(Clone)]
+#[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
+pub(crate) struct ValidRound<A: AggregateSignature> {
+  pub(crate) round_number: RoundNumber,
+  pub(crate) aggregate_signature: A,
+}
+
+impl<A: AggregateSignature> PartialEq for ValidRound<A> {
+  /// This equality is semantic and does not consider if any present signatures are equal. This
+  /// ensures even for signature schemes with malleable signatures, multiple signatures over the
+  /// same messages are not semantically treated as distinct signatures. However, this also means a
+  /// value with an invalid signature will be considered equal to a message with a valid signature.
+  fn eq(&self, other: &Self) -> bool {
+    let Self { round_number, aggregate_signature: _ } = self;
+    (*round_number) == other.round_number
+  }
+}
+impl<A: AggregateSignature> Eq for ValidRound<A> {}
+
+impl<A: AggregateSignature> fmt::Debug for ValidRound<A> {
+  fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+    let Self { round_number, aggregate_signature: _ } = self;
+    formatter.debug_struct("ValidRound").field("round_number", round_number).finish()
+  }
+}
 
 /// The data within a message.
 #[derive(Clone)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-pub(crate) enum Data<S: Signature, B: Block> {
-  Proposal { valid_round: Option<RoundNumber>, proposal: B },
+pub(crate) enum Data<S: Signature, A: AggregateSignature, B: Block> {
+  Proposal { valid_round: Option<ValidRound<A>>, proposal: B },
   Prevote { block: Option<B::Hash> },
   Precommit { block_and_precommit_signature: Option<(B::Hash, S)> },
 }
 
-impl<S: Signature, B: Block> PartialEq for Data<S, B> {
+impl<S: Signature, A: AggregateSignature, B: Block> PartialEq for Data<S, A, B> {
   /// This equality is semantic and does not consider if any present signatures are equal. This
-  /// ensures even for signature schemes with malleable signatures, multiple signaturs over the
+  /// ensures even for signature schemes with malleable signatures, multiple signatures over the
   /// same messages are not semantically treated as distinct signatures. However, this also means a
   /// value with an invalid signature will be considered equal to a message with a valid signature.
   fn eq(&self, other: &Self) -> bool {
@@ -38,9 +78,9 @@ impl<S: Signature, B: Block> PartialEq for Data<S, B> {
     }
   }
 }
-impl<S: Signature, B: Block> Eq for Data<S, B> {}
+impl<S: Signature, A: AggregateSignature, B: Block> Eq for Data<S, A, B> {}
 
-impl<S: Signature, B: Block> Data<S, B> {
+impl<S: Signature, A: AggregateSignature, B: Block> Data<S, A, B> {
   /// The serialization used for signing.
   ///
   /// This exists primarily as we do not want to sign the block in a proposal but solely its hash.
@@ -51,27 +91,38 @@ impl<S: Signature, B: Block> Data<S, B> {
   /// context of such schema. While this is rather annoying to do here, the borrow-checker somewhat
   /// requires this pattern.
   #[must_use]
-  fn signature_message(&self) -> [Option<impl Send + AsRef<[u8]>>; 4] {
-    let (kind, round_number, block, precommit_signature) = match self {
-      Data::Proposal { valid_round, proposal } => (
-        0u8,
-        // As `RoundNumber` is non-zero, represent `None` with the encoding `0` would have
-        Some(
-          valid_round.map(|round_number| u64::from(round_number).to_le_bytes()).unwrap_or([0; 8]),
-        ),
-        // We only sign the hash so the signed message is of a consistent length
-        Some(proposal.hash()),
-        None,
-      ),
+  fn signature_message(
+    &self,
+  ) -> impl IntoIterator<IntoIter: Send, Item = Option<impl AsRef<[u8]>>> {
+    let (kind, round_number, aggregate_signature, block, precommit_signature) = match self {
+      Data::Proposal { valid_round, proposal } => {
+        let (round_number, aggregate_signature) = valid_round
+          .as_ref()
+          .map(|ValidRound { round_number, aggregate_signature }| {
+            (u64::from(*round_number).to_le_bytes(), aggregate_signature.clone())
+          })
+          .unzip();
+        (
+          0u8,
+          // As `RoundNumber` is non-zero, we represent `None` with the encoding `0` would have
+          Some(round_number.unwrap_or([0; _])),
+          // This is `None` if the round number was encoded as `[0; 8]` and `Some` otherwise
+          aggregate_signature,
+          // We only sign the hash so the signed message is of a consistent length
+          Some(proposal.hash()),
+          None,
+        )
+      }
       /*
         This omits the encoding of the block hash to signify `None`, which is fine as this is
         without collisions and this doesn't have to be able to be deserialized from.
       */
-      Data::Prevote { block } => (1u8, None, *block, None),
+      Data::Prevote { block } => (1u8, None, None, *block, None),
       Data::Precommit { block_and_precommit_signature } => {
         let (block, precommit_signature) = block_and_precommit_signature.clone().unzip();
         (
           2u8,
+          None,
           None,
           /*
             The block hash has a fixed length and the precommit signature should be self-delimited
@@ -83,17 +134,21 @@ impl<S: Signature, B: Block> Data<S, B> {
       }
     };
 
-    enum Segment<S: Signature, B: Block> {
+    enum Segment<S: Signature, A: AggregateSignature, B: Block> {
       Kind([u8; 1]),
       RoundNumber([u8; 8]),
+      AggregateSignature(Option<A>),
       Block(B::Hash),
       PrecommitSignature(S),
     }
-    impl<S: Signature, B: Block> AsRef<[u8]> for Segment<S, B> {
+    impl<S: Signature, A: AggregateSignature, B: Block> AsRef<[u8]> for Segment<S, A, B> {
       fn as_ref(&self) -> &[u8] {
         match self {
           Self::Kind(kind) => kind.as_slice(),
           Self::RoundNumber(round_number) => round_number.as_slice(),
+          Self::AggregateSignature(aggregate_signature) => {
+            aggregate_signature.as_ref().map(AsRef::as_ref).unwrap_or(&[])
+          }
           Self::Block(block) => block.as_ref(),
           Self::PrecommitSignature(precommit_signature) => precommit_signature.as_ref(),
         }
@@ -101,10 +156,11 @@ impl<S: Signature, B: Block> Data<S, B> {
     }
 
     [
-      Some(Segment::<S, B>::Kind([kind])),
-      round_number.map(Segment::<S, B>::RoundNumber),
-      block.map(Segment::<S, B>::Block),
-      precommit_signature.map(Segment::<S, B>::PrecommitSignature),
+      Some(Segment::<S, A, B>::Kind([kind])),
+      round_number.map(Segment::RoundNumber),
+      Some(Segment::AggregateSignature(aggregate_signature)),
+      block.map(Segment::Block),
+      precommit_signature.map(Segment::PrecommitSignature),
     ]
   }
 }
@@ -114,17 +170,19 @@ impl<S: Signature, B: Block> Data<S, B> {
 /// This encapsulates a [`Data`] with the validator, block and round numbers, and signature.
 #[derive(Clone)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-pub struct Message<V: Validator, S: Signature, B: Block> {
+pub struct Message<V: Validator, S: Signature, A: AggregateSignature, B: Block> {
   pub(crate) validator: V,
   pub(crate) block_number: BlockNumber,
   pub(crate) round_number: RoundNumber,
-  pub(crate) data: Data<S, B>,
+  pub(crate) data: Data<S, A, B>,
   pub(crate) signature: S,
 }
 
-impl<V: Validator, S: Signature, B: Block> PartialEq for Message<V, S, B> {
+impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> PartialEq
+  for Message<V, S, A, B>
+{
   /// This equality is semantic and does not consider if any present signatures are equal. This
-  /// ensures even for signature schemes with malleable signatures, multiple signaturs over the
+  /// ensures even for signature schemes with malleable signatures, multiple signatures over the
   /// same messages are not semantically treated as distinct signatures. However, this also means a
   /// value with an invalid signature will be considered equal to a message with a valid signature.
   fn eq(&self, other: &Self) -> bool {
@@ -135,18 +193,23 @@ impl<V: Validator, S: Signature, B: Block> PartialEq for Message<V, S, B> {
       (data == &other.data)
   }
 }
-impl<V: Validator, S: Signature, B: Block> Eq for Message<V, S, B> {}
+impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Eq for Message<V, S, A, B> {}
 
 /// The message type for a blockchain.
 pub type MessageFor<B> = Message<
   <B as Blockchain>::Validator,
   <<B as Blockchain>::SignatureScheme as SignatureScheme>::Signature,
+  <<B as Blockchain>::SignatureScheme as SignatureScheme>::AggregateSignature,
   <B as Blockchain>::Block,
 >;
 
 pub(crate) enum MessageError {
   /// The message was stale within the current context.
   Stale,
+  /// The message was for a future context.
+  ///
+  /// This MAY suggest the local view is historic.
+  Future,
   /// The message was not from a validator.
   NotValidator,
   /// The message had an invalid signature.
@@ -162,11 +225,11 @@ pub(crate) enum MessageError {
 /// message.
 #[derive(Clone)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-pub(crate) enum EquivocatingData<S: Signature, B: Block> {
+pub(crate) enum EquivocatingData<S: Signature, A: AggregateSignature, B: Block> {
   Proposal {
-    first_valid_round: Option<RoundNumber>,
+    first_valid_round: Option<ValidRound<A>>,
     first_proposal: B::Hash,
-    second_valid_round: Option<RoundNumber>,
+    second_valid_round: Option<ValidRound<A>>,
     second_proposal: B::Hash,
   },
   Prevote {
@@ -179,7 +242,9 @@ pub(crate) enum EquivocatingData<S: Signature, B: Block> {
   },
 }
 
-impl<S: Signature, B: Block<Hash: fmt::Debug>> fmt::Debug for EquivocatingData<S, B> {
+impl<S: Signature, A: AggregateSignature, B: Block<Hash: fmt::Debug>> fmt::Debug
+  for EquivocatingData<S, A, B>
+{
   fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Self::Proposal { first_valid_round, first_proposal, second_valid_round, second_proposal } => {
@@ -214,9 +279,9 @@ impl<S: Signature, B: Block<Hash: fmt::Debug>> fmt::Debug for EquivocatingData<S
   }
 }
 
-impl<S: Signature, B: Block> EquivocatingData<S, B> {
+impl<S: Signature, A: AggregateSignature, B: Block> EquivocatingData<S, A, B> {
   #[expect(clippy::type_complexity)]
-  fn split(&self) -> (Data<S, StubBlock<B::Hash>>, Data<S, StubBlock<B::Hash>>) {
+  fn split(&self) -> (Data<S, A, StubBlock<B::Hash>>, Data<S, A, StubBlock<B::Hash>>) {
     match self {
       EquivocatingData::Proposal {
         first_valid_round,
@@ -224,8 +289,14 @@ impl<S: Signature, B: Block> EquivocatingData<S, B> {
         second_valid_round,
         second_proposal,
       } => (
-        Data::Proposal { valid_round: *first_valid_round, proposal: StubBlock(*first_proposal) },
-        Data::Proposal { valid_round: *second_valid_round, proposal: StubBlock(*second_proposal) },
+        Data::Proposal {
+          valid_round: first_valid_round.clone(),
+          proposal: StubBlock(*first_proposal),
+        },
+        Data::Proposal {
+          valid_round: second_valid_round.clone(),
+          proposal: StubBlock(*second_proposal),
+        },
       ),
       EquivocatingData::Prevote { first_block, second_block } => {
         (Data::Prevote { block: *first_block }, Data::Prevote { block: *second_block })
@@ -248,16 +319,18 @@ impl<S: Signature, B: Block> EquivocatingData<S, B> {
 /// Evidence for a slash.
 #[derive(Clone)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-pub(crate) enum Evidence<S: Signature, B: Block> {
+pub(crate) enum Evidence<S: Signature, A: AggregateSignature, B: Block> {
   /// The validator equivocated, sending two distinct messages when they should have only sent one.
-  Equivocation { data: EquivocatingData<S, B>, first_signature: S, second_signature: S },
+  Equivocation { data: EquivocatingData<S, A, B>, first_signature: S, second_signature: S },
   /// The validator created an invalid proposal.
-  InvalidProposal { valid_round: Option<RoundNumber>, proposal: B::Hash, signature: S },
+  InvalidProposal { valid_round: Option<ValidRound<A>>, proposal: B::Hash, signature: S },
   /// The validator created an invalid precommit.
   InvalidPrecommit { block: B::Hash, precommit_signature: S, signature: S },
 }
 
-impl<S: Signature, B: Block<Hash: fmt::Debug>> fmt::Debug for Evidence<S, B> {
+impl<S: Signature, A: AggregateSignature, B: Block<Hash: fmt::Debug>> fmt::Debug
+  for Evidence<S, A, B>
+{
   fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Self::Equivocation { data, first_signature: _, second_signature: _ } => {
@@ -281,13 +354,15 @@ impl<S: Signature, B: Block<Hash: fmt::Debug>> fmt::Debug for Evidence<S, B> {
 /// This contains the necessary evidence to convince other validators of this slash.
 #[derive(Clone)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-pub struct SlashReason<S: Signature, B: Block> {
+pub struct SlashReason<S: Signature, A: AggregateSignature, B: Block> {
   pub(crate) block_number: BlockNumber,
   pub(crate) round_number: RoundNumber,
-  pub(crate) evidence: Evidence<S, B>,
+  pub(crate) evidence: Evidence<S, A, B>,
 }
 
-impl<S: Signature, B: Block<Hash: fmt::Debug>> fmt::Debug for SlashReason<S, B> {
+impl<S: Signature, A: AggregateSignature, B: Block<Hash: fmt::Debug>> fmt::Debug
+  for SlashReason<S, A, B>
+{
   fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
     let Self { block_number, round_number, evidence } = self;
     formatter
@@ -299,13 +374,13 @@ impl<S: Signature, B: Block<Hash: fmt::Debug>> fmt::Debug for SlashReason<S, B> 
   }
 }
 
-impl<V: Validator, S: Signature, B: Block> Message<V, S, B> {
+impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, A, B> {
   #[must_use]
   pub(crate) fn signature_message(
     genesis: impl Send + Sync + AsRef<[u8]>,
     block_number: BlockNumber,
     round_number: RoundNumber,
-    data: &Data<S, B>,
+    data: &Data<S, A, B>,
   ) -> impl IntoIterator<IntoIter: Send, Item: AsRef<[u8]>> {
     enum Segment<G: AsRef<[u8]>> {
       Dst([u8; 1]),
@@ -353,7 +428,7 @@ impl<V: Validator, S: Signature, B: Block> Message<V, S, B> {
     genesis: impl Send + Sync + AsRef<[u8]>,
     block_number: BlockNumber,
     round_number: RoundNumber,
-    data: Data<S, B>,
+    data: Data<S, A, B>,
   ) -> Self {
     let signature =
       signer.sign(Self::signature_message(genesis, block_number, round_number, &data)).await;
@@ -369,11 +444,12 @@ impl<V: Validator, S: Signature, B: Block> Message<V, S, B> {
     &self,
     blockchain: &impl Blockchain<
       Validator = V,
-      SignatureScheme: SignatureScheme<Signature = S>,
+      SignatureScheme: SignatureScheme<Signature = S, AggregateSignature = A>,
       Block = B,
     >,
   ) -> Result<(), MessageError> {
-    if blockchain.validator_set().weight(&self.validator).is_none() {
+    let validator_set = blockchain.validator_set();
+    if validator_set.weight(&self.validator).is_none() {
       Err(MessageError::NotValidator)?;
     }
 
@@ -386,6 +462,42 @@ impl<V: Validator, S: Signature, B: Block> Message<V, S, B> {
       &self.signature,
     ) {
       Err(MessageError::InvalidSignature)?;
+    }
+
+    if let Data::Proposal {
+      valid_round: Some(ValidRound { round_number, aggregate_signature }),
+      proposal,
+    } = &self.data
+    {
+      if !signature_scheme
+        .verify_aggregate(
+          Self::signature_message(
+            &genesis,
+            self.block_number,
+            *round_number,
+            &Data::Prevote { block: Some(proposal.hash()) },
+          ),
+          aggregate_signature,
+        )
+        .is_ok_and(|validators| crate::validators_satisfy_threshold(validators, validator_set))
+      {
+        blockchain.slash(
+          self.validator,
+          SlashReason {
+            block_number: self.block_number,
+            round_number: self.round_number,
+            evidence: Evidence::InvalidProposal {
+              valid_round: Some(ValidRound {
+                round_number: *round_number,
+                aggregate_signature: aggregate_signature.clone(),
+              }),
+              proposal: proposal.hash(),
+              signature: self.signature.clone(),
+            },
+          },
+        );
+        Err(MessageError::InvalidSignature)?;
+      }
     }
 
     if let Data::Precommit { block_and_precommit_signature: Some((block, precommit_signature)) } =
@@ -440,19 +552,19 @@ impl<Hash: Send + Sync + Clone + Copy + PartialEq + Eq + AsRef<[u8]> + crate::Bo
   }
 }
 
-impl<S: Signature, B: Block> SlashReason<S, B> {
+impl<S: Signature, A: AggregateSignature, B: Block> SlashReason<S, A, B> {
   /// Verify the reasoning for this slash.
   pub fn verify<V: Validator>(
     &self,
     genesis: impl Send + Sync + AsRef<[u8]>,
     validator_set: &impl ValidatorSet<Validator = V>,
-    signature_scheme: &impl SignatureScheme<Validator = V, Signature = S>,
+    signature_scheme: &impl SignatureScheme<Validator = V, Signature = S, AggregateSignature = A>,
     validator: V,
   ) -> Result<(), InvalidReason> {
     let verify_message = |data, signature| {
       if !signature_scheme.verify(
         &validator,
-        Message::<V, S, _>::signature_message(
+        Message::<V, S, A, _>::signature_message(
           &genesis,
           self.block_number,
           self.round_number,
@@ -485,14 +597,32 @@ impl<S: Signature, B: Block> SlashReason<S, B> {
       Evidence::InvalidProposal { valid_round, proposal, signature } => {
         // Check this was a proposal message signed by this validator
         verify_message(
-          Data::Proposal { valid_round: *valid_round, proposal: StubBlock(*proposal) },
+          Data::Proposal { valid_round: valid_round.clone(), proposal: StubBlock(*proposal) },
           signature,
         )?;
 
         // If the structure of this proposal was valid, this is an invalid reason to slash this
         // validator
-        if ((*valid_round) < Some(self.round_number)) &&
-          (validator == validator_set.proposer(self.block_number, self.round_number))
+        if (validator == validator_set.proposer(self.block_number, self.round_number)) &&
+          match valid_round {
+            Some(ValidRound { round_number, aggregate_signature }) => {
+              ((*round_number) < self.round_number) &&
+                signature_scheme
+                  .verify_aggregate(
+                    Message::<V, S, A, B>::signature_message(
+                      &genesis,
+                      self.block_number,
+                      *round_number,
+                      &Data::Prevote { block: Some(*proposal) },
+                    ),
+                    aggregate_signature,
+                  )
+                  .is_ok_and(|validators| {
+                    crate::validators_satisfy_threshold(validators, validator_set)
+                  })
+            }
+            None => true,
+          }
         {
           Err(InvalidReason)?;
         }
