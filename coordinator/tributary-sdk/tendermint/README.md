@@ -159,6 +159,22 @@ database may fail in real life, we assume that will be resolved by the process
 being terminated and restarted, in a way considered entirely out-of-scope to
 this library.
 
+### Possibility for Redundancy
+
+The [`Signer`] trait has an asynchronous `sign` function, allowing the sign
+implementation to involve a (sufficiently low-latency) remote service. This MAY
+allow ensuring any signed message is backed up in a redundant fashion as
+potentially sufficient to enable recovering from a corrupted database without
+being faulty. As an example of such a service (without any endorsement), please
+see [Horcrux](https://github.com/straneglove-ventures/horcrux).
+
+No such functionality is currently implemented however and the necessary API to
+rebuild a local view from a outsourced log is not present. This is solely a
+note on the potential for deriving a more redundant service (such as one which
+even on corruption, has a log of its published messages and can therefore
+ensure it does not equivocate in the future) and existing considerations
+towards one. Further efforts on this topic would be appreciated.
+
 ### no-`alloc` and no-`std`
 
 This library defines `alloc` and `std` features. With less and less of a
