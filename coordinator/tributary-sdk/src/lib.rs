@@ -158,7 +158,11 @@ impl<P: P2p> P2p for Arc<P> {
 }
 
 #[derive(Clone)]
-pub struct Tributary<D: 'static + Send + Sync + Db, T: TransactionTrait, P: P2p> {
+pub struct Tributary<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: TransactionTrait,
+  P: P2p,
+> {
   db: D,
 
   genesis: [u8; 32],
@@ -167,7 +171,9 @@ pub struct Tributary<D: 'static + Send + Sync + Db, T: TransactionTrait, P: P2p>
   handle: Arc<RwLock<TendermintHandle<TendermintNetwork<D, T, P>>>>,
 }
 
-impl<D: 'static + Send + Sync + Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait, P: P2p>
+  Tributary<D, T, P>
+{
   pub async fn new(
     db: D,
     genesis: [u8; 32],
@@ -337,12 +343,13 @@ impl<D: 'static + Send + Sync + Db, T: TransactionTrait, P: P2p> Tributary<D, T,
 }
 
 #[derive(Clone)]
-pub struct TributaryReader<D: 'static + Send + Sync + Db, T: TransactionTrait>(
-  D,
-  [u8; 32],
-  PhantomData<T>,
-);
-impl<D: 'static + Send + Sync + Db, T: TransactionTrait> TributaryReader<D, T> {
+pub struct TributaryReader<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: TransactionTrait,
+>(D, [u8; 32], PhantomData<T>);
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait>
+  TributaryReader<D, T>
+{
   pub fn genesis(&self) -> [u8; 32] {
     self.1
   }

@@ -312,7 +312,7 @@ impl TributaryDb {
     LastHandledTributaryBlock::get(getter, set)
   }
   pub(crate) fn set_last_handled_tributary_block(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     block_number: u64,
     block_hash: [u8; 32],
@@ -327,20 +327,20 @@ impl TributaryDb {
     LatestSubstrateBlockToCosign::get(getter, set)
   }
   pub(crate) fn set_latest_substrate_block_to_cosign(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     substrate_block_hash: BlockHash,
   ) {
     LatestSubstrateBlockToCosign::set(txn, set, &substrate_block_hash);
   }
   pub(crate) fn actively_cosigning(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
   ) -> Option<BlockHash> {
     ActivelyCosigning::get(txn, set)
   }
   pub(crate) fn start_cosigning(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     substrate_block_hash: BlockHash,
     substrate_block_number: u64,
@@ -361,28 +361,32 @@ impl TributaryDb {
       },
     );
   }
-  pub(crate) fn finish_cosigning(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
+  pub(crate) fn finish_cosigning(txn: &mut (impl Send + DbTxn), set: ExternalValidatorSet) {
     assert!(
       ActivelyCosigning::take(txn, set).is_some(),
       "tried to finish cosigning but wasn't actively cosigning"
     );
   }
   pub(crate) fn mark_cosigned(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     substrate_block_hash: BlockHash,
   ) {
     Cosigned::set(txn, set, substrate_block_hash, &());
   }
   pub(crate) fn cosigned(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     substrate_block_hash: BlockHash,
   ) -> bool {
     Cosigned::get(txn, set, substrate_block_hash).is_some()
   }
 
-  pub(crate) fn recognize_topic(txn: &mut impl DbTxn, set: ExternalValidatorSet, topic: Topic) {
+  pub(crate) fn recognize_topic(
+    txn: &mut (impl Send + DbTxn),
+    set: ExternalValidatorSet,
+    topic: Topic,
+  ) {
     AccumulatedWeight::set(txn, set, topic, &0);
     RecognizedTopics::send(txn, set, &topic);
   }
@@ -391,13 +395,17 @@ impl TributaryDb {
   }
   /// The next topic which required recognition which has now been recognized by this Tributary.
   pub(crate) fn try_recv_topic_requiring_recognition(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
   ) -> Option<Topic> {
     RecognizedTopics::try_recv(txn, set)
   }
 
-  pub(crate) fn start_of_block(txn: &mut impl DbTxn, set: ExternalValidatorSet, block_number: u64) {
+  pub(crate) fn start_of_block(
+    txn: &mut (impl Send + DbTxn),
+    set: ExternalValidatorSet,
+    block_number: u64,
+  ) {
     for topic in Reattempt::take(txn, set, block_number).unwrap_or(vec![]) {
       /*
         TODO: Slash all people who preprocessed but didn't share, and add a delay to their
@@ -426,7 +434,7 @@ impl TributaryDb {
   }
 
   pub(crate) fn fatal_slash(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     validator: SeraiAddress,
     #[cfg_attr(coverage, allow(unused_variables))] reason: &str,
@@ -445,7 +453,7 @@ impl TributaryDb {
 
   #[expect(clippy::too_many_arguments)]
   pub(crate) fn accumulate<D: Borshy>(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     validators: &[SeraiAddress],
     total_weight: u16,
@@ -564,7 +572,7 @@ impl TributaryDb {
   }
 
   pub(crate) fn send_message(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     message: impl Into<messages::CoordinatorMessage>,
   ) {

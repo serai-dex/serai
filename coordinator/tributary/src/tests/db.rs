@@ -84,7 +84,7 @@ type NoEachFn = fn(usize, &DataSet<[u8; 32]>);
 /// Cross threshold by accumulating from all validators, returning the final result.
 #[expect(clippy::too_many_arguments)]
 fn accumulate_to_threshold<D: Borshy, F1, F2>(
-  txn: &mut impl DbTxn,
+  txn: &mut (impl Send + DbTxn),
   set: ExternalValidatorSet,
   validators: &[SeraiAddress],
   total_weight: u16,

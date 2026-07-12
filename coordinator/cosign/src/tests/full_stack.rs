@@ -9,7 +9,7 @@ use crate::{evaluator::*, tests::*, *};
 
 /// Drain all pending cosign intents from every keyed session the fuzzer knows about.
 fn drain_intents(
-  txn: &mut impl DbTxn,
+  txn: &mut (impl Send + DbTxn),
   event_fuzzer: &EventFuzzer,
 ) -> Vec<(ExternalNetworkId, CosignIntent)> {
   let mut intents = Vec::new();

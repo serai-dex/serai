@@ -68,12 +68,14 @@ fn cosigning_sets(getter: &impl Get) -> Vec<(ExternalValidatorSet, Public, Amoun
 }
 
 /// A task to determine which blocks we should intend to cosign.
-pub(crate) struct CosignIntendTask<D: 'static + Send + Sync + Db> {
+pub(crate) struct CosignIntendTask<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   pub(crate) db: D,
   pub(crate) serai: Arc<Serai>,
 }
 
-impl<D: 'static + Send + Sync + Db> ContinuallyRan for CosignIntendTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for CosignIntendTask<D>
+{
   #[cfg(test)]
   const DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_secs(1);
   #[cfg(test)]

@@ -57,7 +57,7 @@ mod _db {
 
 pub(crate) struct KeyGenDb<P: KeyGenParams>(PhantomData<P>);
 impl<P: KeyGenParams> KeyGenDb<P> {
-  pub(crate) fn set_params(txn: &mut impl DbTxn, session: Session, params: Params<P>) {
+  pub(crate) fn set_params(txn: &mut (impl Send + DbTxn), session: Session, params: Params<P>) {
     assert_eq!(params.substrate_evrf_public_keys.len(), params.network_evrf_public_keys.len());
 
     _db::Params::set(
@@ -108,7 +108,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
   }
 
   pub(crate) fn set_participations(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     session: Session,
     participations: &Participations,
   ) {
@@ -120,7 +120,7 @@ impl<P: KeyGenParams> KeyGenDb<P> {
 
   // Set the key shares for a session.
   pub(crate) fn set_key_shares(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     session: Session,
     substrate_keys: &[ThresholdKeys<<Ristretto as Curves>::ToweringCurve>],
     network_keys: &[ThresholdKeys<<P::ExternalNetworkCiphersuite as Curves>::ToweringCurve>],

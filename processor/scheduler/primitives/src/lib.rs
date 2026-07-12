@@ -58,14 +58,14 @@ mod db {
 pub struct TransactionsToSign<T>(PhantomData<T>);
 impl<T: SignableTransaction> TransactionsToSign<T> {
   /// Send a transaction to sign.
-  pub fn send(txn: &mut impl DbTxn, key: &impl GroupEncoding, tx: &T) {
+  pub fn send(txn: &mut (impl Send + DbTxn), key: &impl GroupEncoding, tx: &T) {
     let mut buf = Vec::with_capacity(128);
     tx.write(&mut buf).unwrap();
     db::TransactionsToSign::send(txn, key.to_bytes().as_ref(), &buf);
   }
 
   /// Try to receive a transaction to sign.
-  pub fn try_recv(txn: &mut impl DbTxn, key: &impl GroupEncoding) -> Option<T> {
+  pub fn try_recv(txn: &mut (impl Send + DbTxn), key: &impl GroupEncoding) -> Option<T> {
     let tx = db::TransactionsToSign::try_recv(txn, key.to_bytes().as_ref())?;
     let mut tx = tx.as_slice();
     let res = T::read(&mut tx).unwrap();

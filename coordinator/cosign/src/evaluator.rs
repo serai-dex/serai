@@ -34,7 +34,7 @@ serai_db::channel!(
 );
 
 /// Commit a block as evaluated.
-fn commit_evaluated_block(mut txn: impl DbTxn, block_number: u64, has_events: bool) {
+fn commit_evaluated_block(mut txn: impl Send + DbTxn, block_number: u64, has_events: bool) {
   CosignedBlocks::send(&mut txn, &(block_number, now_timestamp().as_secs(), has_events));
   txn.commit();
 }
@@ -52,7 +52,7 @@ fn commit_evaluated_block(mut txn: impl DbTxn, block_number: u64, has_events: bo
 /// This function will also ensure the currently evaluated global session is incremented once we
 /// finish evaluation of the prior session.
 fn currently_evaluated_global_session_strict(
-  txn: &mut impl DbTxn,
+  txn: &mut (impl Send + DbTxn),
   block_number: u64,
 ) -> ([u8; 32], GlobalSession) {
   let mut res = {
@@ -189,14 +189,17 @@ async fn ensure_cosigned(
 }
 
 /// A task to determine if a block has been cosigned and we should handle it.
-pub(crate) struct CosignEvaluatorTask<D: 'static + Send + Sync + Db, R: RequestNotableCosigns> {
+pub(crate) struct CosignEvaluatorTask<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  R: RequestNotableCosigns,
+> {
   pub(crate) db: D,
   pub(crate) request: R,
   pub(crate) last_request_for_cosigns: Instant,
 }
 
-impl<D: 'static + Send + Sync + Db, R: RequestNotableCosigns> ContinuallyRan
-  for CosignEvaluatorTask<D, R>
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, R: RequestNotableCosigns>
+  ContinuallyRan for CosignEvaluatorTask<D, R>
 {
   #[cfg(test)]
   const DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_secs(1);

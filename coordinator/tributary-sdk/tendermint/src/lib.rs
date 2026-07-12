@@ -295,7 +295,7 @@ mod tendermint {
           Validator = B::Validator,
           Signature = <B::SignatureScheme as SignatureScheme>::Signature,
         >,
-      D: Send + Db,
+      D: Send + for<'db> Db<Transaction<'db>: Send>,
       N: Send
         + Network<
           B::Validator,

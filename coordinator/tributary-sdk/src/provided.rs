@@ -23,14 +23,19 @@ pub enum ProvidedError {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub struct ProvidedTransactions<D: 'static + Send + Sync + Db, T: Transaction> {
+pub struct ProvidedTransactions<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: Transaction,
+> {
   db: D,
   genesis: [u8; 32],
 
   pub(crate) transactions: HashMap<&'static str, VecDeque<T>>,
 }
 
-impl<D: 'static + Send + Sync + Db, T: Transaction> ProvidedTransactions<D, T> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transaction>
+  ProvidedTransactions<D, T>
+{
   fn transaction_key(&self, hash: &[u8]) -> Vec<u8> {
     crate::D_key(b"tributary_provided", b"transaction", [self.genesis.as_ref(), hash].concat())
   }

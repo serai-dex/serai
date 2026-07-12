@@ -14,7 +14,10 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub(crate) struct Blockchain<D: 'static + Send + Sync + Db, T: TransactionTrait> {
+pub(crate) struct Blockchain<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: TransactionTrait,
+> {
   db: Option<D>,
   genesis: [u8; 32],
 
@@ -28,7 +31,9 @@ pub(crate) struct Blockchain<D: 'static + Send + Sync + Db, T: TransactionTrait>
   pub(crate) next_block_notifications: VecDeque<tokio::sync::oneshot::Sender<()>>,
 }
 
-impl<D: 'static + Send + Sync + Db, T: TransactionTrait> Blockchain<D, T> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait>
+  Blockchain<D, T>
+{
   fn tip_key(genesis: [u8; 32]) -> Vec<u8> {
     crate::D_key(b"tributary_blockchain", b"tip", genesis)
   }

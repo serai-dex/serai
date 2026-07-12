@@ -13,19 +13,21 @@ use serai_task::ContinuallyRan;
 use crate::Keys;
 
 /// Set keys from `Keys` on Serai.
-pub struct SetKeysTask<D: 'static + Send + Sync + Db> {
+pub struct SetKeysTask<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   db: D,
   serai: Arc<Serai>,
 }
 
-impl<D: 'static + Send + Sync + Db> SetKeysTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> SetKeysTask<D> {
   /// Create a task to publish slash reports onto Serai.
   pub fn new(db: D, serai: Arc<Serai>) -> Self {
     Self { db, serai }
   }
 }
 
-impl<D: 'static + Send + Sync + Db> ContinuallyRan for SetKeysTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for SetKeysTask<D>
+{
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

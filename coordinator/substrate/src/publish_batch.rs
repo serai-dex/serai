@@ -19,20 +19,22 @@ serai_db::schema!(
 );
 
 /// Publish `SignedBatch`s from `SignedBatches` onto Serai.
-pub struct PublishBatchTask<D: 'static + Send + Sync + Db> {
+pub struct PublishBatchTask<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   db: D,
   serai: Arc<Serai>,
   network: ExternalNetworkId,
 }
 
-impl<D: 'static + Send + Sync + Db> PublishBatchTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> PublishBatchTask<D> {
   /// Create a task to publish `SignedBatch`s onto Serai.
   pub fn new(db: D, serai: Arc<Serai>, network: ExternalNetworkId) -> Self {
     Self { db, serai, network }
   }
 }
 
-impl<D: 'static + Send + Sync + Db> ContinuallyRan for PublishBatchTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for PublishBatchTask<D>
+{
   type Error = RpcError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

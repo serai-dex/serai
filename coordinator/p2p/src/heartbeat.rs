@@ -47,7 +47,11 @@ pub const BATCH_SIZE_LIMIT: usize = MIN_BLOCKS_PER_BATCH *
 ///
 /// If the other validator has more blocks then we do, they're expected to inform us. This forms
 /// the sync protocol for our Tributaries.
-pub(crate) struct HeartbeatTask<TD: 'static + Send + Sync + Db, Tx: TransactionTrait, P: P2p> {
+pub(crate) struct HeartbeatTask<
+  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  Tx: TransactionTrait,
+  P: P2p,
+> {
   set: ExternalValidatorSet,
   tributary: Tributary<TD, Tx, P>,
   reader: TributaryReader<TD, Tx>,
@@ -56,7 +60,12 @@ pub(crate) struct HeartbeatTask<TD: 'static + Send + Sync + Db, Tx: TransactionT
   time_of_last_observed_block: Option<Instant>,
 }
 
-impl<TD: 'static + Send + Sync + Db, Tx: TransactionTrait, P: P2p> HeartbeatTask<TD, Tx, P> {
+impl<
+    TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    Tx: TransactionTrait,
+    P: P2p,
+  > HeartbeatTask<TD, Tx, P>
+{
   pub(crate) fn new(
     set: ExternalValidatorSet,
     tributary: Tributary<TD, Tx, P>,
@@ -75,8 +84,11 @@ impl<TD: 'static + Send + Sync + Db, Tx: TransactionTrait, P: P2p> HeartbeatTask
   }
 }
 
-impl<TD: 'static + Send + Sync + Db, Tx: TransactionTrait, P: P2p> ContinuallyRan
-  for HeartbeatTask<TD, Tx, P>
+impl<
+    TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    Tx: TransactionTrait,
+    P: P2p,
+  > ContinuallyRan for HeartbeatTask<TD, Tx, P>
 {
   type Error = String;
 

@@ -103,7 +103,7 @@ async fn wait_for_block_after(
 ///
 /// Returns the block's hash.
 fn inject_block(
-  mut txn: impl DbTxn,
+  mut txn: impl Send + DbTxn,
   genesis: [u8; 32],
   parent: [u8; 32],
   transactions: Vec<TributaryTransaction<Transaction>>,

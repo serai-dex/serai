@@ -46,7 +46,7 @@ pub struct ProcessorMessages;
 impl ProcessorMessages {
   /// Try to receive a message to send to a Processor.
   pub fn try_recv(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
   ) -> Option<messages::CoordinatorMessage> {
     db::ProcessorMessages::try_recv(txn, set)
@@ -64,7 +64,7 @@ impl DkgConfirmationMessages {
   /// actual ID is undefined other than it will be consistent to the signing protocol and unique
   /// across validator sets, with no guarantees of uniqueness across contexts.
   pub fn try_recv(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
   ) -> Option<messages::sign::CoordinatorMessage> {
     db::DkgConfirmationMessages::try_recv(txn, set)
@@ -77,11 +77,11 @@ impl CosignIntents {
   /// Provide a CosignIntent for this Tributary.
   ///
   /// This must be done before the associated `Transaction::Cosign` is provided.
-  pub fn provide(txn: &mut impl DbTxn, set: ExternalValidatorSet, intent: &CosignIntent) {
+  pub fn provide(txn: &mut (impl Send + DbTxn), set: ExternalValidatorSet, intent: &CosignIntent) {
     db::CosignIntents::set(txn, set, intent.block_hash, intent);
   }
   fn take(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     substrate_block_hash: BlockHash,
   ) -> Option<CosignIntent> {
@@ -100,7 +100,7 @@ impl RecognizedTopics {
   }
   /// The next topic requiring recognition which has been recognized by this Tributary.
   pub fn try_recv_topic_requiring_recognition(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
   ) -> Option<Topic> {
     TributaryDb::try_recv_topic_requiring_recognition(txn, set)
@@ -115,7 +115,7 @@ impl SubstrateBlockPlans {
   ///
   /// This must be done before the associated `Transaction::Cosign` is provided.
   pub fn set(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     substrate_block_hash: BlockHash,
     plans: &Vec<[u8; 32]>,
@@ -123,7 +123,7 @@ impl SubstrateBlockPlans {
     db::SubstrateBlockPlans::set(txn, set, substrate_block_hash, plans);
   }
   fn take(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     substrate_block_hash: BlockHash,
   ) -> Option<Vec<[u8; 32]>> {
@@ -131,7 +131,12 @@ impl SubstrateBlockPlans {
   }
 }
 
-struct ScanBlock<'a, TD: 'static + Send + Sync + Db, TDT: DbTxn, P: P2p> {
+struct ScanBlock<
+  'a,
+  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  TDT: Send + DbTxn,
+  P: P2p,
+> {
   _td: PhantomData<TD>,
   _p2p: PhantomData<P>,
   tributary_txn: &'a mut TDT,
@@ -140,7 +145,9 @@ struct ScanBlock<'a, TD: 'static + Send + Sync + Db, TDT: DbTxn, P: P2p> {
   total_weight: u16,
   validator_weights: &'a HashMap<SeraiAddress, u16>,
 }
-impl<TD: 'static + Send + Sync + Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, P> {
+impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send + DbTxn, P: P2p>
+  ScanBlock<'_, TD, TDT, P>
+{
   fn potentially_start_cosign(&mut self) {
     // Don't start a new cosigning instance if we're actively running one
     if TributaryDb::actively_cosigning(self.tributary_txn, self.set.set).is_some() {
@@ -594,7 +601,10 @@ impl<TD: 'static + Send + Sync + Db, TDT: DbTxn, P: P2p> ScanBlock<'_, TD, TDT, 
 }
 
 /// The task to scan the Tributary, populating `ProcessorMessages`.
-pub struct ScanTributaryTask<TD: 'static + Send + Sync + Db, P: P2p> {
+pub struct ScanTributaryTask<
+  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  P: P2p,
+> {
   tributary_db: TD,
   set: NewSetInformation,
   validators: Vec<SeraiAddress>,
@@ -604,7 +614,9 @@ pub struct ScanTributaryTask<TD: 'static + Send + Sync + Db, P: P2p> {
   _p2p: PhantomData<P>,
 }
 
-impl<TD: 'static + Send + Sync + Db, P: P2p> ScanTributaryTask<TD, P> {
+impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, P: P2p>
+  ScanTributaryTask<TD, P>
+{
   /// Create a new instance of this task.
   ///
   /// This will panic if the Tributary read does not correspond to the set.
@@ -640,7 +652,9 @@ impl<TD: 'static + Send + Sync + Db, P: P2p> ScanTributaryTask<TD, P> {
   }
 }
 
-impl<TD: 'static + Send + Sync + Db, P: P2p> ContinuallyRan for ScanTributaryTask<TD, P> {
+impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, P: P2p> ContinuallyRan
+  for ScanTributaryTask<TD, P>
+{
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

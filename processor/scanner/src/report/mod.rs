@@ -15,18 +15,25 @@ use db::BatchDb;
 
 // This task begins reporting Batches for signing once the pre-requisities are met.
 #[expect(non_snake_case)]
-pub(crate) struct ReportTask<D: 'static + Send + Sync + Db, S: ScannerFeed> {
+pub(crate) struct ReportTask<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  S: ScannerFeed,
+> {
   db: D,
   _S: PhantomData<S>,
 }
 
-impl<D: 'static + Send + Sync + Db, S: ScannerFeed> ReportTask<D, S> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerFeed>
+  ReportTask<D, S>
+{
   pub(crate) fn new(db: D) -> Self {
     Self { db, _S: PhantomData }
   }
 }
 
-impl<D: 'static + Send + Sync + Db, S: ScannerFeed> ContinuallyRan for ReportTask<D, S> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerFeed> ContinuallyRan
+  for ReportTask<D, S>
+{
   type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

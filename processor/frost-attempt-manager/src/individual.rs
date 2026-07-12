@@ -20,7 +20,10 @@ serai_db::schema!(
 
 /// An instance of a signing protocol with re-attempts handled internally.
 #[expect(clippy::type_complexity)]
-pub(crate) struct SigningProtocol<D: 'static + Send + Sync + Db, M: Clone + PreprocessMachine> {
+pub(crate) struct SigningProtocol<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  M: Clone + PreprocessMachine,
+> {
   db: D,
   // The session this signing protocol is being conducted by.
   session: Session,
@@ -42,7 +45,11 @@ pub(crate) struct SigningProtocol<D: 'static + Send + Sync + Db, M: Clone + Prep
   >,
 }
 
-impl<D: 'static + Send + Sync + Db, M: Clone + PreprocessMachine> SigningProtocol<D, M> {
+impl<
+    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    M: Clone + PreprocessMachine,
+  > SigningProtocol<D, M>
+{
   /// Create a new signing protocol.
   pub(crate) fn new(
     db: D,
@@ -278,7 +285,7 @@ impl<D: 'static + Send + Sync + Db, M: Clone + PreprocessMachine> SigningProtoco
   }
 
   /// Cleanup the database entries for a specified signing protocol.
-  pub(crate) fn cleanup(txn: &mut impl DbTxn, session: Session, id: VariantSignId) {
+  pub(crate) fn cleanup(txn: &mut (impl Send + DbTxn), session: Session, id: VariantSignId) {
     Attempted::del(txn, session, id);
   }
 }

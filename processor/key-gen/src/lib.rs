@@ -190,7 +190,11 @@ impl<P: KeyGenParams> KeyGen<P> {
   }
 
   /// Handle a message from the coordinator.
-  pub fn handle(&mut self, txn: &mut impl DbTxn, msg: CoordinatorMessage) -> Vec<ProcessorMessage> {
+  pub fn handle(
+    &mut self,
+    txn: &mut (impl Send + DbTxn),
+    msg: CoordinatorMessage,
+  ) -> Vec<ProcessorMessage> {
     const SUBSTRATE_KEY_CONTEXT: &[u8] = b"substrate";
     const NETWORK_KEY_CONTEXT: &[u8] = b"network";
     fn context<P: KeyGenParams>(session: Session, key_context: &[u8]) -> [u8; 32] {
@@ -417,7 +421,7 @@ impl<P: KeyGenParams> KeyGen<P> {
 
         // If we now have the threshold participating, verify their `Participation`s
         fn verify_dkg<P: KeyGenParams, C: 'static + Curves>(
-          txn: &mut impl DbTxn,
+          txn: &mut (impl Send + DbTxn),
           session: Session,
           true_if_substrate_false_if_network: bool,
           threshold: u16,

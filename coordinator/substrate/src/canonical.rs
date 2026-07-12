@@ -23,12 +23,12 @@ serai_db::schema!(
 );
 
 /// The event stream for canonical events.
-pub struct CanonicalEventStream<D: 'static + Send + Sync + Db> {
+pub struct CanonicalEventStream<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   db: D,
   serai: Arc<Serai>,
 }
 
-impl<D: 'static + Send + Sync + Db> CanonicalEventStream<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> CanonicalEventStream<D> {
   /// Create a new canonical event stream.
   ///
   /// Only one of these may exist over the provided database.
@@ -37,7 +37,9 @@ impl<D: 'static + Send + Sync + Db> CanonicalEventStream<D> {
   }
 }
 
-impl<D: 'static + Send + Sync + Db> ContinuallyRan for CanonicalEventStream<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for CanonicalEventStream<D>
+{
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

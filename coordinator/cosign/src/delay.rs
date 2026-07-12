@@ -39,11 +39,13 @@ serai_db::schema!(
 );
 
 /// A task to delay acknowledgement of cosigns.
-pub(crate) struct CosignDelayTask<D: 'static + Send + Sync + Db> {
+pub(crate) struct CosignDelayTask<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   pub(crate) db: D,
 }
 
-impl<D: 'static + Send + Sync + Db> ContinuallyRan for CosignDelayTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for CosignDelayTask<D>
+{
   type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

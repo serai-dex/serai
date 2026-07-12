@@ -119,8 +119,8 @@ enum Signer {
 
 /// Performs the DKG Confirmation protocol.
 pub(crate) struct ConfirmDkgTask<
-  CD: 'static + Send + Sync + DbTrait,
-  TD: 'static + Send + Sync + DbTrait,
+  CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
 > {
   db: CD,
 
@@ -131,8 +131,10 @@ pub(crate) struct ConfirmDkgTask<
   signer: Option<Signer>,
 }
 
-impl<CD: 'static + Send + Sync + DbTrait, TD: 'static + Send + Sync + DbTrait>
-  ConfirmDkgTask<CD, TD>
+impl<
+    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  > ConfirmDkgTask<CD, TD>
 {
   pub(crate) fn new(
     db: CD,
@@ -190,8 +192,10 @@ impl<CD: 'static + Send + Sync + DbTrait, TD: 'static + Send + Sync + DbTrait>
   }
 }
 
-impl<CD: 'static + Send + Sync + DbTrait, TD: 'static + Send + Sync + DbTrait> ContinuallyRan
-  for ConfirmDkgTask<CD, TD>
+impl<
+    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  > ContinuallyRan for ConfirmDkgTask<CD, TD>
 {
   type Error = DoesNotError;
 

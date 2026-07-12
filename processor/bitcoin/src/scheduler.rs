@@ -33,7 +33,7 @@ fn address_from_serai_key(key: <Secp256k1 as WrappedGroup>::G, kind: OutputType)
   .expect("couldn't create Serai-representable address for P2TR script")
 }
 
-fn signable_transaction<D: 'static + Send + Sync + Db>(
+fn signable_transaction<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>(
   _reference_block: &BlockFor<Rpc<D>>,
   inputs: Vec<OutputFor<Rpc<D>>>,
   payments: Vec<Payment<AddressFor<Rpc<D>>>>,
@@ -89,8 +89,8 @@ fn signable_transaction<D: 'static + Send + Sync + Db>(
 
 #[derive(Clone)]
 pub(crate) struct Planner;
-impl<D: 'static + Send + Sync + Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>
-  for Planner
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>
+  TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Planner
 {
   type EphemeralError = ();
 

@@ -113,11 +113,11 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
   pub(crate) fn start_block(getter: &impl Get) -> Option<u64> {
     StartBlock::get(getter)
   }
-  pub(crate) fn set_start_block(txn: &mut impl DbTxn, block: u64) {
+  pub(crate) fn set_start_block(txn: &mut (impl Send + DbTxn), block: u64) {
     StartBlock::set(txn, &block);
   }
 
-  fn tidy_keys(txn: &mut impl DbTxn) {
+  fn tidy_keys(txn: &mut (impl Send + DbTxn)) {
     let mut keys: Vec<SeraiKeyDbEntry<EncodableG<KeyFor<S>>>> =
       ActiveKeys::get(txn).expect("retiring key yet no active keys");
     let Some(key) = keys.first() else { return };
@@ -151,7 +151,11 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
   ///
   /// `activation_block_number` is inclusive, so the key will be scanned for starting at the
   /// specified block.
-  pub(crate) fn queue_key(txn: &mut impl DbTxn, activation_block_number: u64, key: KeyFor<S>) {
+  pub(crate) fn queue_key(
+    txn: &mut (impl Send + DbTxn),
+    activation_block_number: u64,
+    key: KeyFor<S>,
+  ) {
     // Set the block which has a key activate as notable
     NotableBlock::set(txn, activation_block_number, &());
 
@@ -202,7 +206,7 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
   /// Retire a key.
   ///
   /// The key retired must be the oldest key. There must be another key actively tracked.
-  pub(crate) fn retire_key(txn: &mut impl DbTxn, at_block: u64, key: KeyFor<S>) {
+  pub(crate) fn retire_key(txn: &mut (impl Send + DbTxn), at_block: u64, key: KeyFor<S>) {
     // Set the block which has a key retire as notable
     NotableBlock::set(txn, at_block, &());
 
@@ -257,7 +261,7 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
   }
 
   pub(crate) fn set_highest_acknowledged_block(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     highest_acknowledged_block: u64,
   ) {
     HighestAcknowledgedBlock::set(txn, &highest_acknowledged_block);
@@ -274,7 +278,10 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     consider those outputs received as of the block they're queued to (maintaining the policy any
     blocks in which we receive outputs is notable).
   */
-  pub(crate) fn flag_notable_due_to_non_external_output(txn: &mut impl DbTxn, block_number: u64) {
+  pub(crate) fn flag_notable_due_to_non_external_output(
+    txn: &mut (impl Send + DbTxn),
+    block_number: u64,
+  ) {
     NotableBlock::set(txn, block_number, &());
   }
 
@@ -336,7 +343,11 @@ serai_db::channel! {
 
 pub(crate) struct ScanToEventualityDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScanToEventualityDb<S> {
-  pub(crate) fn send_scan_data(txn: &mut impl DbTxn, block_number: u64, data: &SenderScanData<S>) {
+  pub(crate) fn send_scan_data(
+    txn: &mut (impl Send + DbTxn),
+    block_number: u64,
+    data: &SenderScanData<S>,
+  ) {
     // If we received an External output to accumulate, or have an External output to forward
     // (meaning we received an External output), or have an External output to return (again
     // meaning we received an External output), set this block as notable due to receiving outputs
@@ -382,7 +393,7 @@ impl<S: ScannerFeed> ScanToEventualityDb<S> {
     ScannedBlock::send(txn, &buf);
   }
   pub(crate) fn recv_scan_data(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     expected_block_number: u64,
   ) -> ReceiverScanData<S> {
     let data =
@@ -490,7 +501,7 @@ pub(crate) struct InInstructionData<S: ScannerFeed> {
 pub(crate) struct ScanToBatchDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScanToBatchDb<S> {
   pub(crate) fn send_in_instructions(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     block_number: u64,
     data: &InInstructionData<S>,
   ) {
@@ -506,7 +517,7 @@ impl<S: ScannerFeed> ScanToBatchDb<S> {
   }
 
   pub(crate) fn recv_in_instructions(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     block_number: u64,
   ) -> InInstructionData<S> {
     let data = InInstructions::try_recv(txn)
@@ -554,11 +565,16 @@ serai_db::channel! {
 
 pub(crate) struct BatchToReportDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> BatchToReportDb<S> {
-  pub(crate) fn send_batch(txn: &mut impl DbTxn, batch_data: &BatchData<EncodableG<KeyFor<S>>>) {
+  pub(crate) fn send_batch(
+    txn: &mut (impl Send + DbTxn),
+    batch_data: &BatchData<EncodableG<KeyFor<S>>>,
+  ) {
     BatchToReport::send(txn, batch_data);
   }
 
-  pub(crate) fn try_recv_batch(txn: &mut impl DbTxn) -> Option<BatchData<EncodableG<KeyFor<S>>>> {
+  pub(crate) fn try_recv_batch(
+    txn: &mut (impl Send + DbTxn),
+  ) -> Option<BatchData<EncodableG<KeyFor<S>>>> {
     BatchToReport::try_recv(txn)
   }
 }
@@ -572,7 +588,7 @@ serai_db::channel! {
 pub(crate) struct SubstrateToEventualityDb;
 impl SubstrateToEventualityDb {
   pub(crate) fn send_burns<S: ScannerFeed>(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     acknowledged_block: u64,
     burns: Vec<OutInstructionWithBalance>,
   ) {
@@ -587,7 +603,7 @@ impl SubstrateToEventualityDb {
   }
 
   pub(crate) fn try_recv_burns(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     acknowledged_block: u64,
   ) -> Option<Vec<OutInstructionWithBalance>> {
     Burns::try_recv(txn, acknowledged_block)
@@ -611,12 +627,12 @@ mod _public_db {
 /// This is used for publishing Batches onto Serai.
 pub struct BatchesToSign<K: GroupEncoding>(PhantomData<K>);
 impl<K: GroupEncoding> BatchesToSign<K> {
-  pub(crate) fn send(txn: &mut impl DbTxn, key: &K, batch: &Batch) {
+  pub(crate) fn send(txn: &mut (impl Send + DbTxn), key: &K, batch: &Batch) {
     _public_db::BatchesToSign::send(txn, key.to_bytes().as_ref(), batch);
   }
 
   /// Receive a batch to sign and publish.
-  pub fn try_recv(txn: &mut impl DbTxn, key: &K) -> Option<Batch> {
+  pub fn try_recv(txn: &mut (impl Send + DbTxn), key: &K) -> Option<Batch> {
     _public_db::BatchesToSign::try_recv(txn, key.to_bytes().as_ref())
   }
 }
@@ -624,12 +640,12 @@ impl<K: GroupEncoding> BatchesToSign<K> {
 /// The batches which were acknowledged on-chain.
 pub struct AcknowledgedBatches<K: GroupEncoding>(PhantomData<K>);
 impl<K: GroupEncoding> AcknowledgedBatches<K> {
-  pub(crate) fn send(txn: &mut impl DbTxn, key: &K, batch: u32) {
+  pub(crate) fn send(txn: &mut (impl Send + DbTxn), key: &K, batch: u32) {
     _public_db::AcknowledgedBatches::send(txn, key.to_bytes().as_ref(), &batch);
   }
 
   /// Receive the ID of a batch which was acknowledged.
-  pub fn try_recv(txn: &mut impl DbTxn, key: &K) -> Option<u32> {
+  pub fn try_recv(txn: &mut (impl Send + DbTxn), key: &K) -> Option<u32> {
     _public_db::AcknowledgedBatches::try_recv(txn, key.to_bytes().as_ref())
   }
 }
@@ -637,12 +653,12 @@ impl<K: GroupEncoding> AcknowledgedBatches<K> {
 /// The IDs of completed Eventualities found on-chain, within a finalized block.
 pub struct CompletedEventualities<K: GroupEncoding>(PhantomData<K>);
 impl<K: GroupEncoding> CompletedEventualities<K> {
-  pub(crate) fn send(txn: &mut impl DbTxn, key: &K, id: [u8; 32]) {
+  pub(crate) fn send(txn: &mut (impl Send + DbTxn), key: &K, id: [u8; 32]) {
     _public_db::CompletedEventualities::send(txn, key.to_bytes().as_ref(), &id);
   }
 
   /// Receive the ID of a completed Eventuality.
-  pub fn try_recv(txn: &mut impl DbTxn, key: &K) -> Option<[u8; 32]> {
+  pub fn try_recv(txn: &mut (impl Send + DbTxn), key: &K) -> Option<[u8; 32]> {
     _public_db::CompletedEventualities::try_recv(txn, key.to_bytes().as_ref())
   }
 }

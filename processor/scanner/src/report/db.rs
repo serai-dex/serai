@@ -12,7 +12,7 @@ serai_db::schema!(
 pub(crate) struct BatchDb;
 impl BatchDb {
   pub(crate) fn set_last_session_to_sign_batch_and_first_batch(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     session: Session,
     id: u32,
   ) {

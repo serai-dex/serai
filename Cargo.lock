@@ -8174,6 +8174,7 @@ dependencies = [
  "secq256k1",
  "serai-client-bitcoin",
  "serai-client-ethereum",
+ "serai-db",
  "short-weierstrass",
  "std-shims 0.1.5",
  "tendermint-machine",

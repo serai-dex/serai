@@ -32,13 +32,13 @@ serai_db::schema!(
 );
 
 /// The event stream for ephemeral events.
-pub struct EphemeralEventStream<D: 'static + Send + Sync + Db> {
+pub struct EphemeralEventStream<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   db: D,
   serai: Arc<Serai>,
   validator: SeraiAddress,
 }
 
-impl<D: 'static + Send + Sync + Db> EphemeralEventStream<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> EphemeralEventStream<D> {
   /// Create a new ephemeral event stream.
   ///
   /// Only one of these may exist over the provided database.
@@ -47,7 +47,9 @@ impl<D: 'static + Send + Sync + Db> EphemeralEventStream<D> {
   }
 }
 
-impl<D: 'static + Send + Sync + Db> ContinuallyRan for EphemeralEventStream<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for EphemeralEventStream<D>
+{
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

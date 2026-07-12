@@ -23,7 +23,10 @@ use crate::{
 
 // Fetches slash reports to sign and signs them.
 #[expect(non_snake_case)]
-pub(crate) struct SlashReportSignerTask<D: 'static + Send + Sync + Db, S: ScannerFeed> {
+pub(crate) struct SlashReportSignerTask<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  S: ScannerFeed,
+> {
   db: D,
   _S: PhantomData<S>,
 
@@ -34,7 +37,9 @@ pub(crate) struct SlashReportSignerTask<D: 'static + Send + Sync + Db, S: Scanne
   attempt_manager: AttemptManager<D, WrappedSchnorrkelMachine>,
 }
 
-impl<D: 'static + Send + Sync + Db, S: ScannerFeed> SlashReportSignerTask<D, S> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerFeed>
+  SlashReportSignerTask<D, S>
+{
   pub(crate) fn new(db: D, session: Session, keys: Vec<ThresholdKeys<Ristretto>>) -> Self {
     let attempt_manager = AttemptManager::new(
       db.clone(),
@@ -46,7 +51,9 @@ impl<D: 'static + Send + Sync + Db, S: ScannerFeed> SlashReportSignerTask<D, S> 
   }
 }
 
-impl<D: 'static + Send + Sync + Db, S: ScannerFeed> ContinuallyRan for SlashReportSignerTask<D, S> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerFeed> ContinuallyRan
+  for SlashReportSignerTask<D, S>
+{
   type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

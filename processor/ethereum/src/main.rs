@@ -43,7 +43,7 @@ serai_db::schema! {
 
 struct SetInitialKey;
 impl bin::Hooks for SetInitialKey {
-  fn on_message(txn: &mut impl DbTxn, msg: &messages::CoordinatorMessage) {
+  fn on_message(txn: &mut (impl Send + DbTxn), msg: &messages::CoordinatorMessage) {
     if let messages::CoordinatorMessage::Substrate(
       messages::substrate::CoordinatorMessage::SetKeys { session, key_pair, .. },
     ) = msg

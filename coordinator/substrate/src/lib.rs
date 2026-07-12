@@ -145,7 +145,7 @@ mod _public_db {
 pub struct Canonical;
 impl Canonical {
   pub(crate) fn send(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     network: ExternalNetworkId,
     msg: &messages::substrate::CoordinatorMessage,
   ) {
@@ -153,7 +153,7 @@ impl Canonical {
   }
   /// Try to receive a canonical event, returning `None` if there is none to receive.
   pub fn try_recv(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     network: ExternalNetworkId,
   ) -> Option<messages::substrate::CoordinatorMessage> {
     _public_db::Canonical::try_recv(txn, network)
@@ -163,11 +163,11 @@ impl Canonical {
 /// The channel for new set events emitted by an ephemeral event stream.
 pub struct NewSet;
 impl NewSet {
-  pub(crate) fn send(txn: &mut impl DbTxn, msg: &NewSetInformation) {
+  pub(crate) fn send(txn: &mut (impl Send + DbTxn), msg: &NewSetInformation) {
     _public_db::NewSet::send(txn, msg);
   }
   /// Try to receive a new set's information, returning `None` if there is none to receive.
-  pub fn try_recv(txn: &mut impl DbTxn) -> Option<NewSetInformation> {
+  pub fn try_recv(txn: &mut (impl Send + DbTxn)) -> Option<NewSetInformation> {
     _public_db::NewSet::try_recv(txn)
   }
 }
@@ -178,12 +178,12 @@ impl NewSet {
 /// notifications for all relevant validator sets will be included.
 pub struct SignSlashReport;
 impl SignSlashReport {
-  pub(crate) fn send(txn: &mut impl DbTxn, set: ExternalValidatorSet) {
+  pub(crate) fn send(txn: &mut (impl Send + DbTxn), set: ExternalValidatorSet) {
     _public_db::SignSlashReport::send(txn, set, &());
   }
   /// Try to receive a notification to sign a slash report, returning `None` if there is none to
   /// receive.
-  pub fn try_recv(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Option<()> {
+  pub fn try_recv(txn: &mut (impl Send + DbTxn), set: ExternalValidatorSet) -> Option<()> {
     _public_db::SignSlashReport::try_recv(txn, set)
   }
 }
@@ -196,7 +196,7 @@ impl Keys {
   /// This only saves the most recent keys as only a single session is eligible to have its keys
   /// reported at once.
   pub fn set(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     key_pair: KeyPair,
     signature_participants: BitVec<{ KeyShares::MAX_PER_SET_U64 }>,
@@ -218,7 +218,7 @@ impl Keys {
     _public_db::Keys::set(txn, set.network, &(set.session, tx));
   }
   pub(crate) fn take(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     network: ExternalNetworkId,
   ) -> Option<(Session, Transaction)> {
     _public_db::Keys::take(txn, network)
@@ -229,10 +229,13 @@ impl Keys {
 pub struct SignedBatches;
 impl SignedBatches {
   /// Send a `SignedBatch` to publish onto Serai.
-  pub fn send(txn: &mut impl DbTxn, batch: &SignedBatch) {
+  pub fn send(txn: &mut (impl Send + DbTxn), batch: &SignedBatch) {
     _public_db::SignedBatches::send(txn, batch.batch.network(), batch);
   }
-  pub(crate) fn try_recv(txn: &mut impl DbTxn, network: ExternalNetworkId) -> Option<SignedBatch> {
+  pub(crate) fn try_recv(
+    txn: &mut (impl Send + DbTxn),
+    network: ExternalNetworkId,
+  ) -> Option<SignedBatch> {
     _public_db::SignedBatches::try_recv(txn, network)
   }
 }
@@ -245,7 +248,7 @@ impl SlashReports {
   /// This only saves the most recent slashes as only a single session is eligible to have its
   /// slashes reported at once.
   pub fn set(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     set: ExternalValidatorSet,
     slash_report: SlashReport,
     signature: Signature,
@@ -261,7 +264,7 @@ impl SlashReports {
     _public_db::SlashReports::set(txn, set.network, &(set.session, tx));
   }
   pub(crate) fn take(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     network: ExternalNetworkId,
   ) -> Option<(Session, Transaction)> {
     _public_db::SlashReports::take(txn, network)

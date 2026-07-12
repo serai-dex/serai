@@ -16,19 +16,19 @@ use serai_task::ContinuallyRan;
 use crate::SlashReports;
 
 /// Publish slash reports from `SlashReports` onto Serai.
-pub struct PublishSlashReportTask<D: 'static + Send + Sync + Db> {
+pub struct PublishSlashReportTask<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   db: D,
   serai: Arc<Serai>,
 }
 
-impl<D: 'static + Send + Sync + Db> PublishSlashReportTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> PublishSlashReportTask<D> {
   /// Create a task to publish slash reports onto Serai.
   pub fn new(db: D, serai: Arc<Serai>) -> Self {
     Self { db, serai }
   }
 }
 
-impl<D: 'static + Send + Sync + Db> PublishSlashReportTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> PublishSlashReportTask<D> {
   // Returns if a slash report was successfully published
   async fn publish(&mut self, network: ExternalNetworkId) -> Result<bool, String> {
     let mut txn = self.db.txn();
@@ -87,7 +87,9 @@ impl<D: 'static + Send + Sync + Db> PublishSlashReportTask<D> {
   }
 }
 
-impl<D: 'static + Send + Sync + Db> ContinuallyRan for PublishSlashReportTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for PublishSlashReportTask<D>
+{
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

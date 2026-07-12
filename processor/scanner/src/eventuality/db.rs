@@ -24,7 +24,7 @@ serai_db::schema!(
 pub(crate) struct EventualityDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> EventualityDb<S> {
   pub(crate) fn set_next_to_check_for_eventualities_block(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     next_to_check_for_eventualities_block: u64,
   ) {
     NextToCheckForEventualitiesBlock::set(txn, &next_to_check_for_eventualities_block);
@@ -34,7 +34,7 @@ impl<S: ScannerFeed> EventualityDb<S> {
   }
 
   pub(crate) fn set_latest_handled_notable_block(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     latest_handled_notable_block: u64,
   ) {
     LatestHandledNotableBlock::set(txn, &latest_handled_notable_block);
@@ -44,7 +44,7 @@ impl<S: ScannerFeed> EventualityDb<S> {
   }
 
   pub(crate) fn set_eventualities(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     key: KeyFor<S>,
     eventualities: &EventualityTracker<EventualityFor<S>>,
   ) {
@@ -76,7 +76,7 @@ impl<S: ScannerFeed> EventualityDb<S> {
     AccumulatedOutput::get(getter, id.as_ref()).is_some()
   }
   pub(crate) fn accumulated_output(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     id: &<OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
   ) {
     AccumulatedOutput::set(txn, id.as_ref(), &());

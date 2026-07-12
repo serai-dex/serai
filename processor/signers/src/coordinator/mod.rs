@@ -9,18 +9,25 @@ use crate::{db::*, Coordinator};
 mod db;
 
 // Fetches messages to send the coordinator and sends them.
-pub(crate) struct CoordinatorTask<D: 'static + Send + Sync + Db, C: Coordinator> {
+pub(crate) struct CoordinatorTask<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  C: Coordinator,
+> {
   db: D,
   coordinator: C,
 }
 
-impl<D: 'static + Send + Sync + Db, C: Coordinator> CoordinatorTask<D, C> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, C: Coordinator>
+  CoordinatorTask<D, C>
+{
   pub(crate) fn new(db: D, coordinator: C) -> Self {
     Self { db, coordinator }
   }
 }
 
-impl<D: 'static + Send + Sync + Db, C: Coordinator> ContinuallyRan for CoordinatorTask<D, C> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, C: Coordinator> ContinuallyRan
+  for CoordinatorTask<D, C>
+{
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

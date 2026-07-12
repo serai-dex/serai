@@ -145,7 +145,7 @@ impl Coordinator {
   /// this `txn` being committed.
   pub(crate) async fn next_message(
     &mut self,
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
   ) -> messages::CoordinatorMessage {
     loop {
       match ReceivedCoordinatorMessages::try_recv(txn) {

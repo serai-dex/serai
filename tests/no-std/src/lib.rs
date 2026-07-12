@@ -1,6 +1,7 @@
 #![no_std]
 
 pub use std_shims;
+pub use serai_db;
 
 pub use flexible_transcript;
 

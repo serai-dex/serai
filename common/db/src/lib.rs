@@ -50,7 +50,7 @@ pub trait Get {
 /// A) The value which was written to the key _when the transaction was opened_
 /// B) The value which is _currently_ written to the key (which may have been modified by a
 ///    concurrent transaction)
-pub trait Transaction: Send + Get {
+pub trait Transaction: Get {
   /// Write a value to this key.
   ///
   /// If a concurrent transaction has queued a write to this key, the database MAY panic or exhibit

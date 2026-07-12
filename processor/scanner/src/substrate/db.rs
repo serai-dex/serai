@@ -53,12 +53,12 @@ impl<S: ScannerFeed> SubstrateDb<S> {
     LastAcknowledgedBatch::get(getter)
   }
 
-  pub(crate) fn set_last_acknowledged_batch(txn: &mut impl DbTxn, id: u32) {
+  pub(crate) fn set_last_acknowledged_batch(txn: &mut (impl Send + DbTxn), id: u32) {
     LastAcknowledgedBatch::set(txn, &id);
   }
 
   pub(crate) fn queue_acknowledge_batch(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     batch: ExecutedBatch,
     burns: Vec<OutInstructionWithBalance>,
     key_to_activate: Option<KeyFor<S>>,
@@ -72,11 +72,14 @@ impl<S: ScannerFeed> SubstrateDb<S> {
       }),
     );
   }
-  pub(crate) fn queue_queue_burns(txn: &mut impl DbTxn, burns: Vec<OutInstructionWithBalance>) {
+  pub(crate) fn queue_queue_burns(
+    txn: &mut (impl Send + DbTxn),
+    burns: Vec<OutInstructionWithBalance>,
+  ) {
     Actions::send(txn, &ActionEncodable::QueueBurns(burns));
   }
 
-  pub(crate) fn next_action(txn: &mut impl DbTxn) -> Option<Action<S>> {
+  pub(crate) fn next_action(txn: &mut (impl Send + DbTxn)) -> Option<Action<S>> {
     let action_encodable = Actions::try_recv(txn)?;
     Some(match action_encodable {
       ActionEncodable::AcknowledgeBatch(AcknowledgeBatchEncodable {

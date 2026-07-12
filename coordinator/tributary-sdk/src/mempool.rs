@@ -17,7 +17,10 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
-pub(crate) struct Mempool<D: 'static + Send + Sync + Db, T: TransactionTrait> {
+pub(crate) struct Mempool<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: TransactionTrait,
+> {
   db: D,
   genesis: [u8; 32],
 
@@ -26,7 +29,9 @@ pub(crate) struct Mempool<D: 'static + Send + Sync + Db, T: TransactionTrait> {
   txs_per_signer: HashMap<[u8; 32], u32>,
 }
 
-impl<D: 'static + Send + Sync + Db, T: TransactionTrait> Mempool<D, T> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait>
+  Mempool<D, T>
+{
   fn transaction_key(&self, hash: &[u8]) -> Vec<u8> {
     crate::D_key(b"tributary_mempool", b"transaction", [self.genesis.as_ref(), hash].concat())
   }

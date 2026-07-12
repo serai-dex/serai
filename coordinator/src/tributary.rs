@@ -50,7 +50,10 @@ serai_db::channel! {
 ///
 /// This is not a well-designed function. This is specific to the context in which its called,
 /// within this file. It should only be considered an internal helper for this domain alone.
-async fn provide_transaction<TD: 'static + Send + Sync + DbTrait, P: P2p>(
+async fn provide_transaction<
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  P: P2p,
+>(
   set: ExternalValidatorSet,
   tributary: &Tributary<TD, Transaction, P>,
   tx: Transaction,
@@ -80,8 +83,8 @@ async fn provide_transaction<TD: 'static + Send + Sync + DbTrait, P: P2p>(
 
 /// Provides Cosign/Cosigned Transactions onto the Tributary.
 pub(crate) struct ProvideCosignCosignedTransactionsTask<
-  CD: 'static + Send + Sync + DbTrait,
-  TD: 'static + Send + Sync + DbTrait,
+  CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
   P: P2p,
 > {
   db: CD,
@@ -89,8 +92,11 @@ pub(crate) struct ProvideCosignCosignedTransactionsTask<
   set: NewSetInformation,
   tributary: Tributary<TD, Transaction, P>,
 }
-impl<CD: 'static + Send + Sync + DbTrait, TD: 'static + Send + Sync + DbTrait, P: P2p>
-  ContinuallyRan for ProvideCosignCosignedTransactionsTask<CD, TD, P>
+impl<
+    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+    P: P2p,
+  > ContinuallyRan for ProvideCosignCosignedTransactionsTask<CD, TD, P>
 {
   type Error = String;
 
@@ -164,7 +170,10 @@ impl<CD: 'static + Send + Sync + DbTrait, TD: 'static + Send + Sync + DbTrait, P
 }
 
 #[must_use]
-async fn add_signed_unsigned_transaction<TD: 'static + Send + Sync + DbTrait, P: P2p>(
+async fn add_signed_unsigned_transaction<
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  P: P2p,
+>(
   tributary: &Tributary<TD, Transaction, P>,
   key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   mut tx: Transaction,
@@ -215,7 +224,10 @@ async fn add_signed_unsigned_transaction<TD: 'static + Send + Sync + DbTrait, P:
   true
 }
 
-async fn add_with_recognition_check<TD: 'static + Send + Sync + DbTrait, P: P2p>(
+async fn add_with_recognition_check<
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  P: P2p,
+>(
   set: ExternalValidatorSet,
   tributary_db: &mut TD,
   tributary: &Tributary<TD, Transaction, P>,
@@ -254,8 +266,8 @@ async fn add_with_recognition_check<TD: 'static + Send + Sync + DbTrait, P: P2p>
 
 /// Adds all of the transactions sent via `TributaryTransactionsFromProcessorMessages`.
 pub(crate) struct AddTributaryTransactionsTask<
-  CD: 'static + Send + Sync + DbTrait,
-  TD: 'static + Send + Sync + DbTrait,
+  CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
   P: P2p,
 > {
   db: CD,
@@ -264,8 +276,11 @@ pub(crate) struct AddTributaryTransactionsTask<
   set: NewSetInformation,
   key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 }
-impl<CD: 'static + Send + Sync + DbTrait, TD: 'static + Send + Sync + DbTrait, P: P2p>
-  ContinuallyRan for AddTributaryTransactionsTask<CD, TD, P>
+impl<
+    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+    P: P2p,
+  > ContinuallyRan for AddTributaryTransactionsTask<CD, TD, P>
 {
   type Error = DoesNotError;
 
@@ -359,12 +374,16 @@ impl<CD: 'static + Send + Sync + DbTrait, TD: 'static + Send + Sync + DbTrait, P
 }
 
 /// Takes the messages from ScanTributaryTask and publishes them to the message-queue.
-pub(crate) struct TributaryProcessorMessagesTask<TD: 'static + Send + Sync + DbTrait> {
+pub(crate) struct TributaryProcessorMessagesTask<
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+> {
   tributary_db: TD,
   set: ExternalValidatorSet,
   message_queue: Arc<MessageQueue>,
 }
-impl<TD: 'static + Send + Sync + DbTrait> ContinuallyRan for TributaryProcessorMessagesTask<TD> {
+impl<TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>> ContinuallyRan
+  for TributaryProcessorMessagesTask<TD>
+{
   type Error = String; // TODO
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
@@ -390,8 +409,8 @@ impl<TD: 'static + Send + Sync + DbTrait> ContinuallyRan for TributaryProcessorM
 
 /// Checks for the notification to sign a slash report and does so if present.
 pub(crate) struct SignSlashReportTask<
-  CD: 'static + Send + Sync + DbTrait,
-  TD: 'static + Send + Sync + DbTrait,
+  CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
   P: P2p,
 > {
   db: CD,
@@ -400,8 +419,11 @@ pub(crate) struct SignSlashReportTask<
   set: NewSetInformation,
   key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 }
-impl<CD: 'static + Send + Sync + DbTrait, TD: 'static + Send + Sync + DbTrait, P: P2p>
-  ContinuallyRan for SignSlashReportTask<CD, TD, P>
+impl<
+    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+    P: P2p,
+  > ContinuallyRan for SignSlashReportTask<CD, TD, P>
 {
   type Error = DoesNotError;
 
@@ -446,8 +468,8 @@ impl<CD: 'static + Send + Sync + DbTrait, TD: 'static + Send + Sync + DbTrait, P
 
 /// Run the scan task whenever the Tributary adds a new block.
 async fn scan_on_new_block<
-  CD: 'static + Send + Sync + DbTrait,
-  TD: 'static + Send + Sync + DbTrait,
+  CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
   P: P2p,
 >(
   db: CD,

@@ -112,39 +112,52 @@ mod _internal_db {
 
 pub(crate) struct TributaryTransactionsFromProcessorMessages;
 impl TributaryTransactionsFromProcessorMessages {
-  pub(crate) fn send(txn: &mut impl DbTxn, set: ExternalValidatorSet, tx: &Transaction) {
+  pub(crate) fn send(txn: &mut (impl Send + DbTxn), set: ExternalValidatorSet, tx: &Transaction) {
     // If this set has yet to be retired, send this transaction
     if RetiredTributary::get(txn, set.network).map(|session| session.0) < Some(set.session.0) {
       _internal_db::TributaryTransactionsFromProcessorMessages::send(txn, set, tx);
     }
   }
-  pub(crate) fn try_recv(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Option<Transaction> {
+  pub(crate) fn try_recv(
+    txn: &mut (impl Send + DbTxn),
+    set: ExternalValidatorSet,
+  ) -> Option<Transaction> {
     _internal_db::TributaryTransactionsFromProcessorMessages::try_recv(txn, set)
   }
 }
 
 pub(crate) struct TributaryTransactionsFromDkgConfirmation;
 impl TributaryTransactionsFromDkgConfirmation {
-  pub(crate) fn send(txn: &mut impl DbTxn, set: ExternalValidatorSet, tx: &Transaction) {
+  pub(crate) fn send(txn: &mut (impl Send + DbTxn), set: ExternalValidatorSet, tx: &Transaction) {
     // If this set has yet to be retired, send this transaction
     if RetiredTributary::get(txn, set.network).map(|session| session.0) < Some(set.session.0) {
       _internal_db::TributaryTransactionsFromDkgConfirmation::send(txn, set, tx);
     }
   }
-  pub(crate) fn try_recv(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Option<Transaction> {
+  pub(crate) fn try_recv(
+    txn: &mut (impl Send + DbTxn),
+    set: ExternalValidatorSet,
+  ) -> Option<Transaction> {
     _internal_db::TributaryTransactionsFromDkgConfirmation::try_recv(txn, set)
   }
 }
 
 pub(crate) struct RemoveParticipant;
 impl RemoveParticipant {
-  pub(crate) fn send(txn: &mut impl DbTxn, set: ExternalValidatorSet, participant: Participant) {
+  pub(crate) fn send(
+    txn: &mut (impl Send + DbTxn),
+    set: ExternalValidatorSet,
+    participant: Participant,
+  ) {
     // If this set has yet to be retired, send this transaction
     if RetiredTributary::get(txn, set.network).map(|session| session.0) < Some(set.session.0) {
       _internal_db::RemoveParticipant::send(txn, set, &u16::from(participant));
     }
   }
-  pub(crate) fn try_recv(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Option<Participant> {
+  pub(crate) fn try_recv(
+    txn: &mut (impl Send + DbTxn),
+    set: ExternalValidatorSet,
+  ) -> Option<Participant> {
     _internal_db::RemoveParticipant::try_recv(txn, set)
       .map(|i| Participant::new(i).expect("sent invalid participant index for removal"))
   }

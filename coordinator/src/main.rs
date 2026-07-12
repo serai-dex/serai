@@ -81,7 +81,7 @@ async fn serai(env: &Environment) -> Arc<Serai> {
   }
 }
 
-fn spawn_cosigning<D: 'static + Send + Sync + serai_db::Db>(
+fn spawn_cosigning<D: 'static + Send + Sync + for<'db> serai_db::Db<Transaction<'db>: Send>>(
   mut db: D,
   serai: Arc<Serai>,
   p2p: impl p2p::P2p,
@@ -159,7 +159,7 @@ fn spawn_cosigning<D: 'static + Send + Sync + serai_db::Db>(
 }
 
 async fn handle_network(
-  mut db: impl 'static + Send + Sync + serai_db::Db,
+  mut db: impl 'static + Send + Sync + for<'db> serai_db::Db<Transaction<'db>: Send>,
   message_queue: Arc<MessageQueue>,
   serai: Arc<Serai>,
   network: ExternalNetworkId,

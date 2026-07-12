@@ -22,14 +22,14 @@ pub(crate) use db::{BatchInfo, ReturnInformation};
 use db::BatchDb;
 
 pub(crate) fn take_info_for_batch<S: ScannerFeed>(
-  txn: &mut impl DbTxn,
+  txn: &mut (impl Send + DbTxn),
   id: u32,
 ) -> Option<BatchInfo<EncodableG<KeyFor<S>>>> {
   BatchDb::<S>::take_info_for_batch(txn, id)
 }
 
 pub(crate) fn take_return_information<S: ScannerFeed>(
-  txn: &mut impl DbTxn,
+  txn: &mut (impl Send + DbTxn),
   id: u32,
 ) -> Option<Vec<Option<ReturnInformation<S>>>> {
   BatchDb::<S>::take_return_information(txn, id)
@@ -43,12 +43,17 @@ pub(crate) fn take_return_information<S: ScannerFeed>(
   the InInstructions for it.
 */
 #[expect(non_snake_case)]
-pub(crate) struct BatchTask<D: 'static + Send + Sync + Db, S: ScannerFeed> {
+pub(crate) struct BatchTask<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  S: ScannerFeed,
+> {
   db: D,
   _S: PhantomData<S>,
 }
 
-impl<D: 'static + Send + Sync + Db, S: ScannerFeed> BatchTask<D, S> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerFeed>
+  BatchTask<D, S>
+{
   pub(crate) fn new(mut db: D, start_block: u64) -> Self {
     if BatchDb::<S>::next_block_to_batch(&db).is_none() {
       // Initialize the DB
@@ -61,7 +66,9 @@ impl<D: 'static + Send + Sync + Db, S: ScannerFeed> BatchTask<D, S> {
   }
 }
 
-impl<D: 'static + Send + Sync + Db, S: ScannerFeed> ContinuallyRan for BatchTask<D, S> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerFeed> ContinuallyRan
+  for BatchTask<D, S>
+{
   type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

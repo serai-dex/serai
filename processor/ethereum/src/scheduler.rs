@@ -63,8 +63,8 @@ pub(crate) struct SmartContract {
   pub(crate) chain_id: U256,
   pub(crate) router: Arc<OnceLock<Router>>,
 }
-impl<D: 'static + Send + Sync + Db> smart_contract_scheduler::SmartContract<Rpc<D>>
-  for SmartContract
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>
+  smart_contract_scheduler::SmartContract<Rpc<D>> for SmartContract
 {
   type SignableTransaction = Action;
 
