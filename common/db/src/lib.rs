@@ -44,7 +44,9 @@ pub trait Get {
   ///
   /// If the key is not present in the database, this will return `None`.
   ///
-  /// The implementation MAY panic if the database is corrupt or would become corrupted.
+  /// The implementation MAY panic if the database is corrupt or would become corrupted. If the
+  /// length of the key exceeds an internal limit on the length of keys, this may be considered as
+  /// corruption.
   fn get(&self, key: impl AsRef<[u8]>) -> Option<impl AsRef<[u8]>>;
 }
 
@@ -65,15 +67,23 @@ pub trait Transaction: Get {
   /// an undefined choice of which transaction's queued write resolves as the database's current
   /// value for this key.
   ///
-  /// The implementation MAY panic if the database is corrupt or would become corrupted.
+  /// The implementation MAY panic if the database is corrupt or would become corrupted. If the
+  /// length of the key or value exceeds internal limits on lengths or the total database size,
+  /// this may be considered as corruption.
   fn set(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>);
+
   /// Delete the value from this key.
+  ///
+  /// If no value is stored to this key, this operation is effectively a NOP.
   ///
   /// This is considered as a write to this key, with properties as documented by
   /// [`Transaction::put`].
   ///
-  /// The implementation MAY panic if the database is corrupt or would become corrupted.
+  /// The implementation MAY panic if the database is corrupt or would become corrupted. If the
+  /// length of the key exceeds an internal limit on the length of keys, this may be considered as
+  /// corruption.
   fn del(&mut self, key: impl AsRef<[u8]>);
+
   /// Commit this transaction.
   ///
   /// The implementation MAY panic if the database is corrupt or would become corrupted.
