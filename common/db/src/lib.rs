@@ -32,6 +32,13 @@ mod parity_db;
 pub use parity_db::{ParityDb, new_parity_db};
 
 /// A handle to an ACID database via which values may be read.
+///
+/// It's undefined if the retrieved values are:
+/// A) The value which was written to the key _when this handle was instantiated_ (from a snapshot)
+/// B) The value which is _currently_ written to the key (which may have been written to by a
+///    committed transaction during the lifetime of this handle)
+///
+/// In other words, there's no guarantee reads are repeatable.
 pub trait Get {
   /// Get a value from the database.
   ///
@@ -45,11 +52,12 @@ pub trait Get {
 ///
 /// This transaction implements [`Get`]. If this transaction has queued a write to a key, the
 /// retrieved value for that key will be the latest value queued to be written by this transaction.
-/// If this transaction has not queued a write to a key, it's undefined if the retrieved value is
-/// either:
-/// A) The value which was written to the key _when the transaction was opened_
-/// B) The value which is _currently_ written to the key (which may have been modified by a
-///    concurrent transaction)
+/// If this transaction has not queued a write to a key, it's undefined if the retrieved value is:
+/// A) The value which was written to the key _when the transaction was opened_ (from a snapshot)
+/// B) The value which is _currently_ written to the key (which may have been written to by a
+///    committed transaction during the lifetime of this transaction)
+///
+/// In other words, there's no guarantee reads are repeatable.
 pub trait Transaction: Get {
   /// Write a value to this key.
   ///
@@ -77,8 +85,8 @@ pub trait Transaction: Get {
 /// This implements [`Clone`] on the expectation clones refer to the same underlying database. This
 /// effectively makes this a reference-counted handle to the underlying database.
 ///
-/// This implements [`Get`], allowing reading the current values in the database without having to
-/// open a transaction.
+/// This implements [`Get`], allowing reading the _current_ values in the database without having
+/// to open a transaction.
 pub trait Db: Clone + Get {
   /// The type representing a database transaction.
   type Transaction<'db>: Transaction
