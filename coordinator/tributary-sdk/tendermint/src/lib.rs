@@ -317,7 +317,7 @@ mod tendermint {
           .saturating_add(N::BLOCK_PROCESSING_TIME)
           .saturating_add(N::LATENCY_TIME.saturating_mul(3));
         let blocks_per_minute =
-          Duration::from_mins(5).as_millis().div_ceil(time_per_block.as_millis());
+          Duration::from_mins(5).as_millis().div_ceil(time_per_block.as_millis().max(1));
         // Limit this to a sane range
         usize::try_from(blocks_per_minute).unwrap_or(usize::MAX).clamp(1, 64)
       });

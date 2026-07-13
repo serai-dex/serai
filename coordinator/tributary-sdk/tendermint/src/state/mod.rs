@@ -618,10 +618,10 @@ impl<B: Blockchain> State<B> {
     txn: &mut impl Transaction,
     proposal: B::Block,
   ) -> (Self, impl IntoIterator<IntoIter: Send, Item = MessageFor<B>>) {
-    let (init, mut state) = {
-      let genesis = blockchain.genesis();
-      let genesis = genesis.as_ref();
+    let genesis = blockchain.genesis();
+    let genesis = genesis.as_ref();
 
+    let (init, mut state) = {
       let validator_set = blockchain.validator_set();
 
       let getter = &*txn;
@@ -682,6 +682,7 @@ impl<B: Blockchain> State<B> {
     };
 
     let messages = (if init {
+      db::BlockNumber::set(txn, genesis, &BlockNumber::ONE);
       Some(state.start_round::<N>(blockchain, signer, txn, state.round_number).await)
     } else {
       None
@@ -891,39 +892,38 @@ impl<
   ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
     let Self { state, blockchain, signer } = self;
 
-    let (rebroadcast, respond, start) = if state.pending_step_timeout.is_none() &&
-      state.pending_precommit_timeout.is_none()
-    {
-      /*
-        If asked to respond, and we have nothing to respond to, rebroadcast our latest message to
-        try and get any validators which were outside of the synchrony bound to catch up to where
-        we are now, so we do begin receiving new events to respond to again.
-      */
-      (state.our_latest_message.clone(), None, None)
-    } else {
-      let (respond, start) = match state.step {
-        Step::Propose | Step::Prevote => {
-          (Some(state.respond::<N>(blockchain, signer, txn).await), None)
-        }
-        Step::Precommit => {
+    let (rebroadcast, start, respond) =
+      if state.pending_step_timeout.is_none() && state.pending_precommit_timeout.is_none() {
+        /*
+          If asked to respond, and we have nothing to respond to, rebroadcast our latest message to
+          try and get any validators which were outside of the synchrony bound to catch up to where
+          we are now, so we do begin receiving new events to respond to again.
+        */
+        (state.our_latest_message.clone(), None, None)
+      } else {
+        let (start, respond) = if state
+          .pending_precommit_timeout
+          .is_some_and(|(start, duration)| start.elapsed() > duration)
+        {
           if let Some(next_round) = state.round_number.0.checked_add(1) {
             (
-              None,
               Some(state.start_round::<N>(blockchain, signer, txn, RoundNumber(next_round)).await),
+              None,
             )
           } else {
             /*
-              This signifies a permanent stall, but `u64::MAX` is effectively unreachable
-              unless the fault threshold was broken by a group of validators who forced us to
-              jump up to here. Accordingly, it's accepted.
+              This signifies a permanent stall, but `u64::MAX` is effectively unreachable unless
+              the fault threshold was broken by a group of validators who forced us to jump up to
+              here. Accordingly, it's accepted.
             */
             (None, None)
           }
-        }
+        } else {
+          (None, Some(state.respond::<N>(blockchain, signer, txn).await))
+        };
+        (None, start, respond)
       };
-      (None, respond, start)
-    };
-    rebroadcast.into_iter().chain(respond.into_iter().flatten()).chain(start.into_iter().flatten())
+    rebroadcast.into_iter().chain(start.into_iter().flatten()).chain(respond.into_iter().flatten())
   }
 }
 
