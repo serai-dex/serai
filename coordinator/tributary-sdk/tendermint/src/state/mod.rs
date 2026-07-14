@@ -903,7 +903,7 @@ impl<
       } else {
         let (start, respond) = if state
           .pending_precommit_timeout
-          .is_some_and(|(start, duration)| start.elapsed() > duration)
+          .is_some_and(|(start, duration)| start.elapsed() >= duration)
         {
           if let Some(next_round) = state.round_number.0.checked_add(1) {
             (

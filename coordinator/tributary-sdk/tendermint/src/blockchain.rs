@@ -106,7 +106,7 @@ pub trait Blockchain {
   ///
   /// This MUST be consistent for the lifetime of this blockchain and unique across blockchains.
   /// This DOES NOT need to satisfy any cryptographic binding properties and is solely used for
-  /// domain-separation purposes.
+  /// domain-separation purposes. This MUST have a length less than or equal to [`u8::MAX`].
   fn genesis(&self) -> impl Send + Sync + AsRef<[u8]>;
 
   /// The validator set's definition.
@@ -144,6 +144,10 @@ pub trait Blockchain {
   /// be ready _yet_, such as if the blockchain is still syncing, where this future will be
   /// occasionally polled (likely infrequently) for if the proposal is ready. It likely SHOULD be
   /// literally instantiated with [`futures_channel::oneshot::Receiver`] or similar.
+  ///
+  /// This MAY be called multiple times if the process reboots before the Tendermint process
+  /// commits its advanced state. The underlying blockchain MUST be able to handle being asked to
+  /// add a block which it already added.
   fn add_block(
     &mut self,
     block: Self::Block,

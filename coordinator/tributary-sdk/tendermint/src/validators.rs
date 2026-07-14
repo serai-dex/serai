@@ -201,7 +201,8 @@ pub trait ValidatorSet: Sync {
   /// An iterator over every validator.
   ///
   /// The validators MUST be consistent for the lifetime of this blockchain. However, the order
-  /// they're yielded in DOES NOT have to be stable.
+  /// they're yielded in DOES NOT have to be stable. Every validator MUST have weight in the
+  /// consensus process.
   ///
   /// If this method is incorrect, the Tendermint process MAY panic or be otherwise incorrect.
   fn validators(&self) -> impl IntoIterator<Item = &Self::Validator>;

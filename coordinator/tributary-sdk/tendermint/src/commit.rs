@@ -81,6 +81,7 @@ impl<S: SignatureScheme> Commit<S> {
 
     [
       Segment::Dst([0]),
+      Segment::Dst([u8::try_from(genesis.len()).unwrap()]),
       Segment::Genesis(genesis),
       Segment::U64(u64::from(block_number.0).to_le_bytes()),
       Segment::U64(u64::from(round_number.0).to_le_bytes()),
