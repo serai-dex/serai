@@ -27,6 +27,13 @@ impl crate::Transaction for Transaction<'_> {
   }
   fn commit(self) {
     self.txn.commit().expect("couldn't commit to RocksDB via transaction");
+    /*
+      TODO: This is incredibly aggressive flushing due to an observed fault where the WAL was
+      _never_ flushed, despite trusting RocksDB to do so as soon as the size exceeded the limit.
+      This is the overkill solution to the above problem. Proper tests for this should be added and
+      a solution which does bound the WAL, but doesn't remove the performance benefit of the WAL,
+      should be implemented.
+    */
     self.db.flush_wal(true).expect("couldn't flush RocksDB WAL");
     self.db.flush().expect("couldn't flush RocksDB");
   }

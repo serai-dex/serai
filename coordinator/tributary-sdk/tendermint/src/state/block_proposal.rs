@@ -42,3 +42,26 @@ impl<B: Clone, BP: Send + Future<Output = B>> Future for BlockProposal<B, BP> {
     })
   }
 }
+
+#[cfg(all(test, feature = "alloc"))]
+#[tokio::test]
+async fn block_proposal() {
+  use core::{task::Waker, time::Duration};
+  use alloc::boxed::Box;
+
+  let mut context = Context::from_waker(Waker::noop());
+
+  let duration = Duration::from_secs(1);
+  let mut future = Box::pin(BlockProposal::new(async {
+    tokio::time::sleep(duration).await;
+    true
+  }));
+  assert!(matches!(future.as_mut().poll(&mut context), Poll::Pending));
+
+  tokio::time::sleep(duration).await;
+
+  assert!(matches!(*future, BlockProposal::Pending { future: _ }));
+  assert!(matches!(future.as_mut().poll(&mut context), Poll::Ready(true)));
+  assert!(matches!(*future, BlockProposal::Ready { proposal: true }));
+  assert!(matches!(future.as_mut().poll(&mut context), Poll::Ready(true)));
+}

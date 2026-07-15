@@ -9795,6 +9795,7 @@ dependencies = [
  "async-channel",
  "borsh",
  "pin-project-lite",
+ "rand_core 0.9.5",
  "serai-db",
  "tokio",
 ]

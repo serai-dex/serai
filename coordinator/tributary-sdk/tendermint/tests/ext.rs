@@ -1,4 +1,4 @@
-#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+#![expect(clippy::std_instead_of_alloc)]
 
 use core::{num::NonZero, future::Future, time::Duration};
 use std::{

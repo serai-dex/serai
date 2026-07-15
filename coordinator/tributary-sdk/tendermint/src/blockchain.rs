@@ -125,6 +125,7 @@ pub trait Blockchain {
   /// fundamentally invalid.
   // TODO: Don't just provide the proposer, but enough to build evidence sufficient to convince
   // someone else (the signed proposal message)?
+  // TODO: `&mut self`?
   fn validate(
     &self,
     proposer: Self::Validator,
@@ -163,6 +164,7 @@ pub trait Blockchain {
   /// However, there is no evidence for a missed proposal as it may have never been sent, or may
   /// have simply not been received by the local view (which may be the one faulty). For this
   /// reason, it's explicitly distinguished from a slash.
+  // TODO: `&mut self`?
   fn missed_proposal(&self, proposer: Self::Validator);
 
   /// Slash a validator.
@@ -172,6 +174,7 @@ pub trait Blockchain {
   ///
   /// The actual recording of this slash and its interpretation is left entirely to the application
   /// layer. All slashes have the necessary evidence and can be verified by this library.
+  // TODO: `&mut self`?
   fn slash(
     &self,
     validator: Self::Validator,

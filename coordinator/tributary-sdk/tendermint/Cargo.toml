@@ -16,14 +16,22 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+# This is used to implement our bespoke futures, without writing `unsafe` ourselves. While `unsafe`
+# would likely be fine for how minimally we need it, this is a small and trusted dependency.
 pin-project-lite = { version = "0.2", default-features = false }
 
+# This is used for (de)serialization at this time. A long-term goal is generalizing this out.
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
 
+# This is used to message the Tendermint process. It was preferred over `futures-channel` as it had
+# clearer commentary towards cancel safety.
 async-channel = { version = "2", default-features = false, optional = true }
+
+# An abstraction over the underlying database, allowing the application to choose the database used.
 serai-db = { path = "../../../common/db", version = "0.2", default-features = false, features = ["std", "schema"], optional = true }
 
 [dev-dependencies]
+rand_core = { version = "0.9", features = ["os_rng"] }
 tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "macros"] }
 
 [features]

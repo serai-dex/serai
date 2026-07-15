@@ -303,6 +303,11 @@ macro_rules! map {
       /// require (nor provide). A bespoke [`ValidatorSet`] implementation could make use of one
       /// however. Lacking one, this attempts to provide a slightly more fair distribution (as
       /// detailed above), but this is solely on a best-effort basis.
+      /*
+        TODO: Should we return a `struct` which caches this to resolve the performance concerns?
+        Does that work if someone wishes to use this API in conjunction with a PRF to decide the
+        proposer? Does that design work today when we don't bound when we call this?
+      */
       fn proposer(&self, block_number: BlockNumber, round_number: RoundNumber) -> Self::Validator {
         const {
           // We need `u16::MAX + 1` to be representable in `usize` and `u16::MAX <= isize::MAX`
@@ -388,3 +393,312 @@ map!(
   std::collections::HashMap<V, NonZero<u16>, H>,
   V: PartialOrd + Ord + Validator, H: Sync + core::hash::BuildHasher
 );
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  pub(crate) struct TestSignatureScheme(u64, u64);
+  impl TestSignatureScheme {
+    pub(crate) fn new() -> Self {
+      use rand_core::{TryRngCore as _, OsRng};
+      Self(OsRng.try_next_u64().unwrap(), OsRng.try_next_u64().unwrap())
+    }
+  }
+
+  impl TestSignatureScheme {
+    fn hash(&self, message: impl IntoIterator<Item = impl AsRef<[u8]>>) -> [u8; 8] {
+      /*
+        We use this as a non-cryptographically secure hash, as we do not require malicious security
+        for these tests, to weakly bind signatures to messages without requiring allocating nor a
+        third-party dependency (as needed for a cryptographic hash). Any real signature scheme MUST
+        be maliciously secure however.
+      */
+      #[expect(deprecated)]
+      use core::hash::{Hasher as _, SipHasher};
+
+      #[expect(deprecated)]
+      let mut hasher = SipHasher::new_with_keys(self.0, self.1);
+      for chunk in message {
+        for byte in chunk.as_ref() {
+          // Write as individual `u8`s to ensure the chunk boundaries don't become part of the hash
+          hasher.write_u8(*byte);
+        }
+      }
+      hasher.finish().to_le_bytes()
+    }
+  }
+
+  impl SignatureScheme for TestSignatureScheme {
+    type Validator = u8;
+    // The validator concatenated with the 8-byte hash of the message
+    type Signature = [u8; 1 + 8];
+    // The 256-bit bit set concatenated with the 8-byte hash of the message
+    type AggregateSignature = [u8; 32 + 8];
+
+    fn verify(
+      &self,
+      validator: &<Self as SignatureScheme>::Validator,
+      message: impl IntoIterator<Item = impl AsRef<[u8]>>,
+      signature: &<Self as SignatureScheme>::Signature,
+    ) -> bool {
+      (validator == &signature[0]) && (self.hash(message) == signature[1 ..])
+    }
+
+    fn aggregate<'sig>(
+      &self,
+      message: impl IntoIterator<Item = impl AsRef<[u8]>>,
+      signatures: impl IntoIterator<
+        Item = (
+          &'sig <Self as SignatureScheme>::Validator,
+          &'sig <Self as SignatureScheme>::Signature,
+        ),
+      >,
+    ) -> <Self as SignatureScheme>::AggregateSignature
+    where
+      <Self as SignatureScheme>::Validator: 'sig,
+      <Self as SignatureScheme>::Signature: 'sig,
+    {
+      let hash = self.hash(message);
+      let mut aggregate_signature = [0; 32 + 8];
+      for (validator, signature) in signatures {
+        assert!((validator == &signature[0]) && (hash == signature[1 ..]));
+        // Create the bit set
+        aggregate_signature[usize::from(validator / 8)] |= 1 << (validator % 8);
+      }
+      aggregate_signature[32 ..].copy_from_slice(&hash);
+      aggregate_signature
+    }
+
+    fn verify_aggregate(
+      &self,
+      message: impl IntoIterator<Item = impl AsRef<[u8]>>,
+      aggregate_signature: &<Self as SignatureScheme>::AggregateSignature,
+    ) -> Result<
+      impl IntoIterator<Item = <Self as SignatureScheme>::Validator>,
+      InvalidAggregateSignature,
+    > {
+      let hash = self.hash(message);
+      if aggregate_signature[32 ..] != hash {
+        Err(InvalidAggregateSignature)?;
+      }
+
+      // Decompose the bit set into an iterator of validators who had their bits set
+      Ok(
+        aggregate_signature[.. 32]
+          .iter()
+          .enumerate()
+          .flat_map(|(i, b)| {
+            let i = 8 * u8::try_from(i).unwrap();
+            core::array::from_fn::<Option<u8>, 8, _>(|j| {
+              ((b & (1 << (j % 8))) != 0)
+                .then_some(i.checked_add(u8::try_from(j).unwrap()).unwrap())
+            })
+          })
+          .flatten(),
+      )
+    }
+  }
+
+  pub(crate) struct TestSigner {
+    signature_scheme: TestSignatureScheme,
+    validator: u8,
+  }
+
+  impl TestSignatureScheme {
+    pub(crate) fn signer(&self, validator: u8) -> TestSigner {
+      TestSigner { signature_scheme: TestSignatureScheme(self.0, self.1), validator }
+    }
+  }
+
+  impl Signer for TestSigner {
+    type Validator = u8;
+    type Signature = [u8; 1 + 8];
+    fn validator(&self) -> impl Send + Future<Output = <Self as Signer>::Validator> {
+      core::future::ready(self.validator)
+    }
+    fn sign(
+      &self,
+      message: impl Send + IntoIterator<Item = impl AsRef<[u8]>>,
+    ) -> impl Send + Future<Output = <Self as Signer>::Signature> {
+      let mut result = [0; 1 + 8];
+      result[0] = self.validator;
+      result[1 ..].copy_from_slice(&self.signature_scheme.hash(message));
+      core::future::ready(result)
+    }
+  }
+
+  #[test]
+  fn signature_scheme() {
+    use core::{
+      pin::pin,
+      task::{Poll, Waker, Context},
+    };
+
+    let mut context = Context::from_waker(Waker::noop());
+
+    let message = [[12].as_slice(), &[2], &[3]];
+    let other_message = [[].as_slice()];
+    let signature_scheme = loop {
+      let signature_scheme = TestSignatureScheme::new();
+      if signature_scheme.hash(message) == signature_scheme.hash(other_message) {
+        continue;
+      }
+      break signature_scheme;
+    };
+
+    let aggregated = [3, 101, 135];
+    let mut signatures = [None; 3];
+    for validator in 0 ..= u8::MAX {
+      let Poll::Ready(signature) =
+        pin!(signature_scheme.signer(validator).sign(message)).poll(&mut context)
+      else {
+        panic!("`TestSignatureScheme::sign` returned `Poll::Pending`")
+      };
+      assert!(signature_scheme.verify(&validator, message, &signature));
+      assert!(!signature_scheme.verify(&validator.wrapping_add(1), message, &signature));
+      assert!(!signature_scheme.verify(&validator, other_message, &signature));
+      if let Some(i) =
+        aggregated.iter().position(|validator_in_list| *validator_in_list == validator)
+      {
+        signatures[i] = Some((validator, signature));
+      }
+    }
+
+    let aggregate_signature = signature_scheme.aggregate(
+      message,
+      signatures.iter().map(|signature| {
+        let (validator, signature) = signature.as_ref().unwrap();
+        (validator, signature)
+      }),
+    );
+
+    let mut yielded_aggregated =
+      signature_scheme.verify_aggregate(message, &aggregate_signature).unwrap().into_iter();
+    let mut aggregated = aggregated.into_iter();
+    for (i, j) in (&mut yielded_aggregated).zip(&mut aggregated) {
+      assert_eq!(i, j);
+    }
+    assert!(yielded_aggregated.next().is_none());
+    assert!(aggregated.next().is_none());
+  }
+}
+#[cfg(test)]
+pub(crate) use tests::*;
+
+#[cfg(all(test, any(feature = "alloc", feature = "std")))]
+fn test_map<M: FromIterator<(u16, NonZero<u16>)> + ValidatorSet<Validator = u16>>() {
+  let test = |pairs: &[(u16, NonZero<u16>)]| {
+    let map = pairs.iter().copied().collect::<M>();
+
+    assert_eq!(
+      u16::from(map.total_weight()),
+      pairs.iter().map(|(_validator, weight)| u16::from(*weight)).sum::<u16>()
+    );
+
+    assert_eq!(
+      map.validators().into_iter().copied().collect::<alloc::collections::BTreeSet<_>>(),
+      pairs
+        .iter()
+        .map(|(validator, _weight)| validator)
+        .copied()
+        .collect::<alloc::collections::BTreeSet<_>>()
+    );
+
+    /*
+      Cache the list of proposers, which is:
+      - the sorted list of validators
+      - with inclusions proportional to weight
+      - sorted first by the number of the inclusion, then by the validator's key
+    */
+    let proposers = {
+      let mut proposers = alloc::vec::Vec::new();
+      for (validator, weight) in pairs.iter().copied() {
+        let weight = u16::from(weight);
+        for w in 0 .. weight {
+          proposers.push((validator, w));
+        }
+      }
+      proposers.sort_by(|(a_validator, a_weight), (b_validator, b_weight)| {
+        a_weight.cmp(b_weight).then_with(|| a_validator.cmp(b_validator))
+      });
+      proposers.into_iter().map(|(validator, _weight)| validator).collect::<alloc::vec::Vec<_>>()
+    };
+
+    // `(1, 1)`, which is minimal, maps to the `0`th index (which is minimal)
+    assert_eq!(map.proposer(BlockNumber::ONE, RoundNumber::ONE), proposers[0]);
+
+    /*
+      Test calls to [`ValidatorSet::proposer`] match indexing into the list, despite the
+      [`ValidatorSet::proposer`] function ad-hoc generating the (necessary subset of the) list with
+      an optimized implementation.
+    */
+    for i in 0 .. (2 * proposers.len()) {
+      /*
+        The proposer should be indexed by the _naïve sum_ of the block and round numbers, so they
+        should be interchangeable to request proposers via.
+
+        TODO: Should this be a weighted combination so if `(1, 2)` fails, but `(1, 3)` works, we
+        don't immediately retry the same proposal with `(2, 1)`?
+      */
+      assert_eq!(
+        map.proposer(
+          BlockNumber::from(NonZero::new(1 + u64::try_from(i).unwrap()).unwrap()),
+          RoundNumber::ONE
+        ),
+        proposers[i % proposers.len()]
+      );
+      assert_eq!(
+        map.proposer(
+          BlockNumber::ONE,
+          RoundNumber(NonZero::new(1 + u64::try_from(i).unwrap()).unwrap())
+        ),
+        proposers[i % proposers.len()]
+      );
+    }
+
+    // Ensure the maximum possible values don't trigger an overflow/panic
+    assert_eq!(
+      map.proposer(
+        BlockNumber::from(NonZero::new(u64::MAX).unwrap()),
+        RoundNumber(NonZero::new(u64::MAX).unwrap())
+      ),
+      proposers[usize::try_from(
+        // `- 1`, as the minimal `(1, 1)` corresponds to the minimal `[0]`
+        (2 * u128::from(u64::MAX - 1)) % u128::try_from(proposers.len()).unwrap()
+      )
+      .unwrap()]
+    );
+  };
+
+  // Test with uniform and randomly-sampled weights
+  for weighted in [false, true] {
+    // Test from only one validator to 128 validators
+    for len in 1 .. 128 {
+      test(
+        &(1 ..= len)
+          .map(|i| {
+            let weight = if weighted {
+              use rand_core::{TryRngCore as _, OsRng};
+              NonZero::new(u16::try_from(1 + (OsRng.try_next_u64().unwrap() % 16)).unwrap())
+                .unwrap()
+            } else {
+              NonZero::new(1).unwrap()
+            };
+            (i, weight)
+          })
+          .collect::<alloc::vec::Vec<_>>(),
+      );
+    }
+  }
+}
+#[cfg(feature = "alloc")]
+#[test]
+fn test_btree_map() {
+  test_map::<alloc::collections::BTreeMap<u16, NonZero<u16>>>();
+}
+#[cfg(feature = "std")]
+#[test]
+fn test_hash_map() {
+  test_map::<std::collections::HashMap<u16, NonZero<u16>>>();
+}

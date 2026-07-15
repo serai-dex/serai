@@ -13,6 +13,9 @@ use core::{time::Duration, future::Future};
 mod or;
 use or::*;
 
+mod timeout;
+use timeout::*;
+
 mod validators;
 pub use validators::*;
 
@@ -24,6 +27,9 @@ pub use blockchain::*;
 
 mod message;
 pub use message::*;
+
+mod slash_reason;
+pub use slash_reason::*;
 
 #[cfg(feature = "std")]
 mod state;
@@ -69,6 +75,8 @@ pub trait Network<V: Validator, S: Signature, A: AggregateSignature, B: Block>: 
   const BLOCK_PROCESSING_TIME: Duration;
 
   /// An asynchronous implementation of [`std::thread::sleep`].
+  ///
+  /// This MUST be cancel-safe.
   fn sleep(duration: Duration) -> impl Send + Future<Output = ()>;
 
   /// Broadcast a message to the other validators.
@@ -109,6 +117,9 @@ mod tendermint {
   };
 
   /// The Tendermint process.
+  ///
+  /// This is expected to drive the underlying blockchain, adding blocks to it as produced by
+  /// itself _and as received from an external sync loop_ (which is not implemented here).
   pub struct Tendermint;
 
   /// The handle for the Tendermint process.
@@ -183,7 +194,7 @@ mod tendermint {
         .await;
 
         match tick {
-          Ok(Ok(Ok((ref block, ref commit)))) => {
+          crate::or::Either::L(crate::or::Either::L(Ok((ref block, ref commit)))) => {
             // TODO: Remove these `Clone`s
             let block = block.clone();
             let commit = commit.clone();
@@ -220,7 +231,7 @@ mod tendermint {
             immediately expire and cause this behavior to occur once again (as this future has
             priority over incoming messages).
           */
-          Ok(Err(timeout)) => {
+          crate::or::Either::L(crate::or::Either::R(timeout)) => {
             let mut txn = self.db.txn();
             let messages = timeout.respond::<N>(&mut txn).await;
             txn.commit();
@@ -230,7 +241,7 @@ mod tendermint {
             }
           }
 
-          Err(Ok(ref message)) => {
+          crate::or::Either::R(Ok(ref message)) => {
             // TODO: Remove this `Clone`
             let message = message.clone();
             drop(tick);
@@ -253,7 +264,8 @@ mod tendermint {
             }
           }
           // If our channels have been closed, terminate the consensus process
-          Ok(Ok(Err(async_channel::RecvError))) | Err(Err(async_channel::RecvError)) => return,
+          crate::or::Either::L(crate::or::Either::L(Err(async_channel::RecvError))) |
+          crate::or::Either::R(Err(async_channel::RecvError)) => return,
         }
 
         // Attempt to form a commit

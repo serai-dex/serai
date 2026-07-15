@@ -171,15 +171,24 @@ impl<B: Blockchain> State<B> {
       None?;
     }
 
-    let (valid_round, proposal) = (match &self.valid {
+    let (valid_round, proposal) = match &self.valid {
       // L15-L16
-      Some((valid_round, block)) => Some((Some(valid_round.clone()), block.clone())),
+      Some((valid_round, block)) => (Some(valid_round.clone()), block.clone()),
       // L17-L18
-      None => (crate::Or { f1: self.proposal.as_mut(), f2: N::sleep(N::BLOCK_PROCESSING_TIME) })
+      None => {
+        match crate::timeout::<crate::SleepForNetwork<_, _, _, _, N>, _>(
+          self.proposal.as_mut(),
+          N::BLOCK_PROCESSING_TIME,
+        )
         .await
-        .ok()
-        .map(|proposal| (None, proposal)),
-    })?;
+        {
+          // We did not have a valid round but we do have a proposal
+          Ok(proposal) => (None, proposal),
+          // We have no proposal and therefore cannot yield a proposal message
+          Err(crate::TimeoutExpired) => None?,
+        }
+      }
+    };
 
     // L19
     let genesis = blockchain.genesis();
