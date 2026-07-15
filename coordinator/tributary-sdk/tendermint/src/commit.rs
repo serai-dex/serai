@@ -61,7 +61,7 @@ impl<S: SignatureScheme> Commit<S> {
     block_number: BlockNumber,
     round_number: RoundNumber,
     block_hash: impl Send + Sync + AsRef<[u8]>,
-  ) -> [impl Send + AsRef<[u8]>; 5] {
+  ) -> impl IntoIterator<Item = impl AsRef<[u8]>> {
     enum Segment<G: AsRef<[u8]>, B: AsRef<[u8]>> {
       Dst([u8; 1]),
       Genesis(G),
@@ -81,7 +81,7 @@ impl<S: SignatureScheme> Commit<S> {
 
     [
       Segment::Dst([0]),
-      Segment::Dst([u8::try_from(genesis.len()).unwrap()]),
+      Segment::Dst([u8::try_from(genesis.as_ref().len()).unwrap()]),
       Segment::Genesis(genesis),
       Segment::U64(u64::from(block_number.0).to_le_bytes()),
       Segment::U64(u64::from(round_number.0).to_le_bytes()),
