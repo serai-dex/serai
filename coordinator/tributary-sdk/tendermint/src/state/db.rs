@@ -72,3 +72,28 @@ pub(super) fn timeout_from_ms_since_epoch(ms: u64) -> (Instant, Duration) {
 
   (start, duration)
 }
+
+#[test]
+fn unix_time() {
+  for _ in 0 .. 128 {
+    let timeout = Duration::from_millis(1000);
+
+    let unix_time_in_ms = SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis();
+    let fetched_unix_time = timeout_in_ms_since_epoch(timeout);
+    let actual_timeout_start = Instant::now();
+    let unix_time_in_ms_now = SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis();
+    // Check those lines took less than 100ms to run
+    assert!((unix_time_in_ms_now - unix_time_in_ms) < 100);
+
+    assert!((unix_time_in_ms + 1000) <= u128::from(fetched_unix_time));
+    assert!(u128::from(fetched_unix_time) <= (unix_time_in_ms_now + 1000));
+
+    let (now, time_remaining) = timeout_from_ms_since_epoch(fetched_unix_time);
+    let actual_time_remaining =
+      timeout.checked_sub(now.duration_since(actual_timeout_start)).unwrap();
+    // The reloaded timeout is expected to be slightly shorter than the honest timeout
+    assert!(time_remaining < actual_time_remaining);
+    // but it should be approximate
+    assert!(actual_time_remaining <= (time_remaining + Duration::from_millis(100)));
+  }
+}

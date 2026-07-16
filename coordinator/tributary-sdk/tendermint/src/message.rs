@@ -1,7 +1,7 @@
 use core::{iter::Flatten, fmt};
 
 use crate::{
-  BlockNumber, RoundNumber, Validator, ValidatorSet as _, Signature, AggregateSignature,
+  BlockNumber, RoundNumber, Validator, ValidatorSet, Signature, AggregateSignature,
   SignatureScheme, Signer, BlockHash, Block, Commit, Blockchain, Evidence, SlashReason,
 };
 
@@ -161,11 +161,19 @@ impl<S: Signature, A: AggregateSignature, B: Block> Data<S, A, B> {
           .unzip();
         (
           0u8,
-          // As `RoundNumber` is non-zero, we represent `None` with the encoding `0` would have
-          Some(round_number.unwrap_or([0; _])),
-          // This is `None` if the round number was encoded as `[0; 8]` and `Some` otherwise
+          /*
+            `round_number` and `aggregate_signature` are both `Some` or both `None`, and
+            `round_number` is fixed-length, preventing collisions between the two of them.
+          */
+          round_number,
           aggregate_signature,
-          // We only sign the hash so the signed message is of a consistent length
+          /*
+            We only sign the hash to avoid having to serialize/store the entire block.
+
+            This is bound to be of fixed-length so it does not need length-prefixing, nor do the
+            prior two fields (which behave as a single field, the sole field of variable length in
+            this message).
+          */
           Some(proposal.hash()),
           None,
         )
@@ -182,8 +190,8 @@ impl<S: Signature, A: AggregateSignature, B: Block> Data<S, A, B> {
           None,
           None,
           /*
-            The block hash has a fixed length and the precommit signature should be self-delimited
-            (by virtue of being a `borsh` representation). These are both `Some` or both `None`.
+            The block hash has a fixed length and these are both `Some` or both `None`, meaning
+            that regardless of the precommit signature's encoding, this is without conflict.
           */
           block,
           precommit_signature,
@@ -253,6 +261,7 @@ pub type MessageFor<B> = Message<
   <B as Blockchain>::Block,
 >;
 
+#[cfg_attr(test, derive(Debug))]
 pub(crate) enum MessageError<S: Signature, A: AggregateSignature, H: BlockHash> {
   /// The message was stale within the current context.
   Stale,
@@ -284,8 +293,8 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
       MessageSegment::Dst([1]),
       MessageSegment::Dst([u8::try_from(genesis.len()).unwrap()]),
       MessageSegment::Genesis(genesis),
-      MessageSegment::U64(u64::from(block_number.0).to_le_bytes()),
-      MessageSegment::U64(u64::from(round_number.0).to_le_bytes()),
+      MessageSegment::U64(u64::from(block_number).to_le_bytes()),
+      MessageSegment::U64(u64::from(round_number).to_le_bytes()),
     ]
     .map(Some);
     let [f, g, h, i, j] = data.signature_message();
@@ -318,20 +327,16 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
   /// - The valid round's round number is less than this message's round number
   pub(crate) fn static_verificiation(
     &self,
-    blockchain: &impl Blockchain<
-      Validator = V,
-      SignatureScheme: SignatureScheme<Signature = S, AggregateSignature = A>,
-      Block = B,
-    >,
+    genesis: impl AsRef<[u8]>,
+    validator_set: &(impl ?Sized + ValidatorSet<Validator = V>),
+    signature_scheme: &(impl ?Sized
+        + SignatureScheme<Validator = V, Signature = S, AggregateSignature = A>),
   ) -> Result<(), MessageError<S, A, B::Hash>> {
-    let validator_set = blockchain.validator_set();
+    let genesis = genesis.as_ref();
+
     if validator_set.weight(&self.validator).is_none() {
       Err(MessageError::NotValidator)?;
     }
-
-    let genesis = blockchain.genesis();
-    let genesis = genesis.as_ref();
-    let signature_scheme = blockchain.signature_scheme();
 
     if !signature_scheme.verify(
       &self.validator,
@@ -358,8 +363,7 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
               .is_ok_and(|validators| {
                 crate::validators_satisfy_threshold(validators, validator_set)
               })
-        }) && (self.validator ==
-          blockchain.validator_set().proposer(self.block_number, self.round_number)))
+        }) && (self.validator == validator_set.proposer(self.block_number, self.round_number)))
         {
           Err(MessageError::Invalid(SlashReason {
             block_number: self.block_number,
@@ -397,5 +401,255 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
     }
 
     Ok(())
+  }
+}
+
+#[cfg(test)]
+pub(crate) fn random_valid_round(
+) -> Option<ValidRound<<crate::TestSignatureScheme as SignatureScheme>::AggregateSignature>> {
+  use core::num::NonZero;
+  use rand_core::{TryRngCore as _, OsRng};
+
+  ((OsRng.try_next_u64().unwrap() & 1) == 1).then(|| {
+    let round_number =
+      RoundNumber(NonZero::new(OsRng.try_next_u64().unwrap().saturating_add(1)).unwrap());
+    let mut aggregate_signature = [0; 8 + 32];
+    OsRng.try_fill_bytes(&mut aggregate_signature).unwrap();
+    ValidRound { round_number, aggregate_signature }
+  })
+}
+
+#[test]
+fn test_random_valid_round() {
+  let mut some = false;
+  let mut none = false;
+  for _ in 0 .. 128 {
+    some |= random_valid_round().is_some();
+    none |= random_valid_round().is_none();
+  }
+  assert!(some);
+  assert!(none);
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn signature_message() {
+  use core::num::NonZero;
+  use alloc::{vec::Vec, vec};
+
+  use rand_core::{TryRngCore as _, OsRng};
+
+  use crate::{StubBlock, TestSignatureScheme};
+
+  for _ in 0 .. 128 {
+    #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+    let genesis_len = OsRng.try_next_u64().unwrap() as u8;
+    let mut genesis = vec![0xff; usize::from(genesis_len)];
+    OsRng.try_fill_bytes(&mut genesis).unwrap();
+    let genesis = genesis.as_ref();
+
+    let block_number =
+      BlockNumber(NonZero::new(OsRng.try_next_u64().unwrap().saturating_add(1)).unwrap());
+    let round_number =
+      RoundNumber(NonZero::new(OsRng.try_next_u64().unwrap().saturating_add(1)).unwrap());
+
+    let mut block = [0xff; 32];
+    OsRng.try_fill_bytes(&mut block).unwrap();
+    let block = StubBlock::from(&block);
+
+    type TestData<'hash> = Data<
+      <TestSignatureScheme as SignatureScheme>::Signature,
+      <TestSignatureScheme as SignatureScheme>::AggregateSignature,
+      StubBlock<'hash>,
+    >;
+
+    let mut signature = [0; 1 + 8];
+    OsRng.try_fill_bytes(&mut signature).unwrap();
+
+    let valid_round = loop {
+      let valid_round = random_valid_round();
+      if let Some(valid_round) = valid_round {
+        break valid_round;
+      }
+    };
+
+    let prefix = [
+      [1].as_slice(),
+      [genesis_len].as_slice(),
+      genesis,
+      u64::from(block_number).to_le_bytes().as_slice(),
+      u64::from(round_number).to_le_bytes().as_slice(),
+    ]
+    .concat();
+
+    assert_eq!(
+      Message::<<TestSignatureScheme as SignatureScheme>::Validator, _, _, _>::signature_message(
+        genesis,
+        block_number,
+        round_number,
+        &TestData::Proposal { valid_round: Some(valid_round.clone()), proposal: block.clone() }
+      )
+      .fold(Vec::<u8>::new(), |mut accum, item| {
+        accum.extend(item.as_ref());
+        accum
+      }),
+      [
+        prefix.as_slice(),
+        [0].as_slice(),
+        u64::from(valid_round.round_number).to_le_bytes().as_slice(),
+        valid_round.aggregate_signature.as_ref(),
+        block.hash().as_ref(),
+      ]
+      .concat(),
+    );
+
+    assert_eq!(
+      Message::<<TestSignatureScheme as SignatureScheme>::Validator, _, _, _>::signature_message(
+        genesis,
+        block_number,
+        round_number,
+        &TestData::Proposal { valid_round: None, proposal: block.clone() }
+      )
+      .fold(Vec::<u8>::new(), |mut accum, item| {
+        accum.extend(item.as_ref());
+        accum
+      }),
+      [prefix.as_slice(), [0].as_slice(), block.hash().as_ref()].concat(),
+    );
+
+    assert_eq!(
+      Message::<<TestSignatureScheme as SignatureScheme>::Validator, _, _, _>::signature_message(
+        genesis,
+        block_number,
+        round_number,
+        &TestData::Prevote { block: Some(block.hash()) }
+      )
+      .fold(Vec::<u8>::new(), |mut accum, item| {
+        accum.extend(item.as_ref());
+        accum
+      }),
+      [prefix.as_slice(), [1].as_slice(), block.hash().as_ref()].concat(),
+    );
+
+    assert_eq!(
+      Message::<<TestSignatureScheme as SignatureScheme>::Validator, _, _, _>::signature_message(
+        genesis,
+        block_number,
+        round_number,
+        &TestData::Prevote { block: None }
+      )
+      .fold(Vec::<u8>::new(), |mut accum, item| {
+        accum.extend(item.as_ref());
+        accum
+      }),
+      [prefix.as_slice(), [1].as_slice()].concat(),
+    );
+
+    assert_eq!(
+      Message::<<TestSignatureScheme as SignatureScheme>::Validator, _, _, _>::signature_message(
+        genesis,
+        block_number,
+        round_number,
+        &TestData::Precommit { block_and_precommit_signature: Some((block.hash(), signature)) }
+      )
+      .fold(Vec::<u8>::new(), |mut accum, item| {
+        accum.extend(item.as_ref());
+        accum
+      }),
+      [prefix.as_slice(), [2].as_slice(), block.hash().as_ref(), signature.as_ref()].concat(),
+    );
+
+    assert_eq!(
+      Message::<<TestSignatureScheme as SignatureScheme>::Validator, _, _, _>::signature_message(
+        genesis,
+        block_number,
+        round_number,
+        &TestData::Precommit { block_and_precommit_signature: None }
+      )
+      .fold(Vec::<u8>::new(), |mut accum, item| {
+        accum.extend(item.as_ref());
+        accum
+      }),
+      [prefix.as_slice(), [2].as_slice()].concat(),
+    );
+  }
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn sign() {
+  use core::num::NonZero;
+  use core::{
+    pin::pin,
+    task::{Poll, Waker, Context},
+    future::Future as _,
+  };
+
+  use rand_core::{TryRngCore as _, OsRng};
+
+  use crate::{StubBlock, TestSignatureScheme};
+
+  for _ in 0 .. 128 {
+    let mut block = [0; 32];
+    OsRng.try_fill_bytes(&mut block).unwrap();
+    let block = ((OsRng.try_next_u64().unwrap() & 1) == 1).then_some(block);
+
+    let data =
+      Data::Prevote { block: block.as_ref().map(|block| StubBlock::from(block.as_slice()).hash()) };
+
+    let mut genesis = [0; 32];
+    OsRng.try_fill_bytes(&mut genesis).unwrap();
+
+    let block_number =
+      BlockNumber(NonZero::new(OsRng.try_next_u64().unwrap().saturating_add(1)).unwrap());
+    let round_number =
+      RoundNumber(NonZero::new(OsRng.try_next_u64().unwrap().saturating_add(1)).unwrap());
+
+    let signature_scheme = TestSignatureScheme::new();
+    let signer = signature_scheme.signer(0);
+
+    let mut context = Context::from_waker(Waker::noop());
+    let Poll::Ready(message) =
+      pin!(Message::<
+        _,
+        _,
+        <TestSignatureScheme as SignatureScheme>::AggregateSignature,
+        StubBlock<'_>,
+      >::sign(&signer, &genesis, block_number, round_number, data))
+      .poll(&mut context)
+    else {
+      panic!("`TestSignatureScheme::sign` returned `Poll::Pending`")
+    };
+
+    let one_weight = NonZero::new(1).unwrap();
+    let validator_set = alloc::collections::BTreeMap::from([(0, one_weight), (1, one_weight)]);
+    message.static_verificiation(genesis, &validator_set, &signature_scheme).unwrap();
+
+    {
+      let mut message = message.clone();
+      message.signature[0] ^= 1;
+      assert!(matches!(
+        message.static_verificiation(genesis, &validator_set, &signature_scheme),
+        Err(MessageError::InvalidOuterSignature)
+      ));
+    }
+
+    {
+      let mut message = message.clone();
+      message.validator = 1;
+      assert!(matches!(
+        message.static_verificiation(genesis, &validator_set, &signature_scheme),
+        Err(MessageError::InvalidOuterSignature)
+      ));
+    }
+
+    {
+      let mut message = message.clone();
+      message.validator = 2;
+      assert!(matches!(
+        message.static_verificiation(genesis, &validator_set, &signature_scheme),
+        Err(MessageError::NotValidator)
+      ));
+    }
   }
 }

@@ -247,6 +247,7 @@ mod tests {
     }
   }
 
+  #[cfg(feature = "alloc")]
   #[test]
   fn sign_and_verify_precommit() {
     use core::{
@@ -298,6 +299,107 @@ mod tests {
           &signature
         )
       );
+    }
+  }
+
+  #[test]
+  fn verify_commit() {
+    use core::{
+      num::NonZero,
+      pin::pin,
+      task::{Poll, Waker, Context},
+      future::Future as _,
+    };
+    use alloc::{vec::Vec, vec, collections::BTreeMap};
+
+    use crate::TestSignatureScheme;
+
+    let signature_scheme = TestSignatureScheme::new();
+    let commit = RandomCommit::new();
+
+    let signature = |validator| {
+      let mut context = Context::from_waker(Waker::noop());
+      let signer = signature_scheme.signer(validator);
+      let Poll::Ready(signature) = pin!(Commit::<
+        <TestSignatureScheme as SignatureScheme>::AggregateSignature,
+      >::sign::<TestSignatureScheme>(
+        &signer,
+        commit.genesis(),
+        commit.block_number,
+        commit.round_number,
+        commit.block_hash(),
+      ))
+      .poll(&mut context) else {
+        panic!("`TestSignatureScheme::sign` returned `Poll::Pending`")
+      };
+      signature
+    };
+    let signatures = [signature(0), signature(2), signature(3)];
+
+    let aggregate_signature = signature_scheme.aggregate(
+      Commit::<<TestSignatureScheme as SignatureScheme>::AggregateSignature>::signature_message(
+        commit.genesis(),
+        commit.block_number,
+        commit.round_number,
+        commit.block_hash(),
+      ),
+      [(&0, &signatures[0])],
+    );
+
+    let actual_commit = Commit {
+      block_number: commit.block_number,
+      round_number: commit.round_number,
+      aggregate_signature,
+    };
+    assert_eq!(actual_commit.block_number(), commit.block_number);
+
+    let verify = |valid, actual_commit: &Commit<_>, weights: Vec<(_, u16)>| {
+      assert_eq!(
+        actual_commit.verify(
+          &weights
+            .into_iter()
+            .map(|(validator, weight)| (validator, NonZero::new(weight).unwrap()))
+            .collect::<BTreeMap<_, _>>(),
+          &signature_scheme,
+          commit.genesis(),
+          commit.block_hash()
+        ),
+        valid
+      );
+    };
+    // This should verify if the threshold is satisfied
+    verify(true, &actual_commit, vec![(0, 1)]);
+    // It shouldn't if the threshold isn't satisfied
+    verify(false, &actual_commit, vec![(0, 1), (1, 1)]);
+    // But this is a weighted threshold, so increasing the validator's weight should be sufficient
+    verify(false, &actual_commit, vec![(0, 2), (1, 1)]);
+    verify(true, &actual_commit, vec![(0, 3), (1, 1)]);
+
+    // Malleating the signature should cause the commit's verification to fail
+    {
+      let mut actual_commit = actual_commit.clone();
+      *actual_commit.aggregate_signature.last_mut().unwrap() ^= 1;
+      verify(false, &actual_commit, vec![(0, 1)]);
+    }
+
+    // Test a commit which requires the sum weight from multiple validators
+    {
+      let aggregate_signature = signature_scheme.aggregate(
+        Commit::<<TestSignatureScheme as SignatureScheme>::AggregateSignature>::signature_message(
+          commit.genesis(),
+          commit.block_number,
+          commit.round_number,
+          commit.block_hash(),
+        ),
+        [0, 2, 3].iter().zip(signatures.iter()),
+      );
+      let actual_commit = Commit {
+        block_number: commit.block_number,
+        round_number: commit.round_number,
+        aggregate_signature,
+      };
+      assert_eq!(actual_commit.block_number(), commit.block_number);
+      verify(true, &actual_commit, vec![(0, 1), (1, 1), (2, 1), (3, 1)]);
     }
   }
 }

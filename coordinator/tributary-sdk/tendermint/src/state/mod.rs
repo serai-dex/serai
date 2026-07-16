@@ -837,7 +837,11 @@ impl<B: BorshyBlockchain> State<B> {
     debug_assert!(message.round_number >= self.round_number);
 
     // Verify this message's static properties
-    message.static_verificiation(blockchain)?;
+    message.static_verificiation(
+      blockchain.genesis(),
+      validator_set,
+      blockchain.signature_scheme(),
+    )?;
 
     // Update `round_messages`
     match self.round_messages.update(validator_set, message.validator, self.round_number, &message)

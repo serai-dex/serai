@@ -2,8 +2,11 @@ use core::fmt;
 
 use crate::{
   BlockNumber, RoundNumber, Validator, ValidatorSet, Signature, AggregateSignature,
-  SignatureScheme, BlockHash, Block, Commit, Blockchain, ValidRound, Data, Message,
+  SignatureScheme, BlockHash, Block, Blockchain, ValidRound, Data, Message, MessageError,
 };
+
+#[cfg(test)]
+mod tests;
 
 /// A pair of datas which equivocate with each other.
 ///
@@ -11,6 +14,7 @@ use crate::{
 /// round number, by the same signer, when an honest validator will always only publish one such
 /// message.
 #[derive(Clone)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 pub(crate) enum EquivocatingData<S: Signature, A: AggregateSignature, H: BlockHash> {
   Proposal {
@@ -66,17 +70,40 @@ impl<S: Signature, A: AggregateSignature, H: fmt::Debug + BlockHash> fmt::Debug
   }
 }
 
+/// A block hash, yet wrapped as to be opaque.
+///
+/// We use this to ensure that this type only implements the traits we explicitly want implemented.
+/// The main thing we want to avoid is an inadvertent implementation of [`BorshSerialize`] or
+/// [`BorshDeserialize`], as this isn't guaranteed to have an equivalent [`borsh`] representation
+/// to the original type this fills in for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(test, derive(Debug))]
+pub(crate) struct OpaqueBlockHash<'hash>(&'hash [u8]);
+impl AsRef<[u8]> for OpaqueBlockHash<'_> {
+  fn as_ref(&self) -> &[u8] {
+    self.0
+  }
+}
+
 /// A stub block which satisfies the `Block` trait from only a hash.
 ///
 /// We use this to build a `Data` (expecting `B: Block`) from solely a hash, as for the purposes of
 /// verifying its signature.
 #[derive(Clone)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 #[repr(transparent)]
-struct StubBlock<'hash>(&'hash [u8]);
+pub(crate) struct StubBlock<'hash>(&'hash [u8]);
+
+#[cfg(test)]
+impl<'hash> StubBlock<'hash> {
+  pub(crate) fn from(hash: &'hash [u8]) -> Self {
+    Self(hash)
+  }
+}
 impl<'hash> Block for StubBlock<'hash> {
-  type Hash = &'hash [u8];
+  type Hash = OpaqueBlockHash<'hash>;
   fn hash(&self) -> Self::Hash {
-    self.0
+    OpaqueBlockHash(self.0)
   }
 }
 
@@ -99,8 +126,8 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> EquivocatingData<S, A, H
         },
       ),
       EquivocatingData::Prevote { first_block, second_block } => (
-        Data::Prevote { block: first_block.as_ref().map(AsRef::as_ref) },
-        Data::Prevote { block: second_block.as_ref().map(AsRef::as_ref) },
+        Data::Prevote { block: first_block.as_ref().map(|hash| OpaqueBlockHash(hash.as_ref())) },
+        Data::Prevote { block: second_block.as_ref().map(|hash| OpaqueBlockHash(hash.as_ref())) },
       ),
       EquivocatingData::Precommit {
         first_block_and_precommit_signature,
@@ -109,12 +136,12 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> EquivocatingData<S, A, H
         Data::Precommit {
           block_and_precommit_signature: first_block_and_precommit_signature
             .as_ref()
-            .map(|(block, signature)| (block.as_ref(), signature.clone())),
+            .map(|(block, signature)| (OpaqueBlockHash(block.as_ref()), signature.clone())),
         },
         Data::Precommit {
           block_and_precommit_signature: second_block_and_precommit_signature
             .as_ref()
-            .map(|(block, signature)| (block.as_ref(), signature.clone())),
+            .map(|(block, signature)| (OpaqueBlockHash(block.as_ref()), signature.clone())),
         },
       ),
     }
@@ -123,6 +150,7 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> EquivocatingData<S, A, H
 
 /// Evidence for a slash.
 #[derive(Clone)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 pub(crate) enum Evidence<S: Signature, A: AggregateSignature, H: BlockHash> {
   /// The validator equivocated, sending two distinct messages when they should have only sent one.
@@ -158,6 +186,7 @@ impl<S: Signature, A: AggregateSignature, H: fmt::Debug + BlockHash> fmt::Debug
 ///
 /// This contains the necessary evidence to convince other validators of this slash.
 #[derive(Clone)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 pub struct SlashReason<S: Signature, A: AggregateSignature, H: BlockHash> {
   pub(crate) block_number: BlockNumber,
@@ -241,25 +270,6 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
         + SignatureScheme<Validator = V, Signature = S, AggregateSignature = A>),
     validator: V,
   ) -> Result<(), InvalidReason> {
-    let verify_message = |data, signature| {
-      if !signature_scheme.verify(
-        &validator,
-        Message::<V, S, A, _>::signature_message(
-          genesis.as_ref(),
-          self.block_number,
-          self.round_number,
-          &data,
-        ),
-        signature,
-      ) {
-        // If this message's signature was invalid, this wasn't actually a message from the accused
-        // validator, and this is an invalid reason to slash the accused validator
-        Err(InvalidReason)?;
-      }
-
-      Ok(())
-    };
-
     match &self.evidence {
       Evidence::Equivocation { data, first_signature, second_signature } => {
         let (data1, data2) = data.split();
@@ -271,66 +281,64 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
 
         // Check these were both signed by this validator
         for (data, signature) in [(data1, first_signature), (data2, second_signature)] {
+          let verify_message = |data, signature| {
+            if !signature_scheme.verify(
+              &validator,
+              Message::<V, S, A, _>::signature_message(
+                genesis.as_ref(),
+                self.block_number,
+                self.round_number,
+                &data,
+              ),
+              signature,
+            ) {
+              /*
+                If this message's signature was invalid, this wasn't actually a message from the
+                accused validator, and this is an invalid reason to slash the accused validator.
+              */
+              Err(InvalidReason)?;
+            }
+
+            Ok(())
+          };
+
           verify_message(data, signature)?;
         }
       }
       Evidence::InvalidProposal { valid_round, proposal, signature } => {
-        // Check this was a proposal message signed by this validator
-        verify_message(
-          Data::Proposal {
-            valid_round: valid_round.clone(),
-            proposal: StubBlock(proposal.as_ref()),
-          },
-          signature,
-        )?;
-
-        // If the structure of this proposal was valid, this is an invalid reason to slash this
-        // validator
-        if (validator == validator_set.proposer(self.block_number, self.round_number)) &&
-          match valid_round {
-            Some(ValidRound { round_number, aggregate_signature }) => {
-              ((*round_number) < self.round_number) &&
-                signature_scheme
-                  .verify_aggregate(
-                    Message::<V, S, A, StubBlock<'_>>::signature_message(
-                      genesis.as_ref(),
-                      self.block_number,
-                      *round_number,
-                      &Data::Prevote { block: Some(proposal.as_ref()) },
-                    ),
-                    aggregate_signature,
-                  )
-                  .is_ok_and(|validators| {
-                    crate::validators_satisfy_threshold(validators, validator_set)
-                  })
-            }
-            None => true,
-          }
-        {
+        if !matches!(
+          (Message {
+            validator,
+            block_number: self.block_number,
+            round_number: self.round_number,
+            data: Data::Proposal {
+              valid_round: valid_round.clone(),
+              proposal: StubBlock(proposal.as_ref()),
+            },
+            signature: signature.clone(),
+          })
+          .static_verificiation(genesis, validator_set, signature_scheme),
+          Err(MessageError::Invalid(SlashReason { .. }))
+        ) {
           Err(InvalidReason)?;
         }
       }
       Evidence::InvalidPrecommit { block, precommit_signature, signature } => {
-        let block = block.as_ref();
-
-        // Check this was a precommit message signed by this validator
-        verify_message(
-          Data::Precommit {
-            block_and_precommit_signature: Some((block, precommit_signature.clone())),
-          },
-          signature,
-        )?;
-
-        // If the inner signature is valid, this a valid precommit and an invalid reason to slash
-        // the accused validator
-        if Commit::verify_precommit(
-          signature_scheme,
-          &validator,
-          genesis.as_ref(),
-          self.block_number,
-          self.round_number,
-          block,
-          precommit_signature,
+        if !matches!(
+          (Message::<_, _, _, StubBlock<'_>> {
+            validator,
+            block_number: self.block_number,
+            round_number: self.round_number,
+            data: Data::Precommit {
+              block_and_precommit_signature: Some((
+                StubBlock(block.as_ref()).hash(),
+                precommit_signature.clone()
+              )),
+            },
+            signature: signature.clone(),
+          })
+          .static_verificiation(genesis, validator_set, signature_scheme),
+          Err(MessageError::Invalid(SlashReason { .. }))
         ) {
           Err(InvalidReason)?;
         }
