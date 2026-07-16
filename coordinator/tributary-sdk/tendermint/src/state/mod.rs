@@ -10,8 +10,9 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::Transaction;
 
 use crate::{
-  Borshy, SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, Commit, Blockchain, Signer,
-  ValidRound, Data, MessageFor, MessageError, EquivocatingData, Evidence, SlashReason, Network,
+  Borshy, SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, Commit, Blockchain,
+  Signer, ValidRound, Data, MessageFor, MessageError, EquivocatingData, Evidence, SlashReason,
+  Network,
 };
 
 mod block_proposal;
@@ -683,7 +684,7 @@ impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> State<B> {
           fellow validators to rebroadcast their latest message however, meaning on reboot, we just
           have to wait for them to do so for us to repopulate this (and jump ahead as desired).
         */
-        round_messages: HashMap::new(),
+        round_messages: HashMap::with_capacity(validator_set.validators().into_iter().count()),
 
         our_latest_message: db::OurLatestMessage::<B>::get(getter, genesis),
       };

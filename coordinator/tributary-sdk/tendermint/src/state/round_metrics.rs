@@ -481,6 +481,7 @@ impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> RoundMetrics<B> {
       fn commit(self) {}
     }
 
+    let validators = validator_set.validators().into_iter().count();
     let mut result = RoundMetrics {
       block_number,
       round_number,
@@ -488,10 +489,10 @@ impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> RoundMetrics<B> {
       observed_prevotes_weight: 0,
       observed_prevotes_for_proposal: 0,
       observed_prevotes_for_none: 0,
-      observed_prevotes: HashMap::new(),
+      observed_prevotes: HashMap::with_capacity(validators),
       observed_precommits_weight: 0,
       observed_precommits_for_proposal: 0,
-      observed_precommits: HashMap::new(),
+      observed_precommits: HashMap::with_capacity(validators),
     };
 
     if let Some((ttl, (valid_round, proposal))) =

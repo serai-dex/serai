@@ -382,12 +382,14 @@ macro_rules! map {
   };
 }
 
+#[cfg(not(target_pointer_width = "16"))]
 map!(
   "alloc",
   alloc::collections::BTreeMap<V, NonZero<u16>>,
   V: PartialOrd + Ord + Validator
 );
 
+#[cfg(not(target_pointer_width = "16"))]
 map!(
   "std",
   std::collections::HashMap<V, NonZero<u16>, H>,
