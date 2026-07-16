@@ -10,7 +10,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::Transaction;
 
 use crate::{
-  SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, Commit, Blockchain, Signer,
+  Borshy, SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, Commit, Blockchain, Signer,
   ValidRound, Data, MessageFor, MessageError, EquivocatingData, Evidence, SlashReason, Network,
 };
 
@@ -69,7 +69,7 @@ impl<B: Blockchain> RoundMessages<B> {
 ///
 /// This is intertwined with participating in consensus and can not be used for third-party
 /// observation.
-pub(crate) struct State<B: Blockchain> {
+pub(crate) struct State<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> {
   /// The current block number.
   block_number: BlockNumber,
   /// A public reference to the block number.
@@ -126,7 +126,7 @@ pub(crate) struct State<B: Blockchain> {
   our_latest_message: Option<MessageFor<B>>,
 }
 
-impl<B: Blockchain> State<B> {
+impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> State<B> {
   /// The current block number.
   #[must_use]
   pub(super) fn block_number(&self) -> BlockNumber {
@@ -192,8 +192,9 @@ impl<B: Blockchain> State<B> {
 
     // L19
     let genesis = blockchain.genesis();
+    let genesis = genesis.as_ref();
     self.round_metrics.accumulate_proposal(
-      &genesis,
+      genesis,
       validator_set,
       txn,
       proposer,
@@ -225,11 +226,12 @@ impl<B: Blockchain> State<B> {
     block: Option<<B::Block as Block>::Hash>,
   ) -> MessageFor<B> {
     let genesis = blockchain.genesis();
+    let genesis = genesis.as_ref();
     let validator = signer.validator().await;
 
     let result = MessageFor::<B>::sign(
       signer,
-      &genesis,
+      genesis,
       self.block_number,
       self.round_number,
       Data::Prevote { block },
@@ -237,7 +239,7 @@ impl<B: Blockchain> State<B> {
     .await;
 
     assert!(self.round_metrics.accumulate_prevote(
-      &genesis,
+      genesis,
       blockchain.validator_set(),
       txn,
       validator,
@@ -246,12 +248,12 @@ impl<B: Blockchain> State<B> {
     ));
 
     let _ = self.pending_step_timeout.take();
-    db::PendingStepTimeout::del(txn, genesis.as_ref());
+    db::PendingStepTimeout::del(txn, genesis);
     self.step = Step::Prevote;
-    db::Step::set(txn, genesis.as_ref(), &self.step);
+    db::Step::set(txn, genesis, &self.step);
 
     self.our_latest_message = Some(result.clone());
-    db::OurLatestMessage::<B>::set(txn, genesis.as_ref(), &result);
+    db::OurLatestMessage::<B>::set(txn, genesis, &result);
     result
   }
 
@@ -331,27 +333,28 @@ impl<B: Blockchain> State<B> {
     )>,
   ) -> MessageFor<B> {
     let genesis = blockchain.genesis();
+    let genesis = genesis.as_ref();
     assert!(self.round_metrics.accumulate_precommit(
-      &genesis,
+      genesis,
       blockchain.validator_set(),
       txn,
       signer.validator().await,
       block_and_precommit_signature.clone()
     ));
     let _ = self.pending_step_timeout.take();
-    db::PendingStepTimeout::del(txn, genesis.as_ref());
+    db::PendingStepTimeout::del(txn, genesis);
     self.step = Step::Precommit;
-    db::Step::set(txn, genesis.as_ref(), &self.step);
+    db::Step::set(txn, genesis, &self.step);
     let result = MessageFor::<B>::sign(
       signer,
-      &genesis,
+      genesis,
       self.block_number,
       self.round_number,
       Data::Precommit { block_and_precommit_signature },
     )
     .await;
     self.our_latest_message = Some(result.clone());
-    db::OurLatestMessage::<B>::set(txn, genesis.as_ref(), &result);
+    db::OurLatestMessage::<B>::set(txn, genesis, &result);
     result
   }
 
@@ -401,11 +404,12 @@ impl<B: Blockchain> State<B> {
     };
 
     let genesis = blockchain.genesis();
+    let genesis = genesis.as_ref();
 
     // L42-L43
     {
       let valid = (valid_round, proposal.clone());
-      db::Valid::<B>::set(txn, genesis.as_ref(), &valid);
+      db::Valid::<B>::set(txn, genesis, &valid);
       self.valid = Some(valid);
     }
 
@@ -418,14 +422,14 @@ impl<B: Blockchain> State<B> {
     let proposal = proposal.hash();
     {
       let locked = (self.round_number, proposal);
-      db::Locked::set(txn, genesis.as_ref(), &locked);
+      db::Locked::set(txn, genesis, &locked);
       self.locked = Some(locked);
     }
 
     // L40-L41
     let precommit_signature = Commit::<B::SignatureScheme>::sign(
       signer,
-      &genesis,
+      genesis,
       self.block_number,
       self.round_number,
       proposal,
@@ -548,6 +552,7 @@ impl<B: Blockchain> State<B> {
 
     {
       let genesis = blockchain.genesis();
+      let genesis = genesis.as_ref();
 
       let Self {
         block_number,
@@ -574,9 +579,9 @@ impl<B: Blockchain> State<B> {
 
       // L11-L13
       *round_number = round;
-      db::RoundNumber::set(txn, genesis.as_ref(), round_number);
+      db::RoundNumber::set(txn, genesis, round_number);
       *step = Step::Propose;
-      db::Step::set(txn, genesis.as_ref(), &self.step);
+      db::Step::set(txn, genesis, &self.step);
 
       /*
         L20-L21
@@ -591,15 +596,11 @@ impl<B: Blockchain> State<B> {
             N::LATENCY_TIME
               .saturating_mul(u32::try_from(u64::from(*round_number)).unwrap_or(u32::MAX)),
           );
-        db::PendingStepTimeout::set(
-          txn,
-          genesis.as_ref(),
-          &db::timeout_in_ms_since_epoch(duration),
-        );
+        db::PendingStepTimeout::set(txn, genesis, &db::timeout_in_ms_since_epoch(duration));
         *pending_step_timeout = Some((Instant::now(), duration));
       }
       *pending_precommit_timeout = None;
-      db::PendingPrecommitTimeout::del(txn, genesis.as_ref());
+      db::PendingPrecommitTimeout::del(txn, genesis);
 
       round_metrics.reset(block_number, *round_number);
     }
@@ -873,14 +874,20 @@ impl<B: Blockchain> State<B> {
   }
 }
 
-pub(crate) struct TimeoutExpired<'state, 'blockchain, 'signer, B: Blockchain, S> {
+pub(crate) struct TimeoutExpired<
+  'state,
+  'blockchain,
+  'signer,
+  B: Blockchain<Block: Borshy + Block<Hash: Borshy>>,
+  S,
+> {
   state: &'state mut State<B>,
   blockchain: &'blockchain B,
   signer: &'signer S,
 }
 
 impl<
-    B: Blockchain,
+    B: Blockchain<Block: Borshy + Block<Hash: Borshy>>,
     S: Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
@@ -936,7 +943,7 @@ impl<
   }
 }
 
-impl<B: Blockchain> State<B> {
+impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> State<B> {
   /// A future representing the current timeout.
   ///
   /// This function is cancel-safe, but has an output whose future is _not_ cancel-safe. It MUST be
@@ -1039,9 +1046,10 @@ impl<B: Blockchain> State<B> {
       *proposal = Box::pin(BlockProposal::new(blockchain.add_block(block, commit).await));
 
       let genesis = blockchain.genesis();
+      let genesis = genesis.as_ref();
 
       *block_number = BlockNumber(next_block_number);
-      db::BlockNumber::set(txn, genesis.as_ref(), block_number);
+      db::BlockNumber::set(txn, genesis, block_number);
       block_number_ref.store(u64::from(block_number.0), Ordering::Relaxed);
 
       // These are saved to the database by the following call to `start_round`
@@ -1052,15 +1060,15 @@ impl<B: Blockchain> State<B> {
       round_metrics.reset(*block_number, *round_number);
 
       *valid = None;
-      db::Valid::<B>::del(txn, genesis.as_ref());
+      db::Valid::<B>::del(txn, genesis);
       *locked = None;
-      db::Locked::<<B::Block as Block>::Hash>::del(txn, genesis.as_ref());
+      db::Locked::<<B::Block as Block>::Hash>::del(txn, genesis);
 
       round_messages.clear();
 
       // We expect the commit to be sent around to convince validator's of the current _block_
       let _ = our_latest_message.take();
-      db::OurLatestMessage::<B>::del(txn, genesis.as_ref());
+      db::OurLatestMessage::<B>::del(txn, genesis);
     }
 
     Some(self.start_round::<N>(blockchain, signer, txn, RoundNumber::ONE).await)

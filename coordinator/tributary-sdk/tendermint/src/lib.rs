@@ -112,7 +112,7 @@ mod tendermint {
   use serai_db::{Transaction as _, Db};
 
   use crate::{
-    BlockNumber, ValidatorSet as _, SignatureScheme, Block as _, Commit, Blockchain, MessageFor,
+    Borshy, BlockNumber, ValidatorSet as _, SignatureScheme, Block, Commit, Blockchain, MessageFor,
     MessageError, Signer, Network, State, Or,
   };
 
@@ -130,7 +130,7 @@ mod tendermint {
   }
 
   struct TendermintProcess<
-    B: Blockchain<SignatureScheme: SignatureScheme<AggregateSignature: Clone>>,
+    B: Blockchain<Block: Borshy + Block<Hash: Borshy>>,
     S: Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
@@ -154,7 +154,7 @@ mod tendermint {
   }
 
   impl<
-      B: Blockchain<SignatureScheme: SignatureScheme<AggregateSignature: Clone>>,
+      B: Blockchain<Block: Borshy + Block<Hash: Borshy>>,
       S: Signer<
         Validator = B::Validator,
         Signature = <B::SignatureScheme as SignatureScheme>::Signature,
@@ -299,8 +299,9 @@ mod tendermint {
     /// 1) It is of no further use, and accordingly its state may be undefined
     /// 2) The process terminates, so that the Tendermint process will be re-initialized from the
     ///    disk before any further use
+    #[expect(private_bounds)]
     pub async fn process<
-      B: Send + Sync + Blockchain<SignatureScheme: SignatureScheme<AggregateSignature: Clone>>,
+      B: Send + Sync + Blockchain<Block: Borshy + Block<Hash: Borshy>, BlockProposal: Send>,
       S: Send
         + Sync
         + Signer<

@@ -27,7 +27,7 @@ impl<B, BP> BlockProposal<B, BP> {
   }
 }
 
-impl<B: Clone, BP: Send + Future<Output = B>> Future for BlockProposal<B, BP> {
+impl<B: Clone, BP: Future<Output = B>> Future for BlockProposal<B, BP> {
   type Output = B;
   fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
     Poll::Ready(match self.as_mut().project() {

@@ -12,7 +12,7 @@ pub(crate) trait Sleep {
   /// An asynchronous implementation of [`std::thread::sleep`].
   ///
   /// This MUST be cancel-safe.
-  fn sleep(duration: Duration) -> impl Send + Future<Output = ()>;
+  fn sleep(duration: Duration) -> impl Future<Output = ()>;
 }
 
 // TODO: Should `Sleep` be promoted into the public API to avoid this?
@@ -33,7 +33,7 @@ mod sleep_for_network {
   impl<V: Validator, S: Signature, A: AggregateSignature, B: Block, N: Network<V, S, A, B>> Sleep
     for SleepForNetwork<V, S, A, B, N>
   {
-    fn sleep(duration: Duration) -> impl Send + Future<Output = ()> {
+    fn sleep(duration: Duration) -> impl Future<Output = ()> {
       <N as Network<V, S, A, B>>::sleep(duration)
     }
   }
@@ -85,7 +85,7 @@ async fn test_timeout() {
 
   struct TokioSleep;
   impl Sleep for TokioSleep {
-    fn sleep(duration: Duration) -> impl Send + Future<Output = ()> {
+    fn sleep(duration: Duration) -> impl Future<Output = ()> {
       tokio::time::sleep(duration)
     }
   }

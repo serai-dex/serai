@@ -102,10 +102,10 @@ impl<S: SignatureScheme> Commit<S> {
   #[must_use]
   pub(crate) async fn sign(
     signer: &impl Signer<Signature = <S as SignatureScheme>::Signature>,
-    genesis: impl Send + Sync + AsRef<[u8]>,
+    genesis: impl Send + AsRef<[u8]>,
     block_number: BlockNumber,
     round_number: RoundNumber,
-    block_hash: impl Send + Sync + AsRef<[u8]>,
+    block_hash: impl Send + AsRef<[u8]>,
   ) -> <S as SignatureScheme>::Signature {
     signer.sign(Self::signature_message(genesis, block_number, round_number, block_hash)).await
   }
@@ -114,10 +114,10 @@ impl<S: SignatureScheme> Commit<S> {
   pub(crate) fn verify_precommit(
     signature_scheme: &S,
     validator: &S::Validator,
-    genesis: impl Send + Sync + AsRef<[u8]>,
+    genesis: impl AsRef<[u8]>,
     block_number: BlockNumber,
     round_number: RoundNumber,
-    block_hash: impl Send + Sync + AsRef<[u8]>,
+    block_hash: impl AsRef<[u8]>,
     signature: &S::Signature,
   ) -> bool {
     signature_scheme.verify(
@@ -133,8 +133,8 @@ impl<S: SignatureScheme> Commit<S> {
     &self,
     validator_set: &impl ValidatorSet<Validator = S::Validator>,
     signature_scheme: &S,
-    genesis: impl Send + Sync + AsRef<[u8]>,
-    block_hash: impl Send + Sync + AsRef<[u8]>,
+    genesis: impl AsRef<[u8]>,
+    block_hash: impl AsRef<[u8]>,
   ) -> bool {
     // Ensure the signature was valid
     let Ok(validators) = signature_scheme.verify_aggregate(

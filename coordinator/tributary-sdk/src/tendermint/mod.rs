@@ -333,7 +333,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
 
   type BlockProposal = core::future::Ready<Self::Block>;
 
-  fn genesis(&self) -> impl Send + Sync + AsRef<[u8]> {
+  fn genesis(&self) -> impl Send + AsRef<[u8]> {
     &self.genesis
   }
 

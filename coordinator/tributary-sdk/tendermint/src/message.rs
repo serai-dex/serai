@@ -49,9 +49,28 @@ impl<A: AggregateSignature> fmt::Debug for ValidRound<A> {
 #[derive(Clone)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 pub(crate) enum Data<S: Signature, A: AggregateSignature, B: Block> {
-  Proposal { valid_round: Option<ValidRound<A>>, proposal: B },
-  Prevote { block: Option<B::Hash> },
-  Precommit { block_and_precommit_signature: Option<(B::Hash, S)> },
+  Proposal {
+    valid_round: Option<ValidRound<A>>,
+    #[borsh(bound(
+      serialize = "B: borsh::BorshSerialize",
+      deserialize = "B: borsh::BorshDeserialize"
+    ))]
+    proposal: B,
+  },
+  Prevote {
+    #[borsh(bound(
+      serialize = "B::Hash: borsh::BorshSerialize",
+      deserialize = "B::Hash: borsh::BorshDeserialize"
+    ))]
+    block: Option<B::Hash>,
+  },
+  Precommit {
+    #[borsh(bound(
+      serialize = "B::Hash: borsh::BorshSerialize",
+      deserialize = "B::Hash: borsh::BorshDeserialize"
+    ))]
+    block_and_precommit_signature: Option<(B::Hash, S)>,
+  },
 }
 
 impl<S: Signature, A: AggregateSignature, B: Block> PartialEq for Data<S, A, B> {
@@ -174,6 +193,10 @@ pub struct Message<V: Validator, S: Signature, A: AggregateSignature, B: Block> 
   pub(crate) validator: V,
   pub(crate) block_number: BlockNumber,
   pub(crate) round_number: RoundNumber,
+  #[borsh(bound(
+    serialize = "B: borsh::BorshSerialize, B::Hash: borsh::BorshSerialize",
+    deserialize = "B: borsh::BorshDeserialize, B::Hash: borsh::BorshDeserialize"
+  ))]
   pub(crate) data: Data<S, A, B>,
   pub(crate) signature: S,
 }
@@ -221,7 +244,7 @@ pub(crate) enum MessageError {
 impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, A, B> {
   #[must_use]
   pub(crate) fn signature_message(
-    genesis: impl Send + Sync + AsRef<[u8]>,
+    genesis: impl Send + AsRef<[u8]>,
     block_number: BlockNumber,
     round_number: RoundNumber,
     data: &Data<S, A, B>,
@@ -269,7 +292,7 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
   #[must_use]
   pub(crate) async fn sign(
     signer: &impl Signer<Validator = V, Signature = S>,
-    genesis: impl Send + Sync + AsRef<[u8]>,
+    genesis: impl Send + AsRef<[u8]>,
     block_number: BlockNumber,
     round_number: RoundNumber,
     data: Data<S, A, B>,
@@ -298,11 +321,12 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
     }
 
     let genesis = blockchain.genesis();
+    let genesis = genesis.as_ref();
     let signature_scheme = blockchain.signature_scheme();
 
     if !signature_scheme.verify(
       &self.validator,
-      Self::signature_message(&genesis, self.block_number, self.round_number, &self.data),
+      Self::signature_message(genesis, self.block_number, self.round_number, &self.data),
       &self.signature,
     ) {
       Err(MessageError::InvalidSignature)?;
@@ -316,7 +340,7 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
       if !signature_scheme
         .verify_aggregate(
           Self::signature_message(
-            &genesis,
+            genesis,
             self.block_number,
             *round_number,
             &Data::Prevote { block: Some(proposal.hash()) },

@@ -1,7 +1,10 @@
 use core::time::Duration;
 use std::time::{Instant, SystemTime};
 
-use crate::{Borshy, SignatureScheme, ValidRound, Blockchain};
+use crate::{Borshy, SignatureScheme, ValidRound, Block, Blockchain};
+
+trait BorshyBlockchain: Blockchain<Block: Borshy + Block<Hash: Borshy>> {}
+impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> BorshyBlockchain for B {}
 
 serai_db::schema!(TributaryState {
   BlockNumber: (genesis: &[u8]) -> crate::BlockNumber,
@@ -11,14 +14,14 @@ serai_db::schema!(TributaryState {
   PendingPrecommitTimeout: (genesis: &[u8]) -> u64,
   Step: (genesis: &[u8]) -> super::Step,
 
-  Valid: <B: Blockchain>(genesis: &[u8]) -> (
+  Valid: <B: BorshyBlockchain>(genesis: &[u8]) -> (
     ValidRound<<B::SignatureScheme as SignatureScheme>::AggregateSignature>,
     B::Block
   ),
 
   Locked: <Hash: Borshy>(genesis: &[u8]) -> (crate::RoundNumber, Hash),
 
-  OurLatestMessage: <B: Blockchain>(genesis: &[u8]) -> crate::MessageFor<B>,
+  OurLatestMessage: <B: BorshyBlockchain>(genesis: &[u8]) -> crate::MessageFor<B>,
 });
 
 pub(super) fn timeout_in_ms_since_epoch(timeout: Duration) -> u64 {

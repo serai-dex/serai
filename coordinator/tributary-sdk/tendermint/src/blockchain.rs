@@ -56,8 +56,7 @@ pub struct InvalidBlock;
 /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
 /// value which was successfully serialized, from a well-formed reader.
-#[expect(private_bounds)]
-pub trait Block: Send + Sync + Clone + crate::Borshy {
+pub trait Block: Send + Sync + Clone {
   // The type representing a block's hash.
   ///
   /// The `AsRef<[u8]>` implementation MUST return a slice with a consistent length for _any_
@@ -66,9 +65,7 @@ pub trait Block: Send + Sync + Clone + crate::Borshy {
   /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
   /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing
   /// a value which was successfully serialized, from a well-formed reader.
-  // TODO: Remove `borsh` bounds from this
-  #[expect(private_bounds)]
-  type Hash: Send + Sync + Clone + Copy + PartialEq + Eq + AsRef<[u8]> + crate::Borshy;
+  type Hash: Send + Clone + Copy + PartialEq + Eq + AsRef<[u8]>;
 
   /// The block's hash.
   ///
@@ -100,14 +97,14 @@ pub trait Blockchain {
   /// syncing, where this future will be occasionally polled (likely infrequently) for if the
   /// proposal is ready. It is RECOMMENDED to literally instantiate it with
   /// [`futures_channel::oneshot::Receiver`] or similar.
-  type BlockProposal: Send + Future<Output = Self::Block>;
+  type BlockProposal: Future<Output = Self::Block>;
 
   /// The genesis ID of this blockchain.
   ///
   /// This MUST be consistent for the lifetime of this blockchain and unique across blockchains.
   /// This DOES NOT need to satisfy any cryptographic binding properties and is solely used for
   /// domain-separation purposes. This MUST have a length less than or equal to [`u8::MAX`].
-  fn genesis(&self) -> impl Send + Sync + AsRef<[u8]>;
+  fn genesis(&self) -> impl Send + AsRef<[u8]>;
 
   /// The validator set's definition.
   ///

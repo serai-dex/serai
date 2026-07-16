@@ -47,7 +47,7 @@ serai_db::schema!(TendermintRoundMetrics {
 ///
 /// This accumulates messages from the current round into the necessary tallies for participating
 /// in Tendermint.
-pub(super) struct RoundMetrics<B: Blockchain> {
+pub(super) struct RoundMetrics<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> {
   /// The current block number.
   ///
   /// This is used to timestamp values in the database, allowing detecting if they're stale, and
@@ -87,13 +87,13 @@ pub(super) struct RoundMetrics<B: Blockchain> {
   >,
 }
 
-pub(super) struct ObservedProposal<'block, B: Blockchain> {
+pub(super) struct ObservedProposal<'block, B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> {
   pub(super) proposer: B::Validator,
   pub(super) valid_round: Option<RoundNumber>,
   pub(super) proposal: &'block B::Block,
 }
 
-impl<B: Blockchain> RoundMetrics<B> {
+impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> RoundMetrics<B> {
   /// The observed proposal for this round.
   #[must_use]
   pub(super) fn observed_proposal(&self) -> Option<ObservedProposal<'_, B>> {
@@ -561,7 +561,9 @@ impl<B: Blockchain> RoundMetrics<B> {
 /// This satisfies the requirements specifically necessary for proposals before invoking
 /// [`RoundMetrics::accumulate`].
 #[must_use]
-pub(super) fn structurally_validate_if_proposal<B: Blockchain>(
+pub(super) fn structurally_validate_if_proposal<
+  B: Blockchain<Block: Borshy + Block<Hash: Borshy>>,
+>(
   blockchain: &B,
   message: &MessageFor<B>,
 ) -> bool {
