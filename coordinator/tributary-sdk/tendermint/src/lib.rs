@@ -36,18 +36,8 @@ mod state;
 #[cfg(feature = "std")]
 pub(crate) use state::*;
 
-#[cfg(not(feature = "alloc"))]
-trait Borshy {}
-#[cfg(not(feature = "alloc"))]
-impl<B> Borshy for B {}
-
-#[cfg(feature = "alloc")]
-trait Borshy: borsh::BorshSerialize + borsh::BorshDeserialize {}
-#[cfg(feature = "alloc")]
-impl<B: borsh::BorshSerialize + borsh::BorshDeserialize> Borshy for B {}
-
 /// A view over the network used for consensus.
-pub trait Network<V: Validator, S: Signature, A: AggregateSignature, B: Block>: Sized {
+pub trait Network<V: Validator, S: Signature, A: AggregateSignature, B: Block> {
   /// The expected average-case latency of the network.
   ///
   /// This should be sufficient for a supermajority of validators to communicate, in the average
@@ -109,10 +99,12 @@ mod tendermint {
     We expect this property, causing us to use `async-channel`.
   */
   use async_channel::{Sender, Receiver};
+
+  use borsh::{BorshSerialize, BorshDeserialize};
   use serai_db::{Transaction as _, Db};
 
   use crate::{
-    Borshy, BlockNumber, ValidatorSet as _, SignatureScheme, Block, Commit, Blockchain, MessageFor,
+    BlockNumber, ValidatorSet as _, SignatureScheme, Block, CommitFor, Blockchain, MessageFor,
     MessageError, Signer, Network, State, Or,
   };
 
@@ -125,12 +117,19 @@ mod tendermint {
   /// The handle for the Tendermint process.
   pub struct TendermintHandle<B: Blockchain> {
     block_number: Arc<AtomicU64>,
-    sync: Sender<(B::Block, Commit<B::SignatureScheme>)>,
+    sync: Sender<(B::Block, CommitFor<B>)>,
     message: Sender<MessageFor<B>>,
   }
 
   struct TendermintProcess<
-    B: Blockchain<Block: Borshy + Block<Hash: Borshy>>,
+    B: Blockchain<
+      Validator: BorshSerialize + BorshDeserialize,
+      SignatureScheme: SignatureScheme<
+        Signature: BorshSerialize + BorshDeserialize,
+        AggregateSignature: BorshSerialize + BorshDeserialize,
+      >,
+      Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
+    >,
     S: Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
@@ -143,7 +142,7 @@ mod tendermint {
       B::Block,
     >,
   > {
-    sync: Receiver<(B::Block, Commit<B::SignatureScheme>)>,
+    sync: Receiver<(B::Block, CommitFor<B>)>,
     message: Receiver<MessageFor<B>>,
 
     state: State<B>,
@@ -154,7 +153,14 @@ mod tendermint {
   }
 
   impl<
-      B: Blockchain<Block: Borshy + Block<Hash: Borshy>>,
+      B: Blockchain<
+        Validator: BorshSerialize + BorshDeserialize,
+        SignatureScheme: SignatureScheme<
+          Signature: BorshSerialize + BorshDeserialize,
+          AggregateSignature: BorshSerialize + BorshDeserialize,
+        >,
+        Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
+      >,
       S: Signer<
         Validator = B::Validator,
         Signature = <B::SignatureScheme as SignatureScheme>::Signature,
@@ -299,9 +305,18 @@ mod tendermint {
     /// 1) It is of no further use, and accordingly its state may be undefined
     /// 2) The process terminates, so that the Tendermint process will be re-initialized from the
     ///    disk before any further use
-    #[expect(private_bounds)]
-    pub async fn process<
-      B: Send + Sync + Blockchain<Block: Borshy + Block<Hash: Borshy>, BlockProposal: Send>,
+    pub fn process<
+      B: Send
+        + Sync
+        + Blockchain<
+          Validator: BorshSerialize + BorshDeserialize,
+          SignatureScheme: SignatureScheme<
+            Signature: BorshSerialize + BorshDeserialize,
+            AggregateSignature: BorshSerialize + BorshDeserialize,
+          >,
+          Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
+          BlockProposal: Send,
+        >,
       S: Send
         + Sync
         + Signer<
@@ -322,56 +337,58 @@ mod tendermint {
       mut db: D,
       mut network: N,
       proposal: B::Block,
-    ) -> (TendermintHandle<B>, impl Send + Future<Output = ()>) {
-      // Sync blocks with a capacity of the amount of blocks per 5 minutes
-      let (sync_send, sync_recv) = async_channel::bounded({
-        use core::time::Duration;
-        let time_per_block = N::BLOCK_DOWNLOADING_TIME
-          .saturating_add(N::BLOCK_PROCESSING_TIME)
-          .saturating_add(N::LATENCY_TIME.saturating_mul(3));
-        let blocks_per_minute =
-          Duration::from_mins(5).as_millis().div_ceil(time_per_block.as_millis().max(1));
-        // Limit this to a sane range
-        usize::try_from(blocks_per_minute).unwrap_or(usize::MAX).clamp(1, 64)
-      });
+    ) -> impl Send + Future<Output = (TendermintHandle<B>, impl Send + Future<Output = ()>)> {
+      async move {
+        // Sync blocks with a capacity of the amount of blocks per 5 minutes
+        let (sync_send, sync_recv) = async_channel::bounded({
+          use core::time::Duration;
+          let time_per_block = N::BLOCK_DOWNLOADING_TIME
+            .saturating_add(N::BLOCK_PROCESSING_TIME)
+            .saturating_add(N::LATENCY_TIME.saturating_mul(3));
+          let blocks_per_minute =
+            Duration::from_mins(5).as_millis().div_ceil(time_per_block.as_millis().max(1));
+          // Limit this to a sane range
+          usize::try_from(blocks_per_minute).unwrap_or(usize::MAX).clamp(1, 64)
+        });
 
-      /*
-        Limit the amount of messages proportionally to the amount of validators.
+        /*
+          Limit the amount of messages proportionally to the amount of validators.
 
-        So long as validators are honest and only send one message within a period, this bound will
-        only be hit if either:
-        1) Messages aren't drained faster than the network's declared latency time
-        2) This validators is slower than the supermajority of validators
-        where either cases are reasonable to establish the bound regarding.
+          So long as validators are honest and only send one message within a period, this bound
+          will only be hit if either:
+          1) Messages aren't drained faster than the network's declared latency time
+          2) This validators is slower than the supermajority of validators
+          where either cases are reasonable to establish the bound regarding.
 
-        We do further scale the capacity by `2` to handle _some_ overages.
-      */
-      let (message_send, message_recv) =
-        async_channel::bounded(2 * blockchain.validator_set().validators().into_iter().count());
+          We do further scale the capacity by `2` to handle _some_ overages.
+        */
+        let (message_send, message_recv) =
+          async_channel::bounded(2 * blockchain.validator_set().validators().into_iter().count());
 
-      let mut txn = db.txn();
-      let (state, messages) = State::new::<N>(&blockchain, &signer, &mut txn, proposal).await;
-      txn.commit();
+        let mut txn = db.txn();
+        let (state, messages) = State::new::<N>(&blockchain, &signer, &mut txn, proposal).await;
+        txn.commit();
 
-      for message in messages {
-        network.broadcast(message).await;
+        for message in messages {
+          network.broadcast(message).await;
+        }
+
+        let block_number = state.block_number_ref();
+        let mut internal = TendermintProcess {
+          sync: sync_recv,
+          message: message_recv,
+
+          state,
+          blockchain,
+          signer,
+          db,
+          network,
+        };
+
+        (TendermintHandle { block_number, sync: sync_send, message: message_send }, async move {
+          internal.run().await;
+        })
       }
-
-      let block_number = state.block_number_ref();
-      let mut internal = TendermintProcess {
-        sync: sync_recv,
-        message: message_recv,
-
-        state,
-        blockchain,
-        signer,
-        db,
-        network,
-      };
-
-      (TendermintHandle { block_number, sync: sync_send, message: message_send }, async move {
-        internal.run().await;
-      })
     }
   }
 
@@ -397,7 +414,7 @@ mod tendermint {
     pub async fn sync(
       &mut self,
       block: B::Block,
-      commit: Commit<B::SignatureScheme>,
+      commit: CommitFor<B>,
     ) -> Result<(), ProcessTerminated> {
       self.sync.send((block, commit)).await.map_err(|_| ProcessTerminated)
     }

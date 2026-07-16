@@ -10,7 +10,7 @@ use borsh::BorshDeserialize as _;
 use ciphersuite::*;
 use dalek_ff_group::Ristretto;
 
-use ::tendermint::{Block as _, Commit, Tendermint, TendermintHandle};
+use ::tendermint::{Block as _, Commit, SignatureScheme, Tendermint, TendermintHandle};
 
 use ::tendermint::{Blockchain as _, MessageFor};
 pub use ::tendermint::SlashReason;
@@ -272,7 +272,11 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
 
     let block = TendermintBlock(block.serialize());
     let mut commit_ref = commit.as_slice();
-    let Ok(commit) = Commit::<Validators>::deserialize_reader(&mut commit_ref) else {
+    let Ok(commit) =
+      Commit::<<Validators as SignatureScheme>::AggregateSignature>::deserialize_reader(
+        &mut commit_ref,
+      )
+    else {
       log::error!("sent an invalidly serialized commit");
       return false;
     };
@@ -362,10 +366,16 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
   pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
     Blockchain::<D, T>::commit_from_db(&self.0, self.1, hash)
   }
-  pub fn parsed_commit(&self, hash: &[u8; 32]) -> Option<Commit<Validators>> {
-    self
-      .commit(hash)
-      .map(|commit| Commit::<Validators>::deserialize_reader(&mut commit.as_slice()).unwrap())
+  pub fn parsed_commit(
+    &self,
+    hash: &[u8; 32],
+  ) -> Option<Commit<<Validators as SignatureScheme>::AggregateSignature>> {
+    self.commit(hash).map(|commit| {
+      Commit::<<Validators as SignatureScheme>::AggregateSignature>::deserialize_reader(
+        &mut commit.as_slice(),
+      )
+      .unwrap()
+    })
   }
   pub fn block_after(&self, hash: &[u8; 32]) -> Option<[u8; 32]> {
     Blockchain::<D, T>::block_after(&self.0, self.1, hash)

@@ -2,14 +2,8 @@ use core::fmt;
 
 use crate::{
   BlockNumber, RoundNumber, Validator, ValidatorSet, Signature, AggregateSignature,
-  SignatureScheme, Block, Commit, ValidRound, Data, Message,
+  SignatureScheme, BlockHash, Block, Commit, Blockchain, ValidRound, Data, Message,
 };
-
-// We want to replace `borsh`'s bounds, which requires specifying bounds, so we stub them with this
-#[cfg(feature = "alloc")]
-trait NoBounds {}
-#[cfg(feature = "alloc")]
-impl<T> NoBounds for T {}
 
 /// A pair of datas which equivocate with each other.
 ///
@@ -18,49 +12,25 @@ impl<T> NoBounds for T {}
 /// message.
 #[derive(Clone)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-pub(crate) enum EquivocatingData<S: Signature, A: AggregateSignature, B: Block> {
+pub(crate) enum EquivocatingData<S: Signature, A: AggregateSignature, H: BlockHash> {
   Proposal {
     first_valid_round: Option<ValidRound<A>>,
-    #[borsh(bound(
-      serialize = "B: NoBounds, B::Hash: borsh::BorshSerialize",
-      deserialize = "B: NoBounds, B::Hash: borsh::BorshDeserialize"
-    ))]
-    first_proposal: B::Hash,
+    first_proposal: H,
     second_valid_round: Option<ValidRound<A>>,
-    #[borsh(bound(
-      serialize = "B: NoBounds, B::Hash: borsh::BorshSerialize",
-      deserialize = "B: NoBounds, B::Hash: borsh::BorshDeserialize"
-    ))]
-    second_proposal: B::Hash,
+    second_proposal: H,
   },
   Prevote {
-    #[borsh(bound(
-      serialize = "B: NoBounds, B::Hash: borsh::BorshSerialize",
-      deserialize = "B: NoBounds, B::Hash: borsh::BorshDeserialize"
-    ))]
-    first_block: Option<B::Hash>,
-    #[borsh(bound(
-      serialize = "B: NoBounds, B::Hash: borsh::BorshSerialize",
-      deserialize = "B: NoBounds, B::Hash: borsh::BorshDeserialize"
-    ))]
-    second_block: Option<B::Hash>,
+    first_block: Option<H>,
+    second_block: Option<H>,
   },
   Precommit {
-    #[borsh(bound(
-      serialize = "B: NoBounds, B::Hash: borsh::BorshSerialize",
-      deserialize = "B: NoBounds, B::Hash: borsh::BorshDeserialize"
-    ))]
-    first_block_and_precommit_signature: Option<(B::Hash, S)>,
-    #[borsh(bound(
-      serialize = "B: NoBounds, B::Hash: borsh::BorshSerialize",
-      deserialize = "B: NoBounds, B::Hash: borsh::BorshDeserialize"
-    ))]
-    second_block_and_precommit_signature: Option<(B::Hash, S)>,
+    first_block_and_precommit_signature: Option<(H, S)>,
+    second_block_and_precommit_signature: Option<(H, S)>,
   },
 }
 
-impl<S: Signature, A: AggregateSignature, B: Block<Hash: fmt::Debug>> fmt::Debug
-  for EquivocatingData<S, A, B>
+impl<S: Signature, A: AggregateSignature, H: fmt::Debug + BlockHash> fmt::Debug
+  for EquivocatingData<S, A, H>
 {
   fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
@@ -110,7 +80,7 @@ impl<'hash> Block for StubBlock<'hash> {
   }
 }
 
-impl<S: Signature, A: AggregateSignature, B: Block> EquivocatingData<S, A, B> {
+impl<S: Signature, A: AggregateSignature, H: BlockHash> EquivocatingData<S, A, H> {
   fn split(&self) -> (Data<S, A, StubBlock<'_>>, Data<S, A, StubBlock<'_>>) {
     match self {
       EquivocatingData::Proposal {
@@ -154,41 +124,17 @@ impl<S: Signature, A: AggregateSignature, B: Block> EquivocatingData<S, A, B> {
 /// Evidence for a slash.
 #[derive(Clone)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-pub(crate) enum Evidence<S: Signature, A: AggregateSignature, B: Block> {
+pub(crate) enum Evidence<S: Signature, A: AggregateSignature, H: BlockHash> {
   /// The validator equivocated, sending two distinct messages when they should have only sent one.
-  Equivocation {
-    #[borsh(bound(
-      serialize = "B: NoBounds, B::Hash: borsh::BorshSerialize",
-      deserialize = "B: NoBounds, B::Hash: borsh::BorshDeserialize"
-    ))]
-    data: EquivocatingData<S, A, B>,
-    first_signature: S,
-    second_signature: S,
-  },
+  Equivocation { data: EquivocatingData<S, A, H>, first_signature: S, second_signature: S },
   /// The validator created an invalid proposal.
-  InvalidProposal {
-    valid_round: Option<ValidRound<A>>,
-    #[borsh(bound(
-      serialize = "B: NoBounds, B::Hash: borsh::BorshSerialize",
-      deserialize = "B: NoBounds, B::Hash: borsh::BorshDeserialize"
-    ))]
-    proposal: B::Hash,
-    signature: S,
-  },
+  InvalidProposal { valid_round: Option<ValidRound<A>>, proposal: H, signature: S },
   /// The validator created an invalid precommit.
-  InvalidPrecommit {
-    #[borsh(bound(
-      serialize = "B: NoBounds, B::Hash: borsh::BorshSerialize",
-      deserialize = "B: NoBounds, B::Hash: borsh::BorshDeserialize"
-    ))]
-    block: B::Hash,
-    precommit_signature: S,
-    signature: S,
-  },
+  InvalidPrecommit { block: H, precommit_signature: S, signature: S },
 }
 
-impl<S: Signature, A: AggregateSignature, B: Block<Hash: fmt::Debug>> fmt::Debug
-  for Evidence<S, A, B>
+impl<S: Signature, A: AggregateSignature, H: fmt::Debug + BlockHash> fmt::Debug
+  for Evidence<S, A, H>
 {
   fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
@@ -213,18 +159,21 @@ impl<S: Signature, A: AggregateSignature, B: Block<Hash: fmt::Debug>> fmt::Debug
 /// This contains the necessary evidence to convince other validators of this slash.
 #[derive(Clone)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-pub struct SlashReason<S: Signature, A: AggregateSignature, B: Block> {
+pub struct SlashReason<S: Signature, A: AggregateSignature, H: BlockHash> {
   pub(crate) block_number: BlockNumber,
   pub(crate) round_number: RoundNumber,
-  #[borsh(bound(
-    serialize = "B: NoBounds, B::Hash: borsh::BorshSerialize",
-    deserialize = "B: NoBounds, B::Hash: borsh::BorshDeserialize"
-  ))]
-  pub(crate) evidence: Evidence<S, A, B>,
+  pub(crate) evidence: Evidence<S, A, H>,
 }
 
-impl<S: Signature, A: AggregateSignature, B: Block<Hash: fmt::Debug>> fmt::Debug
-  for SlashReason<S, A, B>
+/// The [`SlashReason`] type for a [`Blockchain`].
+pub type SlashReasonFor<B> = SlashReason<
+  <<B as Blockchain>::SignatureScheme as SignatureScheme>::Signature,
+  <<B as Blockchain>::SignatureScheme as SignatureScheme>::AggregateSignature,
+  <<B as Blockchain>::Block as Block>::Hash,
+>;
+
+impl<S: Signature, A: AggregateSignature, H: fmt::Debug + BlockHash> fmt::Debug
+  for SlashReason<S, A, H>
 {
   fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
     let Self { block_number, round_number, evidence } = self;
@@ -241,7 +190,7 @@ impl<S: Signature, A: AggregateSignature, B: Block<Hash: fmt::Debug>> fmt::Debug
 #[derive(Clone, Debug)]
 pub struct InvalidReason;
 
-impl<S: Signature, A: AggregateSignature, B: Block> SlashReason<S, A, B> {
+impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
   /// Verify the reasoning for this slash.
   pub fn verify<V: Validator>(
     &self,
@@ -301,11 +250,11 @@ impl<S: Signature, A: AggregateSignature, B: Block> SlashReason<S, A, B> {
               ((*round_number) < self.round_number) &&
                 signature_scheme
                   .verify_aggregate(
-                    Message::<V, S, A, B>::signature_message(
+                    Message::<V, S, A, StubBlock<'_>>::signature_message(
                       genesis.as_ref(),
                       self.block_number,
                       *round_number,
-                      &Data::Prevote { block: Some(*proposal) },
+                      &Data::Prevote { block: Some(proposal.as_ref()) },
                     ),
                     aggregate_signature,
                   )

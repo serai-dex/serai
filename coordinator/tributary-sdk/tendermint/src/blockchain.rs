@@ -1,6 +1,6 @@
 use core::{future::Future, num::NonZero};
 
-use crate::{Validator, SignatureScheme, ValidatorSet, Commit, SlashReason};
+use crate::{Validator, SignatureScheme, ValidatorSet, CommitFor, SlashReasonFor};
 
 /// A block's number.
 ///
@@ -47,6 +47,17 @@ impl From<RoundNumber> for u64 {
   }
 }
 
+/// A representation of a block's hash.
+///
+/// This is effectively a trait alias where a potential representation of a block's hash is any
+/// type which satisfies all of these bounds, and this is implemented for all such types.
+///
+/// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
+/// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
+/// value which was successfully serialized, from a well-formed reader.
+pub trait BlockHash: Send + Clone + Copy + PartialEq + Eq + AsRef<[u8]> {}
+impl<H: Send + Clone + Copy + PartialEq + Eq + AsRef<[u8]>> BlockHash for H {}
+
 /// The block was invalid.
 #[derive(Clone, Copy, Debug)]
 pub struct InvalidBlock;
@@ -65,7 +76,7 @@ pub trait Block: Send + Sync + Clone {
   /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
   /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing
   /// a value which was successfully serialized, from a well-formed reader.
-  type Hash: Send + Clone + Copy + PartialEq + Eq + AsRef<[u8]>;
+  type Hash: BlockHash;
 
   /// The block's hash.
   ///
@@ -149,7 +160,7 @@ pub trait Blockchain {
   fn add_block(
     &mut self,
     block: Self::Block,
-    commit: Commit<Self::SignatureScheme>,
+    commit: CommitFor<Self>,
   ) -> impl Send + Future<Output = Self::BlockProposal>;
 
   /// Record a missed proposal.
@@ -172,13 +183,5 @@ pub trait Blockchain {
   /// The actual recording of this slash and its interpretation is left entirely to the application
   /// layer. All slashes have the necessary evidence and can be verified by this library.
   // TODO: `&mut self`?
-  fn slash(
-    &self,
-    validator: Self::Validator,
-    slash_reason: SlashReason<
-      <Self::SignatureScheme as SignatureScheme>::Signature,
-      <Self::SignatureScheme as SignatureScheme>::AggregateSignature,
-      Self::Block,
-    >,
-  );
+  fn slash(&self, validator: Self::Validator, slash_reason: SlashReasonFor<Self>);
 }

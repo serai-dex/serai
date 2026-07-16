@@ -181,7 +181,7 @@ impl Blockchain for TestNetwork {
   fn add_block(
     &mut self,
     block: Self::Block,
-    commit: Commit<Self::SignatureScheme>,
+    commit: Commit<<Self::SignatureScheme as SignatureScheme>::AggregateSignature>,
   ) -> impl Send + Future<Output = Self::BlockProposal> {
     assert!(block.valid);
     assert!(commit.verify(
@@ -206,7 +206,7 @@ impl Blockchain for TestNetwork {
     slash_reason: SlashReason<
       <Self::SignatureScheme as SignatureScheme>::Signature,
       <Self::SignatureScheme as SignatureScheme>::AggregateSignature,
-      Self::Block,
+      <Self::Block as Block>::Hash,
     >,
   ) {
     panic!("test environment incurred a slash: {slash_reason:?}")

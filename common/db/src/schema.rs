@@ -38,7 +38,7 @@
 ///   }
 /// );
 /// ```
-// TODO: This doesn't support `A + B` generics
+// TODO: This doesn't support `T: A + B` nor `T: A<B>` generics
 #[macro_export]
 macro_rules! schema {
   ($Schema: ident {

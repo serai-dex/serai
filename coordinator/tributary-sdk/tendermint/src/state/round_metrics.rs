@@ -3,9 +3,11 @@ use std::collections::HashMap;
 use serai_db::{Get, Transaction};
 
 use crate::{
-  Borshy, SignatureScheme, ValidatorSet, BlockNumber, RoundNumber, Block, Commit, Blockchain,
+  SignatureScheme, ValidatorSet, BlockNumber, RoundNumber, Block, Commit, CommitFor, Blockchain,
   ValidRound, Data, Evidence, SlashReason, Message, MessageFor,
 };
+
+use super::{Borshy, BorshyBlockchain};
 
 /*
   The database for this module.
@@ -47,7 +49,7 @@ serai_db::schema!(TendermintRoundMetrics {
 ///
 /// This accumulates messages from the current round into the necessary tallies for participating
 /// in Tendermint.
-pub(super) struct RoundMetrics<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> {
+pub(super) struct RoundMetrics<B: Blockchain> {
   /// The current block number.
   ///
   /// This is used to timestamp values in the database, allowing detecting if they're stale, and
@@ -87,13 +89,13 @@ pub(super) struct RoundMetrics<B: Blockchain<Block: Borshy + Block<Hash: Borshy>
   >,
 }
 
-pub(super) struct ObservedProposal<'block, B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> {
+pub(super) struct ObservedProposal<'block, B: Blockchain> {
   pub(super) proposer: B::Validator,
   pub(super) valid_round: Option<RoundNumber>,
   pub(super) proposal: &'block B::Block,
 }
 
-impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> RoundMetrics<B> {
+impl<B: BorshyBlockchain> RoundMetrics<B> {
   /// The observed proposal for this round.
   #[must_use]
   pub(super) fn observed_proposal(&self) -> Option<ObservedProposal<'_, B>> {
@@ -156,7 +158,7 @@ impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> RoundMetrics<B> {
   ///
   /// This assumes all accumulated precommits had valid signatures.
   #[must_use]
-  pub(super) fn commit(&self, blockchain: &B) -> Option<(B::Block, Commit<B::SignatureScheme>)> {
+  pub(super) fn commit(&self, blockchain: &B) -> Option<(B::Block, CommitFor<B>)> {
     let ObservedProposal { proposer: _, valid_round: _, proposal } = self.observed_proposal()?;
 
     let validator_set = blockchain.validator_set();
@@ -171,7 +173,7 @@ impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> RoundMetrics<B> {
     let weight = &mut weight;
     let mut validators = alloc::vec![];
     let aggregate_signature = blockchain.signature_scheme().aggregate(
-      Commit::<B::SignatureScheme>::signature_message(
+      CommitFor::<B>::signature_message(
         blockchain.genesis().as_ref(),
         self.block_number,
         self.round_number,
@@ -562,9 +564,7 @@ impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> RoundMetrics<B> {
 /// This satisfies the requirements specifically necessary for proposals before invoking
 /// [`RoundMetrics::accumulate`].
 #[must_use]
-pub(super) fn structurally_validate_if_proposal<
-  B: Blockchain<Block: Borshy + Block<Hash: Borshy>>,
->(
+pub(super) fn structurally_validate_if_proposal<B: Blockchain>(
   blockchain: &B,
   message: &MessageFor<B>,
 ) -> bool {

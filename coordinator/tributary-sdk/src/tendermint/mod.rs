@@ -26,7 +26,7 @@ use serai_db::Db;
 use borsh::{BorshSerialize, BorshDeserialize};
 use tendermint::{
   InvalidAggregateSignature, SignatureScheme, Signer as SignerTrait, Block as BlockTrait,
-  InvalidBlock, Commit, Blockchain as BlockchainTrait, MessageFor, SlashReason, Network,
+  InvalidBlock, CommitFor, Blockchain as BlockchainTrait, MessageFor, SlashReasonFor, Network,
 };
 
 use tokio::sync::RwLock;
@@ -395,7 +395,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
   fn add_block(
     &mut self,
     serialized_block: Self::Block,
-    commit: Commit<Self::SignatureScheme>,
+    commit: CommitFor<Self>,
   ) -> impl Send + Future<Output = Self::BlockProposal> {
     #[expect(clippy::async_yields_async)]
     async move {
@@ -457,15 +457,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
     // TODO
   }
 
-  fn slash(
-    &self,
-    validator: Self::Validator,
-    slash_reason: SlashReason<
-      <Self::SignatureScheme as SignatureScheme>::Signature,
-      <Self::SignatureScheme as SignatureScheme>::AggregateSignature,
-      Self::Block,
-    >,
-  ) {
+  fn slash(&self, validator: Self::Validator, slash_reason: SlashReasonFor<Self>) {
     // TODO
     tokio::runtime::Handle::current().block_on(async move {
       log::error!(

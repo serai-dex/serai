@@ -10,7 +10,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::Transaction;
 
 use crate::{
-  Borshy, SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, Commit, Blockchain,
+  SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, CommitFor, Blockchain,
   Signer, ValidRound, Data, MessageFor, MessageError, EquivocatingData, Evidence, SlashReason,
   Network,
 };
@@ -22,6 +22,27 @@ mod round_metrics;
 use round_metrics::*;
 
 mod db;
+
+pub(crate) trait Borshy: borsh::BorshSerialize + borsh::BorshDeserialize {}
+impl<B: borsh::BorshSerialize + borsh::BorshDeserialize> Borshy for B {}
+
+pub(crate) trait BorshyBlockchain:
+  Blockchain<
+  Validator: Borshy,
+  SignatureScheme: SignatureScheme<Signature: Borshy, AggregateSignature: Borshy>,
+  Block: Borshy + Block<Hash: Borshy>,
+>
+{
+}
+impl<
+    B: Blockchain<
+      Validator: Borshy,
+      SignatureScheme: SignatureScheme<Signature: Borshy, AggregateSignature: Borshy>,
+      Block: Borshy + Block<Hash: Borshy>,
+    >,
+  > BorshyBlockchain for B
+{
+}
 
 /// The current step within the round.
 #[derive(BorshSerialize, BorshDeserialize)]
@@ -60,7 +81,7 @@ impl<B: Blockchain> RoundMessages<B> {
 
   /// The messages within this container.
   #[must_use]
-  fn messages(self) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
+  fn messages(self) -> impl IntoIterator<Item = MessageFor<B>> {
     let Self { proposal, prevote, precommit } = self;
     [proposal, prevote, precommit].into_iter().flatten()
   }
@@ -70,7 +91,7 @@ impl<B: Blockchain> RoundMessages<B> {
 ///
 /// This is intertwined with participating in consensus and can not be used for third-party
 /// observation.
-pub(crate) struct State<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> {
+pub(crate) struct State<B: Blockchain> {
   /// The current block number.
   block_number: BlockNumber,
   /// A public reference to the block number.
@@ -127,7 +148,7 @@ pub(crate) struct State<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> {
   our_latest_message: Option<MessageFor<B>>,
 }
 
-impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> State<B> {
+impl<B: BorshyBlockchain> State<B> {
   /// The current block number.
   #[must_use]
   pub(super) fn block_number(&self) -> BlockNumber {
@@ -428,7 +449,7 @@ impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> State<B> {
     }
 
     // L40-L41
-    let precommit_signature = Commit::<B::SignatureScheme>::sign(
+    let precommit_signature = CommitFor::<B>::sign::<B::SignatureScheme>(
       signer,
       genesis,
       self.block_number,
@@ -875,20 +896,14 @@ impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> State<B> {
   }
 }
 
-pub(crate) struct TimeoutExpired<
-  'state,
-  'blockchain,
-  'signer,
-  B: Blockchain<Block: Borshy + Block<Hash: Borshy>>,
-  S,
-> {
+pub(crate) struct TimeoutExpired<'state, 'blockchain, 'signer, B: Blockchain, S> {
   state: &'state mut State<B>,
   blockchain: &'blockchain B,
   signer: &'signer S,
 }
 
 impl<
-    B: Blockchain<Block: Borshy + Block<Hash: Borshy>>,
+    B: BorshyBlockchain,
     S: Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
@@ -944,7 +959,7 @@ impl<
   }
 }
 
-impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> State<B> {
+impl<B: BorshyBlockchain> State<B> {
   /// A future representing the current timeout.
   ///
   /// This function is cancel-safe, but has an output whose future is _not_ cancel-safe. It MUST be
@@ -1018,7 +1033,7 @@ impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> State<B> {
     >,
     txn: &mut impl Transaction,
     block: B::Block,
-    commit: Commit<B::SignatureScheme>,
+    commit: CommitFor<B>,
   ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
     let Some(next_block_number) = self.block_number.0.checked_add(1) else {
       // Stall if the block number is at the maximum, as we can't represent further blocks
@@ -1044,7 +1059,7 @@ impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> State<B> {
         our_latest_message,
       } = self;
 
-      *proposal = Box::pin(BlockProposal::new(blockchain.add_block(block, commit).await));
+      proposal.set(BlockProposal::new(blockchain.add_block(block, commit).await));
 
       let genesis = blockchain.genesis();
       let genesis = genesis.as_ref();

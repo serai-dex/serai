@@ -1,12 +1,16 @@
-use crate::{BlockNumber, RoundNumber, Validator, ValidatorSet, SignatureScheme, Signer};
+use crate::{
+  BlockNumber, RoundNumber, Validator, ValidatorSet, AggregateSignature, SignatureScheme, Signer,
+  Blockchain,
+};
 
 /// A commit for a specific block.
 ///
 /// In order for this to be valid, the signature MUST be valid and aggregated from signatures by
-/// validators whose weight passes the threshold.
+/// validators whose weight is sufficient for the threshold. Deserialization or instantiation alone
+/// DOES NOT signify validity.
 #[derive(Debug)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
-pub struct Commit<S: SignatureScheme> {
+pub struct Commit<A: AggregateSignature> {
   /// The block number this is a commit for.
   pub(crate) block_number: BlockNumber,
 
@@ -19,10 +23,14 @@ pub struct Commit<S: SignatureScheme> {
   pub(crate) round_number: RoundNumber,
 
   /// The aggregate signature for the validators used to create this commit.
-  pub(crate) aggregate_signature: S::AggregateSignature,
+  pub(crate) aggregate_signature: A,
 }
 
-impl<S: SignatureScheme> Clone for Commit<S> {
+/// The [`Commit`] type for a [`Blockchain`].
+pub type CommitFor<B> =
+  Commit<<<B as Blockchain>::SignatureScheme as SignatureScheme>::AggregateSignature>;
+
+impl<A: AggregateSignature> Clone for Commit<A> {
   fn clone(&self) -> Self {
     Self {
       block_number: self.block_number,
@@ -50,7 +58,7 @@ pub(crate) fn validators_satisfy_threshold<V: Validator>(
     .is_some_and(|sum| sum >= validator_set.threshold())
 }
 
-impl<S: SignatureScheme> Commit<S> {
+impl<A: AggregateSignature> Commit<A> {
   /// The block number this commit is for.
   #[must_use]
   pub fn block_number(&self) -> BlockNumber {
@@ -100,7 +108,7 @@ impl<S: SignatureScheme> Commit<S> {
   }
 
   #[must_use]
-  pub(crate) async fn sign(
+  pub(crate) async fn sign<S: SignatureScheme<AggregateSignature = A>>(
     signer: &impl Signer<Signature = <S as SignatureScheme>::Signature>,
     genesis: impl Send + AsRef<[u8]>,
     block_number: BlockNumber,
@@ -111,7 +119,7 @@ impl<S: SignatureScheme> Commit<S> {
   }
 
   #[must_use]
-  pub(crate) fn verify_precommit(
+  pub(crate) fn verify_precommit<S: SignatureScheme<AggregateSignature = A>>(
     signature_scheme: &S,
     validator: &S::Validator,
     genesis: impl AsRef<[u8]>,
@@ -129,7 +137,7 @@ impl<S: SignatureScheme> Commit<S> {
 
   /// Verify a commit.
   #[must_use]
-  pub fn verify(
+  pub fn verify<S: SignatureScheme<AggregateSignature = A>>(
     &self,
     validator_set: &impl ValidatorSet<Validator = S::Validator>,
     signature_scheme: &S,
@@ -217,7 +225,9 @@ mod tests {
       .concat();
 
       let mut concatenated = alloc::vec![];
-      for chunk in Commit::<crate::TestSignatureScheme>::signature_message(
+      for chunk in Commit::<
+        <crate::TestSignatureScheme as SignatureScheme>::AggregateSignature
+      >::signature_message(
         commit.genesis(),
         commit.block_number,
         commit.round_number,
@@ -246,7 +256,9 @@ mod tests {
     for i in 0 .. u8::MAX {
       let signer = signature_scheme.signer(i);
       let commit = RandomCommit::new();
-      let Poll::Ready(mut signature) = pin!(Commit::<TestSignatureScheme>::sign(
+      let Poll::Ready(mut signature) = pin!(Commit::<
+        <TestSignatureScheme as SignatureScheme>::AggregateSignature,
+      >::sign::<TestSignatureScheme>(
         &signer,
         commit.genesis(),
         commit.block_number,
@@ -256,25 +268,29 @@ mod tests {
       .poll(&mut context) else {
         panic!("`TestSignatureScheme::sign` returned `Poll::Pending`")
       };
-      assert!(Commit::<TestSignatureScheme>::verify_precommit(
-        &signature_scheme,
-        &i,
-        commit.genesis(),
-        commit.block_number,
-        commit.round_number,
-        commit.block_hash(),
-        &signature
-      ));
+      assert!(
+        Commit::<<TestSignatureScheme as SignatureScheme>::AggregateSignature>::verify_precommit(
+          &signature_scheme,
+          &i,
+          commit.genesis(),
+          commit.block_number,
+          commit.round_number,
+          commit.block_hash(),
+          &signature
+        )
+      );
       signature[0] ^= 1;
-      assert!(!Commit::<TestSignatureScheme>::verify_precommit(
-        &signature_scheme,
-        &i,
-        commit.genesis(),
-        commit.block_number,
-        commit.round_number,
-        commit.block_hash(),
-        &signature
-      ));
+      assert!(
+        !Commit::<<TestSignatureScheme as SignatureScheme>::AggregateSignature>::verify_precommit(
+          &signature_scheme,
+          &i,
+          commit.genesis(),
+          commit.block_number,
+          commit.round_number,
+          commit.block_hash(),
+          &signature
+        )
+      );
     }
   }
 }

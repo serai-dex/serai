@@ -1,10 +1,9 @@
 use core::time::Duration;
 use std::time::{Instant, SystemTime};
 
-use crate::{Borshy, SignatureScheme, ValidRound, Block, Blockchain};
+use crate::{SignatureScheme, ValidRound};
 
-trait BorshyBlockchain: Blockchain<Block: Borshy + Block<Hash: Borshy>> {}
-impl<B: Blockchain<Block: Borshy + Block<Hash: Borshy>>> BorshyBlockchain for B {}
+use super::{Borshy, BorshyBlockchain};
 
 serai_db::schema!(TributaryState {
   BlockNumber: (genesis: &[u8]) -> crate::BlockNumber,

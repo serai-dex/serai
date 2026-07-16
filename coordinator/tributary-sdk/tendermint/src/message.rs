@@ -19,6 +19,10 @@ use crate::{
 /// linear to the individual signatures, such as by a naïve concatenation into a list, though with
 /// threshold signatures or similar, this could be of equal complexity to the traditional concept
 /// of a proposal message.
+///
+/// In order for this to be valid, the signature MUST be valid and aggregated from signatures by
+/// validators whose weight is sufficient for the threshold. Deserialization or instantiation alone
+/// DOES NOT signify validity.
 #[derive(Clone)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 pub(crate) struct ValidRound<A: AggregateSignature> {
@@ -50,6 +54,10 @@ impl<A: AggregateSignature> fmt::Debug for ValidRound<A> {
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 pub(crate) enum Data<S: Signature, A: AggregateSignature, B: Block> {
   Proposal {
+    #[borsh(bound(
+      serialize = "A: borsh::BorshSerialize",
+      deserialize = "A: borsh::BorshDeserialize"
+    ))]
     valid_round: Option<ValidRound<A>>,
     #[borsh(bound(
       serialize = "B: borsh::BorshSerialize",
@@ -66,8 +74,8 @@ pub(crate) enum Data<S: Signature, A: AggregateSignature, B: Block> {
   },
   Precommit {
     #[borsh(bound(
-      serialize = "B::Hash: borsh::BorshSerialize",
-      deserialize = "B::Hash: borsh::BorshDeserialize"
+      serialize = "S: borsh::BorshSerialize, B::Hash: borsh::BorshSerialize",
+      deserialize = "S: borsh::BorshDeserialize, B::Hash: borsh::BorshDeserialize"
     ))]
     block_and_precommit_signature: Option<(B::Hash, S)>,
   },
@@ -93,7 +101,17 @@ impl<S: Signature, A: AggregateSignature, B: Block> PartialEq for Data<S, A, B> 
         Data::Precommit { block_and_precommit_signature: Some((block, _)) },
         Data::Precommit { block_and_precommit_signature: Some((other_block, _)) },
       ) => block == other_block,
-      _ => false,
+      (
+        Data::Precommit { block_and_precommit_signature: Some(_) },
+        Data::Precommit { block_and_precommit_signature: None },
+      ) |
+      (
+        Data::Precommit { block_and_precommit_signature: None },
+        Data::Precommit { block_and_precommit_signature: Some(_) },
+      ) |
+      (Data::Proposal { .. }, Data::Prevote { .. } | Data::Precommit { .. }) |
+      (Data::Prevote { .. }, Data::Proposal { .. } | Data::Precommit { .. }) |
+      (Data::Precommit { .. }, Data::Proposal { .. } | Data::Prevote { .. }) => false,
     }
   }
 }
@@ -194,8 +212,18 @@ pub struct Message<V: Validator, S: Signature, A: AggregateSignature, B: Block> 
   pub(crate) block_number: BlockNumber,
   pub(crate) round_number: RoundNumber,
   #[borsh(bound(
-    serialize = "B: borsh::BorshSerialize, B::Hash: borsh::BorshSerialize",
-    deserialize = "B: borsh::BorshDeserialize, B::Hash: borsh::BorshDeserialize"
+    serialize = "
+      S: borsh::BorshSerialize,
+      A: borsh::BorshSerialize,
+      B: borsh::BorshSerialize,
+      B::Hash: borsh::BorshSerialize
+    ",
+    deserialize = "
+      S: borsh::BorshDeserialize,
+      A: borsh::BorshDeserialize,
+      B: borsh::BorshDeserialize,
+      B::Hash: borsh::BorshDeserialize
+    "
   ))]
   pub(crate) data: Data<S, A, B>,
   pub(crate) signature: S,

@@ -10,15 +10,8 @@ use crate::{BlockNumber, RoundNumber};
 /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
 /// value which was successfully serialized, from a well-formed reader.
-#[expect(private_bounds)]
-pub trait Validator:
-  Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + crate::Borshy
-{
-}
-impl<V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + crate::Borshy> Validator
-  for V
-{
-}
+pub trait Validator: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug {}
+impl<V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug> Validator for V {}
 
 /// A representation of a signature.
 ///
@@ -31,9 +24,8 @@ impl<V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug + crate::Bors
 /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
 /// value which was successfully serialized, from a well-formed reader.
-#[expect(private_bounds)]
-pub trait Signature: Send + Sync + Clone + AsRef<[u8]> + crate::Borshy {}
-impl<S: Send + Sync + Clone + AsRef<[u8]> + crate::Borshy> Signature for S {}
+pub trait Signature: Send + Clone + AsRef<[u8]> {}
+impl<S: Send + Clone + AsRef<[u8]>> Signature for S {}
 
 /// A representation of an aggregate signature.
 ///
@@ -43,9 +35,8 @@ impl<S: Send + Sync + Clone + AsRef<[u8]> + crate::Borshy> Signature for S {}
 /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
 /// value which was successfully serialized, from a well-formed reader.
-#[expect(private_bounds)]
-pub trait AggregateSignature: Send + Sync + Clone + AsRef<[u8]> + crate::Borshy {}
-impl<S: Send + Sync + Clone + AsRef<[u8]> + crate::Borshy> AggregateSignature for S {}
+pub trait AggregateSignature: Send + Clone + AsRef<[u8]> {}
+impl<S: Send + Clone + AsRef<[u8]>> AggregateSignature for S {}
 
 /// The aggregate signature was invalid.
 #[derive(Debug)]

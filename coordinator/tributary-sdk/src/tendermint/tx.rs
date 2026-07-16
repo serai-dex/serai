@@ -7,7 +7,7 @@ use blake2::{Digest as _, Blake2s256};
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;
 
-use tendermint::{SignatureScheme, Blockchain, SlashReason};
+use tendermint::{SignatureScheme, Block, Blockchain, SlashReason};
 
 use crate::{
   ReadWrite,
@@ -18,7 +18,7 @@ use crate::{
 #[derive(Clone, Debug)]
 pub struct TendermintTx {
   pub(crate) validator: [u8; 32],
-  pub(crate) slash_reason: SlashReason<[u8; 64], Vec<u8>, TendermintBlock>,
+  pub(crate) slash_reason: SlashReason<[u8; 64], Vec<u8>, <TendermintBlock as Block>::Hash>,
 }
 
 impl TendermintTx {
