@@ -58,6 +58,24 @@ pub(crate) fn validators_satisfy_threshold<V: Validator>(
     .is_some_and(|sum| sum >= validator_set.threshold())
 }
 
+#[doc(hidden)]
+pub(crate) enum CommitSegment<'genesis, 'block_hash> {
+  Dst([u8; 1]),
+  Genesis(&'genesis [u8]),
+  U64([u8; 8]),
+  Block(&'block_hash [u8]),
+}
+impl AsRef<[u8]> for CommitSegment<'_, '_> {
+  fn as_ref(&self) -> &[u8] {
+    match self {
+      Self::Dst(dst) => dst.as_slice(),
+      Self::Genesis(genesis) => genesis,
+      Self::U64(number) => number.as_slice(),
+      Self::Block(block_hash) => block_hash,
+    }
+  }
+}
+
 impl<A: AggregateSignature> Commit<A> {
   /// The block number this commit is for.
   #[must_use]
@@ -66,54 +84,38 @@ impl<A: AggregateSignature> Commit<A> {
   }
 
   #[must_use]
-  pub(crate) fn signature_message(
-    genesis: impl AsRef<[u8]>,
+  pub(crate) fn signature_message<'genesis, 'block_hash>(
+    genesis: &'genesis [u8],
     block_number: BlockNumber,
     round_number: RoundNumber,
-    block_hash: impl AsRef<[u8]>,
-  ) -> impl IntoIterator<Item = impl AsRef<[u8]>> {
-    enum Segment<G: AsRef<[u8]>, B: AsRef<[u8]>> {
-      Dst([u8; 1]),
-      Genesis(G),
-      U64([u8; 8]),
-      Block(B),
-    }
-    impl<G: AsRef<[u8]>, B: AsRef<[u8]>> AsRef<[u8]> for Segment<G, B> {
-      fn as_ref(&self) -> &[u8] {
-        match self {
-          Self::Dst(dst) => dst.as_slice(),
-          Self::Genesis(genesis) => genesis.as_ref(),
-          Self::U64(number) => number.as_slice(),
-          Self::Block(block_hash) => block_hash.as_ref(),
-        }
-      }
-    }
-
+    block_hash: &'block_hash [u8],
+  ) -> <[CommitSegment<'genesis, 'block_hash>; 6] as IntoIterator>::IntoIter {
     [
-      Segment::Dst([0]),
+      CommitSegment::Dst([0]),
       /*
         Length-prefix the genesis to prevent one genesis from being a valid prefix of another,
         breaking the intended domain separation of this.
       */
-      Segment::Dst([u8::try_from(genesis.as_ref().len()).unwrap()]),
-      Segment::Genesis(genesis),
-      Segment::U64(u64::from(block_number.0).to_le_bytes()),
-      Segment::U64(u64::from(round_number.0).to_le_bytes()),
+      CommitSegment::Dst([u8::try_from(genesis.as_ref().len()).unwrap()]),
+      CommitSegment::Genesis(genesis),
+      CommitSegment::U64(u64::from(block_number.0).to_le_bytes()),
+      CommitSegment::U64(u64::from(round_number.0).to_le_bytes()),
       /*
         This doesn't length-prefix the block hash as it's presumably fixed-length and is definitely
         unnecessary.
       */
-      Segment::Block(block_hash),
+      CommitSegment::Block(block_hash),
     ]
+    .into_iter()
   }
 
   #[must_use]
   pub(crate) async fn sign<S: SignatureScheme<AggregateSignature = A>>(
     signer: &impl Signer<Signature = <S as SignatureScheme>::Signature>,
-    genesis: impl Send + AsRef<[u8]>,
+    genesis: &[u8],
     block_number: BlockNumber,
     round_number: RoundNumber,
-    block_hash: impl Send + AsRef<[u8]>,
+    block_hash: &[u8],
   ) -> <S as SignatureScheme>::Signature {
     signer.sign(Self::signature_message(genesis, block_number, round_number, block_hash)).await
   }
@@ -122,10 +124,10 @@ impl<A: AggregateSignature> Commit<A> {
   pub(crate) fn verify_precommit<S: SignatureScheme<AggregateSignature = A>>(
     signature_scheme: &S,
     validator: &S::Validator,
-    genesis: impl AsRef<[u8]>,
+    genesis: &[u8],
     block_number: BlockNumber,
     round_number: RoundNumber,
-    block_hash: impl AsRef<[u8]>,
+    block_hash: &[u8],
     signature: &S::Signature,
   ) -> bool {
     signature_scheme.verify(
@@ -146,7 +148,12 @@ impl<A: AggregateSignature> Commit<A> {
   ) -> bool {
     // Ensure the signature was valid
     let Ok(validators) = signature_scheme.verify_aggregate(
-      Self::signature_message(genesis, self.block_number, self.round_number, block_hash),
+      Self::signature_message(
+        genesis.as_ref(),
+        self.block_number,
+        self.round_number,
+        block_hash.as_ref(),
+      ),
       &self.aggregate_signature,
     ) else {
       return false;

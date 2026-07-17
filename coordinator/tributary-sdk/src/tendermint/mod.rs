@@ -75,69 +75,62 @@ impl SignerTrait for Signer {
   type Validator = [u8; 32];
   type Signature = [u8; 64];
 
-  /// Returns the validator's current ID. Returns None if they aren't a current validator.
-  fn validator(&self) -> impl Send + Future<Output = Self::Validator> {
-    core::future::ready((Ristretto::generator() * self.key.deref()).to_bytes())
+  fn validator(&self) -> Self::Validator {
+    (Ristretto::generator() * self.key.deref()).to_bytes()
   }
 
-  /// Sign a signature with the current validator's private key.
-  fn sign(
-    &self,
-    message: impl IntoIterator<Item = impl AsRef<[u8]>>,
-  ) -> impl Send + Future<Output = Self::Signature> {
+  type SignFuture = core::future::Ready<Self::Signature>;
+  fn sign(&self, message: impl IntoIterator<Item = impl AsRef<[u8]>>) -> Self::SignFuture {
     let mut concat_message: Vec<u8> = vec![];
     for chunk in message {
       concat_message.extend(chunk.as_ref());
     }
     let message = concat_message;
 
-    async move {
-      let mut nonce = {
-        let mut nonce_transcript = RecommendedTranscript::new(b"Tributary Chain Tendermint Nonce");
-        nonce_transcript.append_message(b"genesis", self.genesis);
-        nonce_transcript
-          .append_message(b"key", Zeroizing::new(self.key.deref().to_repr()).as_ref());
-        nonce_transcript.append_message(b"message", &message);
-        let nonce = nonce_transcript.challenge(b"nonce");
+    let mut nonce = {
+      let mut nonce_transcript = RecommendedTranscript::new(b"Tributary Chain Tendermint Nonce");
+      nonce_transcript.append_message(b"genesis", self.genesis);
+      nonce_transcript.append_message(b"key", Zeroizing::new(self.key.deref().to_repr()).as_ref());
+      nonce_transcript.append_message(b"message", &message);
+      let nonce = nonce_transcript.challenge(b"nonce");
 
-        // Ensure this will be zeroized (via the type contract) and ensure it happens now
-        {
-          fn drop_zeroize_on_drop(value: impl zeroize::ZeroizeOnDrop) {
-            drop(value);
-          }
-          drop_zeroize_on_drop(nonce_transcript);
+      // Ensure this will be zeroized (via the type contract) and ensure it happens now
+      {
+        fn drop_zeroize_on_drop(value: impl zeroize::ZeroizeOnDrop) {
+          drop(value);
         }
+        drop_zeroize_on_drop(nonce_transcript);
+      }
 
-        nonce
-      };
+      nonce
+    };
 
-      let mut nonce_arr = [0; 64];
-      nonce_arr.copy_from_slice(nonce.as_ref());
+    let mut nonce_arr = [0; 64];
+    nonce_arr.copy_from_slice(nonce.as_ref());
 
-      let nonce_ref: &mut [u8] = nonce.as_mut();
-      nonce_ref.zeroize();
-      let nonce_ref: &[u8] = nonce.as_ref();
-      assert_eq!(nonce_ref, [0; 64].as_ref());
+    let nonce_ref: &mut [u8] = nonce.as_mut();
+    nonce_ref.zeroize();
+    let nonce_ref: &[u8] = nonce.as_ref();
+    assert_eq!(nonce_ref, [0; 64].as_ref());
 
-      let nonce =
-        Zeroizing::new(<Ristretto as WrappedGroup>::F::from_bytes_mod_order_wide(&nonce_arr));
-      nonce_arr.zeroize();
+    let nonce =
+      Zeroizing::new(<Ristretto as WrappedGroup>::F::from_bytes_mod_order_wide(&nonce_arr));
+    nonce_arr.zeroize();
 
-      assert!(!bool::from(nonce.ct_eq(&<Ristretto as WrappedGroup>::F::ZERO)));
+    assert!(!bool::from(nonce.ct_eq(&<Ristretto as WrappedGroup>::F::ZERO)));
 
-      let challenge = challenge(
-        self.genesis,
-        (Ristretto::generator() * self.key.deref()).to_bytes(),
-        (Ristretto::generator() * nonce.deref()).to_bytes().as_ref(),
-        &message,
-      );
+    let challenge = challenge(
+      self.genesis,
+      (Ristretto::generator() * self.key.deref()).to_bytes(),
+      (Ristretto::generator() * nonce.deref()).to_bytes().as_ref(),
+      &message,
+    );
 
-      let sig = SchnorrSignature::<Ristretto>::sign(&self.key, nonce, challenge).serialize();
+    let sig = SchnorrSignature::<Ristretto>::sign(&self.key, nonce, challenge).serialize();
 
-      let mut res = [0; 64];
-      res.copy_from_slice(&sig);
-      res
-    }
+    let mut res = [0; 64];
+    res.copy_from_slice(&sig);
+    core::future::ready(res)
   }
 }
 
@@ -329,11 +322,12 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
   type Validator = [u8; 32];
   type ValidatorSet = HashMap<Self::Validator, NonZero<u16>>;
   type SignatureScheme = Validators;
+  type Genesis = [u8; 32];
   type Block = TendermintBlock;
 
   type BlockProposal = core::future::Ready<Self::Block>;
 
-  fn genesis(&self) -> impl Send + AsRef<[u8]> {
+  fn genesis(&self) -> &Self::Genesis {
     &self.genesis
   }
 

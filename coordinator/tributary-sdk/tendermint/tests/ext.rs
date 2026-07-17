@@ -22,20 +22,17 @@ type TestValidator = u16;
 type TestBlockHash = [u8; 4];
 
 struct TestSigner(u16);
-#[expect(clippy::unused_async_trait_impl)]
 impl Signer for TestSigner {
   type Validator = TestValidator;
   // This is not a cryptographic signature and is solely for testing purposes
   type Signature = [u8; 32];
 
-  async fn validator(&self) -> TestValidator {
+  fn validator(&self) -> TestValidator {
     self.0
   }
 
-  async fn sign(
-    &self,
-    message: impl Send + IntoIterator<Item = impl AsRef<[u8]>>,
-  ) -> Self::Signature {
+  type SignFuture = core::future::Ready<Self::Signature>;
+  fn sign(&self, message: impl IntoIterator<Item = impl AsRef<[u8]>>) -> Self::SignFuture {
     let mut sig = [0; 32];
     sig[.. 2].copy_from_slice(&self.0.to_le_bytes());
 
@@ -46,7 +43,7 @@ impl Signer for TestSigner {
     let message = concat_message;
     sig[2 .. (2 + 30.min(message.len()))].copy_from_slice(&message[.. 30.min(message.len())]);
 
-    sig
+    core::future::ready(sig)
   }
 }
 
@@ -154,12 +151,13 @@ impl Blockchain for TestNetwork {
   type Validator = u16;
   type ValidatorSet = HashMap<u16, NonZero<u16>>;
   type SignatureScheme = TestSignatureScheme;
+  type Genesis = [u8; 0];
   type Block = TestBlock;
 
   type BlockProposal = core::future::Ready<Self::Block>;
 
-  fn genesis(&self) -> impl Send + AsRef<[u8]> {
-    []
+  fn genesis(&self) -> &Self::Genesis {
+    &[]
   }
 
   fn validator_set(&self) -> &Self::ValidatorSet {

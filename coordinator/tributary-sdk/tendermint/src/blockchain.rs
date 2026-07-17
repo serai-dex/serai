@@ -55,8 +55,8 @@ impl From<RoundNumber> for u64 {
 /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
 /// value which was successfully serialized, from a well-formed reader.
-pub trait BlockHash: Send + Clone + Copy + PartialEq + Eq + AsRef<[u8]> {}
-impl<H: Send + Clone + Copy + PartialEq + Eq + AsRef<[u8]>> BlockHash for H {}
+pub trait BlockHash: Clone + Copy + PartialEq + Eq + AsRef<[u8]> {}
+impl<H: Clone + Copy + PartialEq + Eq + AsRef<[u8]>> BlockHash for H {}
 
 /// The block was invalid.
 #[derive(Clone, Copy, Debug)]
@@ -67,7 +67,7 @@ pub struct InvalidBlock;
 /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
 /// value which was successfully serialized, from a well-formed reader.
-pub trait Block: Send + Sync + Clone {
+pub trait Block: Clone {
   // The type representing a block's hash.
   ///
   /// The `AsRef<[u8]>` implementation MUST return a slice with a consistent length for _any_
@@ -99,6 +99,14 @@ pub trait Blockchain {
   type ValidatorSet: ValidatorSet<Validator = Self::Validator>;
   /// The signature scheme used by validators.
   type SignatureScheme: SignatureScheme<Validator = Self::Validator>;
+
+  /// The type used to represent the genesis of this blockchain.
+  ///
+  /// This DOES NOT need to satisfy any cryptographic binding properties and is solely used for
+  /// domain-separation purposes. The slice this may be taken as a reference to MUST be consistent
+  /// across calls and MUST have a length less than or equal to [`u8::MAX`].
+  type Genesis: AsRef<[u8]>;
+
   /// The block type.
   type Block: Block;
 
@@ -110,12 +118,10 @@ pub trait Blockchain {
   /// [`futures_channel::oneshot::Receiver`] or similar.
   type BlockProposal: Future<Output = Self::Block>;
 
-  /// The genesis ID of this blockchain.
+  /// The genesis ID for this blockchain.
   ///
   /// This MUST be consistent for the lifetime of this blockchain and unique across blockchains.
-  /// This DOES NOT need to satisfy any cryptographic binding properties and is solely used for
-  /// domain-separation purposes. This MUST have a length less than or equal to [`u8::MAX`].
-  fn genesis(&self) -> impl Send + AsRef<[u8]>;
+  fn genesis(&self) -> &Self::Genesis;
 
   /// The validator set's definition.
   ///

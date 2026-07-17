@@ -128,7 +128,7 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
       round_number: self.round_number,
       aggregate_signature: blockchain.signature_scheme().aggregate(
         MessageFor::<B>::signature_message(
-          blockchain.genesis(),
+          blockchain.genesis().as_ref(),
           self.block_number,
           self.round_number,
           &Data::Prevote { block: Some(proposal) },

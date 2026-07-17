@@ -121,27 +121,7 @@ mod tendermint {
     message: Sender<MessageFor<B>>,
   }
 
-  struct TendermintProcess<
-    B: Blockchain<
-      Validator: BorshSerialize + BorshDeserialize,
-      SignatureScheme: SignatureScheme<
-        Signature: BorshSerialize + BorshDeserialize,
-        AggregateSignature: BorshSerialize + BorshDeserialize,
-      >,
-      Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
-    >,
-    S: Signer<
-      Validator = B::Validator,
-      Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >,
-    D: Db,
-    N: Network<
-      B::Validator,
-      <B::SignatureScheme as SignatureScheme>::Signature,
-      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-      B::Block,
-    >,
-  > {
+  struct TendermintProcess<B: Blockchain, S, D, N> {
     sync: Receiver<(B::Block, CommitFor<B>)>,
     message: Receiver<MessageFor<B>>,
 
@@ -174,7 +154,7 @@ mod tendermint {
       >,
     > TendermintProcess<B, S, D, N>
   {
-    async fn run(&mut self) {
+    async fn run(mut self) {
       loop {
         /*
           We use our `Or` future to implement a select, where our `Or` is documented to prefer `f1`
@@ -297,6 +277,86 @@ mod tendermint {
   pub struct ProcessTerminated;
 
   impl Tendermint {
+    async fn internal<
+      B: Blockchain<
+        Validator: BorshSerialize + BorshDeserialize,
+        SignatureScheme: SignatureScheme<
+          Signature: BorshSerialize + BorshDeserialize,
+          AggregateSignature: BorshSerialize + BorshDeserialize,
+        >,
+        Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
+      >,
+      S: Signer<
+        Validator = B::Validator,
+        Signature = <B::SignatureScheme as SignatureScheme>::Signature,
+      >,
+      D: Db,
+      N: Network<
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
+    >(
+      blockchain: B,
+      signer: S,
+      mut db: D,
+      mut network: N,
+      proposal: B::Block,
+    ) -> (TendermintHandle<B>, TendermintProcess<B, S, D, N>) {
+      // Sync blocks with a capacity of the amount of blocks per 5 minutes
+      let (sync_send, sync_recv) = async_channel::bounded({
+        use core::time::Duration;
+        let time_per_block = N::BLOCK_DOWNLOADING_TIME
+          .saturating_add(N::BLOCK_PROCESSING_TIME)
+          .saturating_add(N::LATENCY_TIME.saturating_mul(3));
+        let blocks_per_minute =
+          Duration::from_mins(5).as_millis().div_ceil(time_per_block.as_millis().max(1));
+        // Limit this to a sane range
+        usize::try_from(blocks_per_minute).unwrap_or(usize::MAX).clamp(1, 64)
+      });
+
+      /*
+        Limit the amount of messages proportionally to the amount of validators.
+
+        So long as validators are honest and only send one message within a period, this bound
+        will only be hit if either:
+        1) Messages aren't drained faster than the network's declared latency time
+        2) This validators is slower than the supermajority of validators
+        where either cases are reasonable to establish the bound regarding.
+
+        We do further scale the capacity by `2` to handle _some_ overages.
+      */
+      let (message_send, message_recv) =
+        async_channel::bounded(2 * blockchain.validator_set().validators().into_iter().count());
+
+      let mut txn = db.txn();
+      let (state, messages) = State::new::<N>(&blockchain, &signer, &mut txn, proposal).await;
+      txn.commit();
+
+      for message in messages {
+        network.broadcast(message).await;
+      }
+
+      (
+        TendermintHandle {
+          block_number: state.block_number_ref(),
+          sync: sync_send,
+          message: message_send,
+        },
+        (TendermintProcess {
+          sync: sync_recv,
+          message: message_recv,
+
+          state,
+          blockchain,
+          signer,
+          db,
+          network,
+        }),
+      )
+    }
+
     /// Initialize the Tendermint process.
     ///
     /// The returned future will run until its corresponding channels are closed. The future is NOT
@@ -309,12 +369,18 @@ mod tendermint {
       B: Send
         + Sync
         + Blockchain<
-          Validator: BorshSerialize + BorshDeserialize,
+          Validator: Send + Sync + BorshSerialize + BorshDeserialize,
+          ValidatorSet: Sync,
           SignatureScheme: SignatureScheme<
-            Signature: BorshSerialize + BorshDeserialize,
-            AggregateSignature: BorshSerialize + BorshDeserialize,
+            Signature: Send + BorshSerialize + BorshDeserialize,
+            AggregateSignature: Send + BorshSerialize + BorshDeserialize,
           >,
-          Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
+          Genesis: Sync,
+          Block: Send
+                   + Sync
+                   + BorshSerialize
+                   + BorshDeserialize
+                   + Block<Hash: Send + BorshSerialize + BorshDeserialize>,
           BlockProposal: Send,
         >,
       S: Send
@@ -322,6 +388,7 @@ mod tendermint {
         + Signer<
           Validator = B::Validator,
           Signature = <B::SignatureScheme as SignatureScheme>::Signature,
+          SignFuture: Send,
         >,
       D: Send + for<'db> Db<Transaction<'db>: Send>,
       N: Send
@@ -334,60 +401,51 @@ mod tendermint {
     >(
       blockchain: B,
       signer: S,
-      mut db: D,
-      mut network: N,
+      db: D,
+      network: N,
       proposal: B::Block,
     ) -> impl Send + Future<Output = (TendermintHandle<B>, impl Send + Future<Output = ()>)> {
       async move {
-        // Sync blocks with a capacity of the amount of blocks per 5 minutes
-        let (sync_send, sync_recv) = async_channel::bounded({
-          use core::time::Duration;
-          let time_per_block = N::BLOCK_DOWNLOADING_TIME
-            .saturating_add(N::BLOCK_PROCESSING_TIME)
-            .saturating_add(N::LATENCY_TIME.saturating_mul(3));
-          let blocks_per_minute =
-            Duration::from_mins(5).as_millis().div_ceil(time_per_block.as_millis().max(1));
-          // Limit this to a sane range
-          usize::try_from(blocks_per_minute).unwrap_or(usize::MAX).clamp(1, 64)
-        });
+        let (handle, process) = Self::internal(blockchain, signer, db, network, proposal).await;
+        (handle, process.run())
+      }
+    }
 
-        /*
-          Limit the amount of messages proportionally to the amount of validators.
-
-          So long as validators are honest and only send one message within a period, this bound
-          will only be hit if either:
-          1) Messages aren't drained faster than the network's declared latency time
-          2) This validators is slower than the supermajority of validators
-          where either cases are reasonable to establish the bound regarding.
-
-          We do further scale the capacity by `2` to handle _some_ overages.
-        */
-        let (message_send, message_recv) =
-          async_channel::bounded(2 * blockchain.validator_set().validators().into_iter().count());
-
-        let mut txn = db.txn();
-        let (state, messages) = State::new::<N>(&blockchain, &signer, &mut txn, proposal).await;
-        txn.commit();
-
-        for message in messages {
-          network.broadcast(message).await;
-        }
-
-        let block_number = state.block_number_ref();
-        let mut internal = TendermintProcess {
-          sync: sync_recv,
-          message: message_recv,
-
-          state,
-          blockchain,
-          signer,
-          db,
-          network,
-        };
-
-        (TendermintHandle { block_number, sync: sync_send, message: message_send }, async move {
-          internal.run().await;
-        })
+    /// A variant of [`Tendermint::process`] which supports `!Send`, `!Sync` arguments.
+    ///
+    /// This is intended to enable support for single-threaded runtimes which do not require such
+    /// bounds.
+    #[expect(clippy::manual_async_fn)]
+    pub fn process_single_threaded<
+      B: Blockchain<
+        Validator: BorshSerialize + BorshDeserialize,
+        SignatureScheme: SignatureScheme<
+          Signature: BorshSerialize + BorshDeserialize,
+          AggregateSignature: BorshSerialize + BorshDeserialize,
+        >,
+        Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
+      >,
+      S: Signer<
+        Validator = B::Validator,
+        Signature = <B::SignatureScheme as SignatureScheme>::Signature,
+      >,
+      D: Db,
+      N: Network<
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
+    >(
+      blockchain: B,
+      signer: S,
+      db: D,
+      network: N,
+      proposal: B::Block,
+    ) -> impl Future<Output = (TendermintHandle<B>, impl Future<Output = ()>)> {
+      async move {
+        let (handle, process) = Self::internal(blockchain, signer, db, network, proposal).await;
+        (handle, process.run())
       }
     }
   }

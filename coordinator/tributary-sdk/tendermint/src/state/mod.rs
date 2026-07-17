@@ -1,6 +1,7 @@
 use core::{
   sync::atomic::{Ordering, AtomicU64},
   pin::Pin,
+  iter::{Flatten, Chain},
   time::Duration,
 };
 use alloc::{boxed::Box, sync::Arc};
@@ -64,6 +65,8 @@ struct RoundMessages<B: Blockchain> {
   precommit: Option<MessageFor<B>>,
 }
 
+type RoundMessagesMessages<B> = Flatten<<[Option<MessageFor<B>>; 3] as IntoIterator>::IntoIter>;
+
 impl<B: Blockchain> RoundMessages<B> {
   /// The round number these messages are for.
   ///
@@ -80,8 +83,7 @@ impl<B: Blockchain> RoundMessages<B> {
   }
 
   /// The messages within this container.
-  #[must_use]
-  fn messages(self) -> impl IntoIterator<Item = MessageFor<B>> {
+  fn messages(self) -> RoundMessagesMessages<B> {
     let Self { proposal, prevote, precommit } = self;
     [proposal, prevote, precommit].into_iter().flatten()
   }
@@ -148,6 +150,17 @@ pub(crate) struct State<B: Blockchain> {
   our_latest_message: Option<MessageFor<B>>,
 }
 
+type StateRespond<B> = Flatten<<[Option<MessageFor<B>>; 2] as IntoIterator>::IntoIter>;
+type StateStartRound<B> = Chain<
+  <Option<MessageFor<B>> as IntoIterator>::IntoIter,
+  Flatten<<[Option<MessageFor<B>>; 2] as IntoIterator>::IntoIter>,
+>;
+type StateOptionStartRound<B> = Flatten<<Option<StateStartRound<B>> as IntoIterator>::IntoIter>;
+type StateStartRoundRespond<B> =
+  Chain<StateOptionStartRound<B>, Flatten<<Option<StateRespond<B>> as IntoIterator>::IntoIter>>;
+type StateTimeout<B> =
+  Chain<<Option<MessageFor<B>> as IntoIterator>::IntoIter, StateStartRoundRespond<B>>;
+
 impl<B: BorshyBlockchain> State<B> {
   /// The current block number.
   #[must_use]
@@ -184,12 +197,12 @@ impl<B: BorshyBlockchain> State<B> {
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
     txn: &mut impl Transaction,
-  ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
+  ) -> Option<MessageFor<B>> {
     let validator_set = blockchain.validator_set();
 
     // L14
     let proposer = validator_set.proposer(self.block_number, self.round_number);
-    if proposer != signer.validator().await {
+    if proposer != signer.validator() {
       None?;
     }
 
@@ -249,7 +262,7 @@ impl<B: BorshyBlockchain> State<B> {
   ) -> MessageFor<B> {
     let genesis = blockchain.genesis();
     let genesis = genesis.as_ref();
-    let validator = signer.validator().await;
+    let validator = signer.validator();
 
     let result = MessageFor::<B>::sign(
       signer,
@@ -291,7 +304,7 @@ impl<B: BorshyBlockchain> State<B> {
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
     txn: &mut impl Transaction,
-  ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
+  ) -> Option<MessageFor<B>> {
     if !matches!(self.step, Step::Propose) {
       None?;
     }
@@ -360,7 +373,7 @@ impl<B: BorshyBlockchain> State<B> {
       genesis,
       blockchain.validator_set(),
       txn,
-      signer.validator().await,
+      signer.validator(),
       block_and_precommit_signature.clone()
     ));
     let _ = self.pending_step_timeout.take();
@@ -392,7 +405,7 @@ impl<B: BorshyBlockchain> State<B> {
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
     txn: &mut impl Transaction,
-  ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
+  ) -> Option<MessageFor<B>> {
     /*
       L36
 
@@ -454,7 +467,7 @@ impl<B: BorshyBlockchain> State<B> {
       genesis,
       self.block_number,
       self.round_number,
-      proposal,
+      proposal.as_ref(),
     )
     .await;
     Some(
@@ -465,7 +478,6 @@ impl<B: BorshyBlockchain> State<B> {
   /// Respond to the accumulated messages.
   ///
   /// This corresponds to L22-L48.
-  #[must_use]
   async fn respond<
     N: Network<
       B::Validator,
@@ -481,19 +493,25 @@ impl<B: BorshyBlockchain> State<B> {
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
     txn: &mut impl Transaction,
-  ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
-    // L22-L33
-    let prevote_some_message = self.prevote_some_message(blockchain, signer, txn).await;
+  ) -> StateRespond<B> {
+    let prevote_message = {
+      // L22-L33
+      let prevote_some_message = self.prevote_some_message(blockchain, signer, txn).await;
 
-    // L57-L60
-    let prevote_none_message = if matches!(self.step, Step::Propose) &&
-      self.pending_step_timeout.is_some_and(|(start, duration)| start.elapsed() >= duration)
-    {
-      blockchain
-        .missed_proposal(blockchain.validator_set().proposer(self.block_number, self.round_number));
-      Some(self.prevote_message(blockchain, signer, txn, None).await)
-    } else {
-      None
+      // L57-L60
+      let prevote_none_message = if matches!(self.step, Step::Propose) &&
+        self.pending_step_timeout.is_some_and(|(start, duration)| start.elapsed() >= duration)
+      {
+        blockchain.missed_proposal(
+          blockchain.validator_set().proposer(self.block_number, self.round_number),
+        );
+        Some(self.prevote_message(blockchain, signer, txn, None).await)
+      } else {
+        None
+      };
+
+      // As these are mutually exclusive, we can represent both with a single `Option`
+      prevote_some_message.or(prevote_none_message)
     };
 
     // L34-L35
@@ -511,20 +529,24 @@ impl<B: BorshyBlockchain> State<B> {
       self.pending_step_timeout = Some((Instant::now(), duration));
     }
 
-    // L36-L43
-    let precommit_some_message = self.precommit_some_message(blockchain, signer, txn).await;
+    let precommit_message = {
+      // L36-L43
+      let precommit_some_message = self.precommit_some_message(blockchain, signer, txn).await;
 
-    // L44-L46, L61-L64
-    let precommit_none_message = if matches!(self.step, Step::Prevote) &&
-      ((self.round_metrics.observed_prevotes_for_none() >=
-        blockchain.validator_set().threshold()) ||
-        self
-          .pending_step_timeout
-          .is_some_and(|(start, duration)| start.elapsed() >= duration))
-    {
-      Some(self.precommit_message(blockchain, signer, txn, None).await)
-    } else {
-      None
+      // L44-L46, L61-L64
+      let precommit_none_message = if matches!(self.step, Step::Prevote) &&
+        ((self.round_metrics.observed_prevotes_for_none() >=
+          blockchain.validator_set().threshold()) ||
+          self
+            .pending_step_timeout
+            .is_some_and(|(start, duration)| start.elapsed() >= duration))
+      {
+        Some(self.precommit_message(blockchain, signer, txn, None).await)
+      } else {
+        None
+      };
+
+      precommit_some_message.or(precommit_none_message)
     };
 
     // L47-L48
@@ -541,15 +563,10 @@ impl<B: BorshyBlockchain> State<B> {
       self.pending_precommit_timeout = Some((Instant::now(), duration));
     }
 
-    prevote_some_message
-      .into_iter()
-      .chain(prevote_none_message)
-      .chain(precommit_some_message)
-      .chain(precommit_none_message)
+    [prevote_message, precommit_message].into_iter().flatten()
   }
 
   // L11-L21
-  #[must_use]
   async fn start_round<
     N: Network<
       B::Validator,
@@ -566,7 +583,7 @@ impl<B: BorshyBlockchain> State<B> {
     >,
     txn: &mut impl Transaction,
     round: RoundNumber,
-  ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
+  ) -> StateStartRound<B> {
     debug_assert!(
       ((self.round_number == RoundNumber::ONE) && (self.round_number == round)) ||
         (self.round_number < round)
@@ -649,7 +666,7 @@ impl<B: BorshyBlockchain> State<B> {
     >,
     txn: &mut impl Transaction,
     proposal: B::Block,
-  ) -> (Self, impl IntoIterator<IntoIter: Send, Item = MessageFor<B>>) {
+  ) -> (Self, StateOptionStartRound<B>) {
     let genesis = blockchain.genesis();
     let genesis = genesis.as_ref();
 
@@ -749,7 +766,7 @@ impl<B: BorshyBlockchain> State<B> {
     >,
     txn: &mut impl Transaction,
     message: MessageFor<B>,
-  ) -> Result<impl IntoIterator<IntoIter: Send, Item = MessageFor<B>>, MessageError> {
+  ) -> Result<StateStartRoundRespond<B>, MessageError> {
     // If this is historic or for a future block, ignore this message
     if (message.block_number < self.block_number) || (message.round_number < self.round_number) {
       Err(MessageError::Stale)?;
@@ -921,7 +938,7 @@ impl<
   >(
     self,
     txn: &mut impl Transaction,
-  ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
+  ) -> StateTimeout<B> {
     let Self { state, blockchain, signer } = self;
 
     let (rebroadcast, start, respond) =
@@ -955,7 +972,7 @@ impl<
         };
         (None, start, respond)
       };
-    rebroadcast.into_iter().chain(start.into_iter().flatten()).chain(respond.into_iter().flatten())
+    rebroadcast.into_iter().chain(start.into_iter().flatten().chain(respond.into_iter().flatten()))
   }
 }
 
@@ -1016,7 +1033,6 @@ impl<B: BorshyBlockchain> State<B> {
 
   /// Handle a commit.
   // L51-L54
-  #[must_use]
   pub(crate) async fn commit<
     N: Network<
       B::Validator,
@@ -1034,7 +1050,7 @@ impl<B: BorshyBlockchain> State<B> {
     txn: &mut impl Transaction,
     block: B::Block,
     commit: CommitFor<B>,
-  ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
+  ) -> StateOptionStartRound<B> {
     let Some(next_block_number) = self.block_number.0.checked_add(1) else {
       // Stall if the block number is at the maximum, as we can't represent further blocks
       return None.into_iter().flatten();
@@ -1096,7 +1112,6 @@ impl<B: BorshyBlockchain> State<B> {
   ///
   /// This SHOULD be called after every message/timeout.
   // L49-L54
-  #[must_use]
   pub(crate) async fn attempt_commit<
     N: Network<
       B::Validator,
@@ -1112,11 +1127,11 @@ impl<B: BorshyBlockchain> State<B> {
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
     txn: &mut impl Transaction,
-  ) -> impl IntoIterator<IntoIter: Send, Item = MessageFor<B>> {
+  ) -> StateOptionStartRound<B> {
     let Some((block, commit)) = self.round_metrics.commit(blockchain) else {
       return None.into_iter().flatten();
     };
 
-    Some(self.commit::<N>(blockchain, signer, txn, block, commit).await).into_iter().flatten()
+    self.commit::<N>(blockchain, signer, txn, block, commit).await
   }
 }

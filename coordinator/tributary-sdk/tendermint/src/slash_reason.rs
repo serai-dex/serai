@@ -269,10 +269,12 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
         }
       }
       Evidence::InvalidPrecommit { block, precommit_signature, signature } => {
+        let block = block.as_ref();
+
         // Check this was a precommit message signed by this validator
         verify_message(
           Data::Precommit {
-            block_and_precommit_signature: Some((block.as_ref(), precommit_signature.clone())),
+            block_and_precommit_signature: Some((block, precommit_signature.clone())),
           },
           signature,
         )?;
@@ -282,7 +284,7 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
         if Commit::verify_precommit(
           signature_scheme,
           &validator,
-          genesis,
+          genesis.as_ref(),
           self.block_number,
           self.round_number,
           block,

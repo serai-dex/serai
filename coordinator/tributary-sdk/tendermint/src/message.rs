@@ -117,6 +117,29 @@ impl<S: Signature, A: AggregateSignature, B: Block> PartialEq for Data<S, A, B> 
 }
 impl<S: Signature, A: AggregateSignature, B: Block> Eq for Data<S, A, B> {}
 
+#[doc(hidden)]
+pub(crate) enum DataSegment<S: Signature, A: AggregateSignature, B: Block> {
+  Kind([u8; 1]),
+  RoundNumber([u8; 8]),
+  AggregateSignature(Option<A>),
+  Block(B::Hash),
+  PrecommitSignature(S),
+}
+impl<S: Signature, A: AggregateSignature, B: Block> AsRef<[u8]> for DataSegment<S, A, B> {
+  fn as_ref(&self) -> &[u8] {
+    match self {
+      Self::Kind(kind) => kind.as_slice(),
+      Self::RoundNumber(round_number) => round_number.as_slice(),
+      Self::AggregateSignature(aggregate_signature) => {
+        aggregate_signature.as_ref().map(AsRef::as_ref).unwrap_or(&[])
+      }
+      Self::Block(block) => block.as_ref(),
+      Self::PrecommitSignature(precommit_signature) => precommit_signature.as_ref(),
+    }
+  }
+}
+type DataSignatureMessage<S, A, B> = [Option<DataSegment<S, A, B>>; 5];
+
 impl<S: Signature, A: AggregateSignature, B: Block> Data<S, A, B> {
   /// The serialization used for signing.
   ///
@@ -128,9 +151,7 @@ impl<S: Signature, A: AggregateSignature, B: Block> Data<S, A, B> {
   /// context of such schema. While this is rather annoying to do here, the borrow-checker somewhat
   /// requires this pattern.
   #[must_use]
-  fn signature_message(
-    &self,
-  ) -> impl IntoIterator<IntoIter: Send, Item = Option<impl AsRef<[u8]>>> {
+  fn signature_message(&self) -> DataSignatureMessage<S, A, B> {
     let (kind, round_number, aggregate_signature, block, precommit_signature) = match self {
       Data::Proposal { valid_round, proposal } => {
         let (round_number, aggregate_signature) = valid_round
@@ -171,33 +192,12 @@ impl<S: Signature, A: AggregateSignature, B: Block> Data<S, A, B> {
       }
     };
 
-    enum Segment<S: Signature, A: AggregateSignature, B: Block> {
-      Kind([u8; 1]),
-      RoundNumber([u8; 8]),
-      AggregateSignature(Option<A>),
-      Block(B::Hash),
-      PrecommitSignature(S),
-    }
-    impl<S: Signature, A: AggregateSignature, B: Block> AsRef<[u8]> for Segment<S, A, B> {
-      fn as_ref(&self) -> &[u8] {
-        match self {
-          Self::Kind(kind) => kind.as_slice(),
-          Self::RoundNumber(round_number) => round_number.as_slice(),
-          Self::AggregateSignature(aggregate_signature) => {
-            aggregate_signature.as_ref().map(AsRef::as_ref).unwrap_or(&[])
-          }
-          Self::Block(block) => block.as_ref(),
-          Self::PrecommitSignature(precommit_signature) => precommit_signature.as_ref(),
-        }
-      }
-    }
-
     [
-      Some(Segment::<S, A, B>::Kind([kind])),
-      round_number.map(Segment::RoundNumber),
-      Some(Segment::AggregateSignature(aggregate_signature)),
-      block.map(Segment::Block),
-      precommit_signature.map(Segment::PrecommitSignature),
+      Some(DataSegment::<S, A, B>::Kind([kind])),
+      round_number.map(DataSegment::RoundNumber),
+      Some(DataSegment::AggregateSignature(aggregate_signature)),
+      block.map(DataSegment::Block),
+      precommit_signature.map(DataSegment::PrecommitSignature),
     ]
   }
 }
@@ -269,65 +269,70 @@ pub(crate) enum MessageError {
   AlreadyHandled,
 }
 
+#[doc(hidden)]
+pub(crate) enum MessageSegment<'genesis> {
+  Dst([u8; 1]),
+  Genesis(&'genesis [u8]),
+  U64([u8; 8]),
+}
+impl AsRef<[u8]> for MessageSegment<'_> {
+  fn as_ref(&self) -> &[u8] {
+    match self {
+      Self::Dst(dst) => dst.as_slice(),
+      Self::Genesis(genesis) => genesis,
+      Self::U64(number) => number.as_slice(),
+    }
+  }
+}
+pub(crate) enum MessageEither<L: AsRef<[u8]>, R: AsRef<[u8]>> {
+  L(L),
+  R(Option<R>),
+}
+impl<L: AsRef<[u8]>, R: AsRef<[u8]>> AsRef<[u8]> for MessageEither<L, R> {
+  fn as_ref(&self) -> &[u8] {
+    match self {
+      MessageEither::L(l) => l.as_ref(),
+      MessageEither::R(Some(r)) => r.as_ref(),
+      MessageEither::R(None) => &[],
+    }
+  }
+}
+
+type MessageSignatureMessage<'genesis, S, A, B> =
+  <[MessageEither<MessageSegment<'genesis>, DataSegment<S, A, B>>; 10] as IntoIterator>::IntoIter;
 impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, A, B> {
   #[must_use]
-  pub(crate) fn signature_message(
-    genesis: impl Send + AsRef<[u8]>,
+  #[expect(clippy::many_single_char_names)]
+  pub(crate) fn signature_message<'genesis>(
+    genesis: &'genesis [u8],
     block_number: BlockNumber,
     round_number: RoundNumber,
     data: &Data<S, A, B>,
-  ) -> impl IntoIterator<IntoIter: Send, Item: AsRef<[u8]>> {
-    enum Segment<G: AsRef<[u8]>> {
-      Dst([u8; 1]),
-      Genesis(G),
-      U64([u8; 8]),
-    }
-    impl<G: AsRef<[u8]>> AsRef<[u8]> for Segment<G> {
-      fn as_ref(&self) -> &[u8] {
-        match self {
-          Self::Dst(dst) => dst.as_slice(),
-          Self::Genesis(genesis) => genesis.as_ref(),
-          Self::U64(number) => number.as_slice(),
-        }
-      }
-    }
-
-    enum Either<L: AsRef<[u8]>, R: AsRef<[u8]>> {
-      L(L),
-      R(R),
-    }
-    impl<L: AsRef<[u8]>, R: AsRef<[u8]>> AsRef<[u8]> for Either<L, R> {
-      fn as_ref(&self) -> &[u8] {
-        match self {
-          Either::L(l) => l.as_ref(),
-          Either::R(r) => r.as_ref(),
-        }
-      }
-    }
-
-    [
-      Segment::Dst([1]),
-      Segment::Dst([u8::try_from(genesis.as_ref().len()).unwrap()]),
-      Segment::Genesis(genesis),
-      Segment::U64(u64::from(block_number.0).to_le_bytes()),
-      Segment::U64(u64::from(round_number.0).to_le_bytes()),
+  ) -> MessageSignatureMessage<'genesis, S, A, B> {
+    let [a, b, c, d, e] = [
+      MessageSegment::Dst([1]),
+      MessageSegment::Dst([u8::try_from(genesis.len()).unwrap()]),
+      MessageSegment::Genesis(genesis),
+      MessageSegment::U64(u64::from(block_number.0).to_le_bytes()),
+      MessageSegment::U64(u64::from(round_number.0).to_le_bytes()),
     ]
-    .into_iter()
-    .map(Either::L)
-    .chain(data.signature_message().into_iter().filter_map(|value| value.map(Either::R)))
+    .map(MessageEither::L);
+    let [f, g, h, i, j] = data.signature_message().map(MessageEither::R);
+
+    [a, b, c, d, e, f, g, h, i, j].into_iter()
   }
 
   #[must_use]
   pub(crate) async fn sign(
     signer: &impl Signer<Validator = V, Signature = S>,
-    genesis: impl Send + AsRef<[u8]>,
+    genesis: &[u8],
     block_number: BlockNumber,
     round_number: RoundNumber,
     data: Data<S, A, B>,
   ) -> Self {
     let signature =
       signer.sign(Self::signature_message(genesis, block_number, round_number, &data)).await;
-    Self { validator: signer.validator().await, block_number, round_number, data, signature }
+    Self { validator: signer.validator(), block_number, round_number, data, signature }
   }
 
   /// Verify all signatures within this message.
@@ -405,7 +410,7 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
         genesis,
         self.block_number,
         self.round_number,
-        block,
+        block.as_ref(),
         precommit_signature,
       ) {
         blockchain.slash(

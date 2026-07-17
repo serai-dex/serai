@@ -10,8 +10,8 @@ use crate::{BlockNumber, RoundNumber};
 /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
 /// value which was successfully serialized, from a well-formed reader.
-pub trait Validator: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug {}
-impl<V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug> Validator for V {}
+pub trait Validator: Clone + Copy + PartialEq + Eq + Hash + Debug {}
+impl<V: Clone + Copy + PartialEq + Eq + Hash + Debug> Validator for V {}
 
 /// A representation of a signature.
 ///
@@ -24,8 +24,8 @@ impl<V: Send + Sync + Clone + Copy + PartialEq + Eq + Hash + Debug> Validator fo
 /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
 /// value which was successfully serialized, from a well-formed reader.
-pub trait Signature: Send + Clone + AsRef<[u8]> {}
-impl<S: Send + Clone + AsRef<[u8]>> Signature for S {}
+pub trait Signature: Clone + AsRef<[u8]> {}
+impl<S: Clone + AsRef<[u8]>> Signature for S {}
 
 /// A representation of an aggregate signature.
 ///
@@ -35,8 +35,8 @@ impl<S: Send + Clone + AsRef<[u8]>> Signature for S {}
 /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
 /// value which was successfully serialized, from a well-formed reader.
-pub trait AggregateSignature: Send + Clone + AsRef<[u8]> {}
-impl<S: Send + Clone + AsRef<[u8]>> AggregateSignature for S {}
+pub trait AggregateSignature: Clone + AsRef<[u8]> {}
+impl<S: Clone + AsRef<[u8]>> AggregateSignature for S {}
 
 /// The aggregate signature was invalid.
 #[derive(Debug)]
@@ -52,29 +52,30 @@ pub trait Signer {
   /// This validator's ID.
   ///
   /// This MUST be consistent and not change across multiple invocations.
-  fn validator(&self) -> impl Send + Future<Output = Self::Validator>;
+  fn validator(&self) -> Self::Validator;
+
+  /// The future yielded by [`Signer::sign`].
+  ///
+  /// This DOES NOT need to be cancel-safe.
+  type SignFuture: Future<Output = Self::Signature>;
 
   /// Sign a signature as this validator.
   ///
   /// The message is the concatenation of each byte slice yielded by the iterator.
-  fn sign(
-    &self,
-    message: impl Send + IntoIterator<Item = impl AsRef<[u8]>>,
-  ) -> impl Send + Future<Output = Self::Signature>;
+  fn sign(&self, message: impl IntoIterator<Item = impl AsRef<[u8]>>) -> Self::SignFuture;
 }
 
 impl<S: Signer> Signer for &S {
   type Validator = S::Validator;
   type Signature = S::Signature;
 
-  fn validator(&self) -> impl Send + Future<Output = Self::Validator> {
+  fn validator(&self) -> Self::Validator {
     S::validator(self)
   }
 
-  fn sign(
-    &self,
-    message: impl Send + IntoIterator<Item = impl AsRef<[u8]>>,
-  ) -> impl Send + Future<Output = Self::Signature> {
+  type SignFuture = S::SignFuture;
+
+  fn sign(&self, message: impl IntoIterator<Item = impl AsRef<[u8]>>) -> Self::SignFuture {
     S::sign(self, message)
   }
 }
@@ -180,7 +181,7 @@ impl<S: SignatureScheme> SignatureScheme for &S {
 }
 
 /// The set of validators
-pub trait ValidatorSet: Sync {
+pub trait ValidatorSet {
   /// The type used to identify validators.
   type Validator: Validator;
 
@@ -384,7 +385,7 @@ map!(
 map!(
   "std",
   std::collections::HashMap<V, NonZero<u16>, H>,
-  V: PartialOrd + Ord + Validator, H: Sync + core::hash::BuildHasher
+  V: PartialOrd + Ord + Validator, H: core::hash::BuildHasher
 );
 
 #[cfg(test)]
@@ -507,13 +508,11 @@ mod tests {
   impl Signer for TestSigner {
     type Validator = u8;
     type Signature = [u8; 1 + 8];
-    fn validator(&self) -> impl Send + Future<Output = <Self as Signer>::Validator> {
-      core::future::ready(self.validator)
+    fn validator(&self) -> <Self as Signer>::Validator {
+      self.validator
     }
-    fn sign(
-      &self,
-      message: impl Send + IntoIterator<Item = impl AsRef<[u8]>>,
-    ) -> impl Send + Future<Output = <Self as Signer>::Signature> {
+    type SignFuture = core::future::Ready<Self::Signature>;
+    fn sign(&self, message: impl IntoIterator<Item = impl AsRef<[u8]>>) -> Self::SignFuture {
       let mut result = [0; 1 + 8];
       result[0] = self.validator;
       result[1 ..].copy_from_slice(&self.signature_scheme.hash(message));
