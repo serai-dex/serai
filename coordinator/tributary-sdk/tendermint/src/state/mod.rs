@@ -1,7 +1,7 @@
 use core::{
   sync::atomic::{Ordering, AtomicU64},
   pin::Pin,
-  iter::{Flatten, Chain},
+  iter::Flatten,
   time::Duration,
 };
 use alloc::{boxed::Box, sync::Arc};
@@ -24,10 +24,10 @@ use round_metrics::*;
 
 mod db;
 
-pub(crate) trait Borshy: borsh::BorshSerialize + borsh::BorshDeserialize {}
+pub(super) trait Borshy: borsh::BorshSerialize + borsh::BorshDeserialize {}
 impl<B: borsh::BorshSerialize + borsh::BorshDeserialize> Borshy for B {}
 
-pub(crate) trait BorshyBlockchain:
+pub(super) trait BorshyBlockchain:
   Blockchain<
   Validator: Borshy,
   SignatureScheme: SignatureScheme<Signature: Borshy, AggregateSignature: Borshy>,
@@ -47,7 +47,7 @@ impl<
 
 /// The current step within the round.
 #[derive(BorshSerialize, BorshDeserialize)]
-pub(crate) enum Step {
+pub(super) enum Step {
   Propose,
   Prevote,
   Precommit,
@@ -55,8 +55,16 @@ pub(crate) enum Step {
 
 /// The messages by a validator within a round.
 ///
+/// This is used both as part of the local view, to detect equivocations with, and also as the
+/// result for many of the functions below. This as, within any single round, a validator will only
+/// send at most one message of each type. This means the following functions, which only send
+/// messages for one round at a time, can be bounded to sending at most three messages at once.
+/// This struct represents the container for those three messages, while allowing merging different
+/// functions' results into a single unified result.
+///
 /// The fields of this are weakly typed and left to the user to ensure the accuracy of.
-struct RoundMessages<B: Blockchain> {
+#[must_use]
+pub(super) struct RoundMessages<B: Blockchain> {
   /// The proposal message.
   proposal: Option<MessageFor<B>>,
   /// The prevote message.
@@ -65,9 +73,9 @@ struct RoundMessages<B: Blockchain> {
   precommit: Option<MessageFor<B>>,
 }
 
-type RoundMessagesMessages<B> = Flatten<<[Option<MessageFor<B>>; 3] as IntoIterator>::IntoIter>;
-
 impl<B: Blockchain> RoundMessages<B> {
+  const NONE: Self = RoundMessages { proposal: None, prevote: None, precommit: None };
+
   /// The round number these messages are for.
   ///
   /// This assumes all messages within this container are part of the same round. This will not
@@ -82,8 +90,33 @@ impl<B: Blockchain> RoundMessages<B> {
       .map(|message| message.round_number)
   }
 
-  /// The messages within this container.
-  fn messages(self) -> RoundMessagesMessages<B> {
+  /// Insert a message.
+  ///
+  /// If there is no message present at the corresponding slot, this will insert the message and
+  /// return `None`. If there is already a message present at the corresponding slot, this will
+  /// perform no mutations and return a reference to the existing message.
+  ///
+  /// This does not check the round number of this message is consistent with the other messages in
+  /// this container.
+  #[must_use]
+  fn insert(&mut self, message: &MessageFor<B>) -> Option<&MessageFor<B>> {
+    let slot = match message.data {
+      Data::Proposal { .. } => &mut self.proposal,
+      Data::Prevote { .. } => &mut self.prevote,
+      Data::Precommit { .. } => &mut self.precommit,
+    };
+    if let Some(existing_message) = slot {
+      return Some(existing_message);
+    }
+    *slot = Some(message.clone());
+    None
+  }
+}
+
+impl<B: Blockchain> IntoIterator for RoundMessages<B> {
+  type IntoIter = Flatten<<[Option<MessageFor<B>>; 3] as IntoIterator>::IntoIter>;
+  type Item = MessageFor<B>;
+  fn into_iter(self) -> Self::IntoIter {
     let Self { proposal, prevote, precommit } = self;
     [proposal, prevote, precommit].into_iter().flatten()
   }
@@ -93,7 +126,7 @@ impl<B: Blockchain> RoundMessages<B> {
 ///
 /// This is intertwined with participating in consensus and can not be used for third-party
 /// observation.
-pub(crate) struct State<B: Blockchain> {
+pub(super) struct State<B: Blockchain> {
   /// The current block number.
   block_number: BlockNumber,
   /// A public reference to the block number.
@@ -150,17 +183,6 @@ pub(crate) struct State<B: Blockchain> {
   our_latest_message: Option<MessageFor<B>>,
 }
 
-type StateRespond<B> = Flatten<<[Option<MessageFor<B>>; 2] as IntoIterator>::IntoIter>;
-type StateStartRound<B> = Chain<
-  <Option<MessageFor<B>> as IntoIterator>::IntoIter,
-  Flatten<<[Option<MessageFor<B>>; 2] as IntoIterator>::IntoIter>,
->;
-type StateOptionStartRound<B> = Flatten<<Option<StateStartRound<B>> as IntoIterator>::IntoIter>;
-type StateStartRoundRespond<B> =
-  Chain<StateOptionStartRound<B>, Flatten<<Option<StateRespond<B>> as IntoIterator>::IntoIter>>;
-type StateTimeout<B> =
-  Chain<<Option<MessageFor<B>> as IntoIterator>::IntoIter, StateStartRoundRespond<B>>;
-
 impl<B: BorshyBlockchain> State<B> {
   /// The current block number.
   #[must_use]
@@ -170,9 +192,13 @@ impl<B: BorshyBlockchain> State<B> {
 
   /// Create a new reference to the current block number.
   ///
+  /// This reference is an atomic which is updated after a block is added to the underlying
+  /// blockchain. Accordingly, it may desynchronize from the underlying blockchain for a brief
+  /// moment. For the exact current block number, [`State::block_number`] MUST be used.
+  ///
   /// This MAY be invalidated, as possible if any reference is used to write to it (other than the
   /// one internal to the state). This is accepted as this is solely an internal API.
-  pub(crate) fn block_number_ref(&self) -> Arc<AtomicU64> {
+  pub(super) fn block_number_ref(&self) -> Arc<AtomicU64> {
     self.block_number_ref.clone()
   }
 
@@ -493,7 +519,7 @@ impl<B: BorshyBlockchain> State<B> {
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
     txn: &mut impl Transaction,
-  ) -> StateRespond<B> {
+  ) -> RoundMessages<B> {
     let prevote_message = {
       // L22-L33
       let prevote_some_message = self.prevote_some_message(blockchain, signer, txn).await;
@@ -563,7 +589,7 @@ impl<B: BorshyBlockchain> State<B> {
       self.pending_precommit_timeout = Some((Instant::now(), duration));
     }
 
-    [prevote_message, precommit_message].into_iter().flatten()
+    RoundMessages { proposal: None, prevote: prevote_message, precommit: precommit_message }
   }
 
   // L11-L21
@@ -583,7 +609,7 @@ impl<B: BorshyBlockchain> State<B> {
     >,
     txn: &mut impl Transaction,
     round: RoundNumber,
-  ) -> StateStartRound<B> {
+  ) -> RoundMessages<B> {
     debug_assert!(
       ((self.round_number == RoundNumber::ONE) && (self.round_number == round)) ||
         (self.round_number < round)
@@ -646,8 +672,11 @@ impl<B: BorshyBlockchain> State<B> {
 
     // L14-L19
     let proposal_message = self.proposal_message::<N>(blockchain, signer, txn).await;
-
-    proposal_message.into_iter().chain(self.respond::<N>(blockchain, signer, txn).await)
+    let mut round_messages = self.respond::<N>(blockchain, signer, txn).await;
+    // [`State::respond`] does not emit proposal messages
+    debug_assert!(round_messages.proposal.is_none());
+    round_messages.proposal = proposal_message;
+    round_messages
   }
 
   // L01-L10
@@ -666,7 +695,7 @@ impl<B: BorshyBlockchain> State<B> {
     >,
     txn: &mut impl Transaction,
     proposal: B::Block,
-  ) -> (Self, StateOptionStartRound<B>) {
+  ) -> (Self, RoundMessages<B>) {
     let genesis = blockchain.genesis();
     let genesis = genesis.as_ref();
 
@@ -730,14 +759,12 @@ impl<B: BorshyBlockchain> State<B> {
       (init, state)
     };
 
-    let messages = (if init {
+    let messages = if init {
       db::BlockNumber::set(txn, genesis, &BlockNumber::ONE);
-      Some(state.start_round::<N>(blockchain, signer, txn, state.round_number).await)
+      state.start_round::<N>(blockchain, signer, txn, state.round_number).await
     } else {
-      None
-    })
-    .into_iter()
-    .flatten();
+      RoundMessages::NONE
+    };
 
     (state, messages)
   }
@@ -750,7 +777,7 @@ impl<B: BorshyBlockchain> State<B> {
   /// message in the first place.
   ///
   /// This future is NOT cancel-safe.
-  pub(crate) async fn message<
+  pub(super) async fn message<
     N: Network<
       B::Validator,
       <B::SignatureScheme as SignatureScheme>::Signature,
@@ -766,7 +793,7 @@ impl<B: BorshyBlockchain> State<B> {
     >,
     txn: &mut impl Transaction,
     message: MessageFor<B>,
-  ) -> Result<StateStartRoundRespond<B>, MessageError> {
+  ) -> Result<RoundMessages<B>, MessageError> {
     // If this is historic or for a future block, ignore this message
     if (message.block_number < self.block_number) || (message.round_number < self.round_number) {
       Err(MessageError::Stale)?;
@@ -781,16 +808,14 @@ impl<B: BorshyBlockchain> State<B> {
 
     // Update `round_messages`
     {
-      let empty_round_messages =
-        || RoundMessages { proposal: None, prevote: None, precommit: None };
       let round_messages =
-        self.round_messages.entry(message.validator).or_insert(empty_round_messages());
+        self.round_messages.entry(message.validator).or_insert(RoundMessages::NONE);
       // If these round messages are historic to this message's round, move on
       if round_messages
         .round_number()
         .is_some_and(|round_number| round_number < message.round_number)
       {
-        *round_messages = empty_round_messages();
+        *round_messages = RoundMessages::NONE;
       }
       debug_assert!(round_messages
         .round_number()
@@ -801,63 +826,53 @@ impl<B: BorshyBlockchain> State<B> {
         .round_number()
         .is_none_or(|round_number| round_number == message.round_number)
       {
-        let slot = match message.data {
-          Data::Proposal { .. } => &mut round_messages.proposal,
-          Data::Prevote { .. } => &mut round_messages.prevote,
-          Data::Precommit { .. } => &mut round_messages.precommit,
-        };
-        match slot {
-          Some(existing_message) => {
-            // If we've already handled this message, ignore it
-            if existing_message == &message {
-              Err(MessageError::AlreadyHandled)?;
-            }
+        if let Some(existing_message) = round_messages.insert(&message) {
+          // If we've already handled this message, ignore it
+          if existing_message == &message {
+            Err(MessageError::AlreadyHandled)?;
+          }
 
-            // Slash this validator for equivocating (there is a different existing message)
-            blockchain.slash(
-              message.validator,
-              SlashReason {
-                block_number: message.block_number,
-                round_number: message.round_number,
-                evidence: Evidence::Equivocation {
-                  data: match (existing_message.data.clone(), message.data.clone()) {
-                    (
-                      Data::Proposal { valid_round: first_valid_round, proposal: first_proposal },
-                      Data::Proposal { valid_round: second_valid_round, proposal: second_proposal },
-                    ) => EquivocatingData::Proposal {
-                      first_valid_round,
-                      first_proposal: first_proposal.hash(),
-                      second_valid_round,
-                      second_proposal: second_proposal.hash(),
-                    },
-                    (
-                      Data::Prevote { block: first_block },
-                      Data::Prevote { block: second_block },
-                    ) => EquivocatingData::Prevote { first_block, second_block },
-                    (
-                      Data::Precommit {
-                        block_and_precommit_signature: first_block_and_precommit_signature,
-                      },
-                      Data::Precommit {
-                        block_and_precommit_signature: second_block_and_precommit_signature,
-                      },
-                    ) => EquivocatingData::Precommit {
-                      first_block_and_precommit_signature,
-                      second_block_and_precommit_signature,
-                    },
-                    _ => unreachable!("`RoundMessages` had a mismatch between message and slot"),
+          // Slash this validator for equivocating (there is a different existing message)
+          blockchain.slash(
+            message.validator,
+            SlashReason {
+              block_number: message.block_number,
+              round_number: message.round_number,
+              evidence: Evidence::Equivocation {
+                data: match (existing_message.data.clone(), message.data.clone()) {
+                  (
+                    Data::Proposal { valid_round: first_valid_round, proposal: first_proposal },
+                    Data::Proposal { valid_round: second_valid_round, proposal: second_proposal },
+                  ) => EquivocatingData::Proposal {
+                    first_valid_round,
+                    first_proposal: first_proposal.hash(),
+                    second_valid_round,
+                    second_proposal: second_proposal.hash(),
                   },
-                  first_signature: existing_message.signature.clone(),
-                  second_signature: message.signature.clone(),
+                  (Data::Prevote { block: first_block }, Data::Prevote { block: second_block }) => {
+                    EquivocatingData::Prevote { first_block, second_block }
+                  }
+                  (
+                    Data::Precommit {
+                      block_and_precommit_signature: first_block_and_precommit_signature,
+                    },
+                    Data::Precommit {
+                      block_and_precommit_signature: second_block_and_precommit_signature,
+                    },
+                  ) => EquivocatingData::Precommit {
+                    first_block_and_precommit_signature,
+                    second_block_and_precommit_signature,
+                  },
+                  _ => unreachable!("`RoundMessages` had a mismatch between message and slot"),
                 },
+                first_signature: existing_message.signature.clone(),
+                second_signature: message.signature.clone(),
               },
-            );
+            },
+          );
 
-            return Ok(None.into_iter().flatten().chain(None.into_iter().flatten()));
-          }
-          None => {
-            *slot = Some(message.clone());
-          }
+          // TODO: Should we have an error for this?
+          return Ok(RoundMessages::NONE);
         }
       }
     }
@@ -866,7 +881,7 @@ impl<B: BorshyBlockchain> State<B> {
     // TODO: Use a tally for it instead of doing a full iteration upon every message
     // L55-L56
     let validator_set = blockchain.validator_set();
-    let start_round_messages = if (message.round_number > self.round_number) && {
+    let mut round_messages = if (message.round_number > self.round_number) && {
       let mut weight = 0u16;
       for (validator, round_messages) in &self.round_messages {
         if round_messages
@@ -878,7 +893,7 @@ impl<B: BorshyBlockchain> State<B> {
       }
       weight > validator_set.fault_threshold()
     } {
-      let start_round_messages =
+      let round_messages =
         self.start_round::<N>(blockchain, signer, txn, message.round_number).await;
       // Accumulate every message from this round
       for (_validator, round_messages) in
@@ -886,15 +901,15 @@ impl<B: BorshyBlockchain> State<B> {
           round_messages.round_number() == Some(message.round_number)
         })
       {
-        for message in round_messages.messages() {
+        for message in round_messages {
           if structurally_validate_if_proposal::<B>(blockchain, &message) {
             self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
           }
         }
       }
-      Some(start_round_messages)
+      round_messages
     } else {
-      None
+      RoundMessages::NONE
     };
 
     // This MAY accumulate this message twice if we just jumped ahead, but this is fine
@@ -904,16 +919,21 @@ impl<B: BorshyBlockchain> State<B> {
       self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
     }
 
-    Ok(
-      start_round_messages
-        .into_iter()
-        .flatten()
-        .chain(Some(self.respond::<N>(blockchain, signer, txn).await).into_iter().flatten()),
-    )
+    // Merge the two `RoundMessages`
+    let RoundMessages { proposal, prevote, precommit } =
+      self.respond::<N>(blockchain, signer, txn).await;
+    // [`State::respond`] does not emit proposal messages
+    debug_assert!(proposal.is_none());
+    // These hold as else we'd be equivocating, a violation of our state machine
+    debug_assert!(round_messages.prevote.is_none() || prevote.is_none());
+    debug_assert!(round_messages.precommit.is_none() || precommit.is_none());
+    round_messages.prevote = round_messages.prevote.or(prevote);
+    round_messages.precommit = round_messages.precommit.or(precommit);
+    Ok(round_messages)
   }
 }
 
-pub(crate) struct TimeoutExpired<'state, 'blockchain, 'signer, B: Blockchain, S> {
+pub(super) struct TimeoutExpired<'state, 'blockchain, 'signer, B: Blockchain, S> {
   state: &'state mut State<B>,
   blockchain: &'blockchain B,
   signer: &'signer S,
@@ -928,7 +948,7 @@ impl<
   > TimeoutExpired<'_, '_, '_, B, S>
 {
   /// This future is NOT cancel-safe.
-  pub(crate) async fn respond<
+  pub(super) async fn respond<
     N: Network<
       B::Validator,
       <B::SignatureScheme as SignatureScheme>::Signature,
@@ -938,41 +958,38 @@ impl<
   >(
     self,
     txn: &mut impl Transaction,
-  ) -> StateTimeout<B> {
+  ) -> RoundMessages<B> {
     let Self { state, blockchain, signer } = self;
 
-    let (rebroadcast, start, respond) =
-      if state.pending_step_timeout.is_none() && state.pending_precommit_timeout.is_none() {
-        /*
-          If asked to respond, and we have nothing to respond to, rebroadcast our latest message to
-          try and get any validators which were outside of the synchrony bound to catch up to where
-          we are now, so we do begin receiving new events to respond to again.
-        */
-        (state.our_latest_message.clone(), None, None)
+    if state.pending_step_timeout.is_none() && state.pending_precommit_timeout.is_none() {
+      /*
+        If asked to respond, and we have nothing to respond to, rebroadcast our latest message to
+        try and get any validators who were outside of the synchrony bound to catch up to where we
+        are now, so we do begin receiving new messages to respond to again.
+      */
+      let mut round_messages = RoundMessages::NONE;
+      if let Some(our_latest_message) = state.our_latest_message.as_ref() {
+        let existing = round_messages.insert(our_latest_message);
+        debug_assert!(existing.is_none());
+      }
+      round_messages
+    } else if state
+      .pending_precommit_timeout
+      .is_some_and(|(start, duration)| start.elapsed() >= duration)
+    {
+      if let Some(next_round) = state.round_number.0.checked_add(1) {
+        state.start_round::<N>(blockchain, signer, txn, RoundNumber(next_round)).await
       } else {
-        let (start, respond) = if state
-          .pending_precommit_timeout
-          .is_some_and(|(start, duration)| start.elapsed() >= duration)
-        {
-          if let Some(next_round) = state.round_number.0.checked_add(1) {
-            (
-              Some(state.start_round::<N>(blockchain, signer, txn, RoundNumber(next_round)).await),
-              None,
-            )
-          } else {
-            /*
-              This signifies a permanent stall, but `u64::MAX` is effectively unreachable unless
-              the fault threshold was broken by a group of validators who forced us to jump up to
-              here. Accordingly, it's accepted.
-            */
-            (None, None)
-          }
-        } else {
-          (None, Some(state.respond::<N>(blockchain, signer, txn).await))
-        };
-        (None, start, respond)
-      };
-    rebroadcast.into_iter().chain(start.into_iter().flatten().chain(respond.into_iter().flatten()))
+        /*
+          This signifies a permanent stall, but `u64::MAX` is effectively unreachable unless the
+          fault threshold was broken by a group of validators who forced us to jump up to here.
+          Accordingly, it's accepted.
+        */
+        RoundMessages::NONE
+      }
+    } else {
+      state.respond::<N>(blockchain, signer, txn).await
+    }
   }
 }
 
@@ -984,7 +1001,7 @@ impl<B: BorshyBlockchain> State<B> {
   ///
   /// This corresponds to L57-L67.
   #[must_use]
-  pub(crate) async fn timeout<
+  pub(super) async fn timeout<
     'state,
     'blockchain,
     'signer,
@@ -1033,7 +1050,7 @@ impl<B: BorshyBlockchain> State<B> {
 
   /// Handle a commit.
   // L51-L54
-  pub(crate) async fn commit<
+  pub(super) async fn commit<
     N: Network<
       B::Validator,
       <B::SignatureScheme as SignatureScheme>::Signature,
@@ -1050,10 +1067,10 @@ impl<B: BorshyBlockchain> State<B> {
     txn: &mut impl Transaction,
     block: B::Block,
     commit: CommitFor<B>,
-  ) -> StateOptionStartRound<B> {
+  ) -> RoundMessages<B> {
     let Some(next_block_number) = self.block_number.0.checked_add(1) else {
       // Stall if the block number is at the maximum, as we can't represent further blocks
-      return None.into_iter().flatten();
+      return RoundMessages::NONE;
     };
 
     {
@@ -1103,16 +1120,14 @@ impl<B: BorshyBlockchain> State<B> {
       db::OurLatestMessage::<B>::del(txn, genesis);
     }
 
-    Some(self.start_round::<N>(blockchain, signer, txn, RoundNumber::ONE).await)
-      .into_iter()
-      .flatten()
+    self.start_round::<N>(blockchain, signer, txn, RoundNumber::ONE).await
   }
 
   /// Attempt to create a commit.
   ///
   /// This SHOULD be called after every message/timeout.
   // L49-L54
-  pub(crate) async fn attempt_commit<
+  pub(super) async fn attempt_commit<
     N: Network<
       B::Validator,
       <B::SignatureScheme as SignatureScheme>::Signature,
@@ -1127,9 +1142,9 @@ impl<B: BorshyBlockchain> State<B> {
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >,
     txn: &mut impl Transaction,
-  ) -> StateOptionStartRound<B> {
+  ) -> RoundMessages<B> {
     let Some((block, commit)) = self.round_metrics.commit(blockchain) else {
-      return None.into_iter().flatten();
+      return RoundMessages::NONE;
     };
 
     self.commit::<N>(blockchain, signer, txn, block, commit).await

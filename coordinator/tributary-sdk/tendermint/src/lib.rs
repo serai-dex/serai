@@ -34,7 +34,7 @@ pub use slash_reason::*;
 #[cfg(feature = "std")]
 mod state;
 #[cfg(feature = "std")]
-pub(crate) use state::*;
+use state::*;
 
 /// A view over the network used for consensus.
 pub trait Network<V: Validator, S: Signature, A: AggregateSignature, B: Block> {
