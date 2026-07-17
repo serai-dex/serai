@@ -20,7 +20,8 @@ serai_db::schema!(TributaryState {
 
   Locked: <Hash: Borshy>(genesis: &[u8]) -> (crate::RoundNumber, Hash),
 
-  OurLatestMessage: <B: BorshyBlockchain>(genesis: &[u8]) -> crate::MessageFor<B>,
+  OurLatestPrevote: <B: BorshyBlockchain>(genesis: &[u8]) -> crate::MessageFor<B>,
+  OurLatestPrecommit: <B: BorshyBlockchain>(genesis: &[u8]) -> crate::MessageFor<B>,
 });
 
 pub(super) fn timeout_in_ms_since_epoch(timeout: Duration) -> u64 {
