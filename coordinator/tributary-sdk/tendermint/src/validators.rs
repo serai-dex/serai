@@ -65,7 +65,7 @@ pub trait Signer {
   fn sign(&self, message: impl IntoIterator<Item = impl AsRef<[u8]>>) -> Self::SignFuture;
 }
 
-impl<S: Signer> Signer for &S {
+impl<S: ?Sized + Signer> Signer for &S {
   type Validator = S::Validator;
   type Signature = S::Signature;
 
@@ -145,7 +145,7 @@ pub trait SignatureScheme {
   ) -> Result<impl IntoIterator<Item = Self::Validator>, InvalidAggregateSignature>;
 }
 
-impl<S: SignatureScheme> SignatureScheme for &S {
+impl<S: ?Sized + SignatureScheme> SignatureScheme for &S {
   type Validator = S::Validator;
   type Signature = S::Signature;
   type AggregateSignature = S::AggregateSignature;
@@ -230,7 +230,7 @@ pub trait ValidatorSet {
   fn proposer(&self, block_number: BlockNumber, round_number: RoundNumber) -> Self::Validator;
 }
 
-impl<V: ValidatorSet> ValidatorSet for &V {
+impl<V: ?Sized + ValidatorSet> ValidatorSet for &V {
   type Validator = V::Validator;
 
   fn total_weight(&self) -> NonZero<u16> {
