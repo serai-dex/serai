@@ -497,8 +497,9 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
   const BLOCK_PROCESSING_TIME: Duration = BLOCK_PROCESSING_TIME;
   const LATENCY_TIME: Duration = LATENCY_TIME;
 
-  async fn sleep(duration: Duration) {
-    tokio::time::sleep(duration).await;
+  type Sleep = tokio::time::Sleep;
+  fn sleep(duration: Duration) -> Self::Sleep {
+    tokio::time::sleep(duration)
   }
 
   fn broadcast(&mut self, msg: MessageFor<Self>) -> impl Send + Future<Output = ()> {

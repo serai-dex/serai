@@ -117,7 +117,8 @@ pub trait SignatureScheme {
   /// The message is singular, expected to be consistent across all signatures, and the
   /// concatenation of each byte slice yielded by the iterator.
   ///
-  /// This MAY panic if a validator/signature pair is invalid.
+  /// This MAY panic if a validator/signature pair is invalid for the message, or if the
+  /// validators' sum weight does not satisfy the threshold.
   #[must_use]
   fn aggregate<'sig>(
     &self,

@@ -64,10 +64,13 @@ pub trait Network<V: Validator, S: Signature, A: AggregateSignature, B: Block> {
   /// time.
   const BLOCK_PROCESSING_TIME: Duration;
 
+  /// The future returned by [`Network::sleep`].
+  type Sleep: Future<Output = ()>;
+
   /// An asynchronous implementation of [`std::thread::sleep`].
   ///
   /// This MUST be cancel-safe.
-  fn sleep(duration: Duration) -> impl Send + Future<Output = ()>;
+  fn sleep(duration: Duration) -> Self::Sleep;
 
   /// Broadcast a message to the other validators.
   ///
@@ -77,6 +80,8 @@ pub trait Network<V: Validator, S: Signature, A: AggregateSignature, B: Block> {
   /// broadcast with any specific security properties, though failure for this message to be
   /// delivered to a sufficient amount of other validators in a timely fashion will cause consensus
   /// to stall until the timeout for a round exceeds the latency of this network.
+  ///
+  /// This DOES NOT have to be cancel-safe.
   fn broadcast(&mut self, message: Message<V, S, A, B>) -> impl Send + Future<Output = ()>;
 }
 
@@ -397,6 +402,7 @@ mod tendermint {
           <B::SignatureScheme as SignatureScheme>::Signature,
           <B::SignatureScheme as SignatureScheme>::AggregateSignature,
           B::Block,
+          Sleep: Send,
         >,
     >(
       blockchain: B,

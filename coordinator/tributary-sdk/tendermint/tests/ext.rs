@@ -223,7 +223,8 @@ impl
   const BLOCK_DOWNLOADING_TIME: Duration = Duration::from_secs(1);
   const BLOCK_PROCESSING_TIME: Duration = Duration::from_secs(1);
 
-  fn sleep(duration: Duration) -> impl Send + Future<Output = ()> {
+  type Sleep = tokio::time::Sleep;
+  fn sleep(duration: Duration) -> Self::Sleep {
     tokio::time::sleep(duration)
   }
 

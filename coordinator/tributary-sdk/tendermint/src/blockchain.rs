@@ -137,6 +137,8 @@ pub trait Blockchain {
   /// candidate with minimal context passed and no call pattern guaranteed. The proposer is
   /// specified in case the blockchain wishes to record a slash for this block, if it is
   /// fundamentally invalid.
+  ///
+  /// This DOES NOT have to be cancel-safe.
   // TODO: Don't just provide the proposer, but enough to build evidence sufficient to convince
   // someone else (the signed proposal message)?
   // TODO: `&mut self`?
@@ -163,6 +165,8 @@ pub trait Blockchain {
   /// This MAY be called multiple times if the process reboots before the Tendermint process
   /// commits its advanced state. The underlying blockchain MUST be able to handle being asked to
   /// add a block which it already added.
+  ///
+  /// This DOES NOT have to be cancel-safe.
   fn add_block(
     &mut self,
     block: Self::Block,
