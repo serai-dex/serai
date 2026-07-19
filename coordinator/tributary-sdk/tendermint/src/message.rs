@@ -2,7 +2,7 @@ use core::{iter::Flatten, fmt};
 
 use crate::{
   BlockNumber, RoundNumber, Validator, ValidatorSet as _, Signature, AggregateSignature,
-  SignatureScheme, Signer, Block, Commit, Blockchain, Evidence, SlashReason,
+  SignatureScheme, Signer, BlockHash, Block, Commit, Blockchain, Evidence, SlashReason,
 };
 
 /// A valid round.
@@ -253,7 +253,7 @@ pub type MessageFor<B> = Message<
   <B as Blockchain>::Block,
 >;
 
-pub(crate) enum MessageError {
+pub(crate) enum MessageError<S: Signature, A: AggregateSignature, H: BlockHash> {
   /// The message was stale within the current context.
   Stale,
   /// The message was for a future context.
@@ -262,8 +262,10 @@ pub(crate) enum MessageError {
   Future,
   /// The message was not from a validator.
   NotValidator,
-  /// The message had an invalid signature.
-  InvalidSignature,
+  /// The message had an invalid signature and could not be authenticated as from the validator.
+  InvalidOuterSignature,
+  /// The message has an invalid intenal structure.
+  Invalid(SlashReason<S, A, H>),
   /// This message has already been handled.
   AlreadyHandled,
 }
@@ -304,19 +306,23 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
     Self { validator: signer.validator(), block_number, round_number, data, signature }
   }
 
-  /// Verify all signatures within this message.
+  /// Perform static verification for this message.
   ///
-  /// This verifies not just the message's signature, but if this is a precommit with a contained
-  /// signature, the precommit's signature as well. If the latter is invalid, the corresponding
-  /// slash will be issued.
-  pub(crate) fn verify_signatures(
+  /// This only verifies the values within this message which can be verified against solely the
+  /// `blockchain` itself, without any state from the Tendermint consensus process. This includes:
+  ///
+  /// - The message's signature
+  /// - The signatures inside the message ([`ValidRound`], the precommit signature)
+  /// - The proposer is actually the proposer for this round
+  /// - The valid round's round number is less than this message's round number
+  pub(crate) fn static_verificiation(
     &self,
     blockchain: &impl Blockchain<
       Validator = V,
       SignatureScheme: SignatureScheme<Signature = S, AggregateSignature = A>,
       Block = B,
     >,
-  ) -> Result<(), MessageError> {
+  ) -> Result<(), MessageError<S, A, B::Hash>> {
     let validator_set = blockchain.validator_set();
     if validator_set.weight(&self.validator).is_none() {
       Err(MessageError::NotValidator)?;
@@ -331,60 +337,51 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
       Self::signature_message(genesis, self.block_number, self.round_number, &self.data),
       &self.signature,
     ) {
-      Err(MessageError::InvalidSignature)?;
+      Err(MessageError::InvalidOuterSignature)?;
     }
 
-    if let Data::Proposal {
-      valid_round: Some(ValidRound { round_number, aggregate_signature }),
-      proposal,
-    } = &self.data
-    {
-      if !signature_scheme
-        .verify_aggregate(
-          Self::signature_message(
-            genesis,
-            self.block_number,
-            *round_number,
-            &Data::Prevote { block: Some(proposal.hash()) },
-          ),
-          aggregate_signature,
-        )
-        .is_ok_and(|validators| crate::validators_satisfy_threshold(validators, validator_set))
-      {
-        blockchain.slash(
-          self.validator,
-          SlashReason {
+    match &self.data {
+      Data::Proposal { valid_round, proposal } => {
+        if !(valid_round.as_ref().is_none_or(|ValidRound { round_number, aggregate_signature }| {
+          ((*round_number) < self.round_number) &&
+            signature_scheme
+              .verify_aggregate(
+                Self::signature_message(
+                  genesis,
+                  self.block_number,
+                  *round_number,
+                  &Data::Prevote { block: Some(proposal.hash()) },
+                ),
+                aggregate_signature,
+              )
+              .is_ok_and(|validators| {
+                crate::validators_satisfy_threshold(validators, validator_set)
+              })
+        }) && (self.validator ==
+          blockchain.validator_set().proposer(self.block_number, self.round_number)))
+        {
+          Err(MessageError::Invalid(SlashReason {
             block_number: self.block_number,
             round_number: self.round_number,
             evidence: Evidence::InvalidProposal {
-              valid_round: Some(ValidRound {
-                round_number: *round_number,
-                aggregate_signature: aggregate_signature.clone(),
-              }),
+              valid_round: valid_round.clone(),
               proposal: proposal.hash(),
               signature: self.signature.clone(),
             },
-          },
-        );
-        Err(MessageError::InvalidSignature)?;
+          }))?;
+        }
       }
-    }
-
-    if let Data::Precommit { block_and_precommit_signature: Some((block, precommit_signature)) } =
-      &self.data
-    {
-      if !Commit::verify_precommit(
-        signature_scheme,
-        &self.validator,
-        genesis,
-        self.block_number,
-        self.round_number,
-        block.as_ref(),
-        precommit_signature,
-      ) {
-        blockchain.slash(
-          self.validator,
-          SlashReason {
+      Data::Precommit { block_and_precommit_signature: Some((block, precommit_signature)) } => {
+        if !Commit::verify_precommit(
+          signature_scheme,
+          &self.validator,
+          genesis,
+          self.block_number,
+          self.round_number,
+          block.as_ref(),
+          precommit_signature,
+        ) {
+          Err(MessageError::Invalid(SlashReason {
             block_number: self.block_number,
             round_number: self.round_number,
             evidence: Evidence::InvalidPrecommit {
@@ -392,10 +389,10 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
               precommit_signature: precommit_signature.clone(),
               signature: self.signature.clone(),
             },
-          },
-        );
-        Err(MessageError::InvalidSignature)?;
+          }))?;
+        }
       }
+      Data::Prevote { .. } | Data::Precommit { block_and_precommit_signature: None } => {}
     }
 
     Ok(())

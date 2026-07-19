@@ -238,6 +238,7 @@ mod tendermint {
             drop(tick);
 
             let mut txn = self.db.txn();
+            let validator = message.validator;
             match self.state.message::<N>(&self.blockchain, &self.signer, &mut txn, message).await {
               Ok(messages) => {
                 txn.commit();
@@ -245,11 +246,15 @@ mod tendermint {
                   self.network.broadcast(message).await;
                 }
               }
+              Err(MessageError::Invalid(slash_reason)) => {
+                self.blockchain.slash(validator, slash_reason);
+                continue;
+              }
               Err(
                 MessageError::Stale |
                 MessageError::Future |
                 MessageError::NotValidator |
-                MessageError::InvalidSignature |
+                MessageError::InvalidOuterSignature |
                 MessageError::AlreadyHandled,
               ) => continue,
             }

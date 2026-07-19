@@ -4,7 +4,7 @@ use serai_db::{Get, Transaction};
 
 use crate::{
   SignatureScheme, ValidatorSet, BlockNumber, RoundNumber, Block, Commit, CommitFor, Blockchain,
-  ValidRound, Data, Evidence, SlashReason, Message, MessageFor,
+  ValidRound, Data, Message, MessageFor,
 };
 
 use super::{Borshy, BorshyBlockchain};
@@ -409,10 +409,9 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
 
   /// Accumulate a message into the round's metrics.
   ///
-  /// The message MUST be for the current block, round numbers.
-  ///
-  /// Messages with `Data::Proposal` MUST have been validated to have the correct proposer AND a
-  /// valid `locked_round` value.
+  /// The message MUST be for the current block, round numbers AND have valid signatures. Messages
+  /// with `Data::Proposal` MUST have been validated to have the correct proposer AND a valid
+  /// `locked_round` value. This method performs NO structural validation.
   ///
   /// This explicitly does not handle equivocations, which would require a full log of this round's
   /// messages to do so with evidence, and instead solely updates the metrics when there would not
@@ -550,48 +549,5 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
     }
 
     result
-  }
-}
-
-/// Validate a message with `Data::Proposal`'s structure.
-///
-/// This returns `true` so long as:
-/// - If the message contains a `Data::Proposal`, it is by the expected proposer
-/// - If the message contains a `Data::Proposal`, it has a valid round less than the current round
-///
-/// This returns `false` otherwise and emits a slash for the validator who sent this message.
-///
-/// This satisfies the requirements specifically necessary for proposals before invoking
-/// [`RoundMetrics::accumulate`].
-#[must_use]
-pub(super) fn structurally_validate_if_proposal<B: Blockchain>(
-  blockchain: &B,
-  message: &MessageFor<B>,
-) -> bool {
-  match &message.data {
-    Data::Proposal { valid_round, proposal } => {
-      let structurally_valid = (valid_round
-        .as_ref()
-        .map(|ValidRound { round_number, aggregate_signature: _ }| *round_number) <
-        Some(message.round_number)) &&
-        (message.validator ==
-          blockchain.validator_set().proposer(message.block_number, message.round_number));
-      if !structurally_valid {
-        blockchain.slash(
-          message.validator,
-          SlashReason {
-            block_number: message.block_number,
-            round_number: message.round_number,
-            evidence: Evidence::InvalidProposal {
-              valid_round: valid_round.clone(),
-              proposal: proposal.hash(),
-              signature: message.signature.clone(),
-            },
-          },
-        );
-      }
-      structurally_valid
-    }
-    Data::Prevote { .. } | Data::Precommit { .. } => true,
   }
 }

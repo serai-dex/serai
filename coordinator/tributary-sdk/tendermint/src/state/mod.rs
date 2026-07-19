@@ -832,7 +832,14 @@ impl<B: BorshyBlockchain> State<B> {
     >),
     txn: &mut impl Transaction,
     message: MessageFor<B>,
-  ) -> Result<RoundMessages<B>, MessageError> {
+  ) -> Result<
+    RoundMessages<B>,
+    MessageError<
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      <B::Block as Block>::Hash,
+    >,
+  > {
     // If this is historic or for a future block, ignore this message
     if (message.block_number < self.block_number) || (message.round_number < self.round_number) {
       Err(MessageError::Stale)?;
@@ -842,8 +849,8 @@ impl<B: BorshyBlockchain> State<B> {
     }
     debug_assert_eq!(message.block_number, self.block_number);
 
-    // Verify this message's signature(s)
-    message.verify_signatures(blockchain)?;
+    // Verify this message's static properties
+    message.static_verificiation(blockchain)?;
 
     // Update `round_messages`
     {
@@ -941,33 +948,31 @@ impl<B: BorshyBlockchain> State<B> {
         })
       {
         for message in round_messages {
-          if structurally_validate_if_proposal::<B>(blockchain, &message) {
-            self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
-          }
+          self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
         }
       }
       round_messages
-    } else {
+    } else if message.round_number == self.round_number {
+      self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
       RoundMessages::NONE
+    } else {
+      // If this message wasn't for the current round, simply return now
+      return Ok(RoundMessages::NONE);
     };
 
-    // This MAY accumulate this message twice if we just jumped ahead, but this is fine
-    if (message.round_number == self.round_number) &&
-      structurally_validate_if_proposal::<B>(blockchain, &message)
-    {
-      self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
-    }
-
-    // Merge the two `RoundMessages`
+    // Respond to the updated state
     let RoundMessages { proposal, prevote, precommit } =
       self.respond::<N>(blockchain, signer, txn).await;
-    // [`State::respond`] does not emit proposal messages
-    debug_assert!(proposal.is_none());
-    // These hold as else we'd be equivocating, a violation of our state machine
-    debug_assert!(round_messages.prevote.is_none() || prevote.is_none());
-    debug_assert!(round_messages.precommit.is_none() || precommit.is_none());
-    round_messages.prevote = round_messages.prevote.or(prevote);
-    round_messages.precommit = round_messages.precommit.or(precommit);
+    // Merge the two `RoundMessages`
+    {
+      // [`State::respond`] does not emit proposal messages
+      debug_assert!(proposal.is_none());
+      // These hold as else we'd be equivocating, a violation of our state machine
+      debug_assert!(round_messages.prevote.is_none() || prevote.is_none());
+      debug_assert!(round_messages.precommit.is_none() || precommit.is_none());
+      round_messages.prevote = round_messages.prevote.or(prevote);
+      round_messages.precommit = round_messages.precommit.or(precommit);
+    }
     Ok(round_messages)
   }
 }
