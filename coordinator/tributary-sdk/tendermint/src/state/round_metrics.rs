@@ -264,7 +264,7 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
   pub(super) fn accumulate_proposal(
     &mut self,
     genesis: impl AsRef<[u8]>,
-    validator_set: &impl ValidatorSet<Validator = B::Validator>,
+    validator_set: &(impl ?Sized + ValidatorSet<Validator = B::Validator>),
     txn: &mut impl Transaction,
     proposer: B::Validator,
     valid_round: Option<RoundNumber>,
@@ -313,7 +313,7 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
   pub(super) fn accumulate_prevote(
     &mut self,
     genesis: impl AsRef<[u8]>,
-    validator_set: &impl ValidatorSet<Validator = B::Validator>,
+    validator_set: &(impl ?Sized + ValidatorSet<Validator = B::Validator>),
     txn: &mut impl Transaction,
     validator: B::Validator,
     block: Option<<B::Block as Block>::Hash>,
@@ -366,7 +366,7 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
   pub(super) fn accumulate_precommit(
     &mut self,
     genesis: impl AsRef<[u8]>,
-    validator_set: &impl ValidatorSet<Validator = B::Validator>,
+    validator_set: &(impl ?Sized + ValidatorSet<Validator = B::Validator>),
     txn: &mut impl Transaction,
     validator: B::Validator,
     block_and_precommit_signature: Option<(
@@ -421,7 +421,7 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
   pub(super) fn accumulate(
     &mut self,
     genesis: impl AsRef<[u8]>,
-    validator_set: &impl ValidatorSet<Validator = B::Validator>,
+    validator_set: &(impl ?Sized + ValidatorSet<Validator = B::Validator>),
     txn: &mut impl Transaction,
     message: MessageFor<B>,
   ) {
@@ -459,7 +459,7 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
 
   pub(super) fn new(
     genesis: impl AsRef<[u8]>,
-    validator_set: &impl ValidatorSet<Validator = B::Validator>,
+    validator_set: &(impl ?Sized + ValidatorSet<Validator = B::Validator>),
     getter: &impl Get,
     block_number: BlockNumber,
     round_number: RoundNumber,

@@ -47,7 +47,7 @@ impl<A: AggregateSignature> Clone for Commit<A> {
 #[must_use]
 pub(crate) fn validators_satisfy_threshold<V: Validator>(
   validators: impl IntoIterator<Item = V>,
-  validator_set: &impl ValidatorSet<Validator = V>,
+  validator_set: &(impl ?Sized + ValidatorSet<Validator = V>),
 ) -> bool {
   // Ensure every validator is in fact a validator and their sum weight satisfies the threshold
   validators
@@ -110,8 +110,8 @@ impl<A: AggregateSignature> Commit<A> {
   }
 
   #[must_use]
-  pub(crate) async fn sign<S: SignatureScheme<AggregateSignature = A>>(
-    signer: &impl Signer<Signature = <S as SignatureScheme>::Signature>,
+  pub(crate) async fn sign<S: ?Sized + SignatureScheme<AggregateSignature = A>>(
+    signer: &(impl ?Sized + Signer<Signature = <S as SignatureScheme>::Signature>),
     genesis: &[u8],
     block_number: BlockNumber,
     round_number: RoundNumber,
@@ -121,7 +121,7 @@ impl<A: AggregateSignature> Commit<A> {
   }
 
   #[must_use]
-  pub(crate) fn verify_precommit<S: SignatureScheme<AggregateSignature = A>>(
+  pub(crate) fn verify_precommit<S: ?Sized + SignatureScheme<AggregateSignature = A>>(
     signature_scheme: &S,
     validator: &S::Validator,
     genesis: &[u8],
@@ -139,9 +139,9 @@ impl<A: AggregateSignature> Commit<A> {
 
   /// Verify a commit.
   #[must_use]
-  pub fn verify<S: SignatureScheme<AggregateSignature = A>>(
+  pub fn verify<S: ?Sized + SignatureScheme<AggregateSignature = A>>(
     &self,
-    validator_set: &impl ValidatorSet<Validator = S::Validator>,
+    validator_set: &(impl ?Sized + ValidatorSet<Validator = S::Validator>),
     signature_scheme: &S,
     genesis: impl AsRef<[u8]>,
     block_hash: impl AsRef<[u8]>,

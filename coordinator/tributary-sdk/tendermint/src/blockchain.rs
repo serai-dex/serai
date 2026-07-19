@@ -96,9 +96,9 @@ pub trait Blockchain {
   /// It is RECOMMENDED to use [`u16`] to identify validators.
   type Validator: Validator;
   /// The type used to define the validator set.
-  type ValidatorSet: ValidatorSet<Validator = Self::Validator>;
+  type ValidatorSet: ?Sized + ValidatorSet<Validator = Self::Validator>;
   /// The signature scheme used by validators.
-  type SignatureScheme: SignatureScheme<Validator = Self::Validator>;
+  type SignatureScheme: ?Sized + SignatureScheme<Validator = Self::Validator>;
 
   /// The type used to represent the genesis of this blockchain.
   ///

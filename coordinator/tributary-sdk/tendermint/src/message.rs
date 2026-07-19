@@ -293,7 +293,7 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
 
   #[must_use]
   pub(crate) async fn sign(
-    signer: &impl Signer<Validator = V, Signature = S>,
+    signer: &(impl ?Sized + Signer<Validator = V, Signature = S>),
     genesis: &[u8],
     block_number: BlockNumber,
     round_number: RoundNumber,
