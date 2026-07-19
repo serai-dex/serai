@@ -176,18 +176,31 @@ pub(super) struct State<B: Blockchain> {
   /// validator has been observed to be performing will be kept.
   round_messages: HashMap<B::Validator, RoundMessages<B>>,
 
-  /// Our latest prevote message.
+  /// Our latest prevote messages.
   ///
   /// We rebroadcast this with the assumption all other validators will be doing the same for their
   /// own messages. This will cause a latent peer to jump to the current round, get past the
   /// prevote phase, and send their own precommit.
-  our_latest_prevote: Option<MessageFor<B>>,
+  ///
+  /// We keep the latest _two_ prevotes as if we send our own prevote for round #n+1, there may
+  /// only be `f` such validators doing so, while the remaining `f + 1` validators who have been
+  /// online may be stuck on round #n. If `f` of these validators then go offline, replaced by `f`
+  /// validators who have been offline the entire time, those validators will see `f+1` precommits
+  /// for round #n (which is insufficient to make progress, requiring observing `2 f + 1`). By
+  /// keeping our prevote for the prior round as well, the validators who were offline the entire
+  /// time may be handheld through the prevote step, then sending their own precommits, finally
+  /// achieving the necessary precommits for _everyone_ to move to the next round.
+  our_latest_prevotes: [Option<MessageFor<B>>; 2],
 
   /// Our latest precommit message.
   ///
   /// We rebroadcast this with the assumption all other validators will be doing the same for their
   /// own messages. This will cause a latent peer to jump to the current round, and once we have
   /// `2 f + 1` precommits, start the next round.
+  ///
+  /// We only store our latest precommit as this implies the existence of `2 f + 1` prevotes for
+  /// this round, as sufficient for everyone to jump to this round even if `f` validators are
+  /// substituted.
   our_latest_precommit: Option<MessageFor<B>>,
 }
 
@@ -323,8 +336,8 @@ impl<B: BorshyBlockchain> State<B> {
     self.step = Step::Prevote;
     db::Step::set(txn, genesis, &self.step);
 
-    self.our_latest_prevote = Some(result.clone());
-    db::OurLatestPrevote::<B>::set(txn, genesis, &result);
+    self.our_latest_prevotes = [self.our_latest_prevotes[1].take(), Some(result.clone())];
+    db::OurLatestPrevotes::<B>::set(txn, genesis, &self.our_latest_prevotes);
     result
   }
 
@@ -426,6 +439,11 @@ impl<B: BorshyBlockchain> State<B> {
       Data::Precommit { block_and_precommit_signature },
     )
     .await;
+    /*
+      Because we've observed `2 f + 1` prevotes in this round, we don't need to keep messages from
+      the prior round around to ensure every validator eventually participates in this round.
+    */
+    self.our_latest_prevotes[0] = None;
     self.our_latest_precommit = Some(result.clone());
     db::OurLatestPrecommit::<B>::set(txn, genesis, &result);
     result
@@ -652,9 +670,9 @@ impl<B: BorshyBlockchain> State<B> {
 
         // This is independent of the round, used for detecting equivocations and if we're behind
         round_messages: _,
-
-        our_latest_prevote,
-        our_latest_precommit,
+        // These are used for convincing other validators of the current round
+        our_latest_prevotes: _,
+        our_latest_precommit: _,
       } = self;
       // This is used to reset the `round_metrics` but is not mutated across rounds
       let block_number = *block_number;
@@ -685,17 +703,6 @@ impl<B: BorshyBlockchain> State<B> {
       db::PendingPrecommitTimeout::del(txn, genesis);
 
       round_metrics.reset(block_number, *round_number);
-
-      /*
-        Because we are starting a new round, we will eventually send a prevote (either in response
-        to a proposal or as the proposal timeout expires). This means we do not need our historic
-        messages to ensure we make progress, as we know we will, and when we do, it's that progress
-        which is our latest and we actually want to rebroadcast.
-      */
-      let _ = our_latest_prevote.take();
-      db::OurLatestPrevote::<B>::del(txn, genesis);
-      let _ = our_latest_precommit.take();
-      db::OurLatestPrecommit::<B>::del(txn, genesis);
     }
 
     // L14-L19
@@ -782,7 +789,8 @@ impl<B: BorshyBlockchain> State<B> {
         */
         round_messages: HashMap::with_capacity(validator_set.validators().into_iter().count()),
 
-        our_latest_prevote: db::OurLatestPrevote::<B>::get(getter, genesis),
+        our_latest_prevotes: db::OurLatestPrevotes::<B>::get(getter, genesis)
+          .unwrap_or([const { None }; 2]),
         our_latest_precommit: db::OurLatestPrecommit::<B>::get(getter, genesis),
       };
 
@@ -990,7 +998,7 @@ impl<
   >(
     self,
     txn: &mut impl Transaction,
-  ) -> RoundMessages<B> {
+  ) -> <RoundMessages<B> as IntoIterator>::IntoIter {
     let Self { state, blockchain, signer } = self;
 
     if state.pending_step_timeout.is_none() && state.pending_precommit_timeout.is_none() {
@@ -999,32 +1007,29 @@ impl<
         try and get any validators who were outside of the synchrony bound to catch up to where we
         are now, so we do begin receiving new messages to respond to again.
       */
-      let mut round_messages = RoundMessages::NONE;
-      if let Some(our_latest_prevote) = state.our_latest_prevote.as_ref() {
-        let existing = round_messages.insert(our_latest_prevote);
-        debug_assert!(existing.is_none());
-      }
-      if let Some(our_latest_precommit) = state.our_latest_precommit.as_ref() {
-        let existing = round_messages.insert(our_latest_precommit);
-        debug_assert!(existing.is_none());
-      }
-      round_messages
+      [
+        state.our_latest_prevotes[0].clone(),
+        state.our_latest_precommit.clone(),
+        state.our_latest_prevotes[1].clone(),
+      ]
+      .into_iter()
+      .flatten()
     } else if state
       .pending_precommit_timeout
       .is_some_and(|(start, duration)| start.elapsed() >= duration)
     {
       if let Some(next_round) = state.round_number.0.checked_add(1) {
-        state.start_round::<N>(blockchain, signer, txn, RoundNumber(next_round)).await
+        state.start_round::<N>(blockchain, signer, txn, RoundNumber(next_round)).await.into_iter()
       } else {
         /*
           This signifies a permanent stall, but `u64::MAX` is effectively unreachable unless the
           fault threshold was broken by a group of validators who forced us to jump up to here.
           Accordingly, it's accepted.
         */
-        RoundMessages::NONE
+        RoundMessages::<B>::NONE.into_iter()
       }
     } else {
-      state.respond::<N>(blockchain, signer, txn).await
+      state.respond::<N>(blockchain, signer, txn).await.into_iter()
     }
   }
 }
@@ -1127,7 +1132,7 @@ impl<B: BorshyBlockchain> State<B> {
         locked,
 
         round_messages,
-        our_latest_prevote,
+        our_latest_prevotes,
         our_latest_precommit,
       } = self;
 
@@ -1155,8 +1160,8 @@ impl<B: BorshyBlockchain> State<B> {
       round_messages.clear();
 
       // We expect the commit to be sent around to convince validator's of the current _block_
-      let _ = our_latest_prevote.take();
-      db::OurLatestPrevote::<B>::del(txn, genesis);
+      *our_latest_prevotes = [const { None }; 2];
+      db::OurLatestPrevotes::<B>::del(txn, genesis);
       let _ = our_latest_precommit.take();
       db::OurLatestPrecommit::<B>::del(txn, genesis);
     }

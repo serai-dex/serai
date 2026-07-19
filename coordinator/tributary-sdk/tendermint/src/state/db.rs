@@ -20,7 +20,7 @@ serai_db::schema!(TributaryState {
 
   Locked: <Hash: Borshy>(genesis: &[u8]) -> (crate::RoundNumber, Hash),
 
-  OurLatestPrevote: <B: BorshyBlockchain>(genesis: &[u8]) -> crate::MessageFor<B>,
+  OurLatestPrevotes: <B: BorshyBlockchain>(genesis: &[u8]) -> [Option<crate::MessageFor<B>>; 2],
   OurLatestPrecommit: <B: BorshyBlockchain>(genesis: &[u8]) -> crate::MessageFor<B>,
 });
 
