@@ -311,6 +311,7 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
   /// This only verifies the values within this message which can be verified against solely the
   /// `blockchain` itself, without any state from the Tendermint consensus process. This includes:
   ///
+  /// - The message is from a validator
   /// - The message's signature
   /// - The signatures inside the message ([`ValidRound`], the precommit signature)
   /// - The proposer is actually the proposer for this round

@@ -1,7 +1,8 @@
 use core::{
+  num::NonZero,
+  iter::Flatten,
   sync::atomic::{Ordering, AtomicU64},
   pin::Pin,
-  iter::Flatten,
   time::Duration,
 };
 use alloc::{boxed::Box, sync::Arc};
@@ -73,6 +74,13 @@ pub(super) struct RoundMessages<B: Blockchain> {
   precommit: Option<MessageFor<B>>,
 }
 
+impl<B: Blockchain> Clone for RoundMessages<B> {
+  fn clone(&self) -> Self {
+    let Self { proposal, prevote, precommit } = self;
+    Self { proposal: proposal.clone(), prevote: prevote.clone(), precommit: precommit.clone() }
+  }
+}
+
 impl<B: Blockchain> RoundMessages<B> {
   const NONE: Self = RoundMessages { proposal: None, prevote: None, precommit: None };
 
@@ -113,6 +121,15 @@ impl<B: Blockchain> RoundMessages<B> {
   }
 }
 
+impl<'messages, B: Blockchain> IntoIterator for &'messages RoundMessages<B> {
+  type IntoIter = Flatten<<[&'messages Option<MessageFor<B>>; 3] as IntoIterator>::IntoIter>;
+  type Item = &'messages MessageFor<B>;
+  fn into_iter(self) -> Self::IntoIter {
+    let RoundMessages { proposal, prevote, precommit } = self;
+    [proposal, prevote, precommit].into_iter().flatten()
+  }
+}
+
 impl<B: Blockchain> IntoIterator for RoundMessages<B> {
   type IntoIter = Flatten<<[Option<MessageFor<B>>; 3] as IntoIterator>::IntoIter>;
   type Item = MessageFor<B>;
@@ -142,10 +159,19 @@ pub(super) struct State<B: Blockchain> {
   /// The pending timeout for the current step.
   ///
   /// This is represented as its start time and duration.
+  ///
+  /// This is only used for the proposal/prevote steps' timeouts as:
+  /// - The proposal timeout is only scheduled on L21, after assigning the step to propose
+  /// - The prevote timeout is only scheduled on L35, while the step is prevote
+  ///
+  /// and therefore the preposal/prevote timeouts are specific to the _current_ step.
   pending_step_timeout: Option<(Instant, Duration)>,
   /// The pending precommit timeout.
   ///
   /// This is represented as its start time and duration.
+  ///
+  /// This is explicitly used for the precommit step as the precommit timeout is scheduled on L48
+  /// _regardless of the current step_.
   pending_precommit_timeout: Option<(Instant, Duration)>,
   /// The current step.
   step: Step,
@@ -169,12 +195,18 @@ pub(super) struct State<B: Blockchain> {
   /// The metrics from this round.
   round_metrics: RoundMetrics<B>,
 
-  /// The messages from the latest rounds each of the validators are performing.
+  /// The messages from certain rounds each validator is observed to be performing.
   ///
   /// This is used to jump ahead to a future round and for detecting equivocations. In order to
-  /// maintain our (approximately) linear memory use, only the messages for the latest round a
-  /// validator has been observed to be performing will be kept.
-  round_messages: HashMap<B::Validator, RoundMessages<B>>,
+  /// maintain our (approximately) linear memory use, only the messages for:
+  ///
+  /// - the latest round a validator has been observed to be performing
+  /// - the round prior to the latest round a validator has been observed to be performing
+  /// - the current round
+  ///
+  /// will be kept. The first two are specifically used for jumping ahead, while the current round
+  /// is solely used to help detect equivocations.
+  round_messages: HashMap<B::Validator, [RoundMessages<B>; 3]>,
 
   /// Our latest prevote messages.
   ///
@@ -854,24 +886,50 @@ impl<B: BorshyBlockchain> State<B> {
 
     // Update `round_messages`
     {
-      let round_messages =
-        self.round_messages.entry(message.validator).or_insert(RoundMessages::NONE);
-      // If these round messages are historic to this message's round, move on
-      if round_messages
-        .round_number()
-        .is_some_and(|round_number| round_number < message.round_number)
-      {
+      let all_round_messages =
+        self.round_messages.entry(message.validator).or_insert([RoundMessages::NONE; 3]);
+
+      // These are the only rounds we track messages for
+      let tracked_rounds = {
+        let highest_observed_round_number = core::iter::once(message.round_number)
+          .chain(all_round_messages.iter().filter_map(RoundMessages::round_number))
+          .max()
+          .expect("no maximum `RoundNumber` despite a non-empty iterator");
+        let prior_observed_round_number = u64::from(highest_observed_round_number)
+          .checked_sub(1)
+          .and_then(NonZero::new)
+          .map(RoundNumber);
+        let current_round_number = self.round_number;
+        [
+          Some(highest_observed_round_number),
+          prior_observed_round_number,
+          Some(current_round_number),
+        ]
+      };
+
+      // If we have round messages for distinct rounds, clear them now
+      for round_messages in all_round_messages.iter_mut() {
+        let Some(round_number) = round_messages.round_number() else { continue };
+        if tracked_rounds.contains(&Some(round_number)) {
+          continue;
+        }
         *round_messages = RoundMessages::NONE;
       }
-      debug_assert!(round_messages
-        .round_number()
-        .is_none_or(|round_number| round_number >= message.round_number));
 
-      // Write this message into this validator's messages for this round
-      if round_messages
-        .round_number()
-        .is_none_or(|round_number| round_number == message.round_number)
-      {
+      // If this message is for a round we track, log it now
+      if tracked_rounds.contains(&Some(message.round_number)) {
+        // Find the `RoundMessages` for this round, or if there isn't one, find one which is `None`
+        let round_messages = match all_round_messages
+          .iter_mut()
+          .find(|round_messages| round_messages.round_number() == Some(message.round_number))
+        {
+          Some(round_messages) => round_messages,
+          None => all_round_messages
+            .iter_mut()
+            .find(|round_messages| round_messages.round_number().is_none())
+            .expect("no `RoundMessages` for a tracked round, and none unassigned?"),
+        };
+
         if let Some(existing_message) = round_messages.insert(&message) {
           // If we've already handled this message, ignore it
           if existing_message == &message {
@@ -931,8 +989,8 @@ impl<B: BorshyBlockchain> State<B> {
       let mut weight = 0u16;
       for (validator, round_messages) in &self.round_messages {
         if round_messages
-          .round_number()
-          .is_some_and(|round_number| round_number == message.round_number)
+          .iter()
+          .any(|round_messages| round_messages.round_number() == Some(message.round_number))
         {
           weight += validator_set.weight(validator).map(u16::from).unwrap_or(0);
         }
@@ -942,13 +1000,19 @@ impl<B: BorshyBlockchain> State<B> {
       let round_messages =
         self.start_round::<N>(blockchain, signer, txn, message.round_number).await;
       // Accumulate every message from this round
-      for (_validator, round_messages) in
-        self.round_messages.extract_if(|_validator, round_messages| {
-          round_messages.round_number() == Some(message.round_number)
-        })
-      {
-        for message in round_messages {
-          self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
+      for all_round_messages in self.round_messages.values() {
+        if let Some(round_messages) = all_round_messages
+          .iter()
+          .find(|round_messages| round_messages.round_number() == Some(message.round_number))
+        {
+          for message in round_messages {
+            self.round_metrics.accumulate(
+              blockchain.genesis(),
+              validator_set,
+              txn,
+              message.clone(),
+            );
+          }
         }
       }
       round_messages
@@ -1162,7 +1226,9 @@ impl<B: BorshyBlockchain> State<B> {
       *locked = None;
       db::Locked::<<B::Block as Block>::Hash>::del(txn, genesis);
 
-      round_messages.clear();
+      for round_messages in round_messages.values_mut() {
+        *round_messages = [RoundMessages::NONE; 3];
+      }
 
       // We expect the commit to be sent around to convince validator's of the current _block_
       *our_latest_prevotes = [const { None }; 2];

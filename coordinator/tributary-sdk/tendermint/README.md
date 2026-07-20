@@ -159,6 +159,53 @@ database may fail in real life, we assume that will be resolved by the process
 being terminated and restarted, in a way considered entirely out-of-scope to
 this library.
 
+### Liveness under Eventual Synchrony
+
+Tendermint is _sound_ under asynchrony yet only _live_ under synchrony. With
+each round, Tendermint increases the time before it moves on to the next step
+so that the time allocated to each step _eventually_ exceeds the time required
+to perform each step. When such synchrony is _eventually_ obtained, then
+consensus should be achieved, and the blockchain should continue to have blocks
+added.
+
+This library attempts to ensure liveness accordingly, so long as the following
+properties are _eventually_ achieved for a sufficiently long period of time:
+
+- The proposer for the current round is live.
+- At any moment, at least the necessary threshold of validators is honest and
+  within the synchrony bounds.
+- Between moments, the validators who are honest and within the synchrony
+  bounds MAY be replaced by an adversary with validators who are honest but
+  _were_ outside of the synchrony bounds.
+- Messages sent during one moment will be received by all validators who are
+  honest and within the synchrony bound _for the next moment_.
+
+This is intended to correspond to the model where an adversary may perform
+Denial of Service attacks against up to `f` validators at a time, causing them
+to appear offline, and may change who their targets are. Note we require a
+somewhat weaker adversary due to requiring the adversary not be able to force
+the proposer for each round offline (a single validator), which is a limitation
+of Tendermint's single leader model combined with a lack of a secret single
+leader election protocol.
+
+This effort is complicated by our bounded memory usage, preventing us from
+storing our entire historical message log (and the messages of all validators).
+If we did so, the naïve solution of always gossiping every historical message
+would be sufficient to ensure everyone has the same current view for the honest
+validators. It's also complicated by how the Tendermint protocol, as described,
+is amenable to bounded memory usage but is not actually described with bounded
+memory usage. This library had to solve the practical problems which occur
+accordingly itself, and this library's solutions have NOT been formally proven
+to maintain liveness.
+
+If such an adversary is able to cause the consensus to stall, it WILL be
+considered a bug within this library. It WILL NOT be considered a security
+issue according to the above bug bounty program however, even when argued as a
+'network shutdown' (or similar) due to the infeasibility of such an adversary
+in real life (a subject which will not be up for debate nor discussion). Due to
+it being a high-severity bug however, it MAY still be eligible for a good-will
+reward, at the discretion of the program's managers.
+
 ### Possibility for Redundancy
 
 The [`Signer`] trait has an asynchronous `sign` function, allowing the sign
