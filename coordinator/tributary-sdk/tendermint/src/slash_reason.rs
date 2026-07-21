@@ -191,6 +191,47 @@ impl<S: Signature, A: AggregateSignature, H: fmt::Debug + BlockHash> fmt::Debug
 pub struct InvalidReason;
 
 impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
+  /// Form a `SlashReason` from a pair of equivocating messages.
+  ///
+  /// This does not guarantee the messages actually form an equivocation. This will return `None`
+  /// if the messages are not of the same type and therefore fundamentally cannot form an
+  /// equivocation.
+  pub(crate) fn equivocation<V: Validator, B: Block<Hash = H>>(
+    first_message: Message<V, S, A, B>,
+    second_message: Message<V, S, A, B>,
+  ) -> Option<Self> {
+    Some(Self {
+      block_number: first_message.block_number,
+      round_number: first_message.round_number,
+      evidence: Evidence::Equivocation {
+        data: match (first_message.data, second_message.data) {
+          (
+            Data::Proposal { valid_round: first_valid_round, proposal: first_proposal },
+            Data::Proposal { valid_round: second_valid_round, proposal: second_proposal },
+          ) => EquivocatingData::Proposal {
+            first_valid_round,
+            first_proposal: first_proposal.hash(),
+            second_valid_round,
+            second_proposal: second_proposal.hash(),
+          },
+          (Data::Prevote { block: first_block }, Data::Prevote { block: second_block }) => {
+            EquivocatingData::Prevote { first_block, second_block }
+          }
+          (
+            Data::Precommit { block_and_precommit_signature: first_block_and_precommit_signature },
+            Data::Precommit { block_and_precommit_signature: second_block_and_precommit_signature },
+          ) => EquivocatingData::Precommit {
+            first_block_and_precommit_signature,
+            second_block_and_precommit_signature,
+          },
+          _ => None?,
+        },
+        first_signature: first_message.signature,
+        second_signature: second_message.signature,
+      },
+    })
+  }
+
   /// Verify the reasoning for this slash.
   pub fn verify<V: Validator>(
     &self,

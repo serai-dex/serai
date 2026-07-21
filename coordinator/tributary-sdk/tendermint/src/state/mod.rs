@@ -1,24 +1,24 @@
 use core::{
-  num::NonZero,
-  iter::Flatten,
   sync::atomic::{Ordering, AtomicU64},
   pin::Pin,
   time::Duration,
 };
 use alloc::{boxed::Box, sync::Arc};
-use std::{collections::HashMap, time::Instant};
+use std::time::Instant;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::Transaction;
 
 use crate::{
   SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, CommitFor, Blockchain,
-  Signer, ValidRound, Data, MessageFor, MessageError, EquivocatingData, Evidence, SlashReason,
-  Network,
+  Signer, ValidRound, Data, MessageFor, MessageError, Network,
 };
 
 mod block_proposal;
 use block_proposal::*;
+
+mod round_messages;
+use round_messages::*;
 
 mod round_metrics;
 use round_metrics::*;
@@ -52,91 +52,6 @@ pub(super) enum Step {
   Propose,
   Prevote,
   Precommit,
-}
-
-/// The messages by a validator within a round.
-///
-/// This is used both as part of the local view, to detect equivocations with, and also as the
-/// result for many of the functions below. This as, within any single round, a validator will only
-/// send at most one message of each type. This means the following functions, which only send
-/// messages for one round at a time, can be bounded to sending at most three messages at once.
-/// This struct represents the container for those three messages, while allowing merging different
-/// functions' results into a single unified result.
-///
-/// The fields of this are weakly typed and left to the user to ensure the accuracy of.
-#[must_use]
-pub(super) struct RoundMessages<B: Blockchain> {
-  /// The proposal message.
-  proposal: Option<MessageFor<B>>,
-  /// The prevote message.
-  prevote: Option<MessageFor<B>>,
-  /// The precommit message.
-  precommit: Option<MessageFor<B>>,
-}
-
-impl<B: Blockchain> Clone for RoundMessages<B> {
-  fn clone(&self) -> Self {
-    let Self { proposal, prevote, precommit } = self;
-    Self { proposal: proposal.clone(), prevote: prevote.clone(), precommit: precommit.clone() }
-  }
-}
-
-impl<B: Blockchain> RoundMessages<B> {
-  const NONE: Self = RoundMessages { proposal: None, prevote: None, precommit: None };
-
-  /// The round number these messages are for.
-  ///
-  /// This assumes all messages within this container are part of the same round. This will not
-  /// return `None` so long as at least one message is set.
-  #[must_use]
-  fn round_number(&self) -> Option<RoundNumber> {
-    self
-      .proposal
-      .as_ref()
-      .or(self.prevote.as_ref())
-      .or(self.precommit.as_ref())
-      .map(|message| message.round_number)
-  }
-
-  /// Insert a message.
-  ///
-  /// If there is no message present at the corresponding slot, this will insert the message and
-  /// return `None`. If there is already a message present at the corresponding slot, this will
-  /// perform no mutations and return a reference to the existing message.
-  ///
-  /// This does not check the round number of this message is consistent with the other messages in
-  /// this container.
-  #[must_use]
-  fn insert(&mut self, message: &MessageFor<B>) -> Option<&MessageFor<B>> {
-    let slot = match message.data {
-      Data::Proposal { .. } => &mut self.proposal,
-      Data::Prevote { .. } => &mut self.prevote,
-      Data::Precommit { .. } => &mut self.precommit,
-    };
-    if let Some(existing_message) = slot {
-      return Some(existing_message);
-    }
-    *slot = Some(message.clone());
-    None
-  }
-}
-
-impl<'messages, B: Blockchain> IntoIterator for &'messages RoundMessages<B> {
-  type IntoIter = Flatten<<[&'messages Option<MessageFor<B>>; 3] as IntoIterator>::IntoIter>;
-  type Item = &'messages MessageFor<B>;
-  fn into_iter(self) -> Self::IntoIter {
-    let RoundMessages { proposal, prevote, precommit } = self;
-    [proposal, prevote, precommit].into_iter().flatten()
-  }
-}
-
-impl<B: Blockchain> IntoIterator for RoundMessages<B> {
-  type IntoIter = Flatten<<[Option<MessageFor<B>>; 3] as IntoIterator>::IntoIter>;
-  type Item = MessageFor<B>;
-  fn into_iter(self) -> Self::IntoIter {
-    let Self { proposal, prevote, precommit } = self;
-    [proposal, prevote, precommit].into_iter().flatten()
-  }
 }
 
 /// The state for the Tendermint consensus protocol.
@@ -195,18 +110,8 @@ pub(super) struct State<B: Blockchain> {
   /// The metrics from this round.
   round_metrics: RoundMetrics<B>,
 
-  /// The messages from certain rounds each validator is observed to be performing.
-  ///
-  /// This is used to jump ahead to a future round and for detecting equivocations. In order to
-  /// maintain our (approximately) linear memory use, only the messages for:
-  ///
-  /// - the latest round a validator has been observed to be performing
-  /// - the round prior to the latest round a validator has been observed to be performing
-  /// - the current round
-  ///
-  /// will be kept. The first two are specifically used for jumping ahead, while the current round
-  /// is solely used to help detect equivocations.
-  round_messages: HashMap<B::Validator, [RoundMessages<B>; 3]>,
+  /// The messages from validators for the rounds we're actively tracking.
+  round_messages: TrackedRounds<B>,
 
   /// Our latest prevote messages.
   ///
@@ -654,7 +559,10 @@ impl<B: BorshyBlockchain> State<B> {
       self.pending_precommit_timeout = Some((Instant::now(), duration));
     }
 
-    RoundMessages { proposal: None, prevote: prevote_message, precommit: precommit_message }
+    let mut round_messages = RoundMessages::NONE;
+    round_messages.insert(prevote_message);
+    round_messages.insert(precommit_message);
+    round_messages
   }
 
   // L11-L21
@@ -740,9 +648,7 @@ impl<B: BorshyBlockchain> State<B> {
     // L14-L19
     let proposal_message = self.proposal_message::<N>(blockchain, signer, txn).await;
     let mut round_messages = self.respond::<N>(blockchain, signer, txn).await;
-    // [`State::respond`] does not emit proposal messages
-    debug_assert!(round_messages.proposal.is_none());
-    round_messages.proposal = proposal_message;
+    round_messages.insert(proposal_message);
     round_messages
   }
 
@@ -819,7 +725,7 @@ impl<B: BorshyBlockchain> State<B> {
           fellow validators to rebroadcast their latest message however, meaning on reboot, we just
           have to wait for them to do so for us to repopulate this (and jump ahead as desired).
         */
-        round_messages: HashMap::with_capacity(validator_set.validators().into_iter().count()),
+        round_messages: TrackedRounds::new(validator_set.validators().into_iter().count()),
 
         our_latest_prevotes: db::OurLatestPrevotes::<B>::get(getter, genesis)
           .unwrap_or([const { None }; 2]),
@@ -880,140 +786,41 @@ impl<B: BorshyBlockchain> State<B> {
       Err(MessageError::Future)?;
     }
     debug_assert_eq!(message.block_number, self.block_number);
+    debug_assert!(message.round_number >= self.round_number);
 
     // Verify this message's static properties
     message.static_verificiation(blockchain)?;
 
     // Update `round_messages`
-    {
-      let all_round_messages =
-        self.round_messages.entry(message.validator).or_insert([RoundMessages::NONE; 3]);
-
-      // These are the only rounds we track messages for
-      let tracked_rounds = {
-        let highest_observed_round_number = core::iter::once(message.round_number)
-          .chain(all_round_messages.iter().filter_map(RoundMessages::round_number))
-          .max()
-          .expect("no maximum `RoundNumber` despite a non-empty iterator");
-        let prior_observed_round_number = u64::from(highest_observed_round_number)
-          .checked_sub(1)
-          .and_then(NonZero::new)
-          .map(RoundNumber);
-        let current_round_number = self.round_number;
-        [
-          Some(highest_observed_round_number),
-          prior_observed_round_number,
-          Some(current_round_number),
-        ]
-      };
-
-      // If we have round messages for distinct rounds, clear them now
-      for round_messages in all_round_messages.iter_mut() {
-        let Some(round_number) = round_messages.round_number() else { continue };
-        if tracked_rounds.contains(&Some(round_number)) {
-          continue;
-        }
-        *round_messages = RoundMessages::NONE;
-      }
-
-      // If this message is for a round we track, log it now
-      if tracked_rounds.contains(&Some(message.round_number)) {
-        // Find the `RoundMessages` for this round, or if there isn't one, find one which is `None`
-        let round_messages = match all_round_messages
-          .iter_mut()
-          .find(|round_messages| round_messages.round_number() == Some(message.round_number))
-        {
-          Some(round_messages) => round_messages,
-          None => all_round_messages
-            .iter_mut()
-            .find(|round_messages| round_messages.round_number().is_none())
-            .expect("no `RoundMessages` for a tracked round, and none unassigned?"),
-        };
-
-        if let Some(existing_message) = round_messages.insert(&message) {
-          // If we've already handled this message, ignore it
-          if existing_message == &message {
-            Err(MessageError::AlreadyHandled)?;
-          }
-
-          // Slash this validator for equivocating (there is a different existing message)
-          blockchain.slash(
-            message.validator,
-            SlashReason {
-              block_number: message.block_number,
-              round_number: message.round_number,
-              evidence: Evidence::Equivocation {
-                data: match (existing_message.data.clone(), message.data.clone()) {
-                  (
-                    Data::Proposal { valid_round: first_valid_round, proposal: first_proposal },
-                    Data::Proposal { valid_round: second_valid_round, proposal: second_proposal },
-                  ) => EquivocatingData::Proposal {
-                    first_valid_round,
-                    first_proposal: first_proposal.hash(),
-                    second_valid_round,
-                    second_proposal: second_proposal.hash(),
-                  },
-                  (Data::Prevote { block: first_block }, Data::Prevote { block: second_block }) => {
-                    EquivocatingData::Prevote { first_block, second_block }
-                  }
-                  (
-                    Data::Precommit {
-                      block_and_precommit_signature: first_block_and_precommit_signature,
-                    },
-                    Data::Precommit {
-                      block_and_precommit_signature: second_block_and_precommit_signature,
-                    },
-                  ) => EquivocatingData::Precommit {
-                    first_block_and_precommit_signature,
-                    second_block_and_precommit_signature,
-                  },
-                  _ => unreachable!("`RoundMessages` had a mismatch between message and slot"),
-                },
-                first_signature: existing_message.signature.clone(),
-                second_signature: message.signature.clone(),
-              },
-            },
-          );
-
-          // TODO: Should we have an error for this?
-          return Ok(RoundMessages::NONE);
-        }
+    match self.round_messages.update(message.validator, self.round_number, &message) {
+      Updated::Fresh => {}
+      /*
+        This is for a round greater than or equal to the current round, but it's not the current
+        round nor is it approximate to the latest round we've observed for this validator. It's a
+        historic round (according to the view for the validator who sent it) being needlessly
+        communicated at this time.
+      */
+      Updated::NotTracked => Err(MessageError::Stale)?,
+      Updated::AlreadyHandled => return Err(MessageError::AlreadyHandled),
+      Updated::Equivocation(slash_reason) => {
+        blockchain.slash(message.validator, slash_reason);
+        // TODO: Should we have an error for this, that this message was an equivocation?
+        return Ok(RoundMessages::NONE);
       }
     }
 
     // If this message is for a future round, with sufficient participation, jump to this round
-    // TODO: Use a tally for it instead of doing a full iteration upon every message
     // L55-L56
     let validator_set = blockchain.validator_set();
-    let mut round_messages = if (message.round_number > self.round_number) && {
-      let mut weight = 0u16;
-      for (validator, round_messages) in &self.round_messages {
-        if round_messages
-          .iter()
-          .any(|round_messages| round_messages.round_number() == Some(message.round_number))
-        {
-          weight += validator_set.weight(validator).map(u16::from).unwrap_or(0);
-        }
-      }
-      weight > validator_set.fault_threshold()
-    } {
+    let round_messages = if (message.round_number > self.round_number) &&
+      self.round_messages.should_jump_ahead(validator_set, message.round_number)
+    {
+      // Start the round we're jumping ahead to
       let round_messages =
         self.start_round::<N>(blockchain, signer, txn, message.round_number).await;
-      // Accumulate every message from this round
-      for all_round_messages in self.round_messages.values() {
-        if let Some(round_messages) = all_round_messages
-          .iter()
-          .find(|round_messages| round_messages.round_number() == Some(message.round_number))
-        {
-          for message in round_messages {
-            self.round_metrics.accumulate(
-              blockchain.genesis(),
-              validator_set,
-              txn,
-              message.clone(),
-            );
-          }
-        }
+      // Accumulate all messages we've already seen for this round
+      for message in self.round_messages.messages_for_round(self.round_number) {
+        self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message.clone());
       }
       round_messages
     } else if message.round_number == self.round_number {
@@ -1025,19 +832,8 @@ impl<B: BorshyBlockchain> State<B> {
     };
 
     // Respond to the updated state
-    let RoundMessages { proposal, prevote, precommit } =
-      self.respond::<N>(blockchain, signer, txn).await;
-    // Merge the two `RoundMessages`
-    {
-      // [`State::respond`] does not emit proposal messages
-      debug_assert!(proposal.is_none());
-      // These hold as else we'd be equivocating, a violation of our state machine
-      debug_assert!(round_messages.prevote.is_none() || prevote.is_none());
-      debug_assert!(round_messages.precommit.is_none() || precommit.is_none());
-      round_messages.prevote = round_messages.prevote.or(prevote);
-      round_messages.precommit = round_messages.precommit.or(precommit);
-    }
-    Ok(round_messages)
+    let respond_round_messages = self.respond::<N>(blockchain, signer, txn).await;
+    Ok(round_messages.merge(respond_round_messages))
   }
 }
 
@@ -1076,13 +872,19 @@ impl<
         try and get any validators who were outside of the synchrony bound to catch up to where we
         are now, so we do begin receiving new messages to respond to again.
       */
-      [
-        state.our_latest_prevotes[0].clone(),
-        state.our_latest_precommit.clone(),
-        state.our_latest_prevotes[1].clone(),
-      ]
-      .into_iter()
-      .flatten()
+      let mut to_rebroadcast = {
+        let [prevote_0, prevote_1] = &state.our_latest_prevotes;
+        [prevote_0.clone(), state.our_latest_precommit.clone(), prevote_1.clone()]
+      };
+
+      // If the precommit is after the prevote, swap them so we don't broadcast them out-of-order
+      if to_rebroadcast[1].as_ref().map(|message| message.round_number) >
+        to_rebroadcast[2].as_ref().map(|message| message.round_number)
+      {
+        to_rebroadcast.swap(1, 2);
+      }
+
+      to_rebroadcast.into_iter().flatten()
     } else if state
       .pending_precommit_timeout
       .is_some_and(|(start, duration)| start.elapsed() >= duration)
@@ -1226,9 +1028,7 @@ impl<B: BorshyBlockchain> State<B> {
       *locked = None;
       db::Locked::<<B::Block as Block>::Hash>::del(txn, genesis);
 
-      for round_messages in round_messages.values_mut() {
-        *round_messages = [RoundMessages::NONE; 3];
-      }
+      round_messages.reset();
 
       // We expect the commit to be sent around to convince validator's of the current _block_
       *our_latest_prevotes = [const { None }; 2];
