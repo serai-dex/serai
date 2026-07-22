@@ -1,5 +1,8 @@
 use core::{num::NonZero, iter::Flatten};
-use std::collections::{hash_map::Values as HashMapValues, HashMap};
+use std::collections::{
+  hash_map::{Entry, Values as HashMapValues},
+  HashMap,
+};
 
 use crate::{
   RoundNumber, ValidatorSet, Signature, AggregateSignature, SignatureScheme, BlockHash, Block,
@@ -60,7 +63,7 @@ impl<B: Blockchain> RoundMessages<B> {
   /// This assumes all messages within this container are part of the same round. This will not
   /// return `None` so long as at least one message is set.
   #[must_use]
-  pub(super) fn round_number(&self) -> Option<RoundNumber> {
+  fn round_number(&self) -> Option<RoundNumber> {
     self
       .proposal
       .as_ref()
@@ -102,7 +105,7 @@ impl<B: Blockchain> RoundMessages<B> {
   /// This does not check the round number of this message is consistent with the other messages in
   /// this container.
   #[must_use]
-  pub(super) fn maybe_insert(&mut self, message: &MessageFor<B>) -> Option<&MessageFor<B>> {
+  fn maybe_insert(&mut self, message: &MessageFor<B>) -> Option<&MessageFor<B>> {
     let slot = self.slot(message);
     if let Some(existing_message) = slot {
       return Some(existing_message);
@@ -156,35 +159,25 @@ impl<B: Blockchain, const N: usize> NRoundMessages<B, N> {
   /// If this container does not have a [`RoundMessages`] corresponding to this [`RoundNumber`], it
   /// will return [`None`].
   #[must_use]
-  fn index_some(&self, round_number: RoundNumber) -> Option<&RoundMessages<B>> {
+  fn get(&self, round_number: RoundNumber) -> Option<&RoundMessages<B>> {
     self.0.iter().find(|round_messages| round_messages.round_number() == Some(round_number))
   }
 
-  /// Index the round messages for a round number.
-  ///
-  /// If this container does not have a [`RoundMessages`] corresponding to this [`RoundNumber`], it
-  /// will return a [`RoundMessages`] with no messages (and therefore no round number assigned) if
-  /// one is available.
-  #[must_use]
-  fn index_mut(&mut self, round_number: RoundNumber) -> Option<&mut RoundMessages<B>> {
-    // If this has a corresponding entry, search for it. Else, search for an unassigned entry
-    let search_for = self
-      .0
-      .iter()
-      .any(|round_messages| round_messages.round_number() == Some(round_number))
-      .then_some(round_number);
-    self.0.iter_mut().find(|round_messages| round_messages.round_number() == search_for)
-  }
-
   /// Only retain the [`RoundMessages`] for the tracked rounds.
-  fn retain(&mut self, tracked_rounds: &[Option<RoundNumber>; N]) {
-    for round_messages in &mut self.0 {
-      let Some(round_number) = round_messages.round_number() else { continue };
+  ///
+  /// This returns an iterator over the rounds which were pruned due to no longer being tracked.
+  fn retain<'rounds>(
+    &'rounds mut self,
+    tracked_rounds: &'rounds [Option<RoundNumber>; N],
+  ) -> impl use<'rounds, B, N> + Iterator<Item = RoundNumber> {
+    self.0.iter_mut().filter_map(|round_messages| {
+      let round_number = round_messages.round_number()?;
       if tracked_rounds.contains(&Some(round_number)) {
-        continue;
+        None?;
       }
       *round_messages = RoundMessages::NONE;
-    }
+      Some(round_number)
+    })
   }
 }
 
@@ -203,6 +196,7 @@ impl<B: Blockchain, const N: usize> NRoundMessages<B, N> {
 /// to it. This is necessary to detect if we have to jump ahead.
 pub(super) struct TrackedRounds<B: Blockchain> {
   messages: HashMap<B::Validator, NRoundMessages<B, 3>>,
+  round_tallies: HashMap<NonZero<u64>, u16>,
 }
 
 #[doc(hidden)]
@@ -219,7 +213,7 @@ impl<
 {
   type Item = &'messages RoundMessages<B>;
   fn next(&mut self) -> Option<Self::Item> {
-    self.iterator.next().and_then(|messages| messages.index_some(self.round_number))
+    self.iterator.next().and_then(|messages| messages.get(self.round_number))
   }
 }
 
@@ -251,7 +245,10 @@ impl<B: Blockchain> TrackedRounds<B> {
   /// Create a new instance with a specified capacity.
   #[must_use]
   pub(super) fn new(capacity: usize) -> Self {
-    Self { messages: HashMap::with_capacity(capacity) }
+    Self {
+      messages: HashMap::with_capacity(capacity),
+      round_tallies: HashMap::with_capacity(3 * capacity),
+    }
   }
 
   /// Reset this container.
@@ -259,8 +256,9 @@ impl<B: Blockchain> TrackedRounds<B> {
   /// This allows using a single [`TrackedRounds`] container, with its already allocated capacity,
   /// across blocks.
   pub(super) fn reset(&mut self) {
-    let Self { messages } = self;
+    let Self { messages, round_tallies } = self;
     messages.clear();
+    round_tallies.clear();
   }
 
   /// Updated the messages for the tracked rounds.
@@ -291,7 +289,15 @@ impl<B: Blockchain> TrackedRounds<B> {
     };
 
     // If we have round messages for distinct rounds, clear them now
-    all_round_messages.retain(&tracked_rounds);
+    for pruned_round in all_round_messages.retain(&tracked_rounds) {
+      let Entry::Occupied(mut entry) = self.round_tallies.entry(pruned_round.0) else {
+        panic!("round present in messages but no corresponding tally?")
+      };
+      *entry.get_mut() -= 1;
+      if (*entry.get()) == 0 {
+        entry.remove();
+      }
+    }
 
     if !tracked_rounds.contains(&Some(message.round_number)) {
       return Updated::NotTracked;
@@ -301,11 +307,28 @@ impl<B: Blockchain> TrackedRounds<B> {
       This is guaranteed as:
       - We have `N` slots and are tracking `N` rounds
       - We used to `retain` to prune slots not corresponding to a tracked round
-      - Therefore, this is assigned to an existing slot _or_ there is an empty slot
+      - This round number corresponds to a tracked round
+      - Therefore, this round number corresponds to an existing slot _or_ there is an empty slot
     */
-    let round_messages = all_round_messages
-      .index_mut(message.round_number)
-      .expect("`round_number` in retained `tracked_rounds` but no `RoundMessages`?");
+    let round_messages = match all_round_messages
+      .0
+      .iter_mut()
+      .find(|round_messages| round_messages.round_number() == Some(message.round_number))
+    {
+      Some(round_messages) => round_messages,
+      None => {
+        self
+          .round_tallies
+          .entry(message.round_number.0)
+          .and_modify(|weight| *weight += 1)
+          .or_insert(1);
+        all_round_messages
+          .0
+          .iter_mut()
+          .find(|round_messages| round_messages.round_number().is_none())
+          .expect("`round_number` in retained `tracked_rounds` but no corresponding or empty slot?")
+      }
+    };
 
     if let Some(existing_message) = round_messages.maybe_insert(message) {
       if existing_message == message {
@@ -331,14 +354,11 @@ impl<B: Blockchain> TrackedRounds<B> {
     validator_set: &(impl ?Sized + ValidatorSet<Validator = B::Validator>),
     round_number: RoundNumber,
   ) -> bool {
-    // TODO: Use a tally for it instead of doing a full iteration upon every message
-    let mut weight = 0u16;
-    for (validator, round_messages) in &self.messages {
-      if round_messages.index_some(round_number).is_some() {
-        weight += validator_set.weight(validator).map(u16::from).unwrap_or(0);
-      }
-    }
-    weight > validator_set.fault_threshold()
+    self
+      .round_tallies
+      .get(&round_number.0)
+      .copied()
+      .is_some_and(|weight| weight > validator_set.fault_threshold())
   }
 
   /// An iterator over every message for the specified round.
