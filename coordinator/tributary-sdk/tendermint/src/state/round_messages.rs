@@ -195,7 +195,14 @@ impl<B: Blockchain, const N: usize> NRoundMessages<B, N> {
 /// We also track, on a per validator basis, the latest round observed for them and the round prior
 /// to it. This is necessary to detect if we have to jump ahead.
 pub(super) struct TrackedRounds<B: Blockchain> {
+  /// The literal messages within this container.
   messages: HashMap<B::Validator, NRoundMessages<B, 3>>,
+
+  /// The tallies for how many validators (by weight) have participated in a round.
+  ///
+  /// This is updated in sync with `messages` to determine if we have to jump ahead or not. The
+  /// key, `NonZero<u64>`, represents the `RoundNumber` yet `NonZero<u64>: Hash` and
+  /// `RoundNumber: !Hash`.
   round_tallies: HashMap<NonZero<u64>, u16>,
 }
 
@@ -269,6 +276,7 @@ impl<B: Blockchain> TrackedRounds<B> {
   #[must_use]
   pub(super) fn update(
     &mut self,
+    validator_set: &(impl ?Sized + ValidatorSet<Validator = B::Validator>),
     validator: B::Validator,
     current_round_number: RoundNumber,
     message: &MessageFor<B>,
@@ -289,11 +297,12 @@ impl<B: Blockchain> TrackedRounds<B> {
     };
 
     // If we have round messages for distinct rounds, clear them now
+    let validator_weight = validator_set.weight(&validator).map(u16::from).unwrap_or(0);
     for pruned_round in all_round_messages.retain(&tracked_rounds) {
       let Entry::Occupied(mut entry) = self.round_tallies.entry(pruned_round.0) else {
         panic!("round present in messages but no corresponding tally?")
       };
-      *entry.get_mut() -= 1;
+      *entry.get_mut() -= validator_weight;
       if (*entry.get()) == 0 {
         entry.remove();
       }
@@ -304,42 +313,52 @@ impl<B: Blockchain> TrackedRounds<B> {
     }
 
     /*
-      This is guaranteed as:
+      This is guaranteed to find a `RoundMessages` as:
       - We have `N` slots and are tracking `N` rounds
       - We used to `retain` to prune slots not corresponding to a tracked round
       - This round number corresponds to a tracked round
       - Therefore, this round number corresponds to an existing slot _or_ there is an empty slot
     */
-    let round_messages = match all_round_messages
+    match all_round_messages
       .0
       .iter_mut()
       .find(|round_messages| round_messages.round_number() == Some(message.round_number))
     {
-      Some(round_messages) => round_messages,
+      Some(round_messages) => {
+        if let Some(existing_message) = round_messages.maybe_insert(message) {
+          if existing_message == message {
+            return Updated::AlreadyHandled;
+          }
+
+          // Slash this validator for equivocating (there is a different existing message)
+          return Updated::Equivocation(
+            SlashReason::equivocation(existing_message.clone(), message.clone())
+              .expect("`RoundMessages` had a mismatch between message and slot"),
+          );
+        }
+      }
       None => {
-        self
-          .round_tallies
-          .entry(message.round_number.0)
-          .and_modify(|weight| *weight += 1)
-          .or_insert(1);
-        all_round_messages
+        let round_messages = all_round_messages
           .0
           .iter_mut()
           .find(|round_messages| round_messages.round_number().is_none())
-          .expect("`round_number` in retained `tracked_rounds` but no corresponding or empty slot?")
-      }
-    };
+          .expect(
+            "`round_number` in retained `tracked_rounds` but no corresponding or empty slot?",
+          );
+        let existing_message = round_messages.maybe_insert(message);
+        debug_assert!(existing_message.is_none());
 
-    if let Some(existing_message) = round_messages.maybe_insert(message) {
-      if existing_message == message {
-        return Updated::AlreadyHandled;
+        /*
+          Because this validator is _newly_ participating in this round (per our local view), add
+          this validator's weight to the round's tally.
+        */
+        self
+          .round_tallies
+          .entry(message.round_number.0)
+          .and_modify(|weight| *weight += validator_weight)
+          .or_insert(validator_weight);
+        debug_assert!(self.round_tallies.len() <= (3 * self.messages.len()));
       }
-
-      // Slash this validator for equivocating (there is a different existing message)
-      return Updated::Equivocation(
-        SlashReason::equivocation(existing_message.clone(), message.clone())
-          .expect("`RoundMessages` had a mismatch between message and slot"),
-      );
     }
 
     Updated::Fresh
@@ -357,8 +376,7 @@ impl<B: Blockchain> TrackedRounds<B> {
     self
       .round_tallies
       .get(&round_number.0)
-      .copied()
-      .is_some_and(|weight| weight > validator_set.fault_threshold())
+      .is_some_and(|weight| (*weight) > validator_set.fault_threshold())
   }
 
   /// An iterator over every message for the specified round.

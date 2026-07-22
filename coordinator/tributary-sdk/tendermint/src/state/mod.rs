@@ -792,7 +792,9 @@ impl<B: BorshyBlockchain> State<B> {
     message.static_verificiation(blockchain)?;
 
     // Update `round_messages`
-    match self.round_messages.update(message.validator, self.round_number, &message) {
+    let validator_set = blockchain.validator_set();
+    match self.round_messages.update(validator_set, message.validator, self.round_number, &message)
+    {
       Updated::Fresh => {}
       /*
         This is for a round greater than or equal to the current round, but it's not the current
@@ -811,7 +813,6 @@ impl<B: BorshyBlockchain> State<B> {
 
     // If this message is for a future round, with sufficient participation, jump to this round
     // L55-L56
-    let validator_set = blockchain.validator_set();
     let round_messages = if (message.round_number > self.round_number) &&
       self.round_messages.should_jump_ahead(validator_set, message.round_number)
     {
