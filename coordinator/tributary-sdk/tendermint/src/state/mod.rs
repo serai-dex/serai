@@ -612,10 +612,10 @@ impl<B: BorshyBlockchain> State<B> {
         (self.round_number < round)
     );
 
-    {
-      let genesis = blockchain.genesis();
-      let genesis = genesis.as_ref();
+    let genesis = blockchain.genesis();
+    let genesis = genesis.as_ref();
 
+    {
       let Self {
         block_number,
         round_number,
@@ -672,6 +672,12 @@ impl<B: BorshyBlockchain> State<B> {
 
     // L14-L19
     let proposal_message = self.proposal_message::<N>(blockchain, signer, txn).await;
+
+    // Accumulate all messages we've already seen for this round
+    for message in self.round_messages.messages_for_round(self.round_number) {
+      self.round_metrics.accumulate(genesis, blockchain.validator_set(), txn, message.clone());
+    }
+
     let mut round_messages = self.respond::<N>(blockchain, signer, txn).await;
     round_messages.insert(proposal_message);
     round_messages
@@ -854,28 +860,20 @@ impl<B: BorshyBlockchain> State<B> {
 
     // If this message is for a future round, with sufficient participation, jump to this round
     // L55-L56
-    let round_messages = if (message.round_number > self.round_number) &&
-      self.round_messages.should_jump_ahead(validator_set, message.round_number)
-    {
-      // Start the round we're jumping ahead to
-      let round_messages =
-        self.start_round::<N>(blockchain, signer, txn, message.round_number).await;
-      // Accumulate all messages we've already seen for this round
-      for message in self.round_messages.messages_for_round(self.round_number) {
-        self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message.clone());
-      }
-      round_messages
-    } else if message.round_number == self.round_number {
-      self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
-      RoundMessages::NONE
-    } else {
-      // If this message wasn't for the current round, simply return now
-      return Ok(RoundMessages::NONE);
-    };
-
-    // Respond to the updated state
-    let respond_round_messages = self.respond::<N>(blockchain, signer, txn).await;
-    Ok(round_messages.merge(respond_round_messages))
+    Ok(
+      if (message.round_number > self.round_number) &&
+        self.round_messages.should_jump_ahead(validator_set, message.round_number)
+      {
+        // Start the round we're jumping ahead to
+        self.start_round::<N>(blockchain, signer, txn, message.round_number).await
+      } else if message.round_number == self.round_number {
+        self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
+        self.respond::<N>(blockchain, signer, txn).await
+      } else {
+        // If this isn't for the current round, we have no messages to reply with
+        RoundMessages::NONE
+      },
+    )
   }
 }
 

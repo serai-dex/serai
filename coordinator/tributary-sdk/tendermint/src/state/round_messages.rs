@@ -113,24 +113,6 @@ impl<B: Blockchain> RoundMessages<B> {
     *slot = Some(message.clone());
     None
   }
-
-  /// Merge two sets of messages for a round into a single container.
-  ///
-  /// These SHOULD not overlap and if they do, it is almost certainly a corruption of the
-  /// Tendermint state machine. This MAY panic upon overlap or MAY silently drop a conflicting
-  /// message.
-  ///
-  /// This assumes both sets of round messages are for the same round.
-  pub(super) fn merge(mut self, other: Self) -> Self {
-    let RoundMessages { proposal, prevote, precommit } = other;
-    debug_assert!(self.proposal.is_none() || proposal.is_none());
-    debug_assert!(self.prevote.is_none() || prevote.is_none());
-    debug_assert!(self.precommit.is_none() || precommit.is_none());
-    self.proposal = self.proposal.or(proposal);
-    self.prevote = self.prevote.or(prevote);
-    self.precommit = self.precommit.or(precommit);
-    self
-  }
 }
 
 /// [`RoundMessages`] for `N` rounds.
