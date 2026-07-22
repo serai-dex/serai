@@ -51,6 +51,13 @@ delivery of messages nor attempt re-delivery. This library will not broadcast
 produced [`Commit`]s however, nor historical blocks, and the implementation of
 syncing _to the current block_ is left entirely to the application.
 
+[`TendermintHandle::observed_block_number`] may be used to learn if the local
+Tendermint process is behind and needs to sync historical blocks, and if so,
+how many. Note applications likely SHOULD NOT attempt to sync historical blocks
+if the observed block number is only one greater than the local block number,
+as this may just be momentary latency rather than actually needing to
+explicitly sync historical blocks.
+
 ### Validators
 
 Validators are expected to be consistent throughout the execution of the

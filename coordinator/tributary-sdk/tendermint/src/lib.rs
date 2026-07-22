@@ -122,6 +122,7 @@ mod tendermint {
   /// The handle for the Tendermint process.
   pub struct TendermintHandle<B: Blockchain> {
     block_number: Arc<AtomicU64>,
+    observed_block_number: Arc<AtomicU64>,
     sync: Sender<(B::Block, CommitFor<B>)>,
     message: Sender<MessageFor<B>>,
   }
@@ -351,6 +352,7 @@ mod tendermint {
       (
         TendermintHandle {
           block_number: state.block_number_ref(),
+          observed_block_number: state.observed_block_number_ref(),
           sync: sync_send,
           message: message_send,
         },
@@ -462,14 +464,33 @@ mod tendermint {
   }
 
   impl<B: Blockchain> TendermintHandle<B> {
-    /// The current block number.
+    /// The number for the block we're currently attempting to achieve consensus over.
     ///
     /// This is implemented in a lock-free manner and MAY momentarily desynchronize from the block
     /// number internal to the Tendermint process, or the blockchain, accordingly.
     pub fn block_number(&self) -> BlockNumber {
       BlockNumber(
-        NonZero::new(self.block_number.load(Ordering::Relaxed))
+        NonZero::new(self.block_number.load(Ordering::Acquire))
           .expect("block number was corrupted"),
+      )
+    }
+
+    /// The greatest block number we've observed validators attempting to achieve consensus over.
+    ///
+    /// This is the greatest block number which `f + 1` validators have been observed to be
+    /// attempting to obtain consensus over, meaning there presumably is consensus over all prior
+    /// blocks (or the amount of faulty validators exceeds the fault threshold). This is intended
+    /// to be used to allow the larger application to realize it should explicitly sync up to this
+    /// block (as this library does not implement a block sync loop itself).
+    ///
+    /// This is implemented in a lock-free manner and MAY momentarily desynchronize from other
+    /// representations of the state accordingly. A best-effort attempt is made to ensure this will
+    /// always be greater than or equal to the value yielded by [`TendermintHandle::block_number`]
+    /// but this is not guaranteed.
+    pub fn observed_block_number(&self) -> BlockNumber {
+      BlockNumber(
+        NonZero::new(self.observed_block_number.load(Ordering::Acquire))
+          .expect("observed block number was corrupted"),
       )
     }
 

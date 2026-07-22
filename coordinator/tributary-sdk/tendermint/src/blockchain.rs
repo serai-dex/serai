@@ -10,7 +10,7 @@ use crate::{Validator, SignatureScheme, ValidatorSet, CommitFor, SlashReasonFor}
 /// As this library never works with the genesis block, as it's constant and does not undergo the
 /// consensus process, this library represents block numbers via [`NonZero`]. This is complete to
 /// all block numbers this library has to consider.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[cfg_attr(feature = "alloc", derive(borsh::BorshSerialize, borsh::BorshDeserialize))]
 #[repr(transparent)]
 pub struct BlockNumber(pub(crate) NonZero<u64>);

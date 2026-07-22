@@ -23,6 +23,9 @@ use round_messages::*;
 mod round_metrics;
 use round_metrics::*;
 
+mod observed_block_numbers;
+use observed_block_numbers::*;
+
 mod db;
 
 pub(super) trait Borshy: borsh::BorshSerialize + borsh::BorshDeserialize {}
@@ -63,8 +66,13 @@ pub(super) struct State<B: Blockchain> {
   block_number: BlockNumber,
   /// A public reference to the block number.
   ///
-  /// This is updated as the state's block number is.
+  /// This is updated approximately as the state's block number is.
   block_number_ref: Arc<AtomicU64>,
+
+  /// A tracker for which block numbers we've observed validators attempting consensus for.
+  observed_block_numbers: ObservedBlockNumbers<B::Validator>,
+  /// A public reference to the greatest observed block number.
+  observed_block_number_ref: Arc<AtomicU64>,
 
   /// Our proposal for this block.
   proposal: Pin<Box<BlockProposal<B::Block, B::BlockProposal>>>,
@@ -148,7 +156,8 @@ impl<B: BorshyBlockchain> State<B> {
     self.block_number
   }
 
-  /// Create a new reference to the current block number.
+  /// Create a new reference to the number for the block we're currently attempting to achieve
+  /// consensus over.
   ///
   /// This reference is an atomic which is updated after a block is added to the underlying
   /// blockchain. Accordingly, it may desynchronize from the underlying blockchain for a brief
@@ -158,6 +167,20 @@ impl<B: BorshyBlockchain> State<B> {
   /// one internal to the state). This is accepted as this is solely an internal API.
   pub(super) fn block_number_ref(&self) -> Arc<AtomicU64> {
     self.block_number_ref.clone()
+  }
+
+  /// Create a new reference to the greatest block number we've observed validators attempting to
+  /// achieve consensus over.
+  ///
+  /// This reference is an atomic which is updated after observing `f + 1` validators attempting to
+  /// achieve consensus over this block number. Accordingly, it may desynchronize from related
+  /// state for a brief moment. It is only intended as a guideline, though it will not have a block
+  /// number _higher_ than the actually greatest observed block number.
+  ///
+  /// This MAY be invalidated, as possible if any reference is used to write to it (other than the
+  /// one internal to the state). This is accepted as this is solely an internal API.
+  pub(super) fn observed_block_number_ref(&self) -> Arc<AtomicU64> {
+    self.observed_block_number_ref.clone()
   }
 
   /// Yield a proposal message if we are the proposer.
@@ -604,6 +627,8 @@ impl<B: BorshyBlockchain> State<B> {
 
         // These values are consistent across rounds
         block_number_ref: _,
+        observed_block_numbers: _,
+        observed_block_number_ref: _,
         proposal: _,
         valid: _,
         locked: _,
@@ -694,11 +719,19 @@ impl<B: BorshyBlockchain> State<B> {
         let round_number = round_number.unwrap_or(RoundNumber::ONE);
         (init, block_number, round_number, step.unwrap_or(Step::Propose))
       };
-      let block_number_ref = Arc::new(AtomicU64::new(u64::from(block_number.0)));
+      let block_number_ref = Arc::new(AtomicU64::new(u64::from(block_number)));
 
+      let observed_block_number_ref = Arc::new(AtomicU64::new(u64::from(block_number)));
+
+      let validators = validator_set.validators().into_iter().count();
       let state = State {
         block_number,
         block_number_ref,
+
+        // This isn't DB backed as it's observational and will repopulate based on active messages
+        observed_block_numbers: ObservedBlockNumbers::new(validators),
+        observed_block_number_ref,
+
         proposal: Box::pin(BlockProposal::Ready { proposal }),
 
         round_number,
@@ -725,7 +758,7 @@ impl<B: BorshyBlockchain> State<B> {
           fellow validators to rebroadcast their latest message however, meaning on reboot, we just
           have to wait for them to do so for us to repopulate this (and jump ahead as desired).
         */
-        round_messages: TrackedRounds::new(validator_set.validators().into_iter().count()),
+        round_messages: TrackedRounds::new(validators),
 
         our_latest_prevotes: db::OurLatestPrevotes::<B>::get(getter, genesis)
           .unwrap_or([const { None }; 2]),
@@ -778,11 +811,20 @@ impl<B: BorshyBlockchain> State<B> {
       <B::Block as Block>::Hash,
     >,
   > {
+    let validator_set = blockchain.validator_set();
+
     // If this is historic or for a future block, ignore this message
     if (message.block_number < self.block_number) || (message.round_number < self.round_number) {
       Err(MessageError::Stale)?;
     }
     if message.block_number > self.block_number {
+      if let Some(observed_block_number) =
+        self.observed_block_numbers.update(validator_set, message.validator, message.block_number)
+      {
+        let _ = self
+          .observed_block_number_ref
+          .fetch_max(u64::from(observed_block_number), Ordering::SeqCst);
+      }
       Err(MessageError::Future)?;
     }
     debug_assert_eq!(message.block_number, self.block_number);
@@ -792,7 +834,6 @@ impl<B: BorshyBlockchain> State<B> {
     message.static_verificiation(blockchain)?;
 
     // Update `round_messages`
-    let validator_set = blockchain.validator_set();
     match self.round_messages.update(validator_set, message.validator, self.round_number, &message)
     {
       Updated::Fresh => {}
@@ -992,6 +1033,11 @@ impl<B: BorshyBlockchain> State<B> {
       let Self {
         block_number,
         block_number_ref,
+
+        // This is preserved across blocks
+        observed_block_numbers: _,
+        observed_block_number_ref,
+
         proposal,
 
         round_number,
@@ -1015,7 +1061,8 @@ impl<B: BorshyBlockchain> State<B> {
 
       *block_number = BlockNumber(next_block_number);
       db::BlockNumber::set(txn, genesis, block_number);
-      block_number_ref.store(u64::from(block_number.0), Ordering::Relaxed);
+      let _ = observed_block_number_ref.fetch_max(u64::from(*block_number), Ordering::SeqCst);
+      block_number_ref.store(u64::from(*block_number), Ordering::SeqCst);
 
       // These are saved to the database by the following call to `start_round`
       *round_number = RoundNumber::ONE;

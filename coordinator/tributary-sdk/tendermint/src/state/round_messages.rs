@@ -268,7 +268,7 @@ impl<B: Blockchain> TrackedRounds<B> {
     round_tallies.clear();
   }
 
-  /// Updated the messages for the tracked rounds.
+  /// Update the messages for the tracked rounds.
   ///
   /// If this validator is not already present within this container, an entry will be inserted.
   /// While this increases the memory usage, it's presumed the validator set is constant and
