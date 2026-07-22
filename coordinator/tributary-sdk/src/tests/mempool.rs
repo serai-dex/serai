@@ -1,3 +1,4 @@
+use core::num::NonZero;
 use std::{sync::Arc, collections::HashMap};
 
 use zeroize::Zeroizing;
@@ -6,15 +7,13 @@ use rand::{RngCore as _, rngs::OsRng};
 use dalek_ff_group::Ristretto;
 use ciphersuite::*;
 
-use tendermint::Commit;
-
 use serai_db::MemDb;
 
 use crate::{
   transaction::{TransactionError, Transaction as TransactionTrait},
-  tendermint::{TendermintBlock, Validators, Signer, TendermintNetwork},
+  tendermint::{Validators, TendermintNetwork},
   ACCOUNT_MEMPOOL_LIMIT, Transaction, Mempool,
-  tests::{SignedTransaction, signed_transaction, p2p::DummyP2p, random_evidence_tx},
+  tests::{SignedTransaction, signed_transaction, p2p::DummyP2p},
 };
 
 type N = TendermintNetwork<MemDb, SignedTransaction, DummyP2p>;
@@ -29,9 +28,6 @@ fn new_mempool<T: TransactionTrait>() -> ([u8; 32], MemDb, Mempool<MemDb, T>) {
 #[tokio::test]
 async fn mempool_addition() {
   let (genesis, db, mut mempool) = new_mempool::<SignedTransaction>();
-  let commit = |_: u64| -> Option<Commit<Arc<Validators>>> {
-    Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
-  };
   let unsigned_in_chain = |_: [u8; 32]| false;
   let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
 
@@ -40,7 +36,8 @@ async fn mempool_addition() {
   assert_eq!(mempool.next_nonce_in_mempool(&signer, vec![]), None);
 
   // validators
-  let validators = Arc::new(Validators::new(genesis, vec![(signer, 1)]).unwrap());
+  let validators =
+    Arc::new(Validators::new(genesis, vec![(signer, NonZero::new(1).unwrap())]).unwrap());
 
   // Add TX 0
   assert!(mempool
@@ -48,13 +45,14 @@ async fn mempool_addition() {
       &|_, _| Some(0),
       true,
       Transaction::Application(first_tx.clone()),
+      validators.weights(),
       &validators,
       unsigned_in_chain,
-      commit,
     )
     .unwrap());
   assert_eq!(mempool.next_nonce_in_mempool(&signer, vec![]), Some(1));
 
+  /* TODO
   // add a tendermint evidence tx
   let evidence_tx =
     random_evidence_tx::<N>(Signer::new(genesis, key.clone()).into(), TendermintBlock(vec![]))
@@ -64,11 +62,12 @@ async fn mempool_addition() {
       &|_, _| None,
       true,
       Transaction::Tendermint(evidence_tx.clone()),
+      validators.weights(),
       &validators,
       unsigned_in_chain,
-      commit,
     )
     .unwrap());
+  */
 
   // Test reloading works
   assert_eq!(mempool, Mempool::new(db, genesis));
@@ -79,23 +78,25 @@ async fn mempool_addition() {
       &|_, _| Some(0),
       true,
       Transaction::Application(first_tx.clone()),
+      validators.weights(),
       &validators,
       unsigned_in_chain,
-      commit,
     ),
     Err(TransactionError::InvalidNonce)
   );
+  /* TODO
   assert_eq!(
     mempool.add::<N, _>(
       &|_, _| None,
       true,
       Transaction::Tendermint(evidence_tx.clone()),
+      validators.weights(),
       &validators,
       unsigned_in_chain,
-      commit,
     ),
     Ok(false)
   );
+  */
 
   // Do the same with the next nonce
   let second_tx = signed_transaction(&mut OsRng, genesis, &key, 1);
@@ -104,9 +105,9 @@ async fn mempool_addition() {
       &|_, _| Some(0),
       true,
       Transaction::Application(second_tx.clone()),
+      validators.weights(),
       &validators,
       unsigned_in_chain,
-      commit,
     ),
     Ok(true)
   );
@@ -116,9 +117,9 @@ async fn mempool_addition() {
       &|_, _| Some(0),
       true,
       Transaction::Application(second_tx.clone()),
+      validators.weights(),
       &validators,
       unsigned_in_chain,
-      commit,
     ),
     Err(TransactionError::InvalidNonce)
   );
@@ -134,15 +135,15 @@ async fn mempool_addition() {
       &|_, _| Some(2),
       true,
       Transaction::Application(tx.clone()),
+      validators.weights(),
       &validators,
       unsigned_in_chain,
-      commit
     )
     .unwrap());
   assert_eq!(mempool.next_nonce_in_mempool(&second_signer, vec![]), Some(3));
 
   // Getting a block should work
-  assert_eq!(mempool.block().len(), 4);
+  assert_eq!(mempool.block().len(), 3);
 
   // Removing should successfully prune
   mempool.remove(&tx.hash());
@@ -152,7 +153,7 @@ async fn mempool_addition() {
     &HashMap::from([
       (first_tx.hash(), Transaction::Application(first_tx)),
       (second_tx.hash(), Transaction::Application(second_tx)),
-      (evidence_tx.hash(), Transaction::Tendermint(evidence_tx))
+      // TODO (evidence_tx.hash(), Transaction::Tendermint(evidence_tx))
     ])
   );
 }
@@ -160,10 +161,9 @@ async fn mempool_addition() {
 #[test]
 fn too_many_mempool() {
   let (genesis, _, mut mempool) = new_mempool::<SignedTransaction>();
-  let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
-  let commit = |_: u64| -> Option<Commit<Arc<Validators>>> {
-    Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
-  };
+  let validators = Arc::new(
+    Validators::new(genesis, vec![(Ristretto::generator(), NonZero::new(1).unwrap())]).unwrap(),
+  );
   let unsigned_in_chain = |_: [u8; 32]| false;
   let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
 
@@ -174,9 +174,9 @@ fn too_many_mempool() {
         &|_, _| Some(0),
         false,
         Transaction::Application(signed_transaction(&mut OsRng, genesis, &key, i)),
+        validators.weights(),
         &validators,
         unsigned_in_chain,
-        commit,
       )
       .unwrap());
   }
@@ -191,9 +191,9 @@ fn too_many_mempool() {
         &key,
         ACCOUNT_MEMPOOL_LIMIT
       )),
+      validators.weights(),
       &validators,
       unsigned_in_chain,
-      commit,
     ),
     Err(TransactionError::TooManyInMempool)
   );

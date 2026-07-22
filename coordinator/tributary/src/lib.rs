@@ -19,7 +19,6 @@ use serai_db::{Get, Transaction as DbTxn, Db};
 use serai_task::ContinuallyRan;
 
 use tributary_sdk::{
-  tendermint::{tx::TendermintTx, TendermintNetwork},
   Signed as TributarySigned, TransactionKind, TransactionTrait as _,
   Transaction as TributaryTransaction, Block, TributaryReader, P2p,
 };
@@ -36,10 +35,8 @@ mod db;
 use db::*;
 pub use db::Topic;
 
-/*
 #[cfg(test)]
 mod tests;
-*/
 
 /// Messages to send to the Processors.
 pub struct ProcessorMessages;

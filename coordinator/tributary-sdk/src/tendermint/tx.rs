@@ -21,6 +21,15 @@ pub struct TendermintTx {
   pub(crate) slash_reason: SlashReason<[u8; 64], Vec<u8>, <TendermintBlock as Block>::Hash>,
 }
 
+#[cfg(test)]
+impl PartialEq for TendermintTx {
+  fn eq(&self, other: &Self) -> bool {
+    self.serialize() == other.serialize()
+  }
+}
+#[cfg(test)]
+impl Eq for TendermintTx {}
+
 impl TendermintTx {
   pub fn slashed(&self) -> [u8; 32] {
     self.validator

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use zeroize::Zeroizing;
 use rand::{RngCore, CryptoRng, Rng, rngs::OsRng};
 
-use ciphersuite::{group::GroupEncoding as _, WrappedGroup};
+use ciphersuite::WrappedGroup;
 use dalek_ff_group::Ristretto;
 
 use serai_primitives::{
@@ -15,11 +15,7 @@ use serai_primitives::{
   },
 };
 
-use tendermint::{
-  SignedMessage, Message, Data,
-  ext::{BlockNumber, RoundNumber},
-};
-use tributary_sdk::{P2p, tendermint::TendermintBlock};
+use tributary_sdk::P2p;
 
 use messages::sign::VariantSignId;
 use serai_coordinator_substrate::NewSetInformation;
@@ -137,7 +133,10 @@ fn all_transactions() -> Vec<Transaction> {
 }
 
 /// Assert that no messages remain in either the processor or DKG confirmation queues.
-fn assert_no_pending_messages(txn: &mut impl serai_db::Transaction, set: ExternalValidatorSet) {
+fn assert_no_pending_messages(
+  txn: &mut (impl Send + serai_db::Transaction),
+  set: ExternalValidatorSet,
+) {
   assert!(
     crate::ProcessorMessages::try_recv(txn, set).is_none(),
     "unexpected remaining `ProcessorMessages`",
@@ -163,7 +162,7 @@ fn initial_sign_topic(id: VariantSignId) -> Topic {
 /// - The cosign topic is recognized (`AccumulatedWeight` initialized).
 /// - The cosign topic was queued for recognition (`RecognizedTopics`).
 fn assert_start_cosigning_invariants(
-  txn: &mut impl serai_db::Transaction,
+  txn: &mut (impl Send + serai_db::Transaction),
   set: ExternalValidatorSet,
   block_hash: serai_primitives::BlockHash,
   block_number: u64,
@@ -186,6 +185,7 @@ fn assert_start_cosigning_invariants(
   );
 }
 
+/* TODO
 /// Construct a `borsh`-encoded `SignedMessage` for our `TendermintNetwork`.
 fn make_signed_message_bytes(sender: [u8; 32]) -> Vec<u8> {
   let msg = Message::<[u8; 32], TendermintBlock, [u8; 64]> {
@@ -196,13 +196,14 @@ fn make_signed_message_bytes(sender: [u8; 32]) -> Vec<u8> {
   };
   borsh::to_vec(&SignedMessage { msg, sig: [0u8; 64] }).unwrap()
 }
+*/
 
 /// Drain expected messages produced by the given transactions, then assert both queues are empty.
 ///
 /// Some transactions produce messages on first submission (DkgParticipation, Cosign, SlashReport).
 /// This function drains those expected messages before calling `assert_no_pending_messages`.
 fn assert_block_side_effects(
-  txn: &mut impl serai_db::Transaction,
+  txn: &mut (impl Send + serai_db::Transaction),
   set: ExternalValidatorSet,
   transactions: &[tributary_sdk::Transaction<Transaction>],
 ) {
@@ -246,21 +247,13 @@ fn assert_block_side_effects(
 fn new_test_set_info(validators: &[(SeraiAddress, u16)]) -> NewSetInformation {
   let set = random_validator_set(&mut OsRng);
   let serai_block_hash = random_bytes(&mut OsRng);
-  let serai_block_time = OsRng.next_u64();
   let threshold = u16::try_from(
     ((usize::from(validators.iter().map(|(_validator, weight)| *weight).sum::<u16>()) * 2) / 3) + 1,
   )
   .unwrap();
   let validators = validators.to_vec();
   let evrf_public_keys = vec![];
-  NewSetInformation::new(
-    set,
-    serai_block_hash,
-    serai_block_time,
-    threshold,
-    validators,
-    evrf_public_keys,
-  )
+  NewSetInformation::new(set, serai_block_hash, threshold, validators, evrf_public_keys)
 }
 
 type Setup = (

@@ -54,10 +54,8 @@ pub(crate) use mempool::*;
 pub mod tendermint;
 pub(crate) use crate::tendermint::*;
 
-/* TODO
 #[cfg(any(test, feature = "tests"))]
 pub mod tests;
-*/
 
 /// Size limit for an individual transaction.
 // This needs to be big enough to participate in a 101-of-150 eVRF DKG with each element taking
@@ -78,6 +76,7 @@ pub(crate) const TRANSACTION_MESSAGE: u8 = 1;
 
 #[expect(clippy::large_enum_variant)]
 #[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum Transaction<T: TransactionTrait> {
   Tendermint(TendermintTx),
   Application(T),

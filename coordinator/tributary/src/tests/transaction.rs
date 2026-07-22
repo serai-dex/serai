@@ -4,21 +4,18 @@ use std::{
   collections::HashSet,
 };
 
-use rand_core::{RngCore as _, OsRng};
+use rand_core::OsRng;
 use blake2::{digest::typenum::U32, Digest as _, Blake2b};
-use ciphersuite::{
-  group::{ff::PrimeField as _, Group as _, GroupEncoding as _},
-  *,
-};
+use ciphersuite::group::{ff::PrimeField as _, Group as _};
 use dalek_ff_group::Ristretto;
 
 use borsh::{BorshDeserialize as _, BorshSerialize as _};
 
 use messages::sign::VariantSignId;
-use serai_primitives::{test_helpers::*, validator_sets::KeyShares};
+use serai_primitives::validator_sets::KeyShares;
 use tributary_sdk::{
   ReadWrite,
-  transaction::{TransactionKind, Transaction as _, TransactionError},
+  transaction::{TransactionKind, TransactionError},
 };
 
 use super::*;

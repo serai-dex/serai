@@ -1,4 +1,4 @@
-use rand::{Rng as _, RngCore as _, rngs::OsRng};
+use rand::rngs::OsRng;
 
 use serai_primitives::{
   address::SeraiAddress,
@@ -9,7 +9,7 @@ use serai_primitives::{
 };
 
 use messages::sign::{SignId, VariantSignId};
-use serai_db::{Db as _, Transaction as DbTxn, MemDb};
+use serai_db::{Transaction as DbTxn, MemDb};
 use crate::{
   transaction::SigningProtocolRound,
   db::{*, ProcessorMessages, DkgConfirmationMessages},

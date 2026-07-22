@@ -17,6 +17,7 @@ use crate::{
 };
 
 #[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub(crate) struct Mempool<
   D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
   T: TransactionTrait,
