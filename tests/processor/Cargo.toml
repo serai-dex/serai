@@ -39,7 +39,7 @@ messages = { package = "serai-processor-messages", path = "../../processor/messa
 
 scale = { package = "parity-scale-codec", version = "3" }
 serai-client = { path = "../../substrate/client" }
-serai-db = { path = "../../common/db", default-features = false }
+serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
 serai-message-queue = { path = "../../message-queue" }
 
 borsh = { version = "1", features = ["de_strict_order"] }

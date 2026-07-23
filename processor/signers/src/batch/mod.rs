@@ -7,7 +7,7 @@ use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
 use serai_primitives::{validator_sets::Session, instructions::SignedBatch};
 
-use serai_db::{Get, DbTxn as _, Db};
+use serai_db::{Get, Transaction as _, Db};
 
 use messages::sign::VariantSignId;
 
@@ -33,7 +33,10 @@ pub(crate) fn signed_batch(getter: &impl Get, id: u32) -> Option<SignedBatch> {
 }
 
 // Fetches batches to sign and signs them.
-pub(crate) struct BatchSignerTask<D: Db, E: GroupEncoding> {
+pub(crate) struct BatchSignerTask<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  E: GroupEncoding,
+> {
   db: D,
 
   session: Session,
@@ -44,7 +47,9 @@ pub(crate) struct BatchSignerTask<D: Db, E: GroupEncoding> {
   attempt_manager: AttemptManager<D, WrappedSchnorrkelMachine>,
 }
 
-impl<D: Db, E: GroupEncoding> BatchSignerTask<D, E> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, E: GroupEncoding>
+  BatchSignerTask<D, E>
+{
   pub(crate) fn new(
     db: D,
     session: Session,
@@ -80,7 +85,9 @@ impl<D: Db, E: GroupEncoding> BatchSignerTask<D, E> {
   }
 }
 
-impl<D: Db, E: Send + GroupEncoding> ContinuallyRan for BatchSignerTask<D, E> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, E: Send + GroupEncoding>
+  ContinuallyRan for BatchSignerTask<D, E>
+{
   type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

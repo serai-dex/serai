@@ -1,4 +1,5 @@
-use std::{sync::Arc, io, collections::HashMap, fmt::Debug};
+use core::{fmt::Debug, num::NonZero};
+use std::{sync::Arc, io, collections::HashMap};
 
 use blake2::{Digest as _, Blake2s256};
 
@@ -7,7 +8,6 @@ use ciphersuite::{group::Group as _, *};
 use schnorr::SchnorrSignature;
 
 use serai_db::MemDb;
-use tendermint::ext::Commit;
 
 use crate::{
   ReadWrite, BlockError, Block, Transaction,
@@ -76,10 +76,9 @@ impl TransactionTrait for NonceTransaction {
 fn empty_block() {
   const GENESIS: [u8; 32] = [0xff; 32];
   const LAST: [u8; 32] = [0x01; 32];
-  let validators = Arc::new(Validators::new(GENESIS, vec![]).unwrap());
-  let commit = |_: u64| -> Option<Commit<Arc<Validators>>> {
-    Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
-  };
+  let validators = Arc::new(
+    Validators::new(GENESIS, vec![(Ristretto::generator(), NonZero::new(1).unwrap())]).unwrap(),
+  );
   let provided_or_unsigned_in_chain = |_: [u8; 32]| false;
   Block::<NonceTransaction>::new(LAST, vec![], vec![])
     .verify::<N, _>(
@@ -87,8 +86,8 @@ fn empty_block() {
       LAST,
       HashMap::new(),
       &mut |_, _| None,
+      validators.weights(),
       &validators,
-      commit,
       provided_or_unsigned_in_chain,
       false,
     )
@@ -100,7 +99,9 @@ fn duplicate_nonces() {
   const GENESIS: [u8; 32] = [0xff; 32];
   const LAST: [u8; 32] = [0x01; 32];
 
-  let validators = Arc::new(Validators::new(GENESIS, vec![]).unwrap());
+  let validators = Arc::new(
+    Validators::new(GENESIS, vec![(Ristretto::generator(), NonZero::new(1).unwrap())]).unwrap(),
+  );
 
   // Run once without duplicating a nonce, and once with, so that's confirmed to be the faulty
   // component
@@ -110,9 +111,6 @@ fn duplicate_nonces() {
     insert(NonceTransaction::new(0, 0));
     insert(NonceTransaction::new(i, 1));
 
-    let commit = |_: u64| -> Option<Commit<Arc<Validators>>> {
-      Some(Commit::<Arc<Validators>> { end_time: 0, validators: vec![], signature: vec![] })
-    };
     let provided_or_unsigned_in_chain = |_: [u8; 32]| false;
 
     let mut last_nonce = 0;
@@ -125,8 +123,8 @@ fn duplicate_nonces() {
         last_nonce += 1;
         Some(res)
       },
+      validators.weights(),
       &validators,
-      commit,
       provided_or_unsigned_in_chain,
       false,
     );

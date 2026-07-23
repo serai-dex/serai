@@ -7,13 +7,13 @@ use serai_primitives::{
   balance::{Amount, ExternalBalance},
 };
 
-use serai_db::{Get, DbTxn, create_db, db_channel};
+use serai_db::{Get, Transaction as DbTxn};
 
 use primitives::{Payment, ReceivedOutput as _};
 use utxo_scheduler_primitives::TreeTransaction;
 use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor};
 
-create_db! {
+serai_db::schema! {
   UtxoScheduler {
     OperatingCosts: (coin: ExternalCoin) -> Amount,
     SerializedOutputs: (key: &[u8], coin: ExternalCoin) -> Vec<u8>,
@@ -22,7 +22,7 @@ create_db! {
 }
 
 #[rustfmt::skip]
-db_channel! {
+serai_db::channel! {
   UtxoScheduler {
     PendingBranch: <S: ScannerFeed>(key: &[u8], balance: ExternalBalance) -> TreeTransaction<AddressFor<S>>,
   }
@@ -33,7 +33,11 @@ impl<S: ScannerFeed> Db<S> {
   pub(crate) fn operating_costs(getter: &impl Get, coin: ExternalCoin) -> Amount {
     OperatingCosts::get(getter, coin).unwrap_or(Amount(0))
   }
-  pub(crate) fn set_operating_costs(txn: &mut impl DbTxn, coin: ExternalCoin, amount: Amount) {
+  pub(crate) fn set_operating_costs(
+    txn: &mut (impl Send + DbTxn),
+    coin: ExternalCoin,
+    amount: Amount,
+  ) {
     OperatingCosts::set(txn, coin, &amount);
   }
 
@@ -52,7 +56,7 @@ impl<S: ScannerFeed> Db<S> {
     Some(res)
   }
   pub(crate) fn set_outputs(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     key: KeyFor<S>,
     coin: ExternalCoin,
     outputs: &[OutputFor<S>],
@@ -63,7 +67,7 @@ impl<S: ScannerFeed> Db<S> {
     }
     SerializedOutputs::set(txn, key.to_bytes().as_ref(), coin, &buf);
   }
-  pub(crate) fn del_outputs(txn: &mut impl DbTxn, key: KeyFor<S>, coin: ExternalCoin) {
+  pub(crate) fn del_outputs(txn: &mut (impl Send + DbTxn), key: KeyFor<S>, coin: ExternalCoin) {
     SerializedOutputs::del(txn, key.to_bytes().as_ref(), coin);
   }
 
@@ -82,7 +86,7 @@ impl<S: ScannerFeed> Db<S> {
     Some(res)
   }
   pub(crate) fn set_queued_payments(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     key: KeyFor<S>,
     coin: ExternalCoin,
     queued: &[Payment<AddressFor<S>>],
@@ -93,12 +97,16 @@ impl<S: ScannerFeed> Db<S> {
     }
     SerializedQueuedPayments::set(txn, key.to_bytes().as_ref(), coin, &buf);
   }
-  pub(crate) fn del_queued_payments(txn: &mut impl DbTxn, key: KeyFor<S>, coin: ExternalCoin) {
+  pub(crate) fn del_queued_payments(
+    txn: &mut (impl Send + DbTxn),
+    key: KeyFor<S>,
+    coin: ExternalCoin,
+  ) {
     SerializedQueuedPayments::del(txn, key.to_bytes().as_ref(), coin);
   }
 
   pub(crate) fn queue_pending_branch(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     key: KeyFor<S>,
     balance: ExternalBalance,
     child: &TreeTransaction<AddressFor<S>>,
@@ -106,7 +114,7 @@ impl<S: ScannerFeed> Db<S> {
     PendingBranch::<S>::send(txn, key.to_bytes().as_ref(), balance, child);
   }
   pub(crate) fn take_pending_branch(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     key: KeyFor<S>,
     balance: ExternalBalance,
   ) -> Option<TreeTransaction<AddressFor<S>>> {

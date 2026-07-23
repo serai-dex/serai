@@ -10,7 +10,7 @@ use frost_schnorrkel::{
   Schnorrkel,
 };
 
-use serai_db::{DbTxn as _, Db as DbTrait};
+use serai_db::{Transaction as _, Db as DbTrait};
 
 use serai_client_serai::abi::primitives::{
   validator_sets::{ExternalValidatorSet, ValidatorSet},
@@ -118,7 +118,10 @@ enum Signer {
 }
 
 /// Performs the DKG Confirmation protocol.
-pub(crate) struct ConfirmDkgTask<CD: DbTrait, TD: DbTrait> {
+pub(crate) struct ConfirmDkgTask<
+  CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+> {
   db: CD,
 
   set: NewSetInformation,
@@ -128,7 +131,11 @@ pub(crate) struct ConfirmDkgTask<CD: DbTrait, TD: DbTrait> {
   signer: Option<Signer>,
 }
 
-impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
+impl<
+    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  > ConfirmDkgTask<CD, TD>
+{
   pub(crate) fn new(
     db: CD,
     set: NewSetInformation,
@@ -185,7 +192,11 @@ impl<CD: DbTrait, TD: DbTrait> ConfirmDkgTask<CD, TD> {
   }
 }
 
-impl<CD: DbTrait, TD: DbTrait> ContinuallyRan for ConfirmDkgTask<CD, TD> {
+impl<
+    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  > ContinuallyRan for ConfirmDkgTask<CD, TD>
+{
   type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

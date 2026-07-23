@@ -14,14 +14,14 @@ use serai_client_serai::{
   Serai,
 };
 
-use serai_db::*;
+use serai_db::{Transaction as _, Db};
 use serai_task::ContinuallyRan;
 
 use serai_cosign::Cosigning;
 
 use crate::NewSetInformation;
 
-create_db!(
+serai_db::schema!(
   CoordinatorSubstrateEphemeral {
     NextBlock: () -> u64,
     EmbeddedEllipticCurveKeys: (
@@ -32,13 +32,13 @@ create_db!(
 );
 
 /// The event stream for ephemeral events.
-pub struct EphemeralEventStream<D: Db> {
+pub struct EphemeralEventStream<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   db: D,
   serai: Arc<Serai>,
   validator: SeraiAddress,
 }
 
-impl<D: Db> EphemeralEventStream<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> EphemeralEventStream<D> {
   /// Create a new ephemeral event stream.
   ///
   /// Only one of these may exist over the provided database.
@@ -47,7 +47,9 @@ impl<D: Db> EphemeralEventStream<D> {
   }
 }
 
-impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for EphemeralEventStream<D>
+{
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
@@ -62,7 +64,6 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
       // These are all the events which generate canonical messages
       struct EphemeralEvents {
         block_hash: BlockHash,
-        time: u64,
         embedded_elliptic_curve_keys_events: Vec<serai_client_serai::abi::validator_sets::Event>,
         set_decided_events: Vec<serai_client_serai::abi::validator_sets::Event>,
         accepted_handover_events: Vec<serai_client_serai::abi::validator_sets::Event>,
@@ -94,17 +95,11 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
               events.validator_sets().set_decided_events().cloned().collect::<Vec<_>>();
             let accepted_handover_events =
               events.validator_sets().accepted_handover_events().cloned().collect::<Vec<_>>();
-            let Some(block) = serai.block(block_hash).await.map_err(|e| format!("{e:?}"))? else {
-              Err(format!("Serai node didn't have cosigned block #{block_number}"))?
-            };
 
-            // We use time in seconds, not milliseconds, here
-            let time = block.header.unix_time_in_millis() / 1000;
             Ok((
               block_number,
               EphemeralEvents {
                 block_hash,
-                time,
                 embedded_elliptic_curve_keys_events,
                 set_decided_events,
                 accepted_handover_events,
@@ -224,7 +219,6 @@ impl<D: Db> ContinuallyRan for EphemeralEventStream<D> {
             let mut new_set = NewSetInformation {
               set,
               serai_block: block.block_hash.0,
-              declaration_time: block.time,
               // TODO: This should be inlined into the Processor's key gen code
               // It's legacy from when we removed participants from the key gen
               threshold: ((total_weight * 2) / 3) + 1,

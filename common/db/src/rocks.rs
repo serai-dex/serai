@@ -1,52 +1,66 @@
-use std::sync::Arc;
+use alloc::sync::Arc;
 
 use rocksdb::{
-  DBCompressionType, ThreadMode, SingleThreaded, LogLevel, WriteOptions,
-  Transaction as RocksTransaction, Options, OptimisticTransactionDB,
+  DBCompressionType, SingleThreaded, LogLevel, WriteOptions, Transaction as RocksTransaction,
+  Options, OptimisticTransactionDB,
 };
 
-use crate::*;
+use crate::{Get, Db};
 
-#[must_use]
-pub struct Transaction<'a, T: ThreadMode>(
-  RocksTransaction<'a, OptimisticTransactionDB<T>>,
-  &'a OptimisticTransactionDB<T>,
-);
+/// A transaction for a RocksDB database.
+pub struct Transaction<'db> {
+  db: &'db OptimisticTransactionDB<SingleThreaded>,
+  txn: RocksTransaction<'db, OptimisticTransactionDB<SingleThreaded>>,
+}
 
-impl<T: ThreadMode> Get for Transaction<'_, T> {
-  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-    self.0.get(key).expect("couldn't read from RocksDB via transaction")
+impl Get for Transaction<'_> {
+  fn get(&self, key: impl AsRef<[u8]>) -> Option<impl AsRef<[u8]>> {
+    self.txn.get(key).expect("couldn't read from RocksDB via transaction")
   }
 }
-impl<T: ThreadMode> DbTxn for Transaction<'_, T> {
-  fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
-    self.0.put(key, value).expect("couldn't write to RocksDB via transaction");
+impl crate::Transaction for Transaction<'_> {
+  fn set(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
+    self.txn.put(key, value).expect("couldn't write to RocksDB via transaction");
   }
   fn del(&mut self, key: impl AsRef<[u8]>) {
-    self.0.delete(key).expect("couldn't delete from RocksDB via transaction");
+    self.txn.delete(key).expect("couldn't delete from RocksDB via transaction");
   }
   fn commit(self) {
-    self.0.commit().expect("couldn't commit to RocksDB via transaction");
-    self.1.flush_wal(true).expect("couldn't flush RocksDB WAL");
-    self.1.flush().expect("couldn't flush RocksDB");
+    self.txn.commit().expect("couldn't commit to RocksDB via transaction");
+    /*
+      TODO: This is incredibly aggressive flushing due to an observed fault where the WAL was
+      _never_ flushed, despite trusting RocksDB to do so as soon as the size exceeded the limit.
+      This is the overkill solution to the above problem. Proper tests for this should be added and
+      a solution which does bound the WAL, but doesn't remove the performance benefit of the WAL,
+      should be implemented.
+    */
+    self.db.flush_wal(true).expect("couldn't flush RocksDB WAL");
+    self.db.flush().expect("couldn't flush RocksDB");
   }
 }
 
-impl<T: ThreadMode> Get for Arc<OptimisticTransactionDB<T>> {
-  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
+impl Get for Arc<OptimisticTransactionDB<SingleThreaded>> {
+  fn get(&self, key: impl AsRef<[u8]>) -> Option<impl AsRef<[u8]>> {
     OptimisticTransactionDB::get(self, key).expect("couldn't read from RocksDB")
   }
 }
-impl<T: Send + ThreadMode + 'static> Db for Arc<OptimisticTransactionDB<T>> {
-  type Transaction<'a> = Transaction<'a, T>;
+impl Db for Arc<OptimisticTransactionDB<SingleThreaded>> {
+  type Transaction<'db> = Transaction<'db>;
   fn txn(&mut self) -> Self::Transaction<'_> {
     let mut opts = WriteOptions::default();
     opts.set_sync(true);
-    Transaction(self.transaction_opt(&opts, &Default::default()), &**self)
+    Transaction { db: self, txn: self.transaction_opt(&opts, &Default::default()) }
   }
 }
 
+/// The RocksDB database type.
 pub type RocksDB = Arc<OptimisticTransactionDB<SingleThreaded>>;
+
+/// Open a RocksDB database.
+///
+/// This will create the database if it does not already exist.
+///
+/// This will panic if opening/creating the database errors.
 pub fn new_rocksdb(path: &str) -> RocksDB {
   let mut options = Options::default();
   options.create_if_missing(true);
@@ -62,5 +76,5 @@ pub fn new_rocksdb(path: &str) -> RocksDB {
   options.set_max_log_file_size(1024 * 1024);
   options.set_recycle_log_file_num(1);
 
-  Arc::new(OptimisticTransactionDB::open(&options, path).unwrap())
+  Arc::new(OptimisticTransactionDB::open(&options, path).expect("failed to create/open RocksDB DB"))
 }

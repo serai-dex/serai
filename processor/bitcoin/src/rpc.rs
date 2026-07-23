@@ -15,12 +15,12 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub(crate) struct Rpc<D: Db> {
+pub(crate) struct Rpc<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   pub(crate) db: D,
   pub(crate) rpc: BRpc,
 }
 
-impl<D: Db> ScannerFeed for Rpc<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ScannerFeed for Rpc<D> {
   const NETWORK: ExternalNetworkId = ExternalNetworkId::Bitcoin;
   // 6 confirmations is widely accepted as secure and shouldn't occur
   const CONFIRMATIONS: u64 = 6;
@@ -169,7 +169,9 @@ impl<D: Db> ScannerFeed for Rpc<D> {
   }
 }
 
-impl<D: Db> TransactionPublisher<Transaction> for Rpc<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>
+  TransactionPublisher<Transaction> for Rpc<D>
+{
   type EphemeralError = RpcError;
 
   fn publish(

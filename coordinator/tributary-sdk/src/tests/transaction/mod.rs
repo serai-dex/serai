@@ -1,4 +1,4 @@
-use core::ops::Deref as _;
+use core::{ops::Deref as _, num::NonZero};
 use std::{sync::Arc, io};
 
 use zeroize::Zeroizing;
@@ -10,22 +10,16 @@ use dalek_ff_group::Ristretto;
 use ciphersuite::*;
 use schnorr::SchnorrSignature;
 
-use ::tendermint::{
-  ext::{Network, Signer as _, SignatureScheme, BlockNumber, RoundNumber},
-  SignedMessageFor, DataFor, Message, SignedMessage, Data, Evidence,
-};
+use ::tendermint::Signer as _;
 
 use crate::{
   transaction::{Signed, TransactionError, TransactionKind, Transaction, verify_transaction},
   ReadWrite,
-  tendermint::{tx::TendermintTx, Validators, Signer},
+  tendermint::{Validators, Signer},
 };
 
 #[cfg(test)]
 mod signed;
-
-#[cfg(test)]
-mod tendermint;
 
 pub fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
   Signed {
@@ -171,45 +165,17 @@ pub fn new_genesis() -> [u8; 32] {
   genesis
 }
 
-pub async fn tendermint_meta() -> ([u8; 32], Signer, [u8; 32], Arc<Validators>) {
+pub fn tendermint_meta() -> ([u8; 32], Signer, [u8; 32], Arc<Validators>) {
   // signer
   let genesis = new_genesis();
   let signer =
     Signer::new(genesis, Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng)));
-  let validator_id = signer.validator_id().await.unwrap();
+  let validator_id = signer.validator();
 
   // schema
   let signer_pub = <Ristretto as GroupIo>::read_G(validator_id.as_slice()).unwrap();
-  let validators = Arc::new(Validators::new(genesis, vec![(signer_pub, 1)]).unwrap());
+  let validators =
+    Arc::new(Validators::new(genesis, vec![(signer_pub, NonZero::new(1).unwrap())]).unwrap());
 
   (genesis, signer, validator_id, validators)
-}
-
-pub async fn signed_from_data<N: Network>(
-  signer: <N::SignatureScheme as SignatureScheme>::Signer,
-  signer_id: N::ValidatorId,
-  block_number: u64,
-  round_number: u32,
-  data: DataFor<N>,
-) -> SignedMessageFor<N> {
-  let msg = Message {
-    sender: signer_id,
-    block: BlockNumber(block_number),
-    round: RoundNumber(round_number),
-    data,
-  };
-  let sig = signer.sign(&borsh::to_vec(&msg).unwrap()).await;
-  SignedMessage { msg, sig }
-}
-
-pub async fn random_evidence_tx<N: Network>(
-  signer: <N::SignatureScheme as SignatureScheme>::Signer,
-  b: N::Block,
-) -> TendermintTx {
-  // Creates a TX with an invalid valid round number
-  // TODO: Use a random failure reason
-  let data = Data::Proposal(Some(RoundNumber(0)), b);
-  let signer_id = signer.validator_id().await.unwrap();
-  let signed = signed_from_data::<N>(signer, signer_id, 0, 0, data).await;
-  TendermintTx::SlashEvidence(Evidence::InvalidValidRound(borsh::to_vec(&signed).unwrap()))
 }

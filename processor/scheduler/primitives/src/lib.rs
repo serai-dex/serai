@@ -8,7 +8,7 @@ use std::io;
 use ciphersuite::{group::GroupEncoding, *};
 use frost::{dkg::ThresholdKeys, sign::PreprocessMachine};
 
-use serai_db::DbTxn;
+use serai_db::Transaction as DbTxn;
 
 /// A transaction.
 pub trait Transaction: Sized + Send {
@@ -47,9 +47,7 @@ pub trait SignableTransaction: 'static + Sized + Send + Sync + Clone {
 pub type TransactionFor<ST> = <ST as SignableTransaction>::Transaction;
 
 mod db {
-  use serai_db::{Get, DbTxn, create_db, db_channel};
-
-  db_channel! {
+  serai_db::channel! {
     SchedulerPrimitives {
       TransactionsToSign: (key: &[u8]) -> Vec<u8>,
     }
@@ -60,14 +58,14 @@ mod db {
 pub struct TransactionsToSign<T>(PhantomData<T>);
 impl<T: SignableTransaction> TransactionsToSign<T> {
   /// Send a transaction to sign.
-  pub fn send(txn: &mut impl DbTxn, key: &impl GroupEncoding, tx: &T) {
+  pub fn send(txn: &mut (impl Send + DbTxn), key: &impl GroupEncoding, tx: &T) {
     let mut buf = Vec::with_capacity(128);
     tx.write(&mut buf).unwrap();
     db::TransactionsToSign::send(txn, key.to_bytes().as_ref(), &buf);
   }
 
   /// Try to receive a transaction to sign.
-  pub fn try_recv(txn: &mut impl DbTxn, key: &impl GroupEncoding) -> Option<T> {
+  pub fn try_recv(txn: &mut (impl Send + DbTxn), key: &impl GroupEncoding) -> Option<T> {
     let tx = db::TransactionsToSign::try_recv(txn, key.to_bytes().as_ref())?;
     let mut tx = tx.as_slice();
     let res = T::read(&mut tx).unwrap();

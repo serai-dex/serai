@@ -16,7 +16,7 @@ use dkg::Curves;
 use serai_primitives::validator_sets::Session;
 
 use serai_env::Environment;
-use serai_db::{Get, DbTxn, Db as _, create_db, db_channel};
+use serai_db::{Transaction as DbTxn, Db as _};
 
 use primitives::EncodableG;
 use ::key_gen::{Ristretto, KeyGenParams, KeyGen};
@@ -27,13 +27,13 @@ use signers::{TransactionPublisher, Signers};
 mod coordinator;
 use coordinator::Coordinator;
 
-create_db! {
+serai_db::schema! {
   ProcessorBin {
     ExternalKeyForSessionForSigners: <K: GroupEncoding>(session: Session) -> EncodableG<K>,
   }
 }
 
-db_channel! {
+serai_db::channel! {
   ProcessorBin {
     KeyToActivate: <K: GroupEncoding>() -> EncodableG<K>
   }
@@ -154,10 +154,10 @@ async fn first_block_after_time<S: ScannerFeed>(feed: &S, serai_time: u64) -> u6
 /// Hooks to run during the main loop.
 pub trait Hooks {
   /// A hook to run upon receiving a message.
-  fn on_message(txn: &mut impl DbTxn, msg: &messages::CoordinatorMessage);
+  fn on_message(txn: &mut (impl Send + DbTxn), msg: &messages::CoordinatorMessage);
 }
 impl Hooks for () {
-  fn on_message(_: &mut impl DbTxn, _: &messages::CoordinatorMessage) {}
+  fn on_message(_: &mut (impl Send + DbTxn), _: &messages::CoordinatorMessage) {}
 }
 
 /// The main loop of a Processor, interacting with the Coordinator.

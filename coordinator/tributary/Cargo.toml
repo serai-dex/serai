@@ -30,7 +30,7 @@ schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", defau
 
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std", "test-helpers"] }
 
-serai-db = { path = "../../common/db" }
+serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
 serai-task = { path = "../../common/task", version = "0.1" }
 
 tributary-sdk = { path = "../tributary-sdk" }

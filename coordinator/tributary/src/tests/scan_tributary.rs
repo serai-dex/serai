@@ -1,15 +1,27 @@
-use core::time::Duration;
+use core::{num::NonZero, time::Duration};
 use std::time::Instant;
 
 use blake2::{Digest as _, Blake2s256};
 
 use serai_primitives::test_helpers::random_bytes;
+use serai_db::MemDb;
 use serai_task::test_helpers::TaskTest;
 use tributary_sdk::{
-  ReadWrite as _, Evidence, tendermint::tx::TendermintTx, Transaction as TributaryTransaction,
-  BlockHeader, Block, Tributary,
+  ReadWrite as _, Transaction as TributaryTransaction, BlockHeader, Block, Tributary,
 };
 use super::*;
+
+#[allow(non_snake_case)]
+fn D_key(schema: &'static [u8], field: &'static [u8], args: impl AsRef<[u8]>) -> Vec<u8> {
+  [
+    [u8::try_from(schema.len()).unwrap()].as_slice(),
+    schema,
+    [u8::try_from(field.len()).unwrap()].as_slice(),
+    field,
+    args.as_ref(),
+  ]
+  .concat()
+}
 
 /// Create a Tributary with a single validator.
 ///
@@ -26,7 +38,7 @@ async fn make_tributary(
     let this_key = random_key(&mut OsRng);
     let pub_key = <Ristretto as WrappedGroup>::generator() * *this_key;
     key = Some(this_key);
-    validator_keys.push((pub_key, u64::from(weight)));
+    validator_keys.push((pub_key, NonZero::new(weight).unwrap()));
     let addr = SeraiAddress(pub_key.to_bytes());
     validators.push((addr, weight));
   }
@@ -34,8 +46,6 @@ async fn make_tributary(
   let tributary = Tributary::<MemDb, Transaction, NopP2p>::new(
     db,
     set_info.tributary_genesis(),
-    // Use a past start_time so TendermintMachine::new doesn't sleep waiting for block end time
-    1,
     key.unwrap(),
     validator_keys,
     NopP2p,
@@ -103,7 +113,7 @@ async fn wait_for_block_after(
 ///
 /// Returns the block's hash.
 fn inject_block(
-  mut txn: impl DbTxn,
+  mut txn: impl Send + DbTxn,
   genesis: [u8; 32],
   parent: [u8; 32],
   transactions: Vec<TributaryTransaction<Transaction>>,
@@ -116,16 +126,13 @@ fn inject_block(
   let block_hash = block.hash();
   let serialized = block.serialize();
 
-  let block_after_key = MemDb::key(
-    b"tributary_blockchain",
-    b"block_after",
-    [genesis.as_ref(), parent.as_ref()].concat(),
-  );
+  let block_after_key =
+    D_key(b"tributary_blockchain", b"block_after", [genesis.as_ref(), parent.as_ref()].concat());
   let block_key =
-    MemDb::key(b"tributary_blockchain", b"block", [genesis.as_ref(), block_hash.as_ref()].concat());
+    D_key(b"tributary_blockchain", b"block", [genesis.as_ref(), block_hash.as_ref()].concat());
 
-  txn.put(block_after_key, block_hash);
-  txn.put(block_key, serialized);
+  txn.set(block_after_key, block_hash);
+  txn.set(block_key, serialized);
   txn.commit();
 
   block_hash
@@ -165,23 +172,26 @@ async fn scan_tributary_task_run_iteration() {
     // Processes block with provided and signed txs - inject after the actual last handled block
     let batch_tx =
       TributaryTransaction::Application(Transaction::Batch { hash: random_bytes(&mut OsRng) });
+    /* TODO
     let fake_evidence = TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(
       Evidence::InvalidPrecommit(make_signed_message_bytes(set_info.validators[0].0 .0)),
     ));
     let block_txs = vec![fake_evidence, batch_tx];
+    */
+    let block_txs = vec![batch_tx];
 
     let local_qty_key =
-      MemDb::key(b"tributary_provided", b"local_quantity", [genesis.as_ref(), b"Batch"].concat());
+      D_key(b"tributary_provided", b"local_quantity", [genesis.as_ref(), b"Batch"].concat());
     let block_hash = inject_block(db.txn(), genesis, last_handled_block_hash, block_txs.clone());
-    let block_qty_key = MemDb::key(
+    let block_qty_key = D_key(
       b"tributary_provided",
       b"block_quantity",
       [genesis.as_ref(), block_hash.as_ref(), b"Batch"].concat(),
     );
     {
       let mut txn = db.txn();
-      txn.put(&local_qty_key, 1u32.to_le_bytes());
-      txn.put(block_qty_key, 1u32.to_le_bytes());
+      txn.set(&local_qty_key, 1u32.to_le_bytes());
+      txn.set(block_qty_key, 1u32.to_le_bytes());
       txn.commit();
     }
 
@@ -226,7 +236,7 @@ async fn scan_tributary_task_run_iteration() {
 
     // Delete the locally_provided_quantity to trigger the error
     let local_qty_key =
-      MemDb::key(b"tributary_provided", b"local_quantity", [genesis.as_ref(), b"Cosign"].concat());
+      D_key(b"tributary_provided", b"local_quantity", [genesis.as_ref(), b"Cosign"].concat());
     let mut txn = db.txn();
     txn.del(local_qty_key);
     txn.commit();

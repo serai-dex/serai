@@ -1,5 +1,5 @@
 use core::future::Future;
-use std::time::{Duration, SystemTime};
+use std::time::{Duration, Instant};
 
 use serai_primitives::validator_sets::{ExternalValidatorSet, KeyShares};
 
@@ -7,7 +7,7 @@ use futures_lite::FutureExt as _;
 
 use tributary_sdk::{ReadWrite as _, TransactionTrait, Block, Tributary, TributaryReader};
 
-use serai_db::*;
+use serai_db::Db;
 use serai_task::ContinuallyRan;
 
 use crate::{Heartbeat, Peer as _, P2p};
@@ -47,45 +47,66 @@ pub const BATCH_SIZE_LIMIT: usize = MIN_BLOCKS_PER_BATCH *
 ///
 /// If the other validator has more blocks then we do, they're expected to inform us. This forms
 /// the sync protocol for our Tributaries.
-pub(crate) struct HeartbeatTask<TD: Db, Tx: TransactionTrait, P: P2p> {
-  pub(crate) set: ExternalValidatorSet,
-  pub(crate) tributary: Tributary<TD, Tx, P>,
-  pub(crate) reader: TributaryReader<TD, Tx>,
-  pub(crate) p2p: P,
+pub(crate) struct HeartbeatTask<
+  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  Tx: TransactionTrait,
+  P: P2p,
+> {
+  set: ExternalValidatorSet,
+  tributary: Tributary<TD, Tx, P>,
+  reader: TributaryReader<TD, Tx>,
+  p2p: P,
+  last_observed_block: [u8; 32],
+  time_of_last_observed_block: Option<Instant>,
 }
 
-impl<TD: Db, Tx: TransactionTrait, P: P2p> ContinuallyRan for HeartbeatTask<TD, Tx, P> {
+impl<
+    TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    Tx: TransactionTrait,
+    P: P2p,
+  > HeartbeatTask<TD, Tx, P>
+{
+  pub(crate) fn new(
+    set: ExternalValidatorSet,
+    tributary: Tributary<TD, Tx, P>,
+    reader: TributaryReader<TD, Tx>,
+    p2p: P,
+  ) -> Self {
+    let tip = reader.tip();
+    Self {
+      set,
+      tributary,
+      reader,
+      p2p,
+      last_observed_block: tip,
+      time_of_last_observed_block: None,
+    }
+  }
+}
+
+impl<
+    TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    Tx: TransactionTrait,
+    P: P2p,
+  > ContinuallyRan for HeartbeatTask<TD, Tx, P>
+{
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
+      let mut tip = self.reader.tip();
+      let mut tip_is_stale = false;
+      if tip != self.last_observed_block {
+        self.last_observed_block = tip;
+        self.time_of_last_observed_block = Some(Instant::now());
+      }
+
       // If our blockchain hasn't had a block in the past minute, trigger the heartbeat protocol
       const TIME_TO_TRIGGER_SYNCING: Duration = Duration::from_mins(1);
-
-      let mut tip = self.reader.tip();
-      let time_since = {
-        let block_time = if let Some(time_of_block) = self.reader.time_of_block(&tip) {
-          SystemTime::UNIX_EPOCH + Duration::from_secs(time_of_block)
-        } else {
-          // If we couldn't fetch this block's time, assume it's old
-          // We don't want to declare its unix time as 0 and claim it's 50+ years old though
-          log::warn!(
-            "heartbeat task couldn't fetch the time of a block, flagging it as a minute old"
-          );
-          SystemTime::now() - TIME_TO_TRIGGER_SYNCING
-        };
-        SystemTime::now().duration_since(block_time).unwrap_or(Duration::ZERO)
-      };
-      let mut tip_is_stale = false;
-
       let mut synced_block = false;
-      if TIME_TO_TRIGGER_SYNCING <= time_since {
-        log::warn!(
-          "last known tributary block for {:?} was {} seconds ago",
-          self.set,
-          time_since.as_secs()
-        );
-
+      if self.time_of_last_observed_block.is_none_or(|time_of_last_observed_block| {
+        time_of_last_observed_block.elapsed() >= TIME_TO_TRIGGER_SYNCING
+      }) {
         // This requests all peers for this network, without differentiating by session
         // This should be fine as most validators should overlap across sessions
         'peer: for peer in self.p2p.peers(self.set.network).await {
@@ -148,9 +169,13 @@ impl<TD: Db, Tx: TransactionTrait, P: P2p> ContinuallyRan for HeartbeatTask<TD, 
         // net if we legitimately aren't making progress
         if !synced_block {
           Err(format!(
-            "tried to sync blocks for {:?} since we haven't seen one in {} seconds but didn't",
+            "tried to sync blocks for {:?} since we haven't seen one {} but didn't",
             self.set,
-            time_since.as_secs(),
+            match self.time_of_last_observed_block {
+              None => "since booting".to_owned(),
+              Some(time_of_last_observed_block) =>
+                format!("in {} seconds", time_of_last_observed_block.elapsed().as_secs()),
+            }
           ))?;
         }
       }

@@ -1,7 +1,7 @@
-#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
+#![allow(clippy::std_instead_of_alloc)]
 
-use core::{marker::PhantomData, fmt::Debug, future::Future, time::Duration};
-use std::{sync::Arc, io};
+use core::{marker::PhantomData, fmt::Debug, future::Future, num::NonZero};
+use std::{sync::Arc, io, time::Instant};
 
 use zeroize::Zeroizing;
 
@@ -10,17 +10,23 @@ use borsh::BorshDeserialize as _;
 use ciphersuite::*;
 use dalek_ff_group::Ristretto;
 
-use futures_channel::mpsc::UnboundedReceiver;
-use futures_util::{StreamExt as _, SinkExt as _};
-use ::tendermint::{
-  ext::{BlockNumber, Commit, Block as _, Network as _},
-  SignedMessageFor, SyncedBlock, SyncedBlockSender, SyncedBlockResultReceiver, MessageSender,
-  TendermintMachine, TendermintHandle,
-};
+use ::tendermint::{Block as _, Commit, SignatureScheme, Tendermint, TendermintHandle};
 
-pub use ::tendermint::Evidence;
+use ::tendermint::{Blockchain as _, MessageFor};
+pub use ::tendermint::SlashReason;
 
 use serai_db::Db;
+#[allow(non_snake_case)]
+fn D_key(schema: &'static [u8], field: &'static [u8], args: impl AsRef<[u8]>) -> Vec<u8> {
+  [
+    [u8::try_from(schema.len()).unwrap()].as_slice(),
+    schema,
+    [u8::try_from(field.len()).unwrap()].as_slice(),
+    field,
+    args.as_ref(),
+  ]
+  .concat()
+}
 
 use tokio::sync::RwLock;
 
@@ -62,12 +68,15 @@ pub const ACCOUNT_MEMPOOL_LIMIT: u32 = 50;
 /// Block size limit.
 // This targets a growth limit of roughly 30 GB a day, under load, in order to prevent a malicious
 // participant from flooding disks and causing out of space errors in order processes.
+// TODO: Slash reasons for sufficiently large validator sets may exceed this
 pub const BLOCK_SIZE_LIMIT: usize = 2_001_000;
 
 pub(crate) const TENDERMINT_MESSAGE: u8 = 0;
 pub(crate) const TRANSACTION_MESSAGE: u8 = 1;
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[expect(clippy::large_enum_variant)]
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub enum Transaction<T: TransactionTrait> {
   Tendermint(TendermintTx),
   Application(T),
@@ -148,72 +157,50 @@ impl<P: P2p> P2p for Arc<P> {
 }
 
 #[derive(Clone)]
-pub struct Tributary<D: Db, T: TransactionTrait, P: P2p> {
+pub struct Tributary<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: TransactionTrait,
+  P: P2p,
+> {
   db: D,
 
   genesis: [u8; 32],
   network: TendermintNetwork<D, T, P>,
 
-  synced_block: Arc<RwLock<SyncedBlockSender<TendermintNetwork<D, T, P>>>>,
-  synced_block_result: Arc<RwLock<SyncedBlockResultReceiver>>,
-  messages: Arc<RwLock<MessageSender<TendermintNetwork<D, T, P>>>>,
+  handle: Arc<RwLock<TendermintHandle<TendermintNetwork<D, T, P>>>>,
 }
 
-impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait, P: P2p>
+  Tributary<D, T, P>
+{
   pub async fn new(
     db: D,
     genesis: [u8; 32],
-    start_time: u64,
     key: Zeroizing<<Ristretto as WrappedGroup>::F>,
-    validators: Vec<(<Ristretto as WrappedGroup>::G, u64)>,
+    validators: Vec<(<Ristretto as WrappedGroup>::G, NonZero<u16>)>,
     p2p: P,
   ) -> Option<Self> {
     log::info!("new Tributary with genesis {}", hex::encode(genesis));
 
-    let validators_vec = validators.iter().map(|validator| validator.0).collect::<Vec<_>>();
+    let signer = Signer::new(genesis, key);
+    let validators = Validators::new(genesis, validators)?;
 
-    let signer = Arc::new(Signer::new(genesis, key));
-    let validators = Arc::new(Validators::new(genesis, validators)?);
+    let mut blockchain = Blockchain::new(db.clone(), genesis, validators.weights().clone());
 
-    let mut blockchain = Blockchain::new(db.clone(), genesis, &validators_vec);
-    let block_number = BlockNumber(blockchain.block_number());
-
-    let start_time = if let Some(commit) = blockchain.commit(&blockchain.tip()) {
-      Commit::<Validators>::deserialize_reader(&mut commit.as_slice()).unwrap().end_time
-    } else {
-      start_time
-    };
     let proposal = TendermintBlock(
       blockchain.build_block::<TendermintNetwork<D, T, P>>(&validators).serialize(),
     );
     let blockchain = Arc::new(RwLock::new(blockchain));
 
-    let network = TendermintNetwork { genesis, signer, validators, blockchain, p2p };
+    let network =
+      TendermintNetwork { genesis, last_addition: Instant::now(), validators, blockchain, p2p };
 
-    let TendermintHandle { synced_block, synced_block_result, messages, machine } =
-      TendermintMachine::new(
-        db.clone(),
-        network.clone(),
-        genesis,
-        block_number,
-        start_time,
-        proposal,
-      )
-      .await;
-    tokio::spawn(machine.run());
+    let (handle, process) =
+      Tendermint::process(network.clone(), signer, db.clone(), network.clone(), proposal).await;
+    let handle = Arc::new(RwLock::new(handle));
+    tokio::spawn(process);
 
-    Some(Self {
-      db,
-      genesis,
-      network,
-      synced_block: Arc::new(RwLock::new(synced_block)),
-      synced_block_result: Arc::new(RwLock::new(synced_block_result)),
-      messages: Arc::new(RwLock::new(messages)),
-    })
-  }
-
-  pub fn block_time() -> Duration {
-    TendermintNetwork::<D, T, P>::block_time()
+    Some(Self { db, genesis, network, handle })
   }
 
   pub fn genesis(&self) -> [u8; 32] {
@@ -253,7 +240,7 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     let res = self.network.blockchain.write().await.add_transaction::<TendermintNetwork<D, T, P>>(
       true,
       tx,
-      &self.network.signature_scheme(),
+      self.network.signature_scheme(),
     );
     if res == Ok(true) {
       self.network.p2p.broadcast(self.genesis, to_broadcast).await;
@@ -261,16 +248,10 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
     res
   }
 
-  async fn sync_block_internal(
-    &self,
-    block: Block<T>,
-    commit: Vec<u8>,
-    result: &mut UnboundedReceiver<bool>,
-  ) -> bool {
-    let (tip, block_number) = {
-      let blockchain = self.network.blockchain.read().await;
-      (blockchain.tip(), blockchain.block_number())
-    };
+  // Sync a block.
+  // TODO: Since we have a static validator set, we should only need the tail commit?
+  pub async fn sync_block(&self, block: Block<T>, commit: Vec<u8>) -> bool {
+    let tip = self.network.blockchain.read().await.tip();
 
     if block.header.parent != tip {
       log::debug!("told to sync a block whose parent wasn't our tip");
@@ -290,7 +271,11 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
 
     let block = TendermintBlock(block.serialize());
     let mut commit_ref = commit.as_slice();
-    let Ok(commit) = Commit::<Arc<Validators>>::deserialize_reader(&mut commit_ref) else {
+    let Ok(commit) =
+      Commit::<<Validators as SignatureScheme>::AggregateSignature>::deserialize_reader(
+        &mut commit_ref,
+      )
+    else {
       log::error!("sent an invalidly serialized commit");
       return false;
     };
@@ -300,21 +285,18 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
       log::error!("sent an commit with additional data after it");
       return false;
     }
-    if !self.network.verify_commit(block.id(), &commit) {
+    if !commit.verify(
+      self.network.validator_set(),
+      self.network.signature_scheme(),
+      self.genesis,
+      block.hash(),
+    ) {
       log::error!("sent an invalid commit");
       return false;
     }
 
-    let number = BlockNumber(block_number + 1);
-    self.synced_block.write().await.send(SyncedBlock { number, block, commit }).await.unwrap();
-    result.next().await.unwrap()
-  }
-
-  // Sync a block.
-  // TODO: Since we have a static validator set, we should only need the tail commit?
-  pub async fn sync_block(&self, block: Block<T>, commit: Vec<u8>) -> bool {
-    let mut result = self.synced_block_result.write().await;
-    self.sync_block_internal(block, commit, &mut result).await
+    self.handle.write().await.sync(block, commit).await.unwrap();
+    true
   }
 
   // Return true if the message should be rebroadcasted.
@@ -332,21 +314,20 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
           self.network.blockchain.write().await.add_transaction::<TendermintNetwork<D, T, P>>(
             false,
             tx,
-            &self.network.signature_scheme(),
+            self.network.signature_scheme(),
           );
         log::debug!("received transaction message. valid new transaction: {res:?}");
         res == Ok(true)
       }
 
       Some(&TENDERMINT_MESSAGE) => {
-        let Ok(msg) =
-          SignedMessageFor::<TendermintNetwork<D, T, P>>::deserialize_reader(&mut &msg[1 ..])
+        let Ok(msg) = MessageFor::<TendermintNetwork<D, T, P>>::deserialize_reader(&mut &msg[1 ..])
         else {
           log::error!("received invalid tendermint message");
           return false;
         };
 
-        self.messages.write().await.send(msg).await.unwrap();
+        self.handle.write().await.message(msg).await.unwrap();
         false
       }
 
@@ -365,8 +346,13 @@ impl<D: Db, T: TransactionTrait, P: P2p> Tributary<D, T, P> {
 }
 
 #[derive(Clone)]
-pub struct TributaryReader<D: Db, T: TransactionTrait>(D, [u8; 32], PhantomData<T>);
-impl<D: Db, T: TransactionTrait> TributaryReader<D, T> {
+pub struct TributaryReader<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: TransactionTrait,
+>(D, [u8; 32], PhantomData<T>);
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait>
+  TributaryReader<D, T>
+{
   pub fn genesis(&self) -> [u8; 32] {
     self.1
   }
@@ -379,18 +365,19 @@ impl<D: Db, T: TransactionTrait> TributaryReader<D, T> {
   pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
     Blockchain::<D, T>::commit_from_db(&self.0, self.1, hash)
   }
-  pub fn parsed_commit(&self, hash: &[u8; 32]) -> Option<Commit<Validators>> {
-    self
-      .commit(hash)
-      .map(|commit| Commit::<Validators>::deserialize_reader(&mut commit.as_slice()).unwrap())
+  pub fn parsed_commit(
+    &self,
+    hash: &[u8; 32],
+  ) -> Option<Commit<<Validators as SignatureScheme>::AggregateSignature>> {
+    self.commit(hash).map(|commit| {
+      Commit::<<Validators as SignatureScheme>::AggregateSignature>::deserialize_reader(
+        &mut commit.as_slice(),
+      )
+      .unwrap()
+    })
   }
   pub fn block_after(&self, hash: &[u8; 32]) -> Option<[u8; 32]> {
     Blockchain::<D, T>::block_after(&self.0, self.1, hash)
-  }
-  pub fn time_of_block(&self, hash: &[u8; 32]) -> Option<u64> {
-    self.commit(hash).map(|commit| {
-      Commit::<Validators>::deserialize_reader(&mut commit.as_slice()).unwrap().end_time
-    })
   }
 
   pub fn locally_provided_txs_in_block(&self, hash: &[u8; 32], order: &str) -> bool {

@@ -29,6 +29,6 @@ serai-primitives = { path = "../../substrate/primitives", default-features = fal
 log = { version = "0.4", default-features = false, features = ["std"] }
 
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
-serai-db = { path = "../../common/db" }
+serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
 
 messages = { package = "serai-processor-messages", path = "../messages" }

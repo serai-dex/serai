@@ -8,7 +8,7 @@ use std::{io, collections::HashMap};
 use group::GroupEncoding;
 
 use borsh::{BorshSerialize as _, BorshDeserialize as _};
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get, Transaction as DbTxn, Db};
 
 use serai_primitives::{
   network_id::ExternalNetworkId, coin::ExternalCoin, balance::Amount,
@@ -280,7 +280,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   ///
   /// This SHOULD setup any necessary database structures. This SHOULD NOT cause the new key to
   /// be used as the primary key. The multisig rotation time clearly establishes its steps.
-  fn activate_key(txn: &mut impl DbTxn, key: KeyFor<S>);
+  fn activate_key(txn: &mut (impl Send + DbTxn), key: KeyFor<S>);
 
   /// Flush all outputs within a retiring key to the new key.
   ///
@@ -294,7 +294,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// the responsibility of the new key.
   fn flush_key(
     &self,
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     block: &BlockFor<S>,
     retiring_key: KeyFor<S>,
     new_key: KeyFor<S>,
@@ -305,7 +305,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// Any key retired MUST NOT still have outputs associated with it. This SHOULD be a NOP other
   /// than any assertions and database cleanup. This MUST NOT be expected to be called in a fashion
   /// ordered to any other calls.
-  fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>);
+  fn retire_key(txn: &mut (impl Send + DbTxn), key: KeyFor<S>);
 
   /// Accumulate outputs into the scheduler, yielding the Eventualities now to be scanned for.
   ///
@@ -317,7 +317,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// Eventualities are for.
   fn update(
     &self,
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     update: SchedulerUpdate<S>,
@@ -359,7 +359,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   */
   fn fulfill(
     &self,
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     payments: Vec<Payment<AddressFor<S>>>,
@@ -378,7 +378,11 @@ impl<S: ScannerFeed> Scanner<S> {
   /// This will begin its execution, spawning several asynchronous tasks.
   ///
   /// This will return None if the Scanner was never initialized.
-  pub async fn new(db: impl Db, feed: S, scheduler: impl Scheduler<S>) -> Option<Self> {
+  pub async fn new(
+    db: impl 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    feed: S,
+    scheduler: impl Scheduler<S>,
+  ) -> Option<Self> {
     let start_block = ScannerGlobalDb::<S>::start_block(&db)?;
 
     let index_task = index::IndexTask::new(db.clone(), feed.clone(), start_block).await;
@@ -420,7 +424,7 @@ impl<S: ScannerFeed> Scanner<S> {
   ///
   /// This passes through to `Scanner::new` if prior called.
   pub async fn initialize(
-    mut db: impl Db,
+    mut db: impl 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
     feed: S,
     scheduler: impl Scheduler<S>,
     start_block: u64,
@@ -448,7 +452,7 @@ impl<S: ScannerFeed> Scanner<S> {
   /// The calls to this function must be ordered with regards to `queue_burns`.
   pub fn acknowledge_batch(
     &mut self,
-    mut txn: impl DbTxn,
+    mut txn: impl Send + DbTxn,
     batch: ExecutedBatch,
     burns: Vec<OutInstructionWithBalance>,
     key_to_activate: Option<KeyFor<S>>,
@@ -494,7 +498,7 @@ impl<S: ScannerFeed> Scanner<S> {
     latency and likely practically require we add regularly scheduled notable blocks (which may be
     unnecessary).
   */
-  pub fn queue_burns(&mut self, mut txn: impl DbTxn, burns: Vec<OutInstructionWithBalance>) {
+  pub fn queue_burns(&mut self, mut txn: impl Send + DbTxn, burns: Vec<OutInstructionWithBalance>) {
     if burns.is_empty() {
       return;
     }

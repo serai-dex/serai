@@ -3,7 +3,7 @@ use std::collections::{HashSet, HashMap};
 
 use group::GroupEncoding;
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get, Transaction as DbTxn, Db};
 
 use primitives::{
   task::ContinuallyRan, OutputType, ReceivedOutput as _, Eventuality as _, Block as _, Payment,
@@ -38,7 +38,7 @@ pub(crate) fn latest_scannable_block<S: ScannerFeed>(getter: &impl Get) -> Optio
 ///
 /// The HashMap is keyed by the key these Eventualities are for.
 fn intake_eventualities<S: ScannerFeed>(
-  txn: &mut impl DbTxn,
+  txn: &mut (impl Send + DbTxn),
   to_intake: HashMap<Vec<u8>, Vec<EventualityFor<S>>>,
 ) {
   for (key, new_eventualities) in to_intake {
@@ -101,13 +101,22 @@ fn intake_eventualities<S: ScannerFeed>(
   This forms a backlog only if the latency of scanning, acknowledgement, and intake (including
   checking Eventualities) exceeds the window duration (the desired property).
 */
-pub(crate) struct EventualityTask<D: Db, S: ScannerFeed, Sch: Scheduler<S>> {
+pub(crate) struct EventualityTask<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  S: ScannerFeed,
+  Sch: Scheduler<S>,
+> {
   db: D,
   feed: S,
   scheduler: Sch,
 }
 
-impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
+impl<
+    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    S: ScannerFeed,
+    Sch: Scheduler<S>,
+  > EventualityTask<D, S, Sch>
+{
   pub(crate) fn new(mut db: D, feed: S, scheduler: Sch, start_block: u64) -> Self {
     if EventualityDb::<S>::next_to_check_for_eventualities_block(&db).is_none() {
       // Initialize the DB
@@ -191,7 +200,12 @@ impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> EventualityTask<D, S, Sch> {
   }
 }
 
-impl<D: Db, S: ScannerFeed, Sch: Scheduler<S>> ContinuallyRan for EventualityTask<D, S, Sch> {
+impl<
+    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    S: ScannerFeed,
+    Sch: Scheduler<S>,
+  > ContinuallyRan for EventualityTask<D, S, Sch>
+{
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

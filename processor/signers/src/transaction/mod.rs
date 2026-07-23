@@ -5,7 +5,7 @@ use frost::dkg::ThresholdKeys;
 
 use serai_primitives::validator_sets::Session;
 
-use serai_db::{DbTxn as _, Db};
+use serai_db::{Transaction as _, Db};
 
 use messages::sign::VariantSignId;
 
@@ -25,7 +25,7 @@ use db::*;
 
 // Fetches transactions to sign and signs them.
 pub(crate) struct TransactionSignerTask<
-  D: Db,
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
   ST: SignableTransaction,
   P: TransactionPublisher<TransactionFor<ST>>,
 > {
@@ -41,8 +41,11 @@ pub(crate) struct TransactionSignerTask<
   last_publication: Instant,
 }
 
-impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>>
-  TransactionSignerTask<D, ST, P>
+impl<
+    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    ST: SignableTransaction,
+    P: TransactionPublisher<TransactionFor<ST>>,
+  > TransactionSignerTask<D, ST, P>
 {
   pub(crate) fn new(
     db: D,
@@ -86,8 +89,11 @@ impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>
   }
 }
 
-impl<D: Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>> ContinuallyRan
-  for TransactionSignerTask<D, ST, P>
+impl<
+    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    ST: SignableTransaction,
+    P: TransactionPublisher<TransactionFor<ST>>,
+  > ContinuallyRan for TransactionSignerTask<D, ST, P>
 {
   type Error = P::EphemeralError;
 

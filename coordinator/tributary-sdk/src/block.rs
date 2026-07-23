@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use blake2::{Digest as _, Blake2s256};
 
-use tendermint::ext::{Network, Commit};
+use tendermint::{SignatureScheme, Blockchain};
 
 use crate::{
   transaction::{
@@ -49,7 +49,7 @@ pub enum BlockError {
   TransactionError(TransactionError),
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Debug)]
 pub struct BlockHeader {
   pub parent: [u8; 32],
   pub transactions: [u8; 32],
@@ -75,7 +75,7 @@ impl BlockHeader {
   }
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, Debug)]
 pub struct Block<T: TransactionTrait> {
   pub header: BlockHeader,
   pub transactions: Vec<Transaction<T>>,
@@ -166,14 +166,20 @@ impl<T: TransactionTrait> Block<T> {
   }
 
   #[expect(clippy::too_many_arguments)]
-  pub(crate) fn verify<N: Network, G: GAIN>(
+  pub(crate) fn verify<
+    N: Blockchain<
+      Validator = [u8; 32],
+      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+    >,
+    G: GAIN,
+  >(
     &self,
     genesis: [u8; 32],
     last_block: [u8; 32],
     mut locally_provided: HashMap<&'static str, VecDeque<T>>,
     get_and_increment_nonce: &mut G,
+    validator_set: &N::ValidatorSet,
     schema: &N::SignatureScheme,
-    commit: impl Fn(u64) -> Option<Commit<N::SignatureScheme>>,
     provided_or_unsigned_in_chain: impl Fn([u8; 32]) -> bool,
     allow_non_local_provided: bool,
   ) -> Result<(), BlockError> {
@@ -220,7 +226,7 @@ impl<T: TransactionTrait> Block<T> {
             let Transaction::Application(tx) = tx else {
               Err(BlockError::NonLocalProvided(txs.pop().unwrap()))?
             };
-            if tx != &local {
+            if tx.hash() != local.hash() {
               Err(BlockError::DistinctProvided)?;
             }
           } else if !allow_non_local_provided {
@@ -248,10 +254,12 @@ impl<T: TransactionTrait> Block<T> {
       last_tx_order = current_tx_order;
 
       match tx {
-        Transaction::Tendermint(tx) => match verify_tendermint_tx::<N>(tx, schema, &commit) {
-          Ok(()) => {}
-          Err(e) => Err(BlockError::TransactionError(e))?,
-        },
+        Transaction::Tendermint(tx) => {
+          match verify_tendermint_tx::<N>(tx, genesis, validator_set, schema) {
+            Ok(()) => {}
+            Err(e) => Err(BlockError::TransactionError(e))?,
+          }
+        }
         Transaction::Application(tx) => {
           match verify_transaction(tx, genesis, get_and_increment_nonce) {
             Ok(()) => {}

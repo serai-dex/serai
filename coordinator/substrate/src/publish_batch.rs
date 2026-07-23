@@ -6,12 +6,12 @@ use serai_client_serai::{
   RpcError, Serai,
 };
 
-use serai_db::{Get, DbTxn, Db, create_db};
+use serai_db::{Transaction as _, Db};
 use serai_task::ContinuallyRan;
 
 use crate::SignedBatches;
 
-create_db!(
+serai_db::schema!(
   CoordinatorSubstrate {
     LastPublishedBatch: (network: ExternalNetworkId) -> u32,
     BatchesToPublish: (network: ExternalNetworkId, batch: u32) -> SignedBatch,
@@ -19,20 +19,22 @@ create_db!(
 );
 
 /// Publish `SignedBatch`s from `SignedBatches` onto Serai.
-pub struct PublishBatchTask<D: Db> {
+pub struct PublishBatchTask<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   db: D,
   serai: Arc<Serai>,
   network: ExternalNetworkId,
 }
 
-impl<D: Db> PublishBatchTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> PublishBatchTask<D> {
   /// Create a task to publish `SignedBatch`s onto Serai.
   pub fn new(db: D, serai: Arc<Serai>, network: ExternalNetworkId) -> Self {
     Self { db, serai, network }
   }
 }
 
-impl<D: Db> ContinuallyRan for PublishBatchTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for PublishBatchTask<D>
+{
   type Error = RpcError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

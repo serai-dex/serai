@@ -1,9 +1,24 @@
-#![allow(clippy::std_instead_of_core, clippy::std_instead_of_alloc)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![no_std]
 
-mod create_db;
-pub use create_db::*;
+#[cfg(feature = "alloc")]
+extern crate alloc;
+#[cfg(feature = "std")]
+extern crate std;
 
+#[doc(hidden)]
+pub mod __private {
+  #[cfg(feature = "schema")]
+  pub use borsh;
+}
+#[cfg(feature = "schema")]
+mod schema;
+
+#[cfg(feature = "std")]
 mod mem;
+#[cfg(feature = "std")]
 pub use mem::*;
 
 #[cfg(feature = "rocksdb")]
@@ -16,43 +31,78 @@ mod parity_db;
 #[cfg(feature = "parity-db")]
 pub use parity_db::{ParityDb, new_parity_db};
 
-/// An object implementing `get`.
+/// A handle to an ACID database via which values may be read.
+///
+/// It's undefined if the retrieved values are:
+/// A) The value which was written to the key _when this handle was instantiated_ (from a snapshot)
+/// B) The value which is _currently_ written to the key (which may have been written to by a
+///    committed transaction during the lifetime of this handle)
+///
+/// In other words, there's no guarantee reads are repeatable.
 pub trait Get {
   /// Get a value from the database.
-  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>>;
+  ///
+  /// If the key is not present in the database, this will return `None`.
+  ///
+  /// The implementation MAY panic if the database is corrupt or would become corrupted. If the
+  /// length of the key exceeds an internal limit on the length of keys, this may be considered as
+  /// corruption.
+  fn get(&self, key: impl AsRef<[u8]>) -> Option<impl AsRef<[u8]>>;
 }
 
-/// An atomic database transaction.
+/// An ACID transaction.
 ///
-/// A transaction is only required to atomically commit. It is not required that two `Get` calls
-/// made with the same transaction return the same result, if another transaction wrote to that
-/// key.
+/// This transaction implements [`Get`]. If this transaction has queued a write to a key, the
+/// retrieved value for that key will be the latest value queued to be written by this transaction.
+/// If this transaction has not queued a write to a key, it's undefined if the retrieved value is:
+/// A) The value which was written to the key _when the transaction was opened_ (from a snapshot)
+/// B) The value which is _currently_ written to the key (which may have been written to by a
+///    committed transaction during the lifetime of this transaction)
 ///
-/// If two transactions are created, and both write (including deletions) to the same key, behavior
-/// is undefined. The transaction may block, deadlock, panic, overwrite one of the two values
-/// randomly, or any other action, at time of write or at time of commit.
-#[must_use]
-pub trait DbTxn: Send + Get {
+/// In other words, there's no guarantee reads are repeatable.
+pub trait Transaction: Get {
   /// Write a value to this key.
-  fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>);
+  ///
+  /// If a concurrent transaction has queued a write to this key, the database MAY panic or exhibit
+  /// an undefined choice of which transaction's queued write resolves as the database's current
+  /// value for this key.
+  ///
+  /// The implementation MAY panic if the database is corrupt or would become corrupted. If the
+  /// length of the key or value exceeds internal limits on lengths or the total database size,
+  /// this may be considered as corruption.
+  fn set(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>);
+
   /// Delete the value from this key.
+  ///
+  /// If no value is stored to this key, this operation is effectively a NOP.
+  ///
+  /// This is considered as a write to this key, with properties as documented by
+  /// [`Transaction::put`].
+  ///
+  /// The implementation MAY panic if the database is corrupt or would become corrupted. If the
+  /// length of the key exceeds an internal limit on the length of keys, this may be considered as
+  /// corruption.
   fn del(&mut self, key: impl AsRef<[u8]>);
+
   /// Commit this transaction.
+  ///
+  /// The implementation MAY panic if the database is corrupt or would become corrupted.
   fn commit(self);
 }
 
-/// A database supporting atomic transaction.
-pub trait Db: 'static + Send + Sync + Clone + Get {
+/// A handle to an ACID database.
+///
+/// This implements [`Clone`] on the expectation clones refer to the same underlying database. This
+/// effectively makes this a reference-counted handle to the underlying database.
+///
+/// This implements [`Get`], allowing reading the _current_ values in the database without having
+/// to open a transaction.
+pub trait Db: Clone + Get {
   /// The type representing a database transaction.
-  type Transaction<'a>: DbTxn;
-  /// Calculate a key for a database entry.
-  ///
-  /// Keys are separated by the database, the item within the database, and the item's key itself.
-  fn key(db_dst: &'static [u8], item_dst: &'static [u8], key: impl AsRef<[u8]>) -> Vec<u8> {
-    let db_len = u8::try_from(db_dst.len()).unwrap();
-    let dst_len = u8::try_from(item_dst.len()).unwrap();
-    [[db_len].as_ref(), db_dst, [dst_len].as_ref(), item_dst, key.as_ref()].concat()
-  }
+  type Transaction<'db>: Transaction
+  where
+    Self: 'db;
+
   /// Open a new transaction.
   fn txn(&mut self) -> Self::Transaction<'_>;
 }

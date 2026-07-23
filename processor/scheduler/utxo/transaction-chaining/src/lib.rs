@@ -9,7 +9,7 @@ use group::GroupEncoding as _;
 
 use serai_primitives::{coin::ExternalCoin, balance::Amount};
 
-use serai_db::DbTxn;
+use serai_db::Transaction as DbTxn;
 
 use primitives::{OutputType, ReceivedOutput as _, Payment};
 use scanner::{
@@ -40,7 +40,11 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
     Self { planner, _S: PhantomData }
   }
 
-  fn accumulate_outputs(txn: &mut impl DbTxn, outputs: Vec<OutputFor<S>>, from_scanner: bool) {
+  fn accumulate_outputs(
+    txn: &mut (impl Send + DbTxn),
+    outputs: Vec<OutputFor<S>>,
+    from_scanner: bool,
+  ) {
     let mut outputs_by_key = HashMap::new();
     for output in outputs {
       if !from_scanner {
@@ -68,7 +72,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
   async fn aggregate_inputs(
     &self,
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     block: &BlockFor<S>,
     key_for_change: KeyFor<S>,
     key: KeyFor<S>,
@@ -109,7 +113,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
   }
 
   fn fulfillable_payments(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     operating_costs: &mut u64,
     key: KeyFor<S>,
     coin: ExternalCoin,
@@ -165,7 +169,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
   async fn step(
     &self,
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     block: &BlockFor<S>,
     key: KeyFor<S>,
@@ -353,7 +357,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
   async fn flush_outputs(
     &self,
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     eventualities: &mut KeyScopedEventualities<S>,
     block: &BlockFor<S>,
     from: KeyFor<S>,
@@ -400,7 +404,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
   type EphemeralError = P::EphemeralError;
   type SignableTransaction = P::SignableTransaction;
 
-  fn activate_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
+  fn activate_key(txn: &mut (impl Send + DbTxn), key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
       assert!(Db::<S>::outputs(txn, key, coin).is_none());
       Db::<S>::set_outputs(txn, key, coin, &[]);
@@ -411,7 +415,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
   fn flush_key(
     &self,
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     block: &BlockFor<S>,
     retiring_key: KeyFor<S>,
     new_key: KeyFor<S>,
@@ -438,7 +442,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
     }
   }
 
-  fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
+  fn retire_key(txn: &mut (impl Send + DbTxn), key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
       assert!(Db::<S>::outputs(txn, key, coin).unwrap().is_empty());
       Db::<S>::del_outputs(txn, key, coin);
@@ -449,7 +453,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
   fn update(
     &self,
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     update: SchedulerUpdate<S>,
@@ -551,7 +555,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
   fn fulfill(
     &self,
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     block: &BlockFor<S>,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     payments: Vec<Payment<AddressFor<S>>>,

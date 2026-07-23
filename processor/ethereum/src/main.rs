@@ -17,7 +17,7 @@ use alloy_provider::{Provider as _, RootProvider};
 
 use serai_primitives::validator_sets::Session;
 
-use serai_db::{Get, DbTxn, create_db};
+use serai_db::Transaction as DbTxn;
 
 use ::primitives::EncodableG;
 use ::key_gen::KeyGenParams as _;
@@ -34,7 +34,7 @@ use scheduler::{SmartContract, Scheduler};
 mod publisher;
 use publisher::TransactionPublisher;
 
-create_db! {
+serai_db::schema! {
   EthereumProcessor {
     // The initial key for Serai on Ethereum
     InitialSeraiKey: () -> EncodableG<k256::ProjectivePoint>,
@@ -43,7 +43,7 @@ create_db! {
 
 struct SetInitialKey;
 impl bin::Hooks for SetInitialKey {
-  fn on_message(txn: &mut impl DbTxn, msg: &messages::CoordinatorMessage) {
+  fn on_message(txn: &mut (impl Send + DbTxn), msg: &messages::CoordinatorMessage) {
     if let messages::CoordinatorMessage::Substrate(
       messages::substrate::CoordinatorMessage::SetKeys { session, key_pair, .. },
     ) = msg

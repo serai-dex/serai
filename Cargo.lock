@@ -7855,8 +7855,9 @@ dependencies = [
 
 [[package]]
 name = "serai-db"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
+ "borsh",
  "parity-db",
  "rocksdb",
 ]
@@ -8173,8 +8174,10 @@ dependencies = [
  "secq256k1",
  "serai-client-bitcoin",
  "serai-client-ethereum",
+ "serai-db",
  "short-weierstrass",
  "std-shims 0.1.5",
+ "tendermint-machine",
 ]
 
 [[package]]
@@ -9789,13 +9792,11 @@ dependencies = [
 name = "tendermint-machine"
 version = "0.2.0"
 dependencies = [
+ "async-channel",
  "borsh",
- "futures-channel",
- "futures-util",
- "hex",
- "log",
+ "pin-project-lite",
+ "rand_core 0.9.5",
  "serai-db",
- "thiserror 2.0.18",
  "tokio",
 ]
 
@@ -10145,12 +10146,9 @@ dependencies = [
  "ciphersuite 0.4.2",
  "dalek-ff-group",
  "flexible-transcript",
- "futures-channel",
- "futures-util",
  "hex",
  "log",
  "rand 0.8.6",
- "rand_chacha 0.3.1",
  "schnorr-signatures",
  "serai-db",
  "subtle",

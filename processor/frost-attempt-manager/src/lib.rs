@@ -8,7 +8,7 @@ use frost::{Participant, sign::PreprocessMachine};
 
 use serai_primitives::validator_sets::Session;
 
-use serai_db::{DbTxn, Db};
+use serai_db::{Transaction as DbTxn, Db};
 use messages::sign::{VariantSignId, ProcessorMessage, CoordinatorMessage};
 
 mod individual;
@@ -28,14 +28,21 @@ pub enum Response<M: PreprocessMachine> {
 }
 
 /// A manager of attempts for a variety of signing protocols.
-pub struct AttemptManager<D: Db, M: Clone + PreprocessMachine> {
+pub struct AttemptManager<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  M: Clone + PreprocessMachine,
+> {
   db: D,
   session: Session,
   start_i: Participant,
   active: HashMap<VariantSignId, SigningProtocol<D, M>>,
 }
 
-impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
+impl<
+    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    M: Clone + PreprocessMachine,
+  > AttemptManager<D, M>
+{
   /// Create a new attempt manager.
   ///
   /// This will not restore any signing sessions from the database. Those must be re-registered.
@@ -60,7 +67,7 @@ impl<D: Db, M: Clone + PreprocessMachine> AttemptManager<D, M> {
   /// This does not stop the protocol from being re-registered and further worked on (with
   /// undefined behavior) then. The higher-level context must never call `register` again with this
   /// ID accordingly.
-  pub fn retire(&mut self, txn: &mut impl DbTxn, id: VariantSignId) {
+  pub fn retire(&mut self, txn: &mut (impl Send + DbTxn), id: VariantSignId) {
     if self.active.remove(&id).is_none() {
       log::info!("retiring protocol {id:?}, which we didn't register/already retired");
     } else {

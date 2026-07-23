@@ -4,7 +4,7 @@ use frost::{dkg::ThresholdKeys, curve::Ristretto};
 
 use serai_primitives::{crypto::RistrettoSignature, validator_sets::Session};
 
-use serai_db::{DbTxn as _, Db};
+use serai_db::{Transaction as _, Db};
 
 use serai_cosign::{COSIGN_CONTEXT, Cosign as CosignStruct, SignedCosign};
 use messages::sign::VariantSignId;
@@ -25,7 +25,7 @@ use db::LatestCosigned;
 ///
 /// Only the latest cosign attempt is kept. We don't work on historical attempts as later cosigns
 /// supersede them.
-pub(crate) struct CosignerTask<D: Db> {
+pub(crate) struct CosignerTask<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   db: D,
 
   session: Session,
@@ -35,7 +35,7 @@ pub(crate) struct CosignerTask<D: Db> {
   attempt_manager: AttemptManager<D, WrappedSchnorrkelMachine>,
 }
 
-impl<D: Db> CosignerTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> CosignerTask<D> {
   pub(crate) fn new(db: D, session: Session, keys: Vec<ThresholdKeys<Ristretto>>) -> Self {
     let attempt_manager = AttemptManager::new(
       db.clone(),
@@ -47,7 +47,9 @@ impl<D: Db> CosignerTask<D> {
   }
 }
 
-impl<D: Db> ContinuallyRan for CosignerTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for CosignerTask<D>
+{
   type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, DoesNotError>> {

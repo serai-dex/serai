@@ -8,7 +8,7 @@ use ciphersuite::{
 };
 use dkg::*;
 
-use serai_db::{DbTxn as _, Db as _, MemDb};
+use serai_db::{Transaction as _, Db as _, MemDb};
 
 use serai_primitives::validator_sets::Session;
 use messages::key_gen::*;

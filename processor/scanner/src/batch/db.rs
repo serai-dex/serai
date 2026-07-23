@@ -4,7 +4,7 @@ use std::io::{Read as _, Write as _};
 use group::GroupEncoding;
 
 use borsh::{BorshSerialize, BorshDeserialize};
-use serai_db::{Get, DbTxn, create_db};
+use serai_db::{Get, Transaction as DbTxn};
 
 use serai_primitives::{balance::ExternalBalance, validator_sets::Session};
 
@@ -19,7 +19,7 @@ pub(crate) struct BatchInfo<K: BorshSerialize> {
   pub(crate) in_instructions_hash: [u8; 32],
 }
 
-create_db!(
+serai_db::schema!(
   ScannerBatch {
     // The next block to create batches for
     NextBlockToBatch: () -> u64,
@@ -42,21 +42,21 @@ pub(crate) struct ReturnInformation<S: ScannerFeed> {
 
 pub(crate) struct BatchDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> BatchDb<S> {
-  pub(crate) fn set_next_block_to_batch(txn: &mut impl DbTxn, next_block_to_batch: u64) {
+  pub(crate) fn set_next_block_to_batch(txn: &mut (impl Send + DbTxn), next_block_to_batch: u64) {
     NextBlockToBatch::set(txn, &next_block_to_batch);
   }
   pub(crate) fn next_block_to_batch(getter: &impl Get) -> Option<u64> {
     NextBlockToBatch::get(getter)
   }
 
-  pub(crate) fn acquire_batch_id(txn: &mut impl DbTxn) -> u32 {
+  pub(crate) fn acquire_batch_id(txn: &mut (impl Send + DbTxn)) -> u32 {
     let id = NextBatchId::get(txn).unwrap_or(0);
     NextBatchId::set(txn, &(id + 1));
     id
   }
 
   pub(crate) fn save_batch_info(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     id: u32,
     block_number: u64,
     session_to_sign_batch: Session,
@@ -76,14 +76,14 @@ impl<S: ScannerFeed> BatchDb<S> {
   }
 
   pub(crate) fn take_info_for_batch(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     id: u32,
   ) -> Option<BatchInfo<EncodableG<KeyFor<S>>>> {
     InfoForBatch::take(txn, id)
   }
 
   pub(crate) fn save_return_information(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     id: u32,
     return_information: &Vec<Option<ReturnInformation<S>>>,
   ) {
@@ -100,7 +100,7 @@ impl<S: ScannerFeed> BatchDb<S> {
     SerializedReturnAddresses::set(txn, id, &buf);
   }
   pub(crate) fn take_return_information(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     id: u32,
   ) -> Option<Vec<Option<ReturnInformation<S>>>> {
     let buf = SerializedReturnAddresses::take(txn, id)?;

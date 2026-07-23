@@ -2,7 +2,7 @@ use core::future::Future;
 
 use bitcoin_serai::bitcoin::ScriptBuf;
 
-use serai_db::{Get, DbTxn as _, Db};
+use serai_db::{Get, Transaction as _, Db};
 
 use primitives::task::ContinuallyRan;
 use scanner::ScannerFeed as _;
@@ -36,9 +36,13 @@ pub(crate) fn script_pubkey_for_on_chain_output(
 
   This task builds that index.
 */
-pub(crate) struct TxIndexTask<D: Db>(pub(crate) Rpc<D>);
+pub(crate) struct TxIndexTask<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>(
+  pub(crate) Rpc<D>,
+);
 
-impl<D: Db> ContinuallyRan for TxIndexTask<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for TxIndexTask<D>
+{
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

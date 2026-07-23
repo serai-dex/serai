@@ -26,13 +26,13 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub(crate) struct Rpc<D: Db> {
+pub(crate) struct Rpc<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   pub(crate) db: D,
   pub(crate) provider: Arc<RootProvider>,
   pub(crate) router: Arc<OnceLock<Router>>,
 }
 
-impl<D: Db> Rpc<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Rpc<D> {
   pub(crate) async fn router(&self) -> Result<Router, RpcError<TransportErrorKind>> {
     let Some(router) = Router::new(
       self.provider.clone(),
@@ -55,7 +55,7 @@ impl<D: Db> Rpc<D> {
   }
 }
 
-impl<D: Db> Rpc<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Rpc<D> {
   pub(crate) async fn initialize_router(&self) -> Result<(), RpcError<TransportErrorKind>> {
     if self.router.get().is_none() {
       let router = self.router().await?;
@@ -68,7 +68,7 @@ impl<D: Db> Rpc<D> {
   }
 }
 
-impl<D: Db> ScannerFeed for Rpc<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ScannerFeed for Rpc<D> {
   const NETWORK: ExternalNetworkId = ExternalNetworkId::Ethereum;
 
   // We only need one confirmation as Ethereum properly finalizes

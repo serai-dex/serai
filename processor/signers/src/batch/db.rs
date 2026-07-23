@@ -3,9 +3,7 @@ use serai_primitives::{
   instructions::{Batch, SignedBatch},
 };
 
-use serai_db::{Get, DbTxn, create_db};
-
-create_db! {
+serai_db::schema! {
   SignersBatch {
     ActiveSigningProtocols: (session: Session) -> Vec<[u8; 32]>,
     BatchHash: (id: u32) -> [u8; 32],

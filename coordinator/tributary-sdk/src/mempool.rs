@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use dalek_ff_group::Ristretto;
 use ciphersuite::{group::GroupEncoding as _, *};
 
-use serai_db::{DbTxn as _, Db};
+use serai_db::{Transaction as _, Db};
 
-use tendermint::ext::{Network, Commit};
+use tendermint::{SignatureScheme, Blockchain};
 
 use crate::{
   ACCOUNT_MEMPOOL_LIMIT, ReadWrite as _,
@@ -16,8 +16,12 @@ use crate::{
   Transaction,
 };
 
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Mempool<D: Db, T: TransactionTrait> {
+#[derive(Clone, Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
+pub(crate) struct Mempool<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: TransactionTrait,
+> {
   db: D,
   genesis: [u8; 32],
 
@@ -26,12 +30,14 @@ pub(crate) struct Mempool<D: Db, T: TransactionTrait> {
   txs_per_signer: HashMap<[u8; 32], u32>,
 }
 
-impl<D: Db, T: TransactionTrait> Mempool<D, T> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait>
+  Mempool<D, T>
+{
   fn transaction_key(&self, hash: &[u8]) -> Vec<u8> {
-    D::key(b"tributary_mempool", b"transaction", [self.genesis.as_ref(), hash].concat())
+    crate::D_key(b"tributary_mempool", b"transaction", [self.genesis.as_ref(), hash].concat())
   }
   fn current_mempool_key(&self) -> Vec<u8> {
-    D::key(b"tributary_mempool", b"current", self.genesis)
+    crate::D_key(b"tributary_mempool", b"current", self.genesis)
   }
 
   // save given tx to the mempool db
@@ -39,12 +45,13 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     let tx_hash = tx.hash();
     let transaction_key = self.transaction_key(&tx_hash);
     let current_mempool_key = self.current_mempool_key();
-    let mut current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
+    let mut current_mempool =
+      self.db.get(&current_mempool_key).map(|bytes| bytes.as_ref().to_vec()).unwrap_or(vec![]);
 
     let mut txn = self.db.txn();
-    txn.put(transaction_key, tx.serialize());
+    txn.set(transaction_key, tx.serialize());
     current_mempool.extend(tx_hash);
-    txn.put(current_mempool_key, current_mempool);
+    txn.set(current_mempool_key, current_mempool);
     txn.commit();
 
     self.txs.insert(tx_hash, tx);
@@ -67,12 +74,13 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
       txs_per_signer: HashMap::new(),
     };
 
-    let current_mempool = res.db.get(res.current_mempool_key()).unwrap_or(vec![]);
+    let current_mempool =
+      res.db.get(res.current_mempool_key()).map(|bytes| bytes.as_ref().to_vec()).unwrap_or(vec![]);
 
     for hash in current_mempool.chunks(32) {
       let hash: [u8; 32] = hash.try_into().unwrap();
       let tx: Transaction<T> =
-        Transaction::read(res.db.get(res.transaction_key(&hash)).unwrap().as_slice()).unwrap();
+        Transaction::read(res.db.get(res.transaction_key(&hash)).unwrap().as_ref()).unwrap();
       debug_assert_eq!(tx.hash(), hash);
 
       match tx {
@@ -106,16 +114,19 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
 
   // Returns Ok(true) if new, Ok(false) if an already present unsigned, or the error.
   pub(crate) fn add<
-    N: Network,
+    N: Blockchain<
+      Validator = [u8; 32],
+      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+    >,
     F: FnOnce(<Ristretto as WrappedGroup>::G, Vec<u8>) -> Option<u32>,
   >(
     &mut self,
     blockchain_next_nonce: F,
     internal: bool,
     tx: Transaction<T>,
+    validator_set: &N::ValidatorSet,
     schema: &N::SignatureScheme,
     unsigned_in_chain: impl Fn([u8; 32]) -> bool,
-    commit: impl Fn(u64) -> Option<Commit<N::SignatureScheme>>,
   ) -> Result<bool, TransactionError> {
     match &tx {
       Transaction::Tendermint(tendermint_tx) => {
@@ -128,7 +139,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
         }
 
         // verify the tx
-        verify_tendermint_tx::<N>(tendermint_tx, schema, commit)?;
+        verify_tendermint_tx::<N>(tendermint_tx, self.genesis, validator_set, schema)?;
       }
       Transaction::Application(app_tx) => {
         match app_tx.kind() {
@@ -224,7 +235,8 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
   pub(crate) fn remove(&mut self, tx: &[u8; 32]) {
     let transaction_key = self.transaction_key(tx);
     let current_mempool_key = self.current_mempool_key();
-    let current_mempool = self.db.get(&current_mempool_key).unwrap_or(vec![]);
+    let current_mempool =
+      self.db.get(&current_mempool_key).map(|bytes| bytes.as_ref().to_vec()).unwrap_or(vec![]);
 
     let mut i = 0;
     while i < current_mempool.len() {
@@ -239,7 +251,7 @@ impl<D: Db, T: TransactionTrait> Mempool<D, T> {
     txn.del(transaction_key);
     if i != current_mempool.len() {
       txn
-        .put(current_mempool_key, [&current_mempool[.. i], &current_mempool[(i + 32) ..]].concat());
+        .set(current_mempool_key, [&current_mempool[.. i], &current_mempool[(i + 32) ..]].concat());
     }
     txn.commit();
 

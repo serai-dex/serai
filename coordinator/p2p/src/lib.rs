@@ -88,7 +88,9 @@ pub trait P2p:
   fn cosign(&self) -> impl Send + Future<Output = SignedCosign>;
 }
 
-fn handle_notable_cosigns_request<D: Db>(
+fn handle_notable_cosigns_request<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+>(
   db: &D,
   global_session: [u8; 32],
   channel: oneshot::Sender<Vec<SignedCosign>>,
@@ -97,7 +99,10 @@ fn handle_notable_cosigns_request<D: Db>(
   channel.send(cosigns).expect("channel listening for cosign oneshot response was dropped?");
 }
 
-fn handle_heartbeat<D: Db, T: TransactionTrait>(
+fn handle_heartbeat<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: TransactionTrait,
+>(
   reader: &TributaryReader<D, T>,
   mut latest_block_hash: [u8; 32],
   channel: oneshot::Sender<Vec<TributaryBlockWithCommit>>,
@@ -129,8 +134,12 @@ fn handle_heartbeat<D: Db, T: TransactionTrait>(
 /// `add_tributary`'s and `retire_tributary's senders, along with `send_cosigns`'s receiver, must
 /// never be dropped. `retire_tributary` is not required to only be instructed with added
 /// Tributaries.
-pub async fn run<TD: Db, Tx: TransactionTrait, P: P2p>(
-  db: impl Db,
+pub async fn run<
+  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  Tx: TransactionTrait,
+  P: P2p,
+>(
+  db: impl 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
   p2p: P,
   mut add_tributary: mpsc::UnboundedReceiver<(ExternalValidatorSet, Tributary<TD, Tx, P>)>,
   mut retire_tributary: mpsc::UnboundedReceiver<ExternalValidatorSet>,
@@ -149,12 +158,8 @@ pub async fn run<TD: Db, Tx: TransactionTrait, P: P2p>(
 
         let (heartbeat_task_def, heartbeat_task) = Task::new();
         tokio::spawn(
-          (HeartbeatTask {
-            set,
-            tributary: tributary.clone(),
-            reader: reader.clone(),
-            p2p: p2p.clone(),
-          }).continually_run(heartbeat_task_def, vec![])
+          HeartbeatTask::new(set, tributary.clone(), reader.clone(), p2p.clone())
+            .continually_run(heartbeat_task_def, vec![])
         );
         heartbeat_tasks.insert(set, heartbeat_task);
 

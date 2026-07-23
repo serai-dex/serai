@@ -1,4 +1,4 @@
-use rand::{Rng as _, RngCore as _, rngs::OsRng};
+use rand::rngs::OsRng;
 
 use serai_primitives::{
   address::SeraiAddress,
@@ -9,7 +9,7 @@ use serai_primitives::{
 };
 
 use messages::sign::{SignId, VariantSignId};
-use serai_db::{Db as _, DbTxn, MemDb};
+use serai_db::{Transaction as DbTxn, MemDb};
 use crate::{
   transaction::SigningProtocolRound,
   db::{*, ProcessorMessages, DkgConfirmationMessages},
@@ -84,7 +84,7 @@ type NoEachFn = fn(usize, &DataSet<[u8; 32]>);
 /// Cross threshold by accumulating from all validators, returning the final result.
 #[expect(clippy::too_many_arguments)]
 fn accumulate_to_threshold<D: Borshy, F1, F2>(
-  txn: &mut impl DbTxn,
+  txn: &mut (impl Send + DbTxn),
   set: ExternalValidatorSet,
   validators: &[SeraiAddress],
   total_weight: u16,

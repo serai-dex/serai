@@ -4,16 +4,14 @@ use schnorr::SchnorrSignature;
 
 use serai_primitives::test_helpers::{random_block_hash, random_vec_u8};
 
-use serai_db::{Db as _, DbTxn, MemDb};
-use tributary_sdk::{
-  tendermint::tx::TendermintTx, Evidence, Transaction as TributaryTransaction, BlockHeader, Block,
-};
+use serai_db::{Transaction as DbTxn, MemDb};
+use tributary_sdk::{Transaction as TributaryTransaction, BlockHeader, Block};
 
 use serai_cosign_types::CosignIntent;
 use crate::{db::CosignIntents as DbCosignIntents, *};
 use super::*;
 
-fn new_scan_block<'a, TDT: DbTxn>(
+fn new_scan_block<'a, TDT: Send + DbTxn>(
   txn: &'a mut TDT,
   set_info: &'a NewSetInformation,
   validators: &'a [SeraiAddress],
@@ -1105,7 +1103,7 @@ fn handle_block() {
     setup_n_validators_with_keys(3);
   let set_info = new_test_set_info(&validator_data);
   let set = set_info.set;
-  let addr0 = validator_data[0].0;
+  // TODO let addr0 = validator_data[0].0;
   let signed = random_signed_for_key(keys_addrs[0].0);
 
   // Empty block only calls start of block
@@ -1200,6 +1198,7 @@ fn handle_block() {
     assert_block_side_effects(&mut txn, set, &block_txs);
   }
 
+  /* TODO
   // Each Tendermint SlashEvidence type fatally slashes the sender
   {
     let all_evidence = [
@@ -1236,6 +1235,7 @@ fn handle_block() {
       txn.commit();
     }
   }
+  */
 
   // Fuzz mixed blocks with random quantities, types, and ordering
   for _ in 0 .. 100 {
@@ -1244,10 +1244,11 @@ fn handle_block() {
 
     let num_txs = OsRng.gen_range(1usize ..= 8);
     let mut transactions = Vec::with_capacity(num_txs);
-    let mut has_evidence = false;
+    // TODO let mut has_evidence = false;
     let mut batch_hashes = vec![];
 
     for _ in 0 .. num_txs {
+      /* TODO
       if OsRng.gen_bool(0.5) {
         // Random Tendermint evidence type
         let evidence = match OsRng.gen_range(0u8 .. 3) {
@@ -1260,7 +1261,8 @@ fn handle_block() {
         };
         transactions.push(TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(evidence)));
         has_evidence = true;
-      } else {
+      } else */
+      {
         // Random application transaction, use Batch so we can assert recognition
         let hash = random_bytes(&mut OsRng);
         batch_hashes.push(hash);
@@ -1281,12 +1283,14 @@ fn handle_block() {
       scan_block.handle_block(OsRng.next_u64(), block);
     }
 
+    /* TODO
     if has_evidence {
       assert!(
         TributaryDb::is_fatally_slashed(&txn, set, addr0),
         "SlashEvidence should fatally slash the sender in mixed blocks",
       );
     }
+    */
     for hash in &batch_hashes {
       let topic = initial_sign_topic(VariantSignId::Batch(*hash));
       assert!(

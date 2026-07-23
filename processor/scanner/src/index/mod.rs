@@ -1,6 +1,6 @@
 use core::future::Future;
 
-use serai_db::{Get, DbTxn as _, Db};
+use serai_db::{Get, Transaction as _, Db};
 use primitives::{task::ContinuallyRan, BlockHeader as _};
 
 use crate::ScannerFeed;
@@ -22,12 +22,17 @@ pub(crate) fn block_id(getter: &impl Get, block_number: u64) -> [u8; 32] {
 
   This task finds the finalized blocks, verifies they're continguous, and saves their IDs.
 */
-pub(crate) struct IndexTask<D: Db, S: ScannerFeed> {
+pub(crate) struct IndexTask<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  S: ScannerFeed,
+> {
   db: D,
   feed: S,
 }
 
-impl<D: Db, S: ScannerFeed> IndexTask<D, S> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerFeed>
+  IndexTask<D, S>
+{
   pub(crate) async fn new(mut db: D, feed: S, start_block: u64) -> Self {
     if IndexDb::block_id(&db, start_block).is_none() {
       // Fetch the block for its ID
@@ -57,7 +62,9 @@ impl<D: Db, S: ScannerFeed> IndexTask<D, S> {
   }
 }
 
-impl<D: Db, S: ScannerFeed> ContinuallyRan for IndexTask<D, S> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerFeed> ContinuallyRan
+  for IndexTask<D, S>
+{
   type Error = String;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

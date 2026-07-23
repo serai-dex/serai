@@ -17,7 +17,7 @@ use serai_client_serai::{
   Serai,
 };
 
-use serai_db::*;
+use serai_db::{Get, Transaction as DbTxn, Db};
 use serai_task::*;
 
 pub use serai_cosign_types::*;
@@ -126,7 +126,7 @@ mod has_events_ord {
   }
 }
 
-create_db! {
+serai_db::schema! {
   Cosign {
     // The following are populated by the intend task and used throughout the library
 
@@ -217,10 +217,10 @@ impl IntakeCosignError {
 }
 
 /// The interface to manage cosigning with.
-pub struct Cosigning<D: Db> {
+pub struct Cosigning<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   db: D,
 }
-impl<D: Db> Cosigning<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Cosigning<D> {
   #[cfg(test)]
   /// Create a cosigning handle using an already-initialized database.
   ///
@@ -430,7 +430,10 @@ impl<D: Db> Cosigning<D> {
   /// All cosigns intended, up to and including the next notable cosign, are returned.
   ///
   /// This will drain the internal channel and not re-yield these intentions again.
-  pub fn intended_cosigns(txn: &mut impl DbTxn, set: ExternalValidatorSet) -> Vec<CosignIntent> {
+  pub fn intended_cosigns(
+    txn: &mut (impl Send + DbTxn),
+    set: ExternalValidatorSet,
+  ) -> Vec<CosignIntent> {
     let mut res: Vec<CosignIntent> = vec![];
     // While we have yet to find a notable cosign...
     while !res.last().map(|cosign| cosign.notable).unwrap_or(false) {

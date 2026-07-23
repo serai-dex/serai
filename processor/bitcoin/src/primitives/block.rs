@@ -25,14 +25,19 @@ impl primitives::BlockHeader for BlockHeader {
 }
 
 #[derive(Clone)]
-pub(crate) struct Block<D: Db>(pub(crate) D, pub(crate) BBlock);
-impl<D: Db> fmt::Debug for Block<D> {
+pub(crate) struct Block<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>(
+  pub(crate) D,
+  pub(crate) BBlock,
+);
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> fmt::Debug for Block<D> {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     fmt.debug_struct("Block").field("1", &self.1).finish_non_exhaustive()
   }
 }
 
-impl<D: Db> primitives::Block for Block<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> primitives::Block
+  for Block<D>
+{
   type Header = BlockHeader;
 
   type Key = <Secp256k1 as WrappedGroup>::G;

@@ -1,7 +1,7 @@
 use core::future::Future;
 use std::time::{Duration, Instant};
 
-use serai_db::*;
+use serai_db::{Get, Transaction as DbTxn, Db};
 use serai_task::ContinuallyRan;
 
 use crate::{
@@ -19,14 +19,14 @@ pub(crate) const REQUEST_COSIGNS_SPACING: Duration = Duration::from_secs(6);
 const COSIGN_COMMIT_THRESHOLD_NUMERATOR: u128 = 83;
 const COSIGN_COMMIT_THRESHOLD_DENOMINATOR: u128 = 100;
 
-create_db!(
+serai_db::schema!(
   SubstrateCosignEvaluator {
     // The global session currently being evaluated.
     CurrentlyEvaluatedGlobalSession: () -> ([u8; 32], GlobalSession),
   }
 );
 
-db_channel!(
+serai_db::channel!(
   SubstrateCosignEvaluatorChannels {
     // (cosigned block, time cosign was evaluated in seconds since the epoch, has_events)
     CosignedBlocks: () -> (u64, u64, bool),
@@ -34,7 +34,7 @@ db_channel!(
 );
 
 /// Commit a block as evaluated.
-fn commit_evaluated_block(mut txn: impl DbTxn, block_number: u64, has_events: bool) {
+fn commit_evaluated_block(mut txn: impl Send + DbTxn, block_number: u64, has_events: bool) {
   CosignedBlocks::send(&mut txn, &(block_number, now_timestamp().as_secs(), has_events));
   txn.commit();
 }
@@ -52,7 +52,7 @@ fn commit_evaluated_block(mut txn: impl DbTxn, block_number: u64, has_events: bo
 /// This function will also ensure the currently evaluated global session is incremented once we
 /// finish evaluation of the prior session.
 fn currently_evaluated_global_session_strict(
-  txn: &mut impl DbTxn,
+  txn: &mut (impl Send + DbTxn),
   block_number: u64,
 ) -> ([u8; 32], GlobalSession) {
   let mut res = {
@@ -189,13 +189,18 @@ async fn ensure_cosigned(
 }
 
 /// A task to determine if a block has been cosigned and we should handle it.
-pub(crate) struct CosignEvaluatorTask<D: Db, R: RequestNotableCosigns> {
+pub(crate) struct CosignEvaluatorTask<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  R: RequestNotableCosigns,
+> {
   pub(crate) db: D,
   pub(crate) request: R,
   pub(crate) last_request_for_cosigns: Instant,
 }
 
-impl<D: Db, R: RequestNotableCosigns> ContinuallyRan for CosignEvaluatorTask<D, R> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, R: RequestNotableCosigns>
+  ContinuallyRan for CosignEvaluatorTask<D, R>
+{
   #[cfg(test)]
   const DELAY_BETWEEN_ITERATIONS: Duration = Duration::from_secs(1);
   #[cfg(test)]

@@ -23,7 +23,7 @@ use serai_client_serai::{
   Serai,
 };
 
-use serai_db::{DbTxn, Db as _, MemDb};
+use serai_db::{Transaction as _, Db as _, MemDb};
 use serai_task::{
   ContinuallyRan, Task,
   test_helpers::{IntoTask, TaskTest},

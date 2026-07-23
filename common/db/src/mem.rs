@@ -1,44 +1,45 @@
 use core::fmt::Debug;
-use std::{
-  sync::{Arc, RwLock},
-  collections::{HashSet, HashMap},
-};
+use alloc::{sync::Arc, vec::Vec};
+use std::{sync::RwLock, collections::HashMap};
 
-use crate::*;
+use crate::{Get, Db};
 
-/// An atomic operation for the in-memory database.
+/// A transaction for [`MemDb`].
 #[must_use]
 #[derive(PartialEq, Eq, Debug)]
-pub struct MemDbTxn<'a>(&'a MemDb, HashMap<Vec<u8>, Vec<u8>>, HashSet<Vec<u8>>);
+pub struct MemDbTxn<'db> {
+  db: &'db MemDb,
+  queued_changes: HashMap<Vec<u8>, Option<Vec<u8>>>,
+}
 
 impl Get for MemDbTxn<'_> {
-  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
-    if self.2.contains(key.as_ref()) {
-      return None;
+  fn get(&self, key: impl AsRef<[u8]>) -> Option<impl AsRef<[u8]>> {
+    match self.queued_changes.get(key.as_ref()) {
+      Some(Some(value)) => Some(value.clone()),
+      Some(None) => None?,
+      None => self.db.get(key.as_ref()).map(|bytes| bytes.as_ref().to_vec()),
     }
-    self
-      .1
-      .get(key.as_ref())
-      .cloned()
-      .or_else(|| self.0 .0.read().unwrap().get(key.as_ref()).cloned())
   }
 }
-impl DbTxn for MemDbTxn<'_> {
-  fn put(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
-    self.2.remove(key.as_ref());
-    self.1.insert(key.as_ref().to_vec(), value.as_ref().to_vec());
+
+impl crate::Transaction for MemDbTxn<'_> {
+  fn set(&mut self, key: impl AsRef<[u8]>, value: impl AsRef<[u8]>) {
+    self.queued_changes.insert(key.as_ref().to_vec(), Some(value.as_ref().to_vec()));
   }
   fn del(&mut self, key: impl AsRef<[u8]>) {
-    self.1.remove(key.as_ref());
-    self.2.insert(key.as_ref().to_vec());
+    self.queued_changes.insert(key.as_ref().to_vec(), None);
   }
   fn commit(mut self) {
-    let mut db = self.0 .0.write().unwrap();
-    for (key, value) in self.1.drain() {
-      db.insert(key, value);
-    }
-    for key in self.2 {
-      db.remove(&key);
+    let mut db = self.db.0.write().unwrap();
+    for (key, value) in self.queued_changes.drain() {
+      match value {
+        Some(value) => {
+          db.insert(key, value);
+        }
+        None => {
+          db.remove(&key);
+        }
+      }
     }
   }
 }
@@ -68,13 +69,13 @@ impl MemDb {
 }
 
 impl Get for MemDb {
-  fn get(&self, key: impl AsRef<[u8]>) -> Option<Vec<u8>> {
+  fn get(&self, key: impl AsRef<[u8]>) -> Option<impl AsRef<[u8]>> {
     self.0.read().unwrap().get(key.as_ref()).cloned()
   }
 }
 impl Db for MemDb {
-  type Transaction<'a> = MemDbTxn<'a>;
+  type Transaction<'db> = MemDbTxn<'db>;
   fn txn(&mut self) -> MemDbTxn<'_> {
-    MemDbTxn(self, HashMap::new(), HashSet::new())
+    MemDbTxn { db: self, queued_changes: HashMap::new() }
   }
 }

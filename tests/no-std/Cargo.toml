@@ -18,6 +18,7 @@ workspace = true
 
 [dependencies]
 std-shims = { path = "../../common/std-shims", default-features = false }
+serai-db = { path = "../../common/db", default-features = false }
 
 flexible-transcript = { path = "../../crypto/transcript", default-features = false, features = ["recommended", "merlin"] }
 
@@ -44,6 +45,8 @@ dkg-evrf = { path = "../../crypto/dkg/evrf", default-features = false, optional 
 modular-frost = { path = "../../crypto/frost", default-features = false, optional = true }
 frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false, optional = true }
 
+tendermint-machine = { path = "../../coordinator/tributary-sdk/tendermint", default-features = false }
+
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, optional = true }
 
 ethereum-schnorr-contract = { path = "../../networks/ethereum/schnorr", default-features = false }
@@ -54,6 +57,9 @@ serai-client-ethereum = { path = "../../substrate/client/ethereum", default-feat
 [features]
 alloc = [
   "std-shims/alloc",
+
+  "serai-db/alloc",
+  "serai-db/schema",
 
   "multiexp/alloc",
   "multiexp/batch",
@@ -78,6 +84,8 @@ alloc = [
 
   "modular-frost",
   "frost-schnorrkel",
+
+  "tendermint-machine/alloc",
 
   "bitcoin-serai",
 

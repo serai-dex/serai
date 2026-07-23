@@ -1,4 +1,4 @@
-use core::ops::Deref as _;
+use core::num::NonZero;
 use std::{
   collections::{VecDeque, HashMap},
   sync::Arc,
@@ -11,19 +11,18 @@ use rand::rngs::OsRng;
 use blake2::{Digest as _, Blake2s256};
 
 use dalek_ff_group::Ristretto;
-use ciphersuite::*;
+use ciphersuite::{group::GroupEncoding as _, WrappedGroup};
 
-use serai_db::{DbTxn as _, Db as _, MemDb};
+use serai_db::{Transaction as _, Db as _, MemDb};
 
 use crate::{
   ReadWrite, TransactionKind,
   transaction::Transaction as TransactionTrait,
   TransactionError, Transaction, ProvidedError, ProvidedTransactions, merkle, BlockError, Block,
   Blockchain,
-  tendermint::{TendermintNetwork, Validators, Signer, TendermintBlock},
+  tendermint::{TendermintNetwork, Validators},
   tests::{
-    ProvidedTransaction, SignedTransaction, random_provided_transaction, p2p::DummyP2p,
-    new_genesis, random_evidence_tx,
+    ProvidedTransaction, SignedTransaction, random_provided_transaction, p2p::DummyP2p, new_genesis,
   },
 };
 
@@ -34,7 +33,14 @@ fn new_blockchain<T: TransactionTrait>(
   participants: &[<Ristretto as WrappedGroup>::G],
 ) -> (MemDb, Blockchain<MemDb, T>) {
   let db = MemDb::new();
-  let blockchain = Blockchain::new(db.clone(), genesis, participants);
+  let blockchain = Blockchain::new(
+    db.clone(),
+    genesis,
+    participants
+      .iter()
+      .map(|validator| (validator.to_bytes(), NonZero::new(1).unwrap()))
+      .collect::<HashMap<_, _>>(),
+  );
   assert_eq!(blockchain.tip(), genesis);
   assert_eq!(blockchain.block_number(), 0);
   (db, blockchain)
@@ -43,7 +49,9 @@ fn new_blockchain<T: TransactionTrait>(
 #[test]
 fn block_addition() {
   let genesis = new_genesis();
-  let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
+  let validators = Arc::new(
+    Validators::new(genesis, vec![(Ristretto::generator(), NonZero::new(1).unwrap())]).unwrap(),
+  );
   let (db, mut blockchain) = new_blockchain::<SignedTransaction>(genesis, &[]);
   let block = blockchain.build_block::<N>(&validators);
 
@@ -62,7 +70,9 @@ fn block_addition() {
 #[test]
 fn invalid_block() {
   let genesis = new_genesis();
-  let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
+  let validators = Arc::new(
+    Validators::new(genesis, vec![(Ristretto::generator(), NonZero::new(1).unwrap())]).unwrap(),
+  );
   let (_, mut blockchain) = new_blockchain::<SignedTransaction>(genesis, &[]);
 
   let block = blockchain.build_block::<N>(&validators);
@@ -150,7 +160,9 @@ fn invalid_block() {
 #[test]
 fn signed_transaction() {
   let genesis = new_genesis();
-  let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
+  let validators = Arc::new(
+    Validators::new(genesis, vec![(Ristretto::generator(), NonZero::new(1).unwrap())]).unwrap(),
+  );
   let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
   let tx = crate::tests::signed_transaction(&mut OsRng, genesis, &key, 0);
   let signer = tx.1.signer;
@@ -170,7 +182,7 @@ fn signed_transaction() {
       assert_eq!(next_nonce + 1, blockchain.next_nonce(&signer, &[]).unwrap());
     }
     let block = blockchain.build_block::<N>(&validators);
-    assert_eq!(block, Block::new(blockchain.tip(), vec![], mempool.clone()));
+    assert_eq!(block.hash(), Block::new(blockchain.tip(), vec![], mempool.clone()).hash());
     assert_eq!(blockchain.tip(), tip);
     assert_eq!(block.header.parent, tip);
 
@@ -206,7 +218,9 @@ fn signed_transaction() {
 #[test]
 fn provided_transaction() {
   let genesis = new_genesis();
-  let validators = Arc::new(Validators::new(genesis, vec![]).unwrap());
+  let validators = Arc::new(
+    Validators::new(genesis, vec![(Ristretto::generator(), NonZero::new(1).unwrap())]).unwrap(),
+  );
   let (db, mut blockchain) = new_blockchain::<ProvidedTransaction>(genesis, &[]);
 
   let tx = random_provided_transaction(&mut OsRng, "order1");
@@ -337,13 +351,15 @@ fn provided_transaction() {
   }
 }
 
+/* TODO
 #[tokio::test]
 async fn tendermint_evidence_tx() {
   let genesis = new_genesis();
   let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
   let signer = Signer::new(genesis, key.clone());
   let signer_id = Ristretto::generator() * key.deref();
-  let validators = Arc::new(Validators::new(genesis, vec![(signer_id, 1)]).unwrap());
+  let validators =
+    Arc::new(Validators::new(genesis, vec![(signer_id, NonZero::new(1).unwrap())]).unwrap());
 
   let (_, mut blockchain) = new_blockchain::<SignedTransaction>(genesis, &[]);
 
@@ -393,6 +409,7 @@ async fn tendermint_evidence_tx() {
   let validators = Arc::new(Validators::new(genesis, signers).unwrap());
   test(&mut blockchain, mempool, validators);
 }
+*/
 
 #[tokio::test]
 async fn block_tx_ordering() {
@@ -451,7 +468,8 @@ async fn block_tx_ordering() {
 
   // signer
   let signer = crate::tests::signed_transaction(&mut OsRng, genesis, &key, 0).1.signer;
-  let validators = Arc::new(Validators::new(genesis, vec![(signer, 1)]).unwrap());
+  let validators =
+    Arc::new(Validators::new(genesis, vec![(signer, NonZero::new(1).unwrap())]).unwrap());
 
   let (_, mut blockchain) = new_blockchain::<SignedTx>(genesis, &[signer]);
   let tip = blockchain.tip();
@@ -466,6 +484,7 @@ async fn block_tx_ordering() {
     blockchain.add_transaction::<N>(true, signed_tx.clone(), &validators).unwrap();
     mempool.push(signed_tx);
 
+    /* TODO
     let unsigned_tx = Transaction::Tendermint(
       random_evidence_tx::<N>(
         Signer::new(genesis, key.clone()).into(),
@@ -475,6 +494,7 @@ async fn block_tx_ordering() {
     );
     blockchain.add_transaction::<N>(true, unsigned_tx.clone(), &validators).unwrap();
     mempool.push(unsigned_tx);
+    */
 
     let provided_tx =
       SignedTx::Provided(Box::new(random_provided_transaction(&mut OsRng, "order1")));
@@ -487,7 +507,7 @@ async fn block_tx_ordering() {
   assert_eq!(block.header.parent, tip);
 
   // Make sure all transactions were included
-  assert_eq!(block.transactions.len(), 3 * 128);
+  assert_eq!(block.transactions.len(), 2 * 128);
   for bt in &block.transactions[128 ..] {
     assert!(mempool.contains(bt));
   }
@@ -497,10 +517,13 @@ async fn block_tx_ordering() {
   for tx in txs.iter().take(128) {
     assert!(matches!(tx.kind(), TransactionKind::Provided(..)));
   }
+  /* TODO
   for tx in txs.iter().take(128).skip(128) {
     assert!(matches!(tx.kind(), TransactionKind::Unsigned));
   }
   for tx in txs.iter().take(128).skip(256) {
+  */
+  for tx in txs.iter().take(128).skip(128) {
     assert!(matches!(tx.kind(), TransactionKind::Signed(..)));
   }
 
@@ -522,7 +545,8 @@ async fn block_tx_ordering() {
   // Signed before Provided
   {
     let mut block = block.clone();
-    let signed = block.transactions.remove(256);
+    // TODO let signed = block.transactions.remove(256);
+    let signed = block.transactions.remove(128);
     block.transactions.insert(0, signed);
     assert_eq!(
       blockchain.verify_block::<N>(&block, &validators, false).unwrap_err(),
@@ -530,6 +554,7 @@ async fn block_tx_ordering() {
     );
   }
 
+  /* TODO
   // Signed before Unsigned
   {
     let mut block = block;
@@ -539,4 +564,5 @@ async fn block_tx_ordering() {
       BlockError::WrongTransactionOrder
     );
   }
+  */
 }

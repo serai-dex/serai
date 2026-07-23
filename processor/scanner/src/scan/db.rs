@@ -1,12 +1,12 @@
 use core::marker::PhantomData;
 
-use serai_db::{Get, DbTxn, create_db};
+use serai_db::{Get, Transaction as DbTxn};
 
 use primitives::ReceivedOutput;
 
 use crate::{db::OutputWithInInstruction, ScannerFeed, KeyFor, AddressFor, OutputFor};
 
-create_db!(
+serai_db::schema!(
   ScannerScan {
     // The next block to scan for received outputs
     NextToScanForOutputsBlock: () -> u64,
@@ -20,7 +20,7 @@ create_db!(
 pub(crate) struct ScanDb<S: ScannerFeed>(PhantomData<S>);
 impl<S: ScannerFeed> ScanDb<S> {
   pub(crate) fn set_next_to_scan_for_outputs_block(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     next_to_scan_for_outputs_block: u64,
   ) {
     NextToScanForOutputsBlock::set(txn, &next_to_scan_for_outputs_block);
@@ -30,7 +30,7 @@ impl<S: ScannerFeed> ScanDb<S> {
   }
 
   pub(crate) fn take_queued_outputs(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     block_number: u64,
   ) -> Vec<OutputWithInInstruction<S>> {
     let serialized = SerializedQueuedOutputs::get(txn, block_number).unwrap_or(vec![]);
@@ -43,7 +43,7 @@ impl<S: ScannerFeed> ScanDb<S> {
     res
   }
   pub(crate) fn queue_output_until_block(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     queue_for_block: u64,
     output: &OutputWithInInstruction<S>,
   ) {
@@ -60,7 +60,7 @@ impl<S: ScannerFeed> ScanDb<S> {
     ReportedInInstructionForOutput::get(getter, id.as_ref()).is_some()
   }
   pub(crate) fn reported_in_instruction_for_output(
-    txn: &mut impl DbTxn,
+    txn: &mut (impl Send + DbTxn),
     id: &<OutputFor<S> as ReceivedOutput<KeyFor<S>, AddressFor<S>>>::Id,
   ) {
     ReportedInInstructionForOutput::set(txn, id.as_ref(), &());

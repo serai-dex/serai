@@ -3,7 +3,7 @@ pub(crate) use tokio::{
   net::TcpListener,
 };
 
-use serai_db::{Get as _, DbTxn as _, Db as _};
+use serai_db::{Get as _, Transaction as _, Db as _};
 
 use serai_env::Environment;
 
@@ -50,7 +50,7 @@ async fn main() {
             let nonce = u32::from_le_bytes(buf[.. 4].try_into().unwrap());
             let mut txn = db.txn();
             // Save the transaction
-            txn.put(nonce.to_le_bytes(), &buf[4 ..]);
+            txn.set(nonce.to_le_bytes(), &buf[4 ..]);
             txn.commit();
 
             let Ok(()) = socket.write_all(&[1]).await else { break };
@@ -76,13 +76,14 @@ async fn main() {
         let mut buf = vec![0; 4];
         let Ok(_) = socket.read_exact(&mut buf).await else { break };
 
-        let transaction = db.get(&buf[.. 4]).unwrap_or(vec![]);
+        let transaction = db.get(&buf[.. 4]);
+        let transaction = transaction.as_ref().map(AsRef::as_ref).unwrap_or(&[]);
         let Ok(()) =
           socket.write_all(&u32::try_from(transaction.len()).unwrap().to_le_bytes()).await
         else {
           break;
         };
-        let Ok(()) = socket.write_all(&transaction).await else { break };
+        let Ok(()) = socket.write_all(transaction).await else { break };
       }
     });
   }

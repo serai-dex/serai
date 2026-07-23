@@ -1,6 +1,6 @@
 use core::{marker::PhantomData, future::Future};
 
-use serai_db::{Get, DbTxn, Db};
+use serai_db::{Get, Transaction as DbTxn, Db};
 
 use serai_primitives::instructions::{OutInstruction, OutInstructionWithBalance};
 
@@ -18,7 +18,7 @@ pub(crate) fn last_acknowledged_batch<S: ScannerFeed>(getter: &impl Get) -> Opti
   SubstrateDb::<S>::last_acknowledged_batch(getter)
 }
 pub(crate) fn queue_acknowledge_batch<S: ScannerFeed>(
-  txn: &mut impl DbTxn,
+  txn: &mut (impl Send + DbTxn),
   batch: ExecutedBatch,
   burns: Vec<OutInstructionWithBalance>,
   key_to_activate: Option<KeyFor<S>>,
@@ -26,7 +26,7 @@ pub(crate) fn queue_acknowledge_batch<S: ScannerFeed>(
   SubstrateDb::<S>::queue_acknowledge_batch(txn, batch, burns, key_to_activate);
 }
 pub(crate) fn queue_queue_burns<S: ScannerFeed>(
-  txn: &mut impl DbTxn,
+  txn: &mut (impl Send + DbTxn),
   burns: Vec<OutInstructionWithBalance>,
 ) {
   SubstrateDb::<S>::queue_queue_burns(txn, burns);
@@ -38,18 +38,25 @@ pub(crate) fn queue_queue_burns<S: ScannerFeed>(
   them until we're able to process them.
 */
 #[expect(non_snake_case)]
-pub(crate) struct SubstrateTask<D: Db, S: ScannerFeed> {
+pub(crate) struct SubstrateTask<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  S: ScannerFeed,
+> {
   db: D,
   _S: PhantomData<S>,
 }
 
-impl<D: Db, S: ScannerFeed> SubstrateTask<D, S> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerFeed>
+  SubstrateTask<D, S>
+{
   pub(crate) fn new(db: D) -> Self {
     Self { db, _S: PhantomData }
   }
 }
 
-impl<D: Db, S: ScannerFeed> ContinuallyRan for SubstrateTask<D, S> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerFeed> ContinuallyRan
+  for SubstrateTask<D, S>
+{
   type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

@@ -23,14 +23,16 @@ use crate::{
 };
 
 #[derive(Clone)]
-pub(crate) struct TransactionPublisher<D: Db> {
+pub(crate) struct TransactionPublisher<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+> {
   db: D,
   rpc: Arc<RootProvider>,
   router: Arc<RwLock<Option<Router>>>,
   relayer_url: String,
 }
 
-impl<D: Db> TransactionPublisher<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> TransactionPublisher<D> {
   pub(crate) fn new(db: D, rpc: Arc<RootProvider>, relayer_url: String) -> Self {
     Self { db, rpc, router: Arc::new(RwLock::new(None)), relayer_url }
   }
@@ -73,7 +75,9 @@ impl<D: Db> TransactionPublisher<D> {
   }
 }
 
-impl<D: Db> signers::TransactionPublisher<Transaction> for TransactionPublisher<D> {
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>
+  signers::TransactionPublisher<Transaction> for TransactionPublisher<D>
+{
   type EphemeralError = RpcError<TransportErrorKind>;
 
   fn publish(
