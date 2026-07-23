@@ -36,6 +36,11 @@ impl<V: Validator> ObservedBlockNumbers<V> {
     }
   }
 
+  /// The greatest observed block number.
+  pub(super) fn observed_block_number(&self) -> Option<BlockNumber> {
+    self.observed_block_number
+  }
+
   /// Update the block number for a validator.
   ///
   /// If this validator is not already present within this container, an entry will be inserted.
@@ -99,6 +104,7 @@ impl<V: Validator> ObservedBlockNumbers<V> {
       .entry(block_number)
       .and_modify(|weight| *weight += validator_weight)
       .or_insert(validator_weight);
+    debug_assert!(self.block_tallies.len() <= self.block_numbers.len());
     self.tallied_weight += validator_weight;
 
     // The fault threshold has to be _passed_ for us to consider this block observed
@@ -120,6 +126,9 @@ impl<V: Validator> ObservedBlockNumbers<V> {
     /*
       Find the greatest block number for which we've observed more than the fault threshold of
       validators attempting to achieve consensus.
+
+      TODO: `f + 1` validators should be on the latest block _or within `1`-distance of it_. That
+      makes the following likely overkill and able to be practically simplified.
     */
     let result = {
       #[cfg(debug_assertions)]

@@ -912,6 +912,15 @@ impl<
         try and get any validators who were outside of the synchrony bound to catch up to where we
         are now, so we do begin receiving new messages to respond to again.
       */
+
+      /*
+        Except if we know _we_ are the ones behind, and therefore we know this won't be helpful and
+        will instead just cause us to be marked as stale by our peers.
+      */
+      if state.observed_block_numbers.observed_block_number() > Some(state.block_number) {
+        return RoundMessages::<B>::NONE.into_iter();
+      }
+
       let mut to_rebroadcast = {
         let [prevote_0, prevote_1] = &state.our_latest_prevotes;
         [prevote_0.clone(), state.our_latest_precommit.clone(), prevote_1.clone()]
