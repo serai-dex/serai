@@ -14,6 +14,7 @@ async fn main() {
 
   // Open the DB
   #[expect(unreachable_code)]
+  #[allow(unused_variables)] // TODO: This appears on `stable` but not `nightly`?
   let db = {
     #[cfg(all(feature = "parity-db", feature = "rocksdb"))]
     panic!("built with parity-db and rocksdb");

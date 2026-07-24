@@ -76,6 +76,7 @@ pub(super) fn timeout_from_ms_since_epoch(ms: u64) -> (Instant, Duration) {
 #[test]
 fn unix_time() {
   for _ in 0 .. 128 {
+    #[allow(clippy::duration_suboptimal_units)] // TODO: `expect`
     let timeout = Duration::from_millis(1000);
 
     let unix_time_in_ms = SystemTime::UNIX_EPOCH.elapsed().unwrap().as_millis();

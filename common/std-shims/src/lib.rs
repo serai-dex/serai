@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 #![no_std]
+#![cfg_attr(feature = "std", allow(clippy::std_instead_of_core))] // TODO: `core::io`
 
 #[cfg(not(feature = "alloc"))]
 pub use core::*;
