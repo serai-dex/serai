@@ -11,19 +11,20 @@ use rand_core::{RngCore, CryptoRng};
 
 use ciphersuite::{
   group::ff::{Field as _, PrimeField},
-  GroupIo, Id,
+  GroupIo,
 };
 pub use dkg::*;
 
-/// Create a key via a dealer key generation protocol.
-pub fn key_gen<R: RngCore + CryptoRng, C: GroupIo + Id>(
+/// Deal shares of a key.
+pub fn share<R: RngCore + CryptoRng, C: GroupIo>(
   rng: &mut R,
+  key: Zeroizing<C::F>,
   threshold: u16,
   participants: u16,
 ) -> Result<HashMap<Participant, ThresholdKeys<C>>, DkgError> {
   let mut coefficients = Vec::with_capacity(usize::from(participants));
-  // `.max(1)` so we always generate the 0th coefficient which we'll share
-  for _ in 0 .. threshold.max(1) {
+  coefficients.push(key);
+  for _ in 1 .. threshold {
     coefficients.push(Zeroizing::new(C::F::random(&mut *rng)));
   }
 
@@ -66,4 +67,14 @@ pub fn key_gen<R: RngCore + CryptoRng, C: GroupIo + Id>(
     res.insert(i, keys);
   }
   Ok(res)
+}
+
+/// Create a key via a dealer key generation protocol.
+pub fn key_gen<R: RngCore + CryptoRng, C: GroupIo>(
+  rng: &mut R,
+  threshold: u16,
+  participants: u16,
+) -> Result<HashMap<Participant, ThresholdKeys<C>>, DkgError> {
+  let key = Zeroizing::new(C::F::random(&mut *rng));
+  share::<R, C>(rng, key, threshold, participants)
 }
