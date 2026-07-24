@@ -1507,7 +1507,7 @@ criteria = "safe-to-deploy"
 
 [[exemptions.fixed-cache]]
 version = "0.1.99"
-criteria = "safe-to-run"
+criteria = "safe-to-deploy"
 notes = "Member of `patches/`"
 
 [[exemptions.fixedbitset]]

@@ -127,8 +127,6 @@ fn vectors_to_multisig_keys<C: Curve>(vectors: &Vectors) -> HashMap<Participant,
   for i in 1 ..= u16::try_from(shares.len()).unwrap() {
     // Manually re-implement the serialization for ThresholdKeys to import this data
     let mut serialized = vec![];
-    serialized.extend(u32::try_from(C::ID.len()).unwrap().to_le_bytes());
-    serialized.extend(C::ID);
     serialized.extend(vectors.threshold.to_le_bytes());
     serialized.extend(u16::try_from(shares.len()).unwrap().to_le_bytes());
     serialized.extend(i.to_le_bytes());

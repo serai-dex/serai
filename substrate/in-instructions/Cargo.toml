@@ -38,7 +38,7 @@ serai-dex-pallet = { path = "../dex", default-features = false }
 serai-economic-security-pallet = { path = "../economic-security", default-features = false }
 serai-genesis-liquidity-pallet = { path = "../genesis-liquidity", default-features = false }
 
-sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
+sp-io = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 frame-benchmarking = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, optional = true }
 
 [dev-dependencies]
@@ -75,7 +75,7 @@ std = [
   "serai-economic-security-pallet/std",
   "serai-genesis-liquidity-pallet/std",
 
-  "sp-io?/std",
+  "sp-io/std",
   "frame-benchmarking?/std",
 ]
 
@@ -105,7 +105,6 @@ runtime-benchmarks = [
   "serai-economic-security-pallet/runtime-benchmarks",
   "serai-genesis-liquidity-pallet/runtime-benchmarks",
 
-  "dep:sp-io",
   "dep:frame-benchmarking",
   "frame-benchmarking/runtime-benchmarks",
 ]

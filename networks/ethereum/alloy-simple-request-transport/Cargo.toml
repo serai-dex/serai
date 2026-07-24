@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/networks/ethereum/alloy-simple-request-transport"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2021"
-rust-version = "1.91"
+rust-version = "1.94"
 
 [package.metadata.docs.rs]
 all-features = true
