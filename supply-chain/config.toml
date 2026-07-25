@@ -1031,10 +1031,6 @@ criteria = "safe-to-deploy"
 version = "0.2.11"
 criteria = "safe-to-deploy"
 
-[[exemptions.base16ct]]
-version = "1.0.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.base64]]
 version = "0.22.1"
 criteria = "safe-to-deploy"
@@ -1181,7 +1177,7 @@ criteria = "safe-to-deploy"
 notes = "Member of `patches/`"
 
 [[exemptions.clang-sys]]
-version = "1.8.1"
+version = "1.9.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.clap]]
@@ -1474,7 +1470,7 @@ version = "0.3.14"
 criteria = "safe-to-deploy"
 
 [[exemptions.event-listener]]
-version = "5.4.1"
+version = "5.4.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.event-listener-strategy]]
@@ -2596,7 +2592,7 @@ version = "0.20.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.ruint]]
-version = "1.19.0"
+version = "1.20.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.ruint-macro]]
@@ -3207,7 +3203,7 @@ version = "1.1.10"
 criteria = "safe-to-deploy"
 
 [[exemptions.time]]
-version = "0.3.54"
+version = "0.3.55"
 criteria = "safe-to-deploy"
 
 [[exemptions.time-core]]

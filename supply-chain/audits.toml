@@ -991,6 +991,11 @@ also manually checked its possible inputs are properly constrained to being a
 nibble. Accordingly, while concerns can be raised, this should be fine.
 """
 
+[[audits.base16ct]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.2.0 -> 1.0.0"
+
 [[audits.base58ck]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1274,10 +1279,20 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.15.0 -> 1.16.0"
 
+[[audits.either]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.16.0 -> 1.17.0"
+
 [[audits.enum-ordinalize]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "4.3.2 -> 4.4.1"
+
+[[audits.enum-ordinalize]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "4.4.1 -> 4.4.2"
 
 [[audits.enum-ordinalize-derive]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -1457,6 +1472,11 @@ criteria = "safe-to-deploy"
 version = "1.1.0"
 notes = "Lacking an exhaustive test for all 256 possible hex sequences"
 
+[[audits.http]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.4.2 -> 1.5.0"
+
 [[audits.http-body]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1487,6 +1507,11 @@ notes = "I did not confirm the several new numbers have correctly-defined bits."
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.4.12 -> 0.4.13"
+
+[[audits.hybrid-array]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.4.13 -> 0.4.14"
 
 [[audits.hyper]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -1834,6 +1859,11 @@ delta = "0.8.1 -> 0.9.3"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "0.1.3"
+
+[[audits.netlink-proto]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.12.0 -> 0.12.1"
 
 [[audits.nohash-hasher]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -2338,6 +2368,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.23.41 -> 0.23.42"
 
+[[audits.rustls]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.23.42 -> 0.23.43"
+
 [[audits.rustls-native-certs]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -2525,6 +2560,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.1.2+spec-1.1.0 -> 1.1.3+spec-1.1.0"
 
+[[audits.toml]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.1.3+spec-1.1.0 -> 1.1.4+spec-1.1.0"
+
 [[audits.toml_edit]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -2539,6 +2579,11 @@ delta = "0.25.11+spec-1.1.0 -> 0.25.12+spec-1.1.0"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.25.12+spec-1.1.0 -> 0.25.13+spec-1.1.0"
+
+[[audits.toml_parser]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.1.2+spec-1.1.0 -> 1.1.3+spec-1.1.0"
 
 [[audits.tuplex]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
