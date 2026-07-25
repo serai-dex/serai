@@ -13,18 +13,23 @@ rust-version = "1.86"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo-machete]
+ignored = ["tap"]
+
 [lints]
 workspace = true
 
 [dependencies]
 paste = { version = "1", default-features = false }
-zeroize = { version = "^1.5", default-features = false }
-subtle = { version = "^2.4", default-features = false }
+zeroize = { version = "1.5", default-features = false }
+subtle = { version = "2.4", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
 ctutils = { version = "0.4", default-features = false, features = ["subtle"] }
 crypto-bigint = { version = "0.7", default-features = false, features = ["zeroize"] }
 
+# `ff` requires `bitvec` requires `wyz 0.5.0` which requires `tap 1.0.1` but only specifies `tap 1.0.0`
+tap = { version = "1.0.1", default-features = false }
 ff = { version = "0.13", default-features = false, features = ["bits"] }
 
 ff-group-tests = { version = "0.13", path = "../ff-group-tests", optional = true }

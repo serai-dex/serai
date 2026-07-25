@@ -13,6 +13,9 @@ rust-version = "1.85"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo-machete]
+ignored = ["zeroize_derive"]
+
 [lints]
 workspace = true
 
@@ -21,6 +24,8 @@ std-shims = { path = "../../common/std-shims", version = "0.1.1", default-featur
 
 rand_core = { version = "0.6", default-features = false }
 
+# `zeroize_derive 1.3.3, 1.4.1` fixes deriving `Zeroize` for structs with generic parameters
+zeroize_derive = { version = "1.4.1", default-features = false }
 zeroize = { version = "1.5", default-features = false, features = ["zeroize_derive"] }
 
 transcript = { package = "flexible-transcript", path = "../transcript", version = "0.3.2", default-features = false, optional = true }

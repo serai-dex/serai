@@ -1434,6 +1434,7 @@ dependencies = [
  "group",
  "std-shims 0.1.5",
  "subtle",
+ "tap",
  "zeroize",
 ]
 
@@ -2279,8 +2280,10 @@ dependencies = [
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "std-shims 0.1.5",
+ "subtle",
  "thiserror 2.0.18",
  "zeroize",
+ "zeroize_derive",
 ]
 
 [[package]]
@@ -2458,6 +2461,7 @@ dependencies = [
  "rand_core 0.6.4",
  "short-weierstrass",
  "typenum",
+ "zeroize_derive",
 ]
 
 [[package]]
@@ -2628,6 +2632,7 @@ dependencies = [
  "p256",
  "rand_core 0.6.4",
  "subtle",
+ "tap",
 ]
 
 [[package]]
@@ -2870,6 +2875,7 @@ dependencies = [
  "rand_core 0.6.4",
  "schnorr-signatures",
  "schnorrkel",
+ "serde_bytes",
  "std-shims 0.1.5",
  "zeroize",
 ]
@@ -4939,6 +4945,7 @@ dependencies = [
  "k256",
  "rand_core 0.6.4",
  "subtle",
+ "tap",
  "zeroize",
 ]
 
@@ -5589,6 +5596,7 @@ dependencies = [
  "paste",
  "rand_core 0.6.4",
  "subtle",
+ "tap",
  "zeroize",
 ]
 
@@ -7375,6 +7383,7 @@ dependencies = [
  "sha2 0.10.9",
  "std-shims 0.1.5",
  "zeroize",
+ "zeroize_derive",
 ]
 
 [[package]]
@@ -7459,6 +7468,7 @@ dependencies = [
  "rand_core 0.6.4",
  "sha2 0.11.0",
  "short-weierstrass",
+ "zeroize_derive",
 ]
 
 [[package]]
@@ -8857,7 +8867,9 @@ dependencies = [
  "group",
  "rand_core 0.6.4",
  "subtle",
+ "tap",
  "zeroize",
+ "zeroize_derive",
 ]
 
 [[package]]
