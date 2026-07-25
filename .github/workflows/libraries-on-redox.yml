@@ -5,14 +5,17 @@ on:
   push:
     branches:
       - develop
+      - next
     paths:
       - "common/**"
       - "crypto/**"
+      - "coordinator/tributary-sdk/tendermint/*"
 
   pull_request:
     paths:
       - "common/**"
       - "crypto/**"
+      - "coordinator/tributary-sdk/tendermint/*"
 
   workflow_dispatch:
 
@@ -27,17 +30,40 @@ jobs:
           persist-credentials: false
 
       - name: Install QEMU
-        run: sudo apt update -y && sudo apt upgrade -y && sudo apt install -y qemu-system-x86
+        run: sudo apt update -y && sudo apt upgrade -y && sudo apt install -y qemu-system-x86 jq
 
       - name: Run Tests for Libraries on Redoxer
         shell: bash
         run: |
-          cargo +1.97.1 install --locked redoxer --version =0.2.63
-          TARGET=x86_64-unknown-redox redoxer toolchain
+          export GITHUB_CI=true
+          export RUST_BACKTRACE=1
 
-          find ./common ./crypto -name "Cargo.toml" | while IFS="\n" read -r manifest; do
+          ACCEL="kvm"
+          if [ ! -w /dev/kvm ]; then
+            # Don't use `kvm` which isn't supported here
+            ACCEL="tcg"
+          fi
+          # Add an explicit audio device as else `audiod` fails to initialize and the booting fails
+          export REDOXER_QEMU_ARGS="-smp $(nproc) -accel $ACCEL -audio none,model=ac97"
+          export TARGET=x86_64-unknown-redox
+
+          cargo +1.97.1 install --locked redoxer --version =0.2.63
+          redoxer toolchain
+
+          CRATES=$(find ./common ./crypto ./coordinator/tributary-sdk/tendermint -name "Cargo.toml")
+          # We skip the `multiexp` and `dkg-evrf` tests due to how long they take
+          CRATES=$(echo "$CRATES" | grep -v "multiexp/Cargo.toml" | grep -v "dkg/evrf/Cargo.toml")
+          echo "$CRATES" | while IFS="\n" read -r manifest; do
+            FEATURES="--all-features"
             if [ "$manifest" = "./common/db/Cargo.toml" ]; then
-              continue
+              FEATURES=""
             fi
-            GITHUB_CI=true RUST_BACKTRACE=1 redoxer test -- --all-features --manifest-path $manifest
+
+            # Build the tests, without running them, and extract their absolute paths via `jq`
+            TESTS=$(redoxer test -- "$FEATURES" --manifest-path "$manifest" --no-run --message-format=json | jq -r '.executable | select(. != null)')
+            # Convert our filesystem's absolute paths to what will be Redox's absolute paths
+            TESTS=$(echo "$TESTS" | sed s/$(pwd | sed s/'\/'/'\\\/'/g)//g | sed s/'^'/'\/root'/g)
+            echo "$TESTS" | while IFS="\n" read -r test; do
+              redoxer exec --folder '.:/root' "$test"
+            done
           done
