@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/common/zalloc"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.81"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -17,7 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-zeroize = { version = "1.8.2", default-features = false }
+zeroize = { version = "1.6", default-features = false }
 
 [features]
 alloc = ["zeroize/alloc"]
