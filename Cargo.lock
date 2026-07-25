@@ -531,7 +531,7 @@ dependencies = [
  "alloy-json-rpc",
  "alloy-transport",
  "serde_json",
- "simple-request 0.3.0",
+ "simple-request 0.3.1",
  "tower 0.5.3",
 ]
 
@@ -1111,7 +1111,7 @@ dependencies = [
  "k256",
  "modular-frost",
  "rand_core 0.6.4",
- "simple-request 0.3.0",
+ "simple-request 0.3.1",
  "std-shims 0.1.5",
  "subtle",
  "thiserror 2.0.18",
@@ -7612,7 +7612,7 @@ dependencies = [
  "serai-abi",
  "serai-docker-tests",
  "serai-substrate-tests",
- "simple-request 0.3.0",
+ "simple-request 0.3.1",
  "sp-application-crypto",
  "sp-core",
  "sp-crypto-hashing",
@@ -8885,12 +8885,12 @@ name = "simple-request"
 version = "0.2.99"
 dependencies = [
  "hyper-util",
- "simple-request 0.3.0",
+ "simple-request 0.3.1",
 ]
 
 [[package]]
 name = "simple-request"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "base64ct",
  "futures-util",

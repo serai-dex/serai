@@ -593,7 +593,7 @@ first-party = true
 first-party = false
 notes = "Member of `patches/`, but explicitly tracked as if third-party"
 
-[policy."simple-request:0.3.0"]
+[policy."simple-request:0.3.1"]
 audit-as-crates-io = false
 first-party = true
 
