@@ -533,6 +533,7 @@ dependencies = [
  "serde_json",
  "simple-request 0.3.1",
  "tower 0.5.3",
+ "tracing",
 ]
 
 [[package]]
