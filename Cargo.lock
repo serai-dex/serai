@@ -8233,6 +8233,7 @@ dependencies = [
  "musig",
  "parity-scale-codec",
  "rand_core 0.6.4",
+ "rustversion",
  "schnorr-signatures",
  "schnorrkel",
  "secq256k1",
