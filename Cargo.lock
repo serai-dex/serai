@@ -2275,7 +2275,7 @@ dependencies = [
  "generalized-bulletproofs-circuit-abstraction",
  "generalized-bulletproofs-ec-gadgets",
  "generic-array 1.4.4",
- "multiexp",
+ "multiexp 0.5.0",
  "rand 0.8.7",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
@@ -3048,7 +3048,7 @@ dependencies = [
  "ciphersuite 0.4.99",
  "ff",
  "flexible-transcript",
- "multiexp",
+ "multiexp 0.4.2",
  "rand_core 0.6.4",
  "std-shims 0.1.99",
  "subtle",
@@ -4681,7 +4681,7 @@ dependencies = [
  "flexible-transcript",
  "hex",
  "minimal-ed448",
- "multiexp",
+ "multiexp 0.5.0",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "schnorr-signatures",
@@ -4938,6 +4938,20 @@ dependencies = [
 [[package]]
 name = "multiexp"
 version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ec2ce93a6f06ac6cae04c1da3f2a6a24fcfc1f0eb0b4e0f3d302f0df45326cb"
+dependencies = [
+ "ff",
+ "group",
+ "rand_core 0.6.4",
+ "rustversion",
+ "std-shims 0.1.99",
+ "zeroize",
+]
+
+[[package]]
+name = "multiexp"
+version = "0.5.0"
 dependencies = [
  "dalek-ff-group",
  "ff",
@@ -5022,7 +5036,7 @@ dependencies = [
  "dalek-ff-group",
  "dkg",
  "dkg-recovery",
- "multiexp",
+ "multiexp 0.5.0",
  "rand_core 0.6.4",
  "std-shims 0.1.5",
  "thiserror 2.0.18",
@@ -7378,7 +7392,7 @@ dependencies = [
  "dalek-ff-group",
  "flexible-transcript",
  "hex",
- "multiexp",
+ "multiexp 0.5.0",
  "rand_core 0.6.4",
  "sha2 0.10.9",
  "std-shims 0.1.5",
@@ -8118,7 +8132,7 @@ dependencies = [
  "frost-schnorrkel",
  "minimal-ed448",
  "modular-frost",
- "multiexp",
+ "multiexp 0.5.0",
  "musig",
  "prime-field",
  "schnorr-signatures",

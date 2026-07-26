@@ -203,11 +203,12 @@ fixed-cache = { path = "patches/ethereum/fixed-cache" }
 alloy-chains = { path = "patches/ethereum/alloy-chains" }
 alloy-hardforks = { path = "patches/ethereum/alloy-hardforks" }
 
-# Dependencies from monero-oxide which originate from within our own tree, potentially shimmed to account for deviations since publishing
+# Dependencies from monero-oxide which originate from within our own tree,
+# potentially shimmed to account for deviations since publishing
 std-shims = { path = "patches/std-shims" }
 simple-request = { path = "patches/simple-request" }
 flexible-transcript = { path = "crypto/transcript" }
-multiexp = { path = "crypto/multiexp" }
+# TODO multiexp = { path = "crypto/multiexp" }
 ciphersuite = { path = "patches/ciphersuite" }
 dalek-ff-group = { path = "crypto/dalek-ff-group" }
 minimal-ed448 = { path = "crypto/ed448" }

@@ -1835,6 +1835,12 @@ criteria = "audited"
 version = "0.3.0"
 notes = "`/audits/crypto/Cypher Stack March 2023`"
 
+[[audits.multiexp]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.4.2"
+notes = "Old version of a crate from this repository."
+
 [[audits.multihash-codetable]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
