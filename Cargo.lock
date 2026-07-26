@@ -2275,7 +2275,7 @@ dependencies = [
  "generalized-bulletproofs-circuit-abstraction",
  "generalized-bulletproofs-ec-gadgets",
  "generic-array 1.4.4",
- "multiexp 0.5.0",
+ "multiexp 0.5.1",
  "rand 0.8.7",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
@@ -4681,7 +4681,7 @@ dependencies = [
  "flexible-transcript",
  "hex",
  "minimal-ed448",
- "multiexp 0.5.0",
+ "multiexp 0.5.1",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "schnorr-signatures",
@@ -4951,7 +4951,7 @@ dependencies = [
 
 [[package]]
 name = "multiexp"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "dalek-ff-group",
  "ff",
@@ -5036,7 +5036,7 @@ dependencies = [
  "dalek-ff-group",
  "dkg",
  "dkg-recovery",
- "multiexp 0.5.0",
+ "multiexp 0.5.1",
  "rand_core 0.6.4",
  "std-shims 0.1.5",
  "thiserror 2.0.18",
@@ -7392,7 +7392,7 @@ dependencies = [
  "dalek-ff-group",
  "flexible-transcript",
  "hex",
- "multiexp 0.5.0",
+ "multiexp 0.5.1",
  "rand_core 0.6.4",
  "sha2 0.10.9",
  "std-shims 0.1.5",
@@ -8132,7 +8132,7 @@ dependencies = [
  "frost-schnorrkel",
  "minimal-ed448",
  "modular-frost",
- "multiexp 0.5.0",
+ "multiexp 0.5.1",
  "musig",
  "prime-field",
  "schnorr-signatures",
