@@ -31,14 +31,14 @@ dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = fals
 schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", version = "0.5", default-features = false, features = ["std", "aggregate"] }
 
 hex = { version = "0.4", default-features = false, features = ["std"] }
-log = { version = "0.4", default-features = false, features = ["std"] }
+log = { version = "0.4.4", default-features = false, features = ["std"] }
 
 serai-db = { path = "../../common/db", version = "0.2", default-features = false, features = ["std", "schema"] }
 
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 tendermint = { package = "tendermint-machine", path = "./tendermint", version = "0.3", default-features = false, features = ["std"] }
 
-tokio = { version = "1", default-features = false, features = ["sync", "time", "rt"] }
+tokio = { version = "1.4", default-features = false, features = ["sync", "time", "rt"] }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros"] }
