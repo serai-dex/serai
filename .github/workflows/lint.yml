@@ -200,6 +200,8 @@ jobs:
         run: |
           cargo +1.97.1 install --locked cargo-msrv --version =0.19.3
 
+          export WORKSPACE="$(pwd)"
+
           function check_msrv {
             # We `cd` into the directory passed as the first argument, but will return to the
             # directory called from.
@@ -246,8 +248,19 @@ jobs:
             echo '[workspace]' >> Cargo.toml
             echo '[workspace.lints]' >> Cargo.toml
 
+            echo '[patch.crates-io]' >> Cargo.toml
+            # TODO: These are needed for `Scalar: FromUniformBytes<64>`
+            echo 'k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "8293be3f9855eea0936523a9b100f1f69261ea4b" }' >> Cargo.toml
+            echo 'p256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "8293be3f9855eea0936523a9b100f1f69261ea4b" }' >> Cargo.toml
+            # TODO: This is needed due to `generalized-bulletproofs`
+            echo "ciphersuite = { path = \"$WORKSPACE/patches/ciphersuite\" }" >> Cargo.toml
+            echo "dalek-ff-group = { path = \"$WORKSPACE/crypto/dalek-ff-group\" }" >> Cargo.toml
+
             # This nightly version is the last before lockfile `version = 4` became the default
             cargo +nightly-2024-09-28 update -Zminimal-versions
+            cargo +nightly-2024-09-28 update -p k256@0.13 --precise 0.13.4 || true
+            cargo +nightly-2024-09-28 update -p p256@0.13 --precise 0.13.4 || true
+            cargo +nightly-2024-09-28 update -p ciphersuite@0.4.2 --precise 0.4.99 || true
             # Check this lockfile is actually adequate to build this crate
             cargo +1.97.1 check
 
