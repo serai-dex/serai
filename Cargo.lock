@@ -1106,6 +1106,7 @@ name = "bitcoin-serai"
 version = "0.4.0"
 dependencies = [
  "bitcoin",
+ "bitcoin-units",
  "core-json-derive",
  "core-json-traits",
  "k256",

@@ -12,6 +12,9 @@ rust-version = "1.89"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo-machete]
+ignored = ["bitcoin-units"]
+
 [lints]
 workspace = true
 
@@ -24,7 +27,13 @@ subtle = { version = "2", default-features = false }
 zeroize = { version = "^1.5", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
-bitcoin = { version = "0.32", default-features = false }
+# `FeeRate::from_sat_per_vb_u32`
+bitcoin-units = { version = "0.1.3", default-features = false }
+# - `0.32.4` relaxed `BufRead` bounds to `Read`, which we need
+# - `0.32.8` specifies `hex-conservative 0.2.2`, when we need at least `0.2.1`
+#    as `0.2.0` specifies `arrayvec 0.7.0` but needs `arrayvec 0.7.2`
+#    (which `0.2.1` fixed).
+bitcoin = { version = "0.32.8", default-features = false }
 
 k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", version = "0.11", default-features = false, features = ["secp256k1"] }
