@@ -21,7 +21,8 @@ borsh = { version = "1", default-features = false, features = ["derive"] }
 
 serai-primitives = { path = "../../primitives", version = "0.1", default-features = false }
 
-bitcoin = { version = "0.32", default-features = false }
+bitcoin = { version = "0.32.9", default-features = false }
 
 [features]
 std = ["borsh/std", "serai-primitives/std", "bitcoin/std"]
+default = ["std"]

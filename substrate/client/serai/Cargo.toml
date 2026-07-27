@@ -19,7 +19,7 @@ workspace = true
 [dependencies]
 thiserror = { version = "2", default-features = false, features = ["std"] }
 core-json-traits = { version = "0.4", default-features = false, features = ["alloc"] }
-core-json-derive = { version = "0.4", default-features = false }
+core-json-derive = { version = "0.4.1", default-features = false }
 simple-request = { path = "../../../common/request", version = "0.3" }
 
 hex = { version = "0.4", default-features = false, features = ["alloc"] }
