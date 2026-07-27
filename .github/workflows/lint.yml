@@ -258,13 +258,20 @@ jobs:
 
             # This nightly version is the last before lockfile `version = 4` became the default
             cargo +nightly-2024-09-28 update -Zminimal-versions
+
             # Update to our patches
             cargo +nightly-2024-09-28 update -p k256@0.13 --precise 0.13.4 || true
             cargo +nightly-2024-09-28 update -p p256@0.13 --precise 0.13.4 || true
             cargo +nightly-2024-09-28 update -p ciphersuite@0.4.2 --precise 0.4.99 || true
+
             # `bip39` allows a range for `rand` where this is the only feasible way to avoid
             # `rand 0.6.0`, which does not compile
             cargo +nightly-2024-09-28 update -p rand@0.6.0 --precise 0.8.0 || true
+
+            # `expander` requires `fs-err 2.4` but only binds to `2`
+            # We don't fix this within our own `Cargo.toml`s as it isn't inherently in our tree
+            cargo update -p fs-err@2.0.0 --precise 2.4.0 || true
+
             # Check this lockfile is actually adequate to build this crate
             cargo +1.97.1 check
 
