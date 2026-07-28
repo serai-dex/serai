@@ -27,7 +27,7 @@ tracing = { version = "0.1.36", default-features = false }
 hyper-util = { version = "0.1.9", default-features = false, features = ["http1", "client-legacy"] }
 http-body-util = { version = "0.1.2", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
-tokio = { version = "1", default-features = false, features = ["sync"] }
+tokio = { version = "1.13", default-features = false, features = ["sync"] }
 
 hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "ring", "rustls-native-certs", "native-tokio"], optional = true }
 
