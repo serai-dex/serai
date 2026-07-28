@@ -12,9 +12,6 @@ rust-version = "1.91"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[package.metadata.cargo-machete]
-ignored = ["tracing"]
-
 [lints]
 workspace = true
 
@@ -25,8 +22,6 @@ tower = "0.5.1"
 serde_json = { version = "1.0.107", default-features = false }
 simple-request = { path = "../../../common/request", version = "0.3", default-features = false, features = ["tokio"] }
 
-# `alloy-json-rpc` requires `tracing 0.1.36` but only specifies `tracing 0.1`
-tracing = { version = "0.1.36", default-features = false }
 alloy-json-rpc = { version = "2", default-features = false }
 alloy-transport = { version = "2", default-features = false }
 

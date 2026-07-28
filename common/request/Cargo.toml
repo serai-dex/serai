@@ -1,6 +1,6 @@
 [package]
 name = "simple-request"
-version = "0.3.1"
+version = "0.3.2"
 description = "A simple HTTP(S) request library"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/common/request"
@@ -13,12 +13,17 @@ rust-version = "1.81"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo-machete]
+ignored = ["tracing"]
+
 [lints]
 workspace = true
 
 [dependencies]
 tower-service = { version = "0.3", default-features = false }
 hyper = { version = "1", default-features = false, features = ["http1", "client"] }
+# TODO: https://github.com/hyperium/hyper-util/pull/305
+tracing = { version = "0.1.36", default-features = false }
 hyper-util = { version = "0.1.9", default-features = false, features = ["http1", "client-legacy"] }
 http-body-util = { version = "0.1.2", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }

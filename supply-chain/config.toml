@@ -541,7 +541,7 @@ first-party = true
 audit-as-crates-io = false
 first-party = true
 
-[policy."simple-request:0.3.1"]
+[policy."simple-request:0.3.2"]
 audit-as-crates-io = false
 first-party = true
 

@@ -533,7 +533,6 @@ dependencies = [
  "serde_json",
  "simple-request",
  "tower 0.5.3",
- "tracing",
 ]
 
 [[package]]
@@ -8888,7 +8887,7 @@ dependencies = [
 
 [[package]]
 name = "simple-request"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "base64ct",
  "futures-util",
@@ -8898,6 +8897,7 @@ dependencies = [
  "hyper-util",
  "tokio",
  "tower-service",
+ "tracing",
  "zeroize",
 ]
 
