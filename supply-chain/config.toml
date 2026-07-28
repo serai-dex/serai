@@ -92,7 +92,7 @@ first-party = true
 first-party = false
 notes = "Member of `patches/`, but explicitly tracked as if third-party"
 
-[policy."ec-divisors:0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"]
+[policy."ec-divisors:0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"]
 first-party = false
 
 [policy.embedwards25519]
@@ -154,13 +154,13 @@ first-party = false
 audit-as-crates-io = false
 first-party = true
 
-[policy."generalized-bulletproofs-circuit-abstraction:0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"]
+[policy."generalized-bulletproofs-circuit-abstraction:0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"]
 first-party = false
 
-[policy."generalized-bulletproofs-ec-gadgets:0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"]
+[policy."generalized-bulletproofs-ec-gadgets:0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"]
 first-party = false
 
-[policy."generalized-bulletproofs:0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"]
+[policy."generalized-bulletproofs:0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"]
 first-party = false
 
 [policy."getrandom:0.2.99"]
@@ -207,54 +207,6 @@ first-party = true
 [policy.modular-frost]
 audit-as-crates-io = false
 first-party = true
-
-[policy."monero-address:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-base58:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-borromean:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-bulletproofs-generators:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-bulletproofs:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-clsag:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-daemon-rpc:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-ed25519:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-epee:0.2.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-interface:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-io:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-mlsag:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-oxide:0.1.4-alpha@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-primitives:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-simple-request-rpc:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
-
-[policy."monero-wallet:0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"]
-first-party = false
 
 [policy.multiexp]
 audit-as-crates-io = false
@@ -588,10 +540,6 @@ first-party = true
 [policy.short-weierstrass]
 audit-as-crates-io = false
 first-party = true
-
-[policy."simple-request:0.2.99"]
-first-party = false
-notes = "Member of `patches/`, but explicitly tracked as if third-party"
 
 [policy."simple-request:0.3.1"]
 audit-as-crates-io = false
@@ -2906,11 +2854,6 @@ criteria = "safe-to-deploy"
 [[exemptions.signature]]
 version = "2.2.0"
 criteria = "safe-to-deploy"
-
-[[exemptions.simple-request]]
-version = "0.2.99"
-criteria = "safe-to-deploy"
-notes = "Member of `patches/`"
 
 [[exemptions.siphasher]]
 version = "1.0.2"

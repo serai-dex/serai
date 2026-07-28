@@ -214,7 +214,7 @@ impl TransactionPlanner<Rpc, ()> for Planner {
         }
         Err(
           SendError::WrongPrivateKey |
-          SendError::MaliciousSerialization |
+          SendError::IncorrectSerialization |
           SendError::ClsagError(_) |
           SendError::FrostError(_),
         ) => unreachable!("signing/serialization error when not signing/serializing"),
@@ -278,7 +278,7 @@ impl TransactionPlanner<Rpc, ()> for Planner {
         }
         Err(
           SendError::WrongPrivateKey |
-          SendError::MaliciousSerialization |
+          SendError::IncorrectSerialization |
           SendError::ClsagError(_) |
           SendError::FrostError(_),
         ) => unreachable!("signing/serialization error when not signing/serializing"),

@@ -1266,7 +1266,7 @@ notes = "Patches to `zmij` which is by the same author, faster, and has an ident
 [[audits.ec-divisors]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-version = "0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
+version = "0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"
 importable = false
 
 [[audits.either]]
@@ -1403,20 +1403,25 @@ version = "0.1.0"
 
 [[audits.generalized-bulletproofs]]
 criteria = "audited"
-version = "0.1.0@git:7d972e2b16fe57f4dfa4a9549d2fbb9306411704"
+version = "0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"
 notes = "`monero-oxide/audits/generalized-bulletproofs`"
 
 [[audits.generalized-bulletproofs]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-version = "0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
+version = "0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"
 importable = false
 notes = "Written by kayabaNerve. The ZK proof itself needs further review"
+
+[[audits.generalized-bulletproofs]]
+criteria = "audited"
+version = "0.1.0@git:7d972e2b16fe57f4dfa4a9549d2fbb9306411704"
+notes = "`monero-oxide/audits/generalized-bulletproofs`"
 
 [[audits.generalized-bulletproofs-circuit-abstraction]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-version = "0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
+version = "0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"
 importable = false
 notes = "Written by kayabaNerve"
 
@@ -1428,7 +1433,7 @@ notes = "`monero-oxide/audits/fcmps`, including formal verification/security pro
 [[audits.generalized-bulletproofs-ec-gadgets]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-version = "0.1.0@git:a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a"
+version = "0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"
 importable = false
 notes = "Written by kayabaNerve"
 
@@ -1681,7 +1686,7 @@ notes = "`/audits/crypto/Cypher Stack March 2023`, excluding the Ed448 ciphersui
 [[audits.monero-address]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
@@ -1693,14 +1698,14 @@ notes = "`monero-oxide/audits/Cypher Stack May 2025`"
 [[audits.monero-base58]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
 [[audits.monero-borromean]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
@@ -1712,7 +1717,7 @@ notes = "`monero-oxide/audits/Cypher Stack May 2025`"
 [[audits.monero-bulletproofs]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
@@ -1724,14 +1729,14 @@ notes = "`monero-oxide/audits/Cypher Stack May 2025`"
 [[audits.monero-bulletproofs-generators]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
 [[audits.monero-clsag]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
@@ -1743,42 +1748,42 @@ notes = "`monero-oxide/audits/Cypher Stack May 2025`"
 [[audits.monero-daemon-rpc]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.2.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
 [[audits.monero-ed25519]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
 [[audits.monero-epee]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.2.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.2.1"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
 [[audits.monero-interface]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.2.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
 [[audits.monero-io]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
 [[audits.monero-mlsag]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
@@ -1790,7 +1795,7 @@ notes = "`monero-oxide/audits/Cypher Stack May 2025`"
 [[audits.monero-oxide]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.4-alpha@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
@@ -1802,7 +1807,7 @@ notes = "`monero-oxide/audits/Cypher Stack May 2025`, while named `monero-serai`
 [[audits.monero-primitives]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
@@ -1814,14 +1819,7 @@ notes = "`monero-oxide/audits/Cypher Stack May 2025`"
 [[audits.monero-simple-request-rpc]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
-importable = false
-notes = "kayabaNerve is a maintainer of `monero-oxide`"
-
-[[audits.monero-wallet]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "reviewed"
-version = "0.1.0@git:c8be5d3d1287669946a83fbfcb296ce2a8852e47"
+version = "0.1.0"
 importable = false
 notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
@@ -1829,6 +1827,13 @@ notes = "kayabaNerve is a maintainer of `monero-oxide`"
 criteria = "audited"
 version = "0.1.0@git:d5077ae9662f54b6a8a399a1ecdfefa0115b8cf7"
 notes = "`monero-oxide/audits/Cypher Stack May 2025`"
+
+[[audits.monero-wallet]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "reviewed"
+version = "0.2.0"
+importable = false
+notes = "kayabaNerve is a maintainer of `monero-oxide`"
 
 [[audits.multiexp]]
 criteria = "audited"

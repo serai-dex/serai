@@ -701,6 +701,9 @@ impl<C: Curves> Proof<C> {
       ) => {
         panic!("prover generated an invalid circuit for the eVRF DKG")
       }
+      Err(AcStatementError::DidNotConstrainCommitment) => {
+        panic!("prover's circuit did not include a full-rank matrix for the Pedersen commitments")
+      }
       // 'too many commitments' is when they threaten 2**32 or so, so this should be unreachable
       Err(AcStatementError::TooManyCommitments) => {
         panic!("prover generated too large of a circuit for the eVRF DKG")
@@ -807,6 +810,9 @@ impl<C: Curves> Proof<C> {
         ) => {
           panic!("verifier generated an invalid circuit for the eVRF DKG")
         }
+        Err(AcStatementError::DidNotConstrainCommitment) => panic!(
+          "verifier's circuit did not include a full-rank matrix for the Pedersen commitments"
+        ),
         // 'too many commitments' is when they threaten 2**32 or so, so this should be unreachable
         Err(AcStatementError::TooManyCommitments) => {
           panic!("verifier generated too large of a circuit for the eVRF DKG")

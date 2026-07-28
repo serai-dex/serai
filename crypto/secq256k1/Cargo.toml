@@ -13,9 +13,6 @@ rust-version = "1.89"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[package.metadata.cargo-machete]
-ignored = ["zeroize_derive"]
-
 [lints]
 workspace = true
 
@@ -28,9 +25,7 @@ prime-field = { path = "../prime-field", default-features = false }
 short-weierstrass = { path = "../short-weierstrass", default-features = false }
 
 ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false }
-# `zeroize_derive 1.3.3, 1.4.1` fixes deriving `Zeroize` for structs with generic parameters
-zeroize_derive = { version = "1.4.1", default-features = false }
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a", default-features = false, optional = true }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "31c26d96eaadbba910ffe3613ad8b4cf9c598a93", default-features = false, optional = true }
 
 [dev-dependencies]
 hex = "0.4"
