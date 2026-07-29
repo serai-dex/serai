@@ -29,6 +29,8 @@ runs:
       run: |
         (gem uninstall -aIx) || true
 
+        brew analytics off || true
+
         for package in \
           "msbuild" "powershell" "nuget" "bazel" "ansible" "terraform" "heroku" "aws" azure-cli \
           "nodejs" "npm" "yarn" "java" "kotlin" "golang" "swift" "julia" "fortran" "android" \
@@ -45,9 +47,6 @@ runs:
         # Explicitly uninstall `xcodes` which no longer offers a binary package for Intel macOS
         brew uninstall --force xcodes || true
 
-        brew cleanup
-        rm -rf $(brew --cache)
-
     - name: Install dependencies
       shell: bash
       run: |
@@ -61,8 +60,10 @@ runs:
           brew install protobuf llvm
           HOMEBREW_PREFIX=$(brew --prefix)
           [ -d "$HOMEBREW_PREFIX" ]
+
+          # Configure `LIBCLANG_PATH` for `clang-sys`
           ls $HOMEBREW_PREFIX/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
-          echo "DYLD_LIBRARY_PATH=$HOMEBREW_PREFIX/opt/llvm/lib:$DYLD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          echo "LIBCLANG_PATH=$HOMEBREW_PREFIX/opt/llvm/lib" >> "$GITHUB_ENV"
 
           # Replace brew rust(up) with rustup
           brew uninstall --force rustup || true

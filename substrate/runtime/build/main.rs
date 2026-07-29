@@ -156,6 +156,14 @@ fn command(bin: &str) -> Command {
     command.env("SystemRoot", root);
   }
 
+  // Propagate macOS's `DYLD_FALLBACK_LIBRARY_PATH` environment variable, which `rust-lld` requires
+  // to find `libLLVM` since https://github.com/rust-lang/rust/pull/157205
+  #[cfg(target_os = "macos")]
+  #[expect(clippy::disallowed_methods)]
+  if let Ok(fallback_libraries) = env::var("DYLD_FALLBACK_LIBRARY_PATH") {
+    command.env("DYLD_FALLBACK_LIBRARY_PATH", fallback_libraries);
+  }
+
   /*
     Normalize the locale, in case any tooling attempts to take it into consideration.
 
