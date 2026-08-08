@@ -68,7 +68,7 @@ runs:
 
     - name: Install `buildx`
       if: runner.os == 'macOS'
-      uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # 4.2.0
+      uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # 4.3.0
       with:
         # This is Docker's default, but `setup-buildx-action` defaults to `docker-container`
         # (for _some_ reason) which means built images won't be loaded into Docker (`--load`) by
@@ -99,7 +99,7 @@ runs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        Invoke-WebRequest https://github.com/containers/podman/releases/download/v6.0.2/podman-installer-windows-amd64.msi -OutFile podman.msi
+        Invoke-WebRequest https://github.com/containers/podman/releases/download/v6.1.0/podman-installer-windows-amd64.msi -OutFile podman.msi
         Start-Process -Wait -PassThru 'msiexec' -ArgumentList "/package podman.msi /quiet /log podman-msi.log MACHINE_PROVIDER=wsl ALLUSERS=1"
         Get-Content podman-msi.log
 

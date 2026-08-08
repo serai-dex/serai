@@ -32,7 +32,7 @@ serai-abi = { path = "../../abi", version = "0.1", default-features = false, fea
 zeroize = "1.5"
 rand_core = "0.6"
 
-blake2 = { version = "0.11.0-rc.5", default-features = false }
+blake2 = { version = "0.11", default-features = false }
 ciphersuite = { path = "../../../crypto/ciphersuite" }
 dalek-ff-group = { path = "../../../crypto/dalek-ff-group" }
 musig = { path = "../../../crypto/dkg/musig" }

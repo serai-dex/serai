@@ -78,9 +78,9 @@ jobs:
             # macOS also has the benefit of packaging (via MacPorts) `mrsh`,
             # which explicitly attempts to be be exactly POSIX, without any extensions.
             # We first have to install MacPorts, the easiest method being from source.
-            curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.12.5.tar.bz2
-            tar xf MacPorts-2.12.5.tar.bz2
-            cd MacPorts-2.12.5
+            curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.12.6.tar.bz2
+            tar xf MacPorts-2.12.6.tar.bz2
+            cd MacPorts-2.12.6
             ./configure
             make
             sudo make install

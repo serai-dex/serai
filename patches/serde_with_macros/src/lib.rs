@@ -117,7 +117,7 @@ pub fn serde_as(attribute: TokenStream, input: TokenStream) -> TokenStream {
               // Parse out the type this is `as`
               let TokenTree::Literal(ty) = iter.next().unwrap() else { panic!() };
               let ty = ty.to_string();
-              let ty = ty.strip_prefix('"').unwrap().strip_suffix('"').unwrap();
+              let ty = ty.strip_circumfix('"', '"').unwrap();
 
               // Replace with `serde(with = As<{ty}>)`
               let meta = alloc::format!(r#"serde(with = "::serde_with::As::<{ty}>")"#);

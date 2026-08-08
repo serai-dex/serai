@@ -31,7 +31,7 @@ ciphersuite = { path = "../../ciphersuite", version = "0.4.1", default-features 
 multiexp = { path = "../../multiexp", version = "0.5", default-features = false }
 
 generic-array = { version = "1", default-features = false, features = ["alloc"] }
-blake2 = { version = "0.11.0-rc.5", default-features = false }
+blake2 = { version = "0.11", default-features = false }
 rand_chacha = { version = "0.3", default-features = false }
 
 generalized-bulletproofs = { git = "https://github.com/monero-oxide/monero-oxide", rev = "31c26d96eaadbba910ffe3613ad8b4cf9c598a93", default-features = false }

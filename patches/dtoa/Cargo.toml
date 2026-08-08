@@ -3,7 +3,7 @@ name = "dtoa"
 version = "1.99.99"
 description = "Patches to `zmij`"
 license = "MIT"
-repository = "https://github.com/serai-dex/serai/tree/develop/patches/zmij"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/dtoa"
 edition = "2021"
 
 [package.metadata.docs.rs]

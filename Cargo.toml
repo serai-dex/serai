@@ -221,6 +221,7 @@ cpufeatures = { path = "patches/cpufeatures" }
 dtoa = { path = "patches/dtoa" }
 getrandom-02 = { package = "getrandom", path = "patches/getrandom-0.2" }
 getrandom-03 = { package = "getrandom", path = "patches/getrandom-0.3" }
+rocksdb = { path = "patches/rocksdb" }
 ryu = { path = "patches/ryu" }
 thiserror = { path = "patches/thiserror" }
 

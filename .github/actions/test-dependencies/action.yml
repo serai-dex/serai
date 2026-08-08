@@ -21,7 +21,7 @@ runs:
     - name: Install Anvil
       shell: bash
       run: |
-        VERSION=4072e48705af9d93e3c0f6e29e93b5e9a40caed8 # 1.7.1
+        VERSION=982849d3140c01fd3b72905759581a132df7aa98 # 1.8.1
         cargo +1.97.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked anvil
 
     - name: Run a Monero Regtest Node

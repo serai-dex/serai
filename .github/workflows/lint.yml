@@ -157,7 +157,7 @@ jobs:
       - name: Install Foundry Forge
         shell: bash
         run: |
-          VERSION=4072e48705af9d93e3c0f6e29e93b5e9a40caed8 # 1.7.1
+          VERSION=982849d3140c01fd3b72905759581a132df7aa98 # 1.8.1
           cargo +1.97.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked forge
 
       - name: Run forge fmt
@@ -387,7 +387,7 @@ jobs:
       - name: solhint
         shell: bash
         run: |
-          npm install -g solhint@6.2.3
+          npm install -g solhint@6.2.4
           [ "$(solhint --disc --noPoster --formatter unix $(find -name '*.sol' ! -name 'IERC20.sol' ! -path '*tests*'))" = "" ]
 
   shellcheck:

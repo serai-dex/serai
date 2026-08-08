@@ -33,7 +33,7 @@ k256 = { version = "^0.13.1", default-features = false, features = ["std"] }
 
 alloy-core = { version = "1", default-features = false }
 alloy-rlp  = { version = "0.3", default-features = false }
-revm-primitives = { version = "42", default-features = false }
+revm-primitives = { version = "43", default-features = false }
 
 alloy-rpc-types-eth = { version = "2", default-features = false }
 alloy-transport = { version = "2", default-features = false }

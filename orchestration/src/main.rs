@@ -251,7 +251,7 @@ fn build_serai_service(
           TODO: Instead of passing around `Network, Os`, design and develop a `Profile` system
           which consistently yields the configurations for all of these specific knobs. Right now,
           we frequently re-decide whether or not to enable ASan. We should also replace `bool` with
-          `enum` for clairty.
+          `enum` for clarity.
         */
         supports_safestack = (OsRng.next_u64() & 1) == 1;
         supports_asan = !supports_safestack;

@@ -1,0 +1,23 @@
+[package]
+name = "rocksdb"
+version = "0.24.99"
+description = "Updates to the latest version"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/rocksdb"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+rocksdb = { version = "0.25", default-features = false }
+
+[features]
+snappy = ["rocksdb/snappy"]
+# This is explicitly disabled due to how it can conflict with the system's allocator
+# It's also only historically worked on certain platforms
+jemalloc = []
+default = ["rocksdb/bindgen-runtime", "snappy"]

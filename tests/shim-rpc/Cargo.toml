@@ -23,7 +23,7 @@ hex = { version = "0.4", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive"] }
 
 rand_core = { version = "0.6", default-features = false }
-blake2 = { version = "0.11.0-rc.0", default-features = false }
+blake2 = { version = "0.11", default-features = false }
 schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
 
 serai-primitives = { path = "../../substrate/primitives", features = ["std", "test-helpers"] }

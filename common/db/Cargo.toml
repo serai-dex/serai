@@ -19,7 +19,7 @@ workspace = true
 [dependencies]
 borsh = { version = "1", default-features = false, optional = true }
 parity-db = { version = "0.5", default-features = false, features = ["arc"], optional = true }
-rocksdb = { version = "0.24", default-features = false, features = ["zstd"], optional = true }
+rocksdb = { version = "0.25", default-features = false, features = ["snappy"], optional = true }
 
 [features]
 alloc = []
