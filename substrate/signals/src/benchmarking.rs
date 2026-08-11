@@ -11,7 +11,9 @@ pub trait BenchmarkValidatorSets {
 #[frame_benchmarking::v2::benchmarks(
   where
     <T as frame_system::Config>::RuntimeOrigin: From<Option<SeraiAddress>>,
-    <T as frame_system::Config>::RuntimeEvent: TryInto<serai_core_pallet::Event<T>>,
+    <T as frame_system::Config>::RuntimeEvent: Clone
+      + TryInto<serai_core_pallet::Event<T>>
+      + TryInto<frame_system::Event<T>>,
     <T as crate::Config>::ValidatorSets: BenchmarkValidatorSets,
 )]
 mod benchmarks {

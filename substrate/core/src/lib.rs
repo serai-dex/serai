@@ -207,21 +207,68 @@ pub mod pallet {
     ///
     /// This MUST NOT be called during a transaction/block's execution due to the
     /// computational/memory cost of it.
+    ///
+    /// In addition to the events emitted by Serai's pallets via [`Pallet::emit_event`], the
+    /// per-extrinsic dispatch outcome emitted by `frame-system` is also appended.
     pub fn events() -> Vec<Vec<Vec<u8>>>
     where
-      T::RuntimeEvent: TryInto<Event<T>>,
+      T::RuntimeEvent: Clone + TryInto<Event<T>> + TryInto<frame_system::Event<T>>,
     {
       let mut result = vec![];
       for event in frame_system::Pallet::<T>::read_events_no_consensus() {
-        match event.event.try_into() {
+        let raw = event.event;
+        match <T::RuntimeEvent as TryInto<Event<T>>>::try_into(raw.clone()) {
           Ok(Event::Transaction) => result.push(vec![]),
           Ok(Event::Event(bytes)) => {
             result.last_mut().expect("Serai event outside of a transaction").push(bytes);
           }
-          Err(_) => {}
+          Err(_) => {
+            if let Ok(sys_event) =
+              <T::RuntimeEvent as TryInto<frame_system::Event<T>>>::try_into(raw)
+            {
+              if let Some(abi_event) = map_frame_system_event::<T>(&sys_event) {
+                let bytes = borsh::to_vec(&serai_abi::Event::from(abi_event)).unwrap();
+                result.last_mut().expect("frame-system event outside of a transaction").push(bytes);
+              }
+            }
+          }
         }
       }
       result
+    }
+  }
+
+  /// Map a `frame-system` event to its `serai_abi::system::Event` equivalent, if any.
+  ///
+  /// Returns `None` for `frame-system` events not relevant to a transaction's outcome.
+  fn map_frame_system_event<T: Config>(
+    event: &frame_system::Event<T>,
+  ) -> Option<serai_abi::system::Event> {
+    #[allow(clippy::wildcard_enum_match_arm)]
+    match event {
+      frame_system::Event::ExtrinsicSuccess { .. } => {
+        Some(serai_abi::system::Event::ExtrinsicSuccess)
+      }
+      frame_system::Event::ExtrinsicFailed { dispatch_error, .. } => {
+        Some(serai_abi::system::Event::ExtrinsicFailed {
+          error: map_dispatch_error(dispatch_error),
+        })
+      }
+      _ => None,
+    }
+  }
+
+  fn map_dispatch_error(
+    err: &frame_support::sp_runtime::DispatchError,
+  ) -> serai_abi::system::DispatchError {
+    use frame_support::sp_runtime;
+    use serai_abi::system::DispatchError as A;
+
+    #[allow(clippy::wildcard_enum_match_arm)]
+    match err {
+      sp_runtime::DispatchError::Module(m) => A::Module { index: m.index, error: m.error },
+      sp_runtime::DispatchError::BadOrigin => A::BadOrigin,
+      other => A::Other(alloc::format!("{other:?}")),
     }
   }
 
