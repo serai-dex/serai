@@ -278,6 +278,12 @@ mod pallet {
     pub fn completed() -> bool {
       Oraclized::<T>::get().is_some()
     }
+
+    /// Returns the time economic security was achieved, represented in milliseconds since the epoch.
+    /// Returns `0` if it isn't achieved yet.
+    pub fn economic_security_time() -> u64 {
+      EconomicSecurityAchieved::<T>::get().unwrap_or(0)
+    }
   }
 
   #[pallet::call]
