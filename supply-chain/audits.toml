@@ -1555,12 +1555,6 @@ version = "0.7.1"
 [[audits.indexmap]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-version = "1.99.99"
-notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
-
-[[audits.indexmap]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
 delta = "2.13.1 -> 2.14.0"
 
 [[audits.itoa]]
@@ -2431,18 +2425,6 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "1.99.99"
 notes = "Patches to `zmij` which is by the same author, faster, and has a nearly-identical API. The unsafe `raw` module is omitted, but the fact this codebase compiles proves it had no active consumers"
-
-[[audits.schemars]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-version = "0.9.99"
-notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
-
-[[audits.schemars]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-version = "1.99.99"
-notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
 
 [[audits.schnorr-signatures]]
 criteria = "audited"

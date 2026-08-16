@@ -185,10 +185,6 @@ first-party = false
 first-party = false
 notes = "Member of `patches/`, but explicitly tracked as if third-party"
 
-[policy."indexmap:1.99.99"]
-first-party = false
-notes = "Member of `patches/`, but explicitly tracked as if third-party"
-
 [policy."k256:0.13.4@git:8293be3f9855eea0936523a9b100f1f69261ea4b"]
 first-party = false
 
@@ -377,14 +373,6 @@ first-party = false
 [policy."sc-utils:23.0.0@git:7b133631ff5e668d81869c81137536185ddc68f6"]
 first-party = false
 
-[policy."schemars:0.9.99"]
-first-party = false
-notes = "Member of `patches/`, but explicitly tracked as if third-party"
-
-[policy."schemars:1.99.99"]
-first-party = false
-notes = "Member of `patches/`, but explicitly tracked as if third-party"
-
 [policy.schnorr-signatures]
 audit-as-crates-io = false
 first-party = true
@@ -536,6 +524,14 @@ first-party = true
 [policy.serai-validator-sets-pallet]
 audit-as-crates-io = false
 first-party = true
+
+[policy."serde_with:3.99.99"]
+first-party = false
+notes = "Member of `patches/`, but explicitly tracked as if third-party"
+
+[policy."serde_with_macros:3.99.99"]
+first-party = false
+notes = "Member of `patches/`, but explicitly tracked as if third-party"
 
 [policy.short-weierstrass]
 audit-as-crates-io = false
@@ -2808,11 +2804,11 @@ version = "0.7.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.serde_with]]
-version = "3.18.0"
+version = "3.99.99"
 criteria = "safe-to-deploy"
 
 [[exemptions.serde_with_macros]]
-version = "3.18.0"
+version = "3.99.99"
 criteria = "safe-to-deploy"
 
 [[exemptions.serdect]]

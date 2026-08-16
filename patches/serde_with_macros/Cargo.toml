@@ -1,0 +1,23 @@
+[package]
+name = "serde_with_macros"
+version = "3.99.99"
+description = "Minimal serde_with_macros alternative"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/serde_with_macros"
+edition = "2021"
+
+[lib]
+proc-macro = true
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+proc-macro2 = { version = "1", default-features = false }
+quote = { version = "1", default-features = false }
+syn = { version = ">= 2, <= 3", default-features = false, features = ["parsing", "printing", "proc-macro", "derive"] }
+
+[features]

@@ -324,7 +324,7 @@ dependencies = [
  "fixed-cache",
  "foldhash 0.2.0",
  "hashbrown 0.17.1",
- "indexmap 2.14.0",
+ "indexmap",
  "itoa",
  "k256",
  "keccak-asm",
@@ -558,7 +558,7 @@ dependencies = [
  "alloy-sol-macro-input",
  "const-hex",
  "heck",
- "indexmap 2.14.0",
+ "indexmap",
  "proc-macro-error2",
  "proc-macro2",
  "quote",
@@ -1410,7 +1410,6 @@ dependencies = [
  "iana-time-zone",
  "js-sys",
  "num-traits",
- "serde",
  "wasm-bindgen",
  "windows-link",
 ]
@@ -2094,9 +2093,6 @@ name = "deranged"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
-dependencies = [
- "serde_core",
-]
 
 [[package]]
 name = "derive-syn-parse"
@@ -3131,7 +3127,7 @@ checksum = "0bf7f043f89559805f8c7cacc432749b2fa0d0a0a9ee46ce47164ed5ba7f126c"
 dependencies = [
  "fnv",
  "hashbrown 0.16.1",
- "indexmap 2.14.0",
+ "indexmap",
  "stable_deref_trait",
 ]
 
@@ -3187,7 +3183,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http",
- "indexmap 2.14.0",
+ "indexmap",
  "slab",
  "tokio",
  "tokio-util",
@@ -3671,10 +3667,6 @@ dependencies = [
  "quote",
  "syn",
 ]
-
-[[package]]
-name = "indexmap"
-version = "1.99.99"
 
 [[package]]
 name = "indexmap"
@@ -5204,7 +5196,7 @@ checksum = "2e5a6c098c7a3b6547378093f5cc30bc54fd361ce711e05293a5cc589562739b"
 dependencies = [
  "crc32fast",
  "hashbrown 0.17.1",
- "indexmap 2.14.0",
+ "indexmap",
  "memchr",
 ]
 
@@ -5449,7 +5441,7 @@ checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
 dependencies = [
  "fixedbitset",
  "hashbrown 0.15.5",
- "indexmap 2.14.0",
+ "indexmap",
 ]
 
 [[package]]
@@ -7257,7 +7249,7 @@ dependencies = [
  "async-trait",
  "futures",
  "futures-timer",
- "indexmap 2.14.0",
+ "indexmap",
  "itertools 0.14.0",
  "linked-hash-map",
  "parity-scale-codec",
@@ -7287,7 +7279,7 @@ source = "git+https://github.com/serai-dex/patch-polkadot-sdk#7b133631ff5e668d81
 dependencies = [
  "async-trait",
  "futures",
- "indexmap 2.14.0",
+ "indexmap",
  "log",
  "parity-scale-codec",
  "serde",
@@ -7345,14 +7337,6 @@ checksum = "91c1b7e4904c873ef0710c1f407dde2e6287de2bebc1bbbf7d430bb7cbffd939"
 dependencies = [
  "windows-sys 0.61.2",
 ]
-
-[[package]]
-name = "schemars"
-version = "0.9.99"
-
-[[package]]
-name = "schemars"
-version = "1.99.99"
 
 [[package]]
 name = "schnellru"
@@ -8724,30 +8708,17 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "3.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd5414fad8e6907dbdd5bc441a50ae8d6e26151a03b1de04d89a5576de61d01f"
+version = "3.99.99"
 dependencies = [
  "base64",
- "chrono",
- "hex",
- "indexmap 1.99.99",
- "indexmap 2.14.0",
- "schemars 0.9.99",
- "schemars 1.99.99",
- "serde_core",
- "serde_json",
+ "serde",
  "serde_with_macros",
- "time",
 ]
 
 [[package]]
 name = "serde_with_macros"
-version = "3.18.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3db8978e608f1fe7357e211969fd9abdcae80bac1ba7a3369bb7eb6b404eb65"
+version = "3.99.99"
 dependencies = [
- "darling",
  "proc-macro2",
  "quote",
  "syn",
@@ -9911,7 +9882,7 @@ version = "0.25.13+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6975367e4d2ef766d86af01ffad14b622fecc8d4357a998fbc4deb6e9bacaf9b"
 dependencies = [
- "indexmap 2.14.0",
+ "indexmap",
  "toml_datetime",
  "toml_parser",
  "winnow",
@@ -10334,7 +10305,7 @@ checksum = "d3eb099dcadcde5be9eef55e3a337128efd4e44b4c93122487e4d2e4e1c6627c"
 dependencies = [
  "bitflags",
  "hashbrown 0.17.1",
- "indexmap 2.14.0",
+ "indexmap",
  "semver",
  "serde",
 ]
@@ -10403,7 +10374,7 @@ dependencies = [
  "cranelift-entity",
  "gimli",
  "hashbrown 0.17.1",
- "indexmap 2.14.0",
+ "indexmap",
  "log",
  "object",
  "postcard",

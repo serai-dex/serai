@@ -189,12 +189,9 @@ ark-ff-05 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.5" }
 c-kzg = { path = "patches/ethereum/c-kzg" }
 fastrlp-3 = { package = "fastrlp", path = "patches/ethereum/fastrlp-0.3" }
 fastrlp-4 = { package = "fastrlp", path = "patches/ethereum/fastrlp-0.4" }
-indexmap = { path = "patches/indexmap" }
 primitive-types-12 = { package = "primitive-types", path = "patches/ethereum/primitive-types-0.12" }
 rapidhash = { path = "patches/ethereum/rapidhash" }
 rlp = { path = "patches/ethereum/rlp" }
-schemars-09 = { package = "schemars", path = "patches/schemars-09" }
-schemars-10 = { package = "schemars", path = "patches/schemars-10" }
 secp256k1-30 = { package = "secp256k1", path = "patches/ethereum/secp256k1-0.30" }
 secp256k1-31 = { package = "secp256k1", path = "patches/ethereum/secp256k1-0.31" }
 
@@ -233,6 +230,8 @@ core2 = { path = "patches/core2" }
 hex_lit = { path = "patches/hex_lit" }
 # `rustc-hex` (a Parity-published crate extracted from `rustc`) can be replaced with <50 lines
 rustc-hex = { path = "patches/rustc-hex" }
+# `serde_with` is a massive bucket crate which we slim down
+serde_with = { path = "patches/serde_with" }
 # `keccak-asm` is liberal with 'use at your risk', yet API-compatible with `sha3`, so we prefer the latter
 keccak-asm = { path = "patches/keccak-asm" }
 # `blake2b_simd` is used by `multihash` and isn't worth it compared to just using `blake2`
