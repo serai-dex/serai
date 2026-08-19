@@ -15,6 +15,14 @@ runs:
         # Install `uidmap`, required for the explicitly-installed rootless Docker
         sudo apt install -y uidmap
 
+        # Docker `29.6.2` defaulted to `(slirp4netns, builtin)` but `29.7.2` defaults to
+        # `(pasta, implicit)`, the latter combination preventing the host from connecting to a
+        # container's exposed port. Explicitly having `slirp4netns` installed causes the setup
+        # script to prefer `(slirp4netns, builtin)` and exposing ports to work as expected.
+        #
+        # Alternatively, `DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER=builtin` MAY be sufficient.
+        sudo apt install -y slirp4netns
+
     - name: Install rootless Docker (Linux)
       uses: docker/setup-docker-action@77e84dbf09b47d1e29270283c22f16145aa85ca1 # 5.4.0
       if: runner.os == 'Linux'

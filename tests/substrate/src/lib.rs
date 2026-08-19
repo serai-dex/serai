@@ -28,15 +28,24 @@ pub async fn rpc(ops: &DockerOperations, handle: Handle) -> Serai {
   let serai_rpc = ops.handle(&handle.0).host_port(9944).unwrap();
   let serai_rpc = format!("http://{}:{}", serai_rpc.0, serai_rpc.1);
 
-  // If the RPC server has yet to start, sleep for up to 20 minutes until it does
-  // Substrate already takes a while to boot, and this may have been compiled with ASan
+  // Substrate takes a while to boot, especially with `--profile debug`, especially in CI
+  #[expect(unexpected_cfgs)]
+  const MINUTES: u64 = {
+    #[cfg(github_ci)]
+    let res = 20;
+    #[cfg(not(github_ci))]
+    let res = 10;
+    res
+  };
+
+  let start = std::time::Instant::now();
   let client = Serai::new(serai_rpc.clone()).unwrap();
-  for _ in 0 .. (20 * 60) {
+  while start.elapsed() < Duration::from_mins(MINUTES) {
     tokio::time::sleep(Duration::from_secs(1)).await;
     if client.block_by_number(0).await.is_err() {
       continue;
     }
     return client;
   }
-  panic!("serai RPC server wasn't available after 5 minutes");
+  panic!("serai RPC server wasn't available after {MINUTES} minutes");
 }
