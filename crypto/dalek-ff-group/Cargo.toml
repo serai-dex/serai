@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/dalek-ff-group"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["curve25519", "ed25519", "ristretto", "dalek", "group"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.89"
 
 [package.metadata.docs.rs]

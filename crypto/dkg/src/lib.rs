@@ -25,11 +25,7 @@ pub struct Participant(u16);
 impl Participant {
   /// Create a new Participant identifier from a u16.
   pub const fn new(i: u16) -> Option<Participant> {
-    if i == 0 {
-      None
-    } else {
-      Some(Participant(i))
-    }
+    if i == 0 { None } else { Some(Participant(i)) }
   }
 
   /// Convert a Participant identifier to bytes.

@@ -18,10 +18,10 @@ pub(crate) fn sample_point<C: GroupIo>(rng: &mut (impl RngCore + CryptoRng)) -> 
   let mut repr = <C::G as GroupEncoding>::Repr::default();
   loop {
     rng.fill_bytes(repr.as_mut());
-    if let Ok(point) = C::read_G(&mut repr.as_ref()) {
-      if bool::from(!point.is_identity()) {
-        return point;
-      }
+    if let Ok(point) = C::read_G(&mut repr.as_ref()) &&
+      bool::from(!point.is_identity())
+    {
+      return point;
     }
   }
 }

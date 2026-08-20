@@ -5,7 +5,7 @@ description = "The Router used by the Serai Processor for Ethereum"
 license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/processor/ethereum/router"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-edition = "2021"
+edition = "2024"
 publish = false
 
 [package.metadata.docs.rs]

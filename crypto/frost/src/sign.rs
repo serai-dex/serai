@@ -117,7 +117,7 @@ pub trait PreprocessMachine: Send {
   /// Returns a preprocess message to be broadcast to all participants, over an authenticated
   /// channel.
   fn preprocess<R: RngCore + CryptoRng>(self, rng: &mut R)
-    -> (Self::SignMachine, Self::Preprocess);
+  -> (Self::SignMachine, Self::Preprocess);
 }
 
 /// State machine which manages signing for an arbitrary signature algorithm.

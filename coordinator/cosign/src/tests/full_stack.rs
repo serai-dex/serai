@@ -434,13 +434,13 @@ async fn dos_stall_offline_set() {
     let (&offline_network, &offline_stake) = global_session
       .stakes
       .iter()
-      .find(|(_, &stake)| global_session.total_stake - stake < threshold)
+      .find(|(_, stake)| (global_session.total_stake - (*stake)) < threshold)
       .unwrap();
     let online_weight: u64 = global_session
       .stakes
       .iter()
-      .filter(|(&net, _)| net != offline_network)
-      .map(|(_, &s)| s)
+      .filter(|(net, _)| (**net) != offline_network)
+      .map(|(_, s)| *s)
       .sum();
 
     let stakes_summary: Vec<_> =

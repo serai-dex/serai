@@ -229,7 +229,7 @@ impl TransactionPlanner<Rpc, ()> for Planner {
     payments: Vec<Payment<AddressFor<Rpc>>>,
     change: Option<KeyFor<Rpc>>,
   ) -> impl Send
-       + Future<
+  + Future<
     Output = Result<PlannedTransaction<Rpc, Self::SignableTransaction, ()>, TransactionsError>,
   > {
     let singular_spent_output = (inputs.len() == 1).then(|| inputs[0].id());

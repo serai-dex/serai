@@ -136,8 +136,10 @@ impl Curves for Ed25519 {
 fn generators() {
   use crate::Ed25519;
   assert!(crate::Proof::<Ed25519>::generators_to_use(0, 0).is_power_of_two());
-  assert!(crate::Proof::<Ed25519>::generators_to_use(usize::from(u16::MAX), usize::from(u16::MAX))
-    .is_power_of_two());
+  assert!(
+    crate::Proof::<Ed25519>::generators_to_use(usize::from(u16::MAX), usize::from(u16::MAX))
+      .is_power_of_two()
+  );
   assert!(
     crate::Proof::<Ed25519>::generators_to_use(usize::from(u16::MAX), usize::from(u16::MAX)) <=
       usize::try_from(u32::try_from(i32::MAX).unwrap()).unwrap()

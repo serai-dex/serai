@@ -139,11 +139,11 @@ type SignableTransactionFor<S, Sch> = <Sch as Scheduler<S>>::SignableTransaction
   memory until the session is retired entirely.
 */
 impl<
-    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-    S: ScannerFeed,
-    Sch: Scheduler<S>,
-    P: TransactionPublisher<TransactionFor<SignableTransactionFor<S, Sch>>>,
-  > Signers<D, S, Sch, P>
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  S: ScannerFeed,
+  Sch: Scheduler<S>,
+  P: TransactionPublisher<TransactionFor<SignableTransactionFor<S, Sch>>>,
+> Signers<D, S, Sch, P>
 {
   fn tasks(
     db: D,

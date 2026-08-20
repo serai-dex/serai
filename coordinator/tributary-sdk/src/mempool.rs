@@ -115,9 +115,9 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
   // Returns Ok(true) if new, Ok(false) if an already present unsigned, or the error.
   pub(crate) fn add<
     N: Blockchain<
-      Validator = [u8; 32],
-      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
-    >,
+        Validator = [u8; 32],
+        SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+      >,
     F: FnOnce(<Ristretto as WrappedGroup>::G, Vec<u8>) -> Option<u32>,
   >(
     &mut self,
@@ -255,18 +255,18 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
     }
     txn.commit();
 
-    if let Some(tx) = self.txs.remove(tx) {
-      if let TransactionKind::Signed(order, Signed { signer, nonce, .. }) = tx.kind() {
-        let signer = signer.to_bytes();
+    if let Some(tx) = self.txs.remove(tx) &&
+      let TransactionKind::Signed(order, Signed { signer, nonce, .. }) = tx.kind()
+    {
+      let signer = signer.to_bytes();
 
-        let amount = *self.txs_per_signer.get(&signer).expect(
-          "removing a transaction from a signer who doesn't have any transactions in the mempool?",
-        ) - 1;
-        self.txs_per_signer.insert(signer, amount);
+      let amount = *self.txs_per_signer.get(&signer).expect(
+        "removing a transaction from a signer who doesn't have any transactions in the mempool?",
+      ) - 1;
+      self.txs_per_signer.insert(signer, amount);
 
-        if self.last_nonce_in_mempool.get(&(signer, order.clone())) == Some(&nonce) {
-          self.last_nonce_in_mempool.remove(&(signer, order));
-        }
+      if self.last_nonce_in_mempool.get(&(signer, order.clone())) == Some(&nonce) {
+        self.last_nonce_in_mempool.remove(&(signer, order));
       }
     }
   }

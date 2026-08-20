@@ -62,14 +62,14 @@ struct Circuit<
 }
 
 impl<
-    C: Curves,
-    CG: Iterator<
-      Item = (
-        <C::EmbeddedCurve as WrappedGroup>::G,
-        ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
-      ),
-    >,
-  > Circuit<'_, C, CG>
+  C: Curves,
+  CG: Iterator<
+    Item = (
+      <C::EmbeddedCurve as WrappedGroup>::G,
+      ChallengedGenerator<<C::ToweringCurve as WrappedGroup>::F, C::EmbeddedCurveParameters>,
+    ),
+  >,
+> Circuit<'_, C, CG>
 {
   /// Generate coefficients for secret-sharing via an eVRF.
   ///
@@ -96,10 +96,10 @@ impl<
     );
     self
       .circuit
-      .equality(LinComb::from(point.x()), &LinComb::empty().constant(evrf_public_key.1 .0));
+      .equality(LinComb::from(point.x()), &LinComb::empty().constant(evrf_public_key.1.0));
     self
       .circuit
-      .equality(LinComb::from(point.y()), &LinComb::empty().constant(evrf_public_key.1 .1));
+      .equality(LinComb::from(point.y()), &LinComb::empty().constant(evrf_public_key.1.1));
 
     // Verify the eVRF invocations
     let k_prime = crate::shares::k_prime::<C>(&evrf_public_key.0);
@@ -295,11 +295,7 @@ impl<C: Curves> Proof<C> {
       We require the actual amount of multiplications to be at least 2048 (even though that
       that 'wastes' thousands of multiplications) to ensure the bandwidth usage remains reasonable.
     */
-    if muls < 2048 {
-      2048
-    } else {
-      muls
-    }
+    if muls < 2048 { 2048 } else { muls }
   }
 
   fn variables_in_vector_commitments(coefficients: usize, participants: usize) -> usize {

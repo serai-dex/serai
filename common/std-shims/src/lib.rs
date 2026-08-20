@@ -10,15 +10,6 @@ pub use core::*;
 pub use core::{alloc, borrow, ffi, fmt, slice, str, task};
 
 #[cfg(not(feature = "std"))]
-#[rustversion::before(1.81)]
-pub mod error {
-  use core::fmt::Debug::Display;
-  /// A shim for
-  /// [`core::error::Error`](https://doc.rust-lang.org/1.96.0/core/error/trait.Error.html).
-  pub trait Error: Debug + Display {}
-}
-#[cfg(not(feature = "std"))]
-#[rustversion::since(1.81)]
 pub use core::error;
 
 #[cfg(feature = "alloc")]
@@ -45,80 +36,4 @@ pub mod prelude {
     vec::Vec,
     string::{String, ToString},
   };
-
-  // Shim `div_ceil`
-  #[rustversion::before(1.73)]
-  #[doc(hidden)]
-  pub trait StdShimsDivCeil {
-    /// Perform a division which rounds non-integer results up.
-    ///
-    /// This function MAY panic when `denominator == 0`.
-    fn div_ceil(self, denominator: Self) -> Self;
-  }
-  #[rustversion::before(1.73)]
-  mod impl_divceil {
-    use super::StdShimsDivCeil;
-    impl StdShimsDivCeil for u8 {
-      fn div_ceil(self, denominator: Self) -> Self {
-        let quotient = self / denominator;
-        let has_remainder = (quotient * denominator) != self;
-        quotient + u8::from(has_remainder)
-      }
-    }
-    impl StdShimsDivCeil for u16 {
-      fn div_ceil(self, denominator: Self) -> Self {
-        let quotient = self / denominator;
-        let has_remainder = (quotient * denominator) != self;
-        quotient + Self::from(u8::from(has_remainder))
-      }
-    }
-    impl StdShimsDivCeil for u32 {
-      fn div_ceil(self, denominator: Self) -> Self {
-        let quotient = self / denominator;
-        let has_remainder = (quotient * denominator) != self;
-        quotient + Self::from(u8::from(has_remainder))
-      }
-    }
-    impl StdShimsDivCeil for u64 {
-      fn div_ceil(self, denominator: Self) -> Self {
-        let quotient = self / denominator;
-        let has_remainder = (quotient * denominator) != self;
-        quotient + Self::from(u8::from(has_remainder))
-      }
-    }
-    impl StdShimsDivCeil for u128 {
-      fn div_ceil(self, denominator: Self) -> Self {
-        let quotient = self / denominator;
-        let has_remainder = (quotient * denominator) != self;
-        quotient + Self::from(u8::from(has_remainder))
-      }
-    }
-    impl StdShimsDivCeil for usize {
-      fn div_ceil(self, denominator: Self) -> Self {
-        let quotient = self / denominator;
-        let has_remainder = (quotient * denominator) != self;
-        quotient + Self::from(u8::from(has_remainder))
-      }
-    }
-  }
-
-  // Shim `io::Error::other`
-  #[cfg(feature = "std")]
-  #[rustversion::before(1.74)]
-  #[doc(hidden)]
-  pub trait StdShimsIoErrorOther {
-    fn other<E>(error: E) -> Self
-    where
-      E: Into<Box<dyn std::error::Error + Send + Sync>>;
-  }
-  #[cfg(feature = "std")]
-  #[rustversion::before(1.74)]
-  impl StdShimsIoErrorOther for std::io::Error {
-    fn other<E>(error: E) -> Self
-    where
-      E: Into<Box<dyn std::error::Error + Send + Sync>>,
-    {
-      std::io::Error::new(std::io::ErrorKind::Other, error)
-    }
-  }
 }

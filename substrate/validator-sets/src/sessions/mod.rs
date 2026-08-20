@@ -453,37 +453,36 @@ impl<Storage: SessionsStorage> Sessions for Storage {
     crate::Core::<Storage::Config>::emit_event(Event::Allocation { validator, network, amount });
 
     // If this validator is active, update `CurrentAllocatedStake`
-    if let Some(current) = Storage::CurrentSession::get(network) {
-      if Storage::SelectedValidators::contains_key(
+    if let Some(current) = Storage::CurrentSession::get(network) &&
+      Storage::SelectedValidators::contains_key(
         ValidatorSet { network, session: current },
         validator,
-      ) {
-        Storage::CurrentAllocatedStake::mutate(network, |existing| {
-          /*
-            The `expect` regarding `CurrentAllocatedStake` is guaranteed by the behavior within
-            this file, as `CurrentAllocatedStake` is owned by this abstraction.
+      )
+    {
+      Storage::CurrentAllocatedStake::mutate(network, |existing| {
+        /*
+          The `expect` regarding `CurrentAllocatedStake` is guaranteed by the behavior within
+          this file, as `CurrentAllocatedStake` is owned by this abstraction.
 
-            The `unwrap` on this addition is safe so long as the supply fits within an `Amount`, as
-            `serai-coins-pallet` guarantees.
-          */
-          Some((existing.expect("current session but no allocated stake set") + amount).unwrap())
-        });
-      }
+          The `unwrap` on this addition is safe so long as the supply fits within an `Amount`, as
+          `serai-coins-pallet` guarantees.
+        */
+        Some((existing.expect("current session but no allocated stake set") + amount).unwrap())
+      });
     }
 
     // The same, but for the latest decided session
-    if let Some(latest_decided) = Storage::LatestDecidedSession::get(network) {
-      if Storage::SelectedValidators::contains_key(
+    if let Some(latest_decided) = Storage::LatestDecidedSession::get(network) &&
+      Storage::SelectedValidators::contains_key(
         ValidatorSet { network, session: latest_decided },
         validator,
-      ) {
-        Storage::LatestDecidedAllocatedStake::mutate(network, |existing| {
-          Some(
-            (existing.expect("latest decided session but no allocated stake set") + amount)
-              .unwrap(),
-          )
-        });
-      }
+      )
+    {
+      Storage::LatestDecidedAllocatedStake::mutate(network, |existing| {
+        Some(
+          (existing.expect("latest decided session but no allocated stake set") + amount).unwrap(),
+        )
+      });
     }
 
     Ok(())

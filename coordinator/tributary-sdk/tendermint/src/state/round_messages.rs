@@ -151,7 +151,7 @@ impl<B: Blockchain, const N: usize> NRoundMessages<B, N> {
   fn retain<'rounds>(
     &'rounds mut self,
     tracked_rounds: &'rounds [Option<RoundNumber>; N],
-  ) -> impl use<'rounds, B, N> + Iterator<Item = RoundNumber> {
+  ) -> impl Iterator<Item = RoundNumber> {
     self.0.iter_mut().filter_map(|round_messages| {
       let round_number = round_messages.round_number()?;
       if tracked_rounds.contains(&Some(round_number)) {
@@ -194,11 +194,11 @@ pub(super) struct NRoundMessagesToRoundMessages<I> {
   iterator: I,
 }
 impl<
-    'messages,
-    B: 'messages + Blockchain,
-    const N: usize,
-    I: Iterator<Item = &'messages NRoundMessages<B, N>>,
-  > Iterator for NRoundMessagesToRoundMessages<I>
+  'messages,
+  B: 'messages + Blockchain,
+  const N: usize,
+  I: Iterator<Item = &'messages NRoundMessages<B, N>>,
+> Iterator for NRoundMessagesToRoundMessages<I>
 {
   type Item = &'messages RoundMessages<B>;
   fn next(&mut self) -> Option<Self::Item> {

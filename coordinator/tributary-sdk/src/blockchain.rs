@@ -153,10 +153,10 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
 
   pub(crate) fn add_transaction<
     N: BlockchainT<
-      Validator = [u8; 32],
-      ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
-    >,
+        Validator = [u8; 32],
+        ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
+        SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+      >,
   >(
     &mut self,
     internal: bool,
@@ -209,10 +209,10 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
 
   pub(crate) fn build_block<
     N: BlockchainT<
-      Validator = [u8; 32],
-      ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
-    >,
+        Validator = [u8; 32],
+        ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
+        SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+      >,
   >(
     &mut self,
     schema: &N::SignatureScheme,
@@ -229,10 +229,10 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
 
   pub(crate) fn verify_block<
     N: BlockchainT<
-      Validator = [u8; 32],
-      ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
-    >,
+        Validator = [u8; 32],
+        ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
+        SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+      >,
   >(
     &self,
     block: &Block<T>,
@@ -275,10 +275,10 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: Transact
   /// Add a block.
   pub(crate) fn add_block<
     N: BlockchainT<
-      Validator = [u8; 32],
-      ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
-    >,
+        Validator = [u8; 32],
+        ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
+        SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+      >,
   >(
     &mut self,
     block: &Block<T>,

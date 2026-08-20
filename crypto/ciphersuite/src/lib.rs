@@ -42,14 +42,14 @@ pub trait G:
 {
 }
 impl<
-    Gr: Group
-      + GroupOps
-      + GroupEncoding
-      + PrimeGroup
-      + ConstantTimeEq
-      + ConditionallySelectable
-      + Zeroize,
-  > G for Gr
+  Gr: Group
+    + GroupOps
+    + GroupEncoding
+    + PrimeGroup
+    + ConstantTimeEq
+    + ConditionallySelectable
+    + Zeroize,
+> G for Gr
 {
 }
 

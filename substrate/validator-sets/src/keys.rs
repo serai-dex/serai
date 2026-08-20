@@ -13,6 +13,7 @@ pub(crate) trait KeysStorage {
   ///
   /// This is to be solely written to by `Keys`, but may be read by the rest of the pallet. Values
   /// for historical sessions may be pruned, per the definition in the `Sessions` abstraction.
+  #[rustfmt::skip]
   type OraclizationKeys: StorageMap<
     ExternalValidatorSet,
     SchnorrkelPublic,
@@ -45,7 +46,7 @@ impl<S: KeysStorage> Keys for S {
   }
 
   fn set_keys(set: ExternalValidatorSet, key_pair: KeyPair) {
-    S::OraclizationKeys::insert(set, SchnorrkelPublic::from(key_pair.0 .0));
+    S::OraclizationKeys::insert(set, SchnorrkelPublic::from(key_pair.0.0));
     S::ExternalKeys::insert(set, key_pair.1);
   }
 

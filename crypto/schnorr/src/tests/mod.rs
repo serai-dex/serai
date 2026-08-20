@@ -21,16 +21,20 @@ pub(crate) fn sign<C: GroupIo>() {
   let private_key = Zeroizing::new(C::F::random(&mut OsRng));
   let nonce = Zeroizing::new(C::F::random(&mut OsRng));
   let challenge = C::F::random(&mut OsRng); // Doesn't bother to craft an HRAm
-  assert!(SchnorrSignature::<C>::sign(&private_key, nonce, challenge)
-    .verify(C::generator() * private_key.deref(), challenge));
+  assert!(
+    SchnorrSignature::<C>::sign(&private_key, nonce, challenge)
+      .verify(C::generator() * private_key.deref(), challenge)
+  );
 }
 
 // The above sign function verifies signing works
 // This verifies invalid signatures don't pass, using zero signatures, which should effectively be
 // random
 pub(crate) fn verify<C: GroupIo>() {
-  assert!(!SchnorrSignature::<C> { R: C::G::identity(), s: C::F::ZERO }
-    .verify(C::generator() * C::F::random(&mut OsRng), C::F::random(&mut OsRng)));
+  assert!(
+    !SchnorrSignature::<C> { R: C::G::identity(), s: C::F::ZERO }
+      .verify(C::generator() * C::F::random(&mut OsRng), C::F::random(&mut OsRng))
+  );
 }
 
 pub(crate) fn batch_verify<C: GroupIo>() {
@@ -102,15 +106,17 @@ pub(crate) fn aggregate<C: GroupIo + WithPreferredHash>() {
 
   let aggregate = aggregator.complete().unwrap();
   let aggregate = SchnorrAggregate::<C>::read(&mut aggregate.serialize().as_slice()).unwrap();
-  assert!(aggregate.verify(
-    DST,
-    keys
-      .iter()
-      .map(|key| C::generator() * key.deref())
-      .zip(challenges.iter().copied())
-      .collect::<Vec<_>>()
-      .as_ref(),
-  ));
+  assert!(
+    aggregate.verify(
+      DST,
+      keys
+        .iter()
+        .map(|key| C::generator() * key.deref())
+        .zip(challenges.iter().copied())
+        .collect::<Vec<_>>()
+        .as_ref(),
+    )
+  );
 }
 
 #[test]

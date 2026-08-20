@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client/bitcoin"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["serai", "bitcoin"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.91"
 
 [package.metadata.docs.rs]

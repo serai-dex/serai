@@ -47,7 +47,7 @@ impl EvaluatorTest {
   ) -> ([u8; 32], ExternalNetworkId) {
     let global_session = random_global_session(&mut OsRng);
     let network = random_external_network_id(&mut OsRng);
-    let set = ExternalValidatorSet { network, session: Session(OsRng.gen()) };
+    let set = ExternalValidatorSet { network, session: Session(OsRng.next_u32()) };
 
     let mut keys = HashMap::new();
     keys.insert(network, random_public(&mut OsRng));

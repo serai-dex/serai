@@ -5,7 +5,7 @@ description = "A transport for alloy based off simple-request"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/networks/ethereum/alloy-simple-request-transport"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.91"
 
 [package.metadata.docs.rs]

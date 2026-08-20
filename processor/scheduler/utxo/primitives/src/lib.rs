@@ -89,7 +89,7 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
     payments: Vec<Payment<AddressFor<S>>>,
     change: Option<KeyFor<S>>,
   ) -> impl Send
-       + Future<
+  + Future<
     Output = Result<PlannedTransaction<S, Self::SignableTransaction, A>, Self::EphemeralError>,
   >;
 
@@ -111,7 +111,7 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
     mut payments: Vec<Payment<AddressFor<S>>>,
     mut change: Option<KeyFor<S>>,
   ) -> impl Send
-       + Future<
+  + Future<
     Output = Result<
       Option<AmortizePlannedTransaction<S, Self::SignableTransaction, A>>,
       Self::EphemeralError,

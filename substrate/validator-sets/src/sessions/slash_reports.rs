@@ -32,6 +32,7 @@ pub(crate) trait SlashReportsStorage:
   ///
   /// Internally, the value is the list of validators with the amount to reward each with _prior_
   /// to the calculation of any slashes.
+  #[rustfmt::skip]
   type PendingSlashReport: StorageMap<
     ExternalValidatorSet,
     PendingSlashReport,

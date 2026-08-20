@@ -12,16 +12,18 @@ fn test_zero_challenge() {
   assert!(Signature::new([0; 32], Scalar::random(&mut OsRng)).is_none());
 
   // Test the modulus, which is congruent to zero modulo itself
-  assert!(Signature::new(
-    {
-      let modulus_minus_one = (-Scalar::ONE).to_repr();
-      let mut modulus = modulus_minus_one;
-      modulus[31] = modulus_minus_one[31].checked_add(1).unwrap();
-      modulus.into()
-    },
-    Scalar::random(&mut OsRng)
-  )
-  .is_none());
+  assert!(
+    Signature::new(
+      {
+        let modulus_minus_one = (-Scalar::ONE).to_repr();
+        let mut modulus = modulus_minus_one;
+        modulus[31] = modulus_minus_one[31].checked_add(1).unwrap();
+        modulus.into()
+      },
+      Scalar::random(&mut OsRng)
+    )
+    .is_none()
+  );
 }
 
 #[test]

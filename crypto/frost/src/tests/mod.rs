@@ -228,9 +228,9 @@ pub fn sign_without_clone<
 pub fn sign<
   R: RngCore + CryptoRng,
   M: PreprocessMachine<
-    SignMachine: SignMachine<M::Signature, Params: Clone>,
-    Signature: PartialEq + Debug,
-  >,
+      SignMachine: SignMachine<M::Signature, Params: Clone>,
+      Signature: PartialEq + Debug,
+    >,
 >(
   rng: &mut R,
   params: &<M::SignMachine as SignMachine<M::Signature>>::Params,

@@ -93,8 +93,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ScannerFeed
     &self,
     number: u64,
   ) -> impl Send
-       + Future<Output = Result<<Self::Block as primitives::Block>::Header, Self::EphemeralError>>
-  {
+  + Future<Output = Result<<Self::Block as primitives::Block>::Header, Self::EphemeralError>> {
     async move {
       Ok(BlockHeader(
         self

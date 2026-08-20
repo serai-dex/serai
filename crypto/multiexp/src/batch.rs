@@ -121,18 +121,14 @@ impl<Id: Copy + Zeroize, G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>
   /// Perform variable time batch verification, and if verification fails, identify one faulty
   /// statement in variable time.
   pub fn verify_vartime_with_vartime_blame(&self) -> Result<(), Id> {
-    if self.verify_vartime() {
-      Ok(())
-    } else {
-      Err(self.blame_vartime().unwrap())
-    }
+    if self.verify_vartime() { Ok(()) } else { Err(self.blame_vartime().unwrap()) }
   }
 }
 
 impl<
-    Id: Copy + Zeroize,
-    G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
-  > BatchVerifier<Id, G>
+  Id: Copy + Zeroize,
+  G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
+> BatchVerifier<Id, G>
 {
   /// Perform batch verification, returning a boolean of if the statements equaled zero.
   #[must_use]
@@ -143,10 +139,6 @@ impl<
   /// Perform constant time batch verification, and if verification fails, identify one faulty
   /// statement in variable time.
   pub fn verify_with_vartime_blame(&self) -> Result<(), Id> {
-    if self.verify() {
-      Ok(())
-    } else {
-      Err(self.blame_vartime().unwrap())
-    }
+    if self.verify() { Ok(()) } else { Err(self.blame_vartime().unwrap()) }
   }
 }

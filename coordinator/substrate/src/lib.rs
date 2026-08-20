@@ -203,10 +203,10 @@ impl Keys {
     signature: Signature,
   ) {
     // If we have a more recent pair of keys, don't write this historic one
-    if let Some((existing_session, _)) = _public_db::Keys::get(txn, set.network) {
-      if existing_session.0 >= set.session.0 {
-        return;
-      }
+    if let Some((existing_session, _)) = _public_db::Keys::get(txn, set.network) &&
+      (existing_session >= set.session)
+    {
+      return;
     }
 
     let tx = serai_client_serai::ValidatorSets::set_keys(
@@ -254,10 +254,10 @@ impl SlashReports {
     signature: Signature,
   ) {
     // If we have a more recent slash report, don't write this historic one
-    if let Some((existing_session, _)) = _public_db::SlashReports::get(txn, set.network) {
-      if existing_session.0 >= set.session.0 {
-        return;
-      }
+    if let Some((existing_session, _)) = _public_db::SlashReports::get(txn, set.network) &&
+      (existing_session >= set.session)
+    {
+      return;
     }
 
     let tx = serai_client_serai::ValidatorSets::report_slashes(set, slash_report, signature);

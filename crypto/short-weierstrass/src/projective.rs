@@ -173,11 +173,7 @@ impl<C: ShortWeierstrass> Projective<C> {
 impl<C: ShortWeierstrass> Add for Projective<C> {
   type Output = Self;
   fn add(self, other: Self) -> Self {
-    if C::PRIME_ORDER {
-      self.add_if_prime_order(other)
-    } else {
-      self.add_if_composite_order(other)
-    }
+    if C::PRIME_ORDER { self.add_if_prime_order(other) } else { self.add_if_composite_order(other) }
   }
 }
 impl<C: ShortWeierstrass> Sub for Projective<C> {

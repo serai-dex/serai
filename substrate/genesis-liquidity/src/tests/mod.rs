@@ -104,9 +104,9 @@ impl crate::ValidatorSets for () {
   fn set_allocation_per_key_share(network: NetworkId, allocation_per_key_share: Amount) {
     let mut set_allocation_per_key_share = SET_ALLOCATION_PER_KEY_SHARE.lock().unwrap();
     let test_id = sp_io::storage::get(TEST_ID_STORAGE).map(|test_id| test_id.to_vec());
-    assert!(set_allocation_per_key_share
-      .insert((test_id, network), allocation_per_key_share)
-      .is_none());
+    assert!(
+      set_allocation_per_key_share.insert((test_id, network), allocation_per_key_share).is_none()
+    );
   }
 
   fn network_stake_requirement(network: ExternalNetworkId) -> Amount {

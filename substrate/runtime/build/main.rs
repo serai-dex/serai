@@ -474,10 +474,10 @@ fn rustc_wrapper(mut args: impl Iterator<Item = String>) {
 
   // If there's yet another wrapper, proxy the actual `rustc` for it now
   #[expect(clippy::disallowed_methods)]
-  if let Ok(wrapper) = env::var("RUSTC_WORKSPACE_WRAPPER") {
-    if rustc == wrapper {
-      command.arg(args.next().unwrap());
-    }
+  if let Ok(wrapper) = env::var("RUSTC_WORKSPACE_WRAPPER") &&
+    (rustc == wrapper)
+  {
+    command.arg(args.next().unwrap());
   }
 
   // If we're within a split argument or not

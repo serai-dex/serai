@@ -430,10 +430,10 @@ EOF
 }
 
 pub fn write_dockerfile(path: PathBuf, dockerfile: &str) {
-  if let Ok(existing) = fs::read_to_string(&path).as_ref() {
-    if existing == dockerfile {
-      return;
-    }
+  if let Ok(existing) = fs::read_to_string(&path).as_ref() &&
+    (existing == dockerfile)
+  {
+    return;
   }
 
   let mut file = fs::File::create(path).unwrap();
@@ -682,11 +682,10 @@ fn start(network: Network, services: HashSet<String>) {
           .arg("-f")
           .arg("{{.State.Status}}:{{.State.ExitCode}}")
           .arg(&wasm_build_container_name)
-          .output()
+          .output() &&
+          let Ok(state_and_status) = String::from_utf8(state_and_status.stdout)
         {
-          if let Ok(state_and_status) = String::from_utf8(state_and_status.stdout) {
-            return state_and_status.trim() == "exited:0";
-          }
+          return state_and_status.trim() == "exited:0";
         }
         false
       };
@@ -782,11 +781,7 @@ fn start(network: Network, services: HashSet<String>) {
       let command = match name {
         "bitcoin" => {
           // Expose the RPC for tests
-          if network == Network::Dev {
-            command.arg("-p").arg("8332:8332")
-          } else {
-            command
-          }
+          if network == Network::Dev { command.arg("-p").arg("8332:8332") } else { command }
         }
         "ethereum-relayer" => {
           // Expose the router command fetch server
@@ -794,11 +789,7 @@ fn start(network: Network, services: HashSet<String>) {
         }
         "monero" => {
           // Expose the RPC for tests
-          if network == Network::Dev {
-            command.arg("-p").arg("18081:18081")
-          } else {
-            command
-          }
+          if network == Network::Dev { command.arg("-p").arg("18081:18081") } else { command }
         }
         "coordinator" => {
           if network == Network::Dev {

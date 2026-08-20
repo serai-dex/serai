@@ -366,10 +366,10 @@ impl Transaction {
     fn signed(tx: &mut Transaction) -> &mut Signed {
       #[expect(clippy::match_same_arms)] // This doesn't make semantic sense here
       match tx {
-        Transaction::RemoveParticipant { ref mut signed, .. } |
-        Transaction::DkgParticipation { ref mut signed, .. } |
-        Transaction::DkgConfirmationPreprocess { ref mut signed, .. } => signed,
-        Transaction::DkgConfirmationShare { ref mut signed, .. } => signed,
+        Transaction::RemoveParticipant { signed, .. } |
+        Transaction::DkgParticipation { signed, .. } |
+        Transaction::DkgConfirmationPreprocess { signed, .. } => signed,
+        Transaction::DkgConfirmationShare { signed, .. } => signed,
 
         Transaction::Cosign { .. } => panic!("signing Cosign transaction (provided)"),
         Transaction::Cosigned { .. } => panic!("signing Cosigned transaction (provided)"),
@@ -378,9 +378,9 @@ impl Transaction {
         }
         Transaction::Batch { .. } => panic!("signing Batch transaction (provided)"),
 
-        Transaction::Sign { ref mut signed, .. } => signed,
+        Transaction::Sign { signed, .. } => signed,
 
-        Transaction::SlashReport { ref mut signed, .. } => signed,
+        Transaction::SlashReport { signed, .. } => signed,
       }
     }
 

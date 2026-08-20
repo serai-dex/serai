@@ -5,7 +5,7 @@ description = "ABI for the Serai runtime"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/abi"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.91"
 
 [package.metadata.docs.rs]

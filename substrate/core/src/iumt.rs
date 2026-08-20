@@ -12,10 +12,10 @@ pub struct IncrementalUnbalancedMerkleTree<
   const LEAF_TAG: u8,
 >(PhantomData<T>);
 impl<
-    T: frame_support::StorageValue<Iumt, Query = Option<Iumt>>,
-    const BRANCH_TAG: u8,
-    const LEAF_TAG: u8,
-  > IncrementalUnbalancedMerkleTree<T, BRANCH_TAG, LEAF_TAG>
+  T: frame_support::StorageValue<Iumt, Query = Option<Iumt>>,
+  const BRANCH_TAG: u8,
+  const LEAF_TAG: u8,
+> IncrementalUnbalancedMerkleTree<T, BRANCH_TAG, LEAF_TAG>
 {
   /// Create a new Merkle tree, expecting there to be none already present.
   ///

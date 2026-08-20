@@ -56,6 +56,7 @@ pub trait MedianStore<KeyPrefix: FullCodec, MedianValue: Average + Lexicographic
   type Store: IterableStorageDoubleMap<KeyPrefix, MedianValue::Encoding, u64, Query = u64>;
 
   /// A secondary store for the values currently present within the median.
+  #[rustfmt::skip]
   type ReverseStore: IterableStorageDoubleMap<
     KeyPrefix,
     LexicographicReverse<MedianValue>,
@@ -200,10 +201,10 @@ pub trait Median<KeyPrefix: FullCodec, MedianValue: Average + LexicographicEncod
 }
 
 impl<
-    KeyPrefix: FullCodec,
-    MedianValue: Average + LexicographicEncoding,
-    S: MedianStore<KeyPrefix, MedianValue>,
-  > Median<KeyPrefix, MedianValue> for S
+  KeyPrefix: FullCodec,
+  MedianValue: Average + LexicographicEncoding,
+  S: MedianStore<KeyPrefix, MedianValue>,
+> Median<KeyPrefix, MedianValue> for S
 {
   fn length(key_prefix: impl Copy + EncodeLike<KeyPrefix>) -> u64 {
     Self::Length::get(key_prefix)

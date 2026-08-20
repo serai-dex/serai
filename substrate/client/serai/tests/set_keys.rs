@@ -111,10 +111,10 @@ pub async fn set_keys(
     frost::tests::algorithm_machines(&mut OsRng, &Schnorrkel::new(b"substrate"), &musig_keys),
     &set.set_keys_message(&key_pair),
   );
-  assert!(sp_core::sr25519::Public::from(
-    musig_keys.values().next().unwrap().group_key().to_bytes()
-  )
-  .verify(&set.set_keys_message(&key_pair), &sig.to_bytes().into()));
+  assert!(
+    sp_core::sr25519::Public::from(musig_keys.values().next().unwrap().group_key().to_bytes())
+      .verify(&set.set_keys_message(&key_pair), &sig.to_bytes().into())
+  );
 
   // Set the key pair
   let block = publish_tx(

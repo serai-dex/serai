@@ -722,7 +722,7 @@ mod pallet {
     fn validate_unsigned(_: TransactionSource, call: &Self::Call) -> TransactionValidity {
       // Match to be exhaustive
       match call {
-        Call::set_keys { network, ref key_pair, ref signature_participants, ref signature } => {
+        Call::set_keys { network, key_pair, signature_participants, signature } => {
           let network = *network;
 
           // Confirm this network has a session decided
@@ -799,7 +799,7 @@ mod pallet {
             .propagate(true)
             .build()
         }
-        Call::report_slashes { set, ref slashes, ref signature } => {
+        Call::report_slashes { set, slashes, signature } => {
           let Some(key) = Abstractions::<T>::should_still_publish_slash_report(*set) else {
             Err(InvalidTransaction::Stale)?
           };

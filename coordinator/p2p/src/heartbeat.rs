@@ -60,11 +60,8 @@ pub(crate) struct HeartbeatTask<
   time_of_last_observed_block: Option<Instant>,
 }
 
-impl<
-    TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-    Tx: TransactionTrait,
-    P: P2p,
-  > HeartbeatTask<TD, Tx, P>
+impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, Tx: TransactionTrait, P: P2p>
+  HeartbeatTask<TD, Tx, P>
 {
   pub(crate) fn new(
     set: ExternalValidatorSet,
@@ -84,11 +81,8 @@ impl<
   }
 }
 
-impl<
-    TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-    Tx: TransactionTrait,
-    P: P2p,
-  > ContinuallyRan for HeartbeatTask<TD, Tx, P>
+impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, Tx: TransactionTrait, P: P2p>
+  ContinuallyRan for HeartbeatTask<TD, Tx, P>
 {
   type Error = String;
 

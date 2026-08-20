@@ -39,11 +39,11 @@ pub(crate) trait AuxiliaryKeysStorage {
   /// auxiliary keys most recently declared by the validator, not the auxiliary keys in use for the
   /// validator within current contexts.
   type AuxiliaryKeys: StorageDoubleMap<
-    NetworkId,
-    SeraiAddress,
-    AuxiliaryKeysStruct,
-    Query = Option<AuxiliaryKeysStruct>,
-  >;
+      NetworkId,
+      SeraiAddress,
+      AuxiliaryKeysStruct,
+      Query = Option<AuxiliaryKeysStruct>,
+    >;
 }
 
 /// An interface for managing validators' auxiliary keys.

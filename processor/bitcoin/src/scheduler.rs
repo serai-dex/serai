@@ -158,7 +158,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>
     payments: Vec<Payment<AddressFor<Rpc<D>>>>,
     change: Option<KeyFor<Rpc<D>>>,
   ) -> impl Send
-       + Future<
+  + Future<
     Output = Result<
       PlannedTransaction<Rpc<D>, Self::SignableTransaction, EffectedReceivedOutputs<Rpc<D>>>,
       Self::EphemeralError,

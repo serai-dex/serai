@@ -86,13 +86,13 @@ impl<A: Address> TreeTransaction<A> {
       // Check each amount to see if it's not viable
       let mut i = 0;
       while i < amounts.len() {
-        if let Some(amount) = amounts[i] {
-          if amount.saturating_sub(per_payment_fee_check) < S::dust(coin).0 {
-            amounts[i] = None;
-            amortized += amount;
-            // If this amount wasn't viable, re-run with the new fee/amortization amounts
-            continue 'outer;
-          }
+        if let Some(amount) = amounts[i] &&
+          (amount.checked_sub(per_payment_fee_check) < Some(S::dust(coin).0))
+        {
+          amounts[i] = None;
+          amortized += amount;
+          // If this amount wasn't viable, re-run with the new fee/amortization amounts
+          continue 'outer;
         }
         i += 1;
       }

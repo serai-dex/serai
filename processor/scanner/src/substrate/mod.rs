@@ -142,10 +142,10 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerF
               let return_information = batch::take_return_information::<S>(&mut txn, batch.id)
                 .expect("didn't save the return information for Batch we published");
               assert_eq!(
-              batch.in_instruction_results.len(),
-              return_information.len(),
-              "amount of InInstruction succeededs differed from amount of return information saved"
-            );
+                batch.in_instruction_results.len(),
+                return_information.len(),
+                "amount of InInstruction results differed from amount of return information saved"
+              );
 
               // We map these into standard Burns
               for (result, return_information) in

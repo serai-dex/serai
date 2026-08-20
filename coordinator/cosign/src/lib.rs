@@ -343,14 +343,12 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Cosigning<D
     let faulty = cosign.block_hash != indexed_block_hash;
 
     // Check this isn't a dated cosign within its global session (as it would be if rebroadcasted)
-    if !faulty {
-      if let Some(existing) =
-        NetworksLatestCosignedBlock::get(&self.db, cosign.global_session, network)
-      {
-        if existing.cosign.block_number >= cosign.block_number {
-          Err(IntakeCosignError::StaleCosign)?;
-        }
-      }
+    if (!faulty) &&
+      let Some(existing) =
+        NetworksLatestCosignedBlock::get(&self.db, cosign.global_session, network) &&
+      (existing.cosign.block_number >= cosign.block_number)
+    {
+      Err(IntakeCosignError::StaleCosign)?;
     }
 
     let Some(global_session) = GlobalSessions::get(&self.db, cosign.global_session) else {
@@ -362,15 +360,16 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Cosigning<D
       // Cosign is for a block predating the global session
       Err(IntakeCosignError::BeforeGlobalSessionStart)?;
     }
-    if !faulty {
-      // This prevents a malicious validator set, on the same chain, from producing a cosign after
-      // their final block, replacing their notable cosign
-      if let Some(last_block) = GlobalSessionsLastBlock::get(&self.db, cosign.global_session) {
-        if cosign.block_number > last_block {
-          // Cosign is for a block after the last block this global session should have signed
-          Err(IntakeCosignError::AfterGlobalSessionEnd)?;
-        }
-      }
+    /*
+      This prevents a malicious validator set, on the same chain, from producing a cosign after
+      their final block, replacing their notable cosign.
+    */
+    if (!faulty) &&
+      let Some(last_block) = GlobalSessionsLastBlock::get(&self.db, cosign.global_session) &&
+      (cosign.block_number > last_block)
+    {
+      // Cosign is for a block after the last block this global session should have signed
+      Err(IntakeCosignError::AfterGlobalSessionEnd)?;
     }
 
     // Check the cosign's signature

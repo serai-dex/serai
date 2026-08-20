@@ -591,18 +591,22 @@ mod tests {
       assert!(
         DelayedDeallocations::get(alice, ValidatorSet { network, session: Session(5) }).is_none()
       );
-      assert!(<MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
-        alice,
-        network,
-        Session(1)
-      )
-      .is_none());
-      assert!(<MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
-        alice,
-        network,
-        Session(2)
-      )
-      .is_none());
+      assert!(
+        <MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
+          alice,
+          network,
+          Session(1)
+        )
+        .is_none()
+      );
+      assert!(
+        <MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
+          alice,
+          network,
+          Session(2)
+        )
+        .is_none()
+      );
     });
   }
 
@@ -676,12 +680,14 @@ mod tests {
         DelayedDeallocations::get(alice, ValidatorSet { network, session: Session(4) }),
         None
       );
-      assert!(<MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
-        alice,
-        network,
-        Session(1)
-      )
-      .is_none());
+      assert!(
+        <MockStorage as super::DelayedDeallocations>::fetch_deallocations_delayed_from(
+          alice,
+          network,
+          Session(1)
+        )
+        .is_none()
+      );
       assert!(matches!(
         <MockStorage as super::DelayedDeallocations>::claim_delayed_deallocation(
           alice,

@@ -139,7 +139,7 @@ mod tendermint {
   }
 
   impl<
-      B: Blockchain<
+    B: Blockchain<
         Validator: BorshSerialize + BorshDeserialize,
         SignatureScheme: SignatureScheme<
           Signature: BorshSerialize + BorshDeserialize,
@@ -147,18 +147,18 @@ mod tendermint {
         >,
         Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
       >,
-      S: Signer<
+    S: Signer<
         Validator = B::Validator,
         Signature = <B::SignatureScheme as SignatureScheme>::Signature,
       >,
-      D: Db,
-      N: Network<
+    D: Db,
+    N: Network<
         B::Validator,
         <B::SignatureScheme as SignatureScheme>::Signature,
         <B::SignatureScheme as SignatureScheme>::AggregateSignature,
         B::Block,
       >,
-    > TendermintProcess<B, S, D, N>
+  > TendermintProcess<B, S, D, N>
   {
     async fn run(mut self) {
       loop {
@@ -290,24 +290,24 @@ mod tendermint {
   impl Tendermint {
     async fn internal<
       B: Blockchain<
-        Validator: BorshSerialize + BorshDeserialize,
-        SignatureScheme: SignatureScheme<
-          Signature: BorshSerialize + BorshDeserialize,
-          AggregateSignature: BorshSerialize + BorshDeserialize,
+          Validator: BorshSerialize + BorshDeserialize,
+          SignatureScheme: SignatureScheme<
+            Signature: BorshSerialize + BorshDeserialize,
+            AggregateSignature: BorshSerialize + BorshDeserialize,
+          >,
+          Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
         >,
-        Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
-      >,
       S: Signer<
-        Validator = B::Validator,
-        Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-      >,
+          Validator = B::Validator,
+          Signature = <B::SignatureScheme as SignatureScheme>::Signature,
+        >,
       D: Db,
       N: Network<
-        B::Validator,
-        <B::SignatureScheme as SignatureScheme>::Signature,
-        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-        B::Block,
-      >,
+          B::Validator,
+          <B::SignatureScheme as SignatureScheme>::Signature,
+          <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+          B::Block,
+        >,
     >(
       blockchain: B,
       signer: S,
@@ -431,24 +431,24 @@ mod tendermint {
     #[expect(clippy::manual_async_fn)]
     pub fn process_single_threaded<
       B: Blockchain<
-        Validator: BorshSerialize + BorshDeserialize,
-        SignatureScheme: SignatureScheme<
-          Signature: BorshSerialize + BorshDeserialize,
-          AggregateSignature: BorshSerialize + BorshDeserialize,
+          Validator: BorshSerialize + BorshDeserialize,
+          SignatureScheme: SignatureScheme<
+            Signature: BorshSerialize + BorshDeserialize,
+            AggregateSignature: BorshSerialize + BorshDeserialize,
+          >,
+          Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
         >,
-        Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
-      >,
       S: Signer<
-        Validator = B::Validator,
-        Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-      >,
+          Validator = B::Validator,
+          Signature = <B::SignatureScheme as SignatureScheme>::Signature,
+        >,
       D: Db,
       N: Network<
-        B::Validator,
-        <B::SignatureScheme as SignatureScheme>::Signature,
-        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-        B::Block,
-      >,
+          B::Validator,
+          <B::SignatureScheme as SignatureScheme>::Signature,
+          <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+          B::Block,
+        >,
     >(
       blockchain: B,
       signer: S,

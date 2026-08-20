@@ -20,7 +20,7 @@ no shims available, will not be exported by `std-shims`.
 `HashSet` and `HashMap` are provided via `hashbrown`. Synchronization
 primitives are provided via `spin` (avoiding a requirement on
 `critical-section`). Sections of `std::io` are independently matched as
-possible. `rustversion` is used to detect when to provide polyfills.
+possible.
 
 ### Disclaimer
 

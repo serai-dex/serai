@@ -134,11 +134,7 @@ impl<T: TransactionTrait> Block<T> {
 
     // Check TXs are sorted by nonce.
     let nonce = |tx: &Transaction<T>| {
-      if let TransactionKind::Signed(_, Signed { nonce, .. }) = tx.kind() {
-        nonce
-      } else {
-        0
-      }
+      if let TransactionKind::Signed(_, Signed { nonce, .. }) = tx.kind() { nonce } else { 0 }
     };
     let mut last = 0;
     for tx in &txs {
@@ -168,9 +164,9 @@ impl<T: TransactionTrait> Block<T> {
   #[expect(clippy::too_many_arguments)]
   pub(crate) fn verify<
     N: Blockchain<
-      Validator = [u8; 32],
-      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
-    >,
+        Validator = [u8; 32],
+        SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+      >,
     G: GAIN,
   >(
     &self,

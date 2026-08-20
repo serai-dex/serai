@@ -72,11 +72,7 @@ impl RequestNotableCosigns for TestRequest {
     let should_error = self.should_error;
     async move {
       calls.fetch_add(1, Ordering::SeqCst);
-      if should_error {
-        Err(RequestError)
-      } else {
-        Ok(())
-      }
+      if should_error { Err(RequestError) } else { Ok(()) }
     }
   }
 }

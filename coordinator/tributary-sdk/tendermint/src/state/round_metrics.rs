@@ -497,18 +497,17 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
     };
 
     if let Some((ttl, (valid_round, proposal))) =
-      Proposal::<B::Block>::get(getter, genesis.as_ref())
+      Proposal::<B::Block>::get(getter, genesis.as_ref()) &&
+      (ttl == (block_number, round_number))
     {
-      if ttl == (block_number, round_number) {
-        result.accumulate_proposal(
-          genesis.as_ref(),
-          validator_set,
-          &mut DummyTxn,
-          validator_set.proposer(block_number, round_number),
-          valid_round,
-          proposal,
-        );
-      }
+      result.accumulate_proposal(
+        genesis.as_ref(),
+        validator_set,
+        &mut DummyTxn,
+        validator_set.proposer(block_number, round_number),
+        valid_round,
+        proposal,
+      );
     }
 
     for validator in validator_set.validators() {
@@ -516,35 +515,33 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
         B::Validator,
         <B::Block as Block>::Hash,
         <B::SignatureScheme as SignatureScheme>::Signature,
-      >::get(getter, genesis.as_ref(), validator)
+      >::get(getter, genesis.as_ref(), validator) &&
+        (ttl == (block_number, round_number))
       {
-        if ttl == (block_number, round_number) {
-          assert!(result.accumulate_prevote(
-            genesis.as_ref(),
-            validator_set,
-            &mut DummyTxn,
-            *validator,
-            block,
-            signature
-          ));
-        }
+        assert!(result.accumulate_prevote(
+          genesis.as_ref(),
+          validator_set,
+          &mut DummyTxn,
+          *validator,
+          block,
+          signature
+        ));
       }
       if let Some((ttl, block_and_precommit_signature)) =
         Precommit::<
           B::Validator,
           <B::Block as Block>::Hash,
           <B::SignatureScheme as SignatureScheme>::Signature,
-        >::get(getter, genesis.as_ref(), validator)
+        >::get(getter, genesis.as_ref(), validator) &&
+        (ttl == (block_number, round_number))
       {
-        if ttl == (block_number, round_number) {
-          assert!(result.accumulate_precommit(
-            genesis.as_ref(),
-            validator_set,
-            &mut DummyTxn,
-            *validator,
-            block_and_precommit_signature,
-          ));
-        }
+        assert!(result.accumulate_precommit(
+          genesis.as_ref(),
+          validator_set,
+          &mut DummyTxn,
+          *validator,
+          block_and_precommit_signature,
+        ));
       }
     }
 

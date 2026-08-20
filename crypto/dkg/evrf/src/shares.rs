@@ -201,19 +201,21 @@ pub(super) fn verify<C: Curves>(
           *sum_masks.entry(*j).or_insert(<C::ToweringCurve as WrappedGroup>::G::identity()) +=
             data.encryption_key_commitments[j_index];
 
-          assert!(formatted_encrypted_secret_shares
-            .insert(
-              *j,
-              EncryptedSecretShare {
-                ecdh_commitments: data.ecdh_commitments[j_index],
-                encrypted_secret_share: *enc_share,
-              },
-            )
-            .is_none());
+          assert!(
+            formatted_encrypted_secret_shares
+              .insert(
+                *j,
+                EncryptedSecretShare {
+                  ecdh_commitments: data.ecdh_commitments[j_index],
+                  encrypted_secret_share: *enc_share,
+                },
+              )
+              .is_none()
+          );
         }
-        assert!(all_encrypted_secret_shares
-          .insert(*i, formatted_encrypted_secret_shares)
-          .is_none());
+        assert!(
+          all_encrypted_secret_shares.insert(*i, formatted_encrypted_secret_shares).is_none()
+        );
       }
       bool::from(multiexp_vartime(&pairs).is_identity())
     } {
@@ -240,9 +242,11 @@ pub(super) fn verify<C: Curves>(
   let mut verification_shares = HashMap::with_capacity(usize::from(n));
   if !potentially_valid.is_empty() {
     for i in Participant::iter().take(usize::from(n)) {
-      assert!(verification_shares
-        .insert(i, (generators.0.g() * sum_encrypted_secret_shares[&i]) - sum_masks[&i])
-        .is_none());
+      assert!(
+        verification_shares
+          .insert(i, (generators.0.g() * sum_encrypted_secret_shares[&i]) - sum_masks[&i])
+          .is_none()
+      );
     }
   }
 
@@ -271,9 +275,11 @@ fn batch_verification() {
       let mut encrypted_secret_shares = HashMap::new();
       for i in Participant::iter().take(participants) {
         let secret_share = crate::polynomial(&coefficients, i);
-        assert!(encrypted_secret_shares
-          .insert(i, *secret_share + encryption_keys[usize::from(u16::from(i)) - 1])
-          .is_none());
+        assert!(
+          encrypted_secret_shares
+            .insert(i, *secret_share + encryption_keys[usize::from(u16::from(i)) - 1])
+            .is_none()
+        );
       }
 
       let coefficients = coefficients

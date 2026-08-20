@@ -184,11 +184,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Continually
                 in_instruction_results: in_instruction_results
                   .iter()
                   .map(|bit| {
-                    if *bit {
-                      InInstructionResult::Succeeded
-                    } else {
-                      InInstructionResult::Failed
-                    }
+                    if *bit { InInstructionResult::Succeeded } else { InInstructionResult::Failed }
                   })
                   .collect(),
               });

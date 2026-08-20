@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/secq256k1"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["secp256k1", "secq256k1", "group"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.89"
 
 [package.metadata.docs.rs]

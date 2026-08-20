@@ -260,10 +260,10 @@ impl Rpc {
         // A const from Bitcoin's bitcoin/src/rpc/protocol.h
         const RPC_VERIFY_ALREADY_IN_CHAIN: isize = -27;
         // If this was already successfully published, consider this having succeeded
-        if let RpcError::RequestError(Error { code, .. }) = e {
-          if code == RPC_VERIFY_ALREADY_IN_CHAIN {
-            return Ok(tx.compute_txid());
-          }
+        if let RpcError::RequestError(Error { code, .. }) = e &&
+          (code == RPC_VERIFY_ALREADY_IN_CHAIN)
+        {
+          return Ok(tx.compute_txid());
         }
         Err(e)?
       }
