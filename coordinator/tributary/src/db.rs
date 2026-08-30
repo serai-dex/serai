@@ -484,18 +484,18 @@ impl TributaryDb {
 
     // Check if there's a preceding topic, this validator participated
     let preceding_topic = topic.preceding_topic();
-    if let Some(preceding_topic) = preceding_topic {
-      // Use a raw key-existence check instead of `Accumulated::<D>::get` because the preceding
-      // topic may have stored a different type (e.g. preprocess is [u8; 64], share is [u8; 32])
-      if txn.get(Accumulated::<D>::key(set, preceding_topic, validator)).is_none() {
-        Self::fatal_slash(
-          txn,
-          set,
-          validator,
-          "participated in topic without participating in prior",
-        );
-        return DataSet::None;
-      }
+    // Use a raw key-existence check instead of `Accumulated::<D>::get` because the preceding
+    // topic may have stored a different type (e.g. preprocess is [u8; 64], share is [u8; 32])
+    if let Some(preceding_topic) = preceding_topic &&
+      txn.get(Accumulated::<D>::key(set, preceding_topic, validator)).is_none()
+    {
+      Self::fatal_slash(
+        txn,
+        set,
+        validator,
+        "participated in topic without participating in prior",
+      );
+      return DataSet::None;
     }
 
     let required_participation = topic.required_participation(total_weight);
@@ -508,10 +508,10 @@ impl TributaryDb {
       return DataSet::None;
     }
     // If this is for an old attempt, NOP
-    if let Some(next_attempt_topic) = topic.next_attempt_topic() {
-      if AccumulatedWeight::get(txn, set, next_attempt_topic).is_some() {
-        return DataSet::None;
-      }
+    if let Some(next_attempt_topic) = topic.next_attempt_topic() &&
+      AccumulatedWeight::get(txn, set, next_attempt_topic).is_some()
+    {
+      return DataSet::None;
     }
 
     // Accumulate the data

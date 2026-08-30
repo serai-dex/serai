@@ -67,11 +67,11 @@ fn make_contiguous<T>(
   let mut i = 1;
   for participant in ordered_participants {
     // If this is the first participant after our own index, increment to account for our index
-    if let Some(our_i_value) = our_i {
-      if u16::from(participant) > u16::from(our_i_value) {
-        i += 1;
-        our_i = None;
-      }
+    if let Some(our_i_value) = our_i &&
+      (u16::from(participant) > u16::from(our_i_value))
+    {
+      i += 1;
+      our_i = None;
     }
 
     let contiguous_index = Participant::new(i).unwrap();
@@ -132,9 +132,9 @@ pub(crate) struct ConfirmDkgTask<
 }
 
 impl<
-    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  > ConfirmDkgTask<CD, TD>
+  CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+> ConfirmDkgTask<CD, TD>
 {
   pub(crate) fn new(
     db: CD,
@@ -193,9 +193,9 @@ impl<
 }
 
 impl<
-    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  > ContinuallyRan for ConfirmDkgTask<CD, TD>
+  CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+> ContinuallyRan for ConfirmDkgTask<CD, TD>
 {
   type Error = DoesNotError;
 

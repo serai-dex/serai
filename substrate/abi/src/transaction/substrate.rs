@@ -200,11 +200,11 @@ impl<Context: TransactionContext, FeeContext: TransactionFeeContext>
           // continuation of this blockchain we have yet to sync (which would be `Future`)
           Err(TransactionValidityError::Unknown(UnknownTransaction::CannotLookup))?;
         }
-        if let Some(include_by) = *include_by {
-          if Context::current_time() >= u64::from(include_by) {
-            // Since this transaction has a time bound which has passed, error
-            Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
-          }
+        if let Some(include_by) = *include_by &&
+          (Context::current_time() >= u64::from(include_by))
+        {
+          // Since this transaction has a time bound which has passed, error
+          Err(TransactionValidityError::Invalid(InvalidTransaction::Stale))?;
         }
 
         let tag_for_nonce = |nonce| borsh::to_vec(&(signer, nonce)).unwrap();

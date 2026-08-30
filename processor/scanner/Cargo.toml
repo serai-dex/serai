@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/processor/scanner"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
-edition = "2021"
+edition = "2024"
 publish = false
 
 [package.metadata.docs.rs]
@@ -22,7 +22,7 @@ hex = { version = "0.4", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
 # Cryptography
-blake2 = { version = "0.11.0-rc.5", default-features = false, features = ["alloc"] }
+blake2 = { version = "0.11", default-features = false, features = ["alloc"] }
 group = { version = "0.13", default-features = false }
 
 # Application

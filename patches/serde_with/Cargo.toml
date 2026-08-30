@@ -1,0 +1,27 @@
+[package]
+name = "serde_with"
+version = "3.99.99"
+description = "Minimal serde_with alternative"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/serde_with"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+serde = { version = "1", default-features = false, features = ["derive"] }
+
+serde_with_macros = { path = "../serde_with_macros" }
+base64 = { version = "0.22", optional = true, features = ["alloc"] }
+
+[features]
+macros = []
+alloc = ["serde/alloc"]
+std = ["alloc"]
+hex = []
+base64 = ["alloc", "dep:base64"]
+default = ["macros", "std"]

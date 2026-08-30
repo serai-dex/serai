@@ -151,7 +151,7 @@ impl Coordinator {
       match ReceivedCoordinatorMessages::try_recv(txn) {
         Some(msg) => {
           return borsh::from_slice(&msg)
-            .expect("message wasn't a borsh-encoded CoordinatorMessage")
+            .expect("message wasn't a borsh-encoded CoordinatorMessage");
         }
         None => {
           let _ =

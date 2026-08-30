@@ -23,14 +23,14 @@ pub trait Address:
 // This casts a wide net, yet it only implements `Address` for things `Into<ExternalAddress>` so
 // it should only implement this for addresses
 impl<
-    A: Send
-      + Sync
-      + Clone
-      + Into<ExternalAddress>
-      + TryFrom<ExternalAddress>
-      + BorshSerialize
-      + BorshDeserialize,
-  > Address for A
+  A: Send
+    + Sync
+    + Clone
+    + Into<ExternalAddress>
+    + TryFrom<ExternalAddress>
+    + BorshSerialize
+    + BorshDeserialize,
+> Address for A
 {
 }
 

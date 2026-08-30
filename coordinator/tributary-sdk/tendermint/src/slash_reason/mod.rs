@@ -266,8 +266,9 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
     &self,
     genesis: impl AsRef<[u8]>,
     validator_set: &(impl ?Sized + ValidatorSet<Validator = V>),
-    signature_scheme: &(impl ?Sized
-        + SignatureScheme<Validator = V, Signature = S, AggregateSignature = A>),
+    signature_scheme: &(
+       impl ?Sized + SignatureScheme<Validator = V, Signature = S, AggregateSignature = A>
+     ),
     validator: V,
   ) -> Result<(), InvalidReason> {
     match &self.evidence {

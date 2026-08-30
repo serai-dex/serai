@@ -254,9 +254,11 @@ fn serialize() {
     OsRng.fill_bytes(&mut historic_block);
     let historic_block = BlockHash(historic_block);
 
-    let include_by = ((OsRng.next_u64() & 1) == 1).then(|| loop {
-      if let Some(include_by) = core::num::NonZero::new(OsRng.next_u64()) {
-        break include_by;
+    let include_by = ((OsRng.next_u64() & 1) == 1).then(|| {
+      loop {
+        if let Some(include_by) = core::num::NonZero::new(OsRng.next_u64()) {
+          break include_by;
+        }
       }
     });
 

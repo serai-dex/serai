@@ -7,7 +7,7 @@ repository = "https://github.com/serai-dex/serai/tree/develop/crypto/short-weier
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["ff", "group", "elliptic-curve", "weierstrass"]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.81"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -17,14 +17,14 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-zeroize = { version = "^1.5", default-features = false }
-subtle = { version = "^2.4", default-features = false }
+zeroize = { version = "1.5", default-features = false }
+subtle = { version = "2.5", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
 ff = { version = "0.13", default-features = false, features = ["bits"] }
 group = { version = "0.13", default-features = false }
 
-ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a", default-features = false, optional = true }
+ec-divisors = { git = "https://github.com/monero-oxide/monero-oxide", rev = "31c26d96eaadbba910ffe3613ad8b4cf9c598a93", default-features = false, optional = true }
 
 [features]
 alloc = ["zeroize/alloc", "rand_core/alloc", "ff/alloc", "group/alloc", "dep:ec-divisors"]

@@ -5,8 +5,8 @@ description = "A transport for alloy based off simple-request"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/networks/ethereum/alloy-simple-request-transport"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-edition = "2021"
-rust-version = "1.94"
+edition = "2024"
+rust-version = "1.91"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -16,9 +16,10 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-tower = "0.5"
+tower = "0.5.1"
 
-serde_json = { version = "1", default-features = false }
+# `alloy-json-rpc` requires `serde_json 1.0.107` but only specifies `serde_json 1`
+serde_json = { version = "1.0.107", default-features = false }
 simple-request = { path = "../../../common/request", version = "0.3", default-features = false, features = ["tokio"] }
 
 alloy-json-rpc = { version = "2", default-features = false }

@@ -43,10 +43,10 @@ pub fn coins_stake_requirement<T: CoinsConfig<CoinsInstance>, E: EconomicSecurit
   let mut requirement = Amount(0).0;
   for coin in network.coins() {
     let mut coin_supply = Coins::<T>::supply(Coin::from(coin));
-    if let Some(proposed_additional_balance) = proposed_additional_balance {
-      if proposed_additional_balance.coin == Coin::External(coin) {
-        coin_supply.0 = coin_supply.0.saturating_add(proposed_additional_balance.amount.0);
-      }
+    if let Some(proposed_additional_balance) = proposed_additional_balance &&
+      (proposed_additional_balance.coin == Coin::External(coin))
+    {
+      coin_supply.0 = coin_supply.0.saturating_add(proposed_additional_balance.amount.0);
     }
 
     let stake_for_balance = {

@@ -41,7 +41,7 @@ impl Tape {
   pub(super) fn read_points_with_common_dlog<C: Curves>(
     &mut self,
     quantity: usize,
-  ) -> impl use<'_, C> + Iterator<Item = PointWithDlog<C::EmbeddedCurveParameters>> {
+  ) -> impl Iterator<Item = PointWithDlog<C::EmbeddedCurveParameters>> {
     /*
       The tape expects the format of:
         - Discrete logarithm

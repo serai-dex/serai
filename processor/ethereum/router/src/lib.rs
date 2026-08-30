@@ -98,11 +98,7 @@ impl From<Coin> for Address {
 }
 impl From<Address> for Coin {
   fn from(address: Address) -> Coin {
-    if address == Address::ZERO {
-      Coin::Ether
-    } else {
-      Coin::Erc20(address)
-    }
+    if address == Address::ZERO { Coin::Ether } else { Coin::Erc20(address) }
   }
 }
 

@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/secq256k1"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["secp256k1", "secq256k1", "group"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.89"
 
 [package.metadata.docs.rs]
@@ -25,7 +25,7 @@ prime-field = { path = "../prime-field", default-features = false }
 short-weierstrass = { path = "../short-weierstrass", default-features = false }
 
 ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false }
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "a5eb3c23f77c4e9c75fa9406dfdbfe63bff4cb3a", default-features = false, optional = true }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "31c26d96eaadbba910ffe3613ad8b4cf9c598a93", default-features = false, optional = true }
 
 [dev-dependencies]
 hex = "0.4"

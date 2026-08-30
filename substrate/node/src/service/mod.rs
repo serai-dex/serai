@@ -91,7 +91,8 @@ pub(crate) fn new_partial(
   config: &mut Configuration,
 ) -> Result<
   Partial<
-    impl sp_inherents::CreateInherentDataProviders<
+    impl use<>
+    + sp_inherents::CreateInherentDataProviders<
       Block,
       (),
       InherentDataProviders: sc_consensus_slots::InherentDataProviderExt,
@@ -346,11 +347,7 @@ pub(crate) fn new_full(
       client.clone(),
       Arc::new(network.clone()),
       Box::pin(network.event_stream("authority-discovery").filter_map(async |event| {
-        if let sc_network::Event::Dht(event) = event {
-          Some(event)
-        } else {
-          None
-        }
+        if let sc_network::Event::Dht(event) = event { Some(event) } else { None }
       })),
       sc_authority_discovery::Role::PublishAndDiscover(keystore.clone()),
       config.prometheus_registry().cloned(),

@@ -75,9 +75,11 @@ impl<C: Curves> Participation<C> {
 
     let mut encrypted_secret_shares = HashMap::with_capacity(usize::from(n));
     for i in Participant::iter().take(usize::from(n)) {
-      assert!(encrypted_secret_shares
-        .insert(i, <C::ToweringCurve as GroupIo>::read_F(&mut reader)?)
-        .is_none());
+      assert!(
+        encrypted_secret_shares
+          .insert(i, <C::ToweringCurve as GroupIo>::read_F(&mut reader)?)
+          .is_none()
+      );
     }
 
     Ok(Self { proof, encrypted_secret_shares })
@@ -297,9 +299,11 @@ impl<C: Curves> Dkg<C> {
       };
       evrf_verifier = verifier_clone;
 
-      assert!(potentially_valid
-        .insert(*i, (participation.encrypted_secret_shares.clone(), data))
-        .is_none());
+      assert!(
+        potentially_valid
+          .insert(*i, (participation.encrypted_secret_shares.clone(), data))
+          .is_none()
+      );
     }
     debug_assert_eq!(potentially_valid.len() + faulty.len(), participations.len());
 

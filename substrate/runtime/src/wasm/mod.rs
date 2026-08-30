@@ -264,10 +264,8 @@ sp_api::impl_runtime_apis! {
           None?
         };
         Some((*validator, reason))
-      })() {
-        if !verify_serai_slash_reason(validator, reason.as_ref()) {
-          Err(TransactionValidityError::Invalid(InvalidTransaction::BadProof))?;
-        }
+      })() && (!verify_serai_slash_reason(validator, reason.as_ref())) {
+        Err(TransactionValidityError::Invalid(InvalidTransaction::BadProof))?;
       }
 
       Executive::apply_extrinsic(extrinsic)

@@ -93,12 +93,12 @@ impl EventFuzzer {
       return Some(deallocation_event(validator, NetworkId::Serai, amount));
     }
 
-    let candidates: Vec<((ExternalNetworkId, SeraiAddress), u64)> = self
+    let candidates = self
       .stakes
       .iter()
-      .filter(|(_v, &stake)| stake > 0)
-      .map(|(&validator, &stake)| (validator, stake))
-      .collect();
+      .filter(|(_v, stake)| (**stake) > 0)
+      .map(|(validator, stake)| (*validator, *stake))
+      .collect::<Vec<_>>();
     if candidates.is_empty() {
       return None;
     }
@@ -232,11 +232,7 @@ impl EventFuzzer {
       events.swap(i, j);
     }
 
-    if events.is_empty() {
-      vec![]
-    } else {
-      vec![events]
-    }
+    if events.is_empty() { vec![] } else { vec![events] }
   }
 
   /// Force a complete allocation of SetDecided -> SetKeys sequence for every external network,

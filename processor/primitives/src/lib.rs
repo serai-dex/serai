@@ -44,19 +44,19 @@ pub trait Id:
 {
 }
 impl<
-    I: Send
-      + Sync
-      + Clone
-      + Default
-      + PartialEq
-      + Eq
-      + Hash
-      + AsRef<[u8]>
-      + AsMut<[u8]>
-      + Debug
-      + BorshSerialize
-      + BorshDeserialize,
-  > Id for I
+  I: Send
+    + Sync
+    + Clone
+    + Default
+    + PartialEq
+    + Eq
+    + Hash
+    + AsRef<[u8]>
+    + AsMut<[u8]>
+    + Debug
+    + BorshSerialize
+    + BorshDeserialize,
+> Id for I
 {
 }
 

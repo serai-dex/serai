@@ -120,11 +120,7 @@ impl Slash {
             For the former, we don't slash at all. For the latter, we slash the entire session.
           */
           reward_slash.unwrap_or({
-            if weighted_slash_points_for_reward_slash == 0 {
-              0
-            } else {
-              session_rewards
-            }
+            if weighted_slash_points_for_reward_slash == 0 { 0 } else { session_rewards }
           })
         };
         // Ensure the slash never exceeds the amount slashable (due to rounding errors)

@@ -895,10 +895,10 @@ mod pallet {
       let _signed_by_session = Self::validate_execute_batch(batch)?;
 
       let mut builder = ValidTransaction::with_tag_prefix("InInstructions");
-      if let Some(required_last_batch) = batch.batch.id().checked_sub(1) {
-        if LastBatch::<T>::get(batch.batch.network()) < Some(required_last_batch) {
-          builder = builder.and_requires((batch.batch.network(), required_last_batch));
-        }
+      if let Some(required_last_batch) = batch.batch.id().checked_sub(1) &&
+        (LastBatch::<T>::get(batch.batch.network()) < Some(required_last_batch))
+      {
+        builder = builder.and_requires((batch.batch.network(), required_last_batch));
       }
       builder
         .and_provides((batch.batch.network(), batch.batch.id()))

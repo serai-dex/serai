@@ -72,9 +72,9 @@ impl KeyShares {
 
       // Take one key share from this validator
       let index = actual_len - offset;
-      validators[index].1 .0 -= 1;
+      validators[index].1.0 -= 1;
       // If they now have zero key shares, shrink the length and continue
-      if validators[index].1 .0 == 0 {
+      if validators[index].1.0 == 0 {
         actual_len -= 1;
         continue;
       }
@@ -95,11 +95,7 @@ impl From<KeyShares> for u16 {
 impl TryFrom<u16> for KeyShares {
   type Error = ();
   fn try_from(value: u16) -> Result<Self, ()> {
-    if value > Self::MAX_PER_SET {
-      Err(())
-    } else {
-      Ok(Self(value))
-    }
+    if value > Self::MAX_PER_SET { Err(()) } else { Ok(Self(value)) }
   }
 }
 

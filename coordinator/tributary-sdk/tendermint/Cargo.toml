@@ -5,7 +5,7 @@ description = "An implementation of the Tendermint state machine in Rust"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/tributary-sdk/tendermint"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.91"
 
 [package.metadata.docs.rs]

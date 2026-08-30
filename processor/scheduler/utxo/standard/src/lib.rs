@@ -410,8 +410,8 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
         let mut outputs_by_key = HashMap::new();
         for output in update.outputs() {
           // If this aligns for a branch, handle it
-          if let Some(branch) = Db::<S>::take_pending_branch(txn, output.key(), output.balance()) {
-            if self
+          if let Some(branch) = Db::<S>::take_pending_branch(txn, output.key(), output.balance()) &&
+            self
               .handle_branch(
                 txn,
                 block,
@@ -420,11 +420,10 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
                 branch,
               )
               .await?
-            {
-              // If we could use it for a branch, we do and move on
-              // Else, we let it be accumulated by the standard accumulation code
-              continue;
-            }
+          {
+            // If we could use it for a branch, we do and move on
+            // Else, we let it be accumulated by the standard accumulation code
+            continue;
           }
 
           let coin = output.balance().coin;

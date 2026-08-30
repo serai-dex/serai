@@ -464,9 +464,14 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
       // Fulfill the payments we prior couldn't
       let mut eventualities = HashMap::new();
       for (key, _stage) in active_keys {
-        assert!(eventualities
-          .insert(key.to_bytes().as_ref().to_vec(), self.step(txn, active_keys, block, *key).await?)
-          .is_none());
+        assert!(
+          eventualities
+            .insert(
+              key.to_bytes().as_ref().to_vec(),
+              self.step(txn, active_keys, block, *key).await?
+            )
+            .is_none()
+        );
       }
 
       // If this key has been flushed, forward all outputs

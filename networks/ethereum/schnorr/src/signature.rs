@@ -48,13 +48,15 @@ impl Signature {
     // H(R || A || m)
     let mut hash = Keccak256::new();
     // We transcript the nonce as an address since ecrecover yields an address
-    hash.update({
-      let uncompressed_encoded_point = R.to_encoded_point(false);
-      // Skip the prefix byte marking this as uncompressed
-      let x_and_y_coordinates = &uncompressed_encoded_point.as_ref()[1 ..];
-      // Last 20 bytes of the hash of the x and y coordinates
-      &Keccak256::digest(x_and_y_coordinates)[12 ..]
-    });
+    hash.update(
+      &{
+        let uncompressed_encoded_point = R.to_encoded_point(false);
+        // Skip the prefix byte marking this as uncompressed
+        let x_and_y_coordinates = &uncompressed_encoded_point.as_ref()[1 ..];
+        // Last 20 bytes of the hash of the x and y coordinates
+        Keccak256::digest(x_and_y_coordinates)
+      }[12 ..],
+    );
     hash.update(key.eth_repr());
     hash.update(Keccak256::digest(message));
     hash.finalize().into()

@@ -6,12 +6,15 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ciphersuite"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["ciphersuite", "ff", "group"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.85"
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+ignored = ["tap"]
 
 [lints]
 workspace = true
@@ -19,11 +22,13 @@ workspace = true
 [dependencies]
 std-shims = { path = "../../common/std-shims", version = "0.1.4", default-features = false }
 
-zeroize = { version = "^1.5", default-features = false, features = ["derive"] }
-subtle = { version = "^2.4", default-features = false }
+zeroize = { version = "1.5", default-features = false, features = ["derive"] }
+subtle = { version = "2.4", default-features = false }
 
 digest = { version = "0.11", default-features = false }
 
+# `ff` requires `bitvec` requires `wyz 0.5.0` which requires `tap 1.0.1` but only specifies `tap 1.0.0`
+tap = { version = "1.0.1", default-features = false }
 ff = { version = "0.13", default-features = false, features = ["bits"] }
 group = { version = "0.13", default-features = false }
 

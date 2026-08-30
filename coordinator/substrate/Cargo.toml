@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/substrate"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
-edition = "2021"
+edition = "2024"
 publish = false
 
 [package.metadata.docs.rs]
@@ -19,7 +19,7 @@ workspace = true
 [dependencies]
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-blake2 = { version = "0.11.0-rc.5", default-features = false, features = ["alloc"] }
+blake2 = { version = "0.11", default-features = false, features = ["alloc"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
 
 serai-client-serai = { path = "../../substrate/client/serai", default-features = false }

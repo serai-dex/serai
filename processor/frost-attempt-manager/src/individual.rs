@@ -45,10 +45,8 @@ pub(crate) struct SigningProtocol<
   >,
 }
 
-impl<
-    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-    M: Clone + PreprocessMachine,
-  > SigningProtocol<D, M>
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, M: Clone + PreprocessMachine>
+  SigningProtocol<D, M>
 {
   /// Create a new signing protocol.
   pub(crate) fn new(

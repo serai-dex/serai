@@ -5,12 +5,15 @@ description = "Primitives for the Serai blockchain"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/primitives"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.91"
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+ignored = ["rustversion"]
 
 [lints]
 workspace = true
@@ -18,10 +21,12 @@ workspace = true
 [dependencies]
 rand_core = { version = "0.6", default-features = false }
 
-zeroize = { version = "^1.5", features = ["derive"] }
-borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"] }
+zeroize = { version = "1.5", features = ["derive"] }
+borsh = { version = "1.6", default-features = false, features = ["derive", "de_strict_order"] }
 
 bitvec = { version = "1", default-features = false, features = ["alloc"] }
+# `parity-scale-codec` requires `rustversion 1.0.6` but only specifies `1.0.0`
+rustversion = { version = "1.0.6", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
 sp-crypto-hashing = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }

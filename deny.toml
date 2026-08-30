@@ -169,6 +169,7 @@ ignore-rust-version = "all"
 # TODO
 ignore = [
   "cfg-if",
+  "itoa",
   "num_cpus",
   "once_cell",
   "pin-utils"

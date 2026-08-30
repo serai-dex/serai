@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/substrate/client/ethereum"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["serai", "ethereum"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.91"
 
 [package.metadata.docs.rs]
@@ -26,3 +26,4 @@ serai-primitives = { path = "../../primitives", default-features = false, versio
 
 [features]
 std = ["std-shims/std", "borsh/std", "serai-primitives/std"]
+default = ["std"]

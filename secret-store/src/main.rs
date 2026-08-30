@@ -58,7 +58,7 @@ fn services() -> impl Iterator<Item = String> {
 }
 
 /// Fetch variables for this service via the environment.
-fn env_variables(service: &str) -> impl use<'_> + Iterator<Item = (String, String)> {
+fn env_variables(service: &str) -> impl Iterator<Item = (String, String)> {
   let prefix = format!("{service}_");
   #[expect(clippy::disallowed_methods)]
   let vars = env::vars();
@@ -69,7 +69,7 @@ fn all_variables<'a>(
   context: &'a [(String, String)],
   secrets: &'a [(String, Zeroizing<String>)],
   service: &'a str,
-) -> impl use<'a> + Iterator<Item = (String, Zeroizing<String>)> {
+) -> impl Iterator<Item = (String, Zeroizing<String>)> {
   context
     .iter()
     .cloned()

@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/processor/frost-attempt-manager"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["frost", "multisig", "threshold"]
-edition = "2021"
+edition = "2024"
 publish = false
 
 [package.metadata.docs.rs]

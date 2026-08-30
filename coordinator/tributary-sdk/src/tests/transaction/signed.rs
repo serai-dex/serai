@@ -34,10 +34,10 @@ fn signed_transaction() {
   // Mutate various properties and verify it no longer works
 
   // Different genesis
-  assert!(verify_transaction(&tx, Blake2s256::digest(genesis).into(), &mut |_, _| Some(
-    tx.1.nonce
-  ))
-  .is_err());
+  assert!(
+    verify_transaction(&tx, Blake2s256::digest(genesis).into(), &mut |_, _| Some(tx.1.nonce))
+      .is_err()
+  );
 
   // Different data
   {

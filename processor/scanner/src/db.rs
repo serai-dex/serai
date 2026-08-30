@@ -232,10 +232,10 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
     let mut keys = Vec::with_capacity(2);
     for i in 0 .. raw_keys.len() {
       // Ensure this key isn't retired
-      if let Some(retire_at) = RetireAt::get(getter, raw_keys[i].key) {
-        if retire_at <= block_number {
-          continue;
-        }
+      if let Some(retire_at) = RetireAt::get(getter, raw_keys[i].key) &&
+        (retire_at <= block_number)
+      {
+        continue;
       }
       // Ensure this key isn't yet to activate
       if block_number < raw_keys[i].activation_block_number {

@@ -33,19 +33,19 @@ impl<B: borsh::BorshSerialize + borsh::BorshDeserialize> Borshy for B {}
 
 pub(super) trait BorshyBlockchain:
   Blockchain<
-  Validator: Borshy,
-  SignatureScheme: SignatureScheme<Signature: Borshy, AggregateSignature: Borshy>,
-  Block: Borshy + Block<Hash: Borshy>,
->
+    Validator: Borshy,
+    SignatureScheme: SignatureScheme<Signature: Borshy, AggregateSignature: Borshy>,
+    Block: Borshy + Block<Hash: Borshy>,
+  >
 {
 }
 impl<
-    B: Blockchain<
+  B: Blockchain<
       Validator: Borshy,
       SignatureScheme: SignatureScheme<Signature: Borshy, AggregateSignature: Borshy>,
       Block: Borshy + Block<Hash: Borshy>,
     >,
-  > BorshyBlockchain for B
+> BorshyBlockchain for B
 {
 }
 
@@ -191,19 +191,21 @@ impl<B: BorshyBlockchain> State<B> {
   #[must_use]
   async fn proposal_message<
     N: Network<
-      B::Validator,
-      <B::SignatureScheme as SignatureScheme>::Signature,
-      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-      B::Block,
-    >,
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
   >(
     &mut self,
     blockchain: &B,
-    signer: &(impl ?Sized
-        + Signer<
+    signer: &(
+       impl ?Sized
+       + Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >),
+    >
+     ),
     txn: &mut impl Transaction,
   ) -> Option<MessageFor<B>> {
     let validator_set = blockchain.validator_set();
@@ -261,11 +263,13 @@ impl<B: BorshyBlockchain> State<B> {
   async fn prevote_message(
     &mut self,
     blockchain: &B,
-    signer: &(impl ?Sized
-        + Signer<
+    signer: &(
+       impl ?Sized
+       + Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >),
+    >
+     ),
     txn: &mut impl Transaction,
     block: Option<<B::Block as Block>::Hash>,
   ) -> MessageFor<B> {
@@ -308,11 +312,13 @@ impl<B: BorshyBlockchain> State<B> {
   async fn prevote_upon_proposal_message(
     &mut self,
     blockchain: &B,
-    signer: &(impl ?Sized
-        + Signer<
+    signer: &(
+       impl ?Sized
+       + Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >),
+    >
+     ),
     txn: &mut impl Transaction,
   ) -> Option<MessageFor<B>> {
     if !matches!(self.step, Step::Propose) {
@@ -367,11 +373,13 @@ impl<B: BorshyBlockchain> State<B> {
   async fn precommit_message(
     &mut self,
     blockchain: &B,
-    signer: &(impl ?Sized
-        + Signer<
+    signer: &(
+       impl ?Sized
+       + Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >),
+    >
+     ),
     txn: &mut impl Transaction,
     block_and_precommit_signature: Option<(
       <B::Block as Block>::Hash,
@@ -416,11 +424,13 @@ impl<B: BorshyBlockchain> State<B> {
   async fn precommit_some_message(
     &mut self,
     blockchain: &B,
-    signer: &(impl ?Sized
-        + Signer<
+    signer: &(
+       impl ?Sized
+       + Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >),
+    >
+     ),
     txn: &mut impl Transaction,
   ) -> Option<MessageFor<B>> {
     /*
@@ -497,19 +507,21 @@ impl<B: BorshyBlockchain> State<B> {
   /// This corresponds to L22-L48.
   async fn respond<
     N: Network<
-      B::Validator,
-      <B::SignatureScheme as SignatureScheme>::Signature,
-      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-      B::Block,
-    >,
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
   >(
     &mut self,
     blockchain: &B,
-    signer: &(impl ?Sized
-        + Signer<
+    signer: &(
+       impl ?Sized
+       + Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >),
+    >
+     ),
     txn: &mut impl Transaction,
   ) -> RoundMessages<B> {
     let prevote_message = {
@@ -591,19 +603,21 @@ impl<B: BorshyBlockchain> State<B> {
   // L11-L21
   async fn start_round<
     N: Network<
-      B::Validator,
-      <B::SignatureScheme as SignatureScheme>::Signature,
-      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-      B::Block,
-    >,
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
   >(
     &mut self,
     blockchain: &B,
-    signer: &(impl ?Sized
-        + Signer<
+    signer: &(
+       impl ?Sized
+       + Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >),
+    >
+     ),
     txn: &mut impl Transaction,
     round: RoundNumber,
   ) -> RoundMessages<B> {
@@ -686,18 +700,20 @@ impl<B: BorshyBlockchain> State<B> {
   // L01-L10
   pub(super) async fn new<
     N: Network<
-      B::Validator,
-      <B::SignatureScheme as SignatureScheme>::Signature,
-      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-      B::Block,
-    >,
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
   >(
     blockchain: &B,
-    signer: &(impl ?Sized
-        + Signer<
+    signer: &(
+       impl ?Sized
+       + Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >),
+    >
+     ),
     txn: &mut impl Transaction,
     proposal: B::Block,
   ) -> (Self, RoundMessages<B>) {
@@ -794,19 +810,21 @@ impl<B: BorshyBlockchain> State<B> {
   /// This future is NOT cancel-safe.
   pub(super) async fn message<
     N: Network<
-      B::Validator,
-      <B::SignatureScheme as SignatureScheme>::Signature,
-      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-      B::Block,
-    >,
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
   >(
     &mut self,
     blockchain: &B,
-    signer: &(impl ?Sized
-        + Signer<
+    signer: &(
+       impl ?Sized
+       + Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >),
+    >
+     ),
     txn: &mut impl Transaction,
     message: MessageFor<B>,
   ) -> Result<
@@ -887,23 +905,20 @@ pub(super) struct TimeoutExpired<'state, 'blockchain, 'signer, B: Blockchain, S:
   signer: &'signer S,
 }
 
+type SignatureForBlockchain<B> = <<B as Blockchain>::SignatureScheme as SignatureScheme>::Signature;
 impl<
-    B: BorshyBlockchain,
-    S: ?Sized
-      + Signer<
-        Validator = B::Validator,
-        Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-      >,
-  > TimeoutExpired<'_, '_, '_, B, S>
+  B: BorshyBlockchain,
+  S: ?Sized + Signer<Validator = B::Validator, Signature = SignatureForBlockchain<B>>,
+> TimeoutExpired<'_, '_, '_, B, S>
 {
   /// This future is NOT cancel-safe.
   pub(super) async fn respond<
     N: Network<
-      B::Validator,
-      <B::SignatureScheme as SignatureScheme>::Signature,
-      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-      B::Block,
-    >,
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
   >(
     self,
     txn: &mut impl Transaction,
@@ -971,11 +986,11 @@ impl<B: BorshyBlockchain> State<B> {
     'blockchain,
     'signer,
     N: Network<
-      B::Validator,
-      <B::SignatureScheme as SignatureScheme>::Signature,
-      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-      B::Block,
-    >,
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
     S: ?Sized
       + Signer<
         Validator = B::Validator,
@@ -1018,19 +1033,21 @@ impl<B: BorshyBlockchain> State<B> {
   // L51-L54
   pub(super) async fn commit<
     N: Network<
-      B::Validator,
-      <B::SignatureScheme as SignatureScheme>::Signature,
-      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-      B::Block,
-    >,
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
   >(
     &mut self,
     blockchain: &mut B,
-    signer: &(impl ?Sized
-        + Signer<
+    signer: &(
+       impl ?Sized
+       + Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >),
+    >
+     ),
     txn: &mut impl Transaction,
     block: B::Block,
     commit: CommitFor<B>,
@@ -1105,19 +1122,21 @@ impl<B: BorshyBlockchain> State<B> {
   // L49-L54
   pub(super) async fn attempt_commit<
     N: Network<
-      B::Validator,
-      <B::SignatureScheme as SignatureScheme>::Signature,
-      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-      B::Block,
-    >,
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
   >(
     &mut self,
     blockchain: &mut B,
-    signer: &(impl ?Sized
-        + Signer<
+    signer: &(
+       impl ?Sized
+       + Signer<
       Validator = B::Validator,
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-    >),
+    >
+     ),
     txn: &mut impl Transaction,
   ) -> RoundMessages<B> {
     let Some((block, commit)) = self.round_metrics.commit(blockchain) else {

@@ -40,16 +40,18 @@ async fn mempool_addition() {
     Arc::new(Validators::new(genesis, vec![(signer, NonZero::new(1).unwrap())]).unwrap());
 
   // Add TX 0
-  assert!(mempool
-    .add::<N, _>(
-      &|_, _| Some(0),
-      true,
-      Transaction::Application(first_tx.clone()),
-      validators.weights(),
-      &validators,
-      unsigned_in_chain,
-    )
-    .unwrap());
+  assert!(
+    mempool
+      .add::<N, _>(
+        &|_, _| Some(0),
+        true,
+        Transaction::Application(first_tx.clone()),
+        validators.weights(),
+        &validators,
+        unsigned_in_chain,
+      )
+      .unwrap()
+  );
   assert_eq!(mempool.next_nonce_in_mempool(&signer, vec![]), Some(1));
 
   /* TODO
@@ -130,16 +132,18 @@ async fn mempool_addition() {
   let tx = signed_transaction(&mut OsRng, genesis, &second_key, 2);
   let second_signer = tx.1.signer;
   assert_eq!(mempool.next_nonce_in_mempool(&second_signer, vec![]), None);
-  assert!(mempool
-    .add::<N, _>(
-      &|_, _| Some(2),
-      true,
-      Transaction::Application(tx.clone()),
-      validators.weights(),
-      &validators,
-      unsigned_in_chain,
-    )
-    .unwrap());
+  assert!(
+    mempool
+      .add::<N, _>(
+        &|_, _| Some(2),
+        true,
+        Transaction::Application(tx.clone()),
+        validators.weights(),
+        &validators,
+        unsigned_in_chain,
+      )
+      .unwrap()
+  );
   assert_eq!(mempool.next_nonce_in_mempool(&second_signer, vec![]), Some(3));
 
   // Getting a block should work
@@ -169,16 +173,18 @@ fn too_many_mempool() {
 
   // We should be able to add transactions up to the limit
   for i in 0 .. ACCOUNT_MEMPOOL_LIMIT {
-    assert!(mempool
-      .add::<N, _>(
-        &|_, _| Some(0),
-        false,
-        Transaction::Application(signed_transaction(&mut OsRng, genesis, &key, i)),
-        validators.weights(),
-        &validators,
-        unsigned_in_chain,
-      )
-      .unwrap());
+    assert!(
+      mempool
+        .add::<N, _>(
+          &|_, _| Some(0),
+          false,
+          Transaction::Application(signed_transaction(&mut OsRng, genesis, &key, i)),
+          validators.weights(),
+          &validators,
+          unsigned_in_chain,
+        )
+        .unwrap()
+    );
   }
   // Yet adding more should fail
   assert_eq!(

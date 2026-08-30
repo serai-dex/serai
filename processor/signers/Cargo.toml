@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/processor/signers"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
-edition = "2021"
+edition = "2024"
 publish = false
 
 [package.metadata.docs.rs]
@@ -23,7 +23,7 @@ workspace = true
 rand_core = { version = "0.6", default-features = false }
 zeroize = { version = "1", default-features = false, features = ["std"] }
 
-blake2 = { version = "0.11.0-rc.5", default-features = false, features = ["alloc"] }
+blake2 = { version = "0.11", default-features = false, features = ["alloc"] }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false, features = ["ristretto"] }
 frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }

@@ -237,9 +237,11 @@ fn provided_transaction() {
   let mut txn = temp_db.txn();
   txs.complete(&mut txn, "order1", [0u8; 32], tx.hash());
   txn.commit();
-  assert!(ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis)
-    .transactions
-    .is_empty());
+  assert!(
+    ProvidedTransactions::<_, ProvidedTransaction>::new(db.clone(), genesis)
+      .transactions
+      .is_empty()
+  );
 
   // case we have the block's provided txs in our local as well
   {

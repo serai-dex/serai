@@ -84,7 +84,7 @@ mod underlying {
     Pippenger(u8),
   }
 
-  // These are 'rule of thumb's obtained via benchmarking `k256` and `curve25519-dalek`
+  // These are rules of thumb obtained via benchmarking `k256` and `curve25519-dalek`
   fn algorithm(len: usize) -> Algorithm {
     #[cfg(not(debug_assertions))]
     if len == 0 {
@@ -166,8 +166,7 @@ mod underlying {
 mod underlying {
   use super::*;
 
-  /// Performs a multiexponentiation, automatically selecting the optimal algorithm based on the
-  /// amount of pairs.
+  /// Performs a multiexponentiation.
   pub fn multiexp<
     G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
   >(
@@ -176,8 +175,7 @@ mod underlying {
     pairs.iter().map(|(scalar, point)| *point * scalar).sum()
   }
 
-  /// Performs a multiexponentiation in variable time, automatically selecting the optimal algorithm
-  /// based on the amount of pairs.
+  /// Performs a multiexponentiation in variable time.
   pub fn multiexp_vartime<G: Group<Scalar: PrimeFieldBits>>(pairs: &[(G::Scalar, G)]) -> G {
     pairs.iter().map(|(scalar, point)| *point * scalar).sum()
   }

@@ -60,7 +60,7 @@ impl ExternalNetworkId {
   }
 
   /// The coins native to this network.
-  pub fn coins(&self) -> impl Iterator<Item = ExternalCoin> {
+  pub fn coins(&self) -> impl use<> + Iterator<Item = ExternalCoin> {
     match self {
       Self::Bitcoin => [ExternalCoin::Bitcoin].as_slice().iter().copied(),
       Self::Ethereum => [ExternalCoin::Ether, ExternalCoin::Dai].as_slice().iter().copied(),

@@ -13,17 +13,23 @@ rust-version = "1.81"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo-machete]
+ignored = ["tap"]
+
 [lints]
 workspace = true
 
 [dependencies]
-rand_core = "0.6"
+rand_core = { version = "0.6", default-features = false }
 
-subtle = "^2.4"
+subtle = { version = "2.5", default-features = false, features = ["std"] }
 
-ff = { version = "0.13", features = ["bits"] }
-group = "0.13"
+# `ff` requires `bitvec` requires `wyz 0.5.0` which requires `tap 1.0.1` but only specifies `tap 1.0.0`
+tap = { version = "1.0.1", default-features = false }
+ff = { version = "0.13", default-features = false, features = ["std", "bits"] }
+group = { version = "0.13", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
-k256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits"] }
-p256 = { version = "^0.13.1", default-features = false, features = ["std", "arithmetic", "bits"] }
+rand_core = { version = "0.6", default-features = false, features = ["std"] }
+k256 = { version = "0.13.1", default-features = false, features = ["std", "arithmetic", "bits"] }
+p256 = { version = "0.13.1", default-features = false, features = ["std", "arithmetic", "bits"] }

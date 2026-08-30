@@ -313,6 +313,10 @@ fn command(bin: &str) -> Command {
         "1.94.0" => Some("1.94.0 (4a4ef493e 2026-03-02)"),
         "1.94.1" => Some("1.94.1 (e408947bf 2026-03-25)"),
         "1.95.0" => Some("1.95.0 (59807616e 2026-04-14)"),
+        "1.96.0" => Some("1.96.0 (ac68faa20 2026-05-25)"),
+        "1.97.0" => Some("1.97.0 (2d8144b78 2026-07-07)"),
+        "1.97.1" => Some("1.97.1 (8bab26f4f 2026-07-14)"),
+        "1.98.0" => Some("1.98.0 (88d9e12ae 2026-08-18)"),
         _ => {
           eprintln!(
             "
@@ -470,10 +474,10 @@ fn rustc_wrapper(mut args: impl Iterator<Item = String>) {
 
   // If there's yet another wrapper, proxy the actual `rustc` for it now
   #[expect(clippy::disallowed_methods)]
-  if let Ok(wrapper) = env::var("RUSTC_WORKSPACE_WRAPPER") {
-    if rustc == wrapper {
-      command.arg(args.next().unwrap());
-    }
+  if let Ok(wrapper) = env::var("RUSTC_WORKSPACE_WRAPPER") &&
+    (rustc == wrapper)
+  {
+    command.arg(args.next().unwrap());
   }
 
   // If we're within a split argument or not

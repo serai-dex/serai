@@ -93,8 +93,7 @@ impl ScannerFeed for Rpc {
     &self,
     number: u64,
   ) -> impl Send
-       + Future<Output = Result<<Self::Block as primitives::Block>::Header, Self::EphemeralError>>
-  {
+  + Future<Output = Result<<Self::Block as primitives::Block>::Header, Self::EphemeralError>> {
     async move { Ok(BlockHeader(self.rpc.block_by_number(number.try_into().unwrap()).await?)) }
   }
 

@@ -112,10 +112,10 @@ pub(crate) struct EventualityTask<
 }
 
 impl<
-    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-    S: ScannerFeed,
-    Sch: Scheduler<S>,
-  > EventualityTask<D, S, Sch>
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  S: ScannerFeed,
+  Sch: Scheduler<S>,
+> EventualityTask<D, S, Sch>
 {
   pub(crate) fn new(mut db: D, feed: S, scheduler: Sch, start_block: u64) -> Self {
     if EventualityDb::<S>::next_to_check_for_eventualities_block(&db).is_none() {
@@ -201,10 +201,10 @@ impl<
 }
 
 impl<
-    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-    S: ScannerFeed,
-    Sch: Scheduler<S>,
-  > ContinuallyRan for EventualityTask<D, S, Sch>
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  S: ScannerFeed,
+  Sch: Scheduler<S>,
+> ContinuallyRan for EventualityTask<D, S, Sch>
 {
   type Error = String;
 

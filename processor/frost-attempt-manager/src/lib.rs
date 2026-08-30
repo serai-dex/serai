@@ -38,10 +38,8 @@ pub struct AttemptManager<
   active: HashMap<VariantSignId, SigningProtocol<D, M>>,
 }
 
-impl<
-    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-    M: Clone + PreprocessMachine,
-  > AttemptManager<D, M>
+impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, M: Clone + PreprocessMachine>
+  AttemptManager<D, M>
 {
   /// Create a new attempt manager.
   ///

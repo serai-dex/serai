@@ -47,7 +47,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerF
               delay += Self::DELAY_BETWEEN_ITERATIONS;
               delay = delay.min(Self::MAX_DELAY_BETWEEN_ITERATIONS);
             }
-          };
+          }
         }
       };
 

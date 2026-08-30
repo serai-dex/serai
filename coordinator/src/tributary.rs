@@ -93,10 +93,10 @@ pub(crate) struct ProvideCosignCosignedTransactionsTask<
   tributary: Tributary<TD, Transaction, P>,
 }
 impl<
-    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-    P: P2p,
-  > ContinuallyRan for ProvideCosignCosignedTransactionsTask<CD, TD, P>
+  CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  P: P2p,
+> ContinuallyRan for ProvideCosignCosignedTransactionsTask<CD, TD, P>
 {
   type Error = String;
 
@@ -277,10 +277,10 @@ pub(crate) struct AddTributaryTransactionsTask<
   key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 }
 impl<
-    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-    P: P2p,
-  > ContinuallyRan for AddTributaryTransactionsTask<CD, TD, P>
+  CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  P: P2p,
+> ContinuallyRan for AddTributaryTransactionsTask<CD, TD, P>
 {
   type Error = DoesNotError;
 
@@ -343,10 +343,10 @@ impl<
         else {
           break;
         };
-        if let Some(tx) = PublishOnRecognition::take(&mut tributary_txn, self.set.set, topic) {
-          if !add_signed_unsigned_transaction(&self.tributary, &self.key, tx).await {
-            break;
-          }
+        if let Some(tx) = PublishOnRecognition::take(&mut tributary_txn, self.set.set, topic) &&
+          (!add_signed_unsigned_transaction(&self.tributary, &self.key, tx).await)
+        {
+          break;
         }
 
         made_progress = true;
@@ -420,10 +420,10 @@ pub(crate) struct SignSlashReportTask<
   key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 }
 impl<
-    CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-    TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-    P: P2p,
-  > ContinuallyRan for SignSlashReportTask<CD, TD, P>
+  CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
+  P: P2p,
+> ContinuallyRan for SignSlashReportTask<CD, TD, P>
 {
   type Error = DoesNotError;
 

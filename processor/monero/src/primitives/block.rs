@@ -73,10 +73,10 @@ impl primitives::Block for Block {
     let mut res = HashMap::new();
     assert_eq!(self.0.block.transactions.len(), self.0.transactions.len());
     for (hash, tx) in self.0.block.transactions.iter().zip(&self.0.transactions) {
-      if let Some(eventuality) = eventualities.active_eventualities.get(&tx.prefix().extra) {
-        if eventuality.eventuality.matches(tx) {
-          res.insert(*hash, eventualities.active_eventualities.remove(&tx.prefix().extra).unwrap());
-        }
+      if let Some(eventuality) = eventualities.active_eventualities.get(&tx.prefix().extra) &&
+        eventuality.eventuality.matches(tx)
+      {
+        res.insert(*hash, eventualities.active_eventualities.remove(&tx.prefix().extra).unwrap());
       }
     }
     res

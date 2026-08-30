@@ -184,13 +184,12 @@ pub fn build(name: String) {
       while !metadatas.is_empty() {
         if let (path, Ok(metadata)) = metadatas.pop().unwrap() {
           if metadata.is_file() {
-            if let Ok(modified) = metadata.modified() {
-              if modified >
+            if let Ok(modified) = metadata.modified() &&
+              (modified >
                 last_modified
-                  .expect("got when source was last modified yet not when the Dockerfile was")
-              {
-                last_modified = Some(modified);
-              }
+                  .expect("got when source was last modified yet not when the Dockerfile was"))
+            {
+              last_modified = Some(modified);
             }
           } else {
             // Recursively crawl since we care when the folder's contents were edited, not the
@@ -204,12 +203,12 @@ pub fn build(name: String) {
         }
       }
 
-      if let Some(last_modified) = last_modified {
-        if last_modified < created_time {
-          println!("{name} was built after the most recent source code edits, assuming built.");
-          built_lock.insert(name, true);
-          return;
-        }
+      if let Some(last_modified) = last_modified &&
+        (last_modified < created_time)
+      {
+        println!("{name} was built after the most recent source code edits, assuming built.");
+        built_lock.insert(name, true);
+        return;
       }
     }
   }

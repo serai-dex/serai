@@ -444,11 +444,11 @@ mod tributary_db {
         }
 
         // When no reattempts were set, verify the current topic's reattempt was not recognized
-        if reattempts.is_empty() {
-          if let Some((_, reattempt_topic)) = topic.reattempt_topic() {
-            assert!(!TributaryDb::recognized(&txn, set, reattempt_topic));
-            serai_env::trace!("verified {reattempt_topic:?} not recognized (no reattempts)");
-          }
+        if reattempts.is_empty() &&
+          let Some((_, reattempt_topic)) = topic.reattempt_topic()
+        {
+          assert!(!TributaryDb::recognized(&txn, set, reattempt_topic));
+          serai_env::trace!("verified {reattempt_topic:?} not recognized (no reattempts)");
         }
 
         // No extra messages should remain in either queue
@@ -481,8 +481,8 @@ mod tributary_db {
     use super::*;
 
     /// Common test setup: random validator set, 3 validators of weight 1, total_weight = 3.
-    fn default_accumulate_setup(
-    ) -> (ExternalValidatorSet, SeraiAddress, Vec<SeraiAddress>, u16, u16) {
+    fn default_accumulate_setup()
+    -> (ExternalValidatorSet, SeraiAddress, Vec<SeraiAddress>, u16, u16) {
       let set = random_validator_set(&mut OsRng);
       let (_, _, validators, _, total_weight) = setup_test_validators_and_weights_with_keys();
       let validator = validators[0];
@@ -1207,31 +1207,38 @@ mod tributary_db {
       #[test]
       fn fuzz_accumulate() {
         for _ in 0 .. 1000 {
-          let has_initial_weight = OsRng.gen::<bool>();
+          let has_initial_weight = (OsRng.next_u64() & 1) == 1;
           let initial_weight = OsRng.gen_range(0u16 .. KeyShares::MAX_PER_SET);
           let total_weight = OsRng.gen_range(1u16 .. KeyShares::MAX_PER_SET);
 
-          let has_next_topic_weight = OsRng.gen::<bool>();
+          let has_next_topic_weight = (OsRng.next_u64() & 1) == 1;
           let next_topic_initial_weight = OsRng.gen_range(0u16 .. KeyShares::MAX_PER_SET);
 
-          let has_preceding_topic_accumulated = OsRng.gen::<bool>();
+          let has_preceding_topic_accumulated = (OsRng.next_u64() & 1) == 1;
 
           let topic_variant = OsRng.gen_range(0u8 .. 5);
           let attempt = OsRng.gen_range(0u64 .. 100);
-          let round = if OsRng.gen::<bool>() {
+          let round = if (OsRng.next_u64() & 1) == 1 {
             SigningProtocolRound::Preprocess
           } else {
             SigningProtocolRound::Share
           };
           let cosign_block = OsRng.next_u64();
-          let batch_id: [u8; 32] = OsRng.gen();
+          let batch_id = {
+            let mut batch_id = [0; 32];
+            OsRng.fill_bytes(&mut batch_id);
+            batch_id
+          };
           let validator_weight = OsRng.gen_range(1u16 .. KeyShares::MAX_PER_SET);
           let block_number = OsRng.gen_range(1u64 .. u64::MAX);
-          let data: Vec<u8> = (0 .. OsRng.gen_range(0usize .. 64)).map(|_| OsRng.gen()).collect();
+          #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+          let data = (0 .. OsRng.gen_range(0usize .. 64))
+            .map(|_| OsRng.next_u64() as u8)
+            .collect::<Vec<_>>();
 
           let num_validators = OsRng.gen_range(1u16 .. u16::from(u8::MAX));
           let cur_validator = OsRng.gen_range(0u16 .. u16::from(u8::MAX));
-          let validator_in_list = OsRng.gen::<bool>();
+          let validator_in_list = (OsRng.next_u64() & 1) == 1;
 
           let topic = match topic_variant % 5 {
             0 => Topic::RemoveParticipant { participant: random_serai_address(&mut OsRng) },
@@ -1258,10 +1265,8 @@ mod tributary_db {
             AccumulatedWeight::set(&mut txn, set, topic, &initial_weight);
           }
 
-          if has_next_topic_weight {
-            if let Some(next_attempt_topic) = topic.next_attempt_topic() {
-              AccumulatedWeight::set(&mut txn, set, next_attempt_topic, &next_topic_initial_weight);
-            }
+          if has_next_topic_weight && let Some(next_attempt_topic) = topic.next_attempt_topic() {
+            AccumulatedWeight::set(&mut txn, set, next_attempt_topic, &next_topic_initial_weight);
           }
 
           // When validator_in_list is false, the accumulating validator is an outsider
@@ -1274,10 +1279,9 @@ mod tributary_db {
             random_serai_address(&mut OsRng)
           };
 
-          if has_preceding_topic_accumulated {
-            if let Some(preceding_topic) = topic.preceding_topic() {
-              Accumulated::set(&mut txn, set, preceding_topic, validator, &data);
-            }
+          if has_preceding_topic_accumulated && let Some(preceding_topic) = topic.preceding_topic()
+          {
+            Accumulated::set(&mut txn, set, preceding_topic, validator, &data);
           }
 
           let pre_weight = AccumulatedWeight::get(&txn, set, topic);

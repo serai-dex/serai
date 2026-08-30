@@ -6,12 +6,15 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/schnorrkel"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["frost", "multisig", "threshold", "schnorrkel"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.89"
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo-machete]
+ignored = ["serde_bytes"]
 
 [lints]
 workspace = true
@@ -26,8 +29,12 @@ transcript = { package = "flexible-transcript", path = "../transcript", version 
 
 ciphersuite = { path = "../ciphersuite", version = "0.4.1", default-features = false, features = ["alloc"] }
 schnorr = { package = "schnorr-signatures", path = "../schnorr", version = "0.5.1", default-features = false, features = ["alloc"] }
-frost = { path = "../frost", package = "modular-frost", version = "0.11.0", default-features = false, features = ["ristretto"] }
+frost = { path = "../frost", package = "modular-frost", version = "0.11", default-features = false, features = ["ristretto"] }
 
+# `schnorrkel` unconditionally relies on `serde_bytes 0.11.5` which doesn't specify a minimum
+# version of `serde`, where `serde 1.0.0` no longer compiles. We explicitly depend on
+# `serde_bytes 0.11.19`, which depends on `serde_core`, accordingly.
+serde_bytes = { version = "0.11.19", default-features = false }
 schnorrkel = { version = "0.11", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]

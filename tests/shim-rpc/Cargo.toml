@@ -5,7 +5,7 @@ description = "A bespoke shim RPC node for testing Serai RPC clients without a r
 license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/tests/shim-rpc"
 authors = ["Luke Parker <lukeparker5132@gmail.com>", "rafael_xmr <g.pi8ax@slmail.me>"]
-edition = "2021"
+edition = "2024"
 publish = false
 
 [package.metadata.docs.rs]
@@ -23,7 +23,7 @@ hex = { version = "0.4", default-features = false, features = ["std"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive"] }
 
 rand_core = { version = "0.6", default-features = false }
-blake2 = { version = "0.11.0-rc.0", default-features = false }
+blake2 = { version = "0.11", default-features = false }
 schnorrkel = { version = "0.11", default-features = false, features = ["std"] }
 
 serai-primitives = { path = "../../substrate/primitives", features = ["std", "test-helpers"] }

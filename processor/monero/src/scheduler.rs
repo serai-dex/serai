@@ -214,7 +214,7 @@ impl TransactionPlanner<Rpc, ()> for Planner {
         }
         Err(
           SendError::WrongPrivateKey |
-          SendError::MaliciousSerialization |
+          SendError::IncorrectSerialization |
           SendError::ClsagError(_) |
           SendError::FrostError(_),
         ) => unreachable!("signing/serialization error when not signing/serializing"),
@@ -229,7 +229,7 @@ impl TransactionPlanner<Rpc, ()> for Planner {
     payments: Vec<Payment<AddressFor<Rpc>>>,
     change: Option<KeyFor<Rpc>>,
   ) -> impl Send
-       + Future<
+  + Future<
     Output = Result<PlannedTransaction<Rpc, Self::SignableTransaction, ()>, TransactionsError>,
   > {
     let singular_spent_output = (inputs.len() == 1).then(|| inputs[0].id());
@@ -278,7 +278,7 @@ impl TransactionPlanner<Rpc, ()> for Planner {
         }
         Err(
           SendError::WrongPrivateKey |
-          SendError::MaliciousSerialization |
+          SendError::IncorrectSerialization |
           SendError::ClsagError(_) |
           SendError::FrostError(_),
         ) => unreachable!("signing/serialization error when not signing/serializing"),

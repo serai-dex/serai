@@ -31,8 +31,10 @@ fn pruned_slash_report() {
     let external_key = ExternalKey(vec![2; 64].try_into().unwrap());
     <crate::Abstractions<Test> as Keys>::set_keys(set, KeyPair(oraclization_key, external_key));
 
-    assert!(<crate::Abstractions::<Test> as SlashReports>::should_still_publish_slash_report(set)
-      .is_none());
+    assert!(
+      <crate::Abstractions::<Test> as SlashReports>::should_still_publish_slash_report(set)
+        .is_none()
+    );
     <crate::Abstractions<Test> as SlashReports>::retire_set_regarding_slash_report(
       set,
       Amount(1_000),
@@ -43,8 +45,10 @@ fn pruned_slash_report() {
     );
 
     <crate::Abstractions<Test> as SlashReports>::prune_historical_set_regarding_slash_report(set);
-    assert!(<crate::Abstractions::<Test> as SlashReports>::should_still_publish_slash_report(set)
-      .is_none());
+    assert!(
+      <crate::Abstractions::<Test> as SlashReports>::should_still_publish_slash_report(set)
+        .is_none()
+    );
 
     // Because this set was pruned before reporting their slashes, no rewards should've been issued
     assert_eq!(super::Coins::supply(Coin::Serai), Amount(0));
@@ -74,8 +78,10 @@ fn published_slash_report() {
     let external_key = ExternalKey(vec![2; 64].try_into().unwrap());
     <crate::Abstractions<Test> as Keys>::set_keys(set, KeyPair(oraclization_key, external_key));
 
-    assert!(<crate::Abstractions::<Test> as SlashReports>::should_still_publish_slash_report(set)
-      .is_none());
+    assert!(
+      <crate::Abstractions::<Test> as SlashReports>::should_still_publish_slash_report(set)
+        .is_none()
+    );
     <crate::Abstractions<Test> as SlashReports>::retire_set_regarding_slash_report(
       set,
       Amount(1_000),
@@ -107,8 +113,10 @@ fn published_slash_report() {
     // Pruning a set which already published should be a NOP
     let root_before_prune = sp_io::storage::root(state_version);
     <crate::Abstractions<Test> as SlashReports>::prune_historical_set_regarding_slash_report(set);
-    assert!(<crate::Abstractions::<Test> as SlashReports>::should_still_publish_slash_report(set)
-      .is_none());
+    assert!(
+      <crate::Abstractions::<Test> as SlashReports>::should_still_publish_slash_report(set)
+        .is_none()
+    );
     assert_eq!(root_before_prune, sp_io::storage::root(state_version));
   });
 }

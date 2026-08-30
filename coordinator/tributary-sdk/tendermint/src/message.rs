@@ -328,8 +328,9 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
     &self,
     genesis: impl AsRef<[u8]>,
     validator_set: &(impl ?Sized + ValidatorSet<Validator = V>),
-    signature_scheme: &(impl ?Sized
-        + SignatureScheme<Validator = V, Signature = S, AggregateSignature = A>),
+    signature_scheme: &(
+       impl ?Sized + SignatureScheme<Validator = V, Signature = S, AggregateSignature = A>
+     ),
   ) -> Result<(), MessageError<S, A, B::Hash>> {
     let genesis = genesis.as_ref();
 
@@ -404,8 +405,8 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
 }
 
 #[cfg(test)]
-pub(crate) fn random_valid_round(
-) -> Option<ValidRound<<crate::TestSignatureScheme as SignatureScheme>::AggregateSignature>> {
+pub(crate) fn random_valid_round()
+-> Option<ValidRound<<crate::TestSignatureScheme as SignatureScheme>::AggregateSignature>> {
   use core::num::NonZero;
   use rand_core::{TryRngCore as _, OsRng};
 

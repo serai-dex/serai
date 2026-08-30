@@ -42,10 +42,10 @@ pub(crate) struct TransactionSignerTask<
 }
 
 impl<
-    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-    ST: SignableTransaction,
-    P: TransactionPublisher<TransactionFor<ST>>,
-  > TransactionSignerTask<D, ST, P>
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  ST: SignableTransaction,
+  P: TransactionPublisher<TransactionFor<ST>>,
+> TransactionSignerTask<D, ST, P>
 {
   pub(crate) fn new(
     db: D,
@@ -90,10 +90,10 @@ impl<
 }
 
 impl<
-    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-    ST: SignableTransaction,
-    P: TransactionPublisher<TransactionFor<ST>>,
-  > ContinuallyRan for TransactionSignerTask<D, ST, P>
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  ST: SignableTransaction,
+  P: TransactionPublisher<TransactionFor<ST>>,
+> ContinuallyRan for TransactionSignerTask<D, ST, P>
 {
   type Error = P::EphemeralError;
 

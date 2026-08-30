@@ -6,7 +6,7 @@ license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/ciphersuite/kp256"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = ["ciphersuite", "ff", "group"]
-edition = "2021"
+edition = "2024"
 rust-version = "1.85"
 
 [package.metadata.docs.rs]
@@ -21,8 +21,8 @@ rand_core = { version = "0.6", default-features = false }
 
 sha2 = { version = "0.11", default-features = false }
 
-p256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"] }
-k256 = { version = "^0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"] }
+p256 = { version = "0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"] }
+k256 = { version = "0.13.1", default-features = false, features = ["arithmetic", "bits", "hash2curve"] }
 
 ciphersuite = { path = "../", version = "0.4", default-features = false }
 

@@ -49,9 +49,9 @@ fn test_rfc8032() {
   for vector in VECTORS {
     let key = Ed25519::read_G(hex::decode(vector.0).unwrap().as_slice()).unwrap();
     let sig = SchnorrSignature::<Ed25519>::read(hex::decode(vector.2).unwrap().as_slice()).unwrap();
-    let hram = Sha512::new_with_prefix(
+    let hram = Sha512::digest(
       [sig.R.to_bytes().as_ref(), &key.to_bytes(), &hex::decode(vector.1).unwrap()].concat(),
     );
-    assert!(sig.verify(key, Scalar::from_hash(hram)));
+    assert!(sig.verify(key, Scalar::from_bytes_mod_order_wide(&hram.into())));
   }
 }

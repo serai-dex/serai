@@ -5,7 +5,7 @@ description = "The deployer for Serai's Ethereum contracts"
 license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/processor/ethereum/deployer"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
-edition = "2021"
+edition = "2024"
 publish = false
 
 [package.metadata.docs.rs]

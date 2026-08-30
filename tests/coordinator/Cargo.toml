@@ -6,7 +6,7 @@ license = "AGPL-3.0-only"
 repository = "https://github.com/serai-dex/serai/tree/develop/tests/coordinator"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 keywords = []
-edition = "2021"
+edition = "2024"
 publish = false
 
 [package.metadata.docs.rs]
@@ -22,7 +22,7 @@ hex = "0.4"
 zeroize = { version = "1", default-features = false }
 rand_core = { version = "0.6", default-features = false }
 
-blake2 = "0.11.0-rc.0"
+blake2 = "0.11"
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
 ciphersuite-kp256 = { path = "../../crypto/ciphersuite/kp256", default-features = false, features = ["std"] }

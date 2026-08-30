@@ -72,9 +72,9 @@ impl Transaction for TendermintTx {
 
 pub(crate) fn verify_tendermint_tx<
   N: Blockchain<
-    Validator = [u8; 32],
-    SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
-  >,
+      Validator = [u8; 32],
+      SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+    >,
 >(
   tx: &TendermintTx,
   genesis: [u8; 32],
