@@ -198,7 +198,7 @@ impl<B: BorshyBlockchain> State<B> {
       >,
   >(
     &mut self,
-    blockchain: &B,
+    blockchain: &mut B,
     signer: &(
        impl ?Sized
        + Signer<
@@ -311,7 +311,7 @@ impl<B: BorshyBlockchain> State<B> {
   #[must_use]
   async fn prevote_upon_proposal_message(
     &mut self,
-    blockchain: &B,
+    blockchain: &mut B,
     signer: &(
        impl ?Sized
        + Signer<
@@ -514,7 +514,7 @@ impl<B: BorshyBlockchain> State<B> {
       >,
   >(
     &mut self,
-    blockchain: &B,
+    blockchain: &mut B,
     signer: &(
        impl ?Sized
        + Signer<
@@ -610,7 +610,7 @@ impl<B: BorshyBlockchain> State<B> {
       >,
   >(
     &mut self,
-    blockchain: &B,
+    blockchain: &mut B,
     signer: &(
        impl ?Sized
        + Signer<
@@ -688,6 +688,7 @@ impl<B: BorshyBlockchain> State<B> {
     let proposal_message = self.proposal_message::<N>(blockchain, signer, txn).await;
 
     // Accumulate all messages we've already seen for this round
+    let genesis = blockchain.genesis();
     for message in self.round_messages.messages_for_round(self.round_number) {
       self.round_metrics.accumulate(genesis, blockchain.validator_set(), txn, message.clone());
     }
@@ -706,7 +707,7 @@ impl<B: BorshyBlockchain> State<B> {
         B::Block,
       >,
   >(
-    blockchain: &B,
+    blockchain: &mut B,
     signer: &(
        impl ?Sized
        + Signer<
@@ -715,7 +716,7 @@ impl<B: BorshyBlockchain> State<B> {
     >
      ),
     txn: &mut impl Transaction,
-    proposal: B::Block,
+    proposal: B::BlockProposal,
   ) -> (Self, RoundMessages<B>) {
     let genesis = blockchain.genesis();
     let genesis = genesis.as_ref();
@@ -754,7 +755,7 @@ impl<B: BorshyBlockchain> State<B> {
         observed_block_numbers: ObservedBlockNumbers::new(validators),
         observed_block_number_ref,
 
-        proposal: Box::pin(BlockProposal::Ready { proposal }),
+        proposal: Box::pin(BlockProposal::Pending { future: proposal }),
 
         round_number,
         pending_step_timeout: db::PendingStepTimeout::get(getter, genesis)
@@ -817,7 +818,7 @@ impl<B: BorshyBlockchain> State<B> {
       >,
   >(
     &mut self,
-    blockchain: &B,
+    blockchain: &mut B,
     signer: &(
        impl ?Sized
        + Signer<
@@ -901,7 +902,7 @@ impl<B: BorshyBlockchain> State<B> {
 
 pub(super) struct TimeoutExpired<'state, 'blockchain, 'signer, B: Blockchain, S: ?Sized> {
   state: &'state mut State<B>,
-  blockchain: &'blockchain B,
+  blockchain: &'blockchain mut B,
   signer: &'signer S,
 }
 
@@ -998,7 +999,7 @@ impl<B: BorshyBlockchain> State<B> {
       >,
   >(
     &'state mut self,
-    blockchain: &'blockchain B,
+    blockchain: &'blockchain mut B,
     signer: &'signer S,
   ) -> TimeoutExpired<'state, 'blockchain, 'signer, B, S> {
     let time_remaining = |(start, duration): (Instant, Duration)| {

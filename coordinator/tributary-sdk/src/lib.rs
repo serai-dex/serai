@@ -1,391 +1,474 @@
-#![allow(clippy::std_instead_of_alloc)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+#![no_std]
 
-use core::{marker::PhantomData, fmt::Debug, future::Future, num::NonZero};
-use std::{sync::Arc, io, time::Instant};
+use core::{
+  pin::Pin,
+  task::{Poll, Context},
+  num::NonZero,
+};
+extern crate alloc;
+use alloc::boxed::Box;
+extern crate std;
+use std::collections::HashMap;
 
 use zeroize::Zeroizing;
-
-use borsh::BorshDeserialize as _;
-
-use ciphersuite::*;
+use ciphersuite::WrappedGroup;
 use dalek_ff_group::Ristretto;
 
-use ::tendermint::{Block as _, Commit, SignatureScheme, Tendermint, TendermintHandle};
+use serai_db::{Transaction as _, Db};
 
-use ::tendermint::{Blockchain as _, MessageFor};
-pub use ::tendermint::SlashReason;
+use ::tendermint::{Signer as _, Network};
 
-use serai_db::Db;
-#[allow(non_snake_case)]
-fn D_key(schema: &'static [u8], field: &'static [u8], args: impl AsRef<[u8]>) -> Vec<u8> {
-  [
-    [u8::try_from(schema.len()).unwrap()].as_slice(),
-    schema,
-    [u8::try_from(field.len()).unwrap()].as_slice(),
-    field,
-    args.as_ref(),
-  ]
-  .concat()
-}
+mod read_write;
+pub use read_write::*;
 
-use tokio::sync::RwLock;
+/// The specification and implementation of a Merkle tree.
+pub mod merkle;
+use merkle::*;
 
-mod merkle;
-pub(crate) use merkle::*;
-
+/// The functionality for transactions.
 pub mod transaction;
-pub use transaction::{TransactionError, Signed, TransactionKind, Transaction as TransactionTrait};
+use transaction::{Signed, TransactionKind};
+pub use transaction::Transaction;
 
-use crate::tendermint::tx::TendermintTx;
+/// The functionality for blocks.
+pub mod block;
+pub use block::Block;
 
-mod provided;
-pub(crate) use provided::*;
-pub use provided::ProvidedError;
-
-mod block;
-pub use block::*;
+pub mod mempool;
+use mempool::{MempoolError, MempoolNetwork, Mempool, MempoolConsumer};
 
 mod blockchain;
-pub(crate) use blockchain::*;
+use blockchain::{Reader, Blockchain};
 
-mod mempool;
-pub(crate) use mempool::*;
+mod tendermint;
+use tendermint::{AggregateSignature, SignatureScheme, Tendermint};
+pub use tendermint::Slash;
 
-pub mod tendermint;
-pub(crate) use crate::tendermint::*;
+mod or;
 
-#[cfg(any(test, feature = "tests"))]
-pub mod tests;
+trait SendDb: Send + for<'db> Db<Transaction<'db>: Send> {}
+impl<D: Send + for<'db> Db<Transaction<'db>: Send>> SendDb for D {}
 
-/// Size limit for an individual transaction.
-// This needs to be big enough to participate in a 101-of-150 eVRF DKG with each element taking
-// `MAX_KEY_LEN`. This also needs to be big enough to pariticpate in signing 520 Bitcoin inputs
-// with 49 key shares, and signing 120 Monero inputs with 49 key shares.
-// TODO: Add a test for these properties
-pub const TRANSACTION_SIZE_LIMIT: usize = 2_000_000;
-/// Amount of transactions a single account may have in the mempool.
-pub const ACCOUNT_MEMPOOL_LIMIT: u32 = 50;
-/// Block size limit.
-// This targets a growth limit of roughly 30 GB a day, under load, in order to prevent a malicious
-// participant from flooding disks and causing out of space errors in order processes.
-// TODO: Slash reasons for sufficiently large validator sets may exceed this
-pub const BLOCK_SIZE_LIMIT: usize = 2_001_000;
+trait SendTransaction: Send + Transaction {}
+impl<D: Send + Transaction> SendTransaction for D {}
 
-pub(crate) const TENDERMINT_MESSAGE: u8 = 0;
-pub(crate) const TRANSACTION_MESSAGE: u8 = 1;
-
-#[expect(clippy::large_enum_variant)]
-#[derive(Clone, Debug)]
-#[cfg_attr(test, derive(PartialEq, Eq))]
-pub enum Transaction<T: TransactionTrait> {
-  Tendermint(TendermintTx),
-  Application(T),
+struct AsyncAddToMempool<T> {
+  transaction: T,
+  bypass_rate_limit: bool,
+  response: async_channel::Sender<Result<(), MempoolError>>,
 }
 
-impl<T: TransactionTrait> ReadWrite for Transaction<T> {
-  fn read(mut reader: impl io::Read) -> io::Result<Self> {
-    let mut kind = [0];
-    reader.read_exact(&mut kind)?;
-    match kind[0] {
-      0 => {
-        let tx = TendermintTx::read(reader)?;
-        Ok(Transaction::Tendermint(tx))
-      }
-      1 => {
-        let tx = T::read(reader)?;
-        Ok(Transaction::Application(tx))
-      }
-      _ => Err(io::Error::other("invalid transaction type")),
-    }
-  }
-  fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
-    match self {
-      Transaction::Tendermint(tx) => {
-        writer.write_all(&[0])?;
-        tx.write(writer)
-      }
-      Transaction::Application(tx) => {
-        writer.write_all(&[1])?;
-        tx.write(writer)
-      }
-    }
+pin_project_lite::pin_project! {
+  struct MempoolFuture<D: SendDb, T: SendTransaction> {
+    db: D,
+    #[pin]
+    mempool: Mempool<D, T>,
+    mempool_recv: async_channel::Receiver<AsyncAddToMempool<T>>,
   }
 }
 
-impl<T: TransactionTrait> Transaction<T> {
-  pub fn hash(&self) -> [u8; 32] {
-    match self {
-      Transaction::Tendermint(tx) => tx.hash(),
-      Transaction::Application(tx) => tx.hash(),
-    }
-  }
-
-  pub fn kind(&self) -> TransactionKind {
-    match self {
-      Transaction::Tendermint(tx) => tx.kind(),
-      Transaction::Application(tx) => tx.kind(),
-    }
-  }
-}
-
-/// An item which can be read and written.
-pub trait ReadWrite: Sized {
-  fn read(reader: impl io::Read) -> io::Result<Self>;
-  fn write(&self, writer: impl io::Write) -> io::Result<()>;
-
-  fn serialize(&self) -> Vec<u8> {
-    // BlockHeader is 64 bytes and likely the smallest item in this system
-    let mut buf = Vec::with_capacity(64);
-    self.write(&mut buf).unwrap();
-    buf
-  }
-}
-
-pub trait P2p: 'static + Send + Sync + Clone {
-  /// Broadcast a message to all other members of the Tributary with the specified genesis.
+pin_project_lite::pin_project! {
+  /// An instanced Tributary.
   ///
-  /// The Tributary will re-broadcast consensus messages on a fixed interval to ensure they aren't
-  /// prematurely dropped from the P2P layer. THe P2P layer SHOULD perform content-based
-  /// deduplication to ensure a sane amount of load.
-  fn broadcast(&self, genesis: [u8; 32], msg: Vec<u8>) -> impl Send + Future<Output = ()>;
-}
-
-impl<P: P2p> P2p for Arc<P> {
-  fn broadcast(&self, genesis: [u8; 32], msg: Vec<u8>) -> impl Send + Future<Output = ()> {
-    P::broadcast(self, genesis, msg)
+  /// This is a collection of futures which MUST be polled in order for the Tributary to make
+  /// progress. It may be directly polled, acting as a single-threaded sequential executor for each
+  /// of the contained futures, or unrolled via its `IntoIterator` implementation, allowing the
+  /// futures to be individually spawned on an executor.
+  pub struct Tributary<
+    D: SendDb,
+    T: SendTransaction,
+  > {
+    #[pin]
+    mempool: MempoolFuture<D, T>,
+    #[pin]
+    tendermint: Pin<Box<dyn Future<Output = ()>>>,
+    #[pin]
+    handle: Pin<Box<dyn Future<Output = ()>>>,
   }
 }
 
-#[derive(Clone)]
-pub struct Tributary<
+impl<
   D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  T: TransactionTrait,
-  P: P2p,
+  T: 'static + Send + Sync + Transaction,
+> Future for MempoolFuture<D, T>
+{
+  type Output = ();
+  fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    let mut projection = self.project();
+
+    let _: Poll<()> = projection.mempool.as_mut().poll(cx);
+    if let Poll::Ready(Ok(AsyncAddToMempool { transaction, bypass_rate_limit, response })) =
+      core::pin::pin!(projection.mempool_recv.recv()).poll(cx)
+    {
+      let mut txn = projection.db.txn();
+      let result = projection.mempool.add(&mut txn, transaction, bypass_rate_limit);
+      txn.commit();
+
+      let _ = response.try_send(result);
+    }
+
+    Poll::Pending
+  }
+}
+
+impl<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: 'static + Send + Sync + Transaction,
+> Future for Tributary<D, T>
+{
+  type Output = ();
+  fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    let projection = self.project();
+
+    let _: Poll<()> = projection.tendermint.poll(cx);
+    let _: Poll<()> = projection.handle.poll(cx);
+    let _: Poll<()> = projection.mempool.poll(cx);
+
+    Poll::Pending
+  }
+}
+
+impl<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: 'static + Send + Sync + Transaction,
+> IntoIterator for Tributary<D, T>
+{
+  type Item = Pin<Box<dyn Future<Output = ()>>>;
+  type IntoIter = <[Self::Item; 3] as IntoIterator>::IntoIter;
+  fn into_iter(self) -> Self::IntoIter {
+    let Self { tendermint, handle, mempool } = self;
+    [tendermint, handle, Box::pin(mempool)].into_iter()
+  }
+}
+
+/// An error when instantiating the Tributary.
+pub enum TributaryError {
+  /// The (target) block time wasn't representable.
+  UnrepresentableBlockTime,
+  /// The provided key didn't correspond to a validator.
+  NotValidator,
+}
+
+/// A handle to an instanced Tributary.
+#[derive(Clone)]
+pub struct TributaryHandle<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: 'static + Send + Sync + Transaction,
 > {
   db: D,
-
   genesis: [u8; 32],
-  network: TendermintNetwork<D, T, P>,
 
-  handle: Arc<RwLock<TendermintHandle<TendermintNetwork<D, T, P>>>>,
+  validator: [u8; 32],
+
+  blocks_behind: async_channel::Sender<async_channel::Sender<u64>>,
+
+  sync_send: async_channel::Sender<(Block<T>, crate::tendermint::Commit)>,
+  message_send: async_channel::Sender<
+    ::tendermint::Message<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<T>>>,
+  >,
+  mempool_send: async_channel::Sender<AsyncAddToMempool<T>>,
+
+  next_block_notification: async_channel::Sender<async_channel::Sender<()>>,
 }
 
-impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait, P: P2p>
-  Tributary<D, T, P>
+#[expect(private_bounds)]
+impl<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: 'static + Send + Sync + Transaction,
+> Tributary<D, T>
 {
-  pub async fn new(
+  /// Instance a Tributary.
+  ///
+  /// This MUST be the only Tributary instanced with this `genesis` value. It will be reloaded from
+  /// the database if prior instanced. For further context on the limitations of this, please defer
+  /// to the limitations placed upon [`::tendermint::Tendermint`].
+  ///
+  /// `genesis_time` is used to limit the minimum time blocks may be published with. This prevents
+  /// a malicious supermajority from backdating blocks, allowing flooding the honest minority with
+  /// valid blocks which still respect the minimum spacing between blocks. It is optional as it is
+  /// not strictly required, but it is practically required for resilience against a dishonest
+  /// supermajority (who can compromise the integrity of the Tributary in general). Whatever value
+  /// is set, it MUST be consistent across participants.
+  ///
+  /// `validators` represents the validators present in the Tributary (keyed by their Ristretto
+  /// public keys, valued by their weight in the consensus process).
+  ///
+  /// `key` is the validator's Ristretto private key.
+  ///
+  /// `mempool_rate_limit` is the maximum amount of transactions each validator may have pending
+  /// within the mempool. It may be locally configured independently of other validators.
+  pub async fn new<
+    N: 'static
+      + Send
+      + Sync
+      + Network<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<T>>, Sleep: Send>,
+  >(
     db: D,
     genesis: [u8; 32],
+    genesis_time: Option<u64>,
+    validators: HashMap<[u8; 32], NonZero<u16>>,
+    tendermint_network: N,
     key: Zeroizing<<Ristretto as WrappedGroup>::F>,
-    validators: Vec<(<Ristretto as WrappedGroup>::G, NonZero<u16>)>,
-    p2p: P,
-  ) -> Option<Self> {
-    log::info!("new Tributary with genesis {}", hex::encode(genesis));
+    mempool_rate_limit: usize,
+  ) -> Result<(Self, TributaryHandle<D, T>), TributaryError> {
+    let genesis_time = genesis_time.unwrap_or(0);
 
-    let signer = Signer::new(genesis, key);
-    let validators = Validators::new(genesis, validators)?;
+    // TODO: This is the maximum of the bound internal to the `tendermint-machine` library
+    let (sync_send, sync_recv) =
+      async_channel::bounded::<(Block<T>, crate::tendermint::Commit)>(64);
+    let (message_send, message_recv) = async_channel::bounded::<
+      ::tendermint::MessageFor<Tendermint<D, T, MempoolConsumer<T>, N>>,
+    >(2 * validators.len());
 
-    let mut blockchain = Blockchain::new(db.clone(), genesis, validators.weights().clone());
+    let (mempool_send, mempool_recv) =
+      async_channel::bounded::<AsyncAddToMempool<T>>(mempool_rate_limit);
 
-    let proposal = TendermintBlock(
-      blockchain.build_block::<TendermintNetwork<D, T, P>>(&validators).serialize(),
-    );
-    let blockchain = Arc::new(RwLock::new(blockchain));
+    let (mempool, mempool_consumer) =
+      Mempool::new(db.clone(), genesis, validators.keys().copied(), mempool_rate_limit);
 
-    let network =
-      TendermintNetwork { genesis, last_addition: Instant::now(), validators, blockchain, p2p };
+    let (blocks_behind_send, blocks_behind_recv) =
+      async_channel::bounded::<async_channel::Sender<u64>>(1);
 
-    let (handle, process) =
-      Tendermint::process(network.clone(), signer, db.clone(), network.clone(), proposal).await;
-    let handle = Arc::new(RwLock::new(handle));
-    tokio::spawn(process);
+    let signer = SignatureScheme::new(genesis).signer(key);
+    let validator = signer.validator();
+    if !validators.contains_key(&validator) {
+      Err(TributaryError::NotValidator)?;
+    }
 
-    Some(Self { db, genesis, network, handle })
+    let (next_block_notification, (mut tendermint_handle, tendermint)) = {
+      let blockchain = Blockchain::new(&db, genesis, validators);
+
+      let (tip, minimum_next_block_time) = {
+        let tip = blockchain.tip(&db);
+        let target_block_time = u64::try_from(
+          N::target_block_time().ok_or(TributaryError::UnrepresentableBlockTime)?.as_millis(),
+        )
+        .map_err(|_| TributaryError::UnrepresentableBlockTime)?;
+        let minimum_next_block_time = tip
+          .as_ref()
+          .map(|tip| tip.time().checked_add(target_block_time))
+          .unwrap_or(Some(genesis_time));
+        let tip = tip.map(|block| block.hash()).unwrap_or(genesis);
+        (tip, minimum_next_block_time)
+      };
+
+      /*
+        In practice, this is bounded by the amount of handles which simultaneously exist,
+        preventing concerns with its memory usage. If the caller did cause this channel to be an
+        effective DoS, it'd be because they've already created an amount of handles which are an
+        effective DoS.
+      */
+      let (next_block_notification_send, next_block_notification_recv) =
+        async_channel::unbounded::<async_channel::Sender<()>>();
+
+      let mut tendermint = Tendermint::<_, _, _, N>::new(
+        genesis,
+        genesis_time,
+        db.clone(),
+        blockchain,
+        next_block_notification_recv,
+        mempool_consumer,
+      );
+      let proposal = tendermint.block_proposal(tip, minimum_next_block_time);
+
+      (
+        next_block_notification_send,
+        ::tendermint::Tendermint::process(
+          tendermint,
+          signer,
+          db.clone(),
+          tendermint_network,
+          proposal,
+        )
+        .await,
+      )
+    };
+
+    let handle = Box::pin(async move {
+      loop {
+        let result: Result<(), ::tendermint::ProcessTerminated> = match (or::Or {
+          f1: or::Or { f1: sync_recv.recv(), f2: message_recv.recv() },
+          f2: blocks_behind_recv.recv(),
+        })
+        .await
+        {
+          or::Either::L(or::Either::L(Ok((block, commit)))) => {
+            tendermint_handle.sync(ReadWriteAsBorsh(block), commit).await
+          }
+          or::Either::L(or::Either::R(Ok(message))) => tendermint_handle.message(message).await,
+
+          or::Either::R(Ok(blocks_behind)) => {
+            // Ignore the error in case the future was cancelled
+            let _ = blocks_behind.send({
+              let observed_block_number = u64::from(tendermint_handle.observed_block_number());
+              let block_number = u64::from(tendermint_handle.block_number());
+              observed_block_number.saturating_sub(block_number)
+            });
+            Ok(())
+          }
+
+          // If all of the handles were dropped, we consider the process terminated
+          or::Either::L(or::Either::L(Err(_)) | or::Either::R(Err(_))) | or::Either::R(Err(_)) => {
+            Err(::tendermint::ProcessTerminated)
+          }
+        };
+
+        if let Err(::tendermint::ProcessTerminated) = result {
+          core::future::pending::<()>().await;
+        }
+      }
+    });
+
+    Ok((
+      Self {
+        tendermint: Box::pin(tendermint),
+        handle,
+        mempool: MempoolFuture { db: db.clone(), mempool, mempool_recv },
+      },
+      TributaryHandle {
+        db,
+        genesis,
+
+        validator,
+
+        blocks_behind: blocks_behind_send,
+
+        sync_send,
+        message_send,
+        mempool_send,
+
+        next_block_notification,
+      },
+    ))
   }
+}
 
+impl<
+  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: 'static + Send + Sync + Transaction,
+> TributaryHandle<D, T>
+{
+  /// The Tributary's genesis.
   pub fn genesis(&self) -> [u8; 32] {
     self.genesis
   }
 
-  pub async fn block_number(&self) -> u64 {
-    self.network.blockchain.read().await.block_number()
-  }
-  pub async fn tip(&self) -> [u8; 32] {
-    self.network.blockchain.read().await.tip()
-  }
-
-  pub fn reader(&self) -> TributaryReader<D, T> {
-    TributaryReader(self.db.clone(), self.genesis, PhantomData)
+  /// The Tributary's tip block.
+  ///
+  /// This is read from the database and is accordingly the last _committed_ block.
+  pub fn tip(&self) -> Option<[u8; 32]> {
+    Reader::<T>::tip(&self.db, self.genesis)
   }
 
-  pub async fn provide_transaction(&self, tx: T) -> Result<(), ProvidedError> {
-    self.network.blockchain.write().await.provide_transaction(tx)
+  /// The amount of blocks the local Tributary is missing in comparison to the current consensus
+  /// efforts.
+  ///
+  /// This is derivative of [`::tendermint::TendermintHandle::observed_block_number`], a method
+  /// which allows the local process to observe the block validators are obtaining consensus over.
+  /// It is not intended to be an explicit counter of the amount of blocks to explicitly sync,
+  /// solely a hint.
+  pub async fn blocks_behind(&self) -> u64 {
+    let (send, recv) = async_channel::bounded(1);
+    let _ = self.blocks_behind.send(send).await;
+    match recv.recv().await {
+      Ok(blocks_behind) => blocks_behind,
+      Err(_) => core::future::pending().await,
+    }
   }
 
-  pub async fn next_nonce(
+  /// A block on the Tributary, identified by its hash.
+  ///
+  /// This returns `None` if the block wasn't committed on this Tributary.
+  pub fn block(&self, hash: [u8; 32]) -> Option<Block<T>> {
+    Reader::<T>::block(&self.db, self.genesis, hash)
+  }
+  /// The commit for a block on the Tributary.
+  ///
+  /// This returns `None` if no commit was saved for this block.
+  pub fn commit(&self, block: [u8; 32]) -> Option<crate::tendermint::Commit> {
+    Reader::<T>::commit(&self.db, self.genesis, block)
+  }
+  /// The block after a block on the Tributary.
+  ///
+  /// This returns `None` if either:
+  /// - The parent block (identified by its hash) wasn't committed on this Tributary
+  /// - It has no child block committed on the Tributary
+  pub fn block_after(&self, parent: [u8; 32]) -> Option<[u8; 32]> {
+    Reader::<T>::block_after(&self.db, self.genesis, parent)
+  }
+
+  /// Handle a consensus message.
+  pub async fn message(
     &self,
-    signer: &<Ristretto as WrappedGroup>::G,
-    order: &[u8],
-  ) -> Option<u32> {
-    self.network.blockchain.read().await.next_nonce(signer, order)
+    message: ::tendermint::Message<
+      [u8; 32],
+      [u8; 64],
+      AggregateSignature,
+      ReadWriteAsBorsh<Block<T>>,
+    >,
+  ) {
+    let _ = self.message_send.send(message).await;
   }
 
-  // Returns Ok(true) if new, Ok(false) if an already present unsigned, or the error.
-  // Safe to be &self since the only meaningful usage of self is self.network.blockchain which
-  // successfully acquires its own write lock
-  pub async fn add_transaction(&self, tx: T) -> Result<bool, TransactionError> {
-    let tx = Transaction::Application(tx);
-    let mut to_broadcast = vec![TRANSACTION_MESSAGE];
-    tx.write(&mut to_broadcast).unwrap();
-    let res = self.network.blockchain.write().await.add_transaction::<TendermintNetwork<D, T, P>>(
-      true,
-      tx,
-      self.network.signature_scheme(),
-    );
-    if res == Ok(true) {
-      self.network.p2p.broadcast(self.genesis, to_broadcast).await;
-    }
-    res
+  /// Explicitly sync a block.
+  ///
+  /// This is intended to be used when a Tributary is behind, unable to simply observe blocks as
+  /// they're produced by the consensus process.
+  pub async fn sync(&self, block: Block<T>, commit: crate::tendermint::Commit) {
+    let _ = self.sync_send.send((block, commit)).await;
   }
 
-  // Sync a block.
-  // TODO: Since we have a static validator set, we should only need the tail commit?
-  pub async fn sync_block(&self, block: Block<T>, commit: Vec<u8>) -> bool {
-    let tip = self.network.blockchain.read().await.tip();
+  /// Publish a transaction into the Tributary's mempool.
+  ///
+  /// The mempool's rate limit will be bypassed if the transaction's signer is the Tributary's
+  /// validator, ensuring the local validator can publish their own transactions without needing to
+  /// implement an additional buffer.
+  pub async fn publish_transaction(&self, transaction: T) -> Result<(), MempoolError> {
+    let bypass_rate_limit =
+      if let TransactionKind::Signed { signed: Signed { signer, .. }, .. } = transaction.kind() {
+        signer == self.validator
+      } else {
+        true
+      };
 
-    if block.header.parent != tip {
-      log::debug!("told to sync a block whose parent wasn't our tip");
-      return false;
+    let (response_send, response_recv) = async_channel::bounded(1);
+    let _ = self
+      .mempool
+      .send(AsyncAddToMempool { transaction, bypass_rate_limit, response: response_send })
+      .await;
+    match response_recv.recv().await {
+      Ok(result) => result,
+      /*
+        If the channel was closed, the mempool was dropped, and this publication won't occur.
+
+        We yield `Pending` infinitely to reflect how this publication will never be ready. While
+        the alternative would to be return an error, we presume that applications won't drop the
+        mempool, letting us simplify the API a bit.
+      */
+      Err(_) => core::future::pending().await,
     }
+  }
 
-    // Verify the block body corresponds to the header
-    {
-      let Block { header, transactions } = &block;
-      if merkle(&transactions.iter().map(Transaction::hash).collect::<Vec<_>>()) !=
-        header.transactions
-      {
-        log::error!("sent a block with a distinct body than its header commits to");
-        return false;
+  /// A future which resolves when the next block is added to the Tributary.
+  pub fn next_block_notification(&self) -> impl Send + Sync + Future<Output = ()> {
+    let (next_block_notification_send, next_block_notification_recv) =
+      async_channel::bounded::<()>(1);
+    let _ = self.next_block_notification.try_send(next_block_notification_send);
+    async move {
+      match next_block_notification_recv.recv().await {
+        Ok(()) => {}
+        /*
+          If the channel was closed, there won't be any more blocks added, so this notification
+          should never resolve.
+
+          We _could_ also propagate an error to signify the Tributary is no longer running, but it
+          isn't worth the API complexity.
+        */
+        Err(_) => core::future::pending().await,
       }
     }
-
-    let block = TendermintBlock(block.serialize());
-    let mut commit_ref = commit.as_slice();
-    let Ok(commit) =
-      Commit::<<Validators as SignatureScheme>::AggregateSignature>::deserialize_reader(
-        &mut commit_ref,
-      )
-    else {
-      log::error!("sent an invalidly serialized commit");
-      return false;
-    };
-    // Storage DoS vector. We *could* truncate to solely the relevant portion, trying to save this,
-    // yet then we'd have to test the truncation was performed correctly.
-    if !commit_ref.is_empty() {
-      log::error!("sent an commit with additional data after it");
-      return false;
-    }
-    if !commit.verify(
-      self.network.validator_set(),
-      self.network.signature_scheme(),
-      self.genesis,
-      block.hash(),
-    ) {
-      log::error!("sent an invalid commit");
-      return false;
-    }
-
-    self.handle.write().await.sync(block, commit).await.unwrap();
-    true
-  }
-
-  // Return true if the message should be rebroadcasted.
-  pub async fn handle_message(&self, msg: &[u8]) -> bool {
-    match msg.first() {
-      Some(&TRANSACTION_MESSAGE) => {
-        let Ok(tx) = Transaction::read(&msg[1 ..]) else {
-          log::error!("received invalid transaction message");
-          return false;
-        };
-
-        // TODO: Sync mempools with fellow peers
-        // Can we just rebroadcast transactions not included for at least two blocks?
-        let res =
-          self.network.blockchain.write().await.add_transaction::<TendermintNetwork<D, T, P>>(
-            false,
-            tx,
-            self.network.signature_scheme(),
-          );
-        log::debug!("received transaction message. valid new transaction: {res:?}");
-        res == Ok(true)
-      }
-
-      Some(&TENDERMINT_MESSAGE) => {
-        let Ok(msg) = MessageFor::<TendermintNetwork<D, T, P>>::deserialize_reader(&mut &msg[1 ..])
-        else {
-          log::error!("received invalid tendermint message");
-          return false;
-        };
-
-        self.handle.write().await.message(msg).await.unwrap();
-        false
-      }
-
-      _ => false,
-    }
-  }
-
-  /// Get a Future which will resolve once the next block has been added.
-  pub async fn next_block_notification(
-    &self,
-  ) -> impl Send + Sync + Future<Output = Result<(), impl Send + Sync + core::fmt::Debug>> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
-    self.network.blockchain.write().await.next_block_notifications.push_back(tx);
-    rx
-  }
-}
-
-#[derive(Clone)]
-pub struct TributaryReader<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  T: TransactionTrait,
->(D, [u8; 32], PhantomData<T>);
-impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait>
-  TributaryReader<D, T>
-{
-  pub fn genesis(&self) -> [u8; 32] {
-    self.1
-  }
-
-  // Since these values are static once set, they can be safely read from the database without lock
-  // acquisition
-  pub fn block(&self, hash: &[u8; 32]) -> Option<Block<T>> {
-    Blockchain::<D, T>::block_from_db(&self.0, self.1, hash)
-  }
-  pub fn commit(&self, hash: &[u8; 32]) -> Option<Vec<u8>> {
-    Blockchain::<D, T>::commit_from_db(&self.0, self.1, hash)
-  }
-  pub fn parsed_commit(
-    &self,
-    hash: &[u8; 32],
-  ) -> Option<Commit<<Validators as SignatureScheme>::AggregateSignature>> {
-    self.commit(hash).map(|commit| {
-      Commit::<<Validators as SignatureScheme>::AggregateSignature>::deserialize_reader(
-        &mut commit.as_slice(),
-      )
-      .unwrap()
-    })
-  }
-  pub fn block_after(&self, hash: &[u8; 32]) -> Option<[u8; 32]> {
-    Blockchain::<D, T>::block_after(&self.0, self.1, hash)
-  }
-
-  pub fn locally_provided_txs_in_block(&self, hash: &[u8; 32], order: &str) -> bool {
-    Blockchain::<D, T>::locally_provided_txs_in_block(&self.0, &self.1, hash, order)
-  }
-
-  // This isn't static, yet can be read with only minor discrepancy risks
-  pub fn tip(&self) -> [u8; 32] {
-    Blockchain::<D, T>::tip_from_db(&self.0, self.1)
   }
 }

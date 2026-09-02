@@ -52,8 +52,8 @@ impl From<RoundNumber> for u64 {
 /// This is effectively a trait alias where a potential representation of a block's hash is any
 /// type which satisfies all of these bounds, and this is implemented for all such types.
 ///
-/// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
-/// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
+/// The [`borsh::BorshSerialize`] implementation MUST be infallible if the underlying writer is
+/// infallible. The [`borsh::BorshDeserialize`] implementation MUST be infallible if it is
 /// value which was successfully serialized, from a well-formed reader.
 pub trait BlockHash: Clone + Copy + PartialEq + Eq + AsRef<[u8]> {}
 impl<H: Clone + Copy + PartialEq + Eq + AsRef<[u8]>> BlockHash for H {}
@@ -64,18 +64,18 @@ pub struct InvalidBlock;
 
 /// A view over the application layer's block.
 ///
-/// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
-/// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
-/// value which was successfully serialized, from a well-formed reader.
+/// The [`borsh::BorshSerialize`] implementation MUST be infallible if the underlying writer is
+/// infallible. The [`borsh::BorshDeserialize`] implementation MUST be infallible if it is
+/// deserializing a value which was successfully serialized, from a well-formed reader.
 pub trait Block: Clone {
   // The type representing a block's hash.
   ///
   /// The `AsRef<[u8]>` implementation MUST return a slice with a consistent length for _any_
   /// value, meaning it's _constant_.
   ///
-  /// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
-  /// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing
-  /// a value which was successfully serialized, from a well-formed reader.
+  /// The [`borsh::BorshSerialize`] implementation MUST be infallible if the underlying writer is
+  /// infallible. The [`borsh::BorshDeserialize`] implementation MUST be infallible if it is
+  /// deserializing a value which was successfully serialized, from a well-formed reader.
   type Hash: BlockHash;
 
   /// The block's hash.
@@ -141,9 +141,8 @@ pub trait Blockchain {
   /// This DOES NOT have to be cancel-safe.
   // TODO: Don't just provide the proposer, but enough to build evidence sufficient to convince
   // someone else (the signed proposal message)?
-  // TODO: `&mut self`?
   fn validate(
-    &self,
+    &mut self,
     proposer: Self::Validator,
     block: &Self::Block,
   ) -> impl Send + Future<Output = Result<(), InvalidBlock>>;
@@ -192,6 +191,5 @@ pub trait Blockchain {
   ///
   /// The actual recording of this slash and its interpretation is left entirely to the application
   /// layer. All slashes have the necessary evidence and can be verified by this library.
-  // TODO: `&mut self`?
-  fn slash(&self, validator: Self::Validator, slash_reason: SlashReasonFor<Self>);
+  fn slash(&mut self, validator: Self::Validator, slash_reason: SlashReasonFor<Self>);
 }

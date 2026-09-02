@@ -169,7 +169,7 @@ impl Blockchain for TestNetwork {
   }
 
   fn validate(
-    &self,
+    &mut self,
     _proposer: Self::Validator,
     block: &Self::Block,
   ) -> impl Send + Future<Output = Result<(), InvalidBlock>> {
@@ -199,7 +199,7 @@ impl Blockchain for TestNetwork {
   fn missed_proposal(&self, _proposer: Self::Validator) {}
 
   fn slash(
-    &self,
+    &mut self,
     _validator: Self::Validator,
     slash_reason: SlashReason<
       <Self::SignatureScheme as SignatureScheme>::Signature,
@@ -228,9 +228,15 @@ impl
     tokio::time::sleep(duration)
   }
 
-  async fn broadcast(&mut self, message: MessageFor<TestNetwork>) {
-    for handle in self.all_validators.write().await.iter_mut() {
-      let _ = handle.message(message.clone()).await;
+  fn broadcast(
+    &mut self,
+    _genesis: impl AsRef<[u8]>,
+    message: MessageFor<TestNetwork>,
+  ) -> impl Send + Future<Output = ()> {
+    async move {
+      for handle in self.all_validators.write().await.iter_mut() {
+        let _ = handle.message(message.clone()).await;
+      }
     }
   }
 }
@@ -250,7 +256,7 @@ impl TestNetwork {
         TestSigner(i),
         MemDb::new(),
         TestNetwork { validator_set: validator_set.clone(), all_validators: arc.clone() },
-        TestBlock { id: 1u32.to_le_bytes(), valid: true },
+        core::future::ready(TestBlock { id: 1u32.to_le_bytes(), valid: true }),
       )
       .await;
       tokio::spawn(process);

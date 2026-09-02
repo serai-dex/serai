@@ -139,9 +139,9 @@ entirely) accordingly. The same holds true if the clock rewinds across
 instances.
 
 This library also makes no effort to detect if the specified validator is being
-used by multiple processes in a way which would inherently enable
-equivocations. Such behavior MAY additionally cause slashes (or exhibit
-undefined behavior entirely).
+used by multiple processes (or multiple instances within a single process) in a
+way which would inherently enable equivocations. Such behavior MAY additionally
+cause slashes (or exhibit undefined behavior entirely).
 
 Finally, this library is maintained under the
 [Serai](https://github.com/serai-dex/serai) repository which has very strict

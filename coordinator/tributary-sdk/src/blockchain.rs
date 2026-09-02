@@ -1,348 +1,314 @@
-use core::num::NonZero;
-use std::collections::{VecDeque, HashMap};
+use core::{marker::PhantomData, num::NonZero, time::Duration};
+use std::{collections::HashMap, time::SystemTime};
 
-use dalek_ff_group::Ristretto;
-use ciphersuite::{group::GroupEncoding as _, *};
-
-use serai_db::{Get as _, Transaction as _, Db};
-
-use tendermint::{SignatureScheme, Blockchain as BlockchainT};
+use serai_db::{Get, Transaction as DbTxn};
 
 use crate::{
-  ReadWrite as _, ProvidedError, ProvidedTransactions, BlockError, Block, Mempool, Transaction,
-  transaction::{Signed, TransactionKind, TransactionError, Transaction as TransactionTrait},
+  ReadWrite,
+  tendermint::Commit as CommitStruct,
+  transaction::{Signed, TransactionKind, Transaction},
+  block::{SemanticError, EphemeralError, BlockError, Block as BlockStruct},
+  mempool::ProvidedReader,
 };
 
-#[derive(Debug)]
-pub(crate) struct Blockchain<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  T: TransactionTrait,
-> {
-  db: Option<D>,
-  genesis: [u8; 32],
+serai_db::schema!(TributaryBlockchain {
+  Tip: (genesis: [u8; 32]) -> [u8; 32],
+  Block: <B: ReadWrite>(genesis: [u8; 32], hash: [u8; 32]) -> crate::ReadWriteAsBorsh<B>,
+  Commit: (genesis: [u8; 32], block: [u8; 32]) -> CommitStruct,
+  BlockAfter: (genesis: [u8; 32], parent: [u8; 32]) -> [u8; 32],
+  Slashed: (genesis: [u8; 32], validator: [u8; 32]) -> (),
+  Unsigned: (genesis: [u8; 32], hash: [u8; 32]) -> (),
+  LastSigned: (genesis: [u8; 32], validator: [u8; 32], scope: &[u8]) -> u64,
+  OnChainProvided: (genesis: [u8; 32], scope: &'static [u8]) -> u64,
+});
 
-  block_number: u64,
-  tip: [u8; 32],
-  participants: HashMap<[u8; 32], NonZero<u16>>,
+pub(crate) struct Reader<T>(PhantomData<T>);
 
-  provided: ProvidedTransactions<D, T>,
-  mempool: Mempool<D, T>,
+impl<T: Transaction> Reader<T> {
+  pub(crate) fn tip(getter: &impl Get, genesis: [u8; 32]) -> Option<[u8; 32]> {
+    Tip::get(getter, genesis)
+  }
 
-  pub(crate) next_block_notifications: VecDeque<tokio::sync::oneshot::Sender<()>>,
+  pub(crate) fn block(
+    getter: &impl Get,
+    genesis: [u8; 32],
+    hash: [u8; 32],
+  ) -> Option<BlockStruct<T>> {
+    Block::get(getter, genesis, hash).map(|block| block.0)
+  }
+
+  pub(crate) fn commit(
+    getter: &impl Get,
+    genesis: [u8; 32],
+    block: [u8; 32],
+  ) -> Option<CommitStruct> {
+    Commit::get(getter, genesis, block)
+  }
+
+  pub(crate) fn block_after(
+    getter: &impl Get,
+    genesis: [u8; 32],
+    parent: [u8; 32],
+  ) -> Option<[u8; 32]> {
+    BlockAfter::get(getter, genesis, parent)
+  }
 }
 
-impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait>
-  Blockchain<D, T>
-{
-  fn tip_key(genesis: [u8; 32]) -> Vec<u8> {
-    crate::D_key(b"tributary_blockchain", b"tip", genesis)
-  }
-  fn block_number_key(&self) -> Vec<u8> {
-    crate::D_key(b"tributary_blockchain", b"block_number", self.genesis)
-  }
-  fn block_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    crate::D_key(b"tributary_blockchain", b"block", [genesis, hash].concat())
-  }
-  fn block_hash_key(genesis: &[u8], block_number: u64) -> Vec<u8> {
-    crate::D_key(
-      b"tributary_blockchain",
-      b"block_hash",
-      [genesis, &block_number.to_le_bytes()].concat(),
-    )
-  }
-  fn commit_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    crate::D_key(b"tributary_blockchain", b"commit", [genesis, hash].concat())
-  }
-  fn block_after_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    crate::D_key(b"tributary_blockchain", b"block_after", [genesis, hash].concat())
-  }
-  fn unsigned_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    crate::D_key(b"tributary_blockchain", b"unsigned_included", [genesis, hash].concat())
-  }
-  fn provided_included_key(genesis: &[u8], hash: &[u8; 32]) -> Vec<u8> {
-    crate::D_key(b"tributary_blockchain", b"provided_included", [genesis, hash].concat())
-  }
-  fn next_nonce_key(
-    genesis: &[u8; 32],
-    signer: &<Ristretto as WrappedGroup>::G,
-    order: &[u8],
-  ) -> Vec<u8> {
-    crate::D_key(
-      b"tributary_blockchain",
-      b"next_nonce",
-      [genesis.as_slice(), signer.to_bytes().as_slice(), order].concat(),
-    )
-  }
+pub(crate) struct Blockchain<T: Transaction> {
+  _T: PhantomData<T>,
 
+  genesis: [u8; 32],
+  validators: HashMap<[u8; 32], NonZero<u16>>,
+
+  tip: [u8; 32],
+}
+
+impl<T: Transaction> Blockchain<T> {
   pub(crate) fn new(
-    db: D,
+    getter: &impl Get,
     genesis: [u8; 32],
-    participants: HashMap<[u8; 32], NonZero<u16>>,
+    validators: HashMap<[u8; 32], NonZero<u16>>,
   ) -> Self {
-    let mut res = Self {
-      db: Some(db.clone()),
-      genesis,
-      participants,
-
-      block_number: 0,
-      tip: genesis,
-
-      provided: ProvidedTransactions::new(db.clone(), genesis),
-      mempool: Mempool::new(db, genesis),
-
-      next_block_notifications: VecDeque::new(),
-    };
-
-    if let Some((block_number, tip)) = {
-      let db = res.db.as_ref().unwrap();
-      db.get(res.block_number_key()).map(|number| (number, db.get(Self::tip_key(genesis)).unwrap()))
-    } {
-      res.block_number = u64::from_le_bytes(block_number.as_ref().try_into().unwrap());
-      res.tip.copy_from_slice(tip.as_ref());
-    }
-
-    res
+    Self { _T: PhantomData, genesis, validators, tip: Tip::get(getter, genesis).unwrap_or(genesis) }
   }
 
-  pub(crate) fn tip(&self) -> [u8; 32] {
-    self.tip
+  pub(crate) fn validators(&self) -> &HashMap<[u8; 32], NonZero<u16>> {
+    &self.validators
   }
 
-  pub(crate) fn block_number(&self) -> u64 {
-    self.block_number
+  #[must_use]
+  pub(crate) fn slashed(&self, getter: &impl Get, validator: [u8; 32]) -> bool {
+    Slashed::get(getter, self.genesis, validator).is_some()
   }
 
-  pub(crate) fn block_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Block<T>> {
-    db.get(Self::block_key(&genesis, block)).map(|bytes| Block::<T>::read(bytes.as_ref()).unwrap())
+  pub(crate) fn tip(&self, getter: &impl Get) -> Option<BlockStruct<T>> {
+    Block::<BlockStruct<T>>::get(getter, self.genesis, self.tip).map(|block| block.0)
   }
 
-  pub(crate) fn commit_from_db(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<Vec<u8>> {
-    db.get(Self::commit_key(&genesis, block)).map(|bytes| bytes.as_ref().to_vec())
-  }
-
-  pub(crate) fn block_after(db: &D, genesis: [u8; 32], block: &[u8; 32]) -> Option<[u8; 32]> {
-    db.get(Self::block_after_key(&genesis, block)).map(|bytes| bytes.as_ref().try_into().unwrap())
-  }
-
-  pub(crate) fn locally_provided_txs_in_block(
-    db: &D,
-    genesis: &[u8; 32],
-    block: &[u8; 32],
-    order: &str,
-  ) -> bool {
-    let local_key = ProvidedTransactions::<D, T>::locally_provided_quantity_key(genesis, order);
-    let local = db
-      .get(local_key)
-      .map(|bytes| u32::from_le_bytes(bytes.as_ref().try_into().unwrap()))
-      .unwrap_or(0);
-    let block_key =
-      ProvidedTransactions::<D, T>::block_provided_quantity_key(genesis, block, order);
-    let block = db
-      .get(block_key)
-      .map(|bytes| u32::from_le_bytes(bytes.as_ref().try_into().unwrap()))
-      .unwrap_or(0);
-
-    local >= block
-  }
-
-  pub(crate) fn tip_from_db(db: &D, genesis: [u8; 32]) -> [u8; 32] {
-    db.get(Self::tip_key(genesis))
-      .map(|bytes| bytes.as_ref().try_into().unwrap())
-      .unwrap_or(genesis)
-  }
-
-  pub(crate) fn add_transaction<
-    N: BlockchainT<
-        Validator = [u8; 32],
-        ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-        SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
-      >,
-  >(
-    &mut self,
-    internal: bool,
-    tx: Transaction<T>,
-    schema: &N::SignatureScheme,
-  ) -> Result<bool, TransactionError> {
-    let db = self.db.as_ref().unwrap();
-
-    let unsigned_in_chain =
-      |hash: [u8; 32]| db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some();
-
-    self.mempool.add::<N, _>(
-      |signer, order| {
-        self.participants.contains_key(&signer.to_bytes()).then(|| {
-          db.get(Self::next_nonce_key(&self.genesis, &signer, &order))
-            .map(|bytes| u32::from_le_bytes(bytes.as_ref().try_into().unwrap()))
-            .unwrap_or(0)
-        })
-      },
-      internal,
-      tx,
-      &self.participants,
-      schema,
-      unsigned_in_chain,
-    )
-  }
-
-  pub(crate) fn provide_transaction(&mut self, tx: T) -> Result<(), ProvidedError> {
-    self.provided.provide(tx)
-  }
-
-  pub(crate) fn next_nonce(
-    &self,
-    signer: &<Ristretto as WrappedGroup>::G,
-    order: &[u8],
-  ) -> Option<u32> {
-    if let Some(next_nonce) = self.mempool.next_nonce_in_mempool(signer, order.to_vec()) {
-      return Some(next_nonce);
-    }
-    self.participants.contains_key(&signer.to_bytes()).then(|| {
-      self
-        .db
-        .as_ref()
-        .unwrap()
-        .get(Self::next_nonce_key(&self.genesis, signer, order))
-        .map(|bytes| u32::from_le_bytes(bytes.as_ref().try_into().unwrap()))
-        .unwrap_or(0)
-    })
-  }
-
-  pub(crate) fn build_block<
-    N: BlockchainT<
-        Validator = [u8; 32],
-        ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-        SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
-      >,
-  >(
-    &mut self,
-    schema: &N::SignatureScheme,
-  ) -> Block<T> {
-    let block = Block::new(
-      self.tip,
-      self.provided.transactions.values().flatten().cloned().collect(),
-      self.mempool.block(),
-    );
-    // build_block should not return invalid blocks
-    self.verify_block::<N>(&block, schema, false).unwrap();
-    block
-  }
-
-  pub(crate) fn verify_block<
-    N: BlockchainT<
-        Validator = [u8; 32],
-        ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-        SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
+  pub(crate) fn verify<
+    N: ::tendermint::Network<
+        [u8; 32],
+        [u8; 64],
+        crate::tendermint::AggregateSignature,
+        crate::ReadWriteAsBorsh<BlockStruct<T>>,
       >,
   >(
     &self,
-    block: &Block<T>,
-    schema: &N::SignatureScheme,
-    allow_non_local_provided: bool,
+    getter: &impl Get,
+    genesis_time: u64,
+    block: &BlockStruct<T>,
   ) -> Result<(), BlockError> {
-    let db = self.db.as_ref().unwrap();
-    let provided_or_unsigned_in_chain = |hash: [u8; 32]| {
-      db.get(Self::unsigned_included_key(&self.genesis, &hash)).is_some() ||
-        db.get(Self::provided_included_key(&self.genesis, &hash)).is_some()
+    if block.parent() != self.tip {
+      Err(EphemeralError::UnexpectedParent)?;
+    }
+
+    block.verify_syntax(self.genesis)?;
+
+    let deferred_time_error = match (|| -> Result<(), BlockError> {
+      let Some(target_block_time) = N::target_block_time()
+        .and_then(|target_block_time| u64::try_from(target_block_time.as_millis()).ok())
+      else {
+        /*
+          This is a misconfiguration which we smudge as `EphemeralError::Future`, the time-relevant
+          `EphemeralError`. This is so we don't blame the proposer (as we would with a syntactic or
+          semantic error), but still error. While we do mis-report the error, this should never
+          occur as it's a fundamental misconfiguration.
+
+          Additionally, because the this value is unrepresentable, the actual block addition (if
+          attempted) will stall because this value is unrepresentable.
+
+          TODO: Improve this flow
+        */
+        Err(EphemeralError::Future)?
+      };
+
+      // Check this block's time isn't too close to the prior block's
+      {
+        let prior_block_time = self.tip(getter).map(|block| block.time()).unwrap_or(genesis_time);
+        let minimum_time = prior_block_time.checked_add(target_block_time);
+        /*
+          If we can't represent the minimum time from the prior block, because we can represent
+          this block's time, this block's time _must_ be less than the minimum time from the prior
+          block.
+        */
+        if minimum_time.is_none_or(|minimum_time| block.time() < minimum_time) {
+          // This block violates the minimum spacing between blocks
+          Err(SemanticError::TooSoon)?;
+        }
+      }
+
+      // Check this block's time isn't in the future
+      if Some(block.system_time()?) >
+        SystemTime::now().checked_add(
+          Duration::from_millis(target_block_time) - N::LATENCY_TIME - N::BLOCK_DOWNLOADING_TIME,
+        )
+      {
+        // This block's time is in the future
+        Err(EphemeralError::Future)?;
+      }
+
+      Ok(())
+    })() {
+      Ok(()) => Ok(()),
+      // Raise syntactic and semantic errors now
+      Err(BlockError::Syntactic(error)) => Err(error)?,
+      Err(BlockError::Semantic(error)) => Err(error)?,
+      /*
+        Defer ephemeral errors for later.
+
+        We will allow blocks which are in the future if they have a commit, we just first wait until
+        they're no longer in the future.
+      */
+      Err(BlockError::Ephemeral(error)) => Err(error),
     };
 
-    let mut txn_db = db.clone();
-    let mut txn = txn_db.txn();
-    let res = block.verify::<N, _>(
-      self.genesis,
-      self.tip,
-      self.provided.transactions.clone(),
-      &mut |signer, order| {
-        self.participants.contains_key(&signer.to_bytes()).then(|| {
-          let key = Self::next_nonce_key(&self.genesis, signer, order);
-          let next = txn
-            .get(&key)
-            .map(|next_nonce| u32::from_le_bytes(next_nonce.as_ref().try_into().unwrap()))
-            .unwrap_or(0);
-          txn.set(key, (next + 1).to_le_bytes());
-          next
-        })
-      },
-      &self.participants,
-      schema,
-      provided_or_unsigned_in_chain,
-      allow_non_local_provided,
-    );
-    // Drop this TXN's changes as we're solely verifying the block
-    drop(txn);
-    res
-  }
+    for slash in block.slashes() {
+      let () = slash
+        .verify(self.genesis, &self.validators)
+        .map_err(|_| SemanticError::InvalidSlash { validator: *slash.validator() })?;
+      if Slashed::get(getter, self.genesis, *slash.validator()).is_some() {
+        Err(SemanticError::SlashAlreadyIncluded { validator: *slash.validator() })?;
+      }
+    }
 
-  /// Add a block.
-  pub(crate) fn add_block<
-    N: BlockchainT<
-        Validator = [u8; 32],
-        ValidatorSet = HashMap<[u8; 32], NonZero<u16>>,
-        SignatureScheme: SignatureScheme<Signature = [u8; 64], AggregateSignature = Vec<u8>>,
-      >,
-  >(
-    &mut self,
-    block: &Block<T>,
-    commit: Vec<u8>,
-    schema: &N::SignatureScheme,
-  ) -> Result<(), BlockError> {
-    self.verify_block::<N>(block, schema, true)?;
+    /*
+      Because the Tributary allows blocks with distinct, or locally missing, provided transactions
+      (so long as they've undergone consensus), we explicitly return these errors last.
+    */
+    let mut deferred_provided_error = Ok(());
 
-    log::info!(
-      "adding block {} to tributary {} with {} TXs",
-      hex::encode(block.hash()),
-      hex::encode(self.genesis),
-      block.transactions.len(),
-    );
+    {
+      let mut provided_transactions_in_scope = None;
+      let mut signed_scope = None;
+      for tx in block.transactions() {
+        let transaction_hash = tx.hash();
+        match tx.kind() {
+          TransactionKind::Provided { scope } => {
+            if provided_transactions_in_scope
+              .as_ref()
+              .is_none_or(|(current_scope, _transactions)| &scope != current_scope)
+            {
+              provided_transactions_in_scope = Some((
+                scope,
+                ProvidedReader::<T>::locally_provided(
+                  getter,
+                  self.genesis,
+                  scope,
+                  OnChainProvided::get(getter, self.genesis, scope.as_bytes()).unwrap_or(0),
+                ),
+              ));
+            }
+            deferred_provided_error = deferred_provided_error.and(
+              match provided_transactions_in_scope
+                .as_mut()
+                .and_then(|(_current_scope, transactions)| transactions.next())
+              {
+                None => Err(BlockError::from(EphemeralError::NotLocallyProvidedTransaction {
+                  scope,
+                  transaction_hash,
+                })),
+                Some(expected_hash) => (expected_hash == transaction_hash).ok_or(BlockError::from(
+                  SemanticError::DistinctProvided { scope, expected_hash, transaction_hash },
+                )),
+              },
+            );
+          }
+          TransactionKind::Unsigned => {
+            if Unsigned::get(getter, self.genesis, transaction_hash).is_some() {
+              Err(SemanticError::UnsignedAlreadyIncluded { transaction_hash })?;
+            }
+          }
+          TransactionKind::Signed { scope, signed: Signed { signer, nonce, signature: _ } } => {
+            if signed_scope
+              .as_ref()
+              .is_none_or(|(current_signer, _current_scope)| current_signer != &signer) &&
+              ((!self.validators.contains_key(&signer)) ||
+                Slashed::get(getter, self.genesis, signer).is_some() ||
+                block
+                  .slashes()
+                  .binary_search_by_key(&signer, |slash| *slash.validator())
+                  .is_ok())
+            {
+              Err(SemanticError::InvalidSigner { signer })?;
+            }
 
-    // None of the following assertions should be reachable since we verified the block
-
-    // Take it from the Option so Rust doesn't consider self as mutably borrowed thanks to the
-    // existence of the txn
-    let mut db = self.db.take().unwrap();
-    let mut txn = db.txn();
-
-    self.tip = block.hash();
-    txn.set(Self::tip_key(self.genesis), self.tip);
-
-    self.block_number += 1;
-    txn.set(self.block_number_key(), self.block_number.to_le_bytes());
-
-    txn.set(Self::block_hash_key(&self.genesis, self.block_number), self.tip);
-
-    txn.set(Self::block_key(&self.genesis, &self.tip), block.serialize());
-    txn.set(Self::commit_key(&self.genesis, &self.tip), commit);
-
-    txn.set(Self::block_after_key(&self.genesis, &block.parent()), block.hash());
-
-    for tx in &block.transactions {
-      match tx.kind() {
-        TransactionKind::Provided(order) => {
-          let hash = tx.hash();
-          self.provided.complete(&mut txn, order, self.tip, hash);
-          txn.set(Self::provided_included_key(&self.genesis, &hash), []);
-        }
-        TransactionKind::Unsigned => {
-          let hash = tx.hash();
-          // Save as included on chain
-          txn.set(Self::unsigned_included_key(&self.genesis, &hash), []);
-          // remove from the mempool
-          self.mempool.remove(&hash);
-        }
-        TransactionKind::Signed(order, Signed { signer, nonce, .. }) => {
-          let next_nonce = nonce + 1;
-          txn.set(Self::next_nonce_key(&self.genesis, &signer, &order), next_nonce.to_le_bytes());
-          self.mempool.remove(&tx.hash());
+            if signed_scope.as_ref().is_none_or(|(current_signer, current_scope)| {
+              (current_signer, current_scope) != (&signer, &scope)
+            }) {
+              let expected_nonce =
+                LastSigned::get(getter, self.genesis, signer, &scope).unwrap_or(0);
+              if expected_nonce != nonce {
+                Err(SemanticError::Gap {
+                  transaction_hash,
+                  transaction_nonce: nonce,
+                  expected_nonce,
+                })?;
+              }
+              signed_scope = Some((signer, scope));
+            }
+          }
         }
       }
     }
 
-    txn.commit();
-    self.db = Some(db);
+    /*
+      First, return if the block is in the future, as this will still be considered an error _and_
+      we will have to wait to perform block addition.
+    */
+    deferred_time_error?;
+    /*
+      Now return if there's an error with the provided transactions, which will solely be
+      considered an error.
+    */
+    deferred_provided_error
+  }
 
-    for tx in self.next_block_notifications.drain(..) {
-      let _ = tx.send(());
+  /// Add a block to the blockchain.
+  ///
+  /// `commit` is optional in case the commit for each block was deferred for solely the commit for
+  /// the most recent block.
+  ///
+  /// This MAY panic if the commit is not valid. It is only intended to be called with inputs
+  /// already verified to be valid.
+  pub(crate) fn add(
+    &mut self,
+    txn: &mut impl DbTxn,
+    block: BlockStruct<T>,
+    commit: Option<CommitStruct>,
+  ) {
+    let hash = block.hash();
+
+    if let Some(commit) = &commit {
+      debug_assert!(commit.verify(
+        &self.validators,
+        &super::tendermint::SignatureScheme::new(self.genesis),
+        self.genesis,
+        hash
+      ));
     }
 
-    Ok(())
+    self.tip = hash;
+    Tip::set(txn, self.genesis, &hash);
+    Block::<BlockStruct<T>>::set(txn, self.genesis, hash, (&block).into());
+    if let Some(commit) = &commit {
+      Commit::set(txn, self.genesis, hash, commit);
+    }
+    BlockAfter::set(txn, self.genesis, block.parent(), &hash);
+
+    for slash in block.slashes() {
+      Slashed::set(txn, self.genesis, slash.validator, &());
+    }
+    for tx in block.transactions() {
+      match tx.kind() {
+        TransactionKind::Provided { scope } => {
+          let existing = OnChainProvided::get(txn, self.genesis, scope.as_bytes()).unwrap_or(0);
+          OnChainProvided::set(txn, self.genesis, scope.as_bytes(), &(existing + 1));
+        }
+        TransactionKind::Unsigned => Unsigned::set(txn, self.genesis, tx.hash(), &()),
+        TransactionKind::Signed { scope, signed: Signed { signer, nonce, signature: _ } } => {
+          LastSigned::set(txn, self.genesis, signer, &scope, &nonce);
+        }
+      }
+    }
   }
 }

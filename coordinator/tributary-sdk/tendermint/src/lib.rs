@@ -64,6 +64,17 @@ pub trait Network<V: Validator, S: Signature, A: AggregateSignature, B: Block> {
   /// time.
   const BLOCK_PROCESSING_TIME: Duration;
 
+  /// The target block time.
+  ///
+  /// This MUST NOT be overriden. It is a function of the constants for timings.
+  ///
+  /// This will return `None` if the resulting `Duration` isn't representable.
+  fn target_block_time() -> Option<Duration> {
+    Self::BLOCK_DOWNLOADING_TIME
+      .checked_add(Self::BLOCK_PROCESSING_TIME)?
+      .checked_add(Self::LATENCY_TIME.checked_mul(3)?)
+  }
+
   /// The future returned by [`Network::sleep`].
   type Sleep: Future<Output = ()>;
 
@@ -82,7 +93,11 @@ pub trait Network<V: Validator, S: Signature, A: AggregateSignature, B: Block> {
   /// to stall until the timeout for a round exceeds the latency of this network.
   ///
   /// This DOES NOT have to be cancel-safe.
-  fn broadcast(&mut self, message: Message<V, S, A, B>) -> impl Send + Future<Output = ()>;
+  fn broadcast(
+    &mut self,
+    genesis: impl AsRef<[u8]>,
+    message: Message<V, S, A, B>,
+  ) -> impl Send + Future<Output = ()>;
 }
 
 #[cfg(feature = "std")]
@@ -178,7 +193,7 @@ mod tendermint {
               We give this priority so if we reload from the database, this is consistently handled
               independent of any messages are available.
             */
-            f2: self.state.timeout::<N, _>(&self.blockchain, &self.signer),
+            f2: self.state.timeout::<N, _>(&mut self.blockchain, &self.signer),
           },
           // Check for a received message, which may advance this consensus process
           f2: self.message.recv(),
@@ -186,12 +201,7 @@ mod tendermint {
         .await;
 
         match tick {
-          crate::or::Either::L(crate::or::Either::L(Ok((ref block, ref commit)))) => {
-            // TODO: Remove these `Clone`s
-            let block = block.clone();
-            let commit = commit.clone();
-            drop(tick);
-
+          crate::or::Either::L(crate::or::Either::L(Ok((block, commit)))) => {
             if commit.block_number != self.state.block_number() {
               continue;
             }
@@ -212,7 +222,7 @@ mod tendermint {
             txn.commit();
 
             for message in messages {
-              self.network.broadcast(message).await;
+              self.network.broadcast(self.blockchain.genesis(), message).await;
             }
 
             continue;
@@ -229,22 +239,22 @@ mod tendermint {
             txn.commit();
 
             for message in messages {
-              self.network.broadcast(message).await;
+              self.network.broadcast(self.blockchain.genesis(), message).await;
             }
           }
 
-          crate::or::Either::R(Ok(ref message)) => {
-            // TODO: Remove this `Clone`
-            let message = message.clone();
-            drop(tick);
-
+          crate::or::Either::R(Ok(message)) => {
             let mut txn = self.db.txn();
             let validator = message.validator;
-            match self.state.message::<N>(&self.blockchain, &self.signer, &mut txn, message).await {
+            match self
+              .state
+              .message::<N>(&mut self.blockchain, &self.signer, &mut txn, message)
+              .await
+            {
               Ok(messages) => {
                 txn.commit();
                 for message in messages {
-                  self.network.broadcast(message).await;
+                  self.network.broadcast(self.blockchain.genesis(), message).await;
                 }
               }
               Err(MessageError::Invalid(slash_reason)) => {
@@ -273,7 +283,7 @@ mod tendermint {
           txn.commit();
 
           for message in messages {
-            self.network.broadcast(message).await;
+            self.network.broadcast(self.blockchain.genesis(), message).await;
           }
         }
       }
@@ -309,22 +319,22 @@ mod tendermint {
           B::Block,
         >,
     >(
-      blockchain: B,
+      mut blockchain: B,
       signer: S,
       mut db: D,
       mut network: N,
-      proposal: B::Block,
+      proposal: B::BlockProposal,
     ) -> (TendermintHandle<B>, TendermintProcess<B, S, D, N>) {
       // Sync blocks with a capacity of the amount of blocks per 5 minutes
       let (sync_send, sync_recv) = async_channel::bounded({
         use core::time::Duration;
-        let time_per_block = N::BLOCK_DOWNLOADING_TIME
-          .saturating_add(N::BLOCK_PROCESSING_TIME)
-          .saturating_add(N::LATENCY_TIME.saturating_mul(3));
-        let blocks_per_minute =
-          Duration::from_mins(5).as_millis().div_ceil(time_per_block.as_millis().max(1));
+        let blocks_per_five_minutes = if let Some(target_block_time) = N::target_block_time() {
+          Duration::from_mins(5).as_millis().div_ceil(target_block_time.as_millis().max(1))
+        } else {
+          1
+        };
         // Limit this to a sane range
-        usize::try_from(blocks_per_minute).unwrap_or(usize::MAX).clamp(1, 64)
+        usize::try_from(blocks_per_five_minutes).unwrap_or(usize::MAX).clamp(1, 64)
       });
 
       /*
@@ -342,11 +352,11 @@ mod tendermint {
         async_channel::bounded(2 * blockchain.validator_set().validators().into_iter().count());
 
       let mut txn = db.txn();
-      let (state, messages) = State::new::<N>(&blockchain, &signer, &mut txn, proposal).await;
+      let (state, messages) = State::new::<N>(&mut blockchain, &signer, &mut txn, proposal).await;
       txn.commit();
 
       for message in messages {
-        network.broadcast(message).await;
+        network.broadcast(blockchain.genesis(), message).await;
       }
 
       (
@@ -372,7 +382,7 @@ mod tendermint {
     /// Initialize the Tendermint process.
     ///
     /// The returned future will run until its corresponding channels are closed. The future is NOT
-    /// cancel-safe, and will have an undefined state in memory if cancelled. It MUST be polled
+    /// cancel-safe, and will leave an undefined state in memory if cancelled. It MUST be polled
     /// until either:
     /// 1) It is of no further use, and accordingly its state may be undefined
     /// 2) The process terminates, so that the Tendermint process will be re-initialized from the
@@ -416,7 +426,7 @@ mod tendermint {
       signer: S,
       db: D,
       network: N,
-      proposal: B::Block,
+      proposal: B::BlockProposal,
     ) -> impl Send + Future<Output = (TendermintHandle<B>, impl Send + Future<Output = ()>)> {
       async move {
         let (handle, process) = Self::internal(blockchain, signer, db, network, proposal).await;
@@ -454,7 +464,7 @@ mod tendermint {
       signer: S,
       db: D,
       network: N,
-      proposal: B::Block,
+      proposal: B::BlockProposal,
     ) -> impl Future<Output = (TendermintHandle<B>, impl Future<Output = ()>)> {
       async move {
         let (handle, process) = Self::internal(blockchain, signer, db, network, proposal).await;

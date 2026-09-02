@@ -1219,7 +1219,7 @@ fn handle_block() {
           parent: random_bytes(&mut OsRng),
           transactions: random_bytes(&mut OsRng),
         },
-        transactions: vec![TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(evidence))],
+        transactions: vec![TributaryTransaction::Tendermint(Slash::SlashEvidence(evidence))],
       };
 
       {
@@ -1259,7 +1259,7 @@ fn handle_block() {
             make_signed_message_bytes(addr0.0),
           ),
         };
-        transactions.push(TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(evidence)));
+        transactions.push(TributaryTransaction::Tendermint(Slash::SlashEvidence(evidence)));
         has_evidence = true;
       } else */
       {

@@ -585,7 +585,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
           TributaryDb::fatal_slash(
             self.tributary_txn,
             self.set.set,
-            SeraiAddress(tendermint_tx.slashed()),
+            SeraiAddress(tendermint_tx.validator()),
             &format!("invalid tendermint messages: {tendermint_tx:?}"),
           );
         }

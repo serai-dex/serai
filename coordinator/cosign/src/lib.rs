@@ -6,7 +6,7 @@
 use core::{fmt::Debug, future::Future};
 use std::{sync::Arc, collections::HashMap, time::Instant};
 
-use blake2::{Digest as _, Blake2s256};
+use blake2::{Digest as _, Blake2b256};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
@@ -64,7 +64,7 @@ pub(crate) struct GlobalSession {
 impl GlobalSession {
   pub(crate) fn id(mut cosigners: Vec<ExternalValidatorSet>) -> [u8; 32] {
     cosigners.sort_by_key(|a| borsh::to_vec(a).unwrap());
-    Blake2s256::digest(borsh::to_vec(&cosigners).unwrap()).into()
+    Blake2b256::digest(borsh::to_vec(&cosigners).unwrap()).into()
   }
 }
 

@@ -1,7 +1,7 @@
 use core::{num::NonZero, time::Duration};
 use std::time::Instant;
 
-use blake2::{Digest as _, Blake2s256};
+use blake2::{Digest as _, Blake2b256};
 
 use serai_primitives::test_helpers::random_bytes;
 use serai_db::MemDb;
@@ -121,7 +121,7 @@ fn inject_block(
   let tx_hashes: Vec<[u8; 32]> =
     transactions.iter().map(tributary_sdk::Transaction::hash).collect();
   let txs_hash =
-    Blake2s256::digest(tx_hashes.iter().flat_map(|h| h.iter().copied()).collect::<Vec<_>>()).into();
+    Blake2b256::digest(tx_hashes.iter().flat_map(|h| h.iter().copied()).collect::<Vec<_>>()).into();
   let block = Block { header: BlockHeader { parent, transactions: txs_hash }, transactions };
   let block_hash = block.hash();
   let serialized = block.serialize();
@@ -173,7 +173,7 @@ async fn scan_tributary_task_run_iteration() {
     let batch_tx =
       TributaryTransaction::Application(Transaction::Batch { hash: random_bytes(&mut OsRng) });
     /* TODO
-    let fake_evidence = TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(
+    let fake_evidence = TributaryTransaction::Tendermint(Slash::SlashEvidence(
       Evidence::InvalidPrecommit(make_signed_message_bytes(set_info.validators[0].0 .0)),
     ));
     let block_txs = vec![fake_evidence, batch_tx];

@@ -7,9 +7,9 @@ use crate::{BlockNumber, RoundNumber};
 /// This is effectively a trait alias where a potential validator ID is any type which satisfies
 /// all of these bounds, and this is implemented for all such types.
 ///
-/// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
-/// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
-/// value which was successfully serialized, from a well-formed reader.
+/// The [`borsh::BorshSerialize`] implementation MUST be infallible if the underlying writer is
+/// infallible. The [`borsh::BorshDeserialize`] implementation MUST be infallible if it is
+/// deserializing a value which was successfully serialized, from a well-formed reader.
 pub trait Validator: Clone + Copy + PartialEq + Eq + Hash + Debug {}
 impl<V: Clone + Copy + PartialEq + Eq + Hash + Debug> Validator for V {}
 
@@ -21,9 +21,9 @@ impl<V: Clone + Copy + PartialEq + Eq + Hash + Debug> Validator for V {}
 /// The `AsRef<[u8]>` implementation MUST return a slice with a consistent length for _any_
 /// value, meaning it's _constant_.
 ///
-/// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
-/// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
-/// value which was successfully serialized, from a well-formed reader.
+/// The [`borsh::BorshSerialize`] implementation MUST be infallible if the underlying writer is
+/// infallible. The [`borsh::BorshDeserialize`] implementation MUST be infallible if it is
+/// deserializing a value which was successfully serialized, from a well-formed reader.
 pub trait Signature: Clone + AsRef<[u8]> {}
 impl<S: Clone + AsRef<[u8]>> Signature for S {}
 
@@ -32,9 +32,9 @@ impl<S: Clone + AsRef<[u8]>> Signature for S {}
 /// This is effectively a trait alias where a potential representation of an aggregate signature is
 /// any type which satisfies all of these bounds, and this is implemented for all such types.
 ///
-/// The [`BorshSerialize`] implementation MUST be infallible if the underlying writer is
-/// infallible. The [`BorshDeserialize`] implementation MUST be infallible if it is deserializing a
-/// value which was successfully serialized, from a well-formed reader.
+/// The [`borsh::BorshSerialize`] implementation MUST be infallible if the underlying writer is
+/// infallible. The [`borsh::BorshDeserialize`] implementation MUST be infallible if it is
+/// deserializing a value which was successfully serialized, from a well-formed reader.
 pub trait AggregateSignature: Clone + AsRef<[u8]> {}
 impl<S: Clone + AsRef<[u8]>> AggregateSignature for S {}
 

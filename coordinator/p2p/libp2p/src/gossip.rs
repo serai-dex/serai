@@ -1,6 +1,6 @@
 use core::time::Duration;
 
-use blake2::{Digest as _, Blake2s256};
+use blake2::{Digest as _, Blake2b256};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
@@ -69,7 +69,7 @@ pub(crate) fn new_behavior() -> Behavior {
     .validation_mode(ValidationMode::Anonymous)
     // Uses a content based message ID to avoid duplicates as much as possible
     .message_id_fn(|msg| {
-      MessageId::new(&Blake2s256::digest([msg.topic.as_str().as_bytes(), &msg.data].concat()))
+      MessageId::new(&Blake2b256::digest([msg.topic.as_str().as_bytes(), &msg.data].concat()))
     })
     .build();
 

@@ -47,7 +47,7 @@ rand = { version = "0.8", default-features = false, features = ["std"] }
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
 tendermint = { package = "tendermint-machine", path = "../tributary-sdk/tendermint" }
-tributary-sdk = { path = "../tributary-sdk", features = ["tests"] }
+tributary-sdk = { path = "../tributary-sdk" }
 
 tokio = { version = "1", default-features = false, features = ["rt", "time", "macros", "rt-multi-thread"] }
 

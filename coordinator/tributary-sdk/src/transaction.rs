@@ -1,220 +1,265 @@
 use core::fmt::Debug;
+use alloc::vec::Vec;
 use std::io;
 
-use zeroize::Zeroize as _;
-use thiserror::Error;
-
-use blake2::{Digest as _, Blake2b512};
-
-use ciphersuite::{
-  group::{Group as _, GroupEncoding as _},
-  *,
+use blake2::{
+  digest::{CustomizedInit as _, Digest as _},
+  Blake2b256, Blake2b512,
 };
+
+use ciphersuite::{WrappedGroup, GroupIo};
 use dalek_ff_group::Ristretto;
 use schnorr::SchnorrSignature;
 
-use crate::{TRANSACTION_SIZE_LIMIT, ReadWrite};
+use crate::{ReadWrite, Digestible};
 
-#[derive(Clone, PartialEq, Eq, Debug, Error)]
+/// An error from a transaction.
+#[derive(Clone, Debug)]
 pub enum TransactionError {
-  /// Transaction exceeded the size limit.
-  #[error("transaction is too large")]
-  TooLargeTransaction,
-  /// Transaction's signer isn't a participant.
-  #[error("invalid signer")]
+  /// The transaction exceeded the size limit.
+  ExceededSizeLimit,
+  /// The transaction's signer wasn't a validator or was slashed.
   InvalidSigner,
-  /// Transaction's nonce isn't the prior nonce plus one.
-  #[error("invalid nonce")]
-  InvalidNonce,
-  /// Transaction's signature is invalid.
-  #[error("invalid signature")]
+  /// The transaction's signature was invalid.
   InvalidSignature,
-  /// Transaction's content is invalid.
-  #[error("transaction content is invalid")]
-  InvalidContent,
-  /// Transaction's signer has too many transactions in the mempool.
-  #[error("signer has too many transactions in the mempool")]
-  TooManyInMempool,
-  /// Provided Transaction added to mempool.
-  #[error("provided transaction added to mempool")]
-  ProvidedAddedToMempool,
+  /// The transaction itself was invalid, as per [`Transaction::verify`].
+  InvalidTransaction,
 }
 
-/// Data for a signed transaction.
-#[derive(Clone, PartialEq, Eq, Debug)]
+/// The signature data for a `Signed` transaction.
+#[derive(Clone, Debug)]
 pub struct Signed {
-  pub signer: <Ristretto as WrappedGroup>::G,
-  pub nonce: u32,
-  pub signature: SchnorrSignature<Ristretto>,
+  /// The transaction's signer.
+  ///
+  /// This MUST be the Ristretto public key of a validator who has not been slashed.
+  pub signer: [u8; 32],
+  /// The transaction's nonce.
+  ///
+  /// This transaction WILL NOT be included until all prior nonces, within this transaction's
+  /// scope, have appeared on-chain.
+  pub nonce: u64,
+  /// The Ristretto Schnorr signature.
+  pub signature: [u8; 64],
 }
 
 impl ReadWrite for Signed {
   fn read(mut reader: impl io::Read) -> io::Result<Self> {
-    let signer = Ristretto::read_G(&mut reader)?;
+    let signer = {
+      let mut signer = [0; 32];
+      reader.read_exact(&mut signer)?;
+      signer
+    };
 
-    let mut nonce = [0; 4];
-    reader.read_exact(&mut nonce)?;
-    let nonce = u32::from_le_bytes(nonce);
-    if nonce >= (u32::MAX - 1) {
-      Err(io::Error::other("nonce exceeded limit"))?;
-    }
+    let nonce = {
+      let mut nonce = [0; 8];
+      reader.read_exact(&mut nonce)?;
+      u64::from_le_bytes(nonce)
+    };
 
-    let mut signature = SchnorrSignature::<Ristretto>::read(reader)?;
-    if signature.R.is_identity().into() {
-      // Anyone malicious could remove this and try to find zero signatures
-      // We should never produce zero signatures though meaning this should never come up
-      // If it does somehow come up, this is a decent courtesy
-      signature.zeroize();
-      Err(io::Error::other("signature nonce was identity"))?;
-    }
+    let signature = {
+      let mut signature = [0; 64];
+      reader.read_exact(&mut signature)?;
+      signature
+    };
 
-    Ok(Signed { signer, nonce, signature })
+    Ok(Self { signer, nonce, signature })
   }
 
   fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
-    // This is either an invalid signature or a private key leak
-    if self.signature.R.is_identity().into() {
-      Err(io::Error::other("signature nonce was identity"))?;
-    }
-    writer.write_all(&self.signer.to_bytes())?;
-    writer.write_all(&self.nonce.to_le_bytes())?;
-    self.signature.write(writer)
+    let Self { signer, nonce, signature } = self;
+    writer.write_all(signer)?;
+    writer.write_all(&nonce.to_le_bytes())?;
+    writer.write_all(signature)
   }
 }
 
 impl Signed {
-  pub fn read_without_nonce(mut reader: impl io::Read, nonce: u32) -> io::Result<Self> {
-    let signer = Ristretto::read_G(&mut reader)?;
+  /// Read a `Signed` value _without its numeric nonce_.
+  ///
+  /// This is beneficial for contexts where the numeric nonce can be inferred from the
+  /// transaction's content, allowing optimizing the encoding and reducing malleability.
+  ///
+  //// This has an incompatible wire format with `<Signed as ReadWrite>` and requires the `nonce`
+  /// be specified as an argument.
+  pub fn read_without_nonce(mut reader: impl io::Read, nonce: u64) -> io::Result<Self> {
+    let signer = {
+      let mut signer = [0; 32];
+      reader.read_exact(&mut signer)?;
+      signer
+    };
 
-    let mut signature = SchnorrSignature::<Ristretto>::read(reader)?;
-    if signature.R.is_identity().into() {
-      // Anyone malicious could remove this and try to find zero signatures
-      // We should never produce zero signatures though meaning this should never come up
-      // If it does somehow come up, this is a decent courtesy
-      signature.zeroize();
-      Err(io::Error::other("signature nonce was identity"))?;
-    }
+    let signature = {
+      let mut signature = [0; 64];
+      reader.read_exact(&mut signature)?;
+      signature
+    };
 
     Ok(Signed { signer, nonce, signature })
   }
 
+  /// Write a `Signed` value _without its numeric nonce_.
+  ///
+  /// This function is the compliment to [`Signed::read_without_nonce`].
+  ///
+  //// This has an incompatible wire format with `<Signed as ReadWrite>`.
   pub fn write_without_nonce(&self, mut writer: impl io::Write) -> io::Result<()> {
-    // This is either an invalid signature or a private key leak
-    if self.signature.R.is_identity().into() {
-      Err(io::Error::other("signature nonce was identity"))?;
-    }
-    writer.write_all(&self.signer.to_bytes())?;
-    self.signature.write(writer)
+    let Self { signer, nonce: _, signature } = self;
+    writer.write_all(signer)?;
+    writer.write_all(signature)
   }
 }
 
-#[expect(clippy::large_enum_variant)]
-#[derive(Clone, PartialEq, Eq, Debug)]
+/// The type of a transaction.
+///
+/// This defines the transaction's required semantics for inclusion.
+#[derive(Clone)]
 pub enum TransactionKind {
-  /// This transaction should be provided by every validator, in an exact order.
+  /// This transaction should be locally provided by every validator, in an exact order.
   ///
-  /// The contained static string names the orderer to use. This allows two distinct provided
-  /// transaction kinds, without a synchronized order, to be ordered within their own kind without
-  /// requiring ordering with each other.
+  /// The contained static string names a scope to use. This allows two distinct provided
+  /// transactions, without synchrony, to be ordered within distinct scopes without mandating
+  /// ordering with each other at time of provision. They will still be ordered into a single
+  /// linear view once included on the agreed-upon blockchain.
   ///
-  /// The only malleability is in when this transaction appears on chain. The block producer will
-  /// include it when they have it. Block verification will fail for validators without it.
+  /// The only malleability SHOULD be when this transaction appears on chain. The block producer
+  /// will only include provided transactions, once locally provided, and validators will only vote
+  /// for blocks with provided transactions if they were as locally provided.
   ///
   /// If a supermajority of validators produce a commit for a block with a provided transaction
-  /// which isn't locally held, the block will be added to the local chain. When the transaction is
-  /// locally provided, it will be compared for correctness to the on-chain version
+  /// which isn't locally held, or even if it conflicts with a locally held provided transaction,
+  /// the block will still be added to the local chain. The application MUST check the on-chain
+  /// provided transactions are consistent with the local view.
   ///
-  /// In order to ensure TXs aren't accidentally provided multiple times, all provided transactions
-  /// must have a unique hash which is also unique to all Unsigned transactions.
-  Provided(&'static str),
+  /// In order to ensure provided transactions aren't inadvertently provided multiple times, all
+  /// provided transactions MUST have a unique hash.
+  Provided {
+    /// The scope for this provided transaction.
+    scope: &'static str,
+  },
 
-  /// An unsigned transaction, only able to be included by the block producer.
+  /// An unsigned transaction.
   ///
-  /// Once an Unsigned transaction is included on-chain, it may not be included again. In order to
-  /// have multiple Unsigned transactions with the same values included on-chain, some distinct
-  /// nonce must be included in order to cause a distinct hash.
+  /// This will be broadcast to other validators, who will add it to their mempool if they agree on
+  /// the transaction's validity. No requirements on its ordering (in relation to any other
+  /// transaction) are established.
   ///
-  /// The hash must also be unique with all Provided transactions.
+  /// In order to ensure unsigned transactions aren't inadvertently included multiple times, all
+  /// unsigned transactions MUST have a unique hash.
   Unsigned,
 
   /// A signed transaction.
-  Signed(Vec<u8>, Signed),
+  Signed {
+    /// The scope for this signed transaction.
+    ///
+    /// The nonce with the `Signed` data is local to this scope.
+    scope: Vec<u8>,
+    /// The `Signed` data associated with this.
+    signed: Signed,
+  },
 }
 
-// TODO: Should this be renamed TransactionTrait now that a literal Transaction exists?
-// Or should the literal Transaction be renamed to Event?
-pub trait Transaction: 'static + Send + Sync + Clone + Debug + ReadWrite {
-  /// Return what type of transaction this is.
+/// A Tributary transaction.
+///
+/// The implementation of `Digestible` MUST be binding to the entire transaction _except_ its
+/// signature (if signed).
+pub trait Transaction: Clone + ReadWrite + Digestible {
+  /// The size limit for a transaction.
+  ///
+  /// The Tributary will enforce no individual transaction exceeds this size. If this is `None`,
+  /// transactions will still be required to be able to be included in a block within the blocks'
+  /// size limit.
+  ///
+  /// The default size limit is 2 MiB.
+  const SIZE_LIMIT: Option<usize> = Some(2 * 1024 * 1024);
+
+  /// The size limit for a block.
+  ///
+  /// The Tributary will enforce no individual block exceeds this size.
+  ///
+  /// The default size limt is 4 MiB.
+  const BLOCK_SIZE_LIMIT: Option<usize> = Some(4 * 1024 * 1024);
+
+  /// The type of transaction this is.
   fn kind(&self) -> TransactionKind;
 
-  /// Return the hash of this transaction.
+  /// Verify this transaction's content.
   ///
-  /// The hash must NOT commit to the signature.
-  fn hash(&self) -> [u8; 32];
-
-  /// Perform transaction-specific verification.
+  /// This MUST be a context-free validation over the data within this transaction alone. This
+  /// function is only required to apply application-specific verification rules, where the
+  /// Tributary will always apply its rules and any rules regarding the current ocntext.
   fn verify(&self) -> Result<(), TransactionError>;
 
   /// Obtain the challenge for this transaction's signature.
   ///
-  /// Do not override this unless you know what you're doing.
+  /// This MUST return `Some(_)`  when `TransactionKind::Signed { .. }` and `None` otherwise.
   ///
-  /// Panics if called on non-signed transactions.
-  fn sig_hash(&self, genesis: [u8; 32]) -> <Ristretto as WrappedGroup>::F {
-    #[expect(clippy::wildcard_enum_match_arm)]
-    match self.kind() {
-      TransactionKind::Signed(order, Signed { signature, .. }) => {
-        <Ristretto as WrappedGroup>::F::from_bytes_mod_order_wide(
-          &Blake2b512::digest(
-            [
-              b"Tributary Signed Transaction",
-              genesis.as_ref(),
-              &self.hash(),
-              order.as_ref(),
-              signature.R.to_bytes().as_ref(),
-            ]
-            .concat(),
-          )
-          .into(),
-        )
-      }
-      _ => panic!("sig_hash called on non-signed transaction"),
-    }
+  /// The provided implementation uses BLAKE2b-512, with a personalization of "tributary tx sig",
+  /// for its hash function. It scopes to a specific Tributary via its genesis before digesting the
+  /// transaction and the present signature's nonce.
+  fn signature_challenge(&self, genesis: [u8; 32]) -> Option<<Ristretto as WrappedGroup>::F> {
+    let TransactionKind::Signed { scope: _, signed: Signed { signature, .. } } = self.kind() else {
+      None?
+    };
+    Some(<Ristretto as WrappedGroup>::F::from_bytes_mod_order_wide(&{
+      let genesis_scoped = Blake2b512::new_customized(b"tributary tx sig").chain_update(genesis);
+      let tx_scoped = self.chain_update(genesis_scoped);
+      let nonce_scoped = tx_scoped.chain_update(&signature[.. 32]);
+      nonce_scoped.finalize().into()
+    }))
+  }
+
+  /// Hash this transaction.
+  ///
+  /// The provided implementation uses BLAKE2b-256, with a personalization of "tributary tx", for
+  /// its hash function. The implementation MUST be binding to the entire value's digestible
+  /// content.
+  fn hash(&self) -> [u8; 32] {
+    self.chain_update(Blake2b256::new_customized(b"tributary tx")).finalize().into()
   }
 }
 
-pub trait GAIN: FnMut(&<Ristretto as WrappedGroup>::G, &[u8]) -> Option<u32> {}
-impl<F: FnMut(&<Ristretto as WrappedGroup>::G, &[u8]) -> Option<u32>> GAIN for F {}
-
-pub(crate) fn verify_transaction<F: GAIN, T: Transaction>(
+pub(crate) fn verify_syntax<T: Transaction>(
   tx: &T,
   genesis: [u8; 32],
-  get_and_increment_nonce: &mut F,
 ) -> Result<(), TransactionError> {
-  if tx.serialize().len() > TRANSACTION_SIZE_LIMIT {
-    Err(TransactionError::TooLargeTransaction)?;
+  {
+    let transaction_size_limit_by_block_size_limit = match T::BLOCK_SIZE_LIMIT
+      .map(|block_size_limit| block_size_limit.checked_sub(crate::Block::<T>::EMPTY_BLOCK_SIZE))
+    {
+      Some(Some(transaction_size_limit_by_block_size_limit)) => {
+        Some(transaction_size_limit_by_block_size_limit)
+      }
+      // The block size limit is less than the size of an empty block, so any block (and
+      // therefore any transactions) will be syntactically invalid
+      Some(None) => Err(TransactionError::ExceededSizeLimit)?,
+      None => None,
+    };
+    if let Some(size_limit) = T::SIZE_LIMIT.or(transaction_size_limit_by_block_size_limit) &&
+      (crate::serialized_len(tx).map_err(|_| TransactionError::ExceededSizeLimit)? > size_limit)
+    {
+      Err(TransactionError::ExceededSizeLimit)?;
+    }
+  }
+
+  if let Some(signature_challenge) = tx.signature_challenge(genesis) {
+    let TransactionKind::Signed { scope: _, signed: Signed { signer, nonce: _, signature } } =
+      tx.kind()
+    else {
+      panic!(
+        "`Transaction::signature_challenge` returned `Some(_)` when not `TransactionKind::Signed`"
+      );
+    };
+    let signer = <Ristretto as GroupIo>::read_G(&mut signer.as_slice())
+      .map_err(|_| TransactionError::InvalidSigner)?;
+    let signature = SchnorrSignature::<Ristretto>::read(&mut signature.as_slice())
+      .map_err(|_| TransactionError::InvalidSignature)?;
+    // TODO: Queue this for batch verification
+    if !signature.verify(signer, signature_challenge) {
+      Err(TransactionError::InvalidSignature)?;
+    }
   }
 
   tx.verify()?;
-
-  match tx.kind() {
-    TransactionKind::Provided(_) | TransactionKind::Unsigned => {}
-    TransactionKind::Signed(order, Signed { signer, nonce, signature }) => {
-      if let Some(next_nonce) = get_and_increment_nonce(&signer, &order) {
-        if nonce != next_nonce {
-          Err(TransactionError::InvalidNonce)?;
-        }
-      } else {
-        // Not a participant
-        Err(TransactionError::InvalidSigner)?;
-      }
-
-      // TODO: Use a batch verification here
-      if !signature.verify(signer, tx.sig_hash(genesis)) {
-        Err(TransactionError::InvalidSignature)?;
-      }
-    }
-  }
 
   Ok(())
 }

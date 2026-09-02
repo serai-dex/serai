@@ -1,512 +1,407 @@
-use core::{ops::Deref as _, future::Future, time::Duration, num::NonZero};
-use std::{
-  sync::Arc,
-  io::Read as _,
-  collections::{HashSet, HashMap},
-  time::Instant,
+//! The integration with Tendermint for consensus.
+//!
+//! `tributary-sdk` makes use of `tendermint-machine` for consensus, complimenting its largely
+//! black-box view of consensus with the structure of a blockchain. This module implements the
+//! necessary traits from `tendermint-machine` for the two to work together, and defines the
+//! [`Slash`] type.
+
+use core::{
+  marker::PhantomData,
+  pin::Pin,
+  task::{Poll, Context},
+  num::NonZero,
+  time::Duration,
 };
+use alloc::{vec::Vec, collections::BTreeMap};
+use std::{time::SystemTime, collections::HashMap};
 
-use subtle::ConstantTimeEq as _;
-use zeroize::{Zeroize as _, Zeroizing};
+use serai_db::{Get, Transaction as DbTxn, Db};
 
-use transcript::{Transcript as _, RecommendedTranscript};
-
-use ciphersuite::{
-  group::{ff::PrimeField as _, GroupEncoding as _},
-  *,
-};
-use dalek_ff_group::Ristretto;
-use schnorr::{
-  SchnorrSignature,
-  aggregate::{SchnorrAggregator, SchnorrAggregate},
-};
-
-use serai_db::Db;
-
-use borsh::{BorshSerialize, BorshDeserialize};
-use tendermint::{
-  InvalidAggregateSignature, SignatureScheme, Signer as SignerTrait, Block as BlockTrait,
-  InvalidBlock, CommitFor, Blockchain as BlockchainTrait, MessageFor, SlashReasonFor, Network,
-};
-
-use tokio::sync::RwLock;
+use ::tendermint::{Network, CommitFor, SlashReasonFor, InvalidBlock};
 
 use crate::{
-  TENDERMINT_MESSAGE, TRANSACTION_MESSAGE, ReadWrite as _,
-  transaction::{TransactionError, Transaction as TransactionTrait},
-  Transaction, BlockHeader, Block, BlockError, Blockchain, P2p,
+  ReadWriteAsBorsh,
+  transaction::{Signed, TransactionKind, Transaction},
+  block::{SyntacticError, SemanticError, EphemeralError, BlockError, Block},
+  Blockchain,
 };
 
-pub mod tx;
-use tx::TendermintTx;
+mod signature_scheme;
+pub use signature_scheme::*;
 
-const DST: &[u8] = b"Tributary Tendermint Commit Aggregator";
+mod slash;
+pub use slash::Slash;
 
-fn challenge(
-  genesis: [u8; 32],
-  key: [u8; 32],
-  nonce: &[u8],
-  msg: &[u8],
-) -> <Ristretto as WrappedGroup>::F {
-  let mut transcript = RecommendedTranscript::new(b"Tributary Chain Tendermint Message");
-  transcript.append_message(b"genesis", genesis);
-  transcript.append_message(b"key", key);
-  transcript.append_message(b"nonce", nonce);
-  transcript.append_message(b"message", msg);
+serai_db::schema!(TributaryTendermint {
+  PendingSlash: (genesis: [u8; 32], validator: [u8; 32]) -> ReadWriteAsBorsh<super::Slash>,
+  PendingSlashes: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
+});
 
-  <Ristretto as WrappedGroup>::F::from_bytes_mod_order_wide(
-    &transcript.challenge(b"schnorr").into(),
-  )
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Signer {
-  genesis: [u8; 32],
-  key: Zeroizing<<Ristretto as WrappedGroup>::F>,
-}
-
-impl Signer {
-  pub(crate) fn new(genesis: [u8; 32], key: Zeroizing<<Ristretto as WrappedGroup>::F>) -> Signer {
-    Signer { genesis, key }
-  }
-}
-
-impl SignerTrait for Signer {
-  type Validator = [u8; 32];
-  type Signature = [u8; 64];
-
-  fn validator(&self) -> Self::Validator {
-    (Ristretto::generator() * self.key.deref()).to_bytes()
-  }
-
-  type SignFuture = core::future::Ready<Self::Signature>;
-  fn sign(&self, message: impl IntoIterator<Item = impl AsRef<[u8]>>) -> Self::SignFuture {
-    let mut concat_message: Vec<u8> = vec![];
-    for chunk in message {
-      concat_message.extend(chunk.as_ref());
-    }
-    let message = concat_message;
-
-    let mut nonce = {
-      let mut nonce_transcript = RecommendedTranscript::new(b"Tributary Chain Tendermint Nonce");
-      nonce_transcript.append_message(b"genesis", self.genesis);
-      nonce_transcript.append_message(b"key", Zeroizing::new(self.key.deref().to_repr()).as_ref());
-      nonce_transcript.append_message(b"message", &message);
-      let nonce = nonce_transcript.challenge(b"nonce");
-
-      // Ensure this will be zeroized (via the type contract) and ensure it happens now
-      {
-        fn drop_zeroize_on_drop(value: impl zeroize::ZeroizeOnDrop) {
-          drop(value);
-        }
-        drop_zeroize_on_drop(nonce_transcript);
-      }
-
-      nonce
-    };
-
-    let mut nonce_arr = [0; 64];
-    nonce_arr.copy_from_slice(nonce.as_ref());
-
-    let nonce_ref: &mut [u8] = nonce.as_mut();
-    nonce_ref.zeroize();
-    let nonce_ref: &[u8] = nonce.as_ref();
-    assert_eq!(nonce_ref, [0; 64].as_ref());
-
-    let nonce =
-      Zeroizing::new(<Ristretto as WrappedGroup>::F::from_bytes_mod_order_wide(&nonce_arr));
-    nonce_arr.zeroize();
-
-    assert!(!bool::from(nonce.ct_eq(&<Ristretto as WrappedGroup>::F::ZERO)));
-
-    let challenge = challenge(
-      self.genesis,
-      (Ristretto::generator() * self.key.deref()).to_bytes(),
-      (Ristretto::generator() * nonce.deref()).to_bytes().as_ref(),
-      &message,
-    );
-
-    let sig = SchnorrSignature::<Ristretto>::sign(&self.key, nonce, challenge).serialize();
-
-    let mut res = [0; 64];
-    res.copy_from_slice(&sig);
-    core::future::ready(res)
-  }
-}
-
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub struct Validators {
-  genesis: [u8; 32],
-  weights: HashMap<[u8; 32], NonZero<u16>>,
-}
-
-impl Validators {
-  pub(crate) fn new(
-    genesis: [u8; 32],
-    validators: Vec<(<Ristretto as WrappedGroup>::G, NonZero<u16>)>,
-  ) -> Option<Validators> {
-    let mut total_weight = 0;
-    let mut weights = HashMap::new();
-
-    for (validator, weight) in validators {
-      let validator = validator.to_bytes();
-      total_weight += u64::from(u16::from(weight));
-      if total_weight > u64::from(u16::MAX) {
-        None?;
-      }
-      weights.insert(validator, weight);
-    }
-
-    (total_weight != 0).then_some(Validators { genesis, weights })
-  }
-
-  pub(crate) fn weights(&self) -> &HashMap<[u8; 32], NonZero<u16>> {
-    &self.weights
-  }
-}
-
-impl SignatureScheme for Validators {
-  type Validator = [u8; 32];
-  type Signature = [u8; 64];
-  type AggregateSignature = Vec<u8>;
-
-  fn verify(
-    &self,
-    validator: &Self::Validator,
-    message: impl IntoIterator<Item = impl AsRef<[u8]>>,
-    signature: &Self::Signature,
-  ) -> bool {
-    let mut concat_message: Vec<u8> = vec![];
-    for chunk in message {
-      concat_message.extend(chunk.as_ref());
-    }
-    let message = concat_message;
-
-    if !self.weights.contains_key(validator) {
-      return false;
-    }
-    let Ok(validator_point) = Ristretto::read_G(validator.as_slice()) else {
-      return false;
-    };
-    let Ok(actual_sig) = SchnorrSignature::<Ristretto>::read(signature.as_slice()) else {
-      return false;
-    };
-    actual_sig
-      .verify(validator_point, challenge(self.genesis, *validator, &signature[.. 32], &message))
-  }
-
-  fn aggregate<'sig>(
-    &self,
-    message: impl IntoIterator<Item = impl AsRef<[u8]>>,
-    signatures: impl IntoIterator<Item = (&'sig Self::Validator, &'sig Self::Signature)>,
-  ) -> Self::AggregateSignature
-  where
-    Self::Validator: 'sig,
-    Self::Signature: 'sig,
-  {
-    let mut concat_message: Vec<u8> = vec![];
-    for chunk in message {
-      concat_message.extend(chunk.as_ref());
-    }
-    let message = concat_message;
-
-    let mut signers = vec![];
-    let mut aggregator = SchnorrAggregator::<Ristretto>::new(DST);
-    for (key, sig) in signatures {
-      signers.push(key);
-      let actual_sig = SchnorrSignature::<Ristretto>::read(sig.as_slice()).unwrap();
-      let challenge = challenge(self.genesis, *key, actual_sig.R.to_bytes().as_ref(), &message);
-      aggregator.aggregate(challenge, actual_sig);
-    }
-
-    let aggregate = aggregator.complete().unwrap();
-
-    let mut result = aggregate.serialize();
-    for signer in signers {
-      result.extend(signer);
-    }
-    result
-  }
-
-  fn verify_aggregate(
-    &self,
-    message: impl IntoIterator<Item = impl AsRef<[u8]>>,
-    aggregate_signature: &Self::AggregateSignature,
-  ) -> Result<impl IntoIterator<Item = Self::Validator>, InvalidAggregateSignature> {
-    let mut concat_message: Vec<u8> = vec![];
-    for chunk in message {
-      concat_message.extend(chunk.as_ref());
-    }
-    let message = concat_message;
-
-    let (aggregate_signature, signers) = {
-      // TODO: Bound the length of this
-      let mut aggregate_signature_slice = aggregate_signature.as_slice();
-      let Ok(aggregate_signature) =
-        SchnorrAggregate::<Ristretto>::read(&mut aggregate_signature_slice)
-      else {
-        Err(InvalidAggregateSignature)?
-      };
-
-      let signers = {
-        let mut signers_set = HashSet::new();
-        let mut signers = vec![];
-        for _ in 0 .. aggregate_signature.Rs().len() {
-          let mut signer = [0xff; 32];
-          let Ok(()) = aggregate_signature_slice.read_exact(&mut signer) else {
-            Err(InvalidAggregateSignature)?
-          };
-          if !signers_set.insert(signer) {
-            Err(InvalidAggregateSignature)?;
-          }
-          signers.push(signer);
-        }
-        signers
-      };
-
-      if !aggregate_signature_slice.is_empty() {
-        Err(InvalidAggregateSignature)?;
-      }
-
-      (aggregate_signature, signers)
-    };
-
-    let mut challenges = vec![];
-    for (key, nonce) in signers.iter().zip(aggregate_signature.Rs()) {
-      challenges.push(challenge(self.genesis, *key, nonce.to_bytes().as_ref(), &message));
-    }
-
-    if !aggregate_signature.verify(
-      DST,
-      signers
-        .iter()
-        .zip(challenges)
-        .map(|(s, c)| (<Ristretto as GroupIo>::read_G(s.as_slice()).unwrap(), c))
-        .collect::<Vec<_>>()
-        .as_slice(),
-    ) {
-      Err(InvalidAggregateSignature)?;
-    }
-
-    Ok(signers.into_iter())
-  }
-}
-
-#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
-pub struct TendermintBlock(pub Vec<u8>);
-impl BlockTrait for TendermintBlock {
+impl<T: Transaction> ::tendermint::Block for ReadWriteAsBorsh<Block<T>> {
   type Hash = [u8; 32];
   fn hash(&self) -> Self::Hash {
-    BlockHeader::read(self.0.as_slice()).unwrap().hash()
+    self.0.hash()
   }
 }
 
-#[derive(Clone, Debug)]
-pub struct TendermintNetwork<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  T: TransactionTrait,
-  P: P2p,
-> {
-  pub(crate) genesis: [u8; 32],
-  pub(crate) last_addition: Instant,
+/// The [`tendermint_machine::Commit`] type for a Tributary.
+pub type Commit = ::tendermint::Commit<AggregateSignature>;
 
-  pub(crate) validators: Validators,
-  pub(crate) blockchain: Arc<RwLock<Blockchain<D, T>>>,
-
-  pub(crate) p2p: P,
+pub(crate) trait Mempool<T> {
+  /// The container for transactions from the mempool.
+  type Transactions: IntoIterator<Item = T>;
+  /// The future for the transactions to include in the proposal for the next block.
+  type Future: Future<Output = Self::Transactions>;
+  /// Fetch transactions to include in the proposal for the next block.
+  ///
+  /// These transactions MUST be syntactically and semantically valid for the specified parent
+  /// block. The transactions MUST be sorted but MAY exceed the block's size limit in their
+  /// totality. Some transactions MAY not be included in the resulting proposal.
+  fn transactions(&mut self, parent_block: [u8; 32]) -> Self::Future;
+  /// If a validator has been censured.
+  fn censured(&self, getter: &impl Get, validator: [u8; 32]) -> bool;
+  /// Censure a validator.
+  fn censure(&mut self, txn: &mut impl DbTxn, validator: [u8; 32]);
 }
 
-impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait, P: P2p>
-  BlockchainTrait for TendermintNetwork<D, T, P>
+pub(crate) struct Tendermint<D, T: Transaction, M, N> {
+  genesis: [u8; 32],
+  genesis_time: u64,
+
+  signature_scheme: SignatureScheme,
+  _network: PhantomData<N>,
+
+  db: D,
+  blockchain: Blockchain<T>,
+  next_block_notification: async_channel::Receiver<async_channel::Sender<()>>,
+
+  /// The mempool for slashes.
+  ///
+  /// This can also be considered a `BTreeSet<T>` where `<Slash as core::cmp::Ord>` is implemented
+  /// by deferring to `<Slash::validator() as core::cmp::Ord>`.
+  slashes: BTreeMap<[u8; 32], Slash>,
+  /// The mempool for transactions.
+  mempool: M,
+}
+
+impl<D: Db, T: Transaction, M, N> Tendermint<D, T, M, N> {
+  pub(crate) fn new(
+    genesis: [u8; 32],
+    genesis_time: u64,
+    db: D,
+    blockchain: Blockchain<T>,
+    next_block_notification: async_channel::Receiver<async_channel::Sender<()>>,
+    mempool: M,
+  ) -> Self {
+    let signature_scheme = SignatureScheme::new(genesis);
+
+    let slashes = PendingSlashes::get(&db, genesis)
+      .into_iter()
+      .flatten()
+      .map(|validator| {
+        let slash = PendingSlash::get(&db, genesis, validator)
+          .expect("slash in mempool wasn't saved to disk")
+          .0;
+        (validator, slash)
+      })
+      .collect::<BTreeMap<_, _>>();
+
+    Self {
+      genesis,
+      genesis_time,
+
+      signature_scheme,
+      _network: PhantomData,
+
+      db,
+      blockchain,
+      next_block_notification,
+
+      slashes,
+      mempool,
+    }
+  }
+}
+
+pin_project_lite::pin_project! {
+  pub(crate) struct BlockProposal<F> {
+    genesis: [u8; 32],
+    parent: [u8; 32],
+    minimum_time: Option<u64>,
+    slashes: BTreeMap<[u8; 32], Slash>,
+    #[pin]
+    transactions: F,
+  }
+}
+impl<T: Transaction, F: Future<Output: IntoIterator<Item = T>>> Future for BlockProposal<F> {
+  type Output = ReadWriteAsBorsh<Block<T>>;
+  fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    let mut transactions = {
+      // Receive the transactions from the mempool
+      let Poll::Ready(transactions) = self.as_mut().project().transactions.poll(cx) else {
+        return Poll::Pending;
+      };
+      // Remove transactions from signers who have pending slashes
+      let transactions = transactions.into_iter().filter(|tx| {
+        if let TransactionKind::Signed {
+          scope: _,
+          signed: Signed { signer, nonce: _, signature: _ },
+        } = tx.kind() &&
+          self.slashes.contains_key(&signer)
+        {
+          return false;
+        }
+        true
+      });
+      transactions.collect::<Vec<_>>()
+    };
+
+    let mut slashes = self.slashes.values().cloned().collect::<Vec<_>>();
+
+    let block = loop {
+      match Block::instantiate(
+        self.genesis,
+        self.parent,
+        {
+          use std::time::SystemTime;
+          let time_since_epoch = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
+          let Some(time_since_epoch_ms) =
+            time_since_epoch.ok().and_then(|duration| u64::try_from(duration.as_millis()).ok())
+          else {
+            return Poll::Pending;
+          };
+          let Some(minimum_time) = self.minimum_time else { return Poll::Pending };
+          time_since_epoch_ms.max(minimum_time)
+        },
+        slashes.clone().into_boxed_slice(),
+        transactions.clone().into_boxed_slice(),
+      ) {
+        Ok(block) => break block,
+        Err(_) => {
+          // If even an empty block is syntactically invalid, don't yield a proposal
+          if slashes.is_empty() && transactions.is_empty() {
+            return Poll::Pending;
+          }
+
+          /*
+            If this block is syntactically invalid, assume the mempool provided invalid
+            transactions _or_ this block is over the size limit due to also including the slashes.
+            Either problem can be solved by popping transactions.
+          */
+          if !transactions.is_empty() {
+            transactions.pop();
+          } else {
+            /*
+              If this block has no transactions, but has slashes, and is invalid, assume it's over
+              the size limit and pop slashes until it's within the size limit.
+            */
+            slashes.pop();
+          }
+        }
+      }
+    };
+
+    Poll::Ready(ReadWriteAsBorsh(block))
+  }
+}
+
+impl<
+  D: Db,
+  T: Transaction,
+  M: Mempool<T>,
+  N: Network<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<T>>>,
+> Tendermint<D, T, M, N>
+{
+  pub(crate) fn block_proposal(
+    &mut self,
+    parent: [u8; 32],
+    minimum_time: Option<u64>,
+  ) -> BlockProposal<M::Future> {
+    BlockProposal {
+      genesis: self.genesis,
+      parent,
+      minimum_time,
+      slashes: self.slashes.clone(),
+      transactions: self.mempool.transactions(parent),
+    }
+  }
+}
+
+type RWaB<T> = ReadWriteAsBorsh<T>;
+impl<
+  D: Send + Db,
+  T: Send + Transaction,
+  M: Send + Mempool<T>,
+  N: Send + Network<[u8; 32], [u8; 64], AggregateSignature, RWaB<Block<T>>, Sleep: Send>,
+> ::tendermint::Blockchain for Tendermint<D, T, M, N>
 {
   type Validator = [u8; 32];
+  // TODO
   type ValidatorSet = HashMap<Self::Validator, NonZero<u16>>;
-  type SignatureScheme = Validators;
+  type SignatureScheme = SignatureScheme;
   type Genesis = [u8; 32];
-  type Block = TendermintBlock;
+  type Block = ReadWriteAsBorsh<Block<T>>;
 
-  type BlockProposal = core::future::Ready<Self::Block>;
+  type BlockProposal = BlockProposal<M::Future>;
 
   fn genesis(&self) -> &Self::Genesis {
     &self.genesis
   }
 
   fn validator_set(&self) -> &Self::ValidatorSet {
-    &self.validators.weights
+    self.blockchain.validators()
   }
 
   fn signature_scheme(&self) -> &Self::SignatureScheme {
-    &self.validators
+    &self.signature_scheme
   }
 
   fn validate(
-    &self,
-    _proposer: Self::Validator,
+    &mut self,
+    proposer: Self::Validator,
     block: &Self::Block,
   ) -> impl Send + Future<Output = Result<(), InvalidBlock>> {
-    async move {
-      if self.last_addition.checked_add(TARGET_BLOCK_TIME) >
-        Some(Instant::now().checked_add(Duration::from_secs(1)).unwrap_or(self.last_addition))
-      {
-        Err(InvalidBlock)?;
-      }
-
-      let block = Block::read(block.0.as_slice()).map_err(|_| InvalidBlock)?;
-      self
-        .blockchain
-        .read()
-        .await
-        .verify_block::<Self>(&block, self.signature_scheme(), false)
-        .map_err(|e| match e {
-          BlockError::NonLocalProvided(_) => InvalidBlock,
-          BlockError::TooLargeBlock |
-          BlockError::InvalidParent |
-          BlockError::InvalidTransactions |
-          BlockError::UnsignedAlreadyIncluded |
-          BlockError::ProvidedAlreadyIncluded |
-          BlockError::WrongTransactionOrder |
-          BlockError::DistinctProvided |
-          BlockError::TransactionError(
-            TransactionError::TooLargeTransaction |
-            TransactionError::InvalidSigner |
-            TransactionError::InvalidNonce |
-            TransactionError::InvalidSignature |
-            TransactionError::InvalidContent,
-          ) => {
-            log::warn!("Tributary Tendermint validate returning InvalidBlock due to {e:?}");
-            InvalidBlock
-          }
-          BlockError::TransactionError(TransactionError::ProvidedAddedToMempool) => {
-            unreachable!("system transaction routed to mempool")
-          }
-          BlockError::TransactionError(TransactionError::TooManyInMempool) => {
-            unreachable!("transaction in block was checked against mempool limits")
-          }
-        })
+    if self.blockchain.slashed(&self.db, proposer) ||
+      self.slashes.contains_key(&proposer) ||
+      self.mempool.censured(&self.db, proposer)
+    {
+      return core::future::ready(Err(InvalidBlock));
     }
+
+    let valid = self.blockchain.verify::<N>(&self.db, self.genesis_time, &block.0);
+    // If block is invalid for syntactic or semantic reasons, censure
+    match valid {
+      Ok(()) | Err(BlockError::Ephemeral(_)) => {}
+      Err(BlockError::Syntactic(_) | BlockError::Semantic(_)) => {
+        let mut txn = self.db.txn();
+        self.mempool.censure(&mut txn, proposer);
+        txn.commit();
+      }
+    }
+    core::future::ready(valid.map_err(|_| InvalidBlock))
   }
 
   fn add_block(
     &mut self,
-    serialized_block: Self::Block,
+    block: Self::Block,
     commit: CommitFor<Self>,
   ) -> impl Send + Future<Output = Self::BlockProposal> {
+    let block = block.0;
+    let hash = block.hash();
+
+    let minimum_next_block_time = N::target_block_time()
+      .and_then(|target_block_time| u64::try_from(target_block_time.as_millis()).ok())
+      .and_then(|target_block_time| target_block_time.checked_add(block.time()));
+
     #[expect(clippy::async_yields_async)]
     async move {
-      // TODO: We need to assert a faulty validator set isn't flooding blocks in real time
-      self.last_addition = Instant::now();
-
-      let invalid_block = || {
-        // There's a fatal flaw in the code, it's behind a hard fork, or the validators turned
-        // malicious
-        // All justify a halt to then achieve social consensus from
-        // TODO: Under multiple validator sets, a small validator set turning malicious knocks
-        // off the entire network. That's an unacceptable DoS.
-        panic!("validators added invalid block to tributary {}", hex::encode(self.genesis));
-      };
-
-      // Tendermint should only give us valid commits
-      assert!(commit.verify(
-        self.validator_set(),
-        self.signature_scheme(),
-        self.genesis,
-        serialized_block.hash()
-      ));
-
-      let Ok(block) = Block::read(serialized_block.0.as_slice()) else {
-        return invalid_block();
-      };
-
-      let encoded_commit = borsh::to_vec(&commit).unwrap();
-      loop {
-        let block_res = self.blockchain.write().await.add_block::<Self>(
-          &block,
-          encoded_commit.clone(),
-          self.signature_scheme(),
-        );
-        match block_res {
-          Ok(()) => {
-            // If we successfully added this block, break
-            break;
+      let verify_result = self.blockchain.verify::<N>(&self.db, self.genesis_time, &block);
+      match &verify_result {
+        Ok(()) |
+        Err(
+          BlockError::Ephemeral(
+            EphemeralError::NotLocallyProvidedTransaction { .. } | EphemeralError::Future,
+          ) |
+          BlockError::Semantic(SemanticError::DistinctProvided { .. }),
+        ) => {
+          // If this occurred in the future, sleep until it's valid
+          if matches!(verify_result, Err(BlockError::Ephemeral(EphemeralError::Future))) {
+            if let Some(minimum_next_block_time) = minimum_next_block_time &&
+              let Some(minimum_next_block_time) = SystemTime::UNIX_EPOCH
+                .checked_add(Duration::from_millis(minimum_next_block_time))
+            {
+              if let Ok(time_remaining) = minimum_next_block_time.duration_since(SystemTime::now())
+              {
+                // Sleep until the next block's minimum time
+                N::sleep(time_remaining).await;
+              }
+            } else {
+              // If the amount of time in the future isn't representable, stall
+              core::future::pending::<()>().await;
+            }
           }
-          Err(BlockError::NonLocalProvided(hash)) => {
-            log::error!(
-              "missing provided transaction {} which other validators on tributary {} had",
-              hex::encode(hash),
-              hex::encode(self.genesis)
-            );
-            tokio::time::sleep(core::time::Duration::from_secs(5)).await;
+
+          // Actually add the block
+          let mut txn = self.db.txn();
+
+          for slash in block.slashes() {
+            if self.slashes.remove(slash.validator()).is_some() {
+              PendingSlash::del(&mut txn, self.genesis, *slash.validator());
+            }
           }
-          _ => return invalid_block(),
+          PendingSlashes::set(
+            &mut txn,
+            self.genesis,
+            &self.slashes.keys().copied().collect::<Vec<_>>(),
+          );
+
+          self.blockchain.add(&mut txn, block, Some(commit));
+
+          txn.commit();
+
+          while let Ok(next_block_notification) = self.next_block_notification.try_recv() {
+            let _ = next_block_notification.try_send(());
+          }
+        }
+        Err(
+          BlockError::Syntactic(
+            SyntacticError::ExceededSizeLimit |
+            SyntacticError::IncorrectContents |
+            SyntacticError::AbsurdTime |
+            SyntacticError::IncorrectOrderOfContents |
+            SyntacticError::Transaction(_),
+          ) |
+          BlockError::Semantic(
+            SemanticError::TooSoon |
+            SemanticError::InvalidSlash { .. } |
+            SemanticError::SlashAlreadyIncluded { .. } |
+            SemanticError::UnsignedAlreadyIncluded { .. } |
+            SemanticError::InvalidSigner { .. } |
+            SemanticError::Gap { .. },
+          ) |
+          BlockError::Ephemeral(EphemeralError::UnexpectedParent),
+        ) => {
+          // Because an invalid block was added, stall the consensus process/block production
+          core::future::pending::<()>().await;
         }
       }
 
-      core::future::ready(TendermintBlock(
-        self.blockchain.write().await.build_block::<Self>(self.signature_scheme()).serialize(),
-      ))
+      self.block_proposal(hash, minimum_next_block_time)
     }
   }
 
-  fn missed_proposal(&self, _proposer: Self::Validator) {
-    // TODO
-  }
+  // TODO
+  fn missed_proposal(&self, _proposer: Self::Validator) {}
 
-  fn slash(&self, validator: Self::Validator, slash_reason: SlashReasonFor<Self>) {
-    // TODO
-    tokio::runtime::Handle::current().block_on(async move {
-      log::error!(
-        "validator {} triggered a slash event on tributary {}",
-        hex::encode(validator),
-        hex::encode(self.genesis),
+  fn slash(&mut self, validator: Self::Validator, slash_reason: SlashReasonFor<Self>) {
+    // Check this validator hasn't already been slashed on-chain
+    if self.blockchain.slashed(&self.db, validator) {
+      return;
+    }
+
+    let slash = Slash { validator, slash_reason };
+    let Ok(serialized_slash_len) = crate::serialized_len(&slash) else { return };
+
+    let existing_slash_len = self
+      .slashes
+      .get(slash.validator())
+      .and_then(|existing_slash| crate::serialized_len(existing_slash).ok());
+
+    let mut txn = self.db.txn();
+    // If this validator already has a slash pending, keep whichever is smaller
+    if existing_slash_len.is_none_or(|existing_slash_len| existing_slash_len > serialized_slash_len)
+    {
+      PendingSlash::set(&mut txn, self.genesis, *slash.validator(), (&slash).into());
+      self.slashes.insert(*slash.validator(), slash);
+    }
+    // If this validator hadn't been prior slashed, update the list of slashed validators
+    if existing_slash_len.is_none() {
+      PendingSlashes::set(
+        &mut txn,
+        self.genesis,
+        &self.slashes.keys().copied().collect::<Vec<_>>(),
       );
-
-      let tx = Transaction::Tendermint(TendermintTx { validator, slash_reason });
-
-      // add tx to blockchain and broadcast to peers
-      let mut to_broadcast = vec![TRANSACTION_MESSAGE];
-      tx.write(&mut to_broadcast).unwrap();
-      let signature_scheme = self.signature_scheme();
-      if self.blockchain.write().await.add_transaction::<Self>(true, tx, signature_scheme) ==
-        Ok(true)
-      {
-        self.p2p.broadcast(self.genesis, to_broadcast).await;
-      }
-    });
-  }
-}
-
-// These effect a six-second target block time.
-pub const BLOCK_DOWNLOADING_TIME: Duration = Duration::from_millis(499);
-pub const BLOCK_PROCESSING_TIME: Duration = Duration::from_millis(500);
-pub const LATENCY_TIME: Duration = Duration::from_millis(1667);
-pub const TARGET_BLOCK_TIME: Duration = BLOCK_DOWNLOADING_TIME
-  .checked_add(BLOCK_PROCESSING_TIME)
-  .unwrap()
-  .checked_add(LATENCY_TIME.checked_mul(3).unwrap())
-  .unwrap();
-
-impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, T: TransactionTrait, P: P2p>
-  Network<
-    [u8; 32],
-    <Validators as SignatureScheme>::Signature,
-    <Validators as SignatureScheme>::AggregateSignature,
-    TendermintBlock,
-  > for TendermintNetwork<D, T, P>
-{
-  const BLOCK_DOWNLOADING_TIME: Duration = BLOCK_DOWNLOADING_TIME;
-  const BLOCK_PROCESSING_TIME: Duration = BLOCK_PROCESSING_TIME;
-  const LATENCY_TIME: Duration = LATENCY_TIME;
-
-  type Sleep = tokio::time::Sleep;
-  fn sleep(duration: Duration) -> Self::Sleep {
-    tokio::time::sleep(duration)
-  }
-
-  fn broadcast(&mut self, msg: MessageFor<Self>) -> impl Send + Future<Output = ()> {
-    async move {
-      let mut to_broadcast = vec![TENDERMINT_MESSAGE];
-      msg.serialize(&mut to_broadcast).unwrap();
-      self.p2p.broadcast(self.genesis, to_broadcast).await;
     }
+    txn.commit();
   }
 }
