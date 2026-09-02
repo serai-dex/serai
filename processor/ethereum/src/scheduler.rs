@@ -108,7 +108,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>
     let mut res = vec![];
     for coin in ExternalNetworkId::Ethereum.coins() {
       let Some(mut payments) = payments_by_coin.remove(&coin) else { continue };
-      assert!(!payments.is_empty(), "entry in map only populated if there was a payment");
+      assert_ne!(payments, vec![], "entry in map only populated if there was a payment");
 
       let maximum_amount_out = {
         let mut maximum_amount_out = U256::ZERO;
@@ -147,7 +147,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>
               batch.push(payments.remove(i));
             } else {
               // There should be no payment which cannot be pushed onto an empty batch
-              assert!(!batch.is_empty());
+              assert_ne!(batch, vec![]);
               i += 1;
             }
           }

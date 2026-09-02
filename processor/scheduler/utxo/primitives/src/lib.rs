@@ -126,7 +126,7 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
 
       // Sanity checks
       {
-        assert!(!inputs.is_empty());
+        assert_ne!(inputs, &[]);
         assert!((!payments.is_empty()) || change.is_some());
         let coin = inputs.first().unwrap().balance().coin;
         for input in &inputs {

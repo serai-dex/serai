@@ -67,7 +67,7 @@ impl<
       let signable_transaction_buf = SerializedSignableTransactions::get(&db, tx).unwrap();
       let mut signable_transaction_buf = signable_transaction_buf.as_slice();
       let signable_transaction = ST::read(&mut signable_transaction_buf).unwrap();
-      assert!(signable_transaction_buf.is_empty());
+      assert_eq!(signable_transaction_buf, &[]);
       assert_eq!(signable_transaction.id(), tx);
 
       let mut machines = Vec::with_capacity(keys.len());
@@ -226,7 +226,7 @@ impl<
           let Some(tx_buf) = SerializedTransactions::get(&self.db, *tx) else { continue };
           let mut tx_buf = tx_buf.as_slice();
           let tx = TransactionFor::<ST>::read(&mut tx_buf).unwrap();
-          assert!(tx_buf.is_empty());
+          assert_eq!(tx_buf, &[]);
 
           self.publisher.publish(tx).await?;
         }

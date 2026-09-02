@@ -47,5 +47,5 @@ fn test_signature_serialization() {
 
   let mut sig_read_slice = sig_bytes.as_slice();
   assert_eq!(Signature::read(&mut sig_read_slice).unwrap(), sig);
-  assert!(sig_read_slice.is_empty());
+  assert_eq!(sig_read_slice, &[0u8; 0]);
 }

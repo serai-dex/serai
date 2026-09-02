@@ -64,11 +64,7 @@ fn matches_segwit_data(script: &ScriptBuf) -> Option<bool> {
   ins.next()?.ok()?.push_bytes()?;
 
   // next should be a equality check
-  if ins.next()?.ok()?.opcode()? != opcodes::all::OP_EQUALVERIFY {
-    return Some(false);
-  }
-
-  Some(true)
+  Some(ins.next()?.ok()?.opcode()? == opcodes::all::OP_EQUALVERIFY)
 }
 
 // Extract the data for Serai from a transaction

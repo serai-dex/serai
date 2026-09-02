@@ -129,9 +129,8 @@ impl core::str::FromStr for SeraiAddress {
 
     let mut res = Self([0; 32]);
     let mut iter = decoded.byte_iter();
-    for i in 0 .. 32 {
-      let Some(byte) = iter.next() else { Err(AddressError::InvalidLength)? };
-      res.0[i] = byte;
+    for byte in &mut res.0 {
+      *byte = iter.next().ok_or(AddressError::InvalidLength)?;
     }
     if iter.next().is_some() {
       Err(AddressError::InvalidLength)?;

@@ -3,6 +3,7 @@
 #![deny(missing_docs)]
 
 use core::{hash::Hash, fmt::Debug};
+extern crate alloc;
 
 use group::GroupEncoding;
 

@@ -22,7 +22,7 @@ runs:
       shell: bash
       run: |
         VERSION=982849d3140c01fd3b72905759581a132df7aa98 # 1.8.1
-        cargo +1.97.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked anvil
+        cargo +1.98.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked anvil
 
     - name: Run a Monero Regtest Node
       uses: ./.github/actions/monero

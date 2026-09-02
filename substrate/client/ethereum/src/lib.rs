@@ -3,7 +3,7 @@
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use core::str::FromStr;
+use core::{fmt, str::FromStr};
 use std_shims::{vec::Vec, io::Read as _};
 
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -134,6 +134,7 @@ impl From<Address> for ExternalAddress {
 
 impl FromStr for Address {
   type Err = ();
+  /// This will only decode an address from a string, with no support for any other variant.
   fn from_str(str: &str) -> Result<Address, ()> {
     let Some(address) = str.strip_prefix("0x") else { Err(())? };
     if address.len() != 40 {
@@ -142,5 +143,19 @@ impl FromStr for Address {
     Ok(Address::Address(
       hex::decode(address.to_lowercase()).map_err(|_| ())?.try_into().map_err(|_| ())?,
     ))
+  }
+}
+
+impl fmt::Display for Address {
+  /// This will display contract deploys as "<contract>", which is invalid as an input to
+  /// [`Address::from_str`].
+  fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    match self {
+      Address::Address(address) => {
+        f.write_str("0x")?;
+        f.write_str(&hex::encode(address))
+      }
+      Address::Contract(_) => f.write_str("<contract>"),
+    }
   }
 }

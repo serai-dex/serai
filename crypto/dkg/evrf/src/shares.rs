@@ -442,7 +442,7 @@ fn shares_verify() {
       &mut HashSet::new(),
     )
     .unwrap();
-    assert!(verification_shares.is_empty());
+    assert_eq!(verification_shares, HashMap::new());
     assert!(encrypted_secret_shares.is_empty());
   }
 
@@ -476,16 +476,16 @@ fn shares_verify() {
   assert_eq!(potentially_valid.len(), 2);
   assert!(potentially_valid.contains_key(&priv_keys[0].0));
   assert!(potentially_valid.contains_key(&priv_keys[1].0));
-  assert!(faulty.is_empty());
+  assert_eq!(faulty, HashSet::new());
   {
     let generalized_bulletproofs::BatchVerifier { g, h, g_bold, h_bold, h_sum, additional } =
       &verifier;
     assert!(bool::from(!g.is_zero()));
     assert!(bool::from(!h.is_zero()));
-    assert!(!g_bold.is_empty());
-    assert!(!h_bold.is_empty());
-    assert!(!h_sum.is_empty());
-    assert!(!additional.is_empty());
+    assert_ne!(g_bold, &[]);
+    assert_ne!(h_bold, &[]);
+    assert_ne!(h_sum, &[]);
+    assert_ne!(additional, &[]);
   }
 
   Dkg::<Ed25519>::verify_structurally_valid_proofs(
@@ -503,7 +503,7 @@ fn shares_verify() {
   assert_eq!(potentially_valid.len(), 2);
   assert!(potentially_valid.contains_key(&priv_keys[0].0));
   assert!(potentially_valid.contains_key(&priv_keys[1].0));
-  assert!(faulty.is_empty());
+  assert_eq!(faulty, HashSet::new());
 
   // Tweak a share to be invalid
   {

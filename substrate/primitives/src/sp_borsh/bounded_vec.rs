@@ -89,7 +89,7 @@ fn serialize() {
     let bounded = BoundedVec::<u64, ConstU32<0>>::new();
     let mut encoding = vec![];
     borsh_serialize_bounded_vec(&bounded, &mut encoding).unwrap();
-    assert!(encoding.is_empty());
+    assert_eq!(encoding, &[]);
     assert_eq!(
       bounded,
       borsh_deserialize_bounded_vec::<_, _, 0>(&mut encoding.as_slice()).unwrap()

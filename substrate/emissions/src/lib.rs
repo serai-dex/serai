@@ -46,7 +46,7 @@ const POST_ECONOMIC_SECURITY_REWARD_PER_BLOCK: Amount = Amount(
     DAYS_365.as_millis()) as u64,
 );
 
-#[expect(let_underscore_drop)]
+#[expect(let_underscore_drop, clippy::clone_on_copy)]
 #[frame_support::pallet]
 mod pallet {
   use frame_support::{pallet_prelude::*, traits::PreInherents};

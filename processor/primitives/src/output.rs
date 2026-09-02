@@ -1,4 +1,5 @@
 use core::fmt::Debug;
+use alloc::string::ToString;
 use std::io;
 
 use group::GroupEncoding;
@@ -14,6 +15,7 @@ pub trait Address:
   Send
   + Sync
   + Clone
+  + ToString
   + Into<ExternalAddress>
   + TryFrom<ExternalAddress>
   + BorshSerialize
@@ -26,6 +28,7 @@ impl<
   A: Send
     + Sync
     + Clone
+    + ToString
     + Into<ExternalAddress>
     + TryFrom<ExternalAddress>
     + BorshSerialize

@@ -1,0 +1,19 @@
+[package]
+name = "futures-timer"
+version = "3.99.99"
+description = "futures-timer which patches to tokio"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/futures-timer"
+edition = "2024"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]
+
+[dependencies]
+tokio = { version = "1", features = ["time"] }
+
+[features]
+wasm-bindgen = []

@@ -65,7 +65,7 @@ impl<T: serai_validator_sets_pallet::Config> ValidatorSets
   }
 }
 
-#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
+#[expect(clippy::as_conversions, clippy::cast_possible_truncation, clippy::clone_on_copy)]
 #[frame_support::pallet]
 pub mod pallet {
   use serai_abi::{

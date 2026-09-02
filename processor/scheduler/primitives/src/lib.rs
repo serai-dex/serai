@@ -69,7 +69,7 @@ impl<T: SignableTransaction> TransactionsToSign<T> {
     let tx = db::TransactionsToSign::try_recv(txn, key.to_bytes().as_ref())?;
     let mut tx = tx.as_slice();
     let res = T::read(&mut tx).unwrap();
-    assert!(tx.is_empty());
+    assert_eq!(tx, &[]);
     Some(res)
   }
 }

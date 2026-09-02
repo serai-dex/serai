@@ -49,7 +49,7 @@ impl Test {
       // If we don't whitelist this token, we shouldn't be yielded an InInstruction
       let in_instructions =
         self.router.in_instructions_unordered(block ..= block, &HashSet::new()).await.unwrap();
-      assert!(in_instructions.is_empty());
+      assert_eq!(in_instructions, vec![]);
     }
 
     let in_instructions = self

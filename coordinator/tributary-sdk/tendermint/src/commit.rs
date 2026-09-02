@@ -83,7 +83,6 @@ impl<A: AggregateSignature> Commit<A> {
     self.block_number
   }
 
-  #[must_use]
   pub(crate) fn signature_message<'genesis, 'block_hash>(
     genesis: &'genesis [u8],
     block_number: BlockNumber,

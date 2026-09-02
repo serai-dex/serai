@@ -177,7 +177,7 @@ fn reveal() {
             .is_zero()
         ));
       }
-      assert!(transcript.is_empty());
+      assert_eq!(transcript, &[]);
     }
 
     // Check the proof verifies as-is
@@ -186,7 +186,7 @@ fn reveal() {
       let commitments = {
         let verifier_commitments =
           transcript.read_commitments::<<Ed25519 as Curves>::ToweringCurve>(0, i).unwrap();
-        assert!(verifier_commitments.C().is_empty());
+        assert_eq!(verifier_commitments.C(), &[]);
         assert_eq!(
           verifier_commitments.V(),
           &commitments
@@ -201,7 +201,7 @@ fn reveal() {
         .unwrap();
       assert!(generators.verify(verifier));
       let challenge = transcript.challenge::<<Ed25519 as Curves>::ToweringCurve>();
-      assert!(transcript.complete().is_empty());
+      assert_eq!(transcript.complete(), &[]);
       challenge
     };
 

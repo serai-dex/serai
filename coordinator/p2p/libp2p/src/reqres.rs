@@ -1,8 +1,6 @@
 use core::{fmt, time::Duration};
 use std::io;
 
-use async_trait::async_trait;
-
 use borsh::{BorshSerialize, BorshDeserialize};
 
 use futures_util::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _};
@@ -87,7 +85,6 @@ impl Codec {
     io.write_all(&msg).await
   }
 }
-#[async_trait]
 impl CodecTrait for Codec {
   type Protocol = &'static str;
   type Request = Request;

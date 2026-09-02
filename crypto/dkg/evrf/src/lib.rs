@@ -818,10 +818,10 @@ mod tests {
     // The `BatchVerifier` should not have had the faulty proof accumulated
     assert!(bool::from(g.is_zero()));
     assert!(bool::from(h.is_zero()));
-    assert!(g_bold.is_empty());
-    assert!(h_bold.is_empty());
-    assert!(h_sum.is_empty());
-    assert!(additional.is_empty());
+    assert_eq!(g_bold, vec![]);
+    assert_eq!(h_bold, vec![]);
+    assert_eq!(h_sum, vec![]);
+    assert_eq!(additional, vec![]);
   }
 
   #[test]
@@ -892,16 +892,16 @@ mod tests {
     assert_eq!(potentially_valid.len(), 2);
     assert!(potentially_valid.contains_key(&priv_keys[0].0));
     assert!(potentially_valid.contains_key(&priv_keys[1].0));
-    assert!(faulty.is_empty());
+    assert_eq!(faulty, HashSet::new());
     {
       let generalized_bulletproofs::BatchVerifier { g, h, g_bold, h_bold, h_sum, additional } =
         &verifier;
       assert!(bool::from(!g.is_zero()));
       assert!(bool::from(!h.is_zero()));
-      assert!(!g_bold.is_empty());
-      assert!(!h_bold.is_empty());
-      assert!(!h_sum.is_empty());
-      assert!(!additional.is_empty());
+      assert_ne!(g_bold, &[]);
+      assert_ne!(h_bold, &[]);
+      assert_ne!(h_sum, &[]);
+      assert_ne!(additional, &[]);
     }
 
     Dkg::<Ed25519>::verify_structurally_valid_proofs(
@@ -1012,7 +1012,7 @@ mod tests {
               Participation::read(&mut serialized, threshold, participants).unwrap() ==
                 participation
             );
-            assert!(serialized.is_empty());
+            assert_eq!(serialized, &[]);
           }
 
           assert!(participations.insert(*i, participation).is_none());

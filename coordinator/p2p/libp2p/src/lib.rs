@@ -111,19 +111,25 @@ struct Peers {
 
 // Consider adding identify/kad/autonat/rendevous/(relay + dcutr). While we currently use the Serai
 // network for peers, we could use it solely for bootstrapping/as a fallback.
-#[derive(NetworkBehaviour)]
-struct Behavior {
-  // Used to only allow Serai validators as peers
-  allow_list: allow_block_list::Behaviour<allow_block_list::AllowedPeers>,
-  // Used to limit each peer to a single connection
-  connection_limits: connection_limits::Behaviour,
-  // Used to ensure connection latency is within tolerances
-  ping: ping::Behavior,
-  // Used to request data from specific peers
-  reqres: reqres::Behavior,
-  // Used to broadcast messages to all other peers subscribed to a topic
-  gossip: gossip::Behavior,
+#[expect(unreachable_code)]
+mod behavior {
+  use super::*;
+
+  #[derive(NetworkBehaviour)]
+  pub(super) struct Behavior {
+    // Used to only allow Serai validators as peers
+    pub(super) allow_list: allow_block_list::Behaviour<allow_block_list::AllowedPeers>,
+    // Used to limit each peer to a single connection
+    pub(super) connection_limits: connection_limits::Behaviour,
+    // Used to ensure connection latency is within tolerances
+    pub(super) ping: ping::Behavior,
+    // Used to request data from specific peers
+    pub(super) reqres: reqres::Behavior,
+    // Used to broadcast messages to all other peers subscribed to a topic
+    pub(super) gossip: gossip::Behavior,
+  }
 }
+use behavior::*;
 
 struct Libp2pInner {
   peers: Peers,

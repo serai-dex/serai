@@ -18,6 +18,7 @@ mod tests;
   let_underscore_drop,
   clippy::as_conversions,
   clippy::cast_possible_truncation,
+  clippy::clone_on_copy,
   clippy::semicolon_if_nothing_returned
 )]
 #[frame_support::pallet]

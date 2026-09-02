@@ -119,7 +119,7 @@ impl<S: ScannerFeed, SC: Send + Sync + SmartContract<S>> SchedulerTrait<S> for S
       // partial availability
 
       // We shouldn't have any forwards though
-      assert!(update.forwards().is_empty());
+      assert_eq!(update.forwards(), &[]);
 
       // Create the transactions for the returns
       Ok(

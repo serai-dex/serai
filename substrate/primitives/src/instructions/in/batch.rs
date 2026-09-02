@@ -219,7 +219,7 @@ fn batch() {
     assert_eq!(batch.network(), network);
     assert_eq!(batch.id(), id);
     assert_eq!(batch.external_network_block_hash(), external_network_block_hash);
-    assert!(batch.instructions().is_empty());
+    assert_eq!(batch.instructions(), &[]);
 
     // Check they can be serialized and the `encoded_size` is maintained
     assert_eq!(borsh::to_vec(&batch).unwrap().len(), batch.encoded_size);

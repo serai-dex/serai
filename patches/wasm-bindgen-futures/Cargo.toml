@@ -1,0 +1,13 @@
+[package]
+name = "wasm-bindgen-futures"
+version = "0.4.58"
+description = "Patch to an empty crate"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/wasm-bindgen-futures"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]

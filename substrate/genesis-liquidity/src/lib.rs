@@ -1,7 +1,12 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 #![cfg_attr(not(any(feature = "std", test)), no_std)]
-#![expect(unit_bindings, clippy::ignored_unit_patterns, clippy::let_unit_value)]
+#![expect(
+  unit_bindings,
+  clippy::ignored_unit_patterns,
+  clippy::let_unit_value,
+  clippy::used_underscore_items
+)]
 #![expect(deprecated)] // TODO: `ValidateUnsigned`
 
 extern crate alloc;
@@ -24,6 +29,7 @@ type GenesisLiquidityTokens<T> =
   let_underscore_drop,
   clippy::as_conversions,
   clippy::cast_possible_truncation,
+  clippy::clone_on_copy,
   clippy::semicolon_if_nothing_returned
 )]
 #[frame_support::pallet]

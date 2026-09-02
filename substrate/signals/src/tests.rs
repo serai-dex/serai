@@ -748,7 +748,7 @@ fn fuzz() {
       for _ in 0 .. ((OsRng.next_u64() as usize) % (networks.len() - 1)) {
         networks.swap_remove((OsRng.next_u64() as usize) % networks.len());
       }
-      assert!(!networks.is_empty());
+      assert_ne!(networks, vec![]);
 
       // Initialize with random states
       let mut sets = vec![];

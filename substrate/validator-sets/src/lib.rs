@@ -6,9 +6,11 @@
   unit_bindings,
   clippy::as_conversions,
   clippy::cast_possible_truncation,
+  clippy::clone_on_copy,
   clippy::ignored_unit_patterns,
   clippy::let_unit_value,
-  clippy::semicolon_if_nothing_returned
+  clippy::semicolon_if_nothing_returned,
+  clippy::used_underscore_items
 )]
 #![expect(deprecated)] // TODO: `ValidateUnsigned`
 

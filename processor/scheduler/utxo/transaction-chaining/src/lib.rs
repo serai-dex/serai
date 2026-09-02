@@ -444,7 +444,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
 
   fn retire_key(txn: &mut (impl Send + DbTxn), key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
-      assert!(Db::<S>::outputs(txn, key, coin).unwrap().is_empty());
+      assert_eq!(Db::<S>::outputs(txn, key, coin).unwrap(), vec![]);
       Db::<S>::del_outputs(txn, key, coin);
       assert!(Db::<S>::queued_payments(txn, key, coin).unwrap().is_empty());
       Db::<S>::del_queued_payments(txn, key, coin);

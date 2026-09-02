@@ -1,3 +1,4 @@
+use core::fmt;
 use std::io;
 
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -14,6 +15,17 @@ use crate::Address;
 pub struct Payment<A: Address> {
   address: A,
   balance: ExternalBalance,
+}
+
+impl<A: Address> fmt::Debug for Payment<A> {
+  fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
+    let Self { address, balance } = self;
+    fmt
+      .debug_struct("Payment")
+      .field("address", &address.to_string())
+      .field("balance", &balance)
+      .finish()
+  }
 }
 
 impl<A: Address> TryFrom<OutInstructionWithBalance> for Payment<A> {

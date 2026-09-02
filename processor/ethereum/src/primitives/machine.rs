@@ -119,7 +119,7 @@ impl SignMachine<Transaction> for ActionSignMachine {
     commitments: HashMap<Participant, Self::Preprocess>,
     msg: &[u8],
   ) -> Result<(Self::SignatureMachine, Self::SignatureShare), FrostError> {
-    assert!(msg.is_empty());
+    assert_eq!(msg, &[0u8; 0]);
     self.machine.sign(commitments, &self.action.message()).map(|(machine, shares)| {
       (ActionSignatureMachine { key: self.key, action: self.action, machine }, shares)
     })

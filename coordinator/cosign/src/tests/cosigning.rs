@@ -923,7 +923,7 @@ fn intended_cosigns() {
     let mut db = MemDb::new();
     let set = random_validator_set(&mut OsRng);
     let mut txn = db.txn();
-    assert!(Cosigning::<MemDb>::intended_cosigns(&mut txn, set).is_empty());
+    assert_eq!(Cosigning::<MemDb>::intended_cosigns(&mut txn, set), vec![]);
     txn.commit();
   }
 

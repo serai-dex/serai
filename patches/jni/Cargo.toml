@@ -1,0 +1,13 @@
+[package]
+name = "jni"
+version = "0.22.99"
+description = "Patch to an empty crate"
+license = "MIT"
+repository = "https://github.com/serai-dex/serai/tree/develop/patches/jni"
+edition = "2021"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[workspace]

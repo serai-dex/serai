@@ -5,7 +5,7 @@
 #[cfg(test)]
 mod tests;
 
-#[expect(let_underscore_drop)]
+#[expect(let_underscore_drop, clippy::clone_on_copy)]
 #[frame_support::pallet]
 mod pallet {
   use core::{marker::PhantomData, num::NonZero, time::Duration};

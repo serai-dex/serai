@@ -80,7 +80,7 @@ impl SignMachine<Signature> for WrappedSchnorrkelSignMachine {
     >,
     msg: &[u8],
   ) -> Result<(Self::SignatureMachine, SignatureShare<Ristretto>), FrostError> {
-    assert!(msg.is_empty());
+    assert_eq!(msg, &[]);
     self.0.sign(preprocesses, &self.1)
   }
 }

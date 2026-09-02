@@ -211,7 +211,7 @@ impl<
       for (session, external_key_bytes) in db::ToCleanup::get(&txn).unwrap_or(vec![]) {
         let mut external_key_bytes = external_key_bytes.as_slice();
         let external_key = CiphersuiteFor::<S, Sch>::read_G(&mut external_key_bytes).unwrap();
-        assert!(external_key_bytes.is_empty());
+        assert_eq!(external_key_bytes, &[]);
 
         // Drain the Batches to sign
         // This will be fully populated by the scanner before retiry occurs, making this perfect

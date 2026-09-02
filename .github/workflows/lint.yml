@@ -125,7 +125,7 @@ jobs:
           persist-credentials: false
 
       - name: Install cargo deny
-        run: cargo +1.97.1 install --locked cargo-deny --version =0.20.2
+        run: cargo +1.98.1 install --locked cargo-deny --version =0.20.2
 
       - name: Run cargo deny
         run: cargo deny -L error --all-features check --hide-inclusion-graph
@@ -158,7 +158,7 @@ jobs:
         shell: bash
         run: |
           VERSION=982849d3140c01fd3b72905759581a132df7aa98 # 1.8.1
-          cargo +1.97.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked forge
+          cargo +1.98.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked forge
 
       - name: Run forge fmt
         shell: bash
@@ -181,7 +181,7 @@ jobs:
 
       - name: Verify all dependencies are in use
         run: |
-          cargo +1.97.1 install --locked cargo-machete --version =0.9.2
+          cargo +1.98.1 install --locked cargo-machete --version =0.9.2
           cargo machete
 
   msrv:
@@ -198,7 +198,7 @@ jobs:
       - name: Verify claimed `rust-version`
         shell: bash
         run: |
-          cargo +1.97.1 install --locked cargo-msrv --version =0.19.3
+          cargo +1.98.1 install --locked cargo-msrv --version =0.19.3
 
           export WORKSPACE="$(pwd)"
 
@@ -283,7 +283,7 @@ jobs:
             cargo +"${LOCKFILE_VERSION}" update -p fs-err@2.0.0 --precise 2.4.0 || true
 
             # Check this lockfile is actually adequate to build this crate
-            cargo +1.97.1 check
+            cargo +1.98.1 check
 
             # We then find the actual `rust-version` using `cargo-msrv` (again stripping to just the
             # major and minor version).
@@ -343,7 +343,7 @@ jobs:
           persist-credentials: false
 
       - name: Install cargo vet
-        run: cargo +1.97.1 install --locked cargo-vet --git https://github.com/kayabaNerve/cargo-vet --rev d2fb27daaeb839e5fa4f6b28c5cdd4a9185542b5
+        run: cargo +1.98.1 install --locked cargo-vet --git https://github.com/kayabaNerve/cargo-vet --rev d2fb27daaeb839e5fa4f6b28c5cdd4a9185542b5
 
       - name: Run cargo vet
         run: |

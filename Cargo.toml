@@ -182,6 +182,13 @@ revm-state = { opt-level = 3 }
 
 [patch.crates-io]
 # Point to empty crates for crates unused within in our tree
+libp2p-quic = { path = "patches/libp2p-quic" }
+libp2p-dns = { path = "patches/libp2p-dns" }
+# Only needed to build `hickory-proto` for Android
+jni = { path = "patches/jni" }
+# Only needed to build `libp2p-swarm` for WASM
+wasm-bindgen-futures = { path = "patches/wasm-bindgen-futures" }
+
 alloy-eip2124 = { path = "patches/ethereum/alloy-eip2124" }
 ark-ff-03 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.3" }
 ark-ff-04 = { package = "ark-ff", path = "patches/ethereum/ark-ff-0.4" }
@@ -225,8 +232,8 @@ rocksdb = { path = "patches/rocksdb" }
 ryu = { path = "patches/ryu" }
 thiserror = { path = "patches/thiserror" }
 
-# `core2` can be replaced with our in-tree `std-shims`
-core2 = { path = "patches/core2" }
+# `futures-timer` can be replaced with `tokio`
+futures-timer = { path = "patches/futures-timer" }
 # `hex_lit` can be replaced with `hex-literal` (from RustCrypto)
 hex_lit = { path = "patches/hex_lit" }
 # `rustc-hex` (a Parity-published crate extracted from `rustc`) can be replaced with <50 lines
@@ -244,11 +251,6 @@ option-ext = { path = "patches/option-ext" }
 aurora-engine-modexp = { path = "patches/ethereum/aurora-engine-modexp" }
 # `nonzero_ext` is more than 300 lines when we only need 10
 nonzero_ext = { path = "patches/nonzero_ext" }
-
-# `hickory-resolver` uses `moka`, which is obscene with LLM use and frequently has critical bugs
-# This is a version patched to use `lru-slab` for its LRU cache instead, and some other misc fixes backported
-hickory-proto = { git = "https://github.com/kayabaNerve/hickory-dns", rev = "b64f5bff16cac072c34c274ff8f943d1bf5337f7" }
-hickory-resolver = { git = "https://github.com/kayabaNerve/hickory-dns", rev = "b64f5bff16cac072c34c274ff8f943d1bf5337f7" }
 
 # Patch to include `FromUniformBytes<64>` over `Scalar`
 k256 = { git = "https://github.com/kayabaNerve/elliptic-curves", rev = "8293be3f9855eea0936523a9b100f1f69261ea4b" }
