@@ -98,9 +98,7 @@ impl ReceivedOutput<<Secp256k1 as WrappedGroup>::G, Address> for Output {
   }
 
   fn transaction_id(&self) -> Self::TransactionId {
-    let mut res = self.output.outpoint().txid.to_raw_hash().to_byte_array();
-    res.reverse();
-    res
+    self.output.outpoint().txid.to_raw_hash().to_byte_array()
   }
 
   fn key(&self) -> <Secp256k1 as WrappedGroup>::G {

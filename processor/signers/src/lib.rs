@@ -8,7 +8,8 @@ use std::collections::HashMap;
 use zeroize::Zeroizing;
 
 use ciphersuite::{group::GroupEncoding, *};
-use frost::{dkg::ThresholdKeys, curve::Ristretto};
+use dkg::{Curves, ThresholdKeys};
+use frost::curve::Ristretto;
 
 use serai_primitives::{
   crypto::Signature,
@@ -194,10 +195,19 @@ impl<
       transaction: transaction_handle,
     }
   }
+
   /// Initialize the signers.
   ///
   /// This will spawn tasks for any historically registered keys.
-  pub fn new(mut db: D, coordinator: impl Coordinator, publisher: P) -> Self {
+  pub fn new<
+    K: key_gen::KeyGenParams<
+        ExternalNetworkCiphersuite: Curves<ToweringCurve = CiphersuiteFor<S, Sch>>,
+      >,
+  >(
+    mut db: D,
+    coordinator: impl Coordinator,
+    publisher: P,
+  ) -> Self {
     /*
       On boot, perform any database cleanup which was queued.
 
@@ -265,7 +275,11 @@ impl<
       let mut external_keys = vec![];
       while !buf.is_empty() {
         substrate_keys.push(ThresholdKeys::<Ristretto>::read(&mut buf).unwrap());
-        external_keys.push(ThresholdKeys::<CiphersuiteFor<S, Sch>>::read(&mut buf).unwrap());
+        external_keys.push({
+          let mut external_keys = ThresholdKeys::<CiphersuiteFor<S, Sch>>::read(&mut buf).unwrap();
+          K::tweak_keys(&mut external_keys);
+          external_keys
+        });
       }
 
       tasks.insert(

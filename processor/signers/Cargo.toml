@@ -25,6 +25,7 @@ zeroize = { version = "1", default-features = false, features = ["std"] }
 
 blake2 = { version = "0.11", default-features = false, features = ["alloc"] }
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dkg = { package = "dkg-evrf", path = "../../crypto/dkg/evrf", default-features = false, features = ["std"] }
 frost = { package = "modular-frost", path = "../../crypto/frost", default-features = false, features = ["ristretto"] }
 frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false }
 
@@ -39,6 +40,7 @@ tokio = { version = "1", default-features = false, features = ["rt-multi-thread"
 serai-cosign = { package = "serai-cosign-types", path = "../../coordinator/cosign/types" }
 messages = { package = "serai-processor-messages", path = "../messages" }
 primitives = { package = "serai-processor-primitives", path = "../primitives" }
+key-gen = { package = "serai-processor-key-gen", path = "../key-gen" }
 scanner = { package = "serai-processor-scanner", path = "../scanner" }
 scheduler = { package = "serai-processor-scheduler-primitives", path = "../scheduler/primitives" }
 

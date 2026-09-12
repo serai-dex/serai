@@ -122,6 +122,7 @@ impl scheduler::SignableTransaction for SignableTransaction {
       input.write(&mut *writer)?;
     }
 
+    writer.write_all(&u32::try_from(self.payments.len()).unwrap().to_le_bytes())?;
     for payment in &self.payments {
       (payment.0.as_script().as_bytes(), payment.1).serialize(writer)?;
     }

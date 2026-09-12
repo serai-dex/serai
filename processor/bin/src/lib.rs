@@ -184,7 +184,7 @@ pub async fn main_loop<
   let mut key_gen = key_gen::<K>(&env);
   let mut scanner = Scanner::new(db.clone(), feed.clone(), scheduler.clone()).await;
   let mut signers =
-    Signers::<Db, S, Sch, _>::new(db.clone(), coordinator.coordinator_send(), publisher);
+    Signers::<Db, S, Sch, _>::new::<K>(db.clone(), coordinator.coordinator_send(), publisher);
 
   loop {
     let db_clone = db.clone();

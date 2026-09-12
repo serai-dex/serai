@@ -40,11 +40,11 @@ fn signable_transaction<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>:
   change: Option<KeyFor<Rpc<D>>>,
 ) -> Result<(SignableTransaction, BSignableTransaction), TransactionError> {
   assert!(
-    inputs.len() <
+    inputs.len() <=
       <Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::MAX_INPUTS
   );
   assert!(
-    (payments.len() + usize::from(u8::from(change.is_some()))) <
+    (payments.len() + usize::from(u8::from(change.is_some()))) <=
       <Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::MAX_OUTPUTS
   );
 
