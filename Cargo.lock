@@ -2814,10 +2814,11 @@ dependencies = [
 
 [[package]]
 name = "frost-schnorrkel"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "ciphersuite 0.4.2",
  "flexible-transcript",
+ "merlin",
  "modular-frost",
  "rand_core 0.6.4",
  "schnorr-signatures",

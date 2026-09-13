@@ -1,6 +1,6 @@
 [package]
 name = "frost-schnorrkel"
-version = "0.2.0"
+version = "0.3.0"
 description = "modular-frost Algorithm compatible with Schnorrkel"
 license = "MIT"
 repository = "https://github.com/serai-dex/serai/tree/develop/crypto/schnorrkel"
@@ -35,6 +35,7 @@ frost = { path = "../frost", package = "modular-frost", version = "0.11", defaul
 # version of `serde`, where `serde 1.0.0` no longer compiles. We explicitly depend on
 # `serde_bytes 0.11.19`, which depends on `serde_core`, accordingly.
 serde_bytes = { version = "0.11.19", default-features = false }
+merlin = { version = "3", default-features = false }
 schnorrkel = { version = "0.11", default-features = false, features = ["alloc"] }
 
 [dev-dependencies]
