@@ -110,6 +110,8 @@ pub enum Event {
   GenesisLiquidity(genesis_liquidity::Event) = 4,
   /// The event for `InInstruction`s.
   InInstructions(in_instructions::Event) = 5,
+  /// The event for `frame-system`.
+  System(system::Event) = 6,
 }
 
 impl From<coins::Event> for Event {
@@ -140,5 +142,10 @@ impl From<genesis_liquidity::Event> for Event {
 impl From<in_instructions::Event> for Event {
   fn from(event: in_instructions::Event) -> Self {
     Self::InInstructions(event)
+  }
+}
+impl From<system::Event> for Event {
+  fn from(event: system::Event) -> Self {
+    Self::System(event)
   }
 }
