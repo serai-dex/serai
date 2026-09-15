@@ -4,57 +4,47 @@ const MIMALLOC_VERSION: &str = "636510a36ab743f76a582067142f29d15b024c90"; // 3.
 const HARDENING_FLAGS: &str = "-DMI_SECURE_FULL=ON -DMI_GUARDED=ON -DMI_XMALLOC=ON";
 #[rustfmt::skip]
 const COMPILATION_FLAGS: &str =
-  "-DMI_OVERRIDE=ON -DMI_OPT_ARCH=ON -DMI_BUILD_SHARED=ON -DMI_BUILD_STATIC=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF";
+  "-DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_OVERRIDE=ON -DMI_BUILD_SHARED=ON -DMI_BUILD_STATIC=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF";
 
 pub fn mimalloc(os: Os, release: bool) -> String {
   let build_script = |env, additional_flags| {
     let flags = format!("{HARDENING_FLAGS} {COMPILATION_FLAGS} {additional_flags}");
     format!(
       r#"
-#!/bin/sh
-set -e
+RUN <<-'EOF'
+  set -e
 
-git clone https://github.com/microsoft/mimalloc
-cd mimalloc
-git checkout {MIMALLOC_VERSION}
+  git clone https://github.com/microsoft/mimalloc
+  cd mimalloc
+  git checkout {MIMALLOC_VERSION}
 
-# For some reason, `mimalloc` contains binary blobs in the repository, so we remove those now
-rm -rf .git ./bin
+  # For some reason, `mimalloc` contains binary blobs in the repository, so we remove those now
+  rm -rf .git ./bin
 
-mkdir -p out
-cd out
+  mkdir -p out
+  cd out
 
-{env} cmake {flags} ..
-make
+  export CFLAGS="$CFLAGS -O2 -fPIC -fstack-protector-strong -fstack-clash-protection"
 
-cd ..
+  {env} cmake {flags} ..
+  make
 
-# Copy the built library to the original directory
-cd ..
-cp mimalloc/out/libmimalloc-*.so ./libmimalloc.so
-# Clean up the source directory
-rm -rf ./mimalloc
+  cd ..
+
+  # Copy the built library to the original directory
+  cd ..
+  cp mimalloc/out/libmimalloc-*.so ./libmimalloc.so
+  # Clean up the source directory
+  rm -rf ./mimalloc
+EOF
   "#
     )
+    // https://github.com/moby/buildkit/issues/4282
+    .replace('\r', "")
   };
 
-  let build_commands = |env, additional_flags| {
-    let mut result = String::new();
-    for line in build_script(env, additional_flags)
-      .lines()
-      .map(|line| {
-        assert!(!line.contains('"'));
-        format!(r#"RUN echo "{line}" >> ./mimalloc.sh"#)
-      })
-      .chain(["RUN /bin/sh ./mimalloc.sh", "RUN rm ./mimalloc.sh"].into_iter().map(str::to_owned))
-    {
-      result.push_str(&line);
-      result.push('\n');
-    }
-    result
-  };
-  let alpine_build = build_commands("CC=$(uname -m)-alpine-linux-musl-gcc", "-DMI_LIBC_MUSL=ON");
-  let debian_build = build_commands("", if !release { "-DMI_TRACK_ASAN=ON" } else { "" });
+  let alpine_build = build_script("CC=$(uname -m)-alpine-linux-musl-gcc", "-DMI_LIBC_MUSL=ON");
+  let debian_build = build_script("", if !release { "-DMI_TRACK_ASAN=ON" } else { "" });
 
   let alpine_mimalloc = format!(
     r#"

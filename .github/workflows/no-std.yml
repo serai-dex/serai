@@ -52,8 +52,8 @@ jobs:
             sudo apt update
             sudo apt install -y gcc-riscv64-unknown-elf gcc-multilib
           elif [ "$RUNNER_OS" = "macOS" ]; then
-            brew trust --formula riscv-software-src/riscv/riscv-tools || true
-            brew tap riscv-software-src/riscv || true
+            brew trust riscv-software-src/riscv
+            brew tap riscv-software-src/riscv
             brew install riscv-tools
           elif [ "$RUNNER_OS" = "Windows" ]; then
             /C/msys64/usr/bin/pacman.exe -Syu --noconfirm

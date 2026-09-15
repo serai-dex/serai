@@ -7439,7 +7439,6 @@ dependencies = [
  "dalek-ff-group",
  "frost-schnorrkel",
  "hex",
- "modular-frost",
  "musig",
  "rand_core 0.6.4",
  "schnorrkel",

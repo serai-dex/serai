@@ -111,7 +111,7 @@ struct Peers {
 
 // Consider adding identify/kad/autonat/rendevous/(relay + dcutr). While we currently use the Serai
 // network for peers, we could use it solely for bootstrapping/as a fallback.
-#[expect(unreachable_code)]
+#[allow(unreachable_code)] // TODO: This only fires on nightly
 mod behavior {
   use super::*;
 
