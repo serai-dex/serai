@@ -423,12 +423,11 @@ impl<
   ///
   /// This is a cheap call and able to be done inline from a higher-level loop.
   pub fn cosign_block(&mut self, mut txn: impl Send + DbTxn, session: Session, cosign: &Cosign) {
-    // Don't cosign blocks with already retired keys
-    if Some(session.0) <= db::LatestRetiredSession::get(&txn).map(|session| session.0) {
-      return;
+    // Only cosign blocks for sets whose keys have yet to retire
+    if Some(session) > db::LatestRetiredSession::get(&txn) {
+      db::ToCosign::set(&mut txn, session, cosign);
     }
 
-    db::ToCosign::set(&mut txn, session, cosign);
     txn.commit();
 
     if let Some(tasks) = self.tasks.get(&session) {
@@ -445,12 +444,11 @@ impl<
     session: Session,
     slash_report: &SlashReport,
   ) {
-    // Don't sign slash reports with already retired keys
-    if Some(session.0) <= db::LatestRetiredSession::get(&txn).map(|session| session.0) {
-      return;
+    // Only sign slash reports for sets whose keys have yet to retire
+    if Some(session) > db::LatestRetiredSession::get(&txn) {
+      db::SlashReport::send(&mut txn, session, slash_report);
     }
 
-    db::SlashReport::send(&mut txn, session, slash_report);
     txn.commit();
 
     if let Some(tasks) = self.tasks.get(&session) {
