@@ -95,10 +95,6 @@ runs:
         svm install "$(solc_version)"
         svm use "$(solc_version)"
 
-    # This is a build dependency, not a test dependency, due to being used to build the runtime
-    - name: Install `docker`
-      uses: ./.github/actions/docker
-
     - name: Update system dependencies
       if: runner.os == 'Linux'
       shell: bash

@@ -41,6 +41,9 @@ jobs:
       - name: Install Build Dependencies
         uses: ./.github/actions/build-dependencies
 
+      - name: Install `docker`
+        uses: ./.github/actions/docker
+
       - name: Run Reproducible Runtime tests on the Source of Truth
         id: build
         shell: bash

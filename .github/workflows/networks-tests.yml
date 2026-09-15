@@ -34,8 +34,13 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Test Dependencies
-        uses: ./.github/actions/test-dependencies
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Run a Bitcoin Regtest Node
+        uses: ./.github/actions/bitcoin
+        with:
+          version: ${{ inputs.bitcoin-version }}
 
       - name: Run Tests
         shell: bash
@@ -58,8 +63,14 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Test Dependencies
-        uses: ./.github/actions/test-dependencies
+      - name: Install Build Dependencies
+        uses: ./.github/actions/build-dependencies
+
+      - name: Install Anvil
+        shell: bash
+        run: |
+          VERSION=982849d3140c01fd3b72905759581a132df7aa98 # 1.8.1
+          cargo +1.98.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked anvil
 
       - name: Run Tests
         shell: bash
