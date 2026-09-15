@@ -4,7 +4,7 @@ const MIMALLOC_VERSION: &str = "636510a36ab743f76a582067142f29d15b024c90"; // 3.
 const HARDENING_FLAGS: &str = "-DMI_SECURE_FULL=ON -DMI_GUARDED=ON -DMI_XMALLOC=ON";
 #[rustfmt::skip]
 const COMPILATION_FLAGS: &str =
-  "-DMI_OVERRIDE=ON -DMI_OPT_ARCH=ON -DMI_BUILD_SHARED=ON -DMI_BUILD_STATIC=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF";
+  "-DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_OVERRIDE=ON -DMI_BUILD_SHARED=ON -DMI_BUILD_STATIC=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF";
 
 pub fn mimalloc(os: Os, release: bool) -> String {
   let build_script = |env, additional_flags| {
@@ -23,6 +23,8 @@ rm -rf .git ./bin
 
 mkdir -p out
 cd out
+
+export CFLAGS="$CFLAGS -O2 -fPIC -fstack-protector-strong -fstack-clash-protection"
 
 {env} cmake {flags} ..
 make
