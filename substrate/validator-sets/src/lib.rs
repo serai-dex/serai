@@ -6,12 +6,12 @@
   unit_bindings,
   clippy::as_conversions,
   clippy::cast_possible_truncation,
-  clippy::clone_on_copy,
   clippy::ignored_unit_patterns,
   clippy::let_unit_value,
-  clippy::semicolon_if_nothing_returned,
-  clippy::used_underscore_items
+  clippy::semicolon_if_nothing_returned
 )]
+// TODO: These only fire on `nightly`
+#![allow(clippy::clone_on_copy, clippy::used_underscore_items)]
 #![expect(deprecated)] // TODO: `ValidateUnsigned`
 
 //! This pallet is likely the most complicated of all of Serai's pallets. In order to ensure it's

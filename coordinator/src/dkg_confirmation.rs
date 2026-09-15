@@ -5,10 +5,7 @@ use zeroize::Zeroizing;
 use rand_core::OsRng;
 use ciphersuite::{group::GroupEncoding as _, *};
 use dkg::{Participant, musig};
-use frost_schnorrkel::{
-  frost::{curve::Ristretto, FrostError, sign::*},
-  Schnorrkel,
-};
+use frost_schnorrkel::{curve::Ristretto, FrostError, sign::*, Schnorrkel};
 
 use serai_db::{Transaction as _, Db as DbTrait};
 

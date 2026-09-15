@@ -4,8 +4,6 @@ use std_shims::{
   collections::HashMap,
 };
 
-use thiserror::Error;
-
 use rand_core::{RngCore, CryptoRng};
 
 use k256::Scalar;
@@ -22,23 +20,37 @@ use bitcoin::{
 
 use crate::{crypto::Schnorr, wallet::ReceivedOutput};
 
-#[derive(Clone, PartialEq, Eq, Debug, Error)]
+/// An error with creating and signing a transaction.
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum TransactionError {
-  #[error("no inputs were specified")]
+  /// No inputs were specified.
   NoInputs,
-  #[error("no outputs were created")]
+  /// No outputs were specified.
   NoOutputs,
-  #[error("a specified payment's amount was less than bitcoin's required minimum")]
+  /// A specified payment's amount was less than Bitcoin policy's required minimum.
   DustPayment,
-  #[error("too much data was specified")]
+  /// Too much arbitrary data was specified according to Bitcoin's policy.
   TooMuchData,
-  #[error("an overflow occurred when evaluating this transaction")]
+  /// An arithmetic overflow occurred when evaluating this transaction.
+  ///
+  /// This suggests the transaction is syntactically invalid but does not identify the exact reason
+  /// why.
   Overflow,
-  #[error("fee was too low to pass the default minimum fee rate")]
+  /// The fee was too low for the default minimum fee rate.
   TooLowFee,
-  #[error("not enough funds for these payments")]
-  NotEnoughFunds { inputs: u64, payments: u64, fee: u64 },
-  #[error("transaction was too large")]
+  /// The inputs do not provide enough value for the payments and fee.
+  NotEnoughFunds {
+    /// The value provided by the inputs.
+    inputs: u64,
+    /// The value spent by the payments.
+    payments: u64,
+    /// The value spent as the transaction's fee.
+    fee: u64,
+  },
+  /// The transaction was too large according to Bitcoin's policy.
+  ///
+  /// This may be overzealously returned due to this library's internal limitations and
+  /// inaccuracies.
   TooLargeTransaction,
 }
 
@@ -210,8 +222,7 @@ impl SignableTransaction {
         .fold(0usize, |accum, script| accum.saturating_add(script.as_bytes().len())),
     ) >= usize::try_from(bitcoin::policy::MAX_STANDARD_TX_WEIGHT).unwrap()
     {
-      // This may be slightly overzealous if a change output which would be unused causes us to
-      // pass the limit, but always erroring on a change output which would always error is fine
+      // This may be slightly overzealous, yet we're allowed to be as a limitation of the library
       Err(TransactionError::TooLargeTransaction)?;
     }
 
@@ -219,8 +230,11 @@ impl SignableTransaction {
     if let Some(change) = change {
       let (_, vbytes_with_change) = Self::calculate_weight_vbytes(inputs.len(), {
         let mut tx_outs = tx_outs.clone();
-        // Use a 0 value since we're currently unsure what the change amount will be, and since
-        // the value is fixed size (so any value could be used here)
+        /*
+          We use `0` for the value since we're currently unsure what the change amount will be.
+          Since the value's encoding is fixed size, any value could be used here to determine the
+          transaction's weight.
+        */
         tx_outs.push(TxOut { value: Amount::ZERO, script_pubkey: change.clone() });
         tx_outs
       });
@@ -334,8 +348,13 @@ impl SignableTransaction {
 
 /// A FROST signing machine to produce a Bitcoin transaction.
 ///
-/// This does not support caching its preprocess. When `sign` is called, `message` must be empty.
-/// This will panic if either `cache`, `from_cache` is called or `message` isn't empty.
+/// This (and its derivatives) do not support caching their preprocesses.
+///
+/// This will panic if either [`SignMachine::cache`], [`SignMachine::from_cache`] are called.
+///
+/// When [`SignMachine::sign`] is called, `message` MUST be empty. The message is the
+/// [`SignableTransaction`] which was used to spawn this machine. This will panic if the passed in
+/// `message` is not `&[]`.
 pub struct TransactionMachine {
   tx: SignableTransaction,
   sigs: Vec<AlgorithmMachine<Secp256k1, Schnorr>>,
@@ -365,6 +384,7 @@ impl PreprocessMachine for TransactionMachine {
   }
 }
 
+#[doc(hidden)]
 pub struct TransactionSignMachine {
   tx: SignableTransaction,
   sigs: Vec<AlgorithmSignMachine<Secp256k1, Schnorr>>,
@@ -402,11 +422,11 @@ impl SignMachine<Transaction> for TransactionSignMachine {
   fn sign(
     mut self,
     commitments: HashMap<Participant, Self::Preprocess>,
-    msg: &[u8],
+    message: &[u8],
   ) -> Result<(TransactionSignatureMachine, Self::SignatureShare), FrostError> {
     assert!(
-      msg.is_empty(),
-      "message was passed to the TransactionSignMachine when it generates its own"
+      message.is_empty(),
+      "message was passed to the `TransactionSignMachine` when it generates its own"
     );
 
     let commitments = (0 .. self.sigs.len())
@@ -432,9 +452,9 @@ impl SignMachine<Transaction> for TransactionSignMachine {
           commitments[i].clone(),
           cache
             .taproot_key_spend_signature_hash(i, &prevouts, TapSighashType::Default)
-            // This should never happen since the inputs align with the TX the cache was
-            // constructed with, and because i is always < prevouts.len()
-            .expect("taproot_key_spend_signature_hash failed to return a hash")
+            // This should never happen since the inputs align with the transaction the cache was
+            // constructed with, and because `i` is always `< prevouts.len()`
+            .expect("`taproot_key_spend_signature_hash` failed to return a hash")
             .as_ref(),
         )?;
         shares.push(share);
@@ -446,6 +466,7 @@ impl SignMachine<Transaction> for TransactionSignMachine {
   }
 }
 
+#[doc(hidden)]
 pub struct TransactionSignatureMachine {
   tx: Transaction,
   sigs: Vec<AlgorithmSignatureMachine<Secp256k1, Schnorr>>,

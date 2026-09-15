@@ -145,15 +145,11 @@ deny = [
   # https://github.com/RustCrypto/crypto-bigint/issues/1303
   { name = "crypto-bigint", version = "=0.7.4" },
 
-  # These re: `multihash` are explained by how we patch `core2` to our own `std-shims`
-
-  # Pulls in `no_std_io2` as a replacement for `core2`
-  { name = "multihash", version = "=0.19.4" },
-  # Inlines `no_std_io2` (or comparable) to avoid a third-party dependency
-  { name = "multihash", version = ">=0.19.5" },
-
   # Legacy which _no one_ should use anymore
   { name = "is-terminal", version = "*" },
+
+  # Pulls in `no_std_io2`
+  { name = "multihash", version = "=0.19.4" },
 
   # Conflicts with our usage of mimalloc
   # https://github.com/serai-dex/serai/issues/690

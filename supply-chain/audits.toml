@@ -170,6 +170,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.4.8 -> 0.4.9"
 
+[[audits.alloy-eip7928]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.4.9 -> 0.4.10"
+
 [[audits.alloy-eips]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -894,6 +899,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.1.5 -> 0.1.6"
 
+[[audits.anyhow]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.103 -> 1.0.104"
+
 [[audits.ark-ff]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1138,6 +1148,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "4.6.3 -> 4.6.6"
 
+[[audits.clap]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "4.6.6 -> 4.6.7"
+
 [[audits.clap_builder]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1148,20 +1163,10 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "4.6.2 -> 4.6.6"
 
-[[audits.clap_derive]]
+[[audits.clap_builder]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
-delta = "4.6.0 -> 4.6.1"
-
-[[audits.clap_derive]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "4.6.1 -> 4.6.3"
-
-[[audits.clap_derive]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "4.6.3 -> 4.6.4"
+delta = "4.6.6 -> 4.6.7"
 
 [[audits.console]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -1713,6 +1718,12 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "1.0.18"
 notes = "For soundness, I have assumed the validity of `div_rem_1e16`"
+
+[[audits.jni]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.22.99"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
 
 [[audits.jobserver]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
@@ -2953,6 +2964,12 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-run"
 version = "0.3.1"
 notes = "Undocumented panic prevents `safe-to-deploy`, see https://github.com/seanmonstar/want/pull/5"
+
+[[audits.wasm-bindgen-futures]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "0.4.58"
+notes = "Stub which never compiles to manually trim its subtree from our `Cargo.lock`"
 
 [[audits.webpki-roots]]
 who = "Luke Parker <lukeparker5132@gmail.com>"

@@ -5,7 +5,7 @@ use crate::{SignatureScheme, ValidRound};
 
 use super::{Borshy, BorshyBlockchain};
 
-serai_db::schema!(TributaryState {
+serai_db::schema!(TendermintState {
   BlockNumber: (genesis: &[u8]) -> crate::BlockNumber,
 
   RoundNumber: (genesis: &[u8]) -> crate::RoundNumber,

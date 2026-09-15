@@ -20,4 +20,7 @@ SUBGRAPH_END=$(echo "$GRAPH" | grep -n "^[[:space:]]*end$" | head -n1 | cut -d':
 GRAPH=$(echo "$GRAPH" | head -n"$SUBGRAPH_END")
 # Assert this is empty (just the start and end lines)
 LINES=$(echo "$GRAPH" | wc -l)
-[ "$LINES" -eq 2 ]
+if [ ! "$LINES" -eq 2 ]; then
+  echo "$GRAPH"
+  exit 1
+fi

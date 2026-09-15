@@ -5,7 +5,8 @@
 #[cfg(test)]
 mod tests;
 
-#[expect(let_underscore_drop, clippy::clone_on_copy)]
+#[expect(let_underscore_drop)]
+#[allow(clippy::clone_on_copy)] // TODO: This only fires on `nightly`
 #[frame_support::pallet]
 mod pallet {
   use core::{marker::PhantomData, num::NonZero, time::Duration};

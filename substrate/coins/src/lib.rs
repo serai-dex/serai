@@ -31,10 +31,10 @@ impl AllowMint for AlwaysAllowMint {
   let_underscore_drop,
   clippy::as_conversions,
   clippy::cast_possible_truncation,
-  clippy::clone_on_copy,
   clippy::semicolon_if_nothing_returned,
   clippy::disallowed_methods
 )]
+#[allow(clippy::clone_on_copy)] // TODO: This only fires on `nightly`
 #[frame_support::pallet]
 mod pallet {
   use core::any::TypeId;

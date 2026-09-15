@@ -248,6 +248,9 @@ async_sequential! {
     rpc.send_raw_transaction(&tx).await.unwrap();
     let hash = *tx.compute_txid().as_raw_hash().as_byte_array();
     assert_eq!(expected_id, hash);
+
+    // Sending the transaction again should not return an error despite having already been sent
+    rpc.send_raw_transaction(&tx).await.unwrap();
   }
 
   async fn test_data() {

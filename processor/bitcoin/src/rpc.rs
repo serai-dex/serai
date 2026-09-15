@@ -177,6 +177,6 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>
     &self,
     tx: Transaction,
   ) -> impl Send + Future<Output = Result<(), Self::EphemeralError>> {
-    async move { self.rpc.send_raw_transaction(&tx.0).await.map(|_| ()) }
+    async move { self.rpc.send_raw_transaction(&tx.0).await }
   }
 }

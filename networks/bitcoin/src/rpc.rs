@@ -2,8 +2,6 @@ use core::{str::FromStr as _, fmt::Debug};
 use std::{io::Read as _, collections::HashSet};
 use std_shims::prelude::*;
 
-use thiserror::Error;
-
 use simple_request::{hyper, Request, TokioClient as Client};
 
 use bitcoin::{
@@ -12,31 +10,46 @@ use bitcoin::{
   Weight, Txid, Transaction, BlockHash, Block,
 };
 
+/// A JSON RPC error.
 #[derive(Clone, Debug)]
 pub struct Error {
-  code: isize,
-  #[expect(dead_code)] // We only want the `Debug` implementation for this
-  message: String,
+  /// The error code.
+  pub code: isize,
+  /// The message explaining this error.
+  pub message: String,
 }
 
 /// A minimal asynchronous Bitcoin RPC client.
+///
+/// This internally uses [`simple-request`](https://docs.rs/simple-request) for the underlying
+/// transport. Please see its documentation for explanations and caveats.
 #[derive(Clone, Debug)]
 pub struct Rpc {
   client: Client,
   url: String,
 }
 
-#[derive(Clone, Debug, Error)]
+/// A structured RPC error.
+#[derive(Clone, Debug)]
 pub enum RpcError {
-  #[error("couldn't connect to node")]
+  /// An error occured with the transport when connecting to the node.
   ConnectionError,
-  #[error("request had an error: {0:?}")]
+  /// The JSON RPC response contained an error.
+  ///
+  /// `bitcoin-serai` _may_ substitute this error with its own typed value _or_ drop it, as it sees
+  /// appropriate.
   RequestError(Error),
-  #[error("node replied with invalid JSON")]
+  /// The node responded with invalid JSON.
   InvalidJson,
-  #[error("node sent an invalid response ({0})")]
+  /// The node sent an invalid response.
+  ///
+  /// The included field is the string reason the response was invalid.
+  ///
+  /// Responses are not guaranteed to be checked to any state of validity. The caller MUST assume
+  /// the node may return an invalid or arbitrary response. Any validity criteria encoded by this
+  /// library are undefined other than being in line with the Bitcoin protocol.
   InvalidResponse(&'static str),
-  #[error("node was missing expected methods")]
+  /// The connected-to node was missing expected RPC methods.
   MissingMethods(HashSet<&'static str>),
 }
 
@@ -248,14 +261,15 @@ impl Rpc {
   }
 
   /// Publish a transaction.
-  pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<Txid, RpcError> {
+  ///
+  /// If the transaction has already been published to the node, this will not return an error.
+  pub async fn send_raw_transaction(&self, tx: &Transaction) -> Result<(), RpcError> {
     let txid = match self
       .call::<String>("sendrawtransaction", &format!(r#"["{}"]"#, encode::serialize_hex(tx)))
       .await
     {
-      Ok(txid) => {
-        Txid::from_str(&txid).map_err(|_| RpcError::InvalidResponse("TXID was not valid hex"))?
-      }
+      Ok(txid) => Txid::from_str(&txid)
+        .map_err(|_| RpcError::InvalidResponse("returned transaction ID was not valid hex"))?,
       Err(e) => {
         // A const from Bitcoin's bitcoin/src/rpc/protocol.h
         const RPC_VERIFY_ALREADY_IN_CHAIN: isize = -27;
@@ -263,14 +277,14 @@ impl Rpc {
         if let RpcError::RequestError(Error { code, .. }) = e &&
           (code == RPC_VERIFY_ALREADY_IN_CHAIN)
         {
-          return Ok(tx.compute_txid());
+          return Ok(());
         }
         Err(e)?
       }
     };
     if txid != tx.compute_txid() {
-      Err(RpcError::InvalidResponse("returned TX ID inequals calculated TX ID"))?;
+      Err(RpcError::InvalidResponse("returned transaction ID inequals calculated transaction ID"))?;
     }
-    Ok(txid)
+    Ok(())
   }
 }

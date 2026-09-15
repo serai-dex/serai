@@ -18,9 +18,9 @@ mod tests;
   let_underscore_drop,
   clippy::as_conversions,
   clippy::cast_possible_truncation,
-  clippy::clone_on_copy,
   clippy::semicolon_if_nothing_returned
 )]
+#[allow(clippy::clone_on_copy)] // TODO: This only fires on `nightly`
 #[frame_support::pallet]
 pub mod pallet {
   use alloc::{vec::Vec, vec};
