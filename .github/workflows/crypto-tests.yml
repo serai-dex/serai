@@ -22,6 +22,7 @@ jobs:
     name: Test `crypto/` crates
 
     strategy:
+      max-parallel: 1
       matrix:
         os: [ubuntu-latest, macos-26-intel, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}

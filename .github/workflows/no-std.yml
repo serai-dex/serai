@@ -25,6 +25,7 @@ jobs:
   build:
     name: Confirm all no-`std` crates build for no-`std` targets
     strategy:
+      max-parallel: 1
       matrix:
         os: [ubuntu-latest, macos-26-intel, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}

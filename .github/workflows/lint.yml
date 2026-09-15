@@ -13,6 +13,8 @@ jobs:
   clippy:
     name: cargo clippy
     strategy:
+      # Run these sequentially so we don't get the same syntax error from each entry of the matrix
+      max-parallel: 1
       matrix:
         os: [ubuntu-latest, macos-26-intel, macos-latest]
     runs-on: ${{ matrix.os }}
@@ -420,6 +422,7 @@ jobs:
   test-patches:
     name: Run the tests of the crates in `patches/`
     strategy:
+      max-parallel: 1
       matrix:
         os: [ubuntu-latest, macos-26-intel, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
