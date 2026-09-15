@@ -159,7 +159,7 @@ jobs:
       - name: Install Foundry Forge
         shell: bash
         run: |
-          VERSION=982849d3140c01fd3b72905759581a132df7aa98 # 1.8.1
+          VERSION=cae51ad458f6abb64852b7709eb784352429825d # 1.8.3
           cargo +1.98.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked forge
 
       - name: Run forge fmt

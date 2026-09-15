@@ -22,5 +22,8 @@ jobs:
       - name: Install Build Dependencies
         uses: ./.github/actions/build-dependencies
 
+      - name: Install `docker`
+        uses: ./.github/actions/docker
+
       - name: Run Full Stack Docker tests
         run: cargo test --all-features -p serai-full-stack-tests
