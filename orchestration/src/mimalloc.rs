@@ -11,52 +11,40 @@ pub fn mimalloc(os: Os, release: bool) -> String {
     let flags = format!("{HARDENING_FLAGS} {COMPILATION_FLAGS} {additional_flags}");
     format!(
       r#"
-#!/bin/sh
-set -e
+RUN <<-'EOF'
+  set -e
 
-git clone https://github.com/microsoft/mimalloc
-cd mimalloc
-git checkout {MIMALLOC_VERSION}
+  git clone https://github.com/microsoft/mimalloc
+  cd mimalloc
+  git checkout {MIMALLOC_VERSION}
 
-# For some reason, `mimalloc` contains binary blobs in the repository, so we remove those now
-rm -rf .git ./bin
+  # For some reason, `mimalloc` contains binary blobs in the repository, so we remove those now
+  rm -rf .git ./bin
 
-mkdir -p out
-cd out
+  mkdir -p out
+  cd out
 
-export CFLAGS="$CFLAGS -O2 -fPIC -fstack-protector-strong -fstack-clash-protection"
+  export CFLAGS="$CFLAGS -O2 -fPIC -fstack-protector-strong -fstack-clash-protection"
 
-{env} cmake {flags} ..
-make
+  {env} cmake {flags} ..
+  make
 
-cd ..
+  cd ..
 
-# Copy the built library to the original directory
-cd ..
-cp mimalloc/out/libmimalloc-*.so ./libmimalloc.so
-# Clean up the source directory
-rm -rf ./mimalloc
+  # Copy the built library to the original directory
+  cd ..
+  cp mimalloc/out/libmimalloc-*.so ./libmimalloc.so
+  # Clean up the source directory
+  rm -rf ./mimalloc
+EOF
   "#
     )
+    // https://github.com/moby/buildkit/issues/4282
+    .replace('\r', "")
   };
 
-  let build_commands = |env, additional_flags| {
-    let mut result = String::new();
-    for line in build_script(env, additional_flags)
-      .lines()
-      .map(|line| {
-        assert!(!line.contains('"'));
-        format!(r#"RUN echo "{line}" >> ./mimalloc.sh"#)
-      })
-      .chain(["RUN /bin/sh ./mimalloc.sh", "RUN rm ./mimalloc.sh"].into_iter().map(str::to_owned))
-    {
-      result.push_str(&line);
-      result.push('\n');
-    }
-    result
-  };
-  let alpine_build = build_commands("CC=$(uname -m)-alpine-linux-musl-gcc", "-DMI_LIBC_MUSL=ON");
-  let debian_build = build_commands("", if !release { "-DMI_TRACK_ASAN=ON" } else { "" });
+  let alpine_build = build_script("CC=$(uname -m)-alpine-linux-musl-gcc", "-DMI_LIBC_MUSL=ON");
+  let debian_build = build_script("", if !release { "-DMI_TRACK_ASAN=ON" } else { "" });
 
   let alpine_mimalloc = format!(
     r#"
