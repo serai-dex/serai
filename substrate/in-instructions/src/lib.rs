@@ -100,7 +100,7 @@ mod pallet {
   #[pallet::storage]
   type PendingLiquidity<T: Config> =
     StorageDoubleMap<_, Identity, ExternalCoin, Identity, BlockNumberFor<T>, Amount, OptionQuery>;
-  /// The amount of pending liqudity to add with each block.
+  /// The amount of pending liquidity to add with each block.
   ///
   /// This is updated, and entirely used within, `pre_inherents`.
   #[pallet::storage]
@@ -401,7 +401,7 @@ mod pallet {
       }
 
       /*
-        Form Protocol-owned Liqudity out of the external balance, which is done in two steps:
+        Form Protocol-owned Liquidity out of the external balance, which is done in two steps:
 
         1) Update the amount of liquidity tokens corresponding to genesis liquidity to represent
            the same amount of the external coin _after this external balance is added_. While this
@@ -453,7 +453,7 @@ mod pallet {
 
         /*
           We want to convert `1 - (genesis_liquidity_external / genesis_liquidity_external_after)`
-          of the genesis liquidity into protocol-owned liqudity such that the remaining liquidity
+          of the genesis liquidity into protocol-owned liquidity such that the remaining liquidity
           tokens, after the pool receives these coins, correspond to the same amount of the
           external coin.
 
@@ -652,20 +652,30 @@ mod pallet {
             },
           )?;
 
-          let sri_intended =
-            (Coins::<T>::balance(in_instructions_address, Coin::Serai) - sri_for_fees).expect(
-              "swapped to amount sufficient for minimum, fees, but received less than for fees?",
-            );
-          let external_coin_intended = external_coin_liquidity;
-          let external_coin_minimum = external_coin_liquidity;
-          serai_dex_pallet::Pallet::<T>::add_liquidity(
-            RawOrigin::Signed(in_instructions_address).into(),
-            external_coin,
-            sri_intended,
-            external_coin_intended,
-            sri_minimum,
-            external_coin_minimum,
-          )?;
+          {
+            let sri_intended =
+              (Coins::<T>::balance(in_instructions_address, Coin::Serai) - sri_for_fees).expect(
+                "swapped to amount sufficient for minimum, fees, but received less than for fees?",
+              );
+            let external_coin_intended = external_coin_liquidity;
+            let external_coin_minimum = external_coin_liquidity;
+            serai_dex_pallet::Pallet::<T>::add_liquidity(
+              RawOrigin::Signed(in_instructions_address).into(),
+              external_coin,
+              sri_intended,
+              external_coin_intended,
+              sri_minimum,
+              external_coin_minimum,
+            )?;
+            serai_dex_pallet::Pallet::<T>::transfer_liquidity(
+              RawOrigin::Signed(in_instructions_address).into(),
+              destination,
+              ExternalBalance {
+                coin: external_coin,
+                amount: LiquidityTokens::<T>::balance(in_instructions_address, external_coin),
+              },
+            )?;
+          }
 
           /*
             Transfer the rest, which will be greater than or equal to the amount requested for
