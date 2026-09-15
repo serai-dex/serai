@@ -17,6 +17,7 @@ jobs:
   stack_size:
     name: Check `increase_default_stack_size.sh`
     strategy:
+      max-parallel: 1
       matrix:
         os: [ubuntu-latest, ubuntu-24.04, ubuntu-22.04, macos-26-intel, macos-latest]
     runs-on: ${{ matrix.os }}

@@ -20,6 +20,7 @@ jobs:
     name: Test `common/` crates
 
     strategy:
+      max-parallel: 1
       matrix:
         os: [ubuntu-latest, macos-26-intel, macos-latest]
     runs-on: ${{ matrix.os }}
