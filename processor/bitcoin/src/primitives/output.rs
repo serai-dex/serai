@@ -114,6 +114,7 @@ impl ReceivedOutput<<Secp256k1 as WrappedGroup>::G, Address> for Output {
       .expect("last item in scanned v1 Taproot script wasn't a valid x-only public key");
 
     // The output's key minus the output's offset is the root key
+    // TODO: This is invalid methodology since the output's key may be the negation of this
     key - (<Secp256k1 as WrappedGroup>::G::GENERATOR * self.output.offset())
   }
 

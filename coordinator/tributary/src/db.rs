@@ -555,7 +555,7 @@ impl TributaryDb {
           data_set.insert(*validator, data);
         }
       }
-      let participated = data_set.contains_key(&validator);
+      let participated = data_set.contains_key(&validator); // TODO: This should be _our_ validator
       match topic.participating() {
         Participating::Participated => {
           if participated {

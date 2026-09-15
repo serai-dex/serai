@@ -215,6 +215,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Continually
           );
         }
 
+        NextBlock::set(&mut txn, &(block_number + 1));
         txn.commit();
       }
 

@@ -290,6 +290,8 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
       let Some(planned) = planned_outer else {
         panic!("couldn't create a tree root with a change output")
       };
+      // Clear the outputs since this planned transaction will consume all of them
+      Db::<S>::set_outputs(txn, key, coin, &[]);
       Db::<S>::set_operating_costs(txn, coin, Amount(operating_costs));
       TransactionsToSign::<P::SignableTransaction>::send(txn, &key, &planned.signable);
       eventualities.push(planned.eventuality);
@@ -334,6 +336,12 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
         Some(to),
       )
       .await?;
+    /*
+      Clear the outputs since either:
+      1) The planned transaction will consume all of them
+      2) They're worth less than the fee to forward them
+    */
+    Db::<S>::set_outputs(txn, key, coin, &[]);
     Db::<S>::set_operating_costs(txn, coin, Amount(operating_costs));
     let Some(planned) = planned else { return Ok(()) };
 

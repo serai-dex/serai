@@ -42,6 +42,7 @@ impl OnlyValidators {
 
     // Write the hash of our challenge
     socket.write_all(&Blake2s256::digest(our_challenge)).await?;
+    socket.flush().await?;
 
     // Read the hash of their challenge
     let mut their_challenge_commitment = [0; 32];
@@ -49,6 +50,7 @@ impl OnlyValidators {
 
     // Reveal our challenge
     socket.write_all(&our_challenge).await?;
+    socket.flush().await?;
 
     // Read their challenge
     let mut their_challenge = [0; 32];
@@ -82,6 +84,7 @@ impl OnlyValidators {
   ) -> io::Result<PeerId> {
     // Write our public key
     socket.write_all(&self.serai_key.public.to_bytes()).await?;
+    socket.flush().await?;
 
     let msg = borsh::to_vec(&(
       dialer_peer_id.to_bytes(),
@@ -92,6 +95,7 @@ impl OnlyValidators {
     .unwrap();
     let signature = self.serai_key.sign_simple(PROTOCOL.as_bytes(), &msg);
     socket.write_all(&signature.to_bytes()).await?;
+    socket.flush().await?;
 
     let mut public_key_and_sig = [0; 96];
     socket.read_exact(&mut public_key_and_sig).await?;

@@ -83,7 +83,7 @@ async fn signable_transaction(
       OutputWithDecoys::fingerprintable_deterministic_new(
         // We need a deterministic RNG here with *some* seed
         // The unique ID means we don't pick some static seed
-        // It is a public value, yet that's fine as this is assumed fully transparent
+        // It is a public value, yet that's fine as this is assumed to be fully transparent
         // It is a reused value (with later code), but that's not an issue. Just an oddity
         &mut ChaCha20Rng::from_seed(id),
         &rpc.rpc,
@@ -97,7 +97,9 @@ async fn signable_transaction(
             panic!("selecting decoys for an unsupported RctType")
           }
         },
-        reference_block.0.block.number() + 1,
+        // The agreed upon reference block, plus the nine blocks past it from which decoys won't
+        // be selected from or with any consideration to due to Monero's 10-block lock
+        reference_block.0.block.number() + 9,
         input.0.clone(),
       )
       .await?,

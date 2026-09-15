@@ -120,7 +120,7 @@ impl ScannerFeed for Rpc {
     _reference_block: &Self::Block,
   ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>> {
     async move {
-      assert_eq!(coin, ExternalCoin::Bitcoin);
+      assert_eq!(coin, ExternalCoin::Monero);
       // TODO
       Ok(Amount(0))
     }

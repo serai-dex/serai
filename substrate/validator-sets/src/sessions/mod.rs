@@ -365,7 +365,11 @@ impl<Storage: SessionsStorage> Sessions for Storage {
 
     Core::<Storage::Config>::emit_event(Event::SetDecided {
       set: latest_decided_set,
-      validators: selected_validators.into_iter().collect(),
+      // We do not use `selected_validators` but read it from the database to emit this event with
+      // the same ordering we'll have when reading these validators from the database
+      validators: Storage::SelectedValidators::iter_prefix(latest_decided_set)
+        .map(|(validator, (_aux_key, key_shares))| (validator, key_shares))
+        .collect(),
     });
 
     true

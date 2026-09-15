@@ -369,6 +369,9 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
 /// A representation of a scanner.
 #[expect(non_snake_case)]
 pub struct Scanner<S: ScannerFeed> {
+  // This needs to run as long as the scanner is live, so we have to hold its handle
+  #[expect(unused)]
+  index_handle: TaskHandle,
   substrate_handle: TaskHandle,
   _S: PhantomData<S>,
 }
@@ -393,7 +396,7 @@ impl<S: ScannerFeed> Scanner<S> {
     let eventuality_task =
       eventuality::EventualityTask::<_, _, _>::new(db, feed, scheduler, start_block);
 
-    let (index_task_def, _index_handle) = Task::new();
+    let (index_task_def, index_handle) = Task::new();
     let (scan_task_def, scan_handle) = Task::new();
     let (batch_task_def, batch_handle) = Task::new();
     let (report_task_def, report_handle) = Task::new();
@@ -415,7 +418,7 @@ impl<S: ScannerFeed> Scanner<S> {
     // window its allowed to scan
     tokio::spawn(eventuality_task.continually_run(eventuality_task_def, vec![scan_handle]));
 
-    Some(Self { substrate_handle, _S: PhantomData })
+    Some(Self { index_handle, substrate_handle, _S: PhantomData })
   }
 
   /// Initialize the scanner.

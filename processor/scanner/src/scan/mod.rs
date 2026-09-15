@@ -5,8 +5,10 @@ use borsh::BorshDeserialize as _;
 
 use serai_db::{Get, Transaction as DbTxn, Db};
 
-#[rustfmt::skip]
-use serai_primitives::instructions::{RefundableInInstruction, InInstruction, InInstructionWithBalance};
+use serai_primitives::{
+  balance::Amount,
+  instructions::{RefundableInInstruction, InInstruction, InInstructionWithBalance},
+};
 
 use primitives::{task::ContinuallyRan, OutputType, ReceivedOutput as _, Block as _};
 
@@ -244,12 +246,19 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerF
                   )
                 })?);
               }
-              balance.amount.0 -= 2 * costs_to_aggregate[&balance.coin].0;
 
-              // Now, check it's still past the dust threshold
-              if balance.amount.0 < S::dust(balance.coin).0 {
-                continue;
-              }
+              balance.amount = {
+                let Some(amount) = (Amount(2) * costs_to_aggregate[&balance.coin])
+                  .and_then(|cost_to_aggregate| balance.amount - cost_to_aggregate)
+                else {
+                  continue;
+                };
+                // Now, check it's still past the dust threshold
+                if amount < S::dust(balance.coin) {
+                  continue;
+                }
+                amount
+              };
 
               balance
             };

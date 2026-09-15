@@ -33,6 +33,12 @@ fn address_from_serai_key(key: <Secp256k1 as WrappedGroup>::G, kind: OutputType)
   .expect("couldn't create Serai-representable address for P2TR script")
 }
 
+fn anyone_can_spend_payment() -> (ScriptBuf, u64) {
+  let script = bitcoin_serai::wallet::address(<Secp256k1 as WrappedGroup>::G::GENERATOR).unwrap();
+  let dust = BSignableTransaction::dust(&script);
+  (script, dust)
+}
+
 fn signable_transaction<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>(
   _reference_block: &BlockFor<Rpc<D>>,
   inputs: Vec<OutputFor<Rpc<D>>>,
@@ -68,11 +74,7 @@ fn signable_transaction<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>:
     gets stuck, this lets anyone create a child transaction spending this output, raising the fee,
     getting the transaction unstuck (via CPFP).
   */
-  payments.push({
-    let script = bitcoin_serai::wallet::address(<Secp256k1 as WrappedGroup>::G::GENERATOR).unwrap();
-    let dust = BSignableTransaction::dust(&script);
-    (script, dust)
-  });
+  payments.push(anyone_can_spend_payment());
 
   let change = change
     .map(<Planner as TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>>::change_address);
@@ -134,20 +136,26 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>
     change: Option<KeyFor<Rpc<D>>>,
   ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>> {
     async move {
-      Ok(match signable_transaction::<D>(reference_block, inputs, payments, change) {
-        Ok(tx) => Amount(tx.1.needed_fee()),
-        Err(
-          TransactionError::NoInputs | TransactionError::NoOutputs | TransactionError::DustPayment,
-        ) => panic!("malformed arguments to calculate_fee"),
-        // No data, we have a minimum fee rate, we checked the amount of inputs/outputs
-        Err(
-          TransactionError::TooMuchData |
-          TransactionError::TooLowFee |
-          TransactionError::Overflow |
-          TransactionError::TooLargeTransaction,
-        ) => unreachable!(),
-        Err(TransactionError::NotEnoughFunds { fee, .. }) => Amount(fee),
-      })
+      let (_script, anyone_can_spend_payment_amount) = anyone_can_spend_payment();
+      Ok(
+        (Amount(match signable_transaction::<D>(reference_block, inputs, payments, change) {
+          Ok(tx) => tx.1.needed_fee(),
+          Err(
+            TransactionError::NoInputs |
+            TransactionError::NoOutputs |
+            TransactionError::DustPayment,
+          ) => panic!("malformed arguments to calculate_fee"),
+          // No data, we have a minimum fee rate, we checked the amount of inputs/outputs
+          Err(
+            TransactionError::TooMuchData |
+            TransactionError::TooLowFee |
+            TransactionError::Overflow |
+            TransactionError::TooLargeTransaction,
+          ) => unreachable!(),
+          Err(TransactionError::NotEnoughFunds { fee, .. }) => fee,
+        }) + Amount(anyone_can_spend_payment_amount))
+        .unwrap(),
+      )
     }
   }
 

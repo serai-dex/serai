@@ -55,7 +55,7 @@ impl Lifetime {
     next_keys_activation_block_number: Option<u64>,
   ) -> Self {
     assert!(
-      activation_block_number >= block_number,
+      block_number >= activation_block_number,
       "calculating lifetime stage for an inactive multisig"
     );
     // This is exclusive, not inclusive, since we want a CONFIRMATIONS + 10 minutes window and the

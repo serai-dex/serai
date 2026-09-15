@@ -4,7 +4,7 @@ use std::{boxed::Box, collections::HashMap};
 use zeroize::Zeroizing;
 use rand_core::OsRng;
 use ciphersuite::{group::GroupEncoding as _, *};
-use dkg::{Participant, musig};
+use dkg::{Participant, ThresholdKeys, musig};
 use frost_schnorrkel::{curve::Ristretto, FrostError, sign::*, Schnorrkel};
 
 use serai_db::{Transaction as _, Db as DbTrait};
@@ -268,10 +268,28 @@ impl<
                 })
                 .collect::<Vec<_>>();
 
-              let keys = musig(
+              // Substrate performs the MuSig aggregation with `dalek_ff_group::Ristretto`
+              let keys = musig::<dalek_ff_group::Ristretto>(
                 ValidatorSet::from(self.set.set).musig_context(),
                 self.key.clone(),
                 &musig_public_keys,
+              )
+              .unwrap();
+
+              /*
+                Except we need it with `modular_frost::curve::Ristretto` to actually sign with
+                these keys, so we map our keys exactly as-is across the two ciphersuites.
+              */
+              let keys = ThresholdKeys::<Ristretto>::new(
+                keys.params(),
+                keys.interpolation().clone(),
+                keys.original_secret_share().clone(),
+                (1 ..= keys.params().n())
+                  .map(|i| {
+                    let i = Participant::new(i).unwrap();
+                    (i, keys.original_verification_share(i))
+                  })
+                  .collect(),
               )
               .unwrap();
 
