@@ -38,7 +38,7 @@ pub(crate) fn latest_scannable_block<S: ScannerFeed>(getter: &impl Get) -> Optio
 ///
 /// The HashMap is keyed by the key these Eventualities are for.
 fn intake_eventualities<S: ScannerFeed>(
-  txn: &mut (impl Send + DbTxn),
+  txn: &mut impl DbTxn,
   to_intake: HashMap<Vec<u8>, Vec<EventualityFor<S>>>,
 ) {
   for (key, new_eventualities) in to_intake {
@@ -101,11 +101,7 @@ fn intake_eventualities<S: ScannerFeed>(
   This forms a backlog only if the latency of scanning, acknowledgement, and intake (including
   checking Eventualities) exceeds the window duration (the desired property).
 */
-pub(crate) struct EventualityTask<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  S: ScannerFeed,
-  Sch: Scheduler<S>,
-> {
+pub(crate) struct EventualityTask<D: 'static + Send + Sync, S: ScannerFeed, Sch: Scheduler<S>> {
   db: D,
   feed: S,
   scheduler: Sch,

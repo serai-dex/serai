@@ -110,7 +110,7 @@ struct Tasks {
 /// The signers used by a processor.
 #[expect(non_snake_case)]
 pub struct Signers<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  D: 'static + Send,
   S: ScannerFeed,
   Sch: Scheduler<S>,
   P: TransactionPublisher<TransactionFor<SignableTransactionFor<S, Sch>>>,
@@ -140,7 +140,7 @@ type SignableTransactionFor<S, Sch> = <Sch as Scheduler<S>>::SignableTransaction
   memory until the session is retired entirely.
 */
 impl<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  D: 'static + Send + for<'db> Db<Transaction<'db>: Send>,
   S: ScannerFeed,
   Sch: Scheduler<S>,
   P: TransactionPublisher<TransactionFor<SignableTransactionFor<S, Sch>>>,
@@ -303,7 +303,7 @@ impl<
   /// If this session (or a session after it) has already been retired, this is a NOP.
   pub fn register_keys(
     &mut self,
-    txn: &mut (impl Send + DbTxn),
+    txn: &mut impl DbTxn,
     session: Session,
     substrate_keys: Vec<ThresholdKeys<Ristretto>>,
     external_keys: Vec<ThresholdKeys<CiphersuiteFor<S, Sch>>>,
@@ -349,7 +349,7 @@ impl<
   /// times out (not once the key is done with regards to the external network).
   pub fn retire_session(
     &mut self,
-    txn: &mut (impl Send + DbTxn),
+    txn: &mut impl DbTxn,
     session: Session,
     external_key: &impl GroupEncoding,
   ) {
@@ -382,7 +382,7 @@ impl<
   /// Queue handling a message.
   ///
   /// This is a cheap call and able to be done inline from a higher-level loop.
-  pub fn queue_message(&mut self, txn: &mut (impl Send + DbTxn), message: &CoordinatorMessage) {
+  pub fn queue_message(&mut self, txn: &mut impl DbTxn, message: &CoordinatorMessage) {
     let sign_id = message.sign_id();
 
     // Don't queue messages for already retired keys

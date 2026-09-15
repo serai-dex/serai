@@ -60,7 +60,7 @@ impl<S: ScannerFeed, SC: Send + Sync + SmartContract<S>> Scheduler<S, SC> {
 
   fn fulfill_payments(
     &self,
-    txn: &mut (impl Send + DbTxn),
+    txn: &mut impl DbTxn,
     active_keys: &[(KeyFor<S>, LifetimeStage)],
     payments: Vec<Payment<AddressFor<S>>>,
   ) -> KeyScopedEventualities<S> {
@@ -87,7 +87,7 @@ impl<S: ScannerFeed, SC: Send + Sync + SmartContract<S>> SchedulerTrait<S> for S
   type EphemeralError = ();
   type SignableTransaction = SC::SignableTransaction;
 
-  fn activate_key(_txn: &mut (impl Send + DbTxn), _key: KeyFor<S>) {}
+  fn activate_key(_txn: &mut impl DbTxn, _key: KeyFor<S>) {}
 
   fn flush_key(
     &self,
@@ -105,7 +105,7 @@ impl<S: ScannerFeed, SC: Send + Sync + SmartContract<S>> SchedulerTrait<S> for S
     }
   }
 
-  fn retire_key(_txn: &mut (impl Send + DbTxn), _key: KeyFor<S>) {}
+  fn retire_key(_txn: &mut impl DbTxn, _key: KeyFor<S>) {}
 
   fn update(
     &self,

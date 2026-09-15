@@ -39,7 +39,7 @@ fn anyone_can_spend_payment() -> (ScriptBuf, u64) {
   (script, dust)
 }
 
-fn signable_transaction<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>(
+fn signable_transaction<D: 'static + Send + Sync + Db>(
   _reference_block: &BlockFor<Rpc<D>>,
   inputs: Vec<OutputFor<Rpc<D>>>,
   payments: Vec<Payment<AddressFor<Rpc<D>>>>,
@@ -91,8 +91,8 @@ fn signable_transaction<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>:
 
 #[derive(Clone)]
 pub(crate) struct Planner;
-impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>>
-  TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>> for Planner
+impl<D: 'static + Send + Sync + Db> TransactionPlanner<Rpc<D>, EffectedReceivedOutputs<Rpc<D>>>
+  for Planner
 {
   type EphemeralError = ();
 

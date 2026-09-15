@@ -79,7 +79,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
   }
 
   fn fulfillable_payments(
-    txn: &mut (impl Send + DbTxn),
+    txn: &mut impl DbTxn,
     operating_costs: &mut u64,
     key: KeyFor<S>,
     coin: ExternalCoin,
@@ -134,7 +134,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
   }
 
   fn queue_branches(
-    txn: &mut (impl Send + DbTxn),
+    txn: &mut impl DbTxn,
     key: KeyFor<S>,
     coin: ExternalCoin,
     effected_payments: Vec<Amount>,
@@ -341,7 +341,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> Scheduler<S, P> {
       1) The planned transaction will consume all of them
       2) They're worth less than the fee to forward them
     */
-    Db::<S>::set_outputs(txn, key, coin, &[]);
+    Db::<S>::set_outputs(txn, from, coin, &[]);
     Db::<S>::set_operating_costs(txn, coin, Amount(operating_costs));
     let Some(planned) = planned else { return Ok(()) };
 
@@ -356,7 +356,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
   type EphemeralError = P::EphemeralError;
   type SignableTransaction = P::SignableTransaction;
 
-  fn activate_key(txn: &mut (impl Send + DbTxn), key: KeyFor<S>) {
+  fn activate_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
       assert!(Db::<S>::outputs(txn, key, coin).is_none());
       Db::<S>::set_outputs(txn, key, coin, &[]);
@@ -394,7 +394,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
     }
   }
 
-  fn retire_key(txn: &mut (impl Send + DbTxn), key: KeyFor<S>) {
+  fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
       assert_eq!(Db::<S>::outputs(txn, key, coin).unwrap(), vec![]);
       Db::<S>::del_outputs(txn, key, coin);

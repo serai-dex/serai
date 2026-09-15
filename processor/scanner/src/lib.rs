@@ -147,7 +147,7 @@ pub trait ScannerFeed: 'static + Send + Sync + Clone {
   /// Panics if the block requested wasn't indexed.
   fn block_by_number(
     &self,
-    getter: &(impl Send + Sync + Get),
+    getter: &(impl Sync + Get),
     number: u64,
   ) -> impl Send + Future<Output = Result<Self::Block, String>> {
     async move {
@@ -280,7 +280,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   ///
   /// This SHOULD setup any necessary database structures. This SHOULD NOT cause the new key to
   /// be used as the primary key. The multisig rotation time clearly establishes its steps.
-  fn activate_key(txn: &mut (impl Send + DbTxn), key: KeyFor<S>);
+  fn activate_key(txn: &mut impl DbTxn, key: KeyFor<S>);
 
   /// Flush all outputs within a retiring key to the new key.
   ///
@@ -305,7 +305,7 @@ pub trait Scheduler<S: ScannerFeed>: 'static + Send {
   /// Any key retired MUST NOT still have outputs associated with it. This SHOULD be a NOP other
   /// than any assertions and database cleanup. This MUST NOT be expected to be called in a fashion
   /// ordered to any other calls.
-  fn retire_key(txn: &mut (impl Send + DbTxn), key: KeyFor<S>);
+  fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>);
 
   /// Accumulate outputs into the scheduler, yielding the Eventualities now to be scanned for.
   ///

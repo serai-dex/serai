@@ -40,11 +40,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
     Self { planner, _S: PhantomData }
   }
 
-  fn accumulate_outputs(
-    txn: &mut (impl Send + DbTxn),
-    outputs: Vec<OutputFor<S>>,
-    from_scanner: bool,
-  ) {
+  fn accumulate_outputs(txn: &mut impl DbTxn, outputs: Vec<OutputFor<S>>, from_scanner: bool) {
     let mut outputs_by_key = HashMap::new();
     for output in outputs {
       if !from_scanner {
@@ -113,7 +109,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
   }
 
   fn fulfillable_payments(
-    txn: &mut (impl Send + DbTxn),
+    txn: &mut impl DbTxn,
     operating_costs: &mut u64,
     key: KeyFor<S>,
     coin: ExternalCoin,
@@ -412,7 +408,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
   type EphemeralError = P::EphemeralError;
   type SignableTransaction = P::SignableTransaction;
 
-  fn activate_key(txn: &mut (impl Send + DbTxn), key: KeyFor<S>) {
+  fn activate_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
       assert!(Db::<S>::outputs(txn, key, coin).is_none());
       Db::<S>::set_outputs(txn, key, coin, &[]);
@@ -450,7 +446,7 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, EffectedReceivedOutputs<S>>> Sched
     }
   }
 
-  fn retire_key(txn: &mut (impl Send + DbTxn), key: KeyFor<S>) {
+  fn retire_key(txn: &mut impl DbTxn, key: KeyFor<S>) {
     for coin in S::NETWORK.coins() {
       assert_eq!(Db::<S>::outputs(txn, key, coin).unwrap(), vec![]);
       Db::<S>::del_outputs(txn, key, coin);

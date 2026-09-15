@@ -25,7 +25,7 @@ use db::*;
 
 // Fetches transactions to sign and signs them.
 pub(crate) struct TransactionSignerTask<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  D: 'static + Send + Db,
   ST: SignableTransaction,
   P: TransactionPublisher<TransactionFor<ST>>,
 > {
@@ -41,11 +41,8 @@ pub(crate) struct TransactionSignerTask<
   last_publication: Instant,
 }
 
-impl<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  ST: SignableTransaction,
-  P: TransactionPublisher<TransactionFor<ST>>,
-> TransactionSignerTask<D, ST, P>
+impl<D: 'static + Send + Db, ST: SignableTransaction, P: TransactionPublisher<TransactionFor<ST>>>
+  TransactionSignerTask<D, ST, P>
 {
   pub(crate) fn new(
     db: D,
@@ -90,7 +87,7 @@ impl<
 }
 
 impl<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  D: 'static + Send + for<'db> Db<Transaction<'db>: Send>,
   ST: SignableTransaction,
   P: TransactionPublisher<TransactionFor<ST>>,
 > ContinuallyRan for TransactionSignerTask<D, ST, P>

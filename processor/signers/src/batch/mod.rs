@@ -33,10 +33,7 @@ pub(crate) fn signed_batch(getter: &impl Get, id: u32) -> Option<SignedBatch> {
 }
 
 // Fetches batches to sign and signs them.
-pub(crate) struct BatchSignerTask<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  E: GroupEncoding,
-> {
+pub(crate) struct BatchSignerTask<D: 'static + Send + Db, E: GroupEncoding> {
   db: D,
 
   session: Session,
@@ -47,9 +44,7 @@ pub(crate) struct BatchSignerTask<
   attempt_manager: AttemptManager<D, WrappedSchnorrkelMachine>,
 }
 
-impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, E: GroupEncoding>
-  BatchSignerTask<D, E>
-{
+impl<D: 'static + Send + Db, E: GroupEncoding> BatchSignerTask<D, E> {
   pub(crate) fn new(
     db: D,
     session: Session,
@@ -85,9 +80,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, E: GroupEnc
   }
 }
 
-impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, E: Send + GroupEncoding>
-  ContinuallyRan for BatchSignerTask<D, E>
-{
+impl<D: 'static + Send + Db, E: Send + GroupEncoding> ContinuallyRan for BatchSignerTask<D, E> {
   type Error = DoesNotError;
 
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {

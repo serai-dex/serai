@@ -30,7 +30,7 @@ pub(crate) fn next_to_scan_for_outputs_block<S: ScannerFeed>(getter: &impl Get) 
 }
 
 pub(crate) fn queue_output_until_block<S: ScannerFeed>(
-  txn: &mut (impl Send + DbTxn),
+  txn: &mut impl DbTxn,
   queue_for_block: u64,
   output: &OutputWithInInstruction<S>,
 ) {
@@ -77,17 +77,12 @@ fn in_instruction_from_output<S: ScannerFeed>(
   )
 }
 
-pub(crate) struct ScanTask<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  S: ScannerFeed,
-> {
+pub(crate) struct ScanTask<D: 'static + Send + Sync + Db, S: ScannerFeed> {
   db: D,
   feed: S,
 }
 
-impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerFeed>
-  ScanTask<D, S>
-{
+impl<D: 'static + Send + Sync + Db, S: ScannerFeed> ScanTask<D, S> {
   pub(crate) fn new(mut db: D, feed: S, start_block: u64) -> Self {
     if ScanDb::<S>::next_to_scan_for_outputs_block(&db).is_none() {
       // Initialize the DB

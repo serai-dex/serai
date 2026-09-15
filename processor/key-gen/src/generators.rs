@@ -15,7 +15,7 @@ use serai_primitives::validator_sets::KeyShares;
 /// correctness can be evaluated solely by reviewing these few lines of code.
 ///
 /// This is arguably over-engineered as of right now, as we only need generators for Ristretto
-/// and N::Curve. By having this HashMap, we enable de-duplication of the Ristretto == N::Curve
+/// and `N::Curve`. By having this HashMap, we enable de-duplication of the `Ristretto == N::Curve`
 /// case, and we automatically support the n-curve case (rather than hard-coding to the 2-curve
 /// case).
 static GENERATORS: LazyLock<Mutex<HashMap<TypeId, &'static (dyn Send + Sync + Any)>>> =
