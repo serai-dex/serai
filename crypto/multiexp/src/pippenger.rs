@@ -26,9 +26,13 @@ pub(crate) fn pippenger<G: Zeroize + ConditionallySelectable + Group<Scalar: Pri
 
     let mut buckets = vec![G::identity(); 2_usize.pow(window.into())];
     for p in 0 .. bits.len() {
-      for (i, bucket) in buckets.iter_mut().enumerate() {
-        *bucket +=
-          <_>::conditional_select(&G::identity(), &pairs[p].1, i.ct_eq(&usize::from(bits[p][n])));
+      let mut bucket = G::identity();
+      for (i, bucket_i) in buckets.iter_mut().enumerate() {
+        bucket.conditional_assign(bucket_i, i.ct_eq(&usize::from(bits[p][n])));
+      }
+      bucket += pairs[p].1;
+      for (i, bucket_i) in buckets.iter_mut().enumerate() {
+        bucket_i.conditional_assign(&bucket, i.ct_eq(&usize::from(bits[p][n])));
       }
     }
 
