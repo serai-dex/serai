@@ -175,6 +175,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.4.9 -> 0.4.10"
 
+[[audits.alloy-eip7928]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.4.10 -> 0.4.11"
+
 [[audits.alloy-eips]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1112,6 +1117,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.2.61 -> 1.2.62"
 
+[[audits.cfg-if]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.4 -> 1.0.5"
+
 [[audits.cfg_aliases]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1285,6 +1295,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.1.17 -> 0.1.19"
 notes = "Solely a version bump"
+
+[[audits.derive-where]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.6.1 -> 1.7.0"
 
 [[audits.digest]]
 who = "Luke Parker <lukeparker5132@gmail.com>"

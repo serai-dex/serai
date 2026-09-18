@@ -1171,7 +1171,7 @@ version = "0.16.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.const-hex]]
-version = "1.18.1"
+version = "1.19.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.const-oid]]
@@ -2381,7 +2381,7 @@ version = "0.5.18"
 criteria = "safe-to-deploy"
 
 [[exemptions.redox_users]]
-version = "0.5.2"
+version = "0.5.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.ref-cast]]
@@ -2501,7 +2501,7 @@ version = "0.1.7"
 criteria = "safe-to-deploy"
 
 [[exemptions.rustix]]
-version = "1.1.4"
+version = "1.1.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.rustls]]
@@ -3034,7 +3034,7 @@ version = "2.0.118"
 criteria = "safe-to-deploy"
 
 [[exemptions.syn]]
-version = "3.0.5"
+version = "3.0.6"
 criteria = "safe-to-deploy"
 
 [[exemptions.syn-solidity]]

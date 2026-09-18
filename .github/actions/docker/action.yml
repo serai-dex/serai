@@ -37,8 +37,8 @@ runs:
       shell: bash
       run: |
         # Docker isn't pre-installed on macOS images, so we solely have to confirm it isn't
-        if [ $(command -v docker; printf $?) -eq 0 ]; then
-          echo "\`docker`` was pre-installed"
+        if [ $(command -v docker > /dev/null; printf $?) -eq 0 ]; then
+          echo "\`docker\` was pre-installed: $(command -v docker)"
           exit 1
         fi
 
@@ -73,7 +73,7 @@ runs:
 
     - name: Install `buildx`
       if: runner.os == 'macOS'
-      uses: docker/setup-buildx-action@594f3bf4285d9ea8dc53c9a0c9c4092420091003 # 4.4.0
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # 4.4.1
       with:
         # This is Docker's default, but `setup-buildx-action` defaults to `docker-container`
         # (for _some_ reason) which means built images won't be loaded into Docker (`--load`) by

@@ -12,7 +12,7 @@ runs:
         sudo apt update -y
 
         # Actually perform the removals
-        sudo apt remove -y "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
+        sudo apt remove -y "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" "*azure*"
         sudo apt remove -y "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
         sudo apt remove -y "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
 
@@ -31,21 +31,24 @@ runs:
 
         brew analytics off || true
 
-        for package in \
-          "msbuild" "powershell" "nuget" "bazel" "ansible" "terraform" "heroku" "aws" azure-cli \
-          "nodejs" "npm" "yarn" "java" "kotlin" "golang" "swift" "julia" "fortran" "android" \
-          "apache2" "nginx" "firefox" "chromium" "chrome" "edge" \
-          "qemu" "sql" "texinfo" "imagemagick" \
-        ; do
-          for package in $(brew list --full-name -1 | grep "$package"); do
-            brew uninstall --force "$package" || true
-          done
+        # Do not bother removing unused dependencies as we go as we're removing everything anyways
+        export HOMEBREW_NO_AUTOREMOVE=1
+        rm -rf $(brew --cache)
+        # Identify all installed formulae, casks, and available taps
+        brew install jq || true
+        PACKAGES=$(brew info --installed --json=v2 | jq -r ".[][] | select(.full_name, .full_token | .)[]")
+        TAPS=$(brew info --json=v2 | jq -r ".[][].tap" | uniq)
+        # Remove every pre-installed tap and package
+        # We remove taps first to start reducing the size of the package list
+        for tap in $TAPS; do
+          brew untap --force "$tap" || true
+        done
+        for package in $PACKAGES; do
+          brew uninstall --force --zap --ignore-dependencies "$package" || true
         done
 
-        # Remove an untrusted tap present for some reason
-        brew untap aws/tap || true
-        # Explicitly uninstall `xcodes` which no longer offers a binary package for Intel macOS
-        brew uninstall --force xcodes || true
+        # Clean up the Rust installation made by via `homebrew`'s `rustup` formula
+        rm -rf ~/.rustup ~/.cargo
 
     - name: Install dependencies
       shell: bash
@@ -55,19 +58,19 @@ runs:
         elif [ "$RUNNER_OS" == "Windows" ]; then
           # Use `-gnu` to avoid the installation and licensing headaches of `-msvc`
           rustup set default-host x86_64-pc-windows-gnu
-          choco install llvm protoc
+          choco install protoc llvm
         elif [ "$RUNNER_OS" == "macOS" ]; then
+          brew update
           brew install protobuf llvm
           HOMEBREW_PREFIX=$(brew --prefix)
+          # Ensure the prefix directory actually exists
           [ -d "$HOMEBREW_PREFIX" ]
 
           # Configure `LIBCLANG_PATH` for `clang-sys`
-          ls $HOMEBREW_PREFIX/opt/llvm/lib | grep "libclang.dylib" # Make sure this installed `libclang`
+          ls "$HOMEBREW_PREFIX/opt/llvm/lib" | grep "libclang.dylib" # Make sure this installed `libclang`
           echo "LIBCLANG_PATH=$HOMEBREW_PREFIX/opt/llvm/lib" >> "$GITHUB_ENV"
 
-          # Replace brew rust(up) with rustup
-          brew uninstall --force rustup || true
-          brew uninstall --force rust || true
+          # Install `rustup`
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- --default-toolchain stable -y
         fi
 
@@ -110,6 +113,7 @@ runs:
       run: |
         brew update || true
         brew upgrade || true
+        brew autoremove
         brew cleanup
         rm -rf $(brew --cache)
 
