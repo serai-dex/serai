@@ -175,6 +175,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.4.9 -> 0.4.10"
 
+[[audits.alloy-eip7928]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.4.10 -> 0.4.11"
+
 [[audits.alloy-eips]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1112,6 +1117,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "1.2.61 -> 1.2.62"
 
+[[audits.cfg-if]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.0.4 -> 1.0.5"
+
 [[audits.cfg_aliases]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1286,6 +1296,11 @@ criteria = "safe-to-deploy"
 delta = "0.1.17 -> 0.1.19"
 notes = "Solely a version bump"
 
+[[audits.derive-where]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "1.6.1 -> 1.7.0"
+
 [[audits.digest]]
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
@@ -1384,16 +1399,6 @@ notes = "Stub which never compiles to manually trim its subtree from our `Cargo.
 criteria = "audited"
 version = "0.12.1"
 notes = "`/audits/crypto/Cypher Stack March 2023`"
-
-[[audits.find-msvc-tools]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.1.9 -> 0.1.11"
-
-[[audits.find-msvc-tools]]
-who = "Luke Parker <lukeparker5132@gmail.com>"
-criteria = "safe-to-deploy"
-delta = "0.1.11 -> 0.1.12"
 
 [[audits.flexible-transcript]]
 criteria = "audited"
@@ -1688,6 +1693,11 @@ delta = "0.1.0 -> 0.1.1"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "0.27.7 -> 0.27.9"
+
+[[audits.hyper-rustls]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "0.27.9 -> 0.27.10"
 
 [[audits.ident_case]]
 who = "Luke Parker <lukeparker5132@gmail.com>"

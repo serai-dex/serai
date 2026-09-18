@@ -55,7 +55,7 @@ jobs:
           elif [ "$RUNNER_OS" = "macOS" ]; then
             brew trust riscv-software-src/riscv
             brew tap riscv-software-src/riscv
-            brew install riscv-tools
+            brew install riscv-gnu-toolchain
           elif [ "$RUNNER_OS" = "Windows" ]; then
             /C/msys64/usr/bin/pacman.exe -Syu --noconfirm
             /C/msys64/usr/bin/pacman.exe -S --noconfirm mingw-w64-clang-x86_64-riscv32-unknown-elf-gcc

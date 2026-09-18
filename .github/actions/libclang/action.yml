@@ -1,0 +1,36 @@
+name: libclang
+description: Builds and caches `libclang.dylib`
+
+runs:
+  using: "composite"
+  steps:
+    - name: libclang.dylib Cache
+      id: cache-libclang
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
+      with:
+        path: /usr/local/lib/libclang.dylib
+        key: libclang-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Build libclang.dylib
+      if: steps.cache-libclang.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        brew update
+        brew install ninja cmake
+
+        git clone https://github.com/llvm/llvm-project --branch llvmorg-23.1.1 --depth 1
+        cd llvm-project
+        mkdir build
+        cd build
+        cmake -DLLVM_ENABLE_PROJECTS=clang -DLLVM_UNVERSIONED_LIBCLANG_ON_DARWIN=ON \
+          -DCMAKE_BUILD_TYPE=Release -G "Ninja" ../llvm
+        cmake --build .
+        sudo mkdir -p /usr/local/lib/
+        sudo chmod 777 /usr/local/lib
+        cp "$(find . -name libclang.dylib)" /usr/local/lib/
+        cd ../..
+        rm -rf llvm-project
+
+    - name: Add libclang.dylib to the path
+      shell: bash
+      run: echo "LIBCLANG_PATH=/usr/local/lib" >> "$GITHUB_ENV"
