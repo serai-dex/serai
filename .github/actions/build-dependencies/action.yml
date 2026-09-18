@@ -12,7 +12,7 @@ runs:
         sudo apt update -y
 
         # Actually perform the removals
-        sudo apt remove -y "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" azure-cli
+        sudo apt remove -y "*powershell*" "*nuget*" "*bazel*" "*ansible*" "*terraform*" "*heroku*" "*aws*" "*azure*"
         sudo apt remove -y "*yarn*" "*java*" "*kotlin*" "*golang*" "*swift*" "*julia*" "*fortran*" "*android*"
         sudo apt remove -y "*apache2*" "*nginx*" "*firefox*" "*chromium*" "*chrome*" "*edge*"
 
@@ -31,21 +31,17 @@ runs:
 
         brew analytics off || true
 
-        for package in \
-          "msbuild" "powershell" "nuget" "bazel" "ansible" "terraform" "heroku" "aws" azure-cli \
-          "nodejs" "npm" "yarn" "java" "kotlin" "golang" "swift" "julia" "fortran" "android" \
-          "apache2" "nginx" "firefox" "chromium" "chrome" "edge" \
-          "qemu" "sql" "texinfo" "imagemagick" \
-        ; do
-          for package in $(brew list --full-name -1 | grep "$package"); do
-            brew uninstall --force "$package" || true
-          done
+        brew install jq || true
+        PACKAGES=$(brew info --installed --json=v2 | jq -r ".[][] | select(.full_name, .full_token | .)[]")
+        TAPS=$(brew info --json=v2 | jq -r ".[][].tap")
+        for package in $PACKAGES; do
+          brew uninstall --force --ignore-dependencies "$package" || true
         done
-
-        # Remove an untrusted tap present for some reason
-        brew untap aws/tap || true
-        # Explicitly uninstall `xcodes` which no longer offers a binary package for Intel macOS
-        brew uninstall --force xcodes || true
+        for tap in $TAPS; do
+          if [ ! "$tap" = "homebrew/core" ]; then
+            brew untap --force "$tap" || true
+          fi
+        done
 
     - name: Install dependencies
       shell: bash
