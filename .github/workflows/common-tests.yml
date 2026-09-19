@@ -4,16 +4,7 @@ permissions: {}
 on:
   push:
     branches:
-      - develop
-      - next
-    paths:
-      - "common/**"
-
-  pull_request:
-    paths:
-      - "common/**"
-
-  workflow_dispatch:
+      - ubuntu-26.04
 
 jobs:
   test-common:

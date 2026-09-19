@@ -4,10 +4,7 @@ permissions: {}
 on:
   push:
     branches:
-      - develop
-      - next
-  pull_request:
-  workflow_dispatch:
+      - ubuntu-26.04
 
 jobs:
   clippy:

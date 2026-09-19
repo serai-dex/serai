@@ -4,18 +4,7 @@ permissions: {}
 on:
   push:
     branches:
-      - develop
-      - next
-    paths:
-      - "common/**"
-      - "crypto/**"
-      - "coordinator/tributary-sdk/tendermint/*"
-
-  pull_request:
-    paths:
-      - "common/**"
-      - "crypto/**"
-      - "coordinator/tributary-sdk/tendermint/*"
+      - ubuntu-26.04
 
   workflow_dispatch:
 

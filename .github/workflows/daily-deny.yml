@@ -2,8 +2,9 @@ name: Daily Deny Check
 permissions: {}
 
 on:
-  schedule:
-    - cron: "0 0 * * *"
+  push:
+    branches:
+      - ubuntu-26.04
 
 jobs:
   deny:

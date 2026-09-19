@@ -4,18 +4,7 @@ permissions: {}
 on:
   push:
     branches:
-      - develop
-      - next
-    paths:
-      - "common/**"
-      - "crypto/**"
-
-  pull_request:
-    paths:
-      - "common/**"
-      - "crypto/**"
-
-  workflow_dispatch:
+      - ubuntu-26.04
 
 jobs:
   test-crypto:

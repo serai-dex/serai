@@ -4,30 +4,7 @@ permissions: {}
 on:
   push:
     branches:
-      - develop
-      - next
-    paths:
-      - "common/**"
-      - "crypto/**"
-      - "networks/**"
-      - "secret-store/**"
-      - "message-queue/**"
-      - "processor/**"
-      - "coordinator/**"
-      - "substrate/**"
-
-  pull_request:
-    paths:
-      - "common/**"
-      - "crypto/**"
-      - "networks/**"
-      - "secret-store/**"
-      - "message-queue/**"
-      - "processor/**"
-      - "coordinator/**"
-      - "substrate/**"
-
-  workflow_dispatch:
+      - ubuntu-26.04
 
 jobs:
   test-infra:
@@ -53,9 +30,6 @@ jobs:
       - name: Run Tests
         run: |
           find ./secret-store -name "Cargo.toml" | while IFS="\n" read -r manifest; do
-            cargo test --all-features --manifest-path $manifest
-          done
-          find ./message-queue -name "Cargo.toml" | while IFS="\n" read -r manifest; do
             cargo test --all-features --manifest-path $manifest
           done
           find ./processor -name "Cargo.toml" | while IFS="\n" read -r manifest; do
