@@ -27,7 +27,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Go
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # 6.1.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # 7.0.0
         with:
           go-version: stable
 
@@ -58,8 +58,8 @@ jobs:
             sudo apt install -y ksh bash dash zsh busybox posh mksh yash
             sudo ln -s "$(which busybox)" /usr/bin/ash
             sudo ln -s "$(which busybox)" /usr/bin/hush
-            wget http://ftp.us.debian.org/debian/pool/main/g/gash/gash_0.3.1-1_amd64.deb
-            sudo apt install ./gash_0.3.1-1_amd64.deb
+            wget http://ftp.us.debian.org/debian/pool/main/g/gash/gash_0.3.2-2_amd64.deb
+            sudo apt install ./gash_0.3.2-2_amd64.deb
             SHELLS="sh ksh bash dash zsh ash hush posh mksh lksh gash yash"
           fi
           if [ "$OS" = "macOS" ]; then
