@@ -22,7 +22,7 @@ on:
 jobs:
   test-redox:
     name: Test Libraries on Redox
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
@@ -63,6 +63,9 @@ jobs:
               FEATURES=""
             fi
 
+            # We apply optimizations as the time to emulate slow code is far
+            # more than the time it to takes to output faster code
+            export RUSTFLAGS="$RUSTFLAGS -C opt-level=3"
             # Build the tests, without running them, and extract their absolute paths via `jq`
             TESTS=$(redoxer test -- "$FEATURES" --manifest-path "$manifest" --no-run --message-format=json | jq -r '.executable | select(. != null)')
             # Convert our filesystem's absolute paths to what will be Redox's absolute paths
