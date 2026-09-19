@@ -34,18 +34,33 @@ runs:
         # Do not bother removing unused dependencies as we go as we're removing everything anyways
         export HOMEBREW_NO_AUTOREMOVE=1
         rm -rf $(brew --cache)
+
         # Identify all installed formulae, casks, and available taps
         brew install jq || true
-        PACKAGES=$(brew info --installed --json=v2 | jq -r ".[][] | select(.full_name, .full_token | .)[]")
+        # PACKAGES=$(brew info --installed --json=v2 | jq -r ".[][] | select(.full_name, .full_token | .)[]")
         TAPS=$(brew info --json=v2 | jq -r ".[][].tap" | uniq)
+
         # Remove every pre-installed tap and package
         # We remove taps first to start reducing the size of the package list
         for tap in $TAPS; do
           brew untap --force "$tap" || true
         done
-        for package in $PACKAGES; do
-          brew uninstall --force --zap --ignore-dependencies "$package" || true
-        done
+
+        # This takes literal _hours_
+        # Instead, we uninstall `homebrew` entirely, before reinstalling it
+        # for package in $PACKAGES; do
+        #   brew uninstall --force --zap --ignore-dependencies "$package" || true
+        # done
+
+        HOMEBREW_INSTALLER=b41c8e7b3588e2899974119faf3b2a897428648d
+        if [ "${{ runner.arch }}" = "X64" ]; then
+          # This is the last commit before support for non-Apple-Silicon macOS was removed
+          HOMEBREW_INSTALLER=7a133dcc74051ee4efc79467ed215dfedf45aea2
+        fi
+        curl -fsSL https://raw.githubusercontent.com/Homebrew/install/$HOMEBREW_INSTALLER/uninstall.sh > uninstall.sh
+        curl -fsSL https://raw.githubusercontent.com/Homebrew/install/$HOMEBREW_INSTALLER/install.sh > install.sh
+        NONINTERACTIVE=1 sudo /bin/bash uninstall.sh --force
+        NONINTERACTIVE=1 sudo /bin/bash install.sh
 
         # Clean up the Rust installation made by via `homebrew`'s `rustup` formula
         rm -rf ~/.rustup ~/.cargo
