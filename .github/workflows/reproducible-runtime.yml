@@ -30,7 +30,7 @@ jobs:
   # Any host is valid for this as they _should_ all give the same result
   source_of_truth:
     name: Build the runtime on the Source of Truth
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     outputs:
       hash: ${{ steps.build.outputs.hash }}
     steps:
@@ -131,7 +131,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, macos-26-intel, windows-latest]
+        os: [ubuntu-26.04, macos-latest, macos-26-intel, windows-latest]
     runs-on: ${{ matrix.os }}
     needs: source_of_truth
 

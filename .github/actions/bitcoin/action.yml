@@ -5,7 +5,6 @@ inputs:
   version:
     description: "Version to download and run"
     required: false
-    default: "31.0"
 
 runs:
   using: "composite"
@@ -14,14 +13,14 @@ runs:
       id: cache-bitcoind
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
       with:
-        path: bitcoin-${{ inputs.version }}
-        key: bitcoind-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
+        path: bitcoin-${{ inputs.version || "31.0" }}
+        key: bitcoind-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version || "31.0" }}
 
     - name: Download and Extract the Bitcoin Daemon
       if: steps.cache-bitcoind.outputs.cache-hit != 'true'
       shell: bash
       env:
-        VERSION: ${{ inputs.version }}
+        VERSION: ${{ inputs.version || "31.0" }}
       run: |
         OS="${{ runner.os }}"
         ARCH="${{ runner.arch }}"

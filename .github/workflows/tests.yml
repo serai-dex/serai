@@ -32,7 +32,7 @@ on:
 jobs:
   test-infra:
     name: Test various pieces of infrastructure
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
@@ -64,7 +64,7 @@ jobs:
 
   test-substrate:
     name: Test `substrate/` crates (except `client/`)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
@@ -82,7 +82,7 @@ jobs:
 
   test-serai-client:
     name: Test `substrate/client` crates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:

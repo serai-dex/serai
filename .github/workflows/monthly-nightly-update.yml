@@ -10,7 +10,7 @@ on:
 jobs:
   update:
     name: Update the nightly version of Rust used to this month's
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:

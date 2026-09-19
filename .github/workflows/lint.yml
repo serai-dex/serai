@@ -16,7 +16,7 @@ jobs:
       # Run these sequentially so we don't get the same syntax error from each entry of the matrix
       max-parallel: 1
       matrix:
-        os: [ubuntu-latest, macos-26-intel, macos-latest]
+        os: [ubuntu-26.04, macos-26-intel, macos-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -89,7 +89,7 @@ jobs:
   # Verify the documentation builds without erroring
   docs:
     name: cargo docs
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
@@ -120,7 +120,7 @@ jobs:
 
   deny:
     name: cargo deny
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
@@ -134,7 +134,7 @@ jobs:
 
   fmt:
     name: cargo fmt
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
@@ -175,7 +175,7 @@ jobs:
 
   machete:
     name: cargo machete
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
@@ -188,7 +188,7 @@ jobs:
 
   msrv:
     name: cargo msrv
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
@@ -338,7 +338,7 @@ jobs:
 
   vet:
     name: cargo vet
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
@@ -354,7 +354,7 @@ jobs:
 
   slither:
     name: slither
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
@@ -387,7 +387,7 @@ jobs:
 
   solhint:
     name: solhint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # 7.0.1
         with:
@@ -424,7 +424,7 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        os: [ubuntu-latest, macos-26-intel, macos-latest, windows-latest]
+        os: [ubuntu-26.04, macos-26-intel, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
 
     steps:
