@@ -131,7 +131,7 @@ jobs:
 
     strategy:
       matrix:
-        os: [ubuntu-26.04, macos-latest, macos-26-intel, windows-latest]
+        os: [ubuntu-26.04, macos-latest, macos-26-intel, windows-latest, windows-11-arm]
     runs-on: ${{ matrix.os }}
     needs: source_of_truth
 
