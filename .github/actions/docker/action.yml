@@ -103,8 +103,10 @@ runs:
     - name: Install Podman (Windows)
       if: runner.os == 'Windows'
       shell: pwsh
+      env:
+        PODMAN_ARCH: ${{ runner.arch == 'X64' && 'amd64' || 'arm64' }}
       run: |
-        Invoke-WebRequest https://github.com/containers/podman/releases/download/v6.1.2/podman-installer-windows-amd64.msi -OutFile podman.msi
+        Invoke-WebRequest https://github.com/containers/podman/releases/download/v6.1.2/podman-installer-windows-${Env:PODMAN_ARCH}.msi -OutFile podman.msi
         Start-Process -Wait -PassThru 'msiexec' -ArgumentList "/package podman.msi /quiet /log podman-msi.log MACHINE_PROVIDER=wsl ALLUSERS=1"
         Get-Content podman-msi.log
 

@@ -425,7 +425,7 @@ jobs:
     strategy:
       max-parallel: 1
       matrix:
-        os: [ubuntu-26.04, macos-26-intel, macos-latest, windows-latest]
+        os: [ubuntu-26.04, macos-26-intel, macos-latest, windows-latest, windows-11-arm]
     runs-on: ${{ matrix.os }}
 
     steps:
