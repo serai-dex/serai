@@ -27,7 +27,7 @@ jobs:
           persist-credentials: false
 
       - name: Install Go
-        uses: actions/setup-go@4dc6199c7b1a012772edbd06daecab0f50c9053c # 6.1.0
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # 7.0.0
         with:
           go-version: stable
 
@@ -55,12 +55,74 @@ jobs:
           OS=${{ runner.os }}
           if [ "$OS" = "Linux" ]; then
             sudo apt update -y
-            sudo apt install -y ksh bash dash zsh busybox posh mksh yash
-            sudo ln -s "$(which busybox)" /usr/bin/ash
-            sudo ln -s "$(which busybox)" /usr/bin/hush
-            wget http://ftp.us.debian.org/debian/pool/main/g/gash/gash_0.3.1-1_amd64.deb
-            sudo apt install ./gash_0.3.1-1_amd64.deb
-            SHELLS="sh ksh bash dash zsh ash hush posh mksh lksh gash yash"
+
+            SHELLS="sh"
+
+            sudo apt install -y ksh bash dash zsh posh yash
+            SHELLS="$SHELLS ksh bash dash zsh posh yash"
+
+            wget http://ftp.us.debian.org/debian/pool/main/g/gash/gash_0.3.2-2_amd64.deb
+            sudo apt install ./gash_0.3.2-2_amd64.deb
+            rm ./gash_0.3.2-2_amd64.deb
+            SHELLS="$SHELLS gash"
+
+            sudo apt install -y mksh
+            SHELLS="$SHELLS mksh lksh"
+
+            sudo apt install -y build-essential
+
+            git clone https://git.busybox.net/busybox --branch 1_38_0 --depth 1
+            cd busybox
+            make defconfig
+            sed -i s/"CONFIG_TC=y"/"CONFIG_TC=n"/ .config # Requires specific Linux headers
+            make
+            cp $(find . -type f -executable -name busybox) /usr/local/bin/busybox
+            sudo ln -s /usr/local/bin/busybox /usr/local/bin/ash
+            sudo ln -s /usr/local/bin/busybox /usr/local/bin/hush
+            cd ..
+            rm -rf ./busybox
+            SHELLS="$SHELLS ash hush"
+
+            git clone https://github.com/dimkr/loksh
+            cd loksh
+            git checkout 1147bbb51c633186287414bb04048261e55fc95f
+            sudo apt install -y meson ninja-build
+            meson --prefix=/usr/local build
+            ninja -C build
+            cp $(find . -type f -executable -name "ksh") /usr/local/bin/loksh
+            cd ..
+            rm -rf ./loksh
+            SHELLS="$SHELLS loksh"
+
+            git clone https://github.com/hvdijk/gwsh
+            cd gwsh
+            git checkout 34192339cb35f8720ac46ab8cd2ba23f2cba6cab
+            rm ./configure
+            sudo apt install -y automake
+            sh ./autogen.sh
+            ./configure
+            make
+            sudo make install
+            cd ..
+            rm -rf ./gwsh
+            SHELLS="$SHELLS gwsh"
+
+            mkdir schily
+            cd schily
+            sudo apt install -y curl
+            curl -L https://sourceforge.net/projects/schilytools/files/schily-2021-09-18.tar.bz2/download -o schily.tar.bz2
+            tar -xf schily.tar.bz2
+            cd schily-2021-09-18
+            cd psmake
+            sh ./MAKE-all
+            cd ..
+            ./psmake/smake CFLAGS="--std=c17" -r all
+            cp $(find . -type f -executable -name bsh) /usr/local/bin
+            cp $(find . -type f -executable -name obosh) /usr/local/bin
+            cp $(find . -type f -executable -name pbosh) /usr/local/bin
+            cd ../..
+            rm -rf ./schily
+            SHELLS="$SHELLS bsh obosh pbosh"
           fi
           if [ "$OS" = "macOS" ]; then
             brew install binutils # `readelf`
@@ -75,37 +137,22 @@ jobs:
             # TODO: `posh` is packaged but doesn't work: https://github.com/serai-dex/serai/issues/703
             brew install ksh93 bash dash-shell zsh mksh oksh yash oils-for-unix
             SHELLS="sh ksh bash dash zsh mksh oksh yash osh"
-
-            # macOS also has the benefit of packaging (via MacPorts) `mrsh`,
-            # which explicitly attempts to be be exactly POSIX, without any extensions.
-            # We first have to install MacPorts, the easiest method being from source.
-            curl -O https://distfiles.macports.org/MacPorts/MacPorts-2.12.6.tar.bz2
-            tar xf MacPorts-2.12.6.tar.bz2
-            cd MacPorts-2.12.6
-            ./configure
-            make
-            sudo make install
-            cd ..
-            PATH=$PATH:/opt/local/bin
-            sudo port -v selfupdate
-
-            # Now, we install `mrsh`
-            # TODO: https://github.com/serai-dex/serai/issues/704
-            # sudo port install mrsh
-            # SHELLS="$SHELLS mrsh"
           fi
 
           # Install shells available via `cargo`
-          cargo install brush-shell
+          cargo +1.98.1 install --locked brush-shell --version =0.2.23
           SHELLS="$SHELLS brush"
-          # We would also test with `nsh` here if not for https://github.com/nuta/nsh/issues/49
-          # cargo install nsh
-          # SHELLS="$SHELLS nsh"
+          cargo +1.98.1 install --locked nsh --version =0.4.2
+          SHELLS="$SHELLS nsh"
 
           # Install shells available via `go`
-          # TODO: https://github.com/u-root/u-root/issues/3474
-          # GOBIN=/usr/local/bin go install github.com/u-root/u-root/cmds/core/gosh@latest
-          # SHELLS="$SHELLS gosh"
+          GOBIN=/usr/local/bin go install github.com/u-root/u-root/cmds/core/gosh@eadd8c6fee2e915e8f331b1c532be4ac98ba2a05
+          # `gosh` doesn't support specifying commands via the CLI so we wrap it with a script which
+          # pipes to its `stdin`
+          echo 'echo "$@" | sed s/"^-c "// | gosh' > gosh2
+          chmod +x ./gosh2
+          export PATH="$PATH:$(pwd)"
+          SHELLS="$SHELLS gosh2"
 
           # Patch with `muslstack`
           cp monerod monerod-muslstack
@@ -127,9 +174,14 @@ jobs:
           # Run our script with all installed shells
           for shell in $SHELLS; do
             echo "Executing \`$shell\`"
+
             cp monerod monerod-idss-$shell
+            $shell -c "./orchestration/increase_default_stack_size.sh monerod-idss-$shell"
+
+            # Run as `sh` as some shells have distinct behavior (less extensions) when so invoked
+            cp monerod monerod-idss-$shell-sh
             ln -s "$(which $shell)" sh
-            ./sh ./orchestration/increase_default_stack_size.sh monerod-idss-$shell
+            ./sh -c "./orchestration/increase_default_stack_size.sh monerod-idss-$shell-sh"
             rm ./sh
           done
 
