@@ -1,0 +1,60 @@
+name: cargo-install
+description: Installs a binary via `cargo`
+
+inputs:
+  crate:
+    description: "The crate to install"
+  version:
+    description: "The version of the crate to install"
+    required: false
+  git:
+    description: "The git repo to install from"
+    required: false
+  revision:
+    description: "The revision of the git repo to install from"
+    required: false
+  no-cache:
+    description: "Disable caching"
+    required: false
+
+runs:
+  using: "composite"
+  steps:
+    - name: Cache
+      if: inputs.no-cache != 'true'
+      id: cache-cargo-install
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
+      with:
+        path: ~/.cargo/bin/${{ inputs.crate }}
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ inputs.crate }}-${{ inputs.version || inputs.revision }}
+
+    - name: Install
+      if: (inputs.no-cache == 'true') || (steps.cache-cargo-install.outputs.cache-hit != 'true')
+      shell: bash
+      env:
+        GIT: ${{ (inputs.git && format('--git {0}', inputs.git)) || ' ' }}
+        CRATE: ${{ inputs.crate }}
+        VERSION: ${{ (inputs.version && format('--version ={0}', inputs.version)) || (inputs.revision && format('--rev {0}', inputs.revision)) }}
+        CACHE: ${{ (inputs.no-cache && '0') || '1' }}
+      run: |
+        # If this is Linux, statically link it so this is usable across any distro the cache is loaded from
+        if [ \( "$RUNNER_OS" = "Linux" \) -a \( $CACHE -eq 1 \) ]; then
+          export RUSTC_BOOTSTRAP=1
+
+          # Do not statically link the build scripts, solely the resulting binary
+          export CARGOFLAGS="-Ztarget-applies-to-host --config target-applies-to-host=false"
+          # Statically link the resulting binary
+          export RUSTFLAGS="$RUSTFLAGS -C target-feature=+crt-static"
+
+          # Use `musl` for the `libc`
+          export RUSTTARGET="$(cargo --version --verbose | grep '^host: ' | cut -f2 -d' ' | sed s/gnu/musl/)"
+          rustup +1.98.1 target add $RUSTTARGET
+          export RUSTTARGET="--target $RUSTTARGET"
+
+          export CC=clang
+        fi
+
+        CARGO_JSON=$(cargo +1.98.1 $CARGOFLAGS install $RUSTTARGET --locked "${CRATE}" ${GIT} ${VERSION} --message-format=json)
+        BINARY=$(echo "$CARGO_JSON" | jq -r '.executable | select(. != null)')
+        # Check this installed to the directory we expect for caching purposes
+        [ -f ~/.cargo/bin/"$(echo $BINARY | sed s/'^.*\/'//)" ]

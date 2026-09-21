@@ -47,6 +47,18 @@ jobs:
           tar -xvf monero-linux-x64-v0.18.5.1.tar.bz2
           mv $(find . -name monerod) .
 
+      - name: Install `brush-shell`
+        uses: ./.github/actions/cargo-install
+        with:
+          crate: brush-shell
+          version: 0.2.23
+
+      - name: Install `nsh`
+        uses: ./.github/actions/cargo-install
+        with:
+          crate: nsh
+          version: 0.4.2
+
       - name: Verify expected behavior
         shell: bash
         run: |
@@ -139,11 +151,8 @@ jobs:
             SHELLS="sh ksh bash dash zsh mksh oksh yash osh"
           fi
 
-          # Install shells available via `cargo`
-          cargo +1.98.1 install --locked brush-shell --version =0.2.23
-          SHELLS="$SHELLS brush"
-          cargo +1.98.1 install --locked nsh --version =0.4.2
-          SHELLS="$SHELLS nsh"
+          # Shells installed via `cargo`
+          SHELLS="$SHELLS brush nsh"
 
           # Install shells available via `go`
           GOBIN=/usr/local/bin go install github.com/u-root/u-root/cmds/core/gosh@eadd8c6fee2e915e8f331b1c532be4ac98ba2a05

@@ -38,6 +38,12 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
+      - name: Install `redoxer`
+        uses: ./.github/actions/cargo-install
+        with:
+          crate: redoxer
+          version: 0.2.63
+
       - name: Run Tests for Libraries on Redoxer
         shell: bash
         run: |
@@ -53,7 +59,6 @@ jobs:
           export REDOXER_QEMU_ARGS="-smp $(nproc) -accel $ACCEL -audio none,model=ac97"
           export TARGET=x86_64-unknown-redox
 
-          cargo +1.98.1 install --locked redoxer --version =0.2.63
           redoxer toolchain
 
           CRATES=$(find ./common ./crypto ./coordinator/tributary-sdk/tendermint -name "Cargo.toml")

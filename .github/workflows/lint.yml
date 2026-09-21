@@ -126,8 +126,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install cargo deny
-        run: cargo +1.98.1 install --locked cargo-deny --version =0.20.2
+      - name: Install `cargo deny`
+        uses: ./.github/actions/cargo-install
+        with:
+          crate: cargo-deny
+          version: 0.20.2
 
       - name: Run cargo deny
         run: cargo deny -L error --all-features check --hide-inclusion-graph
@@ -156,11 +159,13 @@ jobs:
         shell: bash
         run: cargo +"${NIGHTLY_VERSION}" fmt -- --check
 
-      - name: Install Foundry Forge
-        shell: bash
-        run: |
-          VERSION=cae51ad458f6abb64852b7709eb784352429825d # 1.8.3
-          cargo +1.98.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked forge
+      - name: Install Foundry `forge`
+        uses: ./.github/actions/cargo-install
+        with:
+          crate: forge
+          git: https://github.com/foundry-rs/foundry
+          revision: cae51ad458f6abb64852b7709eb784352429825d # 1.8.3
+          no-cache: true
 
       - name: Run forge fmt
         shell: bash
@@ -181,10 +186,14 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install `cargo machete`
+        uses: ./.github/actions/cargo-install
+        with:
+          crate: cargo-machete
+          version: 0.9.2
+
       - name: Verify all dependencies are in use
-        run: |
-          cargo +1.98.1 install --locked cargo-machete --version =0.9.2
-          cargo machete
+        run: cargo machete
 
   msrv:
     name: cargo msrv
@@ -198,11 +207,16 @@ jobs:
       - name: Build Dependencies
         uses: ./.github/actions/build-dependencies
 
+      - name: Install `cargo msrv`
+        uses: ./.github/actions/cargo-install
+        with:
+          crate: cargo-msrv
+          version: 0.19.3
+          no-cache: true
+
       - name: Verify claimed `rust-version`
         shell: bash
         run: |
-          cargo +1.98.1 install --locked cargo-msrv --version =0.19.3
-
           export WORKSPACE="$(pwd)"
 
           function check_msrv {
@@ -345,10 +359,16 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install cargo vet
-        run: cargo +1.98.1 install --locked cargo-vet --git https://github.com/kayabaNerve/cargo-vet --rev d2fb27daaeb839e5fa4f6b28c5cdd4a9185542b5
+      - name: Install `cargo vet`
+        uses: ./.github/actions/cargo-install
+        with:
+          crate: cargo-vet
+          git: https://github.com/kayabaNerve/cargo-vet
+          revision: d2fb27daaeb839e5fa4f6b28c5cdd4a9185542b5
+          no-cache: true
 
       - name: Run cargo vet
+        shell: bash
         run: |
           cargo vet --locked
           ./supply-chain/no-first-party.sh

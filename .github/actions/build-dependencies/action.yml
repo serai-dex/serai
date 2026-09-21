@@ -71,14 +71,21 @@ runs:
       shell: bash
       run: |
         if [ "$RUNNER_OS" == "Linux" ]; then
+          sudo apt update -y
           sudo apt install -y ca-certificates protobuf-compiler libclang-dev
+          # This is used by the `cargo-install` action
+          sudo apt install -y jq
         elif [ "$RUNNER_OS" == "Windows" ]; then
           # Use `-gnu` to avoid the installation and licensing headaches of `-msvc`
           rustup set default-host x86_64-pc-windows-gnu
           choco install protoc llvm
+          # This is used by the `cargo-install` action
+          choco install jq
         elif [ "$RUNNER_OS" == "macOS" ]; then
           brew update
           brew install protobuf
+          # This is used by the `cargo-install` action
+          brew install jq
         fi
 
         # Install `rustup`
@@ -88,11 +95,17 @@ runs:
       if: runner.os == 'macOS'
       uses: ./.github/actions/libclang
 
-    - name: Install solc
+    - name: Install `svm-rs`
+      uses: ./.github/actions/cargo-install
+      with:
+        crate: svm-rs
+        version: 0.5.28
+        # https://github.com/aws/aws-lc-rs/issues/736
+        no-cache: true
+
+    - name: Install `solc`
       shell: bash
       run: |
-        cargo +1.98.1 install --locked svm-rs --version =0.5.28
-
         solc_version() {
           # Install the version of `solc` specified in the contracts
           # This also checks the specified version is consistent across contracts

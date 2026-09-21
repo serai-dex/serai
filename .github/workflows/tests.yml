@@ -44,11 +44,13 @@ jobs:
       - name: Install `docker`
         uses: ./.github/actions/docker
 
-      - name: Install Anvil
-        shell: bash
-        run: |
-          VERSION=cae51ad458f6abb64852b7709eb784352429825d # 1.8.3
-          cargo +1.98.1 install --git https://github.com/foundry-rs/foundry --rev "$VERSION" --locked anvil
+      - name: Install `anvil`
+        uses: ./.github/actions/cargo-install
+        with:
+          crate: anvil
+          git: https://github.com/foundry-rs/foundry
+          revision: cae51ad458f6abb64852b7709eb784352429825d # 1.8.3
+          no-cache: true
 
       - name: Run Tests
         run: |
