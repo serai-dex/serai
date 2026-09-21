@@ -97,13 +97,17 @@ runs:
 
     - name: Install `svm-rs`
       uses: ./.github/actions/cargo-install
+      # Only install `svm-rs` if this _is_ Windows but _is not_ ARM
+      if: ${{ (runner.os == 'Windows') && (!((runner.arch == 'ARM') || (runner.arch == 'ARM64'))) }}
       with:
         crate: svm-rs
         version: 0.5.28
-        # https://github.com/aws/aws-lc-rs/issues/736
+        # This installs two binaries which borks our expectations for caching
         no-cache: true
 
     - name: Install `solc`
+      # Only install `solc` if this _is not_ Windows for ARM, which `solc` doesn't ship binaries for
+      if: ${{ !((runner.os == 'Windows') && ((runner.arch == 'ARM') || (runner.arch == 'ARM64'))) }}
       shell: bash
       run: |
         solc_version() {
@@ -122,8 +126,29 @@ runs:
           done
         }
 
-        svm install "$(solc_version)"
-        svm use "$(solc_version)"
+        OS=$(echo "${{ runner.os }}" | tr "[:upper:]" "[:lower:]")
+        if [ "$OS" = "windows" ]; then
+          # On Windows, we install via `svm`
+          svm install "$(solc_version)"
+          svm use "$(solc_version)"
+        else
+          # On non-Windows platforms, we install `solc` directly
+          if [ "${{ runner.arch }}" = "X64" ]; then
+            ARCH="amd64"
+          else
+            ARCH="arm64"
+          fi
+
+          if [ "$OS" = "macos" ]; then
+            OS="macosx"
+            # The `amd64` binaries are universal binaries for both architectures
+            ARCH="amd64"
+          fi
+
+          BINARY=$(curl -sL https://binaries.soliditylang.org/${OS}-${ARCH}/list.txt | grep -F "$(solc_version)")
+          curl -sL https://binaries.soliditylang.org/${OS}-${ARCH}/${BINARY} -o /usr/local/bin/solc
+          chmod +x /usr/local/bin/solc
+        fi
 
     - name: Update system dependencies
       if: runner.os == 'Linux'
