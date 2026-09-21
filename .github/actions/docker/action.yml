@@ -18,11 +18,6 @@ runs:
     - name: Install rootless Docker (Linux)
       uses: docker/setup-docker-action@2bf61fb9464cc67f0cbdeabed6aa0380accd1c70 # 5.5.0
       if: runner.os == 'Linux'
-      env:
-        # Docker `29.6.2` defaulted to `(slirp4netns, builtin)` but `29.7.2` defaults to
-        # `(pasta, implicit)`, the latter combination preventing the host from connecting to a
-        # container's exposed port. We revert the port drive to "builtin" to fix this.
-        DOCKERD_ROOTLESS_ROOTLESSKIT_PORT_DRIVER: "builtin"
       with:
         rootless: true
         set-host: true
