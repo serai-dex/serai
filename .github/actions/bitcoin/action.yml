@@ -5,23 +5,22 @@ inputs:
   version:
     description: "Version to download and run"
     required: false
-    default: "31.0"
 
 runs:
   using: "composite"
   steps:
-    - name: Bitcoin Daemon Cache
+    - name: Restore Bitcoin Daemon Cache
       id: cache-bitcoind
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
       with:
-        path: bitcoin-${{ inputs.version }}
-        key: bitcoind-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
+        path: bitcoind*
+        key: bitcoind-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version || '31.0' }}
 
     - name: Download and Extract the Bitcoin Daemon
       if: steps.cache-bitcoind.outputs.cache-hit != 'true'
       shell: bash
       env:
-        VERSION: ${{ inputs.version }}
+        VERSION: ${{ inputs.version || '31.0' }}
       run: |
         OS="${{ runner.os }}"
         ARCH="${{ runner.arch }}"
@@ -52,17 +51,30 @@ runs:
 
         if [ "${{ runner.os }}" = "Windows" ]; then
           unzip "${FILE}"
-          mv $(find . -name "bitcoind*") .
         else
           tar -xf "${FILE}"
-          cd "bitcoin-${VERSION}"
-          if [ "${{ runner.os }}" = "macOS" ]; then
-            sudo mv bin/* /usr/local/bin/
-          else
-            sudo mv bin/* /usr/bin/
-          fi
         fi
+
+        mv $(find . -type f -name "bitcoind*") .
+
+    - name: Save Bitcoin Daemon Cache
+      if: steps.cache-bitcoind.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
+      with:
+        path: bitcoind*
+        key: bitcoind-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version || '31.0' }}
+
+    - name: Install the Bitcoin Daemon
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          TARGET="/C/Windows/System32/"
+        else
+          mkdir -p /usr/local/bin
+          TARGET=/usr/local/bin/
+        fi
+        mv $(find . -type f -name "bitcoind*") "$TARGET"
 
     - name: Bitcoin Regtest Daemon
       shell: bash
-      run: PATH="${PATH}:$(pwd)" ./orchestration/dev/networks/bitcoin/run.sh -daemon
+      run: ./orchestration/dev/networks/bitcoin/run.sh -daemon

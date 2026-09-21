@@ -5,23 +5,22 @@ inputs:
   version:
     description: "Version to download and run"
     required: false
-    default: v0.18.5.1
 
 runs:
   using: "composite"
   steps:
-    - name: Monero Daemon Cache
+    - name: Restore Monero Daemon Cache
       id: cache-monerod
-      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
       with:
         path: monerod*
-        key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version }}
+        key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version || 'v0.18.5.1' }}
 
     - name: Download the Monero Daemon
       if: steps.cache-monerod.outputs.cache-hit != 'true'
       shell: bash
       env:
-        VERSION: ${{ inputs.version }}
+        VERSION: ${{ inputs.version || 'v0.18.5.1' }}
       run: |
         OS="${{ runner.os }}"
         ARCH="${{ runner.arch }}"
@@ -60,10 +59,27 @@ runs:
         mv $(find . -type f -name "monerod*") .
         rm -rf monero-tmp
 
+    - name: Save Monero Daemon Cache
+      if: steps.cache-monerod.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
+      with:
+        path: monerod*
+        key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version || 'v0.18.5.1' }}
+
+    - name: Install the Monero Daemon
+      shell: bash
+      run: |
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          TARGET="/C/Windows/System32/"
+        else
+          mkdir -p /usr/local/bin
+          TARGET=/usr/local/bin/
+        fi
+        mv $(find . -type f -name "monerod*") "$TARGET"
+
     - name: Monero Regtest Daemon
       shell: bash
       run: |
-        PATH="${PATH}:$(pwd)"
         COMMAND="./orchestration/dev/networks/monero/run.sh"
 
         if [ "${{ runner.os }}" = "Windows" ]; then
