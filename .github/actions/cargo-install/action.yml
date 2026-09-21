@@ -57,4 +57,6 @@ runs:
         CARGO_JSON=$(cargo +1.98.1 $CARGOFLAGS install $RUSTTARGET --locked "${CRATE}" ${GIT} ${VERSION} --message-format=json)
         BINARY=$(echo "$CARGO_JSON" | jq -r '.executable | select(. != null)')
         # Check this installed to the directory we expect for caching purposes
-        [ -f ~/.cargo/bin/"$(echo $BINARY | sed s/'^.*\/'//)" ]
+        if [ $CACHE -eq 1 ]; then
+          [ -f ~/.cargo/bin/"$(echo $BINARY | sed s/'^.*\/'//)" ]
+        fi
