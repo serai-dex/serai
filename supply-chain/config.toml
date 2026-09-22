@@ -1447,7 +1447,7 @@ version = "0.16.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.find-msvc-tools]]
-version = "0.1.13"
+version = "0.1.12"
 criteria = "safe-to-deploy"
 
 [[exemptions.fixed-cache]]
