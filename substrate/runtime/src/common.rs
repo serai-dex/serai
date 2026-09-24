@@ -81,5 +81,9 @@ sp_api::decl_runtime_apis! {
 
     /// Next nonce to be used for this account.
     fn account_nonce(of: SeraiAddress) -> u32;
+
+    /// Returns the time economic security was achieved, represented in milliseconds since the epoch.
+    /// Returns `0` if it isn't achieved yet.
+    fn economic_security_time() -> u64;
   }
 }
