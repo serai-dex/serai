@@ -14,13 +14,13 @@ runs:
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
       with:
         path: monerod*
-        key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version || 'v0.18.5.1' }}
+        key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version || 'v0.18.5.4' }}
 
     - name: Download the Monero Daemon
       if: steps.cache-monerod.outputs.cache-hit != 'true'
       shell: bash
       env:
-        VERSION: ${{ inputs.version || 'v0.18.5.1' }}
+        VERSION: ${{ inputs.version || 'v0.18.5.4' }}
       run: |
         OS="${{ runner.os }}"
         ARCH="${{ runner.arch }}"
@@ -64,7 +64,7 @@ runs:
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
       with:
         path: monerod*
-        key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version || 'v0.18.5.1' }}
+        key: monerod-${{ runner.os }}-${{ runner.arch }}-${{ inputs.version || 'v0.18.5.4' }}
 
     - name: Install the Monero Daemon
       shell: bash

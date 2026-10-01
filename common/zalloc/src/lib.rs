@@ -2,7 +2,6 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 #![no_std]
-#![cfg_attr(all(zalloc_rustc_nightly, feature = "allocator"), feature(allocator_api))]
 
 use core::{
   slice,

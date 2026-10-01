@@ -71,7 +71,7 @@ jobs:
         with:
           crate: anvil
           git: https://github.com/foundry-rs/foundry
-          revision: cae51ad458f6abb64852b7709eb784352429825d # 1.8.3
+          revision: 6056c5845d34205a83cf7108042adb137325c9df # 1.9.0
           no-cache: true
 
       - name: Run Tests
