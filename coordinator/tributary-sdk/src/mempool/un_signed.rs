@@ -26,7 +26,12 @@ mod db {
   });
 }
 
-type SignerMempool<T> = BTreeMap<Vec<u8>, VecDeque<T>>;
+struct ScopeMempool<T> {
+  have_prior_on_chain: bool,
+  transactions: VecDeque<T>,
+}
+
+type SignerMempool<T> = BTreeMap<Vec<u8>, ScopeMempool<T>>;
 
 /// The (un)signed mempool and view over it.
 pub(super) struct UnSigned<T> {
@@ -86,12 +91,21 @@ impl<T: Transaction> UnSigned<T> {
         TransactionKind::Unsigned => {
           unsigned.insert(transaction.hash(), transaction);
         }
-        TransactionKind::Signed { scope, signed: Signed { signer, .. } } => {
+        TransactionKind::Signed { scope, signed: Signed { signer, nonce, signature: _ } } => {
           let Some(signer_mempool) = signed.get_mut(&signer) else {
             db::Transaction::<T>::del(txn, genesis, transaction.hash());
             continue;
           };
-          signer_mempool.entry(scope).or_insert_with(VecDeque::new).push_back(transaction);
+          signer_mempool
+            .entry(scope)
+            .or_insert_with_key(|scope| ScopeMempool {
+              have_prior_on_chain: nonce.checked_sub(1).is_none_or(|prior_nonce| {
+                db::SignedOnChain::get(txn, genesis, signer, scope, prior_nonce).is_some()
+              }),
+              transactions: VecDeque::new(),
+            })
+            .transactions
+            .push_back(transaction);
         }
       }
     }
@@ -102,17 +116,68 @@ impl<T: Transaction> UnSigned<T> {
   }
 
   /// An iterator over all transactions in the mempool.
-  fn iter(&self) -> impl Iterator<Item = &T> {
+  fn iter(&self, filter_without_prior_on_chain: bool) -> impl Iterator<Item = &T> {
     #[expect(clippy::iter_kv_map)]
-    self.unsigned.values().chain(self.signed.iter().flat_map(|(_signer, signer_mempool)| {
-      signer_mempool.iter().flat_map(|(_scope, transactions)| transactions)
+    self.unsigned.values().chain(self.signed.iter().flat_map(move |(_signer, signer_mempool)| {
+      signer_mempool
+        .iter()
+        .filter_map(move |(_scope, scope_mempool)| {
+          ((!filter_without_prior_on_chain) || scope_mempool.have_prior_on_chain)
+            .then_some(&scope_mempool.transactions)
+        })
+        .flatten()
     }))
   }
 
   /// Save the mempool to the database.
   fn save(&mut self, txn: &mut impl DbTxn) {
-    let mempool = self.iter().map(Transaction::hash).collect();
+    let mempool = self.iter(false).map(Transaction::hash).collect();
     db::Transactions::set(txn, self.genesis, &mempool);
+  }
+
+  /// Find a transaction in a signer's mempool which cannot be published at this time.
+  ///
+  /// This will return a mutable reference to the relevant scope's mempool. This function will not
+  /// perform any mutations itself though.
+  fn find_unpublishable_transaction(
+    signer_mempool: &mut SignerMempool<T>,
+  ) -> Option<&mut ScopeMempool<T>> {
+    for scope_mempool in signer_mempool.values_mut() {
+      // Transactions for which there is a gap between the mempool and the on-chain state
+      if !scope_mempool.have_prior_on_chain {
+        return Some(scope_mempool);
+      }
+
+      // Transactions for which there is a gap within the mempool
+      let transactions = &scope_mempool.transactions;
+      if transactions.len() > 1 {
+        let TransactionKind::Signed { scope: _, signed: Signed { nonce: first, .. } } =
+          transactions.front().unwrap().kind()
+        else {
+          panic!("non-signed transaction in signer's mempool");
+        };
+        let TransactionKind::Signed { scope: _, signed: Signed { nonce: last, .. } } =
+          transactions.back().unwrap().kind()
+        else {
+          panic!("non-signed transaction in signer's mempool");
+        };
+
+        if if let Ok(expected_len_minus_one) = usize::try_from(last - first) {
+          expected_len_minus_one != (transactions.len() - 1)
+        } else {
+          /*
+            If the expected length isn't even representable as a `usize`, then our mempool
+            (stored in memory, bound by the limitations of `usize`) definitely cannot be without
+            gaps.
+          */
+          true
+        } {
+          return Some(scope_mempool);
+        }
+      }
+    }
+
+    None
   }
 
   /// Add a transaction to the mempool.
@@ -126,6 +191,7 @@ impl<T: Transaction> UnSigned<T> {
   ) -> Result<(), MempoolError> {
     let hash = transaction.hash();
 
+    let mut prune = None;
     let transaction: &T = match transaction.kind() {
       TransactionKind::Provided { .. } => panic!("provided transaction being added to the mempool"),
       TransactionKind::Unsigned => {
@@ -153,19 +219,42 @@ impl<T: Transaction> UnSigned<T> {
         }
 
         let signer_mempool = self.signed.get_mut(&signer).ok_or(MempoolError::InvalidSigner)?;
-        if (!bypass_rate_limit) &&
-          signer_mempool
+
+        if !bypass_rate_limit {
+          // Check this signer's mempool isn't larger than the rate limit
+          let Some(rate) = signer_mempool
             .values()
-            .map(VecDeque::len)
+            .map(|scope_mempool| scope_mempool.transactions.len())
             .try_fold(0usize, usize::checked_add)
-            .is_none_or(|pending| pending >= self.rate_limit)
-        {
-          // TODO: If this transaction can be published _now_, supplant a transaction which can't
-          // be published _now_
-          Err(MempoolError::RateLimit)?;
+          else {
+            Err(MempoolError::RateLimit)?
+          };
+          if rate > self.rate_limit {
+            Err(MempoolError::RateLimit)?;
+          }
+
+          /*
+            If this signer's mempool is at the rate limit, we still allow this transaction to be
+            added immediately. However, we flag that this signer's mempool should be pruned. The
+            pruning operation will prefer a transaction which cannot be published at this time.
+
+            This ensures that if a signer's mempool is full of transactions which cannot currently
+            be published, their mempool doesn't stall and transactions which can be published will
+            still be included.
+          */
+          prune = (rate == self.rate_limit).then_some(signer);
         }
-        let scope_mempool = signer_mempool.entry(scope).or_insert_with(VecDeque::new);
-        match scope_mempool.binary_search_by_key(&nonce, |transaction_in_mempool| {
+
+        let scope_mempool_entry = match signer_mempool.entry(scope) {
+          alloc::collections::btree_map::Entry::Occupied(entry) => entry,
+          alloc::collections::btree_map::Entry::Vacant(entry) => entry.insert_entry(ScopeMempool {
+            have_prior_on_chain: false,
+            transactions: VecDeque::new(),
+          }),
+        };
+        let scope_mempool = scope_mempool_entry.get();
+
+        match scope_mempool.transactions.binary_search_by_key(&nonce, |transaction_in_mempool| {
           match transaction_in_mempool.kind() {
             TransactionKind::Signed {
               scope: _,
@@ -183,20 +272,90 @@ impl<T: Transaction> UnSigned<T> {
           }
         }) {
           Ok(i) => {
-            if scope_mempool[i].hash() == hash {
+            if scope_mempool.transactions[i].hash() == hash {
               Err(MempoolError::AlreadyPresent)?;
             }
             Err(MempoolError::Conflict)?
           }
-          Err(i) => &*scope_mempool.insert_mut(i, transaction),
+          Err(i) => {
+            // If we're inserting into the first position, update `have_prior_on_chain`
+            let have_prior_on_chain = if i == 0 {
+              nonce.checked_sub(1).is_none_or(|prior_nonce| {
+                db::SignedOnChain::get(
+                  txn,
+                  self.genesis,
+                  signer,
+                  scope_mempool_entry.key(),
+                  prior_nonce,
+                )
+                .is_some()
+              })
+            } else {
+              // If we're not inserting into the first position, this is unchanged
+              scope_mempool.have_prior_on_chain
+            };
+            let scope_mempool = scope_mempool_entry.into_mut();
+            scope_mempool.have_prior_on_chain = have_prior_on_chain;
+            &*scope_mempool.transactions.insert_mut(i, transaction)
+          }
         }
       }
     };
 
     db::Transaction::<T>::set(txn, self.genesis, hash, transaction.into());
+
+    let prune_result = if let Some(signer) = prune {
+      /*
+        Get the scope of the added transaction.
+
+        If we are unable to find an unpublishable transaction, we will fallback to pruning a
+        transaction from this scope. The pruned transaction will either be the transaction we just
+        added _or_ a transaction in the same scope, but with a later nonce, if the transaction we
+        just added filled a gap. This means we either remove the transaction we just added, as if
+        we refused it due to the rate limit, _or_ we have achieved a strict improvement over the
+        prior mempool.
+
+        Unfortunately, because the `transaction` variable holds a borrow over the mempool, we need
+        to fetch its scope now, before dropping the reference in order to search for unpublishable
+        transactions.
+      */
+      let scope_of_added_transaction = {
+        let TransactionKind::Signed { scope, signed: _ } = transaction.kind() else {
+          panic!("pruning a signer's mempool but not adding a signed transaction")
+        };
+        scope
+      };
+
+      let signer_mempool =
+        self.signed.get_mut(&signer).expect("pruning a signer's mempool we don't have");
+      let scope_mempool = match Self::find_unpublishable_transaction(signer_mempool) {
+        Some(scope_mempool) => scope_mempool,
+        None => signer_mempool
+          .get_mut(&scope_of_added_transaction)
+          .expect("added a transaction but its scope doesn't exist within the signer's mempool"),
+      };
+      let transaction = scope_mempool
+        .transactions
+        .pop_back()
+        .expect("pruning from a scope in a signer's mempool which is empty");
+      let TransactionKind::Signed { scope, signed: _ } = transaction.kind() else {
+        panic!("pruning a transaction from a signer's mempool but it wasn't a signed transaction")
+      };
+      let pruned_hash = transaction.hash();
+      db::Transaction::<T>::del(txn, self.genesis, pruned_hash);
+
+      if scope_mempool.transactions.is_empty() {
+        signer_mempool.remove(&scope);
+      }
+
+      (hash != pruned_hash).ok_or(MempoolError::RateLimit)
+    } else {
+      Ok(())
+    };
+
     self.save(txn);
 
-    Ok(())
+    prune_result
   }
 
   /// Create an iterator over the transactions to include in a block proposal.
@@ -206,18 +365,13 @@ impl<T: Transaction> UnSigned<T> {
   /// single block.
   ///
   /// The caller is expected to apply the block's size limit.
-  pub(super) fn block_proposal<'mempool>(
-    &'mempool self,
-    getter: &'mempool impl Get,
-  ) -> impl Iterator<Item = &'mempool T> {
-    struct Filter<'mempool, G: Get, T: 'mempool, I: Iterator<Item = &'mempool T>> {
-      getter: &'mempool G,
-      genesis: [u8; 32],
+  pub(super) fn block_proposal(&self) -> impl Iterator<Item = &T> {
+    struct Filter<'mempool, T: 'mempool, I: Iterator<Item = &'mempool T>> {
       last: Option<([u8; 32], Vec<u8>, u64)>,
       iter: I,
     }
-    impl<'mempool, G: 'mempool + Get, T: 'mempool + Transaction, I: Iterator<Item = &'mempool T>>
-      Iterator for Filter<'mempool, G, T, I>
+    impl<'mempool, T: 'mempool + Transaction, I: Iterator<Item = &'mempool T>> Iterator
+      for Filter<'mempool, T, I>
     {
       type Item = &'mempool T;
       fn next(&mut self) -> Option<Self::Item> {
@@ -234,16 +388,6 @@ impl<T: Transaction> UnSigned<T> {
                 continue;
               }
 
-              // If we're entering a new signer/scope, check this is ready to be included on-chain
-              if self.last.as_ref().is_none_or(|(last_signer, last_scope, _last_nonce)| {
-                (last_signer, last_scope) != (&signer, &scope)
-              }) && let Some(prior_nonce) = nonce.checked_sub(1) &&
-                db::SignedOnChain::get(self.getter, self.genesis, signer, &scope, prior_nonce)
-                  .is_none()
-              {
-                continue;
-              }
-
               self.last = Some((signer, scope, nonce));
               return Some(next_transaction);
             }
@@ -254,7 +398,7 @@ impl<T: Transaction> UnSigned<T> {
         }
       }
     }
-    Filter { getter, genesis: self.genesis, last: None, iter: self.iter() }
+    Filter { last: None, iter: self.iter(true) }
   }
 
   /// Censure a validator.
@@ -265,7 +409,7 @@ impl<T: Transaction> UnSigned<T> {
       .remove(&validator)
       .into_iter()
       .flatten()
-      .flat_map(|(_scope, transactions)| transactions)
+      .flat_map(|(_scope, scope_mempool)| scope_mempool.transactions)
     {
       db::Transaction::<T>::del(txn, self.genesis, transaction.hash());
     }
@@ -299,30 +443,37 @@ impl<T: Transaction> UnSigned<T> {
           db::SignedOnChain::set(txn, self.genesis, signer, &scope, nonce, &transaction.hash());
 
           if let Some(signer_mempool) = self.signed.get_mut(&signer) &&
-            let Some(in_scope) = signer_mempool.get_mut(&scope)
+            let Some(scope_mempool) = signer_mempool.get_mut(&scope)
           {
-            while in_scope.front().is_some_and(|transaction| match transaction.kind() {
-              TransactionKind::Signed {
-                scope: scope_in_scope,
-                signed: Signed { signer: signer_in_scope, nonce: nonce_in_scope, signature: _ },
-              } => {
-                assert_eq!(
-                  scope_in_scope, scope,
-                  "scope of transaction in scope's mempool distinct from scope"
-                );
-                assert_eq!(
-                  signer_in_scope, signer,
-                  "signer of transaction in signer's mempool distinct from signer"
-                );
-                nonce_in_scope <= nonce
-              }
-              TransactionKind::Provided { .. } | TransactionKind::Unsigned => {
-                panic!("non-signed transaction added to signed transactions in mempool")
+            while scope_mempool.transactions.front().is_some_and(|transaction| {
+              match transaction.kind() {
+                TransactionKind::Signed {
+                  scope: _,
+                  signed: Signed { signer: _, nonce: nonce_in_scope, signature: _ },
+                } => nonce_in_scope <= nonce,
+                TransactionKind::Provided { .. } | TransactionKind::Unsigned => {
+                  panic!("non-signed transaction added to signed transactions in mempool")
+                }
               }
             }) {
-              db::Transaction::<T>::del(txn, self.genesis, in_scope.pop_front().unwrap().hash());
+              db::Transaction::<T>::del(
+                txn,
+                self.genesis,
+                scope_mempool.transactions.pop_front().unwrap().hash(),
+              );
             }
-            if in_scope.is_empty() {
+            if let Some(first) = scope_mempool.transactions.front() {
+              let TransactionKind::Signed {
+                scope: _,
+                signed: Signed { signer: _, nonce, signature: _ },
+              } = first.kind()
+              else {
+                panic!("non-signed transaction added to signed transactions in mempool")
+              };
+              scope_mempool.have_prior_on_chain = nonce.checked_sub(1).is_none_or(|prior_nonce| {
+                db::SignedOnChain::get(txn, self.genesis, signer, &scope, prior_nonce).is_some()
+              });
+            } else {
               signer_mempool.remove(&scope);
             }
           }

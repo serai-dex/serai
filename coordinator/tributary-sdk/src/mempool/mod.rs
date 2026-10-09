@@ -134,7 +134,7 @@ impl<D: Db, T: Transaction> Future for Mempool<D, T> {
       projection
         .provided
         .block_proposal()
-        .chain(projection.un_signed.block_proposal(projection.db))
+        .chain(projection.un_signed.block_proposal())
         .cloned()
         .collect::<Vec<_>>(),
     );
