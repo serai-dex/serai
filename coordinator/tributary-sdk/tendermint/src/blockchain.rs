@@ -46,6 +46,11 @@ impl From<RoundNumber> for u64 {
     u64::from(round_number.0)
   }
 }
+impl From<NonZero<u64>> for RoundNumber {
+  fn from(round_number: NonZero<u64>) -> Self {
+    Self(round_number)
+  }
+}
 
 /// A representation of a block's hash.
 ///

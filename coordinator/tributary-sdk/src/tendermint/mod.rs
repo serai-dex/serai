@@ -12,7 +12,7 @@ use core::{
   num::NonZero,
   time::Duration,
 };
-use alloc::{vec::Vec, collections::BTreeMap};
+use alloc::{boxed::Box, vec::Vec, collections::BTreeMap};
 use std::{time::SystemTime, collections::HashMap};
 
 use serai_db::{Get, Transaction as DbTxn, Db};
@@ -64,6 +64,63 @@ pub(crate) trait Mempool<T> {
   fn censure(&mut self, txn: &mut impl DbTxn, validator: [u8; 32]);
 }
 
+/// A wrapper around `HashMap` which caches the results of its functions.
+pub(crate) struct ValidatorSet {
+  validators: HashMap<[u8; 32], NonZero<u16>>,
+  total_weight: NonZero<u16>,
+  proposers: Box<[[u8; 32]]>,
+}
+
+impl ValidatorSet {
+  fn new(validators: HashMap<[u8; 32], NonZero<u16>>) -> Self {
+    use ::tendermint::ValidatorSet as _;
+
+    let total_weight = validators.total_weight();
+    let proposers = {
+      let mut proposers = Box::new_uninit_slice(usize::from(u16::from(total_weight)));
+      let mut i = 0u16;
+      for proposer in &mut proposers {
+        i += 1;
+        proposer.write(validators.proposer(
+          ::tendermint::BlockNumber::from(NonZero::new(u64::from(i)).unwrap()),
+          ::tendermint::RoundNumber::from(const { NonZero::new(1u64).unwrap() }),
+        ));
+      }
+      // Safety: We just wrote to every entry of this slice
+      unsafe { proposers.assume_init() }
+    };
+
+    Self { validators, total_weight, proposers }
+  }
+}
+
+impl ::tendermint::ValidatorSet for ValidatorSet {
+  type Validator = [u8; 32];
+
+  fn total_weight(&self) -> NonZero<u16> {
+    self.total_weight
+  }
+
+  fn validators(&self) -> impl IntoIterator<Item = &Self::Validator> {
+    self.validators.keys()
+  }
+
+  fn weight(&self, validator: &Self::Validator) -> Option<NonZero<u16>> {
+    self.validators.get(validator).copied()
+  }
+
+  fn proposer(
+    &self,
+    block_number: ::tendermint::BlockNumber,
+    round_number: ::tendermint::RoundNumber,
+  ) -> Self::Validator {
+    let i =
+      (u64::from(block_number) + u64::from(round_number)) % u64::from(u16::from(self.total_weight));
+    let i = u16::try_from(i).unwrap();
+    self.proposers[usize::from(i)]
+  }
+}
+
 pub(crate) struct Tendermint<D, T: Transaction, M, N> {
   genesis: [u8; 32],
   genesis_time: u64,
@@ -73,6 +130,7 @@ pub(crate) struct Tendermint<D, T: Transaction, M, N> {
 
   db: D,
   blockchain: Blockchain<T>,
+  validators: ValidatorSet,
   next_block_notification: async_channel::Receiver<async_channel::Sender<()>>,
 
   /// The mempool for slashes.
@@ -95,6 +153,8 @@ impl<D: Db, T: Transaction, M, N> Tendermint<D, T, M, N> {
   ) -> Self {
     let signature_scheme = SignatureScheme::new(genesis);
 
+    let validators = ValidatorSet::new(blockchain.validators().clone());
+
     let slashes = PendingSlashes::get(&db, genesis)
       .into_iter()
       .flatten()
@@ -115,6 +175,7 @@ impl<D: Db, T: Transaction, M, N> Tendermint<D, T, M, N> {
 
       db,
       blockchain,
+      validators,
       next_block_notification,
 
       slashes,
@@ -236,8 +297,7 @@ impl<
 > ::tendermint::Blockchain for Tendermint<D, T, M, N>
 {
   type Validator = [u8; 32];
-  // TODO
-  type ValidatorSet = HashMap<Self::Validator, NonZero<u16>>;
+  type ValidatorSet = ValidatorSet;
   type SignatureScheme = SignatureScheme;
   type Genesis = [u8; 32];
   type Block = ReadWriteAsBorsh<Block<T>>;
@@ -249,7 +309,7 @@ impl<
   }
 
   fn validator_set(&self) -> &Self::ValidatorSet {
-    self.blockchain.validators()
+    &self.validators
   }
 
   fn signature_scheme(&self) -> &Self::SignatureScheme {
