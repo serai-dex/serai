@@ -49,6 +49,9 @@ pub use tendermint::Slash;
 
 mod or;
 
+type TendermintMessage<T> =
+  ::tendermint::Message<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<T>>>;
+
 trait SendDb: Send + for<'db> Db<Transaction<'db>: Send> {}
 impl<D: Send + for<'db> Db<Transaction<'db>: Send>> SendDb for D {}
 
@@ -165,11 +168,10 @@ pub struct TributaryHandle<
 
   blocks_behind: async_channel::Sender<async_channel::Sender<u64>>,
 
-  sync_send: async_channel::Sender<(Block<T>, crate::tendermint::Commit)>,
-  message_send: async_channel::Sender<
-    ::tendermint::Message<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<T>>>,
-  >,
-  mempool_send: async_channel::Sender<AsyncAddToMempool<T>>,
+  sync: async_channel::Sender<(Block<T>, crate::tendermint::Commit)>,
+  message: async_channel::Sender<TendermintMessage<T>>,
+  mempool: async_channel::Sender<AsyncAddToMempool<T>>,
+  censure: async_channel::Sender<([u8; 32], async_channel::Sender<()>)>,
 
   next_block_notification: async_channel::Sender<async_channel::Sender<()>>,
 }
@@ -226,8 +228,16 @@ impl<
     let (mempool_send, mempool_recv) =
       async_channel::bounded::<AsyncAddToMempool<T>>(mempool_rate_limit);
 
-    let (mempool, mempool_consumer) =
-      Mempool::new(db.clone(), genesis, validators.keys().copied(), mempool_rate_limit);
+    let (censure_send, censure_recv) =
+      async_channel::bounded::<([u8; 32], async_channel::Sender<()>)>(validators.len());
+
+    let (mempool, mempool_consumer) = Mempool::new(
+      db.clone(),
+      genesis,
+      validators.keys().copied(),
+      censure_recv,
+      mempool_rate_limit,
+    );
 
     let (blocks_behind_send, blocks_behind_recv) =
       async_channel::bounded::<async_channel::Sender<u64>>(1);
@@ -302,7 +312,7 @@ impl<
 
           or::Either::R(Ok(blocks_behind)) => {
             // Ignore the error in case the future was cancelled
-            let _ = blocks_behind.send({
+            let _ = blocks_behind.try_send({
               let observed_block_number = u64::from(tendermint_handle.observed_block_number());
               let block_number = u64::from(tendermint_handle.block_number());
               observed_block_number.saturating_sub(block_number)
@@ -336,9 +346,10 @@ impl<
 
         blocks_behind: blocks_behind_send,
 
-        sync_send,
-        message_send,
-        mempool_send,
+        sync: sync_send,
+        message: message_send,
+        mempool: mempool_send,
+        censure: censure_send,
 
         next_block_notification,
       },
@@ -401,16 +412,9 @@ impl<
   }
 
   /// Handle a consensus message.
-  pub async fn message(
-    &self,
-    message: ::tendermint::Message<
-      [u8; 32],
-      [u8; 64],
-      AggregateSignature,
-      ReadWriteAsBorsh<Block<T>>,
-    >,
-  ) {
-    let _ = self.message_send.send(message).await;
+  #[expect(private_interfaces)]
+  pub async fn message(&self, message: TendermintMessage<T>) {
+    let _ = self.message.send(message).await;
   }
 
   /// Explicitly sync a block.
@@ -418,7 +422,7 @@ impl<
   /// This is intended to be used when a Tributary is behind, unable to simply observe blocks as
   /// they're produced by the consensus process.
   pub async fn sync(&self, block: Block<T>, commit: crate::tendermint::Commit) {
-    let _ = self.sync_send.send((block, commit)).await;
+    let _ = self.sync.send((block, commit)).await;
   }
 
   /// Publish a transaction into the Tributary's mempool.
@@ -447,6 +451,27 @@ impl<
         We yield `Pending` infinitely to reflect how this publication will never be ready. While
         the alternative would to be return an error, we presume that applications won't drop the
         mempool, letting us simplify the API a bit.
+      */
+      Err(_) => core::future::pending().await,
+    }
+  }
+
+  /// Censure a validator.
+  ///
+  /// This will prevent voting for block proposals from this validator and not populate their
+  /// transactions within the mempool. It only applies to the local view and doesn't have to
+  /// performed in any synchrony with other validators.
+  pub async fn censure(&self, validator: [u8; 32]) {
+    let (censured_send, censured_recv) = async_channel::bounded::<()>(1);
+    let _ = self.censure.try_send((validator, censured_send));
+    match censured_recv.recv().await {
+      Ok(()) => {}
+      /*
+        If the channel was closed, this validator won't have the censure applied, so this function
+        should never return (signifying the censure was applied).
+
+        We _could_ also propagate an error to signify the Tributary is no longer running, but it
+        isn't worth the API complexity.
       */
       Err(_) => core::future::pending().await,
     }

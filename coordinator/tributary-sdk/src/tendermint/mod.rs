@@ -335,7 +335,7 @@ impl<
             &self.slashes.keys().copied().collect::<Vec<_>>(),
           );
 
-          self.blockchain.add(&mut txn, block, Some(commit));
+          self.blockchain.add(&mut txn, &block, Some(&commit));
 
           txn.commit();
 

@@ -5,44 +5,40 @@ use serai_db::{Get, Transaction as DbTxn};
 
 use crate::{
   ReadWrite,
-  tendermint::Commit as CommitStruct,
+  tendermint::Commit,
   transaction::{Signed, TransactionKind, Transaction},
-  block::{SemanticError, EphemeralError, BlockError, Block as BlockStruct},
+  block::{SemanticError, EphemeralError, BlockError, Block},
   mempool::ProvidedReader,
 };
 
-serai_db::schema!(TributaryBlockchain {
-  Tip: (genesis: [u8; 32]) -> [u8; 32],
-  Block: <B: ReadWrite>(genesis: [u8; 32], hash: [u8; 32]) -> crate::ReadWriteAsBorsh<B>,
-  Commit: (genesis: [u8; 32], block: [u8; 32]) -> CommitStruct,
-  BlockAfter: (genesis: [u8; 32], parent: [u8; 32]) -> [u8; 32],
-  Slashed: (genesis: [u8; 32], validator: [u8; 32]) -> (),
-  Unsigned: (genesis: [u8; 32], hash: [u8; 32]) -> (),
-  LastSigned: (genesis: [u8; 32], validator: [u8; 32], scope: &[u8]) -> u64,
-  OnChainProvided: (genesis: [u8; 32], scope: &'static [u8]) -> u64,
-});
+mod db {
+  use super::*;
+
+  serai_db::schema!(TributaryBlockchain {
+    Tip: (genesis: [u8; 32]) -> [u8; 32],
+    Block: <B: ReadWrite>(genesis: [u8; 32], hash: [u8; 32]) -> crate::ReadWriteAsBorsh<B>,
+    Commit: (genesis: [u8; 32], block: [u8; 32]) -> super::Commit,
+    BlockAfter: (genesis: [u8; 32], parent: [u8; 32]) -> [u8; 32],
+    Slashed: (genesis: [u8; 32], validator: [u8; 32]) -> (),
+    Unsigned: (genesis: [u8; 32], hash: [u8; 32]) -> (),
+    LastSigned: (genesis: [u8; 32], validator: [u8; 32], scope: &[u8]) -> u64,
+    OnChainProvided: (genesis: [u8; 32], scope: &'static [u8]) -> u64,
+  });
+}
 
 pub(crate) struct Reader<T>(PhantomData<T>);
 
 impl<T: Transaction> Reader<T> {
   pub(crate) fn tip(getter: &impl Get, genesis: [u8; 32]) -> Option<[u8; 32]> {
-    Tip::get(getter, genesis)
+    db::Tip::get(getter, genesis)
   }
 
-  pub(crate) fn block(
-    getter: &impl Get,
-    genesis: [u8; 32],
-    hash: [u8; 32],
-  ) -> Option<BlockStruct<T>> {
-    Block::get(getter, genesis, hash).map(|block| block.0)
+  pub(crate) fn block(getter: &impl Get, genesis: [u8; 32], hash: [u8; 32]) -> Option<Block<T>> {
+    db::Block::get(getter, genesis, hash).map(|block| block.0)
   }
 
-  pub(crate) fn commit(
-    getter: &impl Get,
-    genesis: [u8; 32],
-    block: [u8; 32],
-  ) -> Option<CommitStruct> {
-    Commit::get(getter, genesis, block)
+  pub(crate) fn commit(getter: &impl Get, genesis: [u8; 32], block: [u8; 32]) -> Option<Commit> {
+    db::Commit::get(getter, genesis, block)
   }
 
   pub(crate) fn block_after(
@@ -50,10 +46,11 @@ impl<T: Transaction> Reader<T> {
     genesis: [u8; 32],
     parent: [u8; 32],
   ) -> Option<[u8; 32]> {
-    BlockAfter::get(getter, genesis, parent)
+    db::BlockAfter::get(getter, genesis, parent)
   }
 }
 
+#[expect(non_snake_case)]
 pub(crate) struct Blockchain<T: Transaction> {
   _T: PhantomData<T>,
 
@@ -69,7 +66,14 @@ impl<T: Transaction> Blockchain<T> {
     genesis: [u8; 32],
     validators: HashMap<[u8; 32], NonZero<u16>>,
   ) -> Self {
-    Self { _T: PhantomData, genesis, validators, tip: Tip::get(getter, genesis).unwrap_or(genesis) }
+    Self {
+      _T: PhantomData,
+
+      genesis,
+      validators,
+
+      tip: db::Tip::get(getter, genesis).unwrap_or(genesis),
+    }
   }
 
   pub(crate) fn validators(&self) -> &HashMap<[u8; 32], NonZero<u16>> {
@@ -78,11 +82,11 @@ impl<T: Transaction> Blockchain<T> {
 
   #[must_use]
   pub(crate) fn slashed(&self, getter: &impl Get, validator: [u8; 32]) -> bool {
-    Slashed::get(getter, self.genesis, validator).is_some()
+    db::Slashed::get(getter, self.genesis, validator).is_some()
   }
 
-  pub(crate) fn tip(&self, getter: &impl Get) -> Option<BlockStruct<T>> {
-    Block::<BlockStruct<T>>::get(getter, self.genesis, self.tip).map(|block| block.0)
+  pub(crate) fn tip(&self, getter: &impl Get) -> Option<Block<T>> {
+    db::Block::<Block<T>>::get(getter, self.genesis, self.tip).map(|block| block.0)
   }
 
   pub(crate) fn verify<
@@ -90,13 +94,13 @@ impl<T: Transaction> Blockchain<T> {
         [u8; 32],
         [u8; 64],
         crate::tendermint::AggregateSignature,
-        crate::ReadWriteAsBorsh<BlockStruct<T>>,
+        crate::ReadWriteAsBorsh<Block<T>>,
       >,
   >(
     &self,
     getter: &impl Get,
     genesis_time: u64,
-    block: &BlockStruct<T>,
+    block: &Block<T>,
   ) -> Result<(), BlockError> {
     if block.parent() != self.tip {
       Err(EphemeralError::UnexpectedParent)?;
@@ -138,13 +142,43 @@ impl<T: Transaction> Blockchain<T> {
       }
 
       // Check this block's time isn't in the future
-      if Some(block.system_time()?) >
-        SystemTime::now().checked_add(
-          Duration::from_millis(target_block_time) - N::LATENCY_TIME - N::BLOCK_DOWNLOADING_TIME,
-        )
       {
-        // This block's time is in the future
-        Err(EphemeralError::Future)?;
+        /*
+          Calculate when this block will end, based approximately on the synchrony assumptions
+          within the Tendermint consensus protocol.
+        */
+        let end_of_block_time = {
+          let target_block_time = Duration::from_millis(target_block_time);
+          let time_into_block = N::LATENCY_TIME.checked_add(N::BLOCK_DOWNLOADING_TIME);
+          let end_of_block_time = time_into_block
+            .and_then(|time_into_block| target_block_time.checked_sub(time_into_block));
+          end_of_block_time
+            .and_then(|end_of_block_time| SystemTime::now().checked_add(end_of_block_time))
+        };
+
+        let block_time = block.system_time()?;
+
+        /*
+          If the end time of this block isn't representable, our system's clock is insufficient to
+          run this protocol. We represent this as the block being in the future as it relates to a
+          time beyond the time we're able to represent. Additionally, the use of an
+          `EphemeralError` means we won't vote for this block, but also won't slash the proposer.
+
+          If the end time of this block is representable, we check the block's encoded time doesn't
+          exceed it. This does allow the block's time to be in the future of when it should have
+          been proposed, for up to one block's of drift, but allows that degree of error within the
+          validators' clocks (which are not perfectly synchronized).
+
+          This isn't exact as this block's end time will be scaled by the round number inside of
+          the Tendermint process proper. However, as proposals should have been made when consensus
+          for this block _started_, and fixed since, we do not need to scale the allowance for how
+          far this may be in the future. We solely have to wait for the discrepancy to be less than
+          the time already spent attempting consensus.
+        */
+        if end_of_block_time.is_none_or(|end_of_block_time| block_time > end_of_block_time) {
+          // This block's time is in the future
+          Err(EphemeralError::Future)?;
+        }
       }
 
       Ok(())
@@ -166,7 +200,7 @@ impl<T: Transaction> Blockchain<T> {
       let () = slash
         .verify(self.genesis, &self.validators)
         .map_err(|_| SemanticError::InvalidSlash { validator: *slash.validator() })?;
-      if Slashed::get(getter, self.genesis, *slash.validator()).is_some() {
+      if db::Slashed::get(getter, self.genesis, *slash.validator()).is_some() {
         Err(SemanticError::SlashAlreadyIncluded { validator: *slash.validator() })?;
       }
     }
@@ -194,7 +228,7 @@ impl<T: Transaction> Blockchain<T> {
                   getter,
                   self.genesis,
                   scope,
-                  OnChainProvided::get(getter, self.genesis, scope.as_bytes()).unwrap_or(0),
+                  db::OnChainProvided::get(getter, self.genesis, scope.as_bytes()).unwrap_or(0),
                 ),
               ));
             }
@@ -214,7 +248,7 @@ impl<T: Transaction> Blockchain<T> {
             );
           }
           TransactionKind::Unsigned => {
-            if Unsigned::get(getter, self.genesis, transaction_hash).is_some() {
+            if db::Unsigned::get(getter, self.genesis, transaction_hash).is_some() {
               Err(SemanticError::UnsignedAlreadyIncluded { transaction_hash })?;
             }
           }
@@ -223,7 +257,7 @@ impl<T: Transaction> Blockchain<T> {
               .as_ref()
               .is_none_or(|(current_signer, _current_scope)| current_signer != &signer) &&
               ((!self.validators.contains_key(&signer)) ||
-                Slashed::get(getter, self.genesis, signer).is_some() ||
+                db::Slashed::get(getter, self.genesis, signer).is_some() ||
                 block
                   .slashes()
                   .binary_search_by_key(&signer, |slash| *slash.validator())
@@ -236,7 +270,7 @@ impl<T: Transaction> Blockchain<T> {
               (current_signer, current_scope) != (&signer, &scope)
             }) {
               let expected_nonce =
-                LastSigned::get(getter, self.genesis, signer, &scope).unwrap_or(0);
+                db::LastSigned::get(getter, self.genesis, signer, &scope).unwrap_or(0);
               if expected_nonce != nonce {
                 Err(SemanticError::Gap {
                   transaction_hash,
@@ -270,12 +304,7 @@ impl<T: Transaction> Blockchain<T> {
   ///
   /// This MAY panic if the commit is not valid. It is only intended to be called with inputs
   /// already verified to be valid.
-  pub(crate) fn add(
-    &mut self,
-    txn: &mut impl DbTxn,
-    block: BlockStruct<T>,
-    commit: Option<CommitStruct>,
-  ) {
+  pub(crate) fn add(&mut self, txn: &mut impl DbTxn, block: &Block<T>, commit: Option<&Commit>) {
     let hash = block.hash();
 
     if let Some(commit) = &commit {
@@ -288,25 +317,25 @@ impl<T: Transaction> Blockchain<T> {
     }
 
     self.tip = hash;
-    Tip::set(txn, self.genesis, &hash);
-    Block::<BlockStruct<T>>::set(txn, self.genesis, hash, (&block).into());
+    db::Tip::set(txn, self.genesis, &hash);
+    db::Block::<Block<T>>::set(txn, self.genesis, hash, block.into());
     if let Some(commit) = &commit {
-      Commit::set(txn, self.genesis, hash, commit);
+      db::Commit::set(txn, self.genesis, hash, commit);
     }
-    BlockAfter::set(txn, self.genesis, block.parent(), &hash);
+    db::BlockAfter::set(txn, self.genesis, block.parent(), &hash);
 
     for slash in block.slashes() {
-      Slashed::set(txn, self.genesis, slash.validator, &());
+      db::Slashed::set(txn, self.genesis, slash.validator, &());
     }
     for tx in block.transactions() {
       match tx.kind() {
         TransactionKind::Provided { scope } => {
-          let existing = OnChainProvided::get(txn, self.genesis, scope.as_bytes()).unwrap_or(0);
-          OnChainProvided::set(txn, self.genesis, scope.as_bytes(), &(existing + 1));
+          let existing = db::OnChainProvided::get(txn, self.genesis, scope.as_bytes()).unwrap_or(0);
+          db::OnChainProvided::set(txn, self.genesis, scope.as_bytes(), &(existing + 1));
         }
-        TransactionKind::Unsigned => Unsigned::set(txn, self.genesis, tx.hash(), &()),
+        TransactionKind::Unsigned => db::Unsigned::set(txn, self.genesis, tx.hash(), &()),
         TransactionKind::Signed { scope, signed: Signed { signer, nonce, signature: _ } } => {
-          LastSigned::set(txn, self.genesis, signer, &scope, &nonce);
+          db::LastSigned::set(txn, self.genesis, signer, &scope, &nonce);
         }
       }
     }

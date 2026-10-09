@@ -73,6 +73,8 @@ pin_project_lite::pin_project! {
     provided: Provided<T>,
     un_signed: UnSigned<T>,
 
+    // Asynchronous censures.
+    censure: async_channel::Receiver<([u8; 32], async_channel::Sender<()>)>,
     // The requests for block proposals.
     request: async_channel::Receiver<([u8; 32], async_channel::Sender<Vec<T>>)>,
     // A way to re-send requests for block proposals.
@@ -107,7 +109,16 @@ impl<D: Db, T: Transaction> Future for Mempool<D, T> {
       return Poll::Pending;
     }
 
-    // Handle censures
+    // Handle asynchronous censures
+    while let Poll::Ready(Ok((validator, response))) =
+      core::pin::pin!(projection.censure.recv()).poll(cx)
+    {
+      let mut txn = projection.db.txn();
+      projection.un_signed.censure(&mut txn, validator);
+      txn.commit();
+      let _ = response.try_send(());
+    }
+    // Handle synchronous censures
     {
       let mut txn = projection.db.txn();
       while let Some(validator) = Censure::try_recv(&mut txn, *projection.genesis) {
@@ -194,6 +205,7 @@ impl<D: Db, T: Transaction> Mempool<D, T> {
     mut db: D,
     genesis: [u8; 32],
     validators: impl IntoIterator<Item = [u8; 32]>,
+    censure: async_channel::Receiver<([u8; 32], async_channel::Sender<()>)>,
     rate_limit: usize,
   ) -> (Self, MempoolConsumer<T>) {
     let last_block = LastBlock::get(&db, genesis).unwrap_or(genesis);
@@ -219,7 +231,16 @@ impl<D: Db, T: Transaction> Mempool<D, T> {
     let resend_request = request_send.clone().downgrade();
 
     (
-      Self { db, genesis, last_block, provided, un_signed, request: request_recv, resend_request },
+      Self {
+        db,
+        genesis,
+        last_block,
+        provided,
+        un_signed,
+        censure,
+        request: request_recv,
+        resend_request,
+      },
       MempoolConsumer {
         genesis,
 
