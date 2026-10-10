@@ -61,17 +61,35 @@ pub(crate) use provided::ProvidedReader;
 mod un_signed;
 use un_signed::*;
 
+/// The network for the mempool.
+pub trait MempoolNetwork<T: Transaction> {
+  /// Gossip an (un)signed transaction.
+  ///
+  /// The mempool will automatically re-gossip transactions which have yet to be included on-chain.
+  /// Accordingly, this gossip layer should have some layer of intelligence, being able to
+  /// de-duplicate and rate-limit gossiped transactions (in case the mempool is over-eager).
+  fn gossip(&mut self, transaction: T);
+}
+
+/// A stub implementation which does not implement any gossip functionality.
+impl<T: Transaction> MempoolNetwork<T> for () {
+  fn gossip(&mut self, _transaction: T) {}
+}
+
 pin_project_lite::pin_project! {
   /// The mempool for a Tributary.
   ///
   /// This MUST be polled to respond to requests for block proposals.
-  pub struct Mempool<D: Db, T: Transaction> {
+  pub struct Mempool<D: Db, T: Transaction, N: MempoolNetwork<T>> {
     db: D,
     genesis: [u8; 32],
 
     last_block: [u8; 32],
     provided: Provided<T>,
     un_signed: UnSigned<T>,
+
+    network: N,
+    regossip: usize,
 
     // Asynchronous censures.
     censure: async_channel::Receiver<([u8; 32], async_channel::Sender<()>)>,
@@ -86,7 +104,7 @@ pin_project_lite::pin_project! {
   }
 }
 
-impl<D: Db, T: Transaction> Future for Mempool<D, T> {
+impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
   type Output = ();
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
     let projection = self.project();
@@ -104,6 +122,37 @@ impl<D: Db, T: Transaction> Future for Mempool<D, T> {
       txn.commit();
 
       *projection.last_block = block.hash();
+
+      /*
+        If we have transactions which weren't included in this block, pick some to gossip again.
+
+        TODO: This is fine as a naïve solution, technically increasing the odds transactions only
+        in this mempool are eventually included in a block (without requiring this mempool itself
+        provide a block proposal). It's still an incredibly naïve solution which practically
+        requires the gossip layer de-duplicate and rate limit transactions. That leaves the
+        question of if it would be better to defer this out of the mempool entirely, leaving it to
+        the application.
+
+        The Tendermint module does have a `Mempool` trait intended to allow such modularity. That
+        design isn't exposed at this time however.
+      */
+      {
+        let outstanding_un_signed_transactions = projection.un_signed.block_proposal().count();
+        let transactions_to_regossip = outstanding_un_signed_transactions.isqrt().isqrt().max(1);
+        if let Some(start) = projection.regossip.checked_rem(outstanding_un_signed_transactions) {
+          let end = start.saturating_add(transactions_to_regossip);
+          let range = start .. end;
+          for (i, transaction) in projection.un_signed.block_proposal().enumerate() {
+            if range.contains(&i) ||
+              i.checked_add(outstanding_un_signed_transactions)
+                .is_some_and(|i| range.contains(&i))
+            {
+              projection.network.gossip(transaction.clone());
+            }
+          }
+          *projection.regossip = projection.regossip.wrapping_add(transactions_to_regossip);
+        }
+      }
 
       // Yield after indexing a block
       return Poll::Pending;
@@ -200,11 +249,12 @@ impl<T: Transaction> crate::tendermint::Mempool<T> for MempoolConsumer<T> {
   }
 }
 
-impl<D: Db, T: Transaction> Mempool<D, T> {
+impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Mempool<D, T, N> {
   pub(super) fn new(
     mut db: D,
     genesis: [u8; 32],
     validators: impl IntoIterator<Item = [u8; 32]>,
+    network: N,
     censure: async_channel::Receiver<([u8; 32], async_channel::Sender<()>)>,
     rate_limit: usize,
   ) -> (Self, MempoolConsumer<T>) {
@@ -234,9 +284,14 @@ impl<D: Db, T: Transaction> Mempool<D, T> {
       Self {
         db,
         genesis,
+
         last_block,
         provided,
         un_signed,
+
+        network,
+        regossip: 0,
+
         censure,
         request: request_recv,
         resend_request,
@@ -267,7 +322,11 @@ impl<D: Db, T: Transaction> Mempool<D, T> {
     match transaction.kind() {
       TransactionKind::Provided { .. } => projection.provided.provide(txn, transaction),
       TransactionKind::Unsigned | TransactionKind::Signed { .. } => {
-        projection.un_signed.add(txn, transaction, bypass_rate_limit)
+        let result = projection.un_signed.add(txn, transaction.clone(), bypass_rate_limit);
+        if result.is_ok() {
+          projection.network.gossip(transaction);
+        }
+        result
       }
     }
   }

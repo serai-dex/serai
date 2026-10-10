@@ -55,9 +55,6 @@ type TendermintMessage<T> =
 trait SendDb: Send + for<'db> Db<Transaction<'db>: Send> {}
 impl<D: Send + for<'db> Db<Transaction<'db>: Send>> SendDb for D {}
 
-trait SendTransaction: Send + Transaction {}
-impl<D: Send + Transaction> SendTransaction for D {}
-
 struct AsyncAddToMempool<T> {
   transaction: T,
   bypass_rate_limit: bool,
@@ -65,10 +62,10 @@ struct AsyncAddToMempool<T> {
 }
 
 pin_project_lite::pin_project! {
-  struct MempoolFuture<D: SendDb, T: SendTransaction> {
+  struct MempoolFuture<D: SendDb, T: Transaction, MN: MempoolNetwork<T>> {
     db: D,
     #[pin]
-    mempool: Mempool<D, T>,
+    mempool: Mempool<D, T, MN>,
     mempool_recv: async_channel::Receiver<AsyncAddToMempool<T>>,
   }
 }
@@ -82,10 +79,11 @@ pin_project_lite::pin_project! {
   /// futures to be individually spawned on an executor.
   pub struct Tributary<
     D: SendDb,
-    T: SendTransaction,
+    T: Transaction,
+    MN: MempoolNetwork<T>,
   > {
     #[pin]
-    mempool: MempoolFuture<D, T>,
+    mempool: MempoolFuture<D, T, MN>,
     #[pin]
     tendermint: Pin<Box<dyn Future<Output = ()>>>,
     #[pin]
@@ -96,7 +94,8 @@ pin_project_lite::pin_project! {
 impl<
   D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
   T: 'static + Send + Sync + Transaction,
-> Future for MempoolFuture<D, T>
+  MN: 'static + Send + Sync + MempoolNetwork<T>,
+> Future for MempoolFuture<D, T, MN>
 {
   type Output = ();
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -120,7 +119,8 @@ impl<
 impl<
   D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
   T: 'static + Send + Sync + Transaction,
-> Future for Tributary<D, T>
+  MN: 'static + Send + Sync + MempoolNetwork<T>,
+> Future for Tributary<D, T, MN>
 {
   type Output = ();
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -137,7 +137,8 @@ impl<
 impl<
   D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
   T: 'static + Send + Sync + Transaction,
-> IntoIterator for Tributary<D, T>
+  MN: 'static + Send + Sync + MempoolNetwork<T>,
+> IntoIterator for Tributary<D, T, MN>
 {
   type Item = Pin<Box<dyn Future<Output = ()>>>;
   type IntoIter = <[Self::Item; 3] as IntoIterator>::IntoIter;
@@ -180,7 +181,8 @@ pub struct TributaryHandle<
 impl<
   D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
   T: 'static + Send + Sync + Transaction,
-> Tributary<D, T>
+  MN: 'static + Send + Sync + MempoolNetwork<T>,
+> Tributary<D, T, MN>
 {
   /// Instance a Tributary.
   ///
@@ -202,6 +204,7 @@ impl<
   ///
   /// `mempool_rate_limit` is the maximum amount of transactions each validator may have pending
   /// within the mempool. It may be locally configured independently of other validators.
+  #[expect(clippy::too_many_arguments)]
   pub async fn new<
     N: 'static
       + Send
@@ -213,6 +216,7 @@ impl<
     genesis_time: Option<u64>,
     validators: HashMap<[u8; 32], NonZero<u16>>,
     tendermint_network: N,
+    mempool_network: MN,
     key: Zeroizing<<Ristretto as WrappedGroup>::F>,
     mempool_rate_limit: usize,
   ) -> Result<(Self, TributaryHandle<D, T>), TributaryError> {
@@ -235,6 +239,7 @@ impl<
       db.clone(),
       genesis,
       validators.keys().copied(),
+      mempool_network,
       censure_recv,
       mempool_rate_limit,
     );
