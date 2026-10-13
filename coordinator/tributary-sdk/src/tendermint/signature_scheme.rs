@@ -90,6 +90,7 @@ fn message_scoped_transcript() {
 #[derive(Clone)]
 pub(crate) struct SignatureScheme {
   genesis_scoped_transcript: <Ristretto as WithPreferredHash>::H,
+  validators: usize,
 }
 
 /// A signer for a signature scheme for a Tendermint process.
@@ -104,12 +105,13 @@ pub(crate) struct Signer {
 
 impl SignatureScheme {
   /// Instance a new signature scheme for Tendermint, scoped to a specific Tributary.
-  pub fn new(genesis: [u8; 32]) -> Self {
+  pub fn new(genesis: [u8; 32], validators: usize) -> Self {
     Self {
       // Initialize the transcripts for Tendermint with a customization of "tendermint", ensuring a
       // separate domain then the Tributary itself will use for its transcripts.
       genesis_scoped_transcript: <Ristretto as WithPreferredHash>::H::new_customized(b"tendermint")
         .chain_update(genesis),
+      validators,
     }
   }
 
@@ -142,7 +144,7 @@ fn genesis_scoped_transcript() {
 
     let mut bytes = [0; 32];
     rand::rngs::OsRng.fill_bytes(&mut bytes);
-    SignatureScheme::new(bytes)
+    SignatureScheme::new(bytes, 1)
   };
 
   let scheme = rand_scheme();
@@ -159,7 +161,7 @@ fn genesis_scoped_transcript() {
     scheme.message_scope([b"ab"]).0.finalize()
   );
   // This should be binding to the message
-  assert_eq!(scheme.message_scope([b"a"]).0.finalize(), scheme.message_scope([b"b"]).0.finalize());
+  assert_ne!(scheme.message_scope([b"a"]).0.finalize(), scheme.message_scope([b"b"]).0.finalize());
 }
 
 /// The type for an aggregate signature.
@@ -331,6 +333,9 @@ impl tendermint::SignatureScheme for SignatureScheme {
 
     let (validators, aggregate_signature) = {
       let validators_len = aggregate_signature.validators();
+      if validators_len > self.validators {
+        Err(InvalidAggregateSignature)?;
+      }
       let aggregate_signature = aggregate_signature.as_ref();
 
       let (validators, mut aggregate_signature) = aggregate_signature.split_at(validators_len * 32);

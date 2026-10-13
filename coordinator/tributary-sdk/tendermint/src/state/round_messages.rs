@@ -202,7 +202,7 @@ impl<
 {
   type Item = &'messages RoundMessages<B>;
   fn next(&mut self) -> Option<Self::Item> {
-    self.iterator.next().and_then(|messages| messages.get(self.round_number))
+    self.iterator.find_map(|messages| messages.get(self.round_number))
   }
 }
 

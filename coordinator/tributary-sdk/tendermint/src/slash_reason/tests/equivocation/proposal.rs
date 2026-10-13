@@ -44,7 +44,7 @@ fn equivocating_proposal() {
       first_data ==
         Data::Proposal {
           valid_round: first_valid_round.clone(),
-          proposal: StubBlock(&first_proposal)
+          proposal: StubBlock::from(&first_proposal)
         },
       "first `Data` split into was incorrect"
     );
@@ -52,7 +52,7 @@ fn equivocating_proposal() {
       second_data ==
         Data::Proposal {
           valid_round: second_valid_round.clone(),
-          proposal: StubBlock(&second_proposal)
+          proposal: StubBlock::from(&second_proposal)
         },
       "second `Data` split into was incorrect"
     );
@@ -62,7 +62,7 @@ fn equivocating_proposal() {
       first_data !=
         Data::Proposal {
           valid_round: first_valid_round.clone(),
-          proposal: StubBlock(&second_proposal)
+          proposal: StubBlock::from(&second_proposal)
         },
       "proposals with different `proposal`s were considered equal"
     );
@@ -70,7 +70,7 @@ fn equivocating_proposal() {
       first_data !=
         Data::Proposal {
           valid_round: second_valid_round.clone(),
-          proposal: StubBlock(&first_proposal)
+          proposal: StubBlock::from(&first_proposal)
         },
       "proposals with different `valid_round`s were considered equal"
     );
@@ -87,7 +87,7 @@ fn equivocating_proposal() {
                 aggregate_signature
               }
             }),
-            proposal: StubBlock(&first_proposal)
+            proposal: StubBlock::from(&first_proposal)
           },
         "proposals with the same semantics, but distinct signatures, weren't considered equal"
       );

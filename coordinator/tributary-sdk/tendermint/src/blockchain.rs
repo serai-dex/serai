@@ -83,15 +83,26 @@ pub trait Block: Clone {
   /// deserializing a value which was successfully serialized, from a well-formed reader.
   type Hash: BlockHash;
 
-  /// The block's hash.
+  /// The block's proposal hash.
   ///
   /// This MUST be cryptographically binding to the entirety of the block.
   ///
-  /// For two blocks, `b1` and `b2`, `b1 == b2` MUST equal `b1.hash() == b2.hash()`, except with
-  /// negligible probability (per the binding property).
+  /// This MUST always return the same hash for a value upon each call.
+  fn proposal_hash(&self) -> Self::Hash;
+
+  /// The hash of the block's semantics.
+  ///
+  /// This is used for commits, allowing commits to not bind to signature data, enabling
+  /// optimizations.
+  ///
+  /// This MUST be cryptographically binding to the entirety of the block's semantics.
+  ///
+  /// For two blocks, `b1` and `b2`, `b1 == b2` MUST equal
+  /// `b1.semantic_hash() == b2.semantic_hash()`, except with negligible probability (per the
+  /// binding property).
   ///
   /// This MUST always return the same hash for a value upon each call.
-  fn hash(&self) -> Self::Hash;
+  fn semantic_hash(&self) -> Self::Hash;
 }
 
 /// A view of the application layer's blockchain.

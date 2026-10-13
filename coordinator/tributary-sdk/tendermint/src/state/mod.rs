@@ -98,6 +98,8 @@ pub(super) struct State<B: Blockchain> {
   pending_precommit_timeout: Option<(Instant, Duration)>,
   /// The current step.
   step: Step,
+  /// The timeout to rebroadcast messages upon.
+  rebroadcast_timeout: (Instant, Duration),
 
   /// The valid value and round, if one has been decided.
   ///
@@ -147,6 +149,25 @@ pub(super) struct State<B: Blockchain> {
   /// this round, as sufficient for everyone to jump to this round even if `f` validators are
   /// substituted.
   our_latest_precommit: Option<MessageFor<B>>,
+}
+
+fn new_rebroadcast_timeout<
+  B: Blockchain,
+  N: Network<
+      B::Validator,
+      <B::SignatureScheme as SignatureScheme>::Signature,
+      <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+      B::Block,
+    >,
+>(
+  round_number: RoundNumber,
+) -> (Instant, Duration) {
+  (
+    Instant::now(),
+    N::LATENCY_TIME.saturating_mul(
+      1u32.saturating_add(u32::try_from(u64::from(round_number)).unwrap_or(u32::MAX)),
+    ),
+  )
 }
 
 impl<B: BorshyBlockchain> State<B> {
@@ -260,7 +281,14 @@ impl<B: BorshyBlockchain> State<B> {
 
   // L24-L27, L30-L33, L59-L60
   #[must_use]
-  async fn prevote_message(
+  async fn prevote_message<
+    N: Network<
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
+  >(
     &mut self,
     blockchain: &B,
     signer: &(
@@ -299,6 +327,7 @@ impl<B: BorshyBlockchain> State<B> {
     db::PendingStepTimeout::del(txn, genesis);
     self.step = Step::Prevote;
     db::Step::set(txn, genesis, &self.step);
+    self.rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(self.round_number);
 
     self.our_latest_prevotes = [self.our_latest_prevotes[1].take(), Some(result.clone())];
     db::OurLatestPrevotes::<B>::set(txn, genesis, &self.our_latest_prevotes);
@@ -309,7 +338,14 @@ impl<B: BorshyBlockchain> State<B> {
   ///
   /// This corresponds to L22-L33 and does not cover the case where the timeout occurs.
   #[must_use]
-  async fn prevote_upon_proposal_message(
+  async fn prevote_upon_proposal_message<
+    N: Network<
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
+  >(
     &mut self,
     blockchain: &mut B,
     signer: &(
@@ -339,7 +375,7 @@ impl<B: BorshyBlockchain> State<B> {
         */
         None => match &self.locked {
           None => true,
-          Some((_locked_round, locked_value)) => proposal.hash() == (*locked_value),
+          Some((_locked_round, locked_value)) => proposal.proposal_hash() == (*locked_value),
         },
         /*
           L28, where we've already checked:
@@ -355,22 +391,29 @@ impl<B: BorshyBlockchain> State<B> {
           // L29, where we've already checked `valid(v)`
           match &self.locked {
             Some((locked_round, locked_value)) => {
-              ((*locked_round) <= round_number) || (proposal.hash() == (*locked_value))
+              ((*locked_round) <= round_number) || (proposal.proposal_hash() == (*locked_value))
             }
             None => true,
           }
         }
       }))
-    .then(|| proposal.hash());
+    .then(|| proposal.proposal_hash());
 
     // L24-L27, L30-L33
-    Some(self.prevote_message(blockchain, signer, txn, block).await)
+    Some(self.prevote_message::<N>(blockchain, signer, txn, block).await)
   }
 
   // L40-L41, L45-L46, L63-L64
   #[expect(clippy::type_complexity)]
   #[must_use]
-  async fn precommit_message(
+  async fn precommit_message<
+    N: Network<
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
+  >(
     &mut self,
     blockchain: &B,
     signer: &(
@@ -399,6 +442,8 @@ impl<B: BorshyBlockchain> State<B> {
     db::PendingStepTimeout::del(txn, genesis);
     self.step = Step::Precommit;
     db::Step::set(txn, genesis, &self.step);
+    self.rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(self.round_number);
+
     let result = MessageFor::<B>::sign(
       signer,
       genesis,
@@ -421,7 +466,14 @@ impl<B: BorshyBlockchain> State<B> {
   ///
   /// This corresponds to L36-43 and does not cover L44-L46 nor the case where the timeout occurs.
   #[must_use]
-  async fn precommit_some_message(
+  async fn precommit_some_message<
+    N: Network<
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
+  >(
     &mut self,
     blockchain: &B,
     signer: &(
@@ -481,24 +533,26 @@ impl<B: BorshyBlockchain> State<B> {
     }
 
     // L38-L39
-    let proposal = proposal.hash();
     {
-      let locked = (self.round_number, proposal);
+      let locked = (self.round_number, proposal.proposal_hash());
       db::Locked::set(txn, genesis, &locked);
       self.locked = Some(locked);
     }
 
     // L40-L41
+    let semantic_hash = proposal.semantic_hash();
     let precommit_signature = CommitFor::<B>::sign::<B::SignatureScheme>(
       signer,
       genesis,
       self.block_number,
       self.round_number,
-      proposal.as_ref(),
+      semantic_hash.as_ref(),
     )
     .await;
     Some(
-      self.precommit_message(blockchain, signer, txn, Some((proposal, precommit_signature))).await,
+      self
+        .precommit_message::<N>(blockchain, signer, txn, Some((semantic_hash, precommit_signature)))
+        .await,
     )
   }
 
@@ -527,7 +581,7 @@ impl<B: BorshyBlockchain> State<B> {
     let prevote_message = {
       // L22-L33
       let prevote_upon_proposal_message =
-        self.prevote_upon_proposal_message(blockchain, signer, txn).await;
+        self.prevote_upon_proposal_message::<N>(blockchain, signer, txn).await;
 
       // L57-L60
       let prevote_upon_timeout_message = if matches!(self.step, Step::Propose) &&
@@ -536,7 +590,7 @@ impl<B: BorshyBlockchain> State<B> {
         blockchain.missed_proposal(
           blockchain.validator_set().proposer(self.block_number, self.round_number),
         );
-        Some(self.prevote_message(blockchain, signer, txn, None).await)
+        Some(self.prevote_message::<N>(blockchain, signer, txn, None).await)
       } else {
         None
       };
@@ -562,7 +616,7 @@ impl<B: BorshyBlockchain> State<B> {
 
     let precommit_message = {
       // L36-L43
-      let precommit_some_message = self.precommit_some_message(blockchain, signer, txn).await;
+      let precommit_some_message = self.precommit_some_message::<N>(blockchain, signer, txn).await;
 
       // L44-L46, L61-L64
       let precommit_none_message = if matches!(self.step, Step::Prevote) &&
@@ -572,7 +626,7 @@ impl<B: BorshyBlockchain> State<B> {
             .pending_step_timeout
             .is_some_and(|(start, duration)| start.elapsed() >= duration))
       {
-        Some(self.precommit_message(blockchain, signer, txn, None).await)
+        Some(self.precommit_message::<N>(blockchain, signer, txn, None).await)
       } else {
         None
       };
@@ -636,6 +690,7 @@ impl<B: BorshyBlockchain> State<B> {
         pending_step_timeout,
         pending_precommit_timeout,
         step,
+        rebroadcast_timeout,
 
         round_metrics,
 
@@ -661,6 +716,9 @@ impl<B: BorshyBlockchain> State<B> {
       db::RoundNumber::set(txn, genesis, round_number);
       *step = Step::Propose;
       db::Step::set(txn, genesis, &self.step);
+
+      // Reset the rebroadcast timeout
+      *rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(round);
 
       /*
         L20-L21
@@ -763,6 +821,7 @@ impl<B: BorshyBlockchain> State<B> {
         pending_precommit_timeout: db::PendingPrecommitTimeout::get(getter, genesis)
           .map(db::timeout_from_ms_since_epoch),
         step,
+        rebroadcast_timeout: new_rebroadcast_timeout::<B, N>(round_number),
 
         valid: db::Valid::<B>::get(getter, genesis),
         locked: db::Locked::get(getter, genesis),
@@ -838,10 +897,21 @@ impl<B: BorshyBlockchain> State<B> {
   > {
     let validator_set = blockchain.validator_set();
 
-    // If this is historic or for a future block, ignore this message
-    if (message.block_number < self.block_number) || (message.round_number < self.round_number) {
+    // If this message is historic, ignore it
+    if (message.block_number < self.block_number) ||
+      ((message.block_number == self.block_number) && (message.round_number < self.round_number))
+    {
       Err(MessageError::Stale)?;
     }
+
+    // Verify this message's static properties
+    message.static_verificiation(
+      blockchain.genesis(),
+      validator_set,
+      blockchain.signature_scheme(),
+    )?;
+
+    // If this message is in the future, ignore it
     if message.block_number > self.block_number {
       if let Some(observed_block_number) =
         self.observed_block_numbers.update(validator_set, message.validator, message.block_number)
@@ -854,13 +924,6 @@ impl<B: BorshyBlockchain> State<B> {
     }
     debug_assert_eq!(message.block_number, self.block_number);
     debug_assert!(message.round_number >= self.round_number);
-
-    // Verify this message's static properties
-    message.static_verificiation(
-      blockchain.genesis(),
-      validator_set,
-      blockchain.signature_scheme(),
-    )?;
 
     // Update `round_messages`
     match self.round_messages.update(validator_set, message.validator, self.round_number, &message)
@@ -932,6 +995,9 @@ impl<
         try and get any validators who were outside of the synchrony bound to catch up to where we
         are now, so we do begin receiving new messages to respond to again.
       */
+
+      // Reset the rebroadcast timeout
+      state.rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(state.round_number);
 
       /*
         Except if we know _we_ are the ones behind, and therefore we know this won't be helpful and
@@ -1006,11 +1072,11 @@ impl<B: BorshyBlockchain> State<B> {
       let time_elapsed = start.elapsed();
       duration.saturating_sub(time_elapsed)
     };
-    (match (self.pending_step_timeout, self.pending_precommit_timeout) {
+    N::sleep(match (self.pending_step_timeout, self.pending_precommit_timeout) {
       (Some(step_timeout), Some(precommit_timeout)) => {
-        N::sleep(time_remaining(step_timeout).min(time_remaining(precommit_timeout)))
+        time_remaining(step_timeout).min(time_remaining(precommit_timeout))
       }
-      (Some(timeout), None) | (None, Some(timeout)) => N::sleep(time_remaining(timeout)),
+      (Some(timeout), None) | (None, Some(timeout)) => time_remaining(timeout),
       /*
         If there's no timeout pending, we are missing the necessary messages to set the timeout. If
         we do not receive _any_ messages within the current latency bound, we will rebroadcast our
@@ -1020,10 +1086,11 @@ impl<B: BorshyBlockchain> State<B> {
         We know we didn't receive any other messages as this future wasn't cancelled to drop its
         mutable borrow, as necessary to have this state process a message.
       */
-      (None, None) => N::sleep(
-        N::LATENCY_TIME
-          .saturating_mul(u32::try_from(u64::from(self.round_number)).unwrap_or(u32::MAX)),
-      ),
+      (None, None) => {
+        let (start, duration) = self.rebroadcast_timeout;
+        let time_already_passed = Instant::now().duration_since(start);
+        duration.saturating_sub(time_already_passed)
+      }
     })
     .await;
 
@@ -1073,6 +1140,7 @@ impl<B: BorshyBlockchain> State<B> {
         pending_step_timeout,
         pending_precommit_timeout,
         step,
+        rebroadcast_timeout,
 
         round_metrics,
         valid,
@@ -1099,6 +1167,9 @@ impl<B: BorshyBlockchain> State<B> {
       *pending_precommit_timeout = None;
       *step = Step::Propose;
       round_metrics.reset(*block_number, *round_number);
+
+      // This isn't saved, being entirely local, and just has to be reset
+      *rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(*round_number);
 
       *valid = None;
       db::Valid::<B>::del(txn, genesis);

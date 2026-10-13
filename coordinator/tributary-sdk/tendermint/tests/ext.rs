@@ -137,7 +137,13 @@ struct TestBlock {
 impl Block for TestBlock {
   type Hash = TestBlockHash;
 
-  fn hash(&self) -> TestBlockHash {
+  fn proposal_hash(&self) -> TestBlockHash {
+    let mut id = self.id;
+    id[3] ^= 0xff;
+    id
+  }
+
+  fn semantic_hash(&self) -> TestBlockHash {
     self.id
   }
 }
@@ -186,7 +192,7 @@ impl Blockchain for TestNetwork {
       self.validator_set(),
       self.signature_scheme(),
       self.genesis(),
-      block.hash()
+      block.semantic_hash()
     ));
     let added = u32::from_le_bytes(block.id);
     println!("Added block #{added}");

@@ -9839,6 +9839,7 @@ dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
  "dalek-ff-group",
+ "futures-core",
  "pin-project-lite",
  "rand 0.8.8",
  "schnorr-signatures",

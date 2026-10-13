@@ -89,7 +89,12 @@ impl<S: Signature, A: AggregateSignature, B: Block> PartialEq for Data<S, A, B> 
       (
         Data::Proposal { valid_round, proposal },
         Data::Proposal { valid_round: other_valid_round, proposal: other_proposal },
-      ) => (valid_round == other_valid_round) && (proposal.hash() == other_proposal.hash()),
+      ) => {
+        // This uses the block's proposal hash, not its semantic hash, as the proposal hash affects
+        // the semantics of this proposal message
+        (valid_round == other_valid_round) &&
+          (proposal.proposal_hash() == other_proposal.proposal_hash())
+      }
       (Data::Prevote { block }, Data::Prevote { block: other_block }) => block == other_block,
       (
         Data::Precommit { block_and_precommit_signature: None },
@@ -172,7 +177,7 @@ impl<S: Signature, A: AggregateSignature, B: Block> Data<S, A, B> {
             prior two fields (which behave as a single field, the sole field of variable length in
             this message).
           */
-          Some(proposal.hash()),
+          Some(proposal.proposal_hash()),
           None,
         )
       }
@@ -317,7 +322,8 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
   /// Perform static verification for this message.
   ///
   /// This only verifies the values within this message which can be verified against solely the
-  /// `blockchain` itself, without any state from the Tendermint consensus process. This includes:
+  /// blockchain's parameters itself, without any state from the Tendermint consensus process. This
+  /// includes:
   ///
   /// - The message is from a validator
   /// - The message's signature
@@ -356,7 +362,7 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
                   genesis,
                   self.block_number,
                   *round_number,
-                  &Data::Prevote { block: Some(proposal.hash()) },
+                  &Data::Prevote { block: Some(proposal.proposal_hash()) },
                 ),
                 aggregate_signature,
               )
@@ -370,7 +376,7 @@ impl<V: Validator, S: Signature, A: AggregateSignature, B: Block> Message<V, S, 
             round_number: self.round_number,
             evidence: Evidence::InvalidProposal {
               valid_round: valid_round.clone(),
-              proposal: proposal.hash(),
+              proposal: proposal.proposal_hash(),
               signature: self.signature.clone(),
             },
           }))?;
@@ -498,7 +504,7 @@ fn signature_message() {
         [0].as_slice(),
         u64::from(valid_round.round_number).to_le_bytes().as_slice(),
         valid_round.aggregate_signature.as_ref(),
-        block.hash().as_ref(),
+        block.proposal_hash().as_ref(),
       ]
       .concat(),
     );
@@ -514,7 +520,7 @@ fn signature_message() {
         accum.extend(item.as_ref());
         accum
       }),
-      [prefix.as_slice(), [0].as_slice(), block.hash().as_ref()].concat(),
+      [prefix.as_slice(), [0].as_slice(), block.proposal_hash().as_ref()].concat(),
     );
 
     assert_eq!(
@@ -522,13 +528,13 @@ fn signature_message() {
         genesis,
         block_number,
         round_number,
-        &TestData::Prevote { block: Some(block.hash()) }
+        &TestData::Prevote { block: Some(block.proposal_hash()) }
       )
       .fold(Vec::<u8>::new(), |mut accum, item| {
         accum.extend(item.as_ref());
         accum
       }),
-      [prefix.as_slice(), [1].as_slice(), block.hash().as_ref()].concat(),
+      [prefix.as_slice(), [1].as_slice(), block.proposal_hash().as_ref()].concat(),
     );
 
     assert_eq!(
@@ -550,13 +556,16 @@ fn signature_message() {
         genesis,
         block_number,
         round_number,
-        &TestData::Precommit { block_and_precommit_signature: Some((block.hash(), signature)) }
+        &TestData::Precommit {
+          block_and_precommit_signature: Some((block.semantic_hash(), signature))
+        }
       )
       .fold(Vec::<u8>::new(), |mut accum, item| {
         accum.extend(item.as_ref());
         accum
       }),
-      [prefix.as_slice(), [2].as_slice(), block.hash().as_ref(), signature.as_ref()].concat(),
+      [prefix.as_slice(), [2].as_slice(), block.semantic_hash().as_ref(), signature.as_ref()]
+        .concat(),
     );
 
     assert_eq!(
@@ -587,7 +596,7 @@ fn sign() {
 
   use rand_core::{TryRngCore as _, OsRng};
 
-  use crate::{StubBlock, TestSignatureScheme};
+  use crate::{OpaqueBlockHash, StubBlock, TestSignatureScheme};
 
   for _ in 0 .. 128 {
     let mut block = [0; 32];
@@ -595,7 +604,7 @@ fn sign() {
     let block = ((OsRng.try_next_u64().unwrap() & 1) == 1).then_some(block);
 
     let data =
-      Data::Prevote { block: block.as_ref().map(|block| StubBlock::from(block.as_slice()).hash()) };
+      Data::Prevote { block: block.as_ref().map(|block| OpaqueBlockHash(block.as_slice())) };
 
     let mut genesis = [0; 32];
     OsRng.try_fill_bytes(&mut genesis).unwrap();

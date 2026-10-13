@@ -368,6 +368,7 @@ impl<T: Transaction> UnSigned<T> {
   pub(super) fn block_proposal(&self) -> impl Iterator<Item = &T> {
     struct Filter<'mempool, T: 'mempool, I: Iterator<Item = &'mempool T>> {
       last: Option<([u8; 32], Vec<u8>, u64)>,
+      signer_size: usize,
       iter: I,
     }
     impl<'mempool, T: 'mempool + Transaction, I: Iterator<Item = &'mempool T>> Iterator
@@ -388,7 +389,38 @@ impl<T: Transaction> UnSigned<T> {
                 continue;
               }
 
+              // If this is a new signer, clear the signer's size
+              if self
+                .last
+                .as_ref()
+                .is_some_and(|(last_signer, _last_scope, _last_nonce)| last_signer != &signer)
+              {
+                self.signer_size = 0;
+              }
+
+              /*
+                While the caller is expected to apply the block's size limit, we still apply the
+                block's size limit _to individual signers_. This lets the caller choose how to
+                prefer transactions between signers, without providing transactions which
+                definitely won't be included.
+
+                There is a slight caveat, as a later scope of a signer could be preferred over an
+                earlier scope, but that isn't modelled here.
+              */
+              let Some(new_size) = self.signer_size.checked_add({
+                let Ok(size) = crate::serialized_len(next_transaction) else { continue };
+                size
+              }) else {
+                continue;
+              };
+              if let Some(block_size_limit) = T::BLOCK_SIZE_LIMIT &&
+                (new_size > block_size_limit)
+              {
+                continue;
+              }
+
               self.last = Some((signer, scope, nonce));
+              self.signer_size = new_size;
               return Some(next_transaction);
             }
             TransactionKind::Provided { .. } | TransactionKind::Unsigned => {
@@ -398,7 +430,7 @@ impl<T: Transaction> UnSigned<T> {
         }
       }
     }
-    Filter { last: None, iter: self.iter(true) }
+    Filter { last: None, signer_size: 0, iter: self.iter(true) }
   }
 
   /// Censure a validator.

@@ -31,5 +31,6 @@ schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", versi
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 serai-db = { path = "../../common/db", version = "0.2", default-features = false, features = ["std", "schema"] }
 
+futures-core = { version = "0.3", default-features = false }
 async-channel = { version = "2", default-features = false }
 tendermint = { package = "tendermint-machine", path = "./tendermint", version = "0.3", default-features = false, features = ["std"] }

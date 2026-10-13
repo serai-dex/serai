@@ -23,8 +23,8 @@ pin-project-lite = { version = "0.2", default-features = false }
 # This is used for (de)serialization at this time. A long-term goal is generalizing this out.
 borsh = { version = "1", default-features = false, features = ["derive", "de_strict_order"], optional = true }
 
-# This is used to message the Tendermint process. It was preferred over `futures-channel` as it had
-# clearer commentary towards cancel safety.
+# This is used to message the Tendermint process.
+# It was preferred over `futures-channel` as it had clearer commentary towards cancel safety.
 async-channel = { version = "2", default-features = false, optional = true }
 
 # An abstraction over the underlying database, allowing the application to choose the database used.

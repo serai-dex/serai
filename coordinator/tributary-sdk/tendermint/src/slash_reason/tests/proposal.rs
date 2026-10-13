@@ -51,7 +51,7 @@ fn valid() {
         &genesis,
         block_number,
         valid_round_number,
-        Data::Prevote { block: Some(block.hash()) }
+        Data::Prevote { block: Some(block.proposal_hash()) }
       ))
       .poll(&mut context) else {
         panic!("`TestSignatureScheme::sign` returned `Poll::Pending`")
@@ -62,7 +62,7 @@ fn valid() {
           &genesis,
           block_number,
           valid_round_number,
-          &Data::Prevote { block: Some(block.hash()) },
+          &Data::Prevote { block: Some(block.proposal_hash()) },
         ),
         [(&0, &prevote_signature)],
       );
@@ -94,7 +94,7 @@ fn valid() {
       round_number,
       evidence: Evidence::InvalidProposal {
         valid_round: valid_round.clone(),
-        proposal: block.hash(),
+        proposal: block.proposal_hash(),
         signature,
       },
     })
@@ -143,7 +143,7 @@ fn not_proposer() {
         &genesis,
         block_number,
         valid_round_number,
-        Data::Prevote { block: Some(block.hash()) }
+        Data::Prevote { block: Some(block.proposal_hash()) }
       ))
       .poll(&mut context) else {
         panic!("`TestSignatureScheme::sign` returned `Poll::Pending`")
@@ -154,7 +154,7 @@ fn not_proposer() {
           &genesis,
           block_number,
           valid_round_number,
-          &Data::Prevote { block: Some(block.hash()) },
+          &Data::Prevote { block: Some(block.proposal_hash()) },
         ),
         [(&0, &prevote_signature)],
       );
@@ -189,7 +189,7 @@ fn not_proposer() {
       round_number,
       evidence: Evidence::InvalidProposal {
         valid_round: valid_round.clone(),
-        proposal: block.hash(),
+        proposal: block.proposal_hash(),
         signature,
       },
     })
@@ -202,7 +202,7 @@ fn not_proposer() {
       round_number,
       evidence: Evidence::InvalidProposal {
         valid_round: valid_round.clone(),
-        proposal: block.hash(),
+        proposal: block.proposal_hash(),
         signature: {
           let mut signature = signature;
           signature[0] ^= 1;
@@ -257,7 +257,7 @@ fn invalid_valid_round_number() {
         &genesis,
         block_number,
         valid_round_number,
-        Data::Prevote { block: Some(block.hash()) }
+        Data::Prevote { block: Some(block.proposal_hash()) }
       ))
       .poll(&mut context) else {
         panic!("`TestSignatureScheme::sign` returned `Poll::Pending`")
@@ -268,7 +268,7 @@ fn invalid_valid_round_number() {
           &genesis,
           block_number,
           valid_round_number,
-          &Data::Prevote { block: Some(block.hash()) },
+          &Data::Prevote { block: Some(block.proposal_hash()) },
         ),
         [(&0, &prevote_signature)],
       );
@@ -302,7 +302,7 @@ fn invalid_valid_round_number() {
       round_number,
       evidence: Evidence::InvalidProposal {
         valid_round: valid_round.clone(),
-        proposal: block.hash(),
+        proposal: block.proposal_hash(),
         signature,
       },
     })
@@ -315,7 +315,7 @@ fn invalid_valid_round_number() {
       round_number,
       evidence: Evidence::InvalidProposal {
         valid_round: valid_round.clone(),
-        proposal: block.hash(),
+        proposal: block.proposal_hash(),
         signature: {
           let mut signature = signature;
           signature[0] ^= 1;
@@ -373,7 +373,7 @@ fn invalid_valid_round_signature() {
         &genesis,
         block_number,
         valid_round_number,
-        Data::Prevote { block: Some(block.hash()) }
+        Data::Prevote { block: Some(block.proposal_hash()) }
       ))
       .poll(&mut context) else {
         panic!("`TestSignatureScheme::sign` returned `Poll::Pending`")
@@ -384,7 +384,7 @@ fn invalid_valid_round_signature() {
           &genesis,
           block_number,
           valid_round_number,
-          &Data::Prevote { block: Some(block.hash()) },
+          &Data::Prevote { block: Some(block.proposal_hash()) },
         ),
         [(&0, &prevote_signature)],
       );
@@ -397,7 +397,7 @@ fn invalid_valid_round_signature() {
             &genesis,
             block_number,
             valid_round_number,
-            &Data::Prevote { block: Some(block.hash()) },
+            &Data::Prevote { block: Some(block.proposal_hash()) },
           ),
           &aggregate_signature,
         )
@@ -433,7 +433,7 @@ fn invalid_valid_round_signature() {
       round_number,
       evidence: Evidence::InvalidProposal {
         valid_round: valid_round.clone(),
-        proposal: block.hash(),
+        proposal: block.proposal_hash(),
         signature,
       },
     })
@@ -446,7 +446,7 @@ fn invalid_valid_round_signature() {
       round_number,
       evidence: Evidence::InvalidProposal {
         valid_round: valid_round.clone(),
-        proposal: block.hash(),
+        proposal: block.proposal_hash(),
         signature: {
           let mut signature = signature;
           signature[0] ^= 1;
@@ -505,7 +505,7 @@ fn invalid_valid_round_weight() {
         &genesis,
         block_number,
         valid_round_number,
-        Data::Prevote { block: Some(block.hash()) }
+        Data::Prevote { block: Some(block.proposal_hash()) }
       ))
       .poll(&mut context) else {
         panic!("`TestSignatureScheme::sign` returned `Poll::Pending`")
@@ -516,7 +516,7 @@ fn invalid_valid_round_weight() {
           &genesis,
           block_number,
           valid_round_number,
-          &Data::Prevote { block: Some(block.hash()) },
+          &Data::Prevote { block: Some(block.proposal_hash()) },
         ),
         [(&1, &prevote_signature)],
       );
@@ -550,7 +550,7 @@ fn invalid_valid_round_weight() {
       round_number,
       evidence: Evidence::InvalidProposal {
         valid_round: valid_round.clone(),
-        proposal: block.hash(),
+        proposal: block.proposal_hash(),
         signature,
       },
     })
@@ -563,7 +563,7 @@ fn invalid_valid_round_weight() {
       round_number,
       evidence: Evidence::InvalidProposal {
         valid_round: valid_round.clone(),
-        proposal: block.hash(),
+        proposal: block.proposal_hash(),
         signature: {
           let mut signature = signature;
           signature[0] ^= 1;

@@ -20,7 +20,7 @@ use serai_db::{Get, Transaction as DbTxn, Db};
 use ::tendermint::{Network, CommitFor, SlashReasonFor, InvalidBlock};
 
 use crate::{
-  ReadWriteAsBorsh,
+  ReadWrite as _, ReadWriteAsBorsh,
   transaction::{Signed, TransactionKind, Transaction},
   block::{SyntacticError, SemanticError, EphemeralError, BlockError, Block},
   Blockchain,
@@ -39,7 +39,13 @@ serai_db::schema!(TributaryTendermint {
 
 impl<T: Transaction> ::tendermint::Block for ReadWriteAsBorsh<Block<T>> {
   type Hash = [u8; 32];
-  fn hash(&self) -> Self::Hash {
+  fn proposal_hash(&self) -> Self::Hash {
+    use blake2::Digest as _;
+    let mut digest = blake2::Blake2b256::new();
+    self.0.write(crate::merkle::DigestWriter(&mut digest)).expect("`DigestWriter` is infallible");
+    digest.finalize().into()
+  }
+  fn semantic_hash(&self) -> Self::Hash {
     self.0.hash()
   }
 }
@@ -76,6 +82,10 @@ impl ValidatorSet {
     use ::tendermint::ValidatorSet as _;
 
     let total_weight = validators.total_weight();
+    /*
+      TODO: This builds the cache by calling the underlying, yet the underlying continually ad-hocs
+      builds this information, Directly build the cache here.
+    */
     let proposers = {
       let mut proposers = Box::new_uninit_slice(usize::from(u16::from(total_weight)));
       let mut i = 0u16;
@@ -114,8 +124,8 @@ impl ::tendermint::ValidatorSet for ValidatorSet {
     block_number: ::tendermint::BlockNumber,
     round_number: ::tendermint::RoundNumber,
   ) -> Self::Validator {
-    let i =
-      (u64::from(block_number) + u64::from(round_number)) % u64::from(u16::from(self.total_weight));
+    let i = ((u64::from(block_number) - 1) % u64::from(u16::from(self.total_weight))) +
+      ((u64::from(round_number) - 1) % u64::from(u16::from(self.total_weight)));
     let i = u16::try_from(i).unwrap();
     self.proposers[usize::from(i)]
   }
@@ -151,7 +161,7 @@ impl<D: Db, T: Transaction, M, N> Tendermint<D, T, M, N> {
     next_block_notification: async_channel::Receiver<async_channel::Sender<()>>,
     mempool: M,
   ) -> Self {
-    let signature_scheme = SignatureScheme::new(genesis);
+    let signature_scheme = SignatureScheme::new(genesis, blockchain.validators().len());
 
     let validators = ValidatorSet::new(blockchain.validators().clone());
 
@@ -192,16 +202,29 @@ pin_project_lite::pin_project! {
     slashes: BTreeMap<[u8; 32], Slash>,
     #[pin]
     transactions: F,
+
+    // This is a weak form of entropy used to decide which validator to remove the transactions of
+    // first. It doesn't have to satisfy any cryptographic requirements, it solely has to be
+    // updated between blocks in order to ensure the validator removed from first isn't static.
+    //
+    // Only requiring weak entropy does mean this can theoretically be predicted by the adversary.
+    // With the adversary selecting which validators have outstanding transactions, the adversary
+    // can game which validators have their transactions removed (and therefore which have their
+    // transactions remain). This is even easier since validators running this code will
+    // consistently use the block number for 'entropy'. However, the practical effort of such an
+    // attack is considered infeasible.
+    weak_entropy: u64,
   }
 }
 impl<T: Transaction, F: Future<Output: IntoIterator<Item = T>>> Future for BlockProposal<F> {
   type Output = ReadWriteAsBorsh<Block<T>>;
   fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    let mut transactions = {
+    let (mut non_signed_transactions, mut transactions_by_signer) = {
       // Receive the transactions from the mempool
       let Poll::Ready(transactions) = self.as_mut().project().transactions.poll(cx) else {
         return Poll::Pending;
       };
+
       // Remove transactions from signers who have pending slashes
       let transactions = transactions.into_iter().filter(|tx| {
         if let TransactionKind::Signed {
@@ -214,8 +237,135 @@ impl<T: Transaction, F: Future<Output: IntoIterator<Item = T>>> Future for Block
         }
         true
       });
-      transactions.collect::<Vec<_>>()
+
+      // Organize the transactions by their signer
+      let mut non_signed_transactions = alloc::vec![];
+      let mut transactions_by_signer = alloc::vec![];
+      let mut signer_sizes = alloc::vec![];
+      {
+        let mut last_signer = None;
+        let mut signer_full = false;
+        for transaction in transactions {
+          let TransactionKind::Signed { scope: _, signed: Signed { signer, .. } } =
+            transaction.kind()
+          else {
+            non_signed_transactions.push(transaction);
+            continue;
+          };
+
+          // This is correct by the requirement the mempool yield these transactions in order
+          if Some(signer) != last_signer {
+            transactions_by_signer.push(Vec::with_capacity(1));
+            signer_sizes.push(Some(0usize));
+            last_signer = Some(signer);
+            signer_full = false;
+          }
+
+          if signer_full {
+            continue;
+          }
+
+          let transactions_by_signer = transactions_by_signer.last_mut().unwrap();
+          let signer_size = signer_sizes.last_mut().unwrap();
+
+          /*
+            Calculate this transaction's size.
+
+            If we can't determine this transaction's size, for whatever reason, we skip it.
+            However, as it may be a required predecessor to a following transaction, we mark this
+            signer as 'full'.
+          */
+          let Ok(transaction_size) = crate::serialized_len(&transaction) else {
+            signer_full = true;
+            continue;
+          };
+
+          // Determine the new size of this signer's transactions
+          let new_signer_size =
+            (*signer_size).and_then(|signer_size| signer_size.checked_add(transaction_size));
+          // We strictly require the new size of this signer's transactions be representable
+          if new_signer_size.is_some() {
+            *signer_size = new_signer_size;
+            transactions_by_signer.push((transaction_size, transaction));
+          } else {
+            // If the size wasn't representable, mark this signer as full
+            signer_full = true;
+          }
+        }
+      }
+
+      // If there's a block size limit...
+      if let Some(block_size_limit) = T::BLOCK_SIZE_LIMIT {
+        // And the signers' transactions exceed it...
+        let signer_sizes = signer_sizes.into_iter().map(Option::unwrap).collect::<Vec<_>>();
+        let approximate_block_size =
+          signer_sizes.iter().fold((0usize, 0usize), |(mut lo, hi), size| {
+            let carry;
+            (lo, carry) = lo.overflowing_add(*size);
+            /*
+              This is guaranteed to not overflow as we're summing at most `u16::MAX` values, and
+              `usize` is at least `u16`.
+            */
+            (lo, hi + usize::from(u8::from(carry)))
+          });
+        if let Some(mut size_to_trim) = {
+          let (lo, borrow) = approximate_block_size.0.overflowing_sub(block_size_limit);
+          let (hi, borrow) =
+            approximate_block_size.1.overflowing_sub(usize::from(u8::from(borrow)));
+          /*
+            If this _does not_ have a borrow, we successfully subtracted the block's size limit
+            from our approximate block size, and our approximate block size is greater than or
+            equal to the block's size limit.
+          */
+          let size_to_trim = (!borrow).then_some((lo, hi));
+          size_to_trim.filter(|size_to_trim| size_to_trim != &(0, 0))
+        } && let Some(target_size_per_signer) = block_size_limit.checked_div(signer_sizes.len())
+        {
+          /*
+            Remove transactions until either:
+            - This signer only has one transaction left
+            - This signer's transactions' size are less than the amortized capacity per signer
+            - All transactions are less than the block's size limit
+
+            This does not consider the block header's size, nor the size of the slashes. This isn't
+            meant to ensure the resulting block is less than the block's size limit, solely be a
+            rough first pass which does _most_ of the work in a fair manner.
+          */
+          'outer: for (mut size, transactions) in
+            signer_sizes.into_iter().zip(&mut transactions_by_signer)
+          {
+            while (transactions.len() > 1) && (size > target_size_per_signer) {
+              let (transaction_size, _transaction) = transactions.pop().unwrap();
+              size = size.saturating_sub(transaction_size);
+
+              let mut borrow;
+              (size_to_trim.0, borrow) = size_to_trim.0.overflowing_sub(size);
+              (size_to_trim.1, borrow) =
+                size_to_trim.1.overflowing_sub(usize::from(u8::from(borrow)));
+              if borrow || (size_to_trim == (0, 0)) {
+                break 'outer;
+              }
+            }
+          }
+        }
+      }
+
+      (
+        non_signed_transactions,
+        transactions_by_signer
+          .into_iter()
+          .map(|transactions| {
+            transactions
+              .into_iter()
+              .map(|(_transaction_size, transaction)| transaction)
+              .collect::<Vec<_>>()
+          })
+          .filter(|transactions| !transactions.is_empty())
+          .collect::<Vec<_>>(),
+      )
     };
+    let mut next_validator_to_remove_from =
+      usize::try_from(self.weak_entropy & u64::from(u16::MAX)).unwrap();
 
     let mut slashes = self.slashes.values().cloned().collect::<Vec<_>>();
 
@@ -235,29 +385,84 @@ impl<T: Transaction, F: Future<Output: IntoIterator<Item = T>>> Future for Block
           time_since_epoch_ms.max(minimum_time)
         },
         slashes.clone().into_boxed_slice(),
-        transactions.clone().into_boxed_slice(),
+        non_signed_transactions
+          .iter()
+          .chain(transactions_by_signer.iter().flatten())
+          .cloned()
+          .collect::<Box<[_]>>(),
       ) {
         Ok(block) => break block,
-        Err(_) => {
+        Err(err) => {
           // If even an empty block is syntactically invalid, don't yield a proposal
-          if slashes.is_empty() && transactions.is_empty() {
+          if slashes.is_empty() &&
+            non_signed_transactions.is_empty() &&
+            transactions_by_signer.iter().all(Vec::is_empty)
+          {
             return Poll::Pending;
           }
 
+          let mut size_to_trim = if let Some(block_size_limit) = T::BLOCK_SIZE_LIMIT &&
+            let SyntacticError::ExceededSizeLimit { size: Some(size) } = err
+          {
+            size.checked_sub(block_size_limit)
+          } else {
+            None
+          };
+
           /*
             If this block is syntactically invalid, assume the mempool provided invalid
-            transactions _or_ this block is over the size limit due to also including the slashes.
-            Either problem can be solved by popping transactions.
+            transactions _or_ this block is over the size limit. Either problem can be solved by
+            popping transactions, except if over the size limit due to the slashes.
+
+            This also smooths over any issues with the mempool, if it yielded invalid transactions
+            or an invalid ordering.
           */
-          if !transactions.is_empty() {
-            transactions.pop();
-          } else {
+
+          /*
+            Remove a transaction.
+
+            This removes a validator's _last_ transaction in order to ensure it does not affect the
+            ordering's validity.
+          */
+          let mut remove_transaction = || {
             /*
-              If this block has no transactions, but has slashes, and is invalid, assume it's over
-              the size limit and pop slashes until it's within the size limit.
+              Rotate which validator the transaction is removed from to prevent a single
+              validator's transactions from exhausting a block's capacity.
             */
-            slashes.pop();
-          }
+            let signer_to_remove_from =
+              next_validator_to_remove_from.checked_rem(transactions_by_signer.len());
+            next_validator_to_remove_from = next_validator_to_remove_from.wrapping_add(1);
+
+            if let Some(signer_to_remove_from) = signer_to_remove_from {
+              let transaction = transactions_by_signer[signer_to_remove_from].pop();
+              if transactions_by_signer[signer_to_remove_from].is_empty() {
+                transactions_by_signer.remove(signer_to_remove_from);
+              }
+              transaction
+            } else {
+              non_signed_transactions.pop()
+            }
+          };
+
+          while {
+            if let Some(removed_len) = if let Some(transaction) = remove_transaction() {
+              crate::serialized_len(&transaction).ok()
+            } else {
+              /*
+                If this block has no transactions, but has slashes, and is invalid, assume it's
+                over the size limit and pop slashes until it's within the size limit.
+              */
+              slashes.pop().and_then(|slash| crate::serialized_len(&slash).ok())
+            } {
+              size_to_trim =
+                size_to_trim.and_then(|size_to_trim| size_to_trim.checked_sub(removed_len));
+
+              size_to_trim.is_some_and(|size_to_trim| size_to_trim > 0)
+            } else {
+              // We couldn't remove anything/we couldn't determine the size of what we removed
+              false
+            }
+          } {}
         }
       }
     };
@@ -277,6 +482,7 @@ impl<
     &mut self,
     parent: [u8; 32],
     minimum_time: Option<u64>,
+    weak_entropy: u64,
   ) -> BlockProposal<M::Future> {
     BlockProposal {
       genesis: self.genesis,
@@ -284,9 +490,19 @@ impl<
       minimum_time,
       slashes: self.slashes.clone(),
       transactions: self.mempool.transactions(parent),
+      weak_entropy,
     }
   }
 }
+
+// TODO: Remove with Rust 1.100
+trait FnOutput {
+  type Output;
+}
+impl<R> FnOutput for fn() -> R {
+  type Output = R;
+}
+type Never = <fn() -> ! as FnOutput>::Output;
 
 type RWaB<T> = ReadWriteAsBorsh<T>;
 impl<
@@ -349,12 +565,30 @@ impl<
     let block = block.0;
     let hash = block.hash();
 
+    let next_block_number = u64::from(commit.block_number()).checked_add(1);
+
     let minimum_next_block_time = N::target_block_time()
       .and_then(|target_block_time| u64::try_from(target_block_time.as_millis()).ok())
       .and_then(|target_block_time| target_block_time.checked_add(block.time()));
 
     #[expect(clippy::async_yields_async)]
     async move {
+      let Some(next_block_number) = next_block_number else {
+        core::future::pending::<Never>().await
+      };
+
+      /*
+        The Tendermint consensus process and the Tributary blockchain use independent transactions.
+        The Tributary may run, adding the block, before the process reboots and Tendermint (once
+        reinstantiated) tries to add the block again (as documented).
+
+        Accordingly, if this is adding the block we already added, immediately short-circuit to the
+        block proposal.
+      */
+      if Some(block.hash()) == crate::blockchain::Reader::<T>::tip(&self.db, self.genesis) {
+        return self.block_proposal(hash, minimum_next_block_time, next_block_number);
+      }
+
       let verify_result = self.blockchain.verify::<N>(&self.db, self.genesis_time, &block);
       match &verify_result {
         Ok(()) |
@@ -377,7 +611,7 @@ impl<
               }
             } else {
               // If the amount of time in the future isn't representable, stall
-              core::future::pending::<()>().await;
+              core::future::pending::<Never>().await;
             }
           }
 
@@ -405,7 +639,7 @@ impl<
         }
         Err(
           BlockError::Syntactic(
-            SyntacticError::ExceededSizeLimit |
+            SyntacticError::ExceededSizeLimit { .. } |
             SyntacticError::IncorrectContents |
             SyntacticError::AbsurdTime |
             SyntacticError::IncorrectOrderOfContents |
@@ -422,11 +656,11 @@ impl<
           BlockError::Ephemeral(EphemeralError::UnexpectedParent),
         ) => {
           // Because an invalid block was added, stall the consensus process/block production
-          core::future::pending::<()>().await;
+          core::future::pending::<Never>().await;
         }
       }
 
-      self.block_proposal(hash, minimum_next_block_time)
+      self.block_proposal(hash, minimum_next_block_time, next_block_number)
     }
   }
 

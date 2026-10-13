@@ -165,9 +165,9 @@ pub enum TransactionKind {
 pub trait Transaction: Clone + ReadWrite + Digestible {
   /// The size limit for a transaction.
   ///
-  /// The Tributary will enforce no individual transaction exceeds this size. If this is `None`,
-  /// transactions will still be required to be able to be included in a block within the blocks'
-  /// size limit.
+  /// The Tributary will enforce no individual transaction exceeds this size.
+  ///
+  /// Transactions MUST be able to be included within a block's size limit.
   ///
   /// The default size limit is 2 MiB.
   const SIZE_LIMIT: Option<usize> = Some(2 * 1024 * 1024);
@@ -234,8 +234,13 @@ pub(crate) fn verify_syntax<T: Transaction>(
       Some(None) => Err(TransactionError::ExceededSizeLimit)?,
       None => None,
     };
-    if let Some(size_limit) = T::SIZE_LIMIT.or(transaction_size_limit_by_block_size_limit) &&
-      (crate::serialized_len(tx).map_err(|_| TransactionError::ExceededSizeLimit)? > size_limit)
+    let transaction_size =
+      crate::serialized_len(tx).map_err(|_| TransactionError::ExceededSizeLimit)?;
+    let exceeds_size_limit = |size_limit: Option<usize>| {
+      size_limit.is_some_and(|size_limit| transaction_size > size_limit)
+    };
+    if exceeds_size_limit(T::SIZE_LIMIT) ||
+      exceeds_size_limit(transaction_size_limit_by_block_size_limit)
     {
       Err(TransactionError::ExceededSizeLimit)?;
     }

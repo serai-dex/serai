@@ -17,6 +17,8 @@ use core::{
 };
 use alloc::{vec::Vec, collections::BTreeSet};
 
+use futures_core::stream::{Stream as _, FusedStream as _};
+
 use serai_db::{Db, Get, Transaction as DbTxn};
 
 use crate::transaction::{TransactionError, TransactionKind, Transaction};
@@ -90,16 +92,19 @@ pin_project_lite::pin_project! {
 
     network: N,
     regossip: usize,
-
     // Asynchronous censures.
+
+    #[pin]
     censure: async_channel::Receiver<([u8; 32], async_channel::Sender<()>)>,
     // The requests for block proposals.
+    #[pin]
     request: async_channel::Receiver<([u8; 32], async_channel::Sender<Vec<T>>)>,
     // A way to re-send requests for block proposals.
     //
     // `async_channel::Receiver` doesn't offer a `peek` function. If we aren't available to
     // service a request, we simply re-send the request message to handle it later, using the
     // channel itself as the buffer.
+    #[pin]
     resend_request: async_channel::WeakSender<([u8; 32], async_channel::Sender<Vec<T>>)>,
   }
 }
@@ -107,7 +112,7 @@ pin_project_lite::pin_project! {
 impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
   type Output = ();
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    let projection = self.project();
+    let mut projection = self.project();
 
     // Index the blocks added on-chain
     if let Some(block) =
@@ -117,6 +122,7 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
         .expect("block after last block wasn't saved to database");
 
       let mut txn = projection.db.txn();
+      LastBlock::set(&mut txn, *projection.genesis, &block.hash());
       projection.provided.block(&mut txn, &block);
       projection.un_signed.block(&mut txn, &block);
       txn.commit();
@@ -159,8 +165,8 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
     }
 
     // Handle asynchronous censures
-    while let Poll::Ready(Ok((validator, response))) =
-      core::pin::pin!(projection.censure.recv()).poll(cx)
+    while (!projection.censure.is_terminated()) &&
+      let Poll::Ready(Some((validator, response))) = projection.censure.as_mut().poll_next(cx)
     {
       let mut txn = projection.db.txn();
       projection.un_signed.censure(&mut txn, validator);
@@ -177,27 +183,27 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
     }
 
     // Receive requests for block proposals
-    let Poll::Ready(Ok((parent, response))) = core::pin::pin!(projection.request.recv()).poll(cx)
-    else {
-      return Poll::Pending;
-    };
-    // If this proposal isn't building on our latest indexed block, re-queue the request
-    if (parent != *projection.last_block) &&
-      let Some(resend_request) = projection.resend_request.upgrade()
+    if (!projection.request.is_terminated()) &&
+      let Poll::Ready(Some((parent, response))) = projection.request.poll_next(cx)
     {
-      let _ = resend_request.try_send((parent, response));
-      return Poll::Pending;
-    }
+      // If this proposal isn't building on our latest indexed block, re-queue the request
+      if (parent != *projection.last_block) &&
+        let Some(resend_request) = projection.resend_request.upgrade()
+      {
+        let _ = resend_request.try_send((parent, response));
+        return Poll::Pending;
+      }
 
-    // Respond to a request for a block proposal with all transactions in our mempool
-    let _ = response.try_send(
-      projection
-        .provided
-        .block_proposal()
-        .chain(projection.un_signed.block_proposal())
-        .cloned()
-        .collect::<Vec<_>>(),
-    );
+      // Respond to a request for a block proposal with all transactions in our mempool
+      let _ = response.try_send(
+        projection
+          .provided
+          .block_proposal()
+          .chain(projection.un_signed.block_proposal())
+          .cloned()
+          .collect::<Vec<_>>(),
+      );
+    }
 
     Poll::Pending
   }
@@ -209,15 +215,20 @@ pub(crate) struct MempoolConsumer<T> {
   request: async_channel::Sender<([u8; 32], async_channel::Sender<Vec<T>>)>,
 }
 
-pub(crate) struct MempoolRecv<T>(Option<async_channel::Receiver<T>>);
+pin_project_lite::pin_project! {
+  pub(crate) struct MempoolRecv<T> {
+    #[pin]
+    receiver: Option<async_channel::Receiver<T>>
+  }
+}
 impl<T> Future for MempoolRecv<Vec<T>> {
   type Output = Vec<T>;
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    let message = if let Some(ref receiver) = self.0 {
-      let Poll::Ready(message) = core::pin::pin!(receiver.recv()).poll(cx) else {
+    let message = if let Some(receiver) = self.project().receiver.as_pin_mut() {
+      let Poll::Ready(message) = receiver.poll_next(cx) else {
         return Poll::Pending;
       };
-      message.ok()
+      message
     } else {
       // If we don't have a receiver, it's because we couldn't send the request to the mempool
       None
@@ -237,7 +248,7 @@ impl<T: Transaction> crate::tendermint::Mempool<T> for MempoolConsumer<T> {
       next block's proposal.
     */
     let sent_request = self.request.force_send((parent_block, sender));
-    MempoolRecv(sent_request.is_ok().then_some(receiver))
+    MempoolRecv { receiver: sent_request.is_ok().then_some(receiver) }
   }
   fn censured(&self, getter: &impl Get, validator: [u8; 32]) -> bool {
     self.censured.contains(&validator) || UnSigned::<T>::censured(getter, self.genesis, validator)

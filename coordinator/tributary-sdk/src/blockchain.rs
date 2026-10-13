@@ -128,8 +128,10 @@ impl<T: Transaction> Blockchain<T> {
 
       // Check this block's time isn't too close to the prior block's
       {
-        let prior_block_time = self.tip(getter).map(|block| block.time()).unwrap_or(genesis_time);
-        let minimum_time = prior_block_time.checked_add(target_block_time);
+        let prior_block_time = self.tip(getter).map(|block| block.time());
+        let minimum_time = prior_block_time
+          .map(|prior_block_time| prior_block_time.checked_add(target_block_time))
+          .unwrap_or(Some(genesis_time));
         /*
           If we can't represent the minimum time from the prior block, because we can represent
           this block's time, this block's time _must_ be less than the minimum time from the prior
@@ -269,9 +271,10 @@ impl<T: Transaction> Blockchain<T> {
             if signed_scope.as_ref().is_none_or(|(current_signer, current_scope)| {
               (current_signer, current_scope) != (&signer, &scope)
             }) {
-              let expected_nonce =
-                db::LastSigned::get(getter, self.genesis, signer, &scope).unwrap_or(0);
-              if expected_nonce != nonce {
+              let expected_nonce = db::LastSigned::get(getter, self.genesis, signer, &scope)
+                .map(|last_nonce| last_nonce.checked_add(1))
+                .unwrap_or(Some(0));
+              if expected_nonce != Some(nonce) {
                 Err(SemanticError::Gap {
                   transaction_hash,
                   transaction_nonce: nonce,
@@ -310,7 +313,7 @@ impl<T: Transaction> Blockchain<T> {
     if let Some(commit) = &commit {
       debug_assert!(commit.verify(
         &self.validators,
-        &super::tendermint::SignatureScheme::new(self.genesis),
+        &super::tendermint::SignatureScheme::new(self.genesis, self.validators.len()),
         self.genesis,
         hash
       ));

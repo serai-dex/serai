@@ -13,6 +13,8 @@ use alloc::boxed::Box;
 extern crate std;
 use std::collections::HashMap;
 
+use futures_core::stream::{Stream as _, FusedStream as _};
+
 use zeroize::Zeroizing;
 use ciphersuite::WrappedGroup;
 use dalek_ff_group::Ristretto;
@@ -66,6 +68,7 @@ pin_project_lite::pin_project! {
     db: D,
     #[pin]
     mempool: Mempool<D, T, MN>,
+    #[pin]
     mempool_recv: async_channel::Receiver<AsyncAddToMempool<T>>,
   }
 }
@@ -102,8 +105,9 @@ impl<
     let mut projection = self.project();
 
     let _: Poll<()> = projection.mempool.as_mut().poll(cx);
-    if let Poll::Ready(Ok(AsyncAddToMempool { transaction, bypass_rate_limit, response })) =
-      core::pin::pin!(projection.mempool_recv.recv()).poll(cx)
+    if (!projection.mempool_recv.is_terminated()) &&
+      let Poll::Ready(Some(AsyncAddToMempool { transaction, bypass_rate_limit, response })) =
+        projection.mempool_recv.poll_next(cx)
     {
       let mut txn = projection.db.txn();
       let result = projection.mempool.add(&mut txn, transaction, bypass_rate_limit);
@@ -198,12 +202,14 @@ impl<
   /// is set, it MUST be consistent across participants.
   ///
   /// `validators` represents the validators present in the Tributary (keyed by their Ristretto
-  /// public keys, valued by their weight in the consensus process).
+  /// public keys, valued by their weight in the consensus process). It MUST be a valid value for
+  /// the [`::tendermint::ValidatorSet`] trait.
   ///
   /// `key` is the validator's Ristretto private key.
   ///
   /// `mempool_rate_limit` is the maximum amount of transactions each validator may have pending
-  /// within the mempool. It may be locally configured independently of other validators.
+  /// within the mempool. It may be locally configured independently of other validators. It does
+  /// not apply to provided nor unsigned transactions which are privileged within the Tributary.
   #[expect(clippy::too_many_arguments)]
   pub async fn new<
     N: 'static
@@ -212,7 +218,7 @@ impl<
       + Network<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<T>>, Sleep: Send>,
   >(
     db: D,
-    genesis: [u8; 32],
+    genesis: [u8; 16],
     genesis_time: Option<u64>,
     validators: HashMap<[u8; 32], NonZero<u16>>,
     tendermint_network: N,
@@ -230,7 +236,7 @@ impl<
     >(2 * validators.len());
 
     let (mempool_send, mempool_recv) =
-      async_channel::bounded::<AsyncAddToMempool<T>>(mempool_rate_limit);
+      async_channel::bounded::<AsyncAddToMempool<T>>(mempool_rate_limit.max(8));
 
     let (censure_send, censure_recv) =
       async_channel::bounded::<([u8; 32], async_channel::Sender<()>)>(validators.len());
@@ -247,7 +253,7 @@ impl<
     let (blocks_behind_send, blocks_behind_recv) =
       async_channel::bounded::<async_channel::Sender<u64>>(1);
 
-    let signer = SignatureScheme::new(genesis).signer(key);
+    let signer = SignatureScheme::new(genesis, validators.len()).signer(key);
     let validator = signer.validator();
     if !validators.contains_key(&validator) {
       Err(TributaryError::NotValidator)?;
@@ -287,7 +293,7 @@ impl<
         next_block_notification_recv,
         mempool_consumer,
       );
-      let proposal = tendermint.block_proposal(tip, minimum_next_block_time);
+      let proposal = tendermint.block_proposal(tip, minimum_next_block_time, 0);
 
       (
         next_block_notification_send,
@@ -417,25 +423,48 @@ impl<
   }
 
   /// Handle a consensus message.
+  ///
+  /// This will return once the message has been queued to be handled, offering no inspection
+  /// into when that queue is consumed or if the queued message was valid.
   #[expect(private_interfaces)]
   pub async fn message(&self, message: TendermintMessage<T>) {
+    /*
+      Queueing into an open channel (with no observability into when the queue is consumed from) is
+      considered equivalent to not queueing into a closed channel (a queue which will never be
+      consumed from). All values are still handled in order, without omission, whenever (or if
+      ever) handled. This lets us igore any error here.
+    */
     let _ = self.message.send(message).await;
   }
 
   /// Explicitly sync a block.
   ///
   /// This is intended to be used when a Tributary is behind, unable to simply observe blocks as
-  /// they're produced by the consensus process.
+  /// they're produced by the consensus process. The block will be queued to be verified/added and
+  /// only actually added if valid.
+  ///
+  /// This will return once the block has been queued to be verified/added, offering no inspection
+  /// into when that queue is consumed or if the queued block was valid.
   pub async fn sync(&self, block: Block<T>, commit: crate::tendermint::Commit) {
+    /*
+      Queueing into an open channel (with no observability into when the queue is consumed from) is
+      considered equivalent to not queueing into a closed channel (a queue which will never be
+      consumed from). All values are still handled in order, without omission, whenever (or if
+      ever) handled. This lets us igore any error here.
+    */
     let _ = self.sync.send((block, commit)).await;
   }
 
   /// Publish a transaction into the Tributary's mempool.
   ///
+  /// This is used to publish a transaction, regardless of its kind. `Provided` transactions are
+  /// intended to only be provided by the local node however, meaning the caller MUST check the
+  /// kind of a transaction and its origin _before_ calling this method.
+  ///
   /// The mempool's rate limit will be bypassed if the transaction's signer is the Tributary's
   /// validator, ensuring the local validator can publish their own transactions without needing to
   /// implement an additional buffer.
-  pub async fn publish_transaction(&self, transaction: T) -> Result<(), MempoolError> {
+  pub async fn transaction(&self, transaction: T) -> Result<(), MempoolError> {
     let bypass_rate_limit =
       if let TransactionKind::Signed { signed: Signed { signer, .. }, .. } = transaction.kind() {
         signer == self.validator
@@ -468,7 +497,7 @@ impl<
   /// performed in any synchrony with other validators.
   pub async fn censure(&self, validator: [u8; 32]) {
     let (censured_send, censured_recv) = async_channel::bounded::<()>(1);
-    let _ = self.censure.try_send((validator, censured_send));
+    let _ = self.censure.send((validator, censured_send)).await;
     match censured_recv.recv().await {
       Ok(()) => {}
       /*

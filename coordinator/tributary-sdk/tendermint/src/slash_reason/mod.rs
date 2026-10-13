@@ -45,13 +45,13 @@ impl<S: Signature, A: AggregateSignature, H: fmt::Debug + BlockHash> fmt::Debug
           .field("first_proposal", first_proposal)
           .field("second_valid_round", second_valid_round)
           .field("second_proposal", second_proposal)
-          .finish_non_exhaustive()
+          .finish()
       }
       Self::Prevote { first_block, second_block } => formatter
         .debug_struct("EquivocatingData::Prevote")
         .field("first_block", first_block)
         .field("second_block", second_block)
-        .finish_non_exhaustive(),
+        .finish(),
       Self::Precommit {
         first_block_and_precommit_signature,
         second_block_and_precommit_signature,
@@ -78,14 +78,15 @@ impl<S: Signature, A: AggregateSignature, H: fmt::Debug + BlockHash> fmt::Debug
 /// to the original type this fills in for.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(test, derive(Debug))]
-pub(crate) struct OpaqueBlockHash<'hash>(&'hash [u8]);
+#[repr(transparent)]
+pub(crate) struct OpaqueBlockHash<'hash>(pub(crate) &'hash [u8]);
 impl AsRef<[u8]> for OpaqueBlockHash<'_> {
   fn as_ref(&self) -> &[u8] {
     self.0
   }
 }
 
-/// A stub block which satisfies the `Block` trait from only a hash.
+/// A stub block which satisfies the `Block` trait from only a block's proposal hash.
 ///
 /// We use this to build a `Data` (expecting `B: Block`) from solely a hash, as for the purposes of
 /// verifying its signature.
@@ -102,8 +103,40 @@ impl<'hash> StubBlock<'hash> {
 }
 impl<'hash> Block for StubBlock<'hash> {
   type Hash = OpaqueBlockHash<'hash>;
-  fn hash(&self) -> Self::Hash {
+
+  fn proposal_hash(&self) -> Self::Hash {
     OpaqueBlockHash(self.0)
+  }
+
+  #[expect(clippy::cfg_not_test)]
+  #[cfg(not(test))]
+  fn semantic_hash(&self) -> Self::Hash {
+    /*
+      `StubBlock::semantic_hash` is never called except in tests. It should not be called as
+      `StubBlock` is used for proposal messages, whereas `semantic_hash` is solely used for
+      precommit messages.
+
+      The following ensures it is never actually called by defining a non-existent external
+      function. If this function is compiled, the compiler will expect this non-existent function
+      to be linked in, causing the build to fail. If this function isn't compiler, this expectation
+      will be optimized out.
+
+      Note this can be cheated via `-Wl,--allow-undefined` or by actually defining this method.
+      That's irrelevant as this method isn't ever actually called (as proven by the fact it does
+      compile in an honest environment, without such cheats present). This check solely exists for
+      developers to not inadvertently introduce calls to this method.
+
+      This methodology is sourced from Kixunil's `dont_panic`.
+    */
+    unsafe extern "C" {
+      fn rust_tendermint_machine_stub_block_semantic_hash_is_never_called() -> !;
+    }
+    unsafe { rust_tendermint_machine_stub_block_semantic_hash_is_never_called() }
+  }
+
+  #[cfg(test)]
+  fn semantic_hash(&self) -> Self::Hash {
+    self.proposal_hash()
   }
 }
 
@@ -239,9 +272,9 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
             Data::Proposal { valid_round: second_valid_round, proposal: second_proposal },
           ) => EquivocatingData::Proposal {
             first_valid_round,
-            first_proposal: first_proposal.hash(),
+            first_proposal: first_proposal.proposal_hash(),
             second_valid_round,
-            second_proposal: second_proposal.hash(),
+            second_proposal: second_proposal.proposal_hash(),
           },
           (Data::Prevote { block: first_block }, Data::Prevote { block: second_block }) => {
             EquivocatingData::Prevote { first_block, second_block }
@@ -273,6 +306,11 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
   ) -> Result<(), InvalidReason> {
     match &self.evidence {
       Evidence::Equivocation { data, first_signature, second_signature } => {
+        // If this reason isn't for why we should slash a validator, it's an invalid reason
+        if validator_set.weight(&validator).is_none() {
+          Err(InvalidReason)?;
+        }
+
         let (data1, data2) = data.split();
 
         // If these aren't distinct, this isn't an equivocation
@@ -282,28 +320,22 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
 
         // Check these were both signed by this validator
         for (data, signature) in [(data1, first_signature), (data2, second_signature)] {
-          let verify_message = |data, signature| {
-            if !signature_scheme.verify(
-              &validator,
-              Message::<V, S, A, _>::signature_message(
-                genesis.as_ref(),
-                self.block_number,
-                self.round_number,
-                &data,
-              ),
-              signature,
-            ) {
-              /*
-                If this message's signature was invalid, this wasn't actually a message from the
-                accused validator, and this is an invalid reason to slash the accused validator.
-              */
-              Err(InvalidReason)?;
-            }
-
-            Ok(())
-          };
-
-          verify_message(data, signature)?;
+          if !signature_scheme.verify(
+            &validator,
+            Message::<V, S, A, _>::signature_message(
+              genesis.as_ref(),
+              self.block_number,
+              self.round_number,
+              &data,
+            ),
+            signature,
+          ) {
+            /*
+              If this message's signature was invalid, this wasn't actually a message from the
+              accused validator, and this is an invalid reason to slash the accused validator.
+            */
+            Err(InvalidReason)?;
+          }
         }
       }
       Evidence::InvalidProposal { valid_round, proposal, signature } => {
@@ -332,7 +364,7 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
             round_number: self.round_number,
             data: Data::Precommit {
               block_and_precommit_signature: Some((
-                StubBlock(block.as_ref()).hash(),
+                OpaqueBlockHash(block.as_ref()),
                 precommit_signature.clone()
               )),
             },

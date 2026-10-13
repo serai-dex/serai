@@ -209,7 +209,7 @@ mod tendermint {
               self.blockchain.validator_set(),
               self.blockchain.signature_scheme(),
               self.blockchain.genesis(),
-              block.hash(),
+              block.semantic_hash(),
             ) {
               continue;
             }

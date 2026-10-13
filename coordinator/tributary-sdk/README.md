@@ -40,7 +40,8 @@ Transactions are allowed to have one of three types:
   which the application has decided to provide.
 
 - Unsigned: These transactions are not signed by a specific validator but may
-  be broadcast through the mempool.
+  be broadcast through the mempool. They are given priority within the
+  Tributary as they're expected to correspond to universal, 'system' messages.
 
 - Signed: These transactions are signed by a specific validator and may be
   broadcast through the mempool.
@@ -123,6 +124,11 @@ the application which indexes it) prevents emitting slashes.
 
 - For more context on integration, please read
   [`tendermint-machine`'s documentation](https://docs.rs/tendermint-machine).
+
+- Up to 65,535 validators are supported ([`u16::MAX`]). Despite that, due to
+  algorithmic complexities and practical inefficiencies, large validator sets
+  likely SHOULD NOT be used. No representations of this library's performance
+  with large validator sets are made.
 
 - This library is intended to eventually be covered under
   [Serai's Bug Bounty Program](https://immunefi.com/bounty/serai). When so

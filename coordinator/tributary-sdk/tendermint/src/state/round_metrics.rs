@@ -122,7 +122,7 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
       .observed_proposal
       .as_ref()
       .expect("observed prevotes for a proposal but didn't have the proposal?");
-    let proposal = proposal.hash();
+    let proposal = proposal.proposal_hash();
 
     Some(ValidRound {
       round_number: self.round_number,
@@ -168,7 +168,7 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
       None?;
     }
 
-    let proposal_hash = proposal.hash();
+    let proposal_semantic_hash = proposal.semantic_hash();
     let mut weight = weight;
     let weight = &mut weight;
     let mut validators = alloc::vec![];
@@ -177,7 +177,7 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
         blockchain.genesis().as_ref(),
         self.block_number,
         self.round_number,
-        proposal_hash.as_ref(),
+        proposal_semantic_hash.as_ref(),
       ),
       self
         .observed_precommits
@@ -187,7 +187,7 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
           block_and_precommit_signature
             .as_ref()
             .and_then(|(block, signature)| {
-              ((*block) == proposal_hash).then_some((validator, signature))
+              ((*block) == proposal_semantic_hash).then_some((validator, signature))
             })
             .filter(|(validator, _signature)| {
               /*
@@ -271,7 +271,8 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
     proposal: B::Block,
   ) {
     assert!(self.observed_proposal.is_none());
-    let proposal_hash = proposal.hash();
+    let proposal_hash = proposal.proposal_hash();
+    let semantic_hash = proposal.semantic_hash();
     Proposal::set(
       txn,
       genesis.as_ref(),
@@ -295,7 +296,7 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
     // Do the same for precommits
     for (validator, block_and_precommit_signature) in &self.observed_precommits {
       if block_and_precommit_signature.as_ref().map(|(block, _precommit_signature)| *block) ==
-        Some(proposal_hash)
+        Some(semantic_hash)
       {
         self.observed_precommits_for_proposal +=
           validator_set.weight(validator).map(u16::from).unwrap_or(0);
@@ -340,7 +341,9 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
     match block {
       Some(block)
         if self.observed_proposal().is_some_and(
-          |ObservedProposal { proposer: _, valid_round: _, proposal }| block == proposal.hash(),
+          |ObservedProposal { proposer: _, valid_round: _, proposal }| {
+            block == proposal.proposal_hash()
+          },
         ) =>
       {
         self.observed_prevotes_for_proposal += weight;
@@ -395,7 +398,9 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
     match block_and_precommit_signature {
       Some((block, _precommit_signature))
         if self.observed_proposal().is_some_and(
-          |ObservedProposal { proposer: _, valid_round: _, proposal }| block == proposal.hash(),
+          |ObservedProposal { proposer: _, valid_round: _, proposal }| {
+            block == proposal.semantic_hash()
+          },
         ) =>
       {
         self.observed_precommits_for_proposal += weight;

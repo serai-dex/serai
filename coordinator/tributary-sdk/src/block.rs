@@ -13,7 +13,12 @@ use crate::{
 #[derive(Clone, Debug)]
 pub enum SyntacticError {
   /// The block exceeded the size limit.
-  ExceededSizeLimit,
+  ExceededSizeLimit {
+    /// The size of the block when serialized.
+    ///
+    /// This may be `None` if this value couldn't be or wasn't calculated.
+    size: Option<usize>,
+  },
   /// The block's header specified Merkle tree roots for distinct contents.
   IncorrectContents,
   /// The block's timestamp was absurd.
@@ -76,7 +81,9 @@ pub enum SemanticError {
     /// The nonce of the transaction included in this block.
     transaction_nonce: u64,
     /// The expected nonce for the next transaction within the same scope.
-    expected_nonce: u64,
+    ///
+    /// This will be `None` on overflow.
+    expected_nonce: Option<u64>,
   },
 }
 
@@ -391,15 +398,16 @@ impl<T: Transaction> Block<T> {
         4_294_967_295
       }
     {
-      Err(SyntacticError::ExceededSizeLimit)?;
+      Err(SyntacticError::ExceededSizeLimit { size: None })?;
     }
 
     // Check this block's encoded length is less than the block size limit
-    if let Some(block_size_limit) = T::BLOCK_SIZE_LIMIT &&
-      (crate::serialized_len(self).map_err(|_| SyntacticError::ExceededSizeLimit)? >
-        block_size_limit)
-    {
-      Err(SyntacticError::ExceededSizeLimit)?;
+    if let Some(block_size_limit) = T::BLOCK_SIZE_LIMIT {
+      let serialized_len = crate::serialized_len(self)
+        .map_err(|_| SyntacticError::ExceededSizeLimit { size: None })?;
+      if serialized_len > block_size_limit {
+        Err(SyntacticError::ExceededSizeLimit { size: Some(serialized_len) })?;
+      }
     }
 
     if (self.header.slashes != crate::merkle::root::<Slash>(self.slashes.iter())) ||
@@ -424,7 +432,7 @@ impl<T: Transaction> Block<T> {
     {
       let mut kind = 0;
       let mut last_hash_or_validator = None;
-      let mut last_nonce = None;
+      let mut last_nonce: Option<u64> = None;
       let mut last_signed_scope = None;
       let mut last_provided_scope = None;
       for transaction in &self.transactions {
@@ -489,7 +497,7 @@ impl<T: Transaction> Block<T> {
 
             // Ensure ordering by nonce
             if let Some(last_nonce) = last_nonce &&
-              (nonce != (last_nonce + 1))
+              (Some(nonce) != last_nonce.checked_add(1))
             {
               Err(SyntacticError::IncorrectOrderOfContents)?;
             }
