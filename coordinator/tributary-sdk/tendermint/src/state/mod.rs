@@ -229,10 +229,8 @@ impl<B: BorshyBlockchain> State<B> {
      ),
     txn: &mut impl Transaction,
   ) -> Option<MessageFor<B>> {
-    let validator_set = blockchain.validator_set();
-
     // L14
-    let proposer = validator_set.proposer(self.block_number, self.round_number);
+    let proposer = blockchain.validator_set().proposer(self.block_number, self.round_number);
     if proposer != signer.validator() {
       None?;
     }
@@ -249,7 +247,22 @@ impl<B: BorshyBlockchain> State<B> {
         .await
         {
           // We did not have a valid round but we do have a proposal
-          Ok(proposal) => (None, proposal),
+          Ok((true, proposal)) => {
+            /*
+              If this is the first time we've seen our own proposal, validate it so we won't
+              propose an invalid block ourselves.
+
+              This could be a debug assertion instead, but the safety (regardless of the profile)
+              of ensuring our own validator doesn't make an invalid proposal is worth the
+              inefficiency.
+            */
+            if blockchain.validate(proposer, &proposal).await.is_err() {
+              self.proposal.as_mut().set(BlockProposal::Invalid);
+              None?;
+            }
+            (None, proposal)
+          }
+          Ok((false, proposal)) => (None, proposal),
           // We have no proposal and therefore cannot yield a proposal message
           Err(crate::TimeoutExpired) => None?,
         }
@@ -261,7 +274,7 @@ impl<B: BorshyBlockchain> State<B> {
     let genesis = genesis.as_ref();
     self.round_metrics.accumulate_proposal(
       genesis,
-      validator_set,
+      blockchain.validator_set(),
       txn,
       proposer,
       valid_round.as_ref().map(|ValidRound { round_number, aggregate_signature: _ }| *round_number),
