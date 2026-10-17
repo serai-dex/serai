@@ -226,6 +226,23 @@ impl<
     key: Zeroizing<<Ristretto as WrappedGroup>::F>,
     mempool_rate_limit: usize,
   ) -> Result<(Self, TributaryHandle<D, T>), TributaryError> {
+    /*
+      Expand the 16-byte genesis DST into a 32-byte 'hash'.
+
+      This isn't considered a hash, solely an element in the same 32-byte domain as a hash
+      (allowing it to be specified as the 'parent' for the first actual block on the blockchain).
+
+      Tendermint allows the genesis to be an arbitrary DST value but the Tributary requires it not
+      collide with an actual block's hash. The following expansion sets the first 16 bytes to `0`,
+      meaning a collision would require 128 bits of effort (as the security of the rest of the
+      cryptography in the Tributary requires).
+    */
+    let genesis = {
+      let mut genesis_32 = [0; 32];
+      genesis_32[16 ..].copy_from_slice(&genesis);
+      genesis_32
+    };
+
     let genesis_time = genesis_time.unwrap_or(0);
 
     // TODO: This is the maximum of the bound internal to the `tendermint-machine` library
