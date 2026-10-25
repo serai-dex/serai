@@ -194,12 +194,13 @@ impl<
   /// the database if prior instanced. For further context on the limitations of this, please defer
   /// to the limitations placed upon [`::tendermint::Tendermint`].
   ///
-  /// `genesis_time` is used to limit the minimum time blocks may be published with. This prevents
-  /// a malicious supermajority from backdating blocks, allowing flooding the honest minority with
-  /// valid blocks which still respect the minimum spacing between blocks. It is optional as it is
-  /// not strictly required, but it is practically required for resilience against a dishonest
-  /// supermajority (who can compromise the integrity of the Tributary in general). Whatever value
-  /// is set, it MUST be consistent across participants.
+  /// `genesis_time` is expressed in milliseconds since the epoch and used to limit the minimum
+  /// time blocks may be published with. This prevents a malicious supermajority from backdating
+  /// blocks, allowing flooding the honest minority with valid blocks which still respect the
+  /// minimum spacing between blocks. It is optional as it is not strictly required, but it is
+  /// practically required for resilience against a dishonest supermajority (who can compromise the
+  /// integrity of the Tributary in general). Whatever value is set, it MUST be consistent across
+  /// participants.
   ///
   /// `validators` represents the validators present in the Tributary (keyed by their Ristretto
   /// public keys, valued by their weight in the consensus process). It MUST be a valid value for

@@ -195,13 +195,15 @@ impl<D: Db, T: Transaction, M, N> Tendermint<D, T, M, N> {
 }
 
 pin_project_lite::pin_project! {
-  pub(crate) struct BlockProposal<F> {
+  pub(crate) struct BlockProposal<MT, TS> {
     genesis: [u8; 32],
     parent: [u8; 32],
     minimum_time: Option<u64>,
+    #[pin]
+    minimum_time_future: Option<MT>,
     slashes: BTreeMap<[u8; 32], Slash>,
     #[pin]
-    transactions: F,
+    transactions: TS,
 
     // This is a weak form of entropy used to decide which validator to remove the transactions of
     // first. It doesn't have to satisfy any cryptographic requirements, it solely has to be
@@ -216,12 +218,50 @@ pin_project_lite::pin_project! {
     weak_entropy: u64,
   }
 }
-impl<T: Transaction, F: Future<Output: IntoIterator<Item = T>>> Future for BlockProposal<F> {
+impl<T: Transaction, MT: Future<Output = ()>, TS: Future<Output: IntoIterator<Item = T>>> Future
+  for BlockProposal<MT, TS>
+{
   type Output = ReadWriteAsBorsh<Block<T>>;
-  fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+  fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    let mut projection = self.project();
+
+    let block_time = {
+      let Some(minimum_time) = *projection.minimum_time else {
+        // If we were unable to determine the minimum time for this proposal, don't yield anything
+        return Poll::Pending;
+      };
+
+      // Determine the current time, expressed as a block's time (milliseconds since the epoch)
+      let block_time = {
+        let time_since_epoch = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
+        let Some(time_since_epoch_ms) =
+          time_since_epoch.ok().and_then(|duration| u64::try_from(duration.as_millis()).ok())
+        else {
+          return Poll::Pending;
+        };
+        time_since_epoch_ms
+      };
+
+      if block_time < minimum_time {
+        if let Some(minimum_time_future) = projection.minimum_time_future.as_mut().as_pin_mut() {
+          // Poll the future so we establish a waker for our current context
+          let Poll::Ready(()) = minimum_time_future.poll(cx) else {
+            return Poll::Pending;
+          };
+          // Because this future has resolved, set it to `None` so we never call it again
+          projection.minimum_time_future.set(None);
+        }
+        // Use the minimum time for the block's time
+        minimum_time
+      } else {
+        // Since our time is greater than the minimum time, use our time
+        block_time
+      }
+    };
+
     let (mut non_signed_transactions, mut transactions_by_signer) = {
       // Receive the transactions from the mempool
-      let Poll::Ready(transactions) = self.as_mut().project().transactions.poll(cx) else {
+      let Poll::Ready(transactions) = projection.transactions.poll(cx) else {
         return Poll::Pending;
       };
 
@@ -231,7 +271,7 @@ impl<T: Transaction, F: Future<Output: IntoIterator<Item = T>>> Future for Block
           scope: _,
           signed: Signed { signer, nonce: _, signature: _ },
         } = tx.kind() &&
-          self.slashes.contains_key(&signer)
+          projection.slashes.contains_key(&signer)
         {
           return false;
         }
@@ -365,25 +405,15 @@ impl<T: Transaction, F: Future<Output: IntoIterator<Item = T>>> Future for Block
       )
     };
     let mut next_validator_to_remove_from =
-      usize::try_from(self.weak_entropy & u64::from(u16::MAX)).unwrap();
+      usize::try_from((*projection.weak_entropy) & u64::from(u16::MAX)).unwrap();
 
-    let mut slashes = self.slashes.values().cloned().collect::<Vec<_>>();
+    let mut slashes = projection.slashes.values().cloned().collect::<Vec<_>>();
 
     let block = loop {
       match Block::instantiate(
-        self.genesis,
-        self.parent,
-        {
-          use std::time::SystemTime;
-          let time_since_epoch = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH);
-          let Some(time_since_epoch_ms) =
-            time_since_epoch.ok().and_then(|duration| u64::try_from(duration.as_millis()).ok())
-          else {
-            return Poll::Pending;
-          };
-          let Some(minimum_time) = self.minimum_time else { return Poll::Pending };
-          time_since_epoch_ms.max(minimum_time)
-        },
+        *projection.genesis,
+        *projection.parent,
+        block_time,
         slashes.clone().into_boxed_slice(),
         non_signed_transactions
           .iter()
@@ -483,11 +513,17 @@ impl<
     parent: [u8; 32],
     minimum_time: Option<u64>,
     weak_entropy: u64,
-  ) -> BlockProposal<M::Future> {
+  ) -> BlockProposal<N::Sleep, M::Future> {
     BlockProposal {
       genesis: self.genesis,
       parent,
       minimum_time,
+      minimum_time_future: minimum_time.and_then(|minimum_time| {
+        let minimum_system_time =
+          SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(minimum_time))?;
+        let time_remaining = minimum_system_time.duration_since(SystemTime::now()).ok()?;
+        Some(N::sleep(time_remaining))
+      }),
       slashes: self.slashes.clone(),
       transactions: self.mempool.transactions(parent),
       weak_entropy,
@@ -518,7 +554,7 @@ impl<
   type Genesis = [u8; 32];
   type Block = ReadWriteAsBorsh<Block<T>>;
 
-  type BlockProposal = BlockProposal<M::Future>;
+  type BlockProposal = BlockProposal<N::Sleep, M::Future>;
 
   fn genesis(&self) -> &Self::Genesis {
     &self.genesis

@@ -317,12 +317,15 @@ impl<B: BorshyBlockchain> State<B> {
               of ensuring our own validator doesn't make an invalid proposal is worth the
               inefficiency.
             */
-            if Self::validate_block(&mut self.block_validity, blockchain, proposer, &proposal)
+            match Self::validate_block(&mut self.block_validity, blockchain, proposer, &proposal)
               .await
-              .is_err()
             {
-              self.proposal.as_mut().set(BlockProposal::Invalid);
-              None?;
+              Ok(()) => {}
+              Err(InvalidBlock::Temporal) => None?,
+              Err(InvalidBlock::Fatal) => {
+                self.proposal.as_mut().set(BlockProposal::Invalid);
+                None?;
+              }
             }
             (None, proposal)
           }
