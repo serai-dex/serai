@@ -266,6 +266,7 @@ mod tendermint {
                 MessageError::Future |
                 MessageError::NotValidator |
                 MessageError::InvalidOuterSignature |
+                MessageError::FatalProposal |
                 MessageError::AlreadyHandled,
               ) => continue,
             }

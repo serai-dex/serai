@@ -137,6 +137,8 @@ impl<A: AggregateSignature> Commit<A> {
   }
 
   /// Verify a commit.
+  ///
+  /// The genesis MUST be a valid genesis for a [`Blockchain`].
   #[must_use]
   pub fn verify<S: ?Sized + SignatureScheme<AggregateSignature = A>>(
     &self,

@@ -179,7 +179,7 @@ impl Blockchain for TestNetwork {
     _proposer: Self::Validator,
     block: &Self::Block,
   ) -> impl Send + Future<Output = Result<(), InvalidBlock>> {
-    core::future::ready(if block.valid { Ok(()) } else { Err(InvalidBlock) })
+    core::future::ready(if block.valid { Ok(()) } else { Err(InvalidBlock::Fatal) })
   }
 
   fn add_block(

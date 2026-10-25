@@ -10,8 +10,8 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serai_db::Transaction;
 
 use crate::{
-  SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, CommitFor, Blockchain,
-  Signer, ValidRound, Data, MessageFor, MessageError, Network,
+  SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, CommitFor, InvalidBlock,
+  Blockchain, Signer, ValidRound, Data, MessageFor, MessageError, Network,
 };
 
 mod block_proposal;
@@ -56,6 +56,11 @@ pub(super) enum Step {
   Prevote,
   Precommit,
 }
+
+type BlockValidityCache<B> = std::collections::HashMap<
+  <B as Blockchain>::Validator,
+  (<<B as Blockchain>::Block as Block>::Hash, Result<(), InvalidBlock>),
+>;
 
 /// The state for the Tendermint consensus protocol.
 ///
@@ -119,6 +124,9 @@ pub(super) struct State<B: Blockchain> {
 
   /// The metrics from this round.
   round_metrics: RoundMetrics<B>,
+
+  /// The cache for a block's validity.
+  block_validity: BlockValidityCache<B>,
 
   /// The messages from validators for the rounds we're actively tracking.
   round_messages: TrackedRounds<B>,
@@ -204,6 +212,59 @@ impl<B: BorshyBlockchain> State<B> {
     self.observed_block_number_ref.clone()
   }
 
+  async fn validate_block(
+    block_validity: &mut BlockValidityCache<B>,
+    blockchain: &mut B,
+    proposer: B::Validator,
+    block: &B::Block,
+  ) -> Result<(), InvalidBlock> {
+    let proposal_hash = block.proposal_hash();
+    let entry = block_validity.entry(proposer);
+    if let std::collections::hash_map::Entry::Occupied(entry) = &entry {
+      let (block, validity) = entry.get();
+      // Check this cached block validity is actually for this block
+      if block == &proposal_hash {
+        match validity {
+          Ok(()) | Err(InvalidBlock::Fatal) => return *validity,
+          Err(InvalidBlock::Temporal) => {}
+        }
+      }
+    }
+
+    // Validate the block and cache the result
+    let result = blockchain.validate(proposer, block).await;
+    entry.insert_entry((proposal_hash, result));
+    result
+  }
+
+  /// Accumulate a message into the round metrics.
+  ///
+  /// If this is a fatally invalid block proposal, no accumulation will occur, and
+  /// `Err(InvalidBlock::Fatal)` will be returned (as expected per the documentation of
+  /// [`InvalidBlock::Fatal`]).
+  ///
+  /// If the block is temporally invalid, `Ok(())` will be returned (dropping the
+  /// [`InvalidBlock::Temporal`] error).
+  async fn accumulate(
+    &mut self,
+    blockchain: &mut B,
+    txn: &mut impl Transaction,
+    message: MessageFor<B>,
+  ) -> Result<(), InvalidBlock> {
+    // If this is a proposal, check the block isn't fatally invalid
+    if let Data::Proposal { valid_round: _, proposal } = &message.data {
+      match Self::validate_block(&mut self.block_validity, blockchain, message.validator, proposal)
+        .await
+      {
+        Ok(()) | Err(InvalidBlock::Temporal) => {}
+        Err(InvalidBlock::Fatal) => Err(InvalidBlock::Fatal)?,
+      }
+    }
+
+    self.round_metrics.accumulate(blockchain.genesis(), blockchain.validator_set(), txn, message);
+    Ok(())
+  }
+
   /// Yield a proposal message if we are the proposer.
   ///
   /// This MUST only be called once when the round starts.
@@ -256,7 +317,10 @@ impl<B: BorshyBlockchain> State<B> {
               of ensuring our own validator doesn't make an invalid proposal is worth the
               inefficiency.
             */
-            if blockchain.validate(proposer, &proposal).await.is_err() {
+            if Self::validate_block(&mut self.block_validity, blockchain, proposer, &proposal)
+              .await
+              .is_err()
+            {
               self.proposal.as_mut().set(BlockProposal::Invalid);
               None?;
             }
@@ -377,7 +441,9 @@ impl<B: BorshyBlockchain> State<B> {
     let ObservedProposal { proposer, valid_round, proposal } =
       self.round_metrics.observed_proposal()?;
 
-    let block = ((blockchain.validate(proposer, proposal).await.is_ok()) &&
+    let block = ((Self::validate_block(&mut self.block_validity, blockchain, proposer, proposal)
+      .await
+      .is_ok()) &&
       (match valid_round {
         /*
           L22-L23, where we've already checked:
@@ -714,6 +780,7 @@ impl<B: BorshyBlockchain> State<B> {
         proposal: _,
         valid: _,
         locked: _,
+        block_validity: _,
 
         // This is independent of the round, used for detecting equivocations and if we're behind
         round_messages: _,
@@ -759,9 +826,10 @@ impl<B: BorshyBlockchain> State<B> {
     let proposal_message = self.proposal_message::<N>(blockchain, signer, txn).await;
 
     // Accumulate all messages we've already seen for this round
-    let genesis = blockchain.genesis();
-    for message in self.round_messages.messages_for_round(self.round_number) {
-      self.round_metrics.accumulate(genesis, blockchain.validator_set(), txn, message.clone());
+    let messages =
+      self.round_messages.messages_for_round(self.round_number).cloned().collect::<Box<[_]>>();
+    for message in messages {
+      let _ = self.accumulate(blockchain, txn, message).await;
     }
 
     let mut round_messages = self.respond::<N>(blockchain, signer, txn).await;
@@ -818,7 +886,7 @@ impl<B: BorshyBlockchain> State<B> {
       let observed_block_number_ref = Arc::new(AtomicU64::new(u64::from(block_number)));
 
       let validators = validator_set.validators().into_iter().count();
-      let state = State {
+      let state = Self {
         block_number,
         block_number_ref,
 
@@ -846,6 +914,7 @@ impl<B: BorshyBlockchain> State<B> {
           block_number,
           round_number,
         ),
+        block_validity: BlockValidityCache::<B>::with_capacity(validators),
 
         /*
           We do not save or reload `round_messages` as it's solely used for detecting equivocations
@@ -961,12 +1030,15 @@ impl<B: BorshyBlockchain> State<B> {
     // L55-L56
     Ok(
       if (message.round_number > self.round_number) &&
-        self.round_messages.should_jump_ahead(validator_set, message.round_number)
+        self.round_messages.should_jump_ahead(blockchain.validator_set(), message.round_number)
       {
         // Start the round we're jumping ahead to
         self.start_round::<N>(blockchain, signer, txn, message.round_number).await
       } else if message.round_number == self.round_number {
-        self.round_metrics.accumulate(blockchain.genesis(), validator_set, txn, message);
+        match self.accumulate(blockchain, txn, message).await {
+          Ok(()) | Err(InvalidBlock::Temporal) => {}
+          Err(InvalidBlock::Fatal) => Err(MessageError::FatalProposal)?,
+        }
         self.respond::<N>(blockchain, signer, txn).await
       } else {
         // If this isn't for the current round, we have no messages to reply with
@@ -1156,6 +1228,7 @@ impl<B: BorshyBlockchain> State<B> {
         rebroadcast_timeout,
 
         round_metrics,
+        block_validity,
         valid,
         locked,
 
@@ -1182,6 +1255,7 @@ impl<B: BorshyBlockchain> State<B> {
       round_metrics.reset(*block_number, *round_number);
 
       // This isn't saved, being entirely local, and just has to be reset
+      block_validity.clear();
       *rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(*round_number);
 
       *valid = None;

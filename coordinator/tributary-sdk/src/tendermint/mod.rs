@@ -537,24 +537,26 @@ impl<
     proposer: Self::Validator,
     block: &Self::Block,
   ) -> impl Send + Future<Output = Result<(), InvalidBlock>> {
-    if self.blockchain.slashed(&self.db, proposer) ||
-      self.slashes.contains_key(&proposer) ||
-      self.mempool.censured(&self.db, proposer)
-    {
-      return core::future::ready(Err(InvalidBlock));
+    // TODO: Move this rule into `Blockchain::verify`?
+    if self.blockchain.slashed(&self.db, proposer) {
+      return core::future::ready(Err(InvalidBlock::Fatal));
+    }
+    if self.slashes.contains_key(&proposer) || self.mempool.censured(&self.db, proposer) {
+      return core::future::ready(Err(InvalidBlock::Temporal));
     }
 
-    let valid = self.blockchain.verify::<N>(&self.db, self.genesis_time, &block.0);
-    // If block is invalid for syntactic or semantic reasons, censure
-    match valid {
-      Ok(()) | Err(BlockError::Ephemeral(_)) => {}
+    core::future::ready(match self.blockchain.verify::<N>(&self.db, self.genesis_time, &block.0) {
+      Ok(()) => Ok(()),
+      Err(BlockError::Ephemeral(_)) => Err(InvalidBlock::Temporal),
       Err(BlockError::Syntactic(_) | BlockError::Semantic(_)) => {
+        // If block is invalid for syntactic or semantic reasons, censure
         let mut txn = self.db.txn();
         self.mempool.censure(&mut txn, proposer);
         txn.commit();
+
+        Err(InvalidBlock::Fatal)
       }
-    }
-    core::future::ready(valid.map_err(|_| InvalidBlock))
+    })
   }
 
   fn add_block(

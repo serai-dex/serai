@@ -65,7 +65,24 @@ impl<H: Clone + Copy + PartialEq + Eq + AsRef<[u8]>> BlockHash for H {}
 
 /// The block was invalid.
 #[derive(Clone, Copy, Debug)]
-pub struct InvalidBlock;
+pub enum InvalidBlock {
+  /// This block is fatally invalid.
+  ///
+  /// If a block proposal is received, yet the block is considered fatally invalid, the proposal
+  /// will be dropped as if not received. The block proposal will not be voted for and received
+  /// votes will be unrecognized.
+  ///
+  /// Note this only affects block _proposals_, not blocks synced with their commits.
+  Fatal,
+
+  /// The block is temporally invalid.
+  ///
+  /// If a block proposal is received, yet the block is solely considered temporally invalid, the
+  /// proposal will still be stored. The block proposal will not be voted for, but received votes
+  /// will still be recognized, enabling participation in forming a commit, potentially adding this
+  /// block despite its temporal invalidity (due to a supermajority of validators voting for it).
+  Temporal,
+}
 
 /// A view over the application layer's block.
 ///

@@ -279,6 +279,8 @@ pub(crate) enum MessageError<S: Signature, A: AggregateSignature, H: BlockHash> 
   InvalidOuterSignature,
   /// The message has an invalid intenal structure.
   Invalid(SlashReason<S, A, H>),
+  /// The message contained a fatally invalid proposal.
+  FatalProposal,
   /// This message has already been handled.
   AlreadyHandled,
 }

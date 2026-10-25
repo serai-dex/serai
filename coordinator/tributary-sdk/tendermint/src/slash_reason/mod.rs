@@ -295,6 +295,8 @@ impl<S: Signature, A: AggregateSignature, H: BlockHash> SlashReason<S, A, H> {
   }
 
   /// Verify the reasoning for this slash.
+  ///
+  /// The genesis MUST be a valid genesis for a [`Blockchain`].
   pub fn verify<V: Validator>(
     &self,
     genesis: impl AsRef<[u8]>,
