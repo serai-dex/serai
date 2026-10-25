@@ -194,6 +194,8 @@ impl<
   /// the database if prior instanced. For further context on the limitations of this, please defer
   /// to the limitations placed upon [`::tendermint::Tendermint`].
   ///
+  /// The `genesis` argument will be expanded to a 32-byte genesis by prefixing 16 `0`s.
+  ///
   /// `genesis_time` is expressed in milliseconds since the epoch and used to limit the minimum
   /// time blocks may be published with. This prevents a malicious supermajority from backdating
   /// blocks, allowing flooding the honest minority with valid blocks which still respect the

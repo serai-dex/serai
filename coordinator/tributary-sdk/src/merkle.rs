@@ -127,7 +127,7 @@ fn merkle_tree_root() {
       .collect::<Vec<_>>();
 
     while leaves.len() != 1 {
-      let (chunks, extra) = leaves.as_slice().as_chunks::<2>();
+      let (chunks, extra) = leaves.as_chunks::<2>();
       let mut new_leaves = vec![];
       for [l, r] in chunks {
         new_leaves.push(

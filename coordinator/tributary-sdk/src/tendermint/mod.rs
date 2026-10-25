@@ -126,7 +126,7 @@ impl ::tendermint::ValidatorSet for ValidatorSet {
   ) -> Self::Validator {
     let i = ((u64::from(block_number) - 1) % u64::from(u16::from(self.total_weight))) +
       ((u64::from(round_number) - 1) % u64::from(u16::from(self.total_weight)));
-    let i = u16::try_from(i).unwrap();
+    let i = u16::try_from(i % u64::from(u16::from(self.total_weight))).unwrap();
     self.proposers[usize::from(i)]
   }
 }
@@ -379,7 +379,7 @@ impl<T: Transaction, MT: Future<Output = ()>, TS: Future<Output: IntoIterator<It
               size = size.saturating_sub(transaction_size);
 
               let mut borrow;
-              (size_to_trim.0, borrow) = size_to_trim.0.overflowing_sub(size);
+              (size_to_trim.0, borrow) = size_to_trim.0.overflowing_sub(transaction_size);
               (size_to_trim.1, borrow) =
                 size_to_trim.1.overflowing_sub(usize::from(u8::from(borrow)));
               if borrow || (size_to_trim == (0, 0)) {
