@@ -27,6 +27,8 @@ use serai_task::{Task, ContinuallyRan as _};
 
 use serai_cosign::SignedCosign;
 
+use tributary_sdk::{ReadWriteAsBorsh, Transaction, Block};
+
 use libp2p::{
   multihash::Multihash,
   identity::{self, PeerId},
@@ -37,7 +39,7 @@ use libp2p::{
   SwarmBuilder,
 };
 
-use serai_coordinator_p2p::{Heartbeat, TributaryBlockWithCommit};
+use serai_coordinator_p2p::{SyncRequest, CommittedTributaryBlock};
 
 /// A struct to sync the validators from the Serai node in order to keep track of them.
 mod validators;
@@ -75,19 +77,19 @@ fn peer_id_from_public(public: Public) -> PeerId {
 }
 
 /// The representation of a peer.
-pub struct Peer<'a> {
-  outbound_requests: &'a mpsc::UnboundedSender<(PeerId, Request, oneshot::Sender<Response>)>,
+pub struct Peer<'p2p, Tx: 'static + Send + Sync + Transaction> {
+  outbound_requests: &'p2p mpsc::UnboundedSender<(PeerId, Request, oneshot::Sender<Response<Tx>>)>,
   id: PeerId,
 }
-impl serai_coordinator_p2p::Peer<'_> for Peer<'_> {
-  fn send_heartbeat(
+impl<Tx: 'static + Send + Sync + Transaction> serai_coordinator_p2p::Peer<'_, Tx> for Peer<'_, Tx> {
+  fn send_sync_request(
     &self,
-    heartbeat: Heartbeat,
-  ) -> impl Send + Future<Output = Option<Vec<TributaryBlockWithCommit>>> {
+    sync_request: SyncRequest,
+  ) -> impl Send + Future<Output = Option<Vec<CommittedTributaryBlock<Tx>>>> {
     async move {
       const HEARTBEAT_TIMEOUT: Duration = Duration::from_secs(5);
 
-      let request = Request::Heartbeat(heartbeat);
+      let request = Request::SyncRequest(sync_request);
       let (sender, receiver) = oneshot::channel();
       self
         .outbound_requests
@@ -116,7 +118,7 @@ mod behavior {
   use super::*;
 
   #[derive(NetworkBehaviour)]
-  pub(super) struct Behavior {
+  pub(super) struct Behavior<Tx: 'static + Send + Sync + Transaction> {
     // Used to only allow Serai validators as peers
     pub(super) allow_list: allow_block_list::Behaviour<allow_block_list::AllowedPeers>,
     // Used to limit each peer to a single connection
@@ -124,28 +126,28 @@ mod behavior {
     // Used to ensure connection latency is within tolerances
     pub(super) ping: ping::Behavior,
     // Used to request data from specific peers
-    pub(super) reqres: reqres::Behavior,
+    pub(super) reqres: reqres::Behavior<Tx>,
     // Used to broadcast messages to all other peers subscribed to a topic
     pub(super) gossip: gossip::Behavior,
   }
 }
 use behavior::*;
 
-struct Libp2pInner {
+struct Libp2pInner<Tx: 'static + Send + Sync + Transaction> {
   peers: Peers,
 
-  gossip: mpsc::UnboundedSender<Message>,
-  outbound_requests: mpsc::UnboundedSender<(PeerId, Request, oneshot::Sender<Response>)>,
+  gossip: mpsc::UnboundedSender<Message<Tx>>,
+  outbound_requests: mpsc::UnboundedSender<(PeerId, Request, oneshot::Sender<Response<Tx>>)>,
 
-  tributary_gossip: Mutex<mpsc::UnboundedReceiver<([u8; 32], Vec<u8>)>>,
+  tributary_messages: Mutex<mpsc::UnboundedReceiver<([u8; 32], tributary_sdk::Message<Tx>)>>,
+  tributary_transactions: Mutex<mpsc::UnboundedReceiver<([u8; 32], Tx)>>,
 
   signed_cosigns: Mutex<mpsc::UnboundedReceiver<SignedCosign>>,
   signed_cosigns_send: mpsc::UnboundedSender<SignedCosign>,
 
-  heartbeat_requests:
-    Mutex<mpsc::UnboundedReceiver<(InboundRequestId, ExternalValidatorSet, [u8; 32])>>,
+  sync_requests: Mutex<mpsc::UnboundedReceiver<(InboundRequestId, ExternalValidatorSet, [u8; 32])>>,
   notable_cosign_requests: Mutex<mpsc::UnboundedReceiver<(InboundRequestId, [u8; 32])>>,
-  inbound_request_responses: mpsc::UnboundedSender<(InboundRequestId, Response)>,
+  inbound_request_responses: mpsc::UnboundedSender<(InboundRequestId, Response<Tx>)>,
 }
 
 /// The libp2p-backed P2P implementation.
@@ -153,13 +155,13 @@ struct Libp2pInner {
 /// The P2p trait implementation does not support backpressure and is expected to be fully
 /// utilized. Failure to poll the entire API will cause unbounded memory growth.
 #[derive(Clone)]
-pub struct Libp2p(Arc<Libp2pInner>);
+pub struct Libp2p<Tx: 'static + Send + Sync + Transaction>(Arc<Libp2pInner<Tx>>);
 
-impl Libp2p {
+impl<Tx: 'static + Send + Sync + Transaction> Libp2p<Tx> {
   /// Create a new libp2p-backed P2P instance.
   ///
   /// This will spawn all of the internal tasks necessary for functioning.
-  pub fn new(serai_key: &Zeroizing<Keypair>, serai: Arc<Serai>) -> Libp2p {
+  pub fn new(serai_key: &Zeroizing<Keypair>, serai: Arc<Serai>) -> Self {
     // Define the object we track peers with
     let peers = Peers { peers: Arc::new(RwLock::new(HashMap::new())) };
 
@@ -187,8 +189,8 @@ impl Libp2p {
             ConnectionLimits::default().with_max_established_per_peer(Some(1)),
           ),
           ping: ping::new_behavior(),
-          reqres: reqres::new_behavior(),
-          gossip: gossip::new_behavior(),
+          reqres: reqres::new_behavior::<Tx>(),
+          gossip: gossip::new_behavior::<Tx>(),
         })
         .unwrap()
         .with_swarm_config(|config| {
@@ -205,17 +207,18 @@ impl Libp2p {
 
     let (gossip_send, gossip_recv) = mpsc::unbounded_channel();
     let (signed_cosigns_send, signed_cosigns_recv) = mpsc::unbounded_channel();
-    let (tributary_gossip_send, tributary_gossip_recv) = mpsc::unbounded_channel();
+    let (tributary_messages_send, tributary_messages_recv) = mpsc::unbounded_channel();
+    let (tributary_transactions_send, tributary_transactions_recv) = mpsc::unbounded_channel();
 
     let (outbound_requests_send, outbound_requests_recv) = mpsc::unbounded_channel();
 
-    let (heartbeat_requests_send, heartbeat_requests_recv) = mpsc::unbounded_channel();
+    let (sync_requests_send, sync_requests_recv) = mpsc::unbounded_channel();
     let (notable_cosign_requests_send, notable_cosign_requests_recv) = mpsc::unbounded_channel();
     let (inbound_request_responses_send, inbound_request_responses_recv) =
       mpsc::unbounded_channel();
 
     // Create the swarm task
-    SwarmTask::spawn(
+    SwarmTask::<Tx>::spawn(
       dial_task,
       to_dial_recv,
       swarm_validators,
@@ -224,9 +227,10 @@ impl Libp2p {
       swarm,
       gossip_recv,
       signed_cosigns_send.clone(),
-      tributary_gossip_send,
+      tributary_messages_send,
+      tributary_transactions_send,
       outbound_requests_recv,
-      heartbeat_requests_send,
+      sync_requests_send,
       notable_cosign_requests_send,
       inbound_request_responses_recv,
     );
@@ -237,31 +241,71 @@ impl Libp2p {
       gossip: gossip_send,
       outbound_requests: outbound_requests_send,
 
-      tributary_gossip: Mutex::new(tributary_gossip_recv),
+      tributary_messages: Mutex::new(tributary_messages_recv),
+      tributary_transactions: Mutex::new(tributary_transactions_recv),
 
       signed_cosigns: Mutex::new(signed_cosigns_recv),
       signed_cosigns_send,
 
-      heartbeat_requests: Mutex::new(heartbeat_requests_recv),
+      sync_requests: Mutex::new(sync_requests_recv),
       notable_cosign_requests: Mutex::new(notable_cosign_requests_recv),
       inbound_request_responses: inbound_request_responses_send,
     }))
   }
 }
 
-impl tributary_sdk::P2p for Libp2p {
-  fn broadcast(&self, tributary: [u8; 32], message: Vec<u8>) -> impl Send + Future<Output = ()> {
-    async move {
-      self
-        .0
-        .gossip
-        .send(Message::Tributary { tributary, message })
-        .expect("gossip recv channel was dropped?");
-    }
+const LATENCY_TIME: Duration = Duration::from_millis(1_500);
+const BLOCK_DOWNLOADING_TIME: Duration = Duration::from_millis(2_000);
+const BLOCK_PROCESSING_TIME: Duration = Duration::from_millis(500);
+
+impl<Tx: 'static + Send + Sync + Transaction>
+  tendermint::Network<
+    [u8; 32],
+    [u8; 64],
+    tributary_sdk::AggregateSignature,
+    ReadWriteAsBorsh<Block<Tx>>,
+  > for Libp2p<Tx>
+{
+  const LATENCY_TIME: Duration = LATENCY_TIME;
+  const BLOCK_DOWNLOADING_TIME: Duration = BLOCK_DOWNLOADING_TIME;
+  const BLOCK_PROCESSING_TIME: Duration = BLOCK_PROCESSING_TIME;
+
+  type Sleep = tokio::time::Sleep;
+  fn sleep(duration: Duration) -> tokio::time::Sleep {
+    tokio::time::sleep(duration)
+  }
+
+  fn broadcast(
+    &mut self,
+    genesis: impl AsRef<[u8]>,
+    message: tributary_sdk::Message<Tx>,
+  ) -> impl Send + Future<Output = ()> {
+    let tributary = genesis.as_ref().try_into().unwrap();
+    self
+      .0
+      .gossip
+      .send(Message::TributaryMessage { tributary, message })
+      .expect("gossip recv channel was dropped?");
+    core::future::ready(())
   }
 }
 
-impl serai_cosign::RequestNotableCosigns for Libp2p {
+impl<Tx: 'static + Send + Sync + Transaction> tributary_sdk::mempool::MempoolNetwork<Tx>
+  for Libp2p<Tx>
+{
+  fn gossip(&mut self, genesis: [u8; 32], transaction: Tx) {
+    self
+      .0
+      .gossip
+      .send(Message::TributaryTransaction {
+        tributary: genesis,
+        transaction: ReadWriteAsBorsh(transaction),
+      })
+      .expect("gossip recv channel was dropped?");
+  }
+}
+
+impl<Tx: 'static + Send + Sync + Transaction> serai_cosign::RequestNotableCosigns for Libp2p<Tx> {
   type Error = ();
 
   fn request_notable_cosigns(
@@ -317,8 +361,8 @@ impl serai_cosign::RequestNotableCosigns for Libp2p {
   }
 }
 
-impl serai_coordinator_p2p::P2p for Libp2p {
-  type Peer<'a> = Peer<'a>;
+impl<Tx: 'static + Send + Sync + Transaction> serai_coordinator_p2p::P2p<Tx> for Libp2p<Tx> {
+  type Peer<'p2p> = Peer<'p2p, Tx>;
 
   fn peers(&self, network: ExternalNetworkId) -> impl Send + Future<Output = Vec<Self::Peer<'_>>> {
     async move {
@@ -339,37 +383,25 @@ impl serai_coordinator_p2p::P2p for Libp2p {
     }
   }
 
-  fn heartbeat(
-    &self,
-  ) -> impl Send + Future<Output = (Heartbeat, oneshot::Sender<Vec<TributaryBlockWithCommit>>)> {
-    async move {
-      let (request_id, set, latest_block_hash) = self
-        .0
-        .heartbeat_requests
-        .lock()
-        .await
-        .recv()
-        .await
-        .expect("heartbeat_requests_send was dropped?");
-      let (sender, receiver) = oneshot::channel();
-      tokio::spawn({
-        let respond = self.0.inbound_request_responses.clone();
-        async move {
-          // The swarm task expects us to respond to every request. If the caller drops this
-          // channel, we'll receive `Err` and respond with `vec![]`, safely satisfying that bound
-          // without requiring the caller send a value down this channel
-          let response = if let Ok(blocks) = receiver.await {
-            Response::Blocks(blocks)
-          } else {
-            Response::Blocks(vec![])
-          };
-          respond
-            .send((request_id, response))
-            .expect("inbound_request_responses_recv was dropped?");
-        }
-      });
-      (Heartbeat { set, latest_block_hash }, sender)
-    }
+  async fn sync_request(&self) -> (SyncRequest, oneshot::Sender<Vec<CommittedTributaryBlock<Tx>>>) {
+    let (request_id, set, latest_block_hash) =
+      self.0.sync_requests.lock().await.recv().await.expect("sync_requests_send was dropped?");
+    let (sender, receiver) = oneshot::channel();
+    tokio::spawn({
+      let respond = self.0.inbound_request_responses.clone();
+      async move {
+        // The swarm task expects us to respond to every request. If the caller drops this
+        // channel, we'll receive `Err` and respond with `vec![]`, safely satisfying that bound
+        // without requiring the caller send a value down this channel
+        let response = if let Ok(blocks) = receiver.await {
+          Response::Blocks(blocks)
+        } else {
+          Response::Blocks(vec![])
+        };
+        respond.send((request_id, response)).expect("inbound_request_responses_recv was dropped?");
+      }
+    });
+    (SyncRequest { set, latest_block_hash }, sender)
   }
 
   fn notable_cosigns_request(
@@ -402,9 +434,31 @@ impl serai_coordinator_p2p::P2p for Libp2p {
     }
   }
 
-  fn tributary_message(&self) -> impl Send + Future<Output = ([u8; 32], Vec<u8>)> {
+  fn tributary_message(
+    &self,
+  ) -> impl Send + Future<Output = ([u8; 32], tributary_sdk::Message<Tx>)> {
     async move {
-      self.0.tributary_gossip.lock().await.recv().await.expect("tributary_gossip send was dropped?")
+      self
+        .0
+        .tributary_messages
+        .lock()
+        .await
+        .recv()
+        .await
+        .expect("tributary_messages send was dropped?")
+    }
+  }
+
+  fn tributary_transaction(&self) -> impl Send + Future<Output = ([u8; 32], Tx)> {
+    async move {
+      self
+        .0
+        .tributary_transactions
+        .lock()
+        .await
+        .recv()
+        .await
+        .expect("tributary_transactions send was dropped?")
     }
   }
 

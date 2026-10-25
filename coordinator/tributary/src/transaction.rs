@@ -4,11 +4,7 @@ use std::io;
 use zeroize::Zeroizing;
 use rand_core::{RngCore, CryptoRng};
 
-use blake2::{digest::typenum::U32, Digest as _, Blake2b};
-use ciphersuite::{
-  group::{Group as _, GroupEncoding as _},
-  *,
-};
+use ciphersuite::{group::GroupEncoding as _, WrappedGroup};
 use dalek_ff_group::Ristretto;
 use schnorr::SchnorrSignature;
 
@@ -48,49 +44,24 @@ impl SigningProtocolRound {
 /// `tributary::Signed` but without the nonce.
 ///
 /// All of our nonces are deterministic to the type of transaction and fields within.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct Signed {
   /// The signer.
-  pub(crate) signer: <Ristretto as WrappedGroup>::G,
+  pub(crate) signer: [u8; 32],
   /// The signature.
-  pub(crate) signature: SchnorrSignature<Ristretto>,
-}
-
-impl BorshSerialize for Signed {
-  fn serialize<W: io::Write>(&self, writer: &mut W) -> Result<(), io::Error> {
-    writer.write_all(self.signer.to_bytes().as_ref())?;
-    self.signature.write(writer)
-  }
-}
-impl BorshDeserialize for Signed {
-  fn deserialize_reader<R: io::Read>(reader: &mut R) -> Result<Self, io::Error> {
-    let signer = Ristretto::read_G(&mut *reader)?;
-    let signature = SchnorrSignature::read(&mut *reader)?;
-    Ok(Self { signer, signature })
-  }
+  pub(crate) signature: [u8; 64],
 }
 
 impl Signed {
-  /// Fetch the signer.
-  pub(crate) fn signer(&self) -> <Ristretto as WrappedGroup>::G {
-    self.signer
-  }
-
   /// Provide a nonce to convert a `Signed` into a `tributary::Signed`.
   pub(crate) fn to_tributary_signed(self, nonce: u32) -> TributarySigned {
-    TributarySigned { signer: self.signer, nonce, signature: self.signature }
+    TributarySigned { signer: self.signer, nonce: u64::from(nonce), signature: self.signature }
   }
 }
 
 impl Default for Signed {
   fn default() -> Self {
-    Self {
-      signer: <Ristretto as WrappedGroup>::G::identity(),
-      signature: SchnorrSignature {
-        R: <Ristretto as WrappedGroup>::G::identity(),
-        s: <Ristretto as WrappedGroup>::F::ZERO,
-      },
-    }
+    Self { signer: [0; 32], signature: [0; 64] }
   }
 }
 
@@ -241,51 +212,65 @@ impl ReadWrite for Transaction {
   }
 }
 
+impl tributary_sdk::merkle::Digestible for Transaction {
+  fn update(&self, digest: &mut (impl ?Sized + blake2::digest::Update)) {
+    if let TransactionKind::Signed { scope: _, signed: TributarySigned { signature, .. } } =
+      self.kind()
+    {
+      let serialization = ReadWrite::serialize(self);
+
+      // The signature is 64-bytes and always at the end
+      /*
+        TODO: Move `signed` out of the transaction type. Have the current type be `TransactionCore`
+        with `struct Transaction(TransactionCore, Option<Signed>)` replacing it.
+      */
+      assert_eq!(&serialization[(serialization.len() - 64) ..], &signature);
+      let serialization = &serialization[.. (serialization.len() - 64)];
+
+      digest.update(serialization);
+    } else {
+      // TODO: Remove this intermediary allocation
+      digest.update(&ReadWrite::serialize(self));
+    }
+  }
+}
+
 impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind {
     match self {
-      Transaction::RemoveParticipant { participant, signed } => TransactionKind::Signed(
-        borsh::to_vec(&(b"RemoveParticipant".as_slice(), participant)).unwrap(),
-        signed.to_tributary_signed(0),
-      ),
+      Transaction::RemoveParticipant { participant, signed } => TransactionKind::Signed {
+        scope: borsh::to_vec(&(b"RemoveParticipant".as_slice(), participant)).unwrap(),
+        signed: signed.to_tributary_signed(0),
+      },
 
-      Transaction::DkgParticipation { signed, .. } => TransactionKind::Signed(
-        borsh::to_vec(b"DkgParticipation".as_slice()).unwrap(),
-        signed.to_tributary_signed(0),
-      ),
-      Transaction::DkgConfirmationPreprocess { attempt, signed, .. } => TransactionKind::Signed(
-        borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
-        signed.to_tributary_signed(SigningProtocolRound::Preprocess.nonce()),
-      ),
-      Transaction::DkgConfirmationShare { attempt, signed, .. } => TransactionKind::Signed(
-        borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
-        signed.to_tributary_signed(SigningProtocolRound::Share.nonce()),
-      ),
+      Transaction::DkgParticipation { signed, .. } => TransactionKind::Signed {
+        scope: borsh::to_vec(b"DkgParticipation".as_slice()).unwrap(),
+        signed: signed.to_tributary_signed(0),
+      },
+      Transaction::DkgConfirmationPreprocess { attempt, signed, .. } => TransactionKind::Signed {
+        scope: borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
+        signed: signed.to_tributary_signed(SigningProtocolRound::Preprocess.nonce()),
+      },
+      Transaction::DkgConfirmationShare { attempt, signed, .. } => TransactionKind::Signed {
+        scope: borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
+        signed: signed.to_tributary_signed(SigningProtocolRound::Share.nonce()),
+      },
 
-      Transaction::Cosign { .. } => TransactionKind::Provided("Cosign"),
-      Transaction::Cosigned { .. } => TransactionKind::Provided("Cosigned"),
-      Transaction::SubstrateBlock { .. } => TransactionKind::Provided("SubstrateBlock"),
-      Transaction::Batch { .. } => TransactionKind::Provided("Batch"),
+      Transaction::Cosign { .. } => TransactionKind::Provided { scope: "Cosign" },
+      Transaction::Cosigned { .. } => TransactionKind::Provided { scope: "Cosigned" },
+      Transaction::SubstrateBlock { .. } => TransactionKind::Provided { scope: "SubstrateBlock" },
+      Transaction::Batch { .. } => TransactionKind::Provided { scope: "Batch" },
 
-      Transaction::Sign { id, attempt, round, signed, .. } => TransactionKind::Signed(
-        borsh::to_vec(&(b"Sign".as_slice(), id, attempt)).unwrap(),
-        signed.to_tributary_signed(round.nonce()),
-      ),
+      Transaction::Sign { id, attempt, round, signed, .. } => TransactionKind::Signed {
+        scope: borsh::to_vec(&(b"Sign".as_slice(), id, attempt)).unwrap(),
+        signed: signed.to_tributary_signed(round.nonce()),
+      },
 
-      Transaction::SlashReport { signed, .. } => TransactionKind::Signed(
-        borsh::to_vec(b"SlashReport".as_slice()).unwrap(),
-        signed.to_tributary_signed(0),
-      ),
+      Transaction::SlashReport { signed, .. } => TransactionKind::Signed {
+        scope: borsh::to_vec(b"SlashReport".as_slice()).unwrap(),
+        signed: signed.to_tributary_signed(0),
+      },
     }
-  }
-
-  fn hash(&self) -> [u8; 32] {
-    let mut tx = ReadWrite::serialize(self);
-    if let TransactionKind::Signed(_, signed) = self.kind() {
-      // Make sure the part we're cutting off is the signature
-      assert_eq!(tx.drain((tx.len() - 64) ..).collect::<Vec<_>>(), signed.signature.serialize());
-    }
-    Blake2b::<U32>::digest(&tx).into()
   }
 
   // This is a stateless verification which we use to enforce some size limits.
@@ -308,14 +293,14 @@ impl TransactionTrait for Transaction {
 
       Transaction::Sign { data, .. } => {
         if data.len() > usize::from(KeyShares::MAX_PER_SET) {
-          Err(TransactionError::InvalidContent)?;
+          Err(TransactionError::InvalidTransaction)?;
         }
         // TODO: MAX_SIGN_LEN
       }
 
       Transaction::SlashReport { slash_points, .. } => {
         if slash_points.len() > usize::from(KeyShares::MAX_PER_SET) {
-          Err(TransactionError::InvalidContent)?;
+          Err(TransactionError::InvalidTransaction)?;
         }
       }
     };
@@ -390,14 +375,23 @@ impl Transaction {
     {
       // Set the signer and the nonce
       let signed = signed(self);
-      signed.signer = Ristretto::generator() * key.deref();
-      signed.signature.R = <Ristretto as WrappedGroup>::generator() * sig_nonce.deref();
+      signed.signer = (Ristretto::generator() * key.deref()).to_bytes();
+      signed.signature[.. 32].copy_from_slice(
+        (<Ristretto as WrappedGroup>::generator() * sig_nonce.deref()).to_bytes().as_ref(),
+      );
     }
 
     // Get the signature hash (which now includes `R || A` making it valid as the challenge)
-    let sig_hash = self.sig_hash(genesis);
+    let signature_challenge = self
+      .signature_challenge(genesis)
+      .expect("signing a transaction without a signature challenge");
 
     // Sign the signature
-    signed(self).signature = SchnorrSignature::<Ristretto>::sign(key, sig_nonce, sig_hash);
+    // TODO: Remove this intermediary allocation
+    signed(self).signature =
+      SchnorrSignature::<Ristretto>::sign(key, sig_nonce, signature_challenge)
+        .serialize()
+        .try_into()
+        .unwrap();
   }
 }

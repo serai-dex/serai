@@ -7,6 +7,7 @@ use core::{
   pin::Pin,
   task::{Poll, Context},
   num::NonZero,
+  time::Duration,
 };
 extern crate alloc;
 use alloc::boxed::Box;
@@ -46,12 +47,13 @@ mod blockchain;
 use blockchain::{Reader, Blockchain};
 
 mod tendermint;
-use tendermint::{AggregateSignature, SignatureScheme, Tendermint};
-pub use tendermint::Slash;
+use tendermint::{SignatureScheme, Tendermint};
+pub use tendermint::{AggregateSignature, Commit, Slash};
 
 mod or;
 
-type TendermintMessage<T> =
+/// A Tendermint consensus message for a Tributary.
+pub type Message<T> =
   ::tendermint::Message<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<T>>>;
 
 trait SendDb: Send + for<'db> Db<Transaction<'db>: Send> {}
@@ -88,9 +90,9 @@ pin_project_lite::pin_project! {
     #[pin]
     mempool: MempoolFuture<D, T, MN>,
     #[pin]
-    tendermint: Pin<Box<dyn Future<Output = ()>>>,
+    tendermint: Pin<Box<dyn Send + Future<Output = ()>>>,
     #[pin]
-    handle: Pin<Box<dyn Future<Output = ()>>>,
+    handle: Pin<Box<dyn Send + Future<Output = ()>>>,
   }
 }
 
@@ -144,7 +146,7 @@ impl<
   MN: 'static + Send + Sync + MempoolNetwork<T>,
 > IntoIterator for Tributary<D, T, MN>
 {
-  type Item = Pin<Box<dyn Future<Output = ()>>>;
+  type Item = Pin<Box<dyn Send + Future<Output = ()>>>;
   type IntoIter = <[Self::Item; 3] as IntoIterator>::IntoIter;
   fn into_iter(self) -> Self::IntoIter {
     let Self { tendermint, handle, mempool } = self;
@@ -153,11 +155,20 @@ impl<
 }
 
 /// An error when instantiating the Tributary.
+#[derive(Debug)]
 pub enum TributaryError {
   /// The (target) block time wasn't representable.
   UnrepresentableBlockTime,
   /// The provided key didn't correspond to a validator.
   NotValidator,
+}
+
+/// An error when syncing a block.
+pub enum SyncError {
+  /// The block was syntactically invalid.
+  InvalidBlock(block::SyntacticError),
+  /// The commit was invalid.
+  InvalidCommit,
 }
 
 /// A handle to an instanced Tributary.
@@ -167,21 +178,24 @@ pub struct TributaryHandle<
   T: 'static + Send + Sync + Transaction,
 > {
   db: D,
+
   genesis: [u8; 32],
+  block_time: Duration,
+  validator_set: crate::tendermint::ValidatorSet,
+  signature_scheme: SignatureScheme,
 
   validator: [u8; 32],
 
   blocks_behind: async_channel::Sender<async_channel::Sender<u64>>,
 
   sync: async_channel::Sender<(Block<T>, crate::tendermint::Commit)>,
-  message: async_channel::Sender<TendermintMessage<T>>,
+  message: async_channel::Sender<Message<T>>,
   mempool: async_channel::Sender<AsyncAddToMempool<T>>,
   censure: async_channel::Sender<([u8; 32], async_channel::Sender<()>)>,
 
   next_block_notification: async_channel::Sender<async_channel::Sender<()>>,
 }
 
-#[expect(private_bounds)]
 impl<
   D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
   T: 'static + Send + Sync + Transaction,
@@ -248,6 +262,9 @@ impl<
 
     let genesis_time = genesis_time.unwrap_or(0);
 
+    let target_block_time =
+      N::target_block_time().ok_or(TributaryError::UnrepresentableBlockTime)?;
+
     // TODO: This is the maximum of the bound internal to the `tendermint-machine` library
     let (sync_send, sync_recv) =
       async_channel::bounded::<(Block<T>, crate::tendermint::Commit)>(64);
@@ -273,21 +290,20 @@ impl<
     let (blocks_behind_send, blocks_behind_recv) =
       async_channel::bounded::<async_channel::Sender<u64>>(1);
 
-    let signer = SignatureScheme::new(genesis, validators.len()).signer(key);
+    let signature_scheme = SignatureScheme::new(genesis, validators.len());
+    let signer = signature_scheme.signer(key);
     let validator = signer.validator();
     if !validators.contains_key(&validator) {
       Err(TributaryError::NotValidator)?;
     }
 
-    let (next_block_notification, (mut tendermint_handle, tendermint)) = {
+    let (validator_set, next_block_notification, (mut tendermint_handle, tendermint)) = {
       let blockchain = Blockchain::new(&db, genesis, validators);
 
       let (tip, minimum_next_block_time) = {
         let tip = blockchain.tip(&db);
-        let target_block_time = u64::try_from(
-          N::target_block_time().ok_or(TributaryError::UnrepresentableBlockTime)?.as_millis(),
-        )
-        .map_err(|_| TributaryError::UnrepresentableBlockTime)?;
+        let target_block_time = u64::try_from(target_block_time.as_millis())
+          .map_err(|_| TributaryError::UnrepresentableBlockTime)?;
         let minimum_next_block_time = tip
           .as_ref()
           .map(|tip| tip.time().checked_add(target_block_time))
@@ -313,9 +329,14 @@ impl<
         next_block_notification_recv,
         mempool_consumer,
       );
+      let validator_set = {
+        use ::tendermint::Blockchain as _;
+        tendermint.validator_set().clone()
+      };
       let proposal = tendermint.block_proposal(tip, minimum_next_block_time, 0);
 
       (
+        validator_set,
         next_block_notification_send,
         ::tendermint::Tendermint::process(
           tendermint,
@@ -371,7 +392,11 @@ impl<
       },
       TributaryHandle {
         db,
+
         genesis,
+        block_time: target_block_time,
+        validator_set,
+        signature_scheme,
 
         validator,
 
@@ -396,6 +421,11 @@ impl<
   /// The Tributary's genesis.
   pub fn genesis(&self) -> [u8; 32] {
     self.genesis
+  }
+
+  /// The Tributary's target block time.
+  pub fn block_time(&self) -> Duration {
+    self.block_time
   }
 
   /// The Tributary's tip block.
@@ -442,12 +472,20 @@ impl<
     Reader::<T>::block_after(&self.db, self.genesis, parent)
   }
 
+  /// The hashes of locally provided transactions.
+  pub fn locally_provided_transactions(
+    &self,
+    scope: &'static str,
+    start: u64,
+  ) -> impl Iterator<Item = [u8; 32]> {
+    mempool::ProvidedReader::<T>::locally_provided(&self.db, self.genesis, scope, start)
+  }
+
   /// Handle a consensus message.
   ///
   /// This will return once the message has been queued to be handled, offering no inspection
   /// into when that queue is consumed or if the queued message was valid.
-  #[expect(private_interfaces)]
-  pub async fn message(&self, message: TendermintMessage<T>) {
+  pub async fn message(&self, message: Message<T>) {
     /*
       Queueing into an open channel (with no observability into when the queue is consumed from) is
       considered equivalent to not queueing into a closed channel (a queue which will never be
@@ -460,12 +498,29 @@ impl<
   /// Explicitly sync a block.
   ///
   /// This is intended to be used when a Tributary is behind, unable to simply observe blocks as
-  /// they're produced by the consensus process. The block will be queued to be verified/added and
-  /// only actually added if valid.
+  /// they're produced by the consensus process.
   ///
-  /// This will return once the block has been queued to be verified/added, offering no inspection
-  /// into when that queue is consumed or if the queued block was valid.
-  pub async fn sync(&self, block: Block<T>, commit: crate::tendermint::Commit) {
+  /// The block's _syntax_ and the commit is immediately validated. Therefore, this block is either
+  /// valid, semantically invalid, or ephemerally invalid. Assuming honest behavior, this block
+  /// will be semantically valid (due to the commit by a supermajority of validators finalizing
+  /// it) though. This assumption allows simplifying that this function either returns an error or:
+  /// 1) The block was already added
+  /// 2) The block is not ready to be added (due to missing parent blocks)
+  /// 3) The block will be added
+  ///
+  /// This function only queues the block to be added (if verified to be syntactically valid). This
+  /// function offers no inspection into when that queue is consumed or if the queued block was
+  /// valid.
+  pub async fn sync(
+    &self,
+    block: Block<T>,
+    commit: crate::tendermint::Commit,
+  ) -> Result<(), SyncError> {
+    if !commit.verify(&self.validator_set, &self.signature_scheme, &self.genesis, block.hash()) {
+      Err(SyncError::InvalidCommit)?;
+    }
+    let () = block.verify_syntax(self.genesis).map_err(SyncError::InvalidBlock)?;
+
     /*
       Queueing into an open channel (with no observability into when the queue is consumed from) is
       considered equivalent to not queueing into a closed channel (a queue which will never be
@@ -473,6 +528,8 @@ impl<
       ever) handled. This lets us igore any error here.
     */
     let _ = self.sync.send((block, commit)).await;
+
+    Ok(())
   }
 
   /// Publish a transaction into the Tributary's mempool.

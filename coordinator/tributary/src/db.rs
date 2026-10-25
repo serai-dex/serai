@@ -9,11 +9,13 @@ use serai_primitives::{
   address::SeraiAddress,
 };
 
-use serai_db::{Get, Transaction as DbTxn};
+use serai_db::{Get, Transaction as DbTxn, Db};
 use serai_cosign_types::CosignIntent;
 use messages::sign::{VariantSignId, SignId};
 
-use crate::transaction::SigningProtocolRound;
+use tributary_sdk::TributaryHandle;
+
+use crate::transaction::{SigningProtocolRound, Transaction};
 
 /// A topic within the database which the group participates in
 #[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
@@ -243,6 +245,8 @@ serai_db::schema!(
   CoordinatorTributary {
     // The last handled tributary block's (number, hash)
     LastHandledTributaryBlock: (set: ExternalValidatorSet) -> (u64, [u8; 32]),
+    // The last handled provided transaction.
+    LastHandledProvidedTransaction: (set: ExternalValidatorSet, scope: &'static str) -> u64,
 
     // The slash points a validator has accrued, with u32::MAX representing a fatal slash.
     SlashPoints: (set: ExternalValidatorSet, validator: SeraiAddress) -> u32,
@@ -289,19 +293,11 @@ serai_db::channel!(
 
 // 5 minutes
 #[cfg(not(feature = "longer-reattempts"))]
-#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
-pub(crate) const BASE_REATTEMPT_DELAY: u32 = Duration::from_mins(5)
-  .as_millis()
-  .div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME.as_millis())
-  as u32;
+pub(crate) const BASE_REATTEMPT_DELAY: Duration = Duration::from_mins(5);
 
 // 10 minutes, intended for latent environments like the GitHub CI
 #[cfg(feature = "longer-reattempts")]
-#[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
-pub(crate) const BASE_REATTEMPT_DELAY: u32 = Duration::from_mins(10)
-  .as_millis()
-  .div_ceil(tributary_sdk::tendermint::TARGET_BLOCK_TIME.as_millis())
-  as u32;
+pub(crate) const BASE_REATTEMPT_DELAY: Duration = Duration::from_mins(10);
 
 pub(crate) struct TributaryDb;
 impl TributaryDb {
@@ -318,6 +314,22 @@ impl TributaryDb {
     block_hash: [u8; 32],
   ) {
     LastHandledTributaryBlock::set(txn, set, &(block_number, block_hash));
+  }
+
+  pub(crate) fn last_handled_provided_transaction(
+    getter: &impl Get,
+    set: ExternalValidatorSet,
+    scope: &'static str,
+  ) -> Option<u64> {
+    LastHandledProvidedTransaction::get(getter, set, scope)
+  }
+  pub(crate) fn set_last_handled_provided_transaction(
+    txn: &mut (impl Send + DbTxn),
+    set: ExternalValidatorSet,
+    scope: &'static str,
+    nonce: u64,
+  ) {
+    LastHandledProvidedTransaction::set(txn, set, scope, &nonce);
   }
 
   pub(crate) fn latest_substrate_block_to_cosign(
@@ -433,13 +445,17 @@ impl TributaryDb {
     }
   }
 
-  pub(crate) fn fatal_slash(
+  pub(crate) async fn fatal_slash<
+    TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  >(
     txn: &mut (impl Send + DbTxn),
+    tributary: &TributaryHandle<TD, Transaction>,
     set: ExternalValidatorSet,
     validator: SeraiAddress,
     #[cfg_attr(coverage, allow(unused_variables))] reason: &str,
   ) {
     serai_env::warn!("{validator} fatally slashed: {reason}");
+    tributary.censure(validator.0).await;
     SlashPoints::set(txn, set, validator, &u32::MAX);
   }
 
@@ -452,8 +468,12 @@ impl TributaryDb {
   }
 
   #[expect(clippy::too_many_arguments)]
-  pub(crate) fn accumulate<D: Borshy>(
+  pub(crate) async fn accumulate<
+    TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    D: Borshy,
+  >(
     txn: &mut (impl Send + DbTxn),
+    tributary: &TributaryHandle<TD, Transaction>,
     set: ExternalValidatorSet,
     validators: &[SeraiAddress],
     total_weight: u16,
@@ -474,10 +494,12 @@ impl TributaryDb {
     if topic.requires_recognition() && accumulated_weight.is_none() {
       Self::fatal_slash(
         txn,
+        tributary,
         set,
         validator,
         "participated in unrecognized topic which requires recognition",
-      );
+      )
+      .await;
       return DataSet::None;
     }
     let mut accumulated_weight = accumulated_weight.unwrap_or(0);
@@ -491,10 +513,12 @@ impl TributaryDb {
     {
       Self::fatal_slash(
         txn,
+        tributary,
         set,
         validator,
         "participated in topic without participating in prior",
-      );
+      )
+      .await;
       return DataSet::None;
     }
 
@@ -529,7 +553,15 @@ impl TributaryDb {
       let reattempt_topic = topic.reattempt_topic();
       if let Some((attempt, reattempt_topic)) = reattempt_topic {
         // Linearly scale the time for the protocol with the attempt number, up to 10x
-        let blocks_till_reattempt = attempt.min(10).saturating_mul(u64::from(BASE_REATTEMPT_DELAY));
+        let blocks_till_reattempt = {
+          let bounded_attempt = u32::try_from(attempt).unwrap_or(u32::MAX).min(10);
+          let delay = BASE_REATTEMPT_DELAY.saturating_mul(bounded_attempt);
+          let delay_as_millis = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
+          let block_time_as_millis =
+            u64::try_from(tributary.block_time().as_millis()).unwrap_or(u64::MAX);
+          let blocks = delay_as_millis.checked_div(block_time_as_millis);
+          blocks.unwrap_or(20)
+        };
 
         let recognize_at = block_number + blocks_till_reattempt;
         let mut queued = Reattempt::get(txn, set, recognize_at).unwrap_or(Vec::with_capacity(1));

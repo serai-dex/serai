@@ -28,6 +28,8 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 
 serai-client-serai = { path = "../../../substrate/client/serai", default-features = false }
 serai-cosign = { path = "../../cosign" }
+
+tendermint = { package = "tendermint-machine", path = "../../tributary-sdk/tendermint" }
 tributary-sdk = { path = "../../tributary-sdk" }
 
 futures-util = { version = "0.3", default-features = false, features = ["std"] }

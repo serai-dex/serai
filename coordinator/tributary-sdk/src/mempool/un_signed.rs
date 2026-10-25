@@ -6,7 +6,7 @@ use alloc::{
 use serai_db::{Get, Transaction as DbTxn};
 
 use crate::{
-  transaction::{Signed, TransactionKind, Transaction},
+  transaction::{TransactionError, Signed, TransactionKind, Transaction},
   Block,
 };
 
@@ -218,7 +218,10 @@ impl<T: Transaction> UnSigned<T> {
           }
         }
 
-        let signer_mempool = self.signed.get_mut(&signer).ok_or(MempoolError::InvalidSigner)?;
+        let signer_mempool = self
+          .signed
+          .get_mut(&signer)
+          .ok_or(MempoolError::Invalid(TransactionError::InvalidSigner))?;
 
         if !bypass_rate_limit {
           // Check this signer's mempool isn't larger than the rate limit

@@ -1,9 +1,9 @@
 use core::{future::Future, num::NonZero, time::Duration};
-use std::sync::Arc;
+use std::{sync::Arc, collections::HashMap};
 
 use zeroize::Zeroizing;
 use rand_core::OsRng;
-use ciphersuite::*;
+use ciphersuite::{group::GroupEncoding as _, WrappedGroup, GroupIo};
 use dalek_ff_group::Ristretto;
 
 use tokio::sync::mpsc;
@@ -13,7 +13,9 @@ use serai_db::{Transaction as _, Db as DbTrait};
 use serai_client_serai::abi::primitives::validator_sets::ExternalValidatorSet;
 
 use tributary_sdk::{
-  TransactionKind, TransactionError, ProvidedError, TransactionTrait as _, Tributary,
+  transaction::{TransactionError, TransactionKind, Transaction as _},
+  mempool::MempoolError,
+  Tributary, TributaryHandle,
 };
 
 use serai_task::{Task, TaskHandle, DoesNotError, ContinuallyRan};
@@ -52,26 +54,23 @@ serai_db::channel! {
 /// within this file. It should only be considered an internal helper for this domain alone.
 async fn provide_transaction<
   TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  P: P2p,
 >(
   set: ExternalValidatorSet,
-  tributary: &Tributary<TD, Transaction, P>,
+  tributary: &TributaryHandle<TD, Transaction>,
   tx: Transaction,
 ) {
-  match tributary.provide_transaction(tx.clone()).await {
+  match tributary.transaction(tx.clone()).await {
     // The Tributary uses its own DB, so we may provide this multiple times if we reboot before
     // committing the txn which provoked this
-    Ok(()) | Err(ProvidedError::AlreadyProvided) => {}
-    Err(ProvidedError::NotProvided) => {
-      panic!("providing a Transaction which wasn't a Provided transaction: {tx:?}");
-    }
-    Err(ProvidedError::InvalidProvided(e)) => {
+    Ok(()) | Err(MempoolError::AlreadyPresent) => {}
+    Err(MempoolError::Invalid(e)) => {
       panic!("providing an invalid Provided transaction, tx: {tx:?}, error: {e:?}")
     }
+    Err(MempoolError::RateLimit) => panic!("rate limit applied to provided transactions?"),
     // The Tributary's scan task won't advance if we don't have the Provided transactions
     // present on-chain, and this enters an infinite loop to block the calling task from
     // advancing
-    Err(ProvidedError::LocalMismatchesOnChain) => loop {
+    Err(MempoolError::Conflict) => loop {
       serai_env::error!(
         "Tributary {set:?} was supposed to provide {tx:?} but peers disagree, halting Tributary",
       );
@@ -85,18 +84,16 @@ async fn provide_transaction<
 pub(crate) struct ProvideCosignCosignedTransactionsTask<
   CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
   TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  P: P2p,
 > {
   db: CD,
   tributary_db: TD,
   set: NewSetInformation,
-  tributary: Tributary<TD, Transaction, P>,
+  tributary: TributaryHandle<TD, Transaction>,
 }
 impl<
   CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
   TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  P: P2p,
-> ContinuallyRan for ProvideCosignCosignedTransactionsTask<CD, TD, P>
+> ContinuallyRan for ProvideCosignCosignedTransactionsTask<CD, TD>
 {
   type Error = String;
 
@@ -172,53 +169,37 @@ impl<
 #[must_use]
 async fn add_signed_unsigned_transaction<
   TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  P: P2p,
 >(
-  tributary: &Tributary<TD, Transaction, P>,
+  tributary: &TributaryHandle<TD, Transaction>,
   key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   mut tx: Transaction,
 ) -> bool {
   // If this is a signed transaction, sign it
-  if matches!(tx.kind(), TransactionKind::Signed(_, _)) {
+  if matches!(tx.kind(), TransactionKind::Signed { .. }) {
     tx.sign(&mut OsRng, tributary.genesis(), key);
   }
 
-  let res = tributary.add_transaction(tx.clone()).await;
+  let res = tributary.transaction(tx.clone()).await;
   match &res {
     // Fresh publication, already published
-    Ok(true | false) => {}
-    Err(
-      TransactionError::TooLargeTransaction |
+    Ok(()) | Err(MempoolError::AlreadyPresent) => {}
+    Err(MempoolError::Invalid(
+      TransactionError::ExceededSizeLimit |
       TransactionError::InvalidSigner |
       TransactionError::InvalidSignature |
-      TransactionError::InvalidContent,
-    ) => {
+      TransactionError::InvalidTransaction,
+    )) => {
       panic!("created an invalid transaction, tx: {tx:?}, err: {res:?}");
     }
-    // InvalidNonce may be out-of-order TXs, not invalid ones, but we only create nonce #n+1 after
-    // on-chain inclusion of the TX with nonce #n, so it is invalid within our context unless the
-    // issue is this transaction was already included on-chain
-    Err(TransactionError::InvalidNonce) => {
-      let TransactionKind::Signed(order, signed) = tx.kind() else {
-        panic!("non-Signed transaction had InvalidNonce");
-      };
-      let next_nonce = tributary
-        .next_nonce(&signed.signer, &order)
-        .await
-        .expect("signer who is a present validator didn't have a nonce");
-      assert_ne!(next_nonce, signed.nonce);
-      // We're publishing an old transaction
-      if next_nonce > signed.nonce {
-        return true;
-      }
-      panic!("nonce in transaction wasn't contiguous with nonce on-chain");
+    Err(MempoolError::Conflict) => {
+      panic!(
+        "crated a conflicting transaction. are there two coordinators with our key? tx: {tx:?}"
+      )
     }
     // We've published too many transactions recently
-    Err(TransactionError::TooManyInMempool) => {
+    Err(MempoolError::RateLimit) => {
       return false;
     }
-    // This isn't a Provided transaction so this should never be hit
-    Err(TransactionError::ProvidedAddedToMempool) => unreachable!(),
   }
 
   true
@@ -226,18 +207,17 @@ async fn add_signed_unsigned_transaction<
 
 async fn add_with_recognition_check<
   TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  P: P2p,
 >(
   set: ExternalValidatorSet,
   tributary_db: &mut TD,
-  tributary: &Tributary<TD, Transaction, P>,
+  tributary: &TributaryHandle<TD, Transaction>,
   key: &Zeroizing<<Ristretto as WrappedGroup>::F>,
   tx: Transaction,
 ) -> bool {
   let kind = tx.kind();
   match kind {
-    TransactionKind::Provided(_) => provide_transaction(set, tributary, tx).await,
-    TransactionKind::Unsigned | TransactionKind::Signed(_, _) => {
+    TransactionKind::Provided { .. } => provide_transaction(set, tributary, tx).await,
+    TransactionKind::Unsigned | TransactionKind::Signed { .. } => {
       // If this is a transaction with signing data, check the topic is recognized before
       // publishing
       let topic = tx.topic();
@@ -268,19 +248,17 @@ async fn add_with_recognition_check<
 pub(crate) struct AddTributaryTransactionsTask<
   CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
   TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  P: P2p,
 > {
   db: CD,
   tributary_db: TD,
-  tributary: Tributary<TD, Transaction, P>,
+  tributary: TributaryHandle<TD, Transaction>,
   set: NewSetInformation,
   key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 }
 impl<
   CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
   TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  P: P2p,
-> ContinuallyRan for AddTributaryTransactionsTask<CD, TD, P>
+> ContinuallyRan for AddTributaryTransactionsTask<CD, TD>
 {
   type Error = DoesNotError;
 
@@ -411,19 +389,17 @@ impl<TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>> Conti
 pub(crate) struct SignSlashReportTask<
   CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
   TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  P: P2p,
 > {
   db: CD,
   tributary_db: TD,
-  tributary: Tributary<TD, Transaction, P>,
+  tributary: TributaryHandle<TD, Transaction>,
   set: NewSetInformation,
   key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 }
 impl<
   CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
   TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  P: P2p,
-> ContinuallyRan for SignSlashReportTask<CD, TD, P>
+> ContinuallyRan for SignSlashReportTask<CD, TD>
 {
   type Error = DoesNotError;
 
@@ -433,31 +409,11 @@ impl<
       let Some(()) = SignSlashReport::try_recv(&mut txn, self.set.set) else { return Ok(false) };
 
       // Fetch the slash report for this Tributary
-      let mut tx =
-        serai_coordinator_tributary::slash_report_transaction(&self.tributary_db, &self.set);
-      tx.sign(&mut OsRng, self.tributary.genesis(), &self.key);
+      let tx = serai_coordinator_tributary::slash_report_transaction(&self.tributary_db, &self.set);
 
-      let res = self.tributary.add_transaction(tx.clone()).await;
-      match &res {
-        // Fresh publication, already published
-        Ok(true | false) => {}
-        Err(
-          TransactionError::TooLargeTransaction |
-          TransactionError::InvalidSigner |
-          TransactionError::InvalidNonce |
-          TransactionError::InvalidSignature |
-          TransactionError::InvalidContent,
-        ) => {
-          panic!("created an invalid SlashReport transaction, tx: {tx:?}, err: {res:?}");
-        }
-        // We've published too many transactions recently
-        // Drop this txn to try to publish it again later on a future iteration
-        Err(TransactionError::TooManyInMempool) => {
-          drop(txn);
-          return Ok(false);
-        }
-        // This isn't a Provided transaction so this should never be hit
-        Err(TransactionError::ProvidedAddedToMempool) => unreachable!(),
+      if !add_signed_unsigned_transaction(&self.tributary, &self.key, tx).await {
+        drop(txn);
+        return Ok(false);
       }
 
       txn.commit();
@@ -470,11 +426,10 @@ impl<
 async fn scan_on_new_block<
   CD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
   TD: 'static + Send + Sync + for<'db> DbTrait<Transaction<'db>: Send>,
-  P: P2p,
 >(
   db: CD,
   set: ExternalValidatorSet,
-  tributary: Tributary<TD, Transaction, P>,
+  tributary: TributaryHandle<TD, Transaction>,
   scan_tributary_task: TaskHandle,
   tasks_to_keep_alive: Vec<TaskHandle>,
 ) {
@@ -489,11 +444,7 @@ async fn scan_on_new_block<
 
     // Have the tributary scanner run as soon as there's a new block
     // This `expect` is unreachable since this owns the tributary object and doesn't drop it
-    tributary
-      .next_block_notification()
-      .await
-      .await
-      .expect("tributary was dropped causing notification to error");
+    tributary.next_block_notification().await;
     scan_tributary_task.run_now();
   }
 }
@@ -510,12 +461,15 @@ async fn scan_on_new_block<
 /// - Spawn the ConfirmDkgTask
 /// - Spawn the SignSlashReportTask
 /// - Iterate the scan task whenever a new block occurs (not just on the standard interval)
-pub(crate) async fn spawn_tributary<P: P2p>(
+pub(crate) async fn spawn_tributary<P: P2p<Transaction>>(
   env: &Environment,
   db: Db,
   message_queue: Arc<MessageQueue>,
   p2p: P,
-  p2p_add_tributary: &mpsc::UnboundedSender<(ExternalValidatorSet, Tributary<Db, Transaction, P>)>,
+  p2p_add_tributary: &mpsc::UnboundedSender<(
+    ExternalValidatorSet,
+    TributaryHandle<Db, Transaction>,
+  )>,
   set: NewSetInformation,
   serai_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 ) {
@@ -528,23 +482,36 @@ pub(crate) async fn spawn_tributary<P: P2p>(
 
   let genesis = set.tributary_genesis();
 
-  let mut tributary_validators = Vec::with_capacity(set.validators.len());
+  let mut tributary_validators = HashMap::with_capacity(set.validators.len());
   for (validator, weight) in set.validators.iter().copied() {
     let validator_key = <Ristretto as GroupIo>::read_G(&mut validator.0.as_slice())
       .expect("Serai validator had an invalid public key");
-    tributary_validators.push((
-      validator_key,
+    tributary_validators.insert(
+      validator_key.to_bytes(),
       NonZero::new(weight).expect("Serai declared validator without any weight"),
-    ));
+    );
   }
+
+  const MEMPOOL_RATE_LIMIT: usize = 100;
 
   // Spawn the Tributary
   let tributary_db = crate::db::tributary_db(env, set.set);
-  let tributary =
-    Tributary::new(tributary_db.clone(), genesis, serai_key.clone(), tributary_validators, p2p)
-      .await
-      .unwrap();
-  let reader = tributary.reader();
+  let (tributary_task, tributary) = Tributary::new(
+    tributary_db.clone(),
+    genesis,
+    Some(set.serai_block_time),
+    tributary_validators,
+    p2p.clone(),
+    p2p,
+    serai_key.clone(),
+    MEMPOOL_RATE_LIMIT,
+  )
+  .await
+  .unwrap();
+  // TODO: https://github.com/serai-dex/serai/issues/1257
+  for task in tributary_task {
+    tokio::spawn(task);
+  }
 
   // Inform the P2P network
   p2p_add_tributary
@@ -578,7 +545,7 @@ pub(crate) async fn spawn_tributary<P: P2p>(
   // Spawn the scan task
   let (scan_tributary_task_def, scan_tributary_task) = Task::new();
   tokio::spawn(
-    ScanTributaryTask::<_, P>::new(tributary_db.clone(), set.clone(), reader)
+    ScanTributaryTask::<_>::new(tributary_db.clone(), set.clone(), tributary.clone())
       // This is the only handle for this TributaryProcessorMessagesTask, so when this task is
       // dropped, it will be too
       .continually_run(scan_tributary_task_def, vec![scan_tributary_messages_task]),

@@ -40,8 +40,6 @@ pub enum MempoolError {
   Invalid(TransactionError),
   /// The transaction was already present within the mempool or on-chain.
   AlreadyPresent,
-  /// The transaction had a signer who wasn't a validator (or was a slashed validator).
-  InvalidSigner,
   /// The transaction conflicts with a transaction already present within the mempool or on-chain.
   Conflict,
   /// The signer has too many pre-existing transactions in the mempool.
@@ -70,12 +68,14 @@ pub trait MempoolNetwork<T: Transaction> {
   /// The mempool will automatically re-gossip transactions which have yet to be included on-chain.
   /// Accordingly, this gossip layer should have some layer of intelligence, being able to
   /// de-duplicate and rate-limit gossiped transactions (in case the mempool is over-eager).
-  fn gossip(&mut self, transaction: T);
+  fn gossip(&mut self, genesis: [u8; 32], transaction: T);
 }
 
 /// A stub implementation which does not implement any gossip functionality.
+///
+/// This likely SHOULD NOT be used.
 impl<T: Transaction> MempoolNetwork<T> for () {
-  fn gossip(&mut self, _transaction: T) {}
+  fn gossip(&mut self, _genesis: [u8; 32], _transaction: T) {}
 }
 
 pin_project_lite::pin_project! {
@@ -153,7 +153,7 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
               i.checked_add(outstanding_un_signed_transactions)
                 .is_some_and(|i| range.contains(&i))
             {
-              projection.network.gossip(transaction.clone());
+              projection.network.gossip(*projection.genesis, transaction.clone());
             }
           }
           *projection.regossip = projection.regossip.wrapping_add(transactions_to_regossip);
@@ -335,7 +335,7 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Mempool<D, T, N> {
       TransactionKind::Unsigned | TransactionKind::Signed { .. } => {
         let result = projection.un_signed.add(txn, transaction.clone(), bypass_rate_limit);
         if result.is_ok() {
-          projection.network.gossip(transaction);
+          projection.network.gossip(*projection.genesis, transaction);
         }
         result
       }

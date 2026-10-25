@@ -64,6 +64,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Continually
       // These are all the events which generate canonical messages
       struct EphemeralEvents {
         block_hash: BlockHash,
+        block_time: u64,
         embedded_elliptic_curve_keys_events: Vec<serai_client_serai::abi::validator_sets::Event>,
         set_decided_events: Vec<serai_client_serai::abi::validator_sets::Event>,
         accepted_handover_events: Vec<serai_client_serai::abi::validator_sets::Event>,
@@ -85,6 +86,13 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Continually
               Err(serai_cosign::Faulted) => return Err("cosigning process faulted".to_owned()),
             };
 
+            let block = serai.block(block_hash).await.map_err(|e| format!("{e}"))?;
+            let block = block.ok_or(format!(
+              "Serai node didn't have cosigned block {}",
+              hex::encode(block_hash.0)
+            ))?;
+            let block_time = block.header.unix_time_in_millis();
+
             let events = serai.events(block_hash).await.map_err(|e| format!("{e}"))?;
             let embedded_elliptic_curve_keys_events = events
               .validator_sets()
@@ -100,6 +108,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Continually
               block_number,
               EphemeralEvents {
                 block_hash,
+                block_time,
                 embedded_elliptic_curve_keys_events,
                 set_decided_events,
                 accepted_handover_events,
@@ -216,21 +225,20 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Continually
               }
             }
 
-            let mut new_set = NewSetInformation {
+            let serai_block = block.block_hash.0;
+            let serai_block_time = block.block_time;
+            // TODO: This should be inlined into the Processor's key gen code
+            // It's legacy from when we removed participants from the key gen
+            let threshold = ((total_weight * 2) / 3) + 1;
+            // TODO: Why are `validators` and `evrf_public_keys` two separate fields?
+            let new_set = NewSetInformation::new(
               set,
-              serai_block: block.block_hash.0,
-              // TODO: This should be inlined into the Processor's key gen code
-              // It's legacy from when we removed participants from the key gen
-              threshold: ((total_weight * 2) / 3) + 1,
-              // TODO: Why are `validators` and `evrf_public_keys` two separate fields?
+              serai_block,
+              serai_block_time,
+              threshold,
               validators,
               evrf_public_keys,
-              participant_indexes: Default::default(),
-              participant_indexes_reverse_lookup: Default::default(),
-            };
-            // These aren't serialized, and we immediately serialize and drop this, so this isn't
-            // necessary. It's just good practice not have this be dirty
-            new_set.init_participant_indexes();
+            );
             crate::NewSet::send(&mut txn, &new_set);
           }
         }

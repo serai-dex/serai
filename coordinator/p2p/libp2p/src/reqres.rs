@@ -1,4 +1,4 @@
-use core::{fmt, time::Duration};
+use core::{marker::PhantomData, fmt, time::Duration};
 use std::io;
 
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -12,35 +12,31 @@ pub use request_response::{InboundRequestId, Message};
 
 use serai_cosign::SignedCosign;
 
-use serai_coordinator_p2p::{Heartbeat, TributaryBlockWithCommit};
+use tributary_sdk::Transaction;
 
-/// The maximum message size for the request-response protocol
-// This is derived from the heartbeat message size as it's our largest message
-pub(crate) const MAX_LIBP2P_REQRES_MESSAGE_SIZE: usize =
-  1024 + serai_coordinator_p2p::heartbeat::BATCH_SIZE_LIMIT;
+use serai_coordinator_p2p::{SyncRequest, CommittedTributaryBlock};
 
 const PROTOCOL: &str = "/serai/coordinator/reqres/1.0.0";
 
 /// Requests which can be made via the request-response protocol.
 #[derive(Clone, Copy, Debug, BorshSerialize, BorshDeserialize)]
 pub(crate) enum Request {
-  /// A heartbeat informing our peers of our latest block, for the specified blockchain, on regular
-  /// intervals.
+  /// A sync request informing our peers of our latest block, for the specified blockchain.
   ///
   /// If our peers have more blocks than us, they're expected to respond with those blocks.
-  Heartbeat(Heartbeat),
+  SyncRequest(SyncRequest),
   /// A request for the notable cosigns for a global session.
   NotableCosigns { global_session: [u8; 32] },
 }
 
 /// Responses which can be received via the request-response protocol.
 #[derive(Clone, BorshSerialize, BorshDeserialize)]
-pub(crate) enum Response {
+pub(crate) enum Response<Tx: 'static + Send + Sync + Transaction> {
   None,
-  Blocks(Vec<TributaryBlockWithCommit>),
+  Blocks(#[borsh(bound(serialize = "", deserialize = ""))] Vec<CommittedTributaryBlock<Tx>>),
   NotableCosigns(Vec<SignedCosign>),
 }
-impl fmt::Debug for Response {
+impl<Tx: 'static + Send + Sync + Transaction> fmt::Debug for Response<Tx> {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Response::None => fmt.debug_struct("Response::None").finish(),
@@ -57,15 +53,24 @@ impl fmt::Debug for Response {
 /// We don't use CBOR or JSON, but use borsh to create `Vec<u8>`s we then length-prefix. While
 /// ideally, we'd use borsh directly with the `io` traits defined here, they're async and there
 /// isn't an amenable API within borsh for incremental deserialization.
-#[derive(Default, Clone, Copy, Debug)]
-pub(crate) struct Codec;
-impl Codec {
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Codec<Tx: 'static + Send + Sync + Transaction>(PhantomData<Tx>);
+impl<Tx: 'static + Send + Sync + Transaction> Default for Codec<Tx> {
+  fn default() -> Self {
+    Self(PhantomData)
+  }
+}
+impl<Tx: 'static + Send + Sync + Transaction> Codec<Tx> {
   async fn read<M: BorshDeserialize>(io: &mut (impl Unpin + AsyncRead)) -> io::Result<M> {
     let mut len = [0; 4];
     io.read_exact(&mut len).await?;
     let len = usize::try_from(u32::from_le_bytes(len)).expect("not at least a 32-bit platform?");
-    if len > MAX_LIBP2P_REQRES_MESSAGE_SIZE {
-      Err(io::Error::other("request length exceeded MAX_LIBP2P_REQRES_MESSAGE_SIZE"))?;
+    if len > {
+      // The maximum message size for the request-response protocol
+      // This is derived from the sync request's response as it's our largest message
+      1_024 + serai_coordinator_p2p::sync_batch_size::<Tx>()
+    } {
+      Err(io::Error::other("request length exceeded the max libp2p reqres message size"))?;
     }
     // This may be a non-trivial allocation easily causable
     // While we could chunk the read, meaning we only perform the allocation as bandwidth is used,
@@ -85,10 +90,10 @@ impl Codec {
     io.write_all(&msg).await
   }
 }
-impl CodecTrait for Codec {
+impl<Tx: 'static + Send + Sync + Transaction> CodecTrait for Codec<Tx> {
   type Protocol = &'static str;
   type Request = Request;
-  type Response = Response;
+  type Response = Response<Tx>;
 
   async fn read_request<R: Send + Unpin + AsyncRead>(
     &mut self,
@@ -101,7 +106,7 @@ impl CodecTrait for Codec {
     &mut self,
     _: &Self::Protocol,
     io: &mut R,
-  ) -> io::Result<Response> {
+  ) -> io::Result<Self::Response> {
     Self::read(io).await
   }
   async fn write_request<W: Send + Unpin + AsyncWrite>(
@@ -116,16 +121,16 @@ impl CodecTrait for Codec {
     &mut self,
     _: &Self::Protocol,
     io: &mut W,
-    res: Response,
+    res: Self::Response,
   ) -> io::Result<()> {
     Self::write(io, &res).await
   }
 }
 
-pub(crate) type Event = GenericEvent<Request, Response>;
+pub(crate) type Event<Tx> = GenericEvent<Request, Response<Tx>>;
 
-pub(crate) type Behavior = Behaviour<Codec>;
-pub(crate) fn new_behavior() -> Behavior {
+pub(crate) type Behavior<Tx> = Behaviour<Codec<Tx>>;
+pub(crate) fn new_behavior<Tx: 'static + Send + Sync + Transaction>() -> Behavior<Tx> {
   let config = Config::default().with_request_timeout(Duration::from_secs(5));
   Behavior::new([(PROTOCOL, ProtocolSupport::Full)], config)
 }

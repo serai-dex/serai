@@ -16,7 +16,7 @@ use serai_client_serai::abi::primitives::{
 };
 use message_queue::{Service, Metadata, Client as MessageQueue};
 
-use tributary_sdk::Tributary;
+use tributary_sdk::TributaryHandle;
 
 use serai_task::ContinuallyRan;
 
@@ -27,18 +27,18 @@ use serai_coordinator_p2p::P2p;
 
 use crate::{Db, KeySet};
 
-pub(crate) struct SubstrateTask<P: P2p> {
+pub(crate) struct SubstrateTask<P: P2p<Transaction>> {
   pub(crate) env: Environment,
   pub(crate) serai_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   pub(crate) db: Db,
   pub(crate) message_queue: Arc<MessageQueue>,
   pub(crate) p2p: P,
   pub(crate) p2p_add_tributary:
-    mpsc::UnboundedSender<(ExternalValidatorSet, Tributary<Db, Transaction, P>)>,
+    mpsc::UnboundedSender<(ExternalValidatorSet, TributaryHandle<Db, Transaction>)>,
   pub(crate) p2p_retire_tributary: mpsc::UnboundedSender<ExternalValidatorSet>,
 }
 
-impl<P: P2p> ContinuallyRan for SubstrateTask<P> {
+impl<P: P2p<Transaction>> ContinuallyRan for SubstrateTask<P> {
   type Error = String; // TODO
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {

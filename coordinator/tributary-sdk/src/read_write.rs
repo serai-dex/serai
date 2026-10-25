@@ -61,7 +61,8 @@ pub(crate) fn serialized_len(value: &impl ReadWrite) -> io::Result<usize> {
 
 #[derive(Clone)]
 #[repr(transparent)]
-pub(crate) struct ReadWriteAsBorsh<RW: ReadWrite>(pub(crate) RW);
+#[doc(hidden)]
+pub struct ReadWriteAsBorsh<RW: ReadWrite>(pub RW);
 impl<'rw, RW: ReadWrite> From<&'rw RW> for &'rw ReadWriteAsBorsh<RW> {
   fn from(rw: &'rw RW) -> Self {
     // SAFETY: `repr(transparent)`

@@ -14,6 +14,8 @@ use serai_task::TaskHandle;
 
 use serai_cosign::SignedCosign;
 
+use tributary_sdk::{ReadWriteAsBorsh, Transaction};
+
 use futures_util::StreamExt as _;
 use libp2p::{
   identity::PeerId,
@@ -21,7 +23,7 @@ use libp2p::{
   swarm::{dial_opts::DialOpts, SwarmEvent, Swarm},
 };
 
-use serai_coordinator_p2p::Heartbeat;
+use serai_coordinator_p2p::SyncRequest;
 
 use crate::{
   Peers, BehaviorEvent, Behavior,
@@ -48,7 +50,7 @@ const TIME_BETWEEN_REBUILD_PEERS: Duration = Duration::from_mins(10);
   - Dispatching received requests
   - Sending responses
 */
-pub(crate) struct SwarmTask {
+pub(crate) struct SwarmTask<Tx: 'static + Send + Sync + Transaction> {
   dial_task: TaskHandle,
   to_dial: mpsc::UnboundedReceiver<DialOpts>,
   last_dial_task_run: Instant,
@@ -58,22 +60,23 @@ pub(crate) struct SwarmTask {
   peers: Peers,
   rebuild_peers_at: Instant,
 
-  swarm: Swarm<Behavior>,
+  swarm: Swarm<Behavior<Tx>>,
 
-  gossip: mpsc::UnboundedReceiver<gossip::Message>,
+  gossip: mpsc::UnboundedReceiver<gossip::Message<Tx>>,
   signed_cosigns: mpsc::UnboundedSender<SignedCosign>,
-  tributary_gossip: mpsc::UnboundedSender<([u8; 32], Vec<u8>)>,
+  tributary_messages: mpsc::UnboundedSender<([u8; 32], tributary_sdk::Message<Tx>)>,
+  tributary_transactions: mpsc::UnboundedSender<([u8; 32], Tx)>,
 
-  outbound_requests: mpsc::UnboundedReceiver<(PeerId, Request, oneshot::Sender<Response>)>,
-  outbound_request_responses: HashMap<OutboundRequestId, oneshot::Sender<Response>>,
+  outbound_requests: mpsc::UnboundedReceiver<(PeerId, Request, oneshot::Sender<Response<Tx>>)>,
+  outbound_request_responses: HashMap<OutboundRequestId, oneshot::Sender<Response<Tx>>>,
 
-  inbound_request_response_channels: HashMap<InboundRequestId, ResponseChannel<Response>>,
+  inbound_request_response_channels: HashMap<InboundRequestId, ResponseChannel<Response<Tx>>>,
   heartbeat_requests: mpsc::UnboundedSender<(InboundRequestId, ExternalValidatorSet, [u8; 32])>,
   notable_cosign_requests: mpsc::UnboundedSender<(InboundRequestId, [u8; 32])>,
-  inbound_request_responses: mpsc::UnboundedReceiver<(InboundRequestId, Response)>,
+  inbound_request_responses: mpsc::UnboundedReceiver<(InboundRequestId, Response<Tx>)>,
 }
 
-impl SwarmTask {
+impl<Tx: 'static + Send + Sync + Transaction> SwarmTask<Tx> {
   fn handle_gossip(&mut self, event: gossip::Event) {
     match event {
       gossip::Event::Message { message, .. } => {
@@ -83,8 +86,14 @@ impl SwarmTask {
           return;
         };
         match message {
-          gossip::Message::Tributary { tributary, message } => {
-            let _: Result<_, _> = self.tributary_gossip.send((tributary, message));
+          gossip::Message::TributaryMessage { tributary, message } => {
+            let _: Result<_, _> = self.tributary_messages.send((tributary, message));
+          }
+          gossip::Message::TributaryTransaction {
+            tributary,
+            transaction: ReadWriteAsBorsh(transaction),
+          } => {
+            let _: Result<_, _> = self.tributary_transactions.send((tributary, transaction));
           }
           gossip::Message::Cosign(signed_cosign) => {
             let _: Result<_, _> = self.signed_cosigns.send(signed_cosign);
@@ -99,11 +108,11 @@ impl SwarmTask {
     }
   }
 
-  fn handle_reqres(&mut self, event: reqres::Event) {
+  fn handle_reqres(&mut self, event: reqres::Event<Tx>) {
     match event {
       reqres::Event::Message { message, .. } => match message {
         reqres::Message::Request { request_id, request, channel } => match request {
-          reqres::Request::Heartbeat(Heartbeat { set, latest_block_hash }) => {
+          reqres::Request::SyncRequest(SyncRequest { set, latest_block_hash }) => {
             self.inbound_request_response_channels.insert(request_id, channel);
             let _: Result<_, _> =
               self.heartbeat_requests.send((request_id, set, latest_block_hash));
@@ -317,20 +326,21 @@ impl SwarmTask {
     validator_changes: mpsc::UnboundedReceiver<validators::Changes>,
     peers: Peers,
 
-    swarm: Swarm<Behavior>,
+    swarm: Swarm<Behavior<Tx>>,
 
-    gossip: mpsc::UnboundedReceiver<gossip::Message>,
+    gossip: mpsc::UnboundedReceiver<gossip::Message<Tx>>,
     signed_cosigns: mpsc::UnboundedSender<SignedCosign>,
-    tributary_gossip: mpsc::UnboundedSender<([u8; 32], Vec<u8>)>,
+    tributary_messages: mpsc::UnboundedSender<([u8; 32], tributary_sdk::Message<Tx>)>,
+    tributary_transactions: mpsc::UnboundedSender<([u8; 32], Tx)>,
 
-    outbound_requests: mpsc::UnboundedReceiver<(PeerId, Request, oneshot::Sender<Response>)>,
+    outbound_requests: mpsc::UnboundedReceiver<(PeerId, Request, oneshot::Sender<Response<Tx>>)>,
 
     heartbeat_requests: mpsc::UnboundedSender<(InboundRequestId, ExternalValidatorSet, [u8; 32])>,
     notable_cosign_requests: mpsc::UnboundedSender<(InboundRequestId, [u8; 32])>,
-    inbound_request_responses: mpsc::UnboundedReceiver<(InboundRequestId, Response)>,
+    inbound_request_responses: mpsc::UnboundedReceiver<(InboundRequestId, Response<Tx>)>,
   ) {
     tokio::spawn(
-      SwarmTask {
+      Self {
         dial_task,
         to_dial,
         last_dial_task_run: Instant::now(),
@@ -344,7 +354,8 @@ impl SwarmTask {
 
         gossip,
         signed_cosigns,
-        tributary_gossip,
+        tributary_messages,
+        tributary_transactions,
 
         outbound_requests,
         outbound_request_responses: HashMap::new(),

@@ -18,14 +18,16 @@ workspace = true
 
 [dependencies]
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
-
 serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
 
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 serai-cosign = { path = "../cosign" }
+
+tendermint = { package = "tendermint-machine", path = "../tributary-sdk/tendermint" }
 tributary-sdk = { path = "../tributary-sdk" }
 
-futures-lite = { version = "2", default-features = false, features = ["std"] }
+getrandom = { version = "0.4", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
 
 log = { version = "0.4", default-features = false, features = ["std"] }

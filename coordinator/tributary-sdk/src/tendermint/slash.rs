@@ -30,7 +30,7 @@ impl Slash {
   }
 
   /// Verify a slash.
-  pub fn verify(
+  pub(crate) fn verify(
     &self,
     genesis: [u8; 32],
     validator_set: &(impl ?Sized + ValidatorSet<Validator = [u8; 32]>),

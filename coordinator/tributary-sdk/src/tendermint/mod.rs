@@ -71,6 +71,7 @@ pub(crate) trait Mempool<T> {
 }
 
 /// A wrapper around `HashMap` which caches the results of its functions.
+#[derive(Clone)]
 pub(crate) struct ValidatorSet {
   validators: HashMap<[u8; 32], NonZero<u16>>,
   total_weight: NonZero<u16>,
