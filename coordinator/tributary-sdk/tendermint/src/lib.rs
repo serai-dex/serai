@@ -176,7 +176,26 @@ mod tendermint {
   > TendermintProcess<B, S, D, N>
   {
     async fn run(mut self) {
+      let mut progress = true;
       loop {
+        /*
+          Attempt to form a commit.
+
+          We do this first in case the process was interrupted while prior attempting a commit.
+        */
+        if progress {
+          let mut txn = self.db.txn();
+          let messages =
+            self.state.attempt_commit::<N>(&mut self.blockchain, &self.signer, &mut txn).await;
+          txn.commit();
+
+          for message in messages {
+            self.network.broadcast(self.blockchain.genesis(), message).await;
+          }
+        }
+        // Assume we made progress on each iteration of this loop
+        progress = true;
+
         /*
           We use our `Or` future to implement a select, where our `Or` is documented to prefer `f1`
           to `f2`, causing these to be polled in the order they're written.
@@ -202,15 +221,15 @@ mod tendermint {
 
         match tick {
           crate::or::Either::L(crate::or::Either::L(Ok((block, commit)))) => {
-            if commit.block_number != self.state.block_number() {
-              continue;
-            }
-            if !commit.verify(
-              self.blockchain.validator_set(),
-              self.blockchain.signature_scheme(),
-              self.blockchain.genesis(),
-              block.semantic_hash(),
-            ) {
+            if (commit.block_number != self.state.block_number()) ||
+              (!commit.verify(
+                self.blockchain.validator_set(),
+                self.blockchain.signature_scheme(),
+                self.blockchain.genesis(),
+                block.semantic_hash(),
+              ))
+            {
+              progress = false;
               continue;
             }
 
@@ -224,8 +243,6 @@ mod tendermint {
             for message in messages {
               self.network.broadcast(self.blockchain.genesis(), message).await;
             }
-
-            continue;
           }
 
           /*
@@ -259,6 +276,7 @@ mod tendermint {
               }
               Err(MessageError::Invalid(slash_reason)) => {
                 self.blockchain.slash(validator, slash_reason);
+                progress = false;
                 continue;
               }
               Err(
@@ -268,24 +286,15 @@ mod tendermint {
                 MessageError::InvalidOuterSignature |
                 MessageError::FatalProposal |
                 MessageError::AlreadyHandled,
-              ) => continue,
+              ) => {
+                progress = false;
+                continue;
+              }
             }
           }
           // If our channels have been closed, terminate the consensus process
           crate::or::Either::L(crate::or::Either::L(Err(async_channel::RecvError))) |
           crate::or::Either::R(Err(async_channel::RecvError)) => return,
-        }
-
-        // Attempt to form a commit
-        {
-          let mut txn = self.db.txn();
-          let messages =
-            self.state.attempt_commit::<N>(&mut self.blockchain, &self.signer, &mut txn).await;
-          txn.commit();
-
-          for message in messages {
-            self.network.broadcast(self.blockchain.genesis(), message).await;
-          }
         }
       }
     }
