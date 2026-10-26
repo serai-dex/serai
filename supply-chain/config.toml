@@ -682,7 +682,7 @@ first-party = true
 first-party = false
 notes = "Member of `patches/`, but explicitly tracked as if third-party"
 
-[policy.tributary-sdk]
+[policy.tributary-framework]
 audit-as-crates-io = false
 first-party = true
 

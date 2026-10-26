@@ -1,7 +1,7 @@
-# Tributary SDK
+# Tributary Framework
 
-The Tributary SDK is a mini-blockchain framework, intended for being embedded
-into applications (and not itself the application). It serves as a
+The Tributary Framework is a mini-blockchain framework, intended for being
+embedded into applications (and not itself the application). It serves as a
 decentralized append-only message log, with agreement on the order of messages.
 
 ### Model
@@ -17,9 +17,10 @@ Once appended onto the blockchain, blocks may be read. The application is
 intended to index these blocks, applying the transactions within against the
 application's state and handling their semantics. If a transaction is
 semantically invalid, it is up to the application to ignore it or otherwise
-handle it however. This minimizes the complexity of the Tributary SDK itself,
-with caveat semantically-invalid transactions must be ignored (and still take
-up space) rather than being excluded from the Tributary in the first place.
+handle it however. This minimizes the complexity of the Tributary Framework
+itself, with caveat semantically-invalid transactions must be ignored (and
+still take up space) rather than being excluded from the Tributary in the first
+place.
 
 Transactions are allowed to have one of three types:
 
@@ -48,9 +49,9 @@ Transactions are allowed to have one of three types:
 
 ### Consensus
 
-The Tributary SDK achieves consensus over blocks via Tendermint, as implemented
-by [`tendermint-consensus`](https://docs.rs/tendermint-consensus). The choice
-of Tendermint enables consensus
+The Tributary Framework achieves consensus over blocks via Tendermint, as
+implemented by [`tendermint-consensus`](https://docs.rs/tendermint-consensus).
+The choice of Tendermint enables consensus
 _even in the presence of misbehaving validator_, so long as the misbehaving
 validators are less than a third of all validators (by weight).
 
@@ -79,11 +80,11 @@ be similarly functional (not requiring any additional setup in advance).
 ### Cryptography
 
 [`tendermint-consensus`](https://docs.rs/tendermint-consensus) is abstract to
-the cryptography it's instantiated with. The Tributary SDK explicitly uses
-Schnorr signatures over Ristretto though, not just for the Tendermint consensus
-protocol but also for its signed transactions. This makes it efficient but
-means it is vulnerable to quantum computers. Propagating the choice of
-cryptography is an open task.
+the cryptography it's instantiated with. The Tributary Framework explicitly
+uses Schnorr signatures over Ristretto though, not just for the Tendermint
+consensus protocol but also for its signed transactions. This makes it
+efficient but means it is vulnerable to quantum computers. Propagating the
+choice of cryptography is an open task.
 
 ### Slashing and Censuring
 
@@ -107,9 +108,9 @@ the application which indexes it) prevents emitting slashes.
 
 ### Other Notes
 
-- The Tributary SDK makes use of [`borsh`](https://docs.rs/borsh) internally
-  for certain encodings, and it abstracts over a database via the usage of
-  [`serai-db`](https://docs.rs/serai-db).
+- The Tributary Framework makes use of [`borsh`](https://docs.rs/borsh)
+  internally for certain encodings, and it abstracts over a database via the
+  usage of [`serai-db`](https://docs.rs/serai-db).
 
 - The networking layer is abstract. Serai, who maintains this library at this
   time, makes use of [LibP2P](https://libp2p.io) for its networking. Direct
@@ -117,10 +118,10 @@ the application which indexes it) prevents emitting slashes.
   latent or erratic networking solutions SHOULD NOT be used due to the
   Tendermint consensus's required bounds on synchrony.
 
-- The Tributary SDK was designed to be minimal, and in doing so, may be missing
-  desired functionality. Several items are already noted as available to be
-  improved upon. It is available for public consumption however in case it may
-  of benefit to others, and contributions are welcome.
+- The Tributary Framework was designed to be minimal, and in doing so, may be
+  missing desired functionality. Several items are already noted as available
+  to be improved upon. It is available for public consumption however in case
+  it may of benefit to others, and contributions are welcome.
 
 - For more context on integration, please read
   [`tendermint-consensus`'s documentation](https://docs.rs/tendermint-consensus).

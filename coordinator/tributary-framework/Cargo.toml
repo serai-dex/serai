@@ -1,9 +1,9 @@
 [package]
-name = "tributary-sdk"
+name = "tributary-framework"
 version = "0.1.0"
 description = "A mini-blockchain framework, intended for being embedded into applications"
 license = "AGPL-3.0-only"
-repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/tributary-sdk"
+repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/tributary-framework"
 authors = ["Luke Parker <lukeparker5132@gmail.com>"]
 edition = "2024"
 rust-version = "1.91"

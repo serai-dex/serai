@@ -38,7 +38,7 @@ serai-env = { path = "../secret-store/env" }
 
 messages = { package = "serai-processor-messages", path = "../processor/messages" }
 message-queue = { package = "serai-message-queue-client", path = "../message-queue/client" }
-tributary-sdk = { path = "./tributary-sdk" }
+tributary-framework = { path = "./tributary-framework" }
 
 serai-client-serai = { path = "../substrate/client/serai", default-features = false }
 

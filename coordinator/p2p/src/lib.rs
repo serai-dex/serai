@@ -9,7 +9,7 @@ use borsh::{BorshSerialize, BorshDeserialize};
 use serai_primitives::{network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet};
 
 use serai_db::Db;
-use tributary_sdk::{
+use tributary_framework::{
   ReadWriteAsBorsh, AggregateSignature,
   transaction::{TransactionKind, Transaction},
   mempool::MempoolNetwork,

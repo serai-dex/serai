@@ -14,7 +14,7 @@ use serai_task::TaskHandle;
 
 use serai_cosign::SignedCosign;
 
-use tributary_sdk::{ReadWriteAsBorsh, Transaction};
+use tributary_framework::{ReadWriteAsBorsh, Transaction};
 
 use futures_util::StreamExt as _;
 use libp2p::{
@@ -64,7 +64,7 @@ pub(crate) struct SwarmTask<Tx: 'static + Send + Sync + Transaction> {
 
   gossip: mpsc::UnboundedReceiver<gossip::Message<Tx>>,
   signed_cosigns: mpsc::UnboundedSender<SignedCosign>,
-  tributary_messages: mpsc::UnboundedSender<([u8; 32], tributary_sdk::Message<Tx>)>,
+  tributary_messages: mpsc::UnboundedSender<([u8; 32], tributary_framework::Message<Tx>)>,
   tributary_transactions: mpsc::UnboundedSender<([u8; 32], Tx)>,
 
   outbound_requests: mpsc::UnboundedReceiver<(PeerId, Request, oneshot::Sender<Response<Tx>>)>,
@@ -330,7 +330,7 @@ impl<Tx: 'static + Send + Sync + Transaction> SwarmTask<Tx> {
 
     gossip: mpsc::UnboundedReceiver<gossip::Message<Tx>>,
     signed_cosigns: mpsc::UnboundedSender<SignedCosign>,
-    tributary_messages: mpsc::UnboundedSender<([u8; 32], tributary_sdk::Message<Tx>)>,
+    tributary_messages: mpsc::UnboundedSender<([u8; 32], tributary_framework::Message<Tx>)>,
     tributary_transactions: mpsc::UnboundedSender<([u8; 32], Tx)>,
 
     outbound_requests: mpsc::UnboundedReceiver<(PeerId, Request, oneshot::Sender<Response<Tx>>)>,

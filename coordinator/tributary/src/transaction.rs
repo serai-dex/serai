@@ -14,7 +14,7 @@ use serai_primitives::{BlockHash, validator_sets::KeyShares, address::SeraiAddre
 
 use messages::sign::VariantSignId;
 
-use tributary_sdk::{
+use tributary_framework::{
   ReadWrite,
   transaction::{
     Signed as TributarySigned, TransactionError, TransactionKind, Transaction as TransactionTrait,
@@ -212,7 +212,7 @@ impl ReadWrite for Transaction {
   }
 }
 
-impl tributary_sdk::merkle::Digestible for Transaction {
+impl tributary_framework::merkle::Digestible for Transaction {
   fn update(&self, digest: &mut (impl ?Sized + blake2::digest::Update)) {
     if let TransactionKind::Signed { scope: _, signed: TributarySigned { signature, .. } } =
       self.kind()

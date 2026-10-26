@@ -170,7 +170,7 @@ impl From<EphemeralError> for BlockError {
   write one when the data structure only really makes sense when backed by the underlying database.
 
   That isn't unacceptable, it just questions the functionality vs. the complexity of the
-  Tributary SDK.
+  Tributary Framework.
 */
 #[derive(Clone, Copy, Debug)]
 pub struct BlockHeader {

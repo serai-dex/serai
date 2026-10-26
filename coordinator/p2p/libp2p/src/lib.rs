@@ -27,7 +27,7 @@ use serai_task::{Task, ContinuallyRan as _};
 
 use serai_cosign::SignedCosign;
 
-use tributary_sdk::{ReadWriteAsBorsh, Transaction, Block};
+use tributary_framework::{ReadWriteAsBorsh, Transaction, Block};
 
 use libp2p::{
   multihash::Multihash,
@@ -139,7 +139,7 @@ struct Libp2pInner<Tx: 'static + Send + Sync + Transaction> {
   gossip: mpsc::UnboundedSender<Message<Tx>>,
   outbound_requests: mpsc::UnboundedSender<(PeerId, Request, oneshot::Sender<Response<Tx>>)>,
 
-  tributary_messages: Mutex<mpsc::UnboundedReceiver<([u8; 32], tributary_sdk::Message<Tx>)>>,
+  tributary_messages: Mutex<mpsc::UnboundedReceiver<([u8; 32], tributary_framework::Message<Tx>)>>,
   tributary_transactions: Mutex<mpsc::UnboundedReceiver<([u8; 32], Tx)>>,
 
   signed_cosigns: Mutex<mpsc::UnboundedReceiver<SignedCosign>>,
@@ -262,7 +262,7 @@ impl<Tx: 'static + Send + Sync + Transaction>
   tendermint::Network<
     [u8; 32],
     [u8; 64],
-    tributary_sdk::AggregateSignature,
+    tributary_framework::AggregateSignature,
     ReadWriteAsBorsh<Block<Tx>>,
   > for Libp2p<Tx>
 {
@@ -278,7 +278,7 @@ impl<Tx: 'static + Send + Sync + Transaction>
   fn broadcast(
     &mut self,
     genesis: impl AsRef<[u8]>,
-    message: tributary_sdk::Message<Tx>,
+    message: tributary_framework::Message<Tx>,
   ) -> impl Send + Future<Output = ()> {
     let tributary = genesis.as_ref().try_into().unwrap();
     self
@@ -290,7 +290,7 @@ impl<Tx: 'static + Send + Sync + Transaction>
   }
 }
 
-impl<Tx: 'static + Send + Sync + Transaction> tributary_sdk::mempool::MempoolNetwork<Tx>
+impl<Tx: 'static + Send + Sync + Transaction> tributary_framework::mempool::MempoolNetwork<Tx>
   for Libp2p<Tx>
 {
   fn gossip(&mut self, genesis: [u8; 32], transaction: Tx) {
@@ -436,7 +436,7 @@ impl<Tx: 'static + Send + Sync + Transaction> serai_coordinator_p2p::P2p<Tx> for
 
   fn tributary_message(
     &self,
-  ) -> impl Send + Future<Output = ([u8; 32], tributary_sdk::Message<Tx>)> {
+  ) -> impl Send + Future<Output = ([u8; 32], tributary_framework::Message<Tx>)> {
     async move {
       self
         .0

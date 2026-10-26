@@ -1,8 +1,8 @@
 //! The integration with Tendermint for consensus.
 //!
-//! `tributary-sdk` makes use of `tendermint-consensus` for consensus, complimenting its largely
-//! black-box view of consensus with the structure of a blockchain. This module implements the
-//! necessary traits from `tendermint-consensus` for the two to work together, and defines the
+//! `tributary-framework` makes use of `tendermint-consensus` for consensus, complimenting its
+//! largely black-box view of consensus with the structure of a blockchain. This module implements
+//! the necessary traits from `tendermint-consensus` for the two to work together, and defines the
 //! [`Slash`] type.
 
 use core::{

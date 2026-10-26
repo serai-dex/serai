@@ -16,7 +16,7 @@ use serai_client_serai::abi::primitives::{
 };
 use message_queue::{Service, Metadata, Client as MessageQueue};
 
-use tributary_sdk::TributaryHandle;
+use tributary_framework::TributaryHandle;
 
 use serai_task::ContinuallyRan;
 

@@ -12,7 +12,7 @@ use serai_db::{Transaction as _, Db as DbTrait};
 
 use serai_client_serai::abi::primitives::validator_sets::ExternalValidatorSet;
 
-use tributary_sdk::{
+use tributary_framework::{
   transaction::{TransactionError, TransactionKind, Transaction as _},
   mempool::MempoolError,
   Tributary, TributaryHandle,

@@ -6,7 +6,7 @@ use blake2::{Digest as _, Blake2b256};
 use serai_primitives::test_helpers::random_bytes;
 use serai_db::MemDb;
 use serai_task::test_helpers::TaskTest;
-use tributary_sdk::{
+use tributary_framework::{
   ReadWrite as _, Transaction as TributaryTransaction, BlockHeader, Block, Tributary,
 };
 use super::*;
@@ -119,7 +119,7 @@ fn inject_block(
   transactions: Vec<TributaryTransaction<Transaction>>,
 ) -> [u8; 32] {
   let tx_hashes: Vec<[u8; 32]> =
-    transactions.iter().map(tributary_sdk::Transaction::hash).collect();
+    transactions.iter().map(tributary_framework::Transaction::hash).collect();
   let txs_hash =
     Blake2b256::digest(tx_hashes.iter().flat_map(|h| h.iter().copied()).collect::<Vec<_>>()).into();
   let block = Block { header: BlockHeader { parent, transactions: txs_hash }, transactions };
@@ -221,11 +221,9 @@ async fn scan_tributary_task_run_iteration() {
       );
       if let Some(hash) = reader.block_after(&parent) {
         let block = reader.block(&hash).unwrap();
-        if block
-          .transactions
-          .iter()
-          .any(|tx| matches!(tx.kind(), tributary_sdk::transaction::TransactionKind::Provided(_)))
-        {
+        if block.transactions.iter().any(|tx| {
+          matches!(tx.kind(), tributary_framework::transaction::TransactionKind::Provided(_))
+        }) {
           break;
         }
         parent = hash;

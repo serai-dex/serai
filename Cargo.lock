@@ -7450,7 +7450,7 @@ dependencies = [
  "serai-processor-messages",
  "serai-task",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
  "zalloc",
  "zeroize",
 ]
@@ -7473,7 +7473,7 @@ dependencies = [
  "serai-task",
  "tendermint-consensus",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
  "zeroize",
 ]
 
@@ -7491,7 +7491,7 @@ dependencies = [
  "serai-task",
  "tendermint-consensus",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
 ]
 
 [[package]]
@@ -7532,7 +7532,7 @@ dependencies = [
  "serai-task",
  "tendermint-consensus",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
  "zeroize",
 ]
 
@@ -9831,7 +9831,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tributary-sdk"
+name = "tributary-framework"
 version = "0.1.0"
 dependencies = [
  "async-channel",

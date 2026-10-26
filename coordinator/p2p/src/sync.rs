@@ -3,7 +3,8 @@ use std::time::Instant;
 
 use serai_primitives::validator_sets::ExternalValidatorSet;
 
-use tributary_sdk::{ReadWriteAsBorsh, AggregateSignature, Transaction, Block, TributaryHandle};
+#[rustfmt::skip]
+use tributary_framework::{ReadWriteAsBorsh, AggregateSignature, Transaction, Block, TributaryHandle};
 
 use serai_db::Db;
 use serai_task::ContinuallyRan;
@@ -56,7 +57,8 @@ async fn sync_from_peer<
       match tributary.sync(block, commit).await {
         Ok(()) => {}
         Err(
-          tributary_sdk::SyncError::InvalidBlock(_) | tributary_sdk::SyncError::InvalidCommit,
+          tributary_framework::SyncError::InvalidBlock(_) |
+          tributary_framework::SyncError::InvalidCommit,
         ) => {
           // TODO: Disconnect this peer
           return false;

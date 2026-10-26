@@ -4,7 +4,7 @@ use blake2::{Digest as _, Blake2b256};
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use tributary_sdk::{ReadWriteAsBorsh, Transaction};
+use tributary_framework::{ReadWriteAsBorsh, Transaction};
 
 use libp2p::gossipsub::{
   IdentTopic, MessageId, MessageAuthenticity, ValidationMode, ConfigBuilder, IdentityTransform,
@@ -27,7 +27,7 @@ pub(crate) enum Message<Tx: 'static + Send + Sync + Transaction> {
   TributaryMessage {
     tributary: [u8; 32],
     #[borsh(bound(serialize = "", deserialize = ""))]
-    message: tributary_sdk::Message<Tx>,
+    message: tributary_framework::Message<Tx>,
   },
   TributaryTransaction {
     tributary: [u8; 32],

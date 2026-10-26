@@ -5,7 +5,7 @@ use schnorr::SchnorrSignature;
 use serai_primitives::test_helpers::{random_block_hash, random_vec_u8};
 
 use serai_db::{Transaction as DbTxn, MemDb};
-use tributary_sdk::{Transaction as TributaryTransaction, BlockHeader, Block};
+use tributary_framework::{Transaction as TributaryTransaction, BlockHeader, Block};
 
 use serai_cosign_types::CosignIntent;
 use crate::{db::CosignIntents as DbCosignIntents, *};

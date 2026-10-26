@@ -71,8 +71,8 @@ members = [
   "processor/ethereum",
   "processor/monero",
 
-  "coordinator/tributary-sdk/tendermint",
-  "coordinator/tributary-sdk",
+  "coordinator/tributary-framework/tendermint",
+  "coordinator/tributary-framework",
   "coordinator/cosign/types",
   "coordinator/cosign",
   "coordinator/substrate",

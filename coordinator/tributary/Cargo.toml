@@ -33,7 +33,7 @@ serai-primitives = { path = "../../substrate/primitives", default-features = fal
 serai-db = { path = "../../common/db", default-features = false, features = ["std", "schema"] }
 serai-task = { path = "../../common/task", version = "0.1" }
 
-tributary-sdk = { path = "../tributary-sdk" }
+tributary-framework = { path = "../tributary-framework" }
 
 serai-cosign-types = { path = "../cosign/types" }
 serai-coordinator-substrate = { path = "../substrate" }
@@ -46,8 +46,8 @@ serai-env = { path = "../../secret-store/env", version = "0.1" }
 rand = { version = "0.8", default-features = false, features = ["std"] }
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
-tendermint = { package = "tendermint-consensus", path = "../tributary-sdk/tendermint" }
-tributary-sdk = { path = "../tributary-sdk" }
+tendermint = { package = "tendermint-consensus", path = "../tributary-framework/tendermint" }
+tributary-framework = { path = "../tributary-framework" }
 
 tokio = { version = "1", default-features = false, features = ["rt", "time", "macros", "rt-multi-thread"] }
 

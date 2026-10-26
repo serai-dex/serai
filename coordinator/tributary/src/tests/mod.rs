@@ -15,7 +15,7 @@ use serai_primitives::{
   },
 };
 
-use tributary_sdk::P2p;
+use tributary_framework::P2p;
 
 use messages::sign::VariantSignId;
 use serai_coordinator_substrate::NewSetInformation;
@@ -49,7 +49,7 @@ fn random_serai_address_and_key<R: RngCore + CryptoRng>(
 }
 
 fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
-  let signed = tributary_sdk::tests::random_signed(&mut *rng);
+  let signed = tributary_framework::tests::random_signed(&mut *rng);
   Signed { signer: signed.signer, signature: signed.signature }
 }
 
@@ -205,12 +205,12 @@ fn make_signed_message_bytes(sender: [u8; 32]) -> Vec<u8> {
 fn assert_block_side_effects(
   txn: &mut (impl Send + serai_db::Transaction),
   set: ExternalValidatorSet,
-  transactions: &[tributary_sdk::Transaction<Transaction>],
+  transactions: &[tributary_framework::Transaction<Transaction>],
 ) {
   for tx in transactions {
     // TODO: Expand from checking the message is `Some(_)` to the exact expected message
     match tx {
-      tributary_sdk::Transaction::Application(app_tx) => match app_tx {
+      tributary_framework::Transaction::Application(app_tx) => match app_tx {
         Transaction::DkgParticipation { .. } => {
           assert!(
             crate::ProcessorMessages::try_recv(txn, set).is_some(),
@@ -238,7 +238,7 @@ fn assert_block_side_effects(
         Transaction::Batch { .. } |
         Transaction::Sign { .. } => {}
       },
-      tributary_sdk::Transaction::Tendermint(_) => {}
+      tributary_framework::Transaction::Tendermint(_) => {}
     }
   }
   assert_no_pending_messages(txn, set);

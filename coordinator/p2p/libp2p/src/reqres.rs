@@ -12,7 +12,7 @@ pub use request_response::{InboundRequestId, Message};
 
 use serai_cosign::SignedCosign;
 
-use tributary_sdk::Transaction;
+use tributary_framework::Transaction;
 
 use serai_coordinator_p2p::{SyncRequest, CommittedTributaryBlock};
 

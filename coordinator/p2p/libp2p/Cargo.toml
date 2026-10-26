@@ -29,8 +29,8 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 serai-client-serai = { path = "../../../substrate/client/serai", default-features = false }
 serai-cosign = { path = "../../cosign" }
 
-tendermint = { package = "tendermint-consensus", path = "../../tributary-sdk/tendermint" }
-tributary-sdk = { path = "../../tributary-sdk" }
+tendermint = { package = "tendermint-consensus", path = "../../tributary-framework/tendermint" }
+tributary-framework = { path = "../../tributary-framework" }
 
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["sync"] }

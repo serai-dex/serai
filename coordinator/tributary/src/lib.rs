@@ -15,7 +15,7 @@ use serai_primitives::{
 use serai_db::{Get, Transaction as DbTxn, Db};
 use serai_task::ContinuallyRan;
 
-use tributary_sdk::{
+use tributary_framework::{
   transaction::{Signed as TributarySigned, TransactionKind, Transaction as _},
   Block, TributaryHandle,
 };

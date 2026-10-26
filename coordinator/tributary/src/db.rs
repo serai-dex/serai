@@ -13,7 +13,7 @@ use serai_db::{Get, Transaction as DbTxn, Db};
 use serai_cosign_types::CosignIntent;
 use messages::sign::{VariantSignId, SignId};
 
-use tributary_sdk::TributaryHandle;
+use tributary_framework::TributaryHandle;
 
 use crate::transaction::{SigningProtocolRound, Transaction};
 

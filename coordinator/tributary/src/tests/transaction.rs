@@ -13,7 +13,7 @@ use borsh::{BorshDeserialize as _, BorshSerialize as _};
 
 use messages::sign::VariantSignId;
 use serai_primitives::validator_sets::KeyShares;
-use tributary_sdk::{
+use tributary_framework::{
   ReadWrite,
   transaction::{TransactionKind, TransactionError},
 };
