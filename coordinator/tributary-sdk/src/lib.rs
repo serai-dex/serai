@@ -56,9 +56,6 @@ mod or;
 pub type Message<T> =
   ::tendermint::Message<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<T>>>;
 
-trait SendDb: Send + for<'db> Db<Transaction<'db>: Send> {}
-impl<D: Send + for<'db> Db<Transaction<'db>: Send>> SendDb for D {}
-
 struct AsyncAddToMempool<T> {
   transaction: T,
   bypass_rate_limit: bool,
@@ -66,7 +63,7 @@ struct AsyncAddToMempool<T> {
 }
 
 pin_project_lite::pin_project! {
-  struct MempoolFuture<D: SendDb, T: Transaction, MN: MempoolNetwork<T>> {
+  struct MempoolFuture<D: Db, T: Transaction, MN: MempoolNetwork<T>> {
     db: D,
     #[pin]
     mempool: Mempool<D, T, MN>,
@@ -83,25 +80,22 @@ pin_project_lite::pin_project! {
   /// of the contained futures, or unrolled via its `IntoIterator` implementation, allowing the
   /// futures to be individually spawned on an executor.
   pub struct Tributary<
-    D: SendDb,
+    D: Db,
     T: Transaction,
     MN: MempoolNetwork<T>,
+    Tendermint = (),
+    Loop = (),
   > {
     #[pin]
     mempool: MempoolFuture<D, T, MN>,
     #[pin]
-    tendermint: Pin<Box<dyn Send + Future<Output = ()>>>,
+    tendermint: Tendermint,
     #[pin]
-    handle: Pin<Box<dyn Send + Future<Output = ()>>>,
+    inner_loop: Loop,
   }
 }
 
-impl<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  T: 'static + Send + Sync + Transaction,
-  MN: 'static + Send + Sync + MempoolNetwork<T>,
-> Future for MempoolFuture<D, T, MN>
-{
+impl<D: Db, T: Transaction, MN: MempoolNetwork<T>> Future for MempoolFuture<D, T, MN> {
   type Output = ();
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
     let mut projection = self.project();
@@ -123,17 +117,19 @@ impl<
 }
 
 impl<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  T: 'static + Send + Sync + Transaction,
-  MN: 'static + Send + Sync + MempoolNetwork<T>,
-> Future for Tributary<D, T, MN>
+  D: Db,
+  T: Transaction,
+  MN: MempoolNetwork<T>,
+  Tendermint: Future<Output = ()>,
+  Loop: Future<Output = ()>,
+> Future for Tributary<D, T, MN, Tendermint, Loop>
 {
   type Output = ();
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
     let projection = self.project();
 
     let _: Poll<()> = projection.tendermint.poll(cx);
-    let _: Poll<()> = projection.handle.poll(cx);
+    let _: Poll<()> = projection.inner_loop.poll(cx);
     let _: Poll<()> = projection.mempool.poll(cx);
 
     Poll::Pending
@@ -141,16 +137,21 @@ impl<
 }
 
 impl<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  T: 'static + Send + Sync + Transaction,
-  MN: 'static + Send + Sync + MempoolNetwork<T>,
-> IntoIterator for Tributary<D, T, MN>
+  D: 'static + Send + for<'db> Db<Transaction<'db>: Send>,
+  T: 'static + Send + Transaction,
+  MN: 'static + Send + MempoolNetwork<T>,
+  Tendermint: 'static + Send + Future<Output = ()>,
+  Loop: 'static + Send + Future<Output = ()>,
+> IntoIterator for Tributary<D, T, MN, Tendermint, Loop>
 {
   type Item = Pin<Box<dyn Send + Future<Output = ()>>>;
   type IntoIter = <[Self::Item; 3] as IntoIterator>::IntoIter;
   fn into_iter(self) -> Self::IntoIter {
-    let Self { tendermint, handle, mempool } = self;
-    [tendermint, handle, Box::pin(mempool)].into_iter()
+    let Self { tendermint, inner_loop, mempool } = self;
+    let tendermint: Self::Item = Box::pin(tendermint);
+    let inner_loop = Box::pin(inner_loop);
+    let mempool = Box::pin(mempool);
+    [tendermint, inner_loop, mempool].into_iter()
   }
 }
 
@@ -173,10 +174,7 @@ pub enum SyncError {
 
 /// A handle to an instanced Tributary.
 #[derive(Clone)]
-pub struct TributaryHandle<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  T: 'static + Send + Sync + Transaction,
-> {
+pub struct TributaryHandle<D: Db, T: Transaction> {
   db: D,
 
   genesis: [u8; 32],
@@ -197,9 +195,9 @@ pub struct TributaryHandle<
 }
 
 impl<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  T: 'static + Send + Sync + Transaction,
-  MN: 'static + Send + Sync + MempoolNetwork<T>,
+  D: Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  T: Send + Sync + Transaction,
+  MN: MempoolNetwork<T>,
 > Tributary<D, T, MN>
 {
   /// Instance a Tributary.
@@ -229,8 +227,7 @@ impl<
   /// not apply to provided nor unsigned transactions which are privileged within the Tributary.
   #[expect(clippy::too_many_arguments)]
   pub async fn new<
-    N: 'static
-      + Send
+    N: Send
       + Sync
       + Network<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<T>>, Sleep: Send>,
   >(
@@ -242,7 +239,13 @@ impl<
     mempool_network: MN,
     key: Zeroizing<<Ristretto as WrappedGroup>::F>,
     mempool_rate_limit: usize,
-  ) -> Result<(Self, TributaryHandle<D, T>), TributaryError> {
+  ) -> Result<
+    (
+      Tributary<D, T, MN, impl Send + Future<Output = ()>, impl Send + Future<Output = ()>>,
+      TributaryHandle<D, T>,
+    ),
+    TributaryError,
+  > {
     /*
       Expand the 16-byte genesis DST into a 32-byte 'hash'.
 
@@ -349,7 +352,7 @@ impl<
       )
     };
 
-    let handle = Box::pin(async move {
+    let inner_loop = async move {
       loop {
         let result: Result<(), ::tendermint::ProcessTerminated> = match (or::Or {
           f1: or::Or { f1: sync_recv.recv(), f2: message_recv.recv() },
@@ -382,12 +385,12 @@ impl<
           core::future::pending::<()>().await;
         }
       }
-    });
+    };
 
     Ok((
-      Self {
-        tendermint: Box::pin(tendermint),
-        handle,
+      Tributary {
+        tendermint,
+        inner_loop,
         mempool: MempoolFuture { db: db.clone(), mempool, mempool_recv },
       },
       TributaryHandle {
@@ -413,11 +416,7 @@ impl<
   }
 }
 
-impl<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  T: 'static + Send + Sync + Transaction,
-> TributaryHandle<D, T>
-{
+impl<D: Db, T: Transaction> TributaryHandle<D, T> {
   /// The Tributary's genesis.
   pub fn genesis(&self) -> [u8; 32] {
     self.genesis
@@ -589,7 +588,7 @@ impl<
   }
 
   /// A future which resolves when the next block is added to the Tributary.
-  pub fn next_block_notification(&self) -> impl Send + Sync + Future<Output = ()> {
+  pub fn next_block_notification(&self) -> impl Send + Future<Output = ()> {
     let (next_block_notification_send, next_block_notification_recv) =
       async_channel::bounded::<()>(1);
     let _ = self.next_block_notification.try_send(next_block_notification_send);
