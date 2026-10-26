@@ -49,8 +49,8 @@ Transactions are allowed to have one of three types:
 ### Consensus
 
 The Tributary SDK achieves consensus over blocks via Tendermint, as implemented
-by [`tendermint-machine`](https://docs.rs/tendermint-machine). The choice of
-Tendermint enables consensus
+by [`tendermint-consensus`](https://docs.rs/tendermint-consensus). The choice
+of Tendermint enables consensus
 _even in the presence of misbehaving validator_, so long as the misbehaving
 validators are less than a third of all validators (by weight).
 
@@ -78,9 +78,9 @@ be similarly functional (not requiring any additional setup in advance).
 
 ### Cryptography
 
-[`tendermint-machine`](https://docs.rs/tendermint-machine) is abstract to the
-cryptography it's instantiated with. The Tributary SDK explicitly uses Schnorr
-signatures over Ristretto though, not just for the Tendermint consensus
+[`tendermint-consensus`](https://docs.rs/tendermint-consensus) is abstract to
+the cryptography it's instantiated with. The Tributary SDK explicitly uses
+Schnorr signatures over Ristretto though, not just for the Tendermint consensus
 protocol but also for its signed transactions. This makes it efficient but
 means it is vulnerable to quantum computers. Propagating the choice of
 cryptography is an open task.
@@ -123,7 +123,7 @@ the application which indexes it) prevents emitting slashes.
   of benefit to others, and contributions are welcome.
 
 - For more context on integration, please read
-  [`tendermint-machine`'s documentation](https://docs.rs/tendermint-machine).
+  [`tendermint-consensus`'s documentation](https://docs.rs/tendermint-consensus).
 
 - Up to 65,535 validators are supported ([`u16::MAX`]). Despite that, due to
   algorithmic complexities and practical inefficiencies, large validator sets
@@ -133,5 +133,5 @@ the application which indexes it) prevents emitting slashes.
 - This library is intended to eventually be covered under
   [Serai's Bug Bounty Program](https://immunefi.com/bounty/serai). When so
   included, the same good-faith expectations and general practices established
-  for [`tendermint-machine`](https://docs.rs/tendermint-machine) will also be
-  applied here.
+  for [`tendermint-consensus`](https://docs.rs/tendermint-consensus) will also
+  be applied here.

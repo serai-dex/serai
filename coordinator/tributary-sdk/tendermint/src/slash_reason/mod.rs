@@ -129,9 +129,9 @@ impl<'hash> Block for StubBlock<'hash> {
       This methodology is sourced from Kixunil's `dont_panic`.
     */
     unsafe extern "C" {
-      fn rust_tendermint_machine_stub_block_semantic_hash_is_never_called() -> !;
+      fn rust_tendermint_consensus_stub_block_semantic_hash_is_never_called() -> !;
     }
-    unsafe { rust_tendermint_machine_stub_block_semantic_hash_is_never_called() }
+    unsafe { rust_tendermint_consensus_stub_block_semantic_hash_is_never_called() }
   }
 
   #[cfg(test)]

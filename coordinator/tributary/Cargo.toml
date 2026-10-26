@@ -46,7 +46,7 @@ serai-env = { path = "../../secret-store/env", version = "0.1" }
 rand = { version = "0.8", default-features = false, features = ["std"] }
 rand_chacha = { version = "0.3", default-features = false, features = ["std"] }
 
-tendermint = { package = "tendermint-machine", path = "../tributary-sdk/tendermint" }
+tendermint = { package = "tendermint-consensus", path = "../tributary-sdk/tendermint" }
 tributary-sdk = { path = "../tributary-sdk" }
 
 tokio = { version = "1", default-features = false, features = ["rt", "time", "macros", "rt-multi-thread"] }

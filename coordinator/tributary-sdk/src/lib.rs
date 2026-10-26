@@ -268,7 +268,7 @@ impl<
     let target_block_time =
       N::target_block_time().ok_or(TributaryError::UnrepresentableBlockTime)?;
 
-    // TODO: This is the maximum of the bound internal to the `tendermint-machine` library
+    // TODO: This is the maximum of the bound internal to the `tendermint-consensus` library
     let (sync_send, sync_recv) =
       async_channel::bounded::<(Block<T>, crate::tendermint::Commit)>(64);
     let (message_send, message_recv) = async_channel::bounded::<

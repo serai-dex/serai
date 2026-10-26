@@ -1,8 +1,8 @@
 //! The integration with Tendermint for consensus.
 //!
-//! `tributary-sdk` makes use of `tendermint-machine` for consensus, complimenting its largely
+//! `tributary-sdk` makes use of `tendermint-consensus` for consensus, complimenting its largely
 //! black-box view of consensus with the structure of a blockchain. This module implements the
-//! necessary traits from `tendermint-machine` for the two to work together, and defines the
+//! necessary traits from `tendermint-consensus` for the two to work together, and defines the
 //! [`Slash`] type.
 
 use core::{
@@ -50,7 +50,7 @@ impl<T: Transaction> ::tendermint::Block for ReadWriteAsBorsh<Block<T>> {
   }
 }
 
-/// The [`tendermint_machine::Commit`] type for a Tributary.
+/// The [`tendermint_consensus::Commit`] type for a Tributary.
 pub type Commit = ::tendermint::Commit<AggregateSignature>;
 
 pub(crate) trait Mempool<T> {

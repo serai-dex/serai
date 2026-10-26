@@ -26,11 +26,11 @@ const AGGREGATOR_DST: &[u8] = b"Tributary Tendermint Commit Aggregator";
 
 /// A transcript which has already been scoped to a message.
 ///
-/// The `SignatureScheme` API expected by `tendermint-machine` supports aggregation where multiple
-/// signers sign the same message and then non-interactively produce a single signature. Because
-/// the messages are the same, we first transcript the message, _then_ the signer's key and nonce.
-/// If we hashed the signer's key and nonce _first_, as traditional, we'd have to re-hash the
-/// message for each signer. This is safe, without a risk of collisions, as the length of the
+/// The `SignatureScheme` API expected by `tendermint-consensus` supports aggregation where
+/// multiple signers sign the same message and then non-interactively produce a single signature.
+/// Because the messages are the same, we first transcript the message, _then_ the signer's key and
+/// nonce. If we hashed the signer's key and nonce _first_, as traditional, we'd have to re-hash
+/// the message for each signer. This is safe, without a risk of collisions, as the length of the
 /// signer's key and nonce is constant.
 #[derive(Clone)]
 struct MessageScopedTranscript(<Ristretto as WithPreferredHash>::H);

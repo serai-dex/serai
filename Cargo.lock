@@ -7471,7 +7471,7 @@ dependencies = [
  "serai-coordinator-p2p",
  "serai-cosign",
  "serai-task",
- "tendermint-machine",
+ "tendermint-consensus",
  "tokio",
  "tributary-sdk",
  "zeroize",
@@ -7489,7 +7489,7 @@ dependencies = [
  "serai-db",
  "serai-primitives",
  "serai-task",
- "tendermint-machine",
+ "tendermint-consensus",
  "tokio",
  "tributary-sdk",
 ]
@@ -7530,7 +7530,7 @@ dependencies = [
  "serai-processor-messages",
  "serai-substrate-tests",
  "serai-task",
- "tendermint-machine",
+ "tendermint-consensus",
  "tokio",
  "tributary-sdk",
  "zeroize",
@@ -7906,7 +7906,7 @@ dependencies = [
  "serai-db",
  "short-weierstrass",
  "std-shims 0.1.5",
- "tendermint-machine",
+ "tendermint-consensus",
 ]
 
 [[package]]
@@ -9490,7 +9490,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "tendermint-machine"
+name = "tendermint-consensus"
 version = "0.3.0"
 dependencies = [
  "async-channel",
@@ -9844,7 +9844,7 @@ dependencies = [
  "rand 0.8.8",
  "schnorr-signatures",
  "serai-db",
- "tendermint-machine",
+ "tendermint-consensus",
  "zeroize",
 ]
 

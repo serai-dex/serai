@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 
 use serai_db::MemDb;
 
-use tendermint_machine::{
+use tendermint_consensus::{
   InvalidAggregateSignature, SignatureScheme, Signer, Block, Commit, InvalidBlock, Blockchain,
   MessageFor, Network, SlashReason, Tendermint, TendermintHandle,
 };

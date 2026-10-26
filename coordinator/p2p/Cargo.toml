@@ -23,7 +23,7 @@ serai-db = { path = "../../common/db", default-features = false, features = ["st
 serai-primitives = { path = "../../substrate/primitives", default-features = false, features = ["std"] }
 serai-cosign = { path = "../cosign" }
 
-tendermint = { package = "tendermint-machine", path = "../tributary-sdk/tendermint" }
+tendermint = { package = "tendermint-consensus", path = "../tributary-sdk/tendermint" }
 tributary-sdk = { path = "../tributary-sdk" }
 
 getrandom = { version = "0.4", default-features = false }
