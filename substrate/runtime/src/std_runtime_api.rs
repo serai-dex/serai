@@ -202,7 +202,7 @@ sp_api::impl_runtime_apis! {
       unimplemented!("runtime is only implemented when WASM")
     }
 
-    fn economic_security_time() -> u64 {
+    fn economic_security_time() -> Option<u64> {
       unimplemented!("runtime is only implemented when WASM")
     }
   }

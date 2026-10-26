@@ -534,7 +534,7 @@ sp_api::impl_runtime_apis! {
       Core::next_nonce(&of)
     }
 
-    fn economic_security_time() -> u64 {
+    fn economic_security_time() -> Option<u64> {
       GenesisLiquidity::economic_security_time()
     }
   }

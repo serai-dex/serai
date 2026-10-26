@@ -34,8 +34,8 @@ impl State<'_> {
   }
 
   /// Returns the time economic security is achieved first time for all networks.
-  /// Returns `0` if it hasn't happen yet.
-  pub async fn economic_security_time(&self) -> Result<u64, RpcError> {
-    self.call::<u64>("genesis-liquidity/economic-security", "").await
+  /// Returns `None` if it hasn't happen yet.
+  pub async fn economic_security_time(&self) -> Result<Option<u64>, RpcError> {
+    self.call::<Option<u64>>("genesis-liquidity/economic-security", "").await
   }
 }
