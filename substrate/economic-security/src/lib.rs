@@ -450,12 +450,12 @@ mod pallet {
         a sufficient amount of _relevant_ samples. If there are _any_ stale quotes, as there could
         be an unbounded amount of stale quotes, we immediately decide the median is unhealthy.
       */
-      if !({
+      if {
         const LENGTH_OF_MEDIAN_IN_SLOTS: u128 =
           MEDIAN_LENGTH.as_millis() / TARGET_BLOCK_TIME.as_millis();
         #[expect(clippy::as_conversions, clippy::cast_possible_truncation)]
         const SUFFICIENT_SAMPLES: u64 = LENGTH_OF_MEDIAN_IN_SLOTS.div_ceil(2) as u64;
-        Median::<T>::length(coin) >= SUFFICIENT_SAMPLES
+        Median::<T>::length(coin) < SUFFICIENT_SAMPLES
       } || {
         let historical_values = find_historical_values::<_, _, PastQuotes<T>>(
           coin,
@@ -463,8 +463,8 @@ mod pallet {
           MEDIAN_LENGTH,
           1,
         );
-        historical_values.is_empty()
-      }) {
+        !historical_values.is_empty()
+      } {
         None?;
       }
       Median::<T>::median(coin)
