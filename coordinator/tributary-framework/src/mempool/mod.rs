@@ -160,7 +160,14 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
         }
       }
 
-      // Yield after indexing a block
+      /*
+        Yield after indexing a block.
+
+        In order to ensure this future is polled again, this task is immediately woken back up.
+        [`core::task::Waker::wake`] guarantees this call happens _before_ the following
+        [`Future::poll`] invocation, allowing a task to wake itself to implement a yield.
+      */
+      cx.waker().wake_by_ref();
       return Poll::Pending;
     }
 

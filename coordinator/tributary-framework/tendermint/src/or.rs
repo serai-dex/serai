@@ -22,8 +22,8 @@ pin_project_lite::pin_project! {
 
 impl<F1: Future, F2: Future> Future for Or<F1, F2> {
   type Output = Either<F1::Output, F2::Output>;
-  fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    let futures = self.as_mut().project();
+  fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    let futures = self.project();
     match futures.f1.poll(cx) {
       Poll::Pending => {}
       Poll::Ready(value) => return Poll::Ready(Either::L(value)),

@@ -55,8 +55,8 @@ pin_project_lite::pin_project! {
 
 impl<F: Future, S: Future<Output = ()>> Future for Timeout<F, S> {
   type Output = Result<F::Output, TimeoutExpired>;
-  fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    match self.as_mut().project().or.poll(cx) {
+  fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    match self.project().or.poll(cx) {
       Poll::Pending => Poll::Pending,
       Poll::Ready(Either::L(value)) => Poll::Ready(Ok(value)),
       Poll::Ready(Either::R(())) => Poll::Ready(Err(TimeoutExpired)),
