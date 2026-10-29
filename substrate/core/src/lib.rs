@@ -42,7 +42,7 @@ pub mod pallet {
     primitives::{
       BlockHash, address::SeraiAddress, merkle::IncrementalUnbalancedMerkleTree as Iumt,
     },
-    TransactionContext,
+    TransactionContext, TransactionResult,
   };
 
   use super::*;
@@ -291,6 +291,11 @@ pub mod pallet {
         *value =
           value.checked_add(1).expect("`consume_next_nonce` called when current nonce is <_>::MAX")
       });
+    }
+
+    /// Emit the result of the transaction currently being executed.
+    fn emit_transaction_result(result: TransactionResult) {
+      Self::emit_event(result);
     }
 
     /// End execution of a transaction.
