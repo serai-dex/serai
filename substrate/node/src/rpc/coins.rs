@@ -37,5 +37,15 @@ pub(crate) fn module(
     Ok(amount.0)
   })?;
 
+  module.register_method("coins/allow-mint", |params, client, _ext| -> Result<_, Error> {
+    let Some(block_hash) = block_hash(client, &params)? else { Err(Error::InvalidStateReference)? };
+
+    let balance = balance(&params)?;
+    let Ok(allowed) = client.runtime_api().allow_coin_mint(block_hash, balance) else {
+      Err(Error::Internal("couldn't fetch the supply for the coin"))?
+    };
+    Ok(allowed)
+  })?;
+
   Ok(module)
 }
