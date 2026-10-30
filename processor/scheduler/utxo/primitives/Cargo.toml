@@ -24,3 +24,7 @@ serai-primitives = { path = "../../../../substrate/primitives", default-features
 primitives = { package = "serai-processor-primitives", path = "../../../primitives" }
 scanner = { package = "serai-processor-scanner", path = "../../../scanner" }
 scheduler-primitives = { package = "serai-processor-scheduler-primitives", path = "../../primitives" }
+
+[dev-dependencies]
+ciphersuite = { path = "../../../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../../../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
