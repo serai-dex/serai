@@ -8,7 +8,7 @@ use serai_abi::{
     network_id::NetworkId,
     validator_sets::{Session, ExternalValidatorSet},
     coin::{Coin, ExternalCoin},
-    balance::Amount,
+    balance::{Amount, Balance},
     address::SeraiAddress,
   },
   SubstrateHeader as Header, SubstrateBlock as Block, LazySubstrateBlock as LazyBlock,
@@ -203,6 +203,14 @@ sp_api::impl_runtime_apis! {
     }
 
     fn economic_security_time() -> Option<u64> {
+      unimplemented!("runtime is only implemented when WASM")
+    }
+
+    fn allow_coin_mint(balance: Balance) -> bool {
+      unimplemented!("runtime is only implemented when WASM")
+    }
+
+    fn allow_liquidity_mint(balance: Balance) -> bool {
       unimplemented!("runtime is only implemented when WASM")
     }
   }

@@ -1,4 +1,8 @@
-use serai_abi::primitives::{balance::Amount, address::SeraiAddress, coin::ExternalCoin};
+use serai_abi::primitives::{
+  address::SeraiAddress,
+  balance::{Amount, ExternalBalance},
+  coin::ExternalCoin,
+};
 
 use crate::{RpcError, State, rpc_coin};
 
@@ -26,5 +30,15 @@ impl State<'_> {
         .call::<u64>("liquidity-tokens/supply", &format!(r#", "coin": {} "#, rpc_coin(coin)))
         .await?,
     ))
+  }
+
+  /// Check whether Serai will allow minting of the given liquidity balance.
+  pub async fn allow_liquidity_mint(&self, balance: ExternalBalance) -> Result<bool, RpcError> {
+    self
+      .call::<bool>(
+        "liquidity-tokens/allow-mint",
+        &format!(r#", "coin": {}, "amount": {:?} "#, rpc_coin(balance.coin), balance.amount),
+      )
+      .await
   }
 }
