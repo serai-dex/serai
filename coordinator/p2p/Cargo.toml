@@ -30,5 +30,4 @@ getrandom = { version = "0.4", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
 
-log = { version = "0.4", default-features = false, features = ["std"] }
 serai-task = { path = "../../common/task", version = "0.1" }

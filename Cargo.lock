@@ -7484,7 +7484,6 @@ dependencies = [
  "borsh",
  "futures-util",
  "getrandom 0.4.3",
- "log",
  "serai-cosign",
  "serai-db",
  "serai-primitives",
