@@ -8258,6 +8258,8 @@ name = "serai-processor-utxo-scheduler-primitives"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "ciphersuite 0.4.2",
+ "dalek-ff-group",
  "serai-primitives",
  "serai-processor-primitives",
  "serai-processor-scanner",

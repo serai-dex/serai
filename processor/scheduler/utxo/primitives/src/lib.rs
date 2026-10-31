@@ -13,6 +13,9 @@ use scheduler_primitives::*;
 mod tree;
 pub use tree::*;
 
+#[cfg(test)]
+mod tests;
+
 /// A planned transaction.
 pub struct PlannedTransaction<S: ScannerFeed, ST: SignableTransaction, A> {
   /// The signable transaction.
