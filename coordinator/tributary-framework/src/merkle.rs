@@ -18,7 +18,7 @@ pub const BRANCH_PERSONALIZATION: &[u8] = b"tributary branch";
 pub trait Digestible {
   /// Update the digest with this value.
   fn update(&self, digest: &mut (impl ?Sized + Update));
-  /// Update the digest with this value, returning the digest.
+  /// Update the digest with this value, returning the updated digest.
   fn chain_update<U: Update>(&self, mut digest: U) -> U {
     self.update(&mut digest);
     digest
@@ -62,6 +62,7 @@ impl<U: ?Sized + Update> io::Write for DigestWriter<'_, U> {
   https://github.com/monero-oxide/monero-oxide/pull/176 showed the `blake2` crate sometimes
   differs due to API constraints.
 */
+// TODO: [`core::iter::TrustedLen`]
 pub fn root<D: ?Sized + Digestible>(
   leaves: impl IntoIterator<Item = impl Borrow<D>, IntoIter: ExactSizeIterator>,
 ) -> [u8; 32] {

@@ -5,8 +5,8 @@ use std::io;
 pub trait ReadWrite: Sized {
   /// Read an instance of `Self`.
   ///
-  /// If the reader yields a reachable serialization of a transaction, it MUST be readable. In
-  /// other, words, the following round-trip MUST succeed:
+  /// If the reader yields a reachable serialization of a value, it MUST be readable. In other
+  /// words, the following round-trip MUST succeed:
   ///
   /// ```rs
   /// let serialization = item.serialize();

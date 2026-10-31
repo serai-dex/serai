@@ -22,6 +22,8 @@ pub enum SyntacticError {
   /// The block's header specified Merkle tree roots for distinct contents.
   IncorrectContents,
   /// The block's timestamp was absurd.
+  ///
+  /// This is determined with respect to the system's representation of time ([`SystemTime`]).
   AbsurdTime,
   /// The block's contents weren't ordered as expected.
   ///
@@ -66,9 +68,10 @@ pub enum SemanticError {
     /// The hash of the unsigned transaction which was already included.
     transaction_hash: [u8; 32],
   },
-  /// The signer of this transaction was slashed.
+  /// The signer of this transaction was invalid within the blockchain's context.
   ///
-  /// This means the signer was not a validator who has yet to be slashed.
+  /// The signer either was not a validator of the Tributary _or_ was a validator who had a slash
+  /// included on-chain.
   InvalidSigner {
     /// The invalid signer who signed a transaction included in this block.
     signer: [u8; 32],
@@ -223,9 +226,11 @@ impl crate::merkle::Digestible for BlockHeader {
 impl BlockHeader {
   const SIZE: usize = 32 + 8 + 32 + 32;
 
-  /// The slashes this block header commits to.
-  pub fn slashes(&self) -> [u8; 32] {
-    self.slashes
+  /// The parent this builds upon.
+  ///
+  /// This will be the genesis if this is the first block on the blockchain.
+  pub fn parent(&self) -> [u8; 32] {
+    self.parent
   }
 
   /// The time embedded within this block header.
@@ -235,7 +240,12 @@ impl BlockHeader {
     self.time
   }
 
-  /// The transactions this block commits to.
+  /// The slashes this block header commits to.
+  pub fn slashes(&self) -> [u8; 32] {
+    self.slashes
+  }
+
+  /// The transactions this block header commits to.
   pub fn transactions(&self) -> [u8; 32] {
     self.transactions
   }
@@ -300,8 +310,7 @@ impl<T: Transaction> ReadWrite for Block<T> {
       u16::from_le_bytes(slashes)
     })
       .map(|_| Slash::read(&mut reader))
-      .collect::<Result<Vec<_>, _>>()?
-      .into_boxed_slice();
+      .collect::<Result<Box<[_]>, _>>()?;
 
     let transactions = (0 .. {
       let mut transactions = [0; 4];
@@ -309,8 +318,7 @@ impl<T: Transaction> ReadWrite for Block<T> {
       u32::from_le_bytes(transactions)
     })
       .map(|_| T::read(&mut reader))
-      .collect::<Result<Vec<_>, _>>()?
-      .into_boxed_slice();
+      .collect::<Result<Box<[_]>, _>>()?;
 
     Ok(Block { header, slashes, transactions })
   }
@@ -355,6 +363,68 @@ impl<T: Transaction> Block<T> {
       Err(SyntacticError::AbsurdTime)?
     };
     Ok(time)
+  }
+
+  fn verify_syntax_slashes<'block>(
+    slashes: impl IntoIterator<Item = &'block Slash>,
+  ) -> Result<(), SyntacticError> {
+    slashes
+      .into_iter()
+      .is_sorted_by(|a, b| a.validator() < b.validator())
+      .ok_or(SyntacticError::IncorrectOrderOfContents)
+  }
+
+  fn verify_syntax_transactions<'block>(
+    transactions: impl IntoIterator<Item = &'block T>,
+    genesis: [u8; 32],
+  ) -> Result<(), SyntacticError>
+  where
+    T: 'block,
+  {
+    /*
+      We check the ordering by checking the following tuple is greater with each iteration of the
+      loop. This takes advantage of how `(T1, Tn, ...)` implements `PartialOrd` by comparing the
+      first element, and only on equality, comparing the next element (until the tuple is
+      exhausted).
+    */
+    #[expect(clippy::type_complexity)]
+    let mut order: (
+      u8,
+      Option<&'static [u8]>,
+      Option<[u8; 32]>,
+      Option<([u8; 32], Vec<u8>, u64)>,
+    ) = (0, None, None, None);
+
+    for transaction in transactions {
+      let new_order = match transaction.kind() {
+        TransactionKind::Provided { scope } => (0, Some(scope.as_bytes()), None, None),
+        TransactionKind::Unsigned => (1, None, Some(transaction.hash()), None),
+        TransactionKind::Signed { scope, signed: Signed { signer, nonce, signature: _ } } => {
+          /*
+            If the last transaction was by this signer, within this scope, check this pair of
+            transactions is contiguous and there's no gap between them.
+          */
+          if let Some((prior_signer, ref prior_scope, prior_nonce)) = order.3 &&
+            (prior_signer == signer) &&
+            (prior_scope == scope.as_slice()) &&
+            (prior_nonce.checked_add(1) != Some(nonce))
+          {
+            Err(SyntacticError::IncorrectOrderOfContents)?;
+          }
+
+          (2, None, None, Some((signer, scope, nonce)))
+        }
+      };
+
+      if new_order <= order {
+        Err(SyntacticError::IncorrectOrderOfContents)?;
+      }
+      order = new_order;
+
+      crate::transaction::verify_syntax(transaction, genesis)?;
+    }
+
+    Ok(())
   }
 
   /// Verify this block's syntax.
@@ -403,8 +473,9 @@ impl<T: Transaction> Block<T> {
 
     // Check this block's encoded length is less than the block size limit
     if let Some(block_size_limit) = T::BLOCK_SIZE_LIMIT {
-      let serialized_len = crate::serialized_len(self)
-        .map_err(|_| SyntacticError::ExceededSizeLimit { size: None })?;
+      let Ok(serialized_len) = crate::serialized_len(self) else {
+        Err(SyntacticError::ExceededSizeLimit { size: None })?
+      };
       if serialized_len > block_size_limit {
         Err(SyntacticError::ExceededSizeLimit { size: Some(serialized_len) })?;
       }
@@ -416,98 +487,11 @@ impl<T: Transaction> Block<T> {
       Err(SyntacticError::IncorrectContents)?;
     }
 
+    // Check the block's time is representable
     self.system_time()?;
 
-    // Ensure the slashes are sorted
-    {
-      let mut last_validator = None;
-      for slash in &self.slashes {
-        if Some(slash.validator()) <= last_validator {
-          Err(SyntacticError::IncorrectOrderOfContents)?;
-        }
-        last_validator = Some(slash.validator());
-      }
-    }
-
-    {
-      let mut kind = 0;
-      let mut last_hash_or_validator = None;
-      let mut last_nonce: Option<u64> = None;
-      let mut last_signed_scope = None;
-      let mut last_provided_scope = None;
-      for transaction in &self.transactions {
-        {
-          // Ensure this is sorted as provided, unsigned, signed
-          let transaction_kind = match transaction.kind() {
-            TransactionKind::Provided { .. } => 0,
-            TransactionKind::Unsigned => 1,
-            TransactionKind::Signed { .. } => 2,
-          };
-          if transaction_kind < kind {
-            Err(SyntacticError::IncorrectOrderOfContents)?;
-          }
-
-          // If we are switching kinds, reset our trackers for the last values
-          if transaction_kind > kind {
-            last_hash_or_validator = None;
-            last_nonce = None;
-            last_signed_scope = None;
-            last_provided_scope = None;
-            kind = transaction_kind;
-          }
-        }
-
-        match transaction.kind() {
-          TransactionKind::Provided { scope } => {
-            if Some(scope.as_bytes()) < last_provided_scope.map(str::as_bytes) {
-              Err(SyntacticError::IncorrectOrderOfContents)?;
-            }
-            last_provided_scope = Some(scope);
-          }
-          TransactionKind::Unsigned => {
-            let hash = transaction.hash();
-            // `<` is for incorrect order
-            // `=` is for multiple inclusions, reported here as an incorrect order
-            if Some(hash) <= last_hash_or_validator {
-              Err(SyntacticError::IncorrectOrderOfContents)?;
-            }
-            last_hash_or_validator = Some(hash);
-          }
-          TransactionKind::Signed { scope, signed: Signed { signer, nonce, signature: _ } } => {
-            // Ensure ordering by signer
-            if Some(signer) < last_hash_or_validator {
-              Err(SyntacticError::IncorrectOrderOfContents)?;
-            }
-            // If we're onto the next signer's transactions, reset the scope's tracker
-            if Some(signer) > last_hash_or_validator {
-              last_signed_scope = None;
-              last_nonce = None;
-              last_hash_or_validator = Some(signer);
-            }
-
-            // Ensure ordering by scope
-            if Some(&scope) < last_signed_scope.as_ref() {
-              Err(SyntacticError::IncorrectOrderOfContents)?;
-            }
-            // If we're onto a new scope, reset the tracker for the nonce
-            if Some(&scope) > last_signed_scope.as_ref() {
-              last_nonce = None;
-              last_signed_scope = Some(scope);
-            }
-
-            // Ensure ordering by nonce
-            if let Some(last_nonce) = last_nonce &&
-              (Some(nonce) != last_nonce.checked_add(1))
-            {
-              Err(SyntacticError::IncorrectOrderOfContents)?;
-            }
-            last_nonce = Some(nonce);
-          }
-        }
-
-        crate::transaction::verify_syntax(transaction, genesis)?;
-      }
-    }
+    Self::verify_syntax_slashes(&self.slashes)?;
+    Self::verify_syntax_transactions(&self.transactions, genesis)?;
 
     Ok(())
   }

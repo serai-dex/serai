@@ -5,7 +5,6 @@ use serai_db::{Get, Transaction as DbTxn};
 
 use crate::{
   ReadWrite,
-  tendermint::Commit,
   transaction::{Signed, TransactionKind, Transaction},
   block::{SemanticError, EphemeralError, BlockError, Block},
   mempool::ProvidedReader,
@@ -17,12 +16,11 @@ mod db {
   serai_db::schema!(TributaryBlockchain {
     Tip: (genesis: [u8; 32]) -> [u8; 32],
     Block: <B: ReadWrite>(genesis: [u8; 32], hash: [u8; 32]) -> crate::ReadWriteAsBorsh<B>,
-    Commit: (genesis: [u8; 32], block: [u8; 32]) -> super::Commit,
     BlockAfter: (genesis: [u8; 32], parent: [u8; 32]) -> [u8; 32],
     Slashed: (genesis: [u8; 32], validator: [u8; 32]) -> (),
+    OnChainProvided: (genesis: [u8; 32], scope: &'static [u8]) -> u64,
     Unsigned: (genesis: [u8; 32], hash: [u8; 32]) -> (),
     LastSigned: (genesis: [u8; 32], validator: [u8; 32], scope: &[u8]) -> u64,
-    OnChainProvided: (genesis: [u8; 32], scope: &'static [u8]) -> u64,
   });
 }
 
@@ -35,10 +33,6 @@ impl<T: Transaction> Reader<T> {
 
   pub(crate) fn block(getter: &impl Get, genesis: [u8; 32], hash: [u8; 32]) -> Option<Block<T>> {
     db::Block::get(getter, genesis, hash).map(|block| block.0)
-  }
-
-  pub(crate) fn commit(getter: &impl Get, genesis: [u8; 32], block: [u8; 32]) -> Option<Commit> {
-    db::Commit::get(getter, genesis, block)
   }
 
   pub(crate) fn block_after(
@@ -55,6 +49,7 @@ pub(crate) struct Blockchain<T: Transaction> {
   _T: PhantomData<T>,
 
   genesis: [u8; 32],
+  genesis_time: u64,
   validators: HashMap<[u8; 32], NonZero<u16>>,
 
   tip: [u8; 32],
@@ -64,12 +59,14 @@ impl<T: Transaction> Blockchain<T> {
   pub(crate) fn new(
     getter: &impl Get,
     genesis: [u8; 32],
+    genesis_time: u64,
     validators: HashMap<[u8; 32], NonZero<u16>>,
   ) -> Self {
     Self {
       _T: PhantomData,
 
       genesis,
+      genesis_time,
       validators,
 
       tip: db::Tip::get(getter, genesis).unwrap_or(genesis),
@@ -89,6 +86,96 @@ impl<T: Transaction> Blockchain<T> {
     db::Block::<Block<T>>::get(getter, self.genesis, self.tip).map(|block| block.0)
   }
 
+  fn verify_block_time<
+    N: ::tendermint::Network<
+        [u8; 32],
+        [u8; 64],
+        crate::tendermint::AggregateSignature,
+        crate::ReadWriteAsBorsh<Block<T>>,
+      >,
+  >(
+    genesis_time: u64,
+    parent_block: Option<&Block<T>>,
+    block: &Block<T>,
+  ) -> Result<(), BlockError> {
+    let Some(target_block_time) = N::target_block_time()
+      .and_then(|target_block_time| u64::try_from(target_block_time.as_millis()).ok())
+    else {
+      /*
+        This is a misconfiguration which we smudge as `EphemeralError::Future`, the time-relevant
+        `EphemeralError`. This is so we don't blame the proposer (as we would with a syntactic or
+        semantic error), but still error. While we do mis-report the error, this should never
+        occur as it's a fundamental misconfiguration.
+
+        Additionally, because the this value is unrepresentable, the actual block addition (if
+        attempted) will stall because this value is unrepresentable.
+
+        TODO: Improve this flow
+      */
+      Err(EphemeralError::Future)?
+    };
+
+    // Check this block's time isn't too close to the prior block's
+    {
+      let minimum_time = match parent_block.map(Block::time) {
+        Some(prior_block_time) => prior_block_time.checked_add(target_block_time),
+        None => Some(genesis_time),
+      };
+
+      /*
+        If we can't represent the minimum time from the prior block, because we can represent
+        this block's time, this block's time _must_ be less than the minimum time from the prior
+        block.
+      */
+      if minimum_time.is_none_or(|minimum_time| block.time() < minimum_time) {
+        // This block violates the minimum spacing between blocks
+        Err(SemanticError::TooSoon)?;
+      }
+    }
+
+    // Check this block's time isn't in the future
+    {
+      /*
+        Calculate when this block will end, based approximately on the synchrony assumptions
+        within the Tendermint consensus protocol.
+      */
+      let end_of_block_time = {
+        let target_block_time = Duration::from_millis(target_block_time);
+        let time_into_block = N::LATENCY_TIME.checked_add(N::BLOCK_DOWNLOADING_TIME);
+        let end_of_block_time = time_into_block
+          .and_then(|time_into_block| target_block_time.checked_sub(time_into_block));
+        end_of_block_time
+          .and_then(|end_of_block_time| SystemTime::now().checked_add(end_of_block_time))
+      };
+
+      let block_time = block.system_time()?;
+
+      /*
+        If the end time of this block isn't representable, our system's clock is insufficient to
+        run this protocol. We represent this as the block being in the future as it relates to a
+        time beyond the time we're able to represent. Additionally, the use of an
+        `EphemeralError` means we won't vote for this block, but also won't slash the proposer.
+
+        If the end time of this block is representable, we check the block's encoded time doesn't
+        exceed it. This does allow the block's time to be in the future of when it should have
+        been proposed, for up to one block's of drift, but allows that degree of error within the
+        validators' clocks (which are not perfectly synchronized).
+
+        This isn't exact as this block's end time will be scaled by the round number inside of
+        the Tendermint process proper. However, as proposals should have been made when consensus
+        for this block _started_, and fixed since, we do not need to scale the allowance for how
+        far this may be in the future. We solely have to wait for the discrepancy to be less than
+        the time already spent attempting consensus.
+      */
+      if end_of_block_time.is_none_or(|end_of_block_time| block_time > end_of_block_time) {
+        // This block's time is in the future
+        Err(EphemeralError::Future)?;
+      }
+    }
+
+    Ok(())
+  }
+
   pub(crate) fn verify<
     N: ::tendermint::Network<
         [u8; 32],
@@ -99,7 +186,6 @@ impl<T: Transaction> Blockchain<T> {
   >(
     &self,
     getter: &impl Get,
-    genesis_time: u64,
     block: &Block<T>,
   ) -> Result<(), BlockError> {
     if block.parent() != self.tip {
@@ -108,95 +194,20 @@ impl<T: Transaction> Blockchain<T> {
 
     block.verify_syntax(self.genesis)?;
 
-    let deferred_time_error = match (|| -> Result<(), BlockError> {
-      let Some(target_block_time) = N::target_block_time()
-        .and_then(|target_block_time| u64::try_from(target_block_time.as_millis()).ok())
-      else {
+    let parent = db::Block::get(getter, self.genesis, block.parent()).map(|block| block.0);
+    let deferred_time_error =
+      match Self::verify_block_time::<N>(self.genesis_time, parent.as_ref(), block) {
+        Ok(()) => Ok(()),
+        // Raise syntactic and semantic errors now
+        Err(error @ (BlockError::Syntactic(_) | BlockError::Semantic(_))) => Err(error)?,
         /*
-          This is a misconfiguration which we smudge as `EphemeralError::Future`, the time-relevant
-          `EphemeralError`. This is so we don't blame the proposer (as we would with a syntactic or
-          semantic error), but still error. While we do mis-report the error, this should never
-          occur as it's a fundamental misconfiguration.
+          Defer ephemeral errors for later.
 
-          Additionally, because the this value is unrepresentable, the actual block addition (if
-          attempted) will stall because this value is unrepresentable.
-
-          TODO: Improve this flow
+          We will allow blocks which are in the future if they have a commit, we just first wait
+          until they're no longer in the future.
         */
-        Err(EphemeralError::Future)?
+        Err(BlockError::Ephemeral(error)) => Err(error),
       };
-
-      // Check this block's time isn't too close to the prior block's
-      {
-        let prior_block_time = self.tip(getter).map(|block| block.time());
-        let minimum_time = prior_block_time
-          .map(|prior_block_time| prior_block_time.checked_add(target_block_time))
-          .unwrap_or(Some(genesis_time));
-        /*
-          If we can't represent the minimum time from the prior block, because we can represent
-          this block's time, this block's time _must_ be less than the minimum time from the prior
-          block.
-        */
-        if minimum_time.is_none_or(|minimum_time| block.time() < minimum_time) {
-          // This block violates the minimum spacing between blocks
-          Err(SemanticError::TooSoon)?;
-        }
-      }
-
-      // Check this block's time isn't in the future
-      {
-        /*
-          Calculate when this block will end, based approximately on the synchrony assumptions
-          within the Tendermint consensus protocol.
-        */
-        let end_of_block_time = {
-          let target_block_time = Duration::from_millis(target_block_time);
-          let time_into_block = N::LATENCY_TIME.checked_add(N::BLOCK_DOWNLOADING_TIME);
-          let end_of_block_time = time_into_block
-            .and_then(|time_into_block| target_block_time.checked_sub(time_into_block));
-          end_of_block_time
-            .and_then(|end_of_block_time| SystemTime::now().checked_add(end_of_block_time))
-        };
-
-        let block_time = block.system_time()?;
-
-        /*
-          If the end time of this block isn't representable, our system's clock is insufficient to
-          run this protocol. We represent this as the block being in the future as it relates to a
-          time beyond the time we're able to represent. Additionally, the use of an
-          `EphemeralError` means we won't vote for this block, but also won't slash the proposer.
-
-          If the end time of this block is representable, we check the block's encoded time doesn't
-          exceed it. This does allow the block's time to be in the future of when it should have
-          been proposed, for up to one block's of drift, but allows that degree of error within the
-          validators' clocks (which are not perfectly synchronized).
-
-          This isn't exact as this block's end time will be scaled by the round number inside of
-          the Tendermint process proper. However, as proposals should have been made when consensus
-          for this block _started_, and fixed since, we do not need to scale the allowance for how
-          far this may be in the future. We solely have to wait for the discrepancy to be less than
-          the time already spent attempting consensus.
-        */
-        if end_of_block_time.is_none_or(|end_of_block_time| block_time > end_of_block_time) {
-          // This block's time is in the future
-          Err(EphemeralError::Future)?;
-        }
-      }
-
-      Ok(())
-    })() {
-      Ok(()) => Ok(()),
-      // Raise syntactic and semantic errors now
-      Err(BlockError::Syntactic(error)) => Err(error)?,
-      Err(BlockError::Semantic(error)) => Err(error)?,
-      /*
-        Defer ephemeral errors for later.
-
-        We will allow blocks which are in the future if they have a commit, we just first wait until
-        they're no longer in the future.
-      */
-      Err(BlockError::Ephemeral(error)) => Err(error),
-    };
 
     for slash in block.slashes() {
       let () = slash
@@ -302,41 +313,26 @@ impl<T: Transaction> Blockchain<T> {
 
   /// Add a block to the blockchain.
   ///
-  /// `commit` is optional in case the commit for each block was deferred for solely the commit for
-  /// the most recent block.
-  ///
-  /// This MAY panic if the commit is not valid. It is only intended to be called with inputs
-  /// already verified to be valid.
-  pub(crate) fn add(&mut self, txn: &mut impl DbTxn, block: &Block<T>, commit: Option<&Commit>) {
+  /// This is only intended to be called with inputs already verified to be valid.
+  pub(crate) fn add(&mut self, txn: &mut impl DbTxn, block: &Block<T>) {
     let hash = block.hash();
-
-    if let Some(commit) = &commit {
-      debug_assert!(commit.verify(
-        &self.validators,
-        &super::tendermint::SignatureScheme::new(self.genesis, self.validators.len()),
-        self.genesis,
-        hash
-      ));
-    }
 
     self.tip = hash;
     db::Tip::set(txn, self.genesis, &hash);
     db::Block::<Block<T>>::set(txn, self.genesis, hash, block.into());
-    if let Some(commit) = &commit {
-      db::Commit::set(txn, self.genesis, hash, commit);
-    }
     db::BlockAfter::set(txn, self.genesis, block.parent(), &hash);
 
     for slash in block.slashes() {
       db::Slashed::set(txn, self.genesis, slash.validator, &());
     }
-    for tx in block.transactions() {
-      match tx.kind() {
+    for transaction in block.transactions() {
+      match transaction.kind() {
         TransactionKind::Provided { scope } => {
-          let existing = db::OnChainProvided::get(txn, self.genesis, scope.as_bytes()).unwrap_or(0);
-          db::OnChainProvided::set(txn, self.genesis, scope.as_bytes(), &(existing + 1));
+          let scope = scope.as_bytes();
+          let existing = db::OnChainProvided::get(txn, self.genesis, scope).unwrap_or(0);
+          db::OnChainProvided::set(txn, self.genesis, scope, &(existing + 1));
         }
-        TransactionKind::Unsigned => db::Unsigned::set(txn, self.genesis, tx.hash(), &()),
+        TransactionKind::Unsigned => db::Unsigned::set(txn, self.genesis, transaction.hash(), &()),
         TransactionKind::Signed { scope, signed: Signed { signer, nonce, signature: _ } } => {
           db::LastSigned::set(txn, self.genesis, signer, &scope, &nonce);
         }

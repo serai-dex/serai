@@ -1,6 +1,5 @@
 use core::{
   sync::atomic::{Ordering, AtomicU64},
-  pin::Pin,
   time::Duration,
 };
 use alloc::{boxed::Box, sync::Arc};
@@ -80,7 +79,7 @@ pub(super) struct State<B: Blockchain> {
   observed_block_number_ref: Arc<AtomicU64>,
 
   /// Our proposal for this block.
-  proposal: Pin<Box<BlockProposal<B::Block, B::BlockProposal>>>,
+  proposal: BlockProposal<B::Block, B::BlockProposal>,
 
   /// The current round number.
   round_number: RoundNumber,
@@ -302,7 +301,7 @@ impl<B: BorshyBlockchain> State<B> {
       // L17-L18
       None => {
         match crate::timeout::<crate::SleepForNetwork<_, _, _, _, N>, _>(
-          self.proposal.as_mut(),
+          &mut self.proposal,
           N::BLOCK_PROCESSING_TIME,
         )
         .await
@@ -323,7 +322,7 @@ impl<B: BorshyBlockchain> State<B> {
               Ok(()) => {}
               Err(InvalidBlock::Temporal) => None?,
               Err(InvalidBlock::Fatal) => {
-                self.proposal.as_mut().set(BlockProposal::Invalid);
+                self.proposal = BlockProposal::Invalid;
                 None?;
               }
             }
@@ -897,7 +896,7 @@ impl<B: BorshyBlockchain> State<B> {
         observed_block_numbers: ObservedBlockNumbers::new(validators),
         observed_block_number_ref,
 
-        proposal: Box::pin(BlockProposal::Pending { future: proposal }),
+        proposal: BlockProposal::Pending { future: proposal },
 
         round_number,
         pending_step_timeout: db::PendingStepTimeout::get(getter, genesis)
@@ -1240,7 +1239,7 @@ impl<B: BorshyBlockchain> State<B> {
         our_latest_precommit,
       } = self;
 
-      proposal.set(BlockProposal::new(blockchain.add_block(block, commit).await));
+      *proposal = BlockProposal::new(blockchain.add_block(block, commit).await);
 
       let genesis = blockchain.genesis();
       let genesis = genesis.as_ref();

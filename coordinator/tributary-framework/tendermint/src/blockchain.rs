@@ -149,7 +149,11 @@ pub trait Blockchain {
   /// syncing, where this future will be occasionally polled (likely infrequently) for if the
   /// proposal is ready. It is RECOMMENDED to literally instantiate it with
   /// [`futures_channel::oneshot::Receiver`] or similar.
-  type BlockProposal: Future<Output = Self::Block>;
+  /*
+    TODO: Remove this `Unpin` bound. While the application can trivially satisfy it with a
+    `Pin<Box<_>>` wrapper, it shouldn't be necessary to expose.
+  */
+  type BlockProposal: Unpin + Future<Output = Self::Block>;
 
   /// The genesis ID for this blockchain.
   ///

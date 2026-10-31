@@ -1,7 +1,7 @@
 //! The mempool for a Tributary.
 //!
 //! This is distinguished into the mempool for provided transactions and the mempool for (un)signed
-//! transactions, due to the difference in semantics between them.
+//! transactions due to the difference in semantics between them.
 //!
 //! Both mempools are implemented with the same pattern.
 //! - Transactions may be added into the mempool by a mutable reference.
@@ -15,7 +15,7 @@ use core::{
   pin::Pin,
   task::{Poll, Context},
 };
-use alloc::{vec::Vec, collections::BTreeSet};
+use alloc::{boxed::Box, collections::BTreeSet};
 
 use futures_core::stream::{Stream as _, FusedStream as _};
 
@@ -66,7 +66,7 @@ pub trait MempoolNetwork<T: Transaction> {
   /// Gossip an (un)signed transaction.
   ///
   /// The mempool will automatically re-gossip transactions which have yet to be included on-chain.
-  /// Accordingly, this gossip layer should have some layer of intelligence, being able to
+  /// Accordingly, this gossip layer SHOULD have some layer of intelligence, being able to
   /// de-duplicate and rate-limit gossiped transactions (in case the mempool is over-eager).
   fn gossip(&mut self, genesis: [u8; 32], transaction: T);
 }
@@ -98,14 +98,14 @@ pin_project_lite::pin_project! {
     censure: async_channel::Receiver<([u8; 32], async_channel::Sender<()>)>,
     // The requests for block proposals.
     #[pin]
-    request: async_channel::Receiver<([u8; 32], async_channel::Sender<Vec<T>>)>,
+    request: async_channel::Receiver<([u8; 32], async_channel::Sender<Box<[T]>>)>,
     // A way to re-send requests for block proposals.
     //
     // `async_channel::Receiver` doesn't offer a `peek` function. If we aren't available to
     // service a request, we simply re-send the request message to handle it later, using the
     // channel itself as the buffer.
     #[pin]
-    resend_request: async_channel::WeakSender<([u8; 32], async_channel::Sender<Vec<T>>)>,
+    resend_request: async_channel::WeakSender<([u8; 32], async_channel::Sender<Box<[T]>>)>,
   }
 }
 
@@ -193,23 +193,20 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
     if (!projection.request.is_terminated()) &&
       let Poll::Ready(Some((parent, response))) = projection.request.poll_next(cx)
     {
-      // If this proposal isn't building on our latest indexed block, re-queue the request
-      if (parent != *projection.last_block) &&
-        let Some(resend_request) = projection.resend_request.upgrade()
-      {
+      if parent == *projection.last_block {
+        // Respond to a request for a block proposal with all transactions in our mempool
+        let _ = response.try_send(
+          projection
+            .provided
+            .block_proposal()
+            .chain(projection.un_signed.block_proposal())
+            .cloned()
+            .collect::<Box<[_]>>(),
+        );
+      } else if let Some(resend_request) = projection.resend_request.upgrade() {
+        // If this proposal isn't building on our latest indexed block, try to re-queue the request
         let _ = resend_request.try_send((parent, response));
-        return Poll::Pending;
       }
-
-      // Respond to a request for a block proposal with all transactions in our mempool
-      let _ = response.try_send(
-        projection
-          .provided
-          .block_proposal()
-          .chain(projection.un_signed.block_proposal())
-          .cloned()
-          .collect::<Vec<_>>(),
-      );
     }
 
     Poll::Pending
@@ -219,7 +216,8 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
 pub(crate) struct MempoolConsumer<T> {
   genesis: [u8; 32],
   censured: BTreeSet<[u8; 32]>,
-  request: async_channel::Sender<([u8; 32], async_channel::Sender<Vec<T>>)>,
+  #[expect(clippy::type_complexity)]
+  request: async_channel::Sender<([u8; 32], async_channel::Sender<Box<[T]>>)>,
 }
 
 pin_project_lite::pin_project! {
@@ -228,8 +226,9 @@ pin_project_lite::pin_project! {
     receiver: Option<async_channel::Receiver<T>>
   }
 }
-impl<T> Future for MempoolRecv<Vec<T>> {
-  type Output = Vec<T>;
+
+impl<T> Future for MempoolRecv<Box<[T]>> {
+  type Output = Box<[T]>;
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
     let message = if let Some(receiver) = self.project().receiver.as_pin_mut() {
       let Poll::Ready(message) = receiver.poll_next(cx) else {
@@ -240,13 +239,21 @@ impl<T> Future for MempoolRecv<Vec<T>> {
       // If we don't have a receiver, it's because we couldn't send the request to the mempool
       None
     };
-    // Fallback to an empty list of transactions
-    Poll::Ready(message.unwrap_or_else(Vec::new))
+
+    /*
+      Fallback to an empty list of transactions.
+
+      This uses [`Box::default`] which for `[T]`, creates a box to an empty slice
+      _without further bounds on `T`_. `Box::from([].as_slice())` would require `T: Clone`.
+      Unfortunately, it isn't available as `Box::new_empty_slice`
+      (or with any more descriptive name).
+    */
+    Poll::Ready(message.unwrap_or_else(Box::default))
   }
 }
 
 impl<T: Transaction> crate::tendermint::Mempool<T> for MempoolConsumer<T> {
-  type Transactions = Vec<T>;
+  type Transactions = Box<[T]>;
   type Future = MempoolRecv<Self::Transactions>;
   fn transactions(&mut self, parent_block: [u8; 32]) -> Self::Future {
     let (sender, receiver) = async_channel::bounded(1);

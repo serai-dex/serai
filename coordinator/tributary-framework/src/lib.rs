@@ -72,29 +72,6 @@ pin_project_lite::pin_project! {
   }
 }
 
-pin_project_lite::pin_project! {
-  /// An instanced Tributary.
-  ///
-  /// This is a collection of futures which MUST be polled in order for the Tributary to make
-  /// progress. It may be directly polled, acting as a single-threaded sequential executor for each
-  /// of the contained futures, or unrolled via its `IntoIterator` implementation, allowing the
-  /// futures to be individually spawned on an executor.
-  pub struct Tributary<
-    D: Db,
-    T: Transaction,
-    MN: MempoolNetwork<T>,
-    Tendermint = (),
-    Loop = (),
-  > {
-    #[pin]
-    mempool: MempoolFuture<D, T, MN>,
-    #[pin]
-    tendermint: Tendermint,
-    #[pin]
-    inner_loop: Loop,
-  }
-}
-
 impl<D: Db, T: Transaction, MN: MempoolNetwork<T>> Future for MempoolFuture<D, T, MN> {
   type Output = ();
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
@@ -116,6 +93,29 @@ impl<D: Db, T: Transaction, MN: MempoolNetwork<T>> Future for MempoolFuture<D, T
   }
 }
 
+pin_project_lite::pin_project! {
+  /// An instanced Tributary.
+  ///
+  /// This is a collection of futures which MUST be polled in order for the Tributary to make
+  /// progress. It may be directly polled, acting as a single-threaded sequential executor for each
+  /// of the contained futures, or unrolled via its `IntoIterator` implementation, allowing the
+  /// futures to be individually spawned on an executor.
+  pub struct Tributary<
+    D: Db,
+    T: Transaction,
+    MN: MempoolNetwork<T>,
+    Tendermint = (),
+    Loop = (),
+  > {
+    #[pin]
+    tendermint: Tendermint,
+    #[pin]
+    mempool: MempoolFuture<D, T, MN>,
+    #[pin]
+    inner_loop: Loop,
+  }
+}
+
 impl<
   D: Db,
   T: Transaction,
@@ -129,8 +129,8 @@ impl<
     let projection = self.project();
 
     let _: Poll<()> = projection.tendermint.poll(cx);
-    let _: Poll<()> = projection.inner_loop.poll(cx);
     let _: Poll<()> = projection.mempool.poll(cx);
+    let _: Poll<()> = projection.inner_loop.poll(cx);
 
     Poll::Pending
   }
@@ -147,11 +147,11 @@ impl<
   type Item = Pin<Box<dyn Send + Future<Output = ()>>>;
   type IntoIter = <[Self::Item; 3] as IntoIterator>::IntoIter;
   fn into_iter(self) -> Self::IntoIter {
-    let Self { tendermint, inner_loop, mempool } = self;
+    let Self { tendermint, mempool, inner_loop } = self;
     let tendermint: Self::Item = Box::pin(tendermint);
-    let inner_loop = Box::pin(inner_loop);
     let mempool = Box::pin(mempool);
-    [tendermint, inner_loop, mempool].into_iter()
+    let inner_loop = Box::pin(inner_loop);
+    [tendermint, mempool, inner_loop].into_iter()
   }
 }
 
@@ -301,7 +301,7 @@ impl<
     }
 
     let (validator_set, next_block_notification, (mut tendermint_handle, tendermint)) = {
-      let blockchain = Blockchain::new(&db, genesis, validators);
+      let blockchain = Blockchain::new(&db, genesis, genesis_time, validators);
 
       let (tip, minimum_next_block_time) = {
         let tip = blockchain.tip(&db);
@@ -326,7 +326,6 @@ impl<
 
       let mut tendermint = Tendermint::<_, _, _, N>::new(
         genesis,
-        genesis_time,
         db.clone(),
         blockchain,
         next_block_notification_recv,
@@ -390,8 +389,8 @@ impl<
     Ok((
       Tributary {
         tendermint,
-        inner_loop,
         mempool: MempoolFuture { db: db.clone(), mempool, mempool_recv },
+        inner_loop,
       },
       TributaryHandle {
         db,
@@ -460,7 +459,7 @@ impl<D: Db, T: Transaction> TributaryHandle<D, T> {
   ///
   /// This returns `None` if no commit was saved for this block.
   pub fn commit(&self, block: [u8; 32]) -> Option<crate::tendermint::Commit> {
-    Reader::<T>::commit(&self.db, self.genesis, block)
+    crate::tendermint::db_commit(&self.db, self.genesis, block)
   }
   /// The block after a block on the Tributary.
   ///

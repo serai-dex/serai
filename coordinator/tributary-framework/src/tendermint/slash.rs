@@ -35,7 +35,7 @@ impl Slash {
     genesis: [u8; 32],
     validator_set: &(impl ?Sized + ValidatorSet<Validator = [u8; 32]>),
   ) -> Result<(), ::tendermint::InvalidReason> {
-    // TODO: This runs in linear time. While trivial, we should have a O(1) method for this
+    // TODO: This runs in linear time. While trivial, we likely should have a O(1) method for this
     let validators = validator_set.validators().into_iter().count();
     self.slash_reason.verify(
       genesis,

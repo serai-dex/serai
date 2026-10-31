@@ -116,13 +116,13 @@ impl<T: Transaction> UnSigned<T> {
   }
 
   /// An iterator over all transactions in the mempool.
-  fn iter(&self, filter_without_prior_on_chain: bool) -> impl Iterator<Item = &T> {
+  fn iter<const FILTER_WITHOUT_PRIOR_ON_CHAIN: bool>(&self) -> impl Iterator<Item = &T> {
     #[expect(clippy::iter_kv_map)]
     self.unsigned.values().chain(self.signed.iter().flat_map(move |(_signer, signer_mempool)| {
       signer_mempool
         .iter()
         .filter_map(move |(_scope, scope_mempool)| {
-          ((!filter_without_prior_on_chain) || scope_mempool.have_prior_on_chain)
+          ((!FILTER_WITHOUT_PRIOR_ON_CHAIN) || scope_mempool.have_prior_on_chain)
             .then_some(&scope_mempool.transactions)
         })
         .flatten()
@@ -131,7 +131,7 @@ impl<T: Transaction> UnSigned<T> {
 
   /// Save the mempool to the database.
   fn save(&mut self, txn: &mut impl DbTxn) {
-    let mempool = self.iter(false).map(Transaction::hash).collect();
+    let mempool = self.iter::<false>().map(Transaction::hash).collect();
     db::Transactions::set(txn, self.genesis, &mempool);
   }
 
@@ -259,16 +259,7 @@ impl<T: Transaction> UnSigned<T> {
 
         match scope_mempool.transactions.binary_search_by_key(&nonce, |transaction_in_mempool| {
           match transaction_in_mempool.kind() {
-            TransactionKind::Signed {
-              scope: _,
-              signed: Signed { signer: signer_in_mempool, nonce, signature: _ },
-            } => {
-              assert_eq!(
-                signer_in_mempool, signer,
-                "signer of transaction in signer's mempool distinct from signer"
-              );
-              nonce
-            }
+            TransactionKind::Signed { scope: _, signed: Signed { nonce, .. } } => nonce,
             TransactionKind::Provided { .. } | TransactionKind::Unsigned => {
               panic!("non-signed transaction in mempool's signed transactions")
             }
@@ -307,7 +298,7 @@ impl<T: Transaction> UnSigned<T> {
 
     db::Transaction::<T>::set(txn, self.genesis, hash, transaction.into());
 
-    let prune_result = if let Some(signer) = prune {
+    if let Some(signer) = prune {
       /*
         Get the scope of the added transaction.
 
@@ -351,21 +342,20 @@ impl<T: Transaction> UnSigned<T> {
         signer_mempool.remove(&scope);
       }
 
-      (hash != pruned_hash).ok_or(MempoolError::RateLimit)
-    } else {
-      Ok(())
-    };
+      if hash == pruned_hash {
+        Err(MempoolError::RateLimit)?;
+      }
+    }
 
     self.save(txn);
 
-    prune_result
+    Ok(())
   }
 
-  /// Create an iterator over the transactions to include in a block proposal.
+  /// Create an iterator over the transactions for a block proposal.
   ///
   /// The transactions will be sorted according to the requirements for a block's syntactic
-  /// validity. This will only yield the transactions which can be included on-chain within a
-  /// single block.
+  /// validity. This will only yield the transactions which are ready to be included on-chain.
   ///
   /// The caller is expected to apply the block's size limit.
   pub(super) fn block_proposal(&self) -> impl Iterator<Item = &T> {
@@ -405,10 +395,12 @@ impl<T: Transaction> UnSigned<T> {
                 While the caller is expected to apply the block's size limit, we still apply the
                 block's size limit _to individual signers_. This lets the caller choose how to
                 prefer transactions between signers, without providing transactions which
-                definitely won't be included.
+                definitely won't be included, as those would pointlessly increase the amount of
+                memory required to represent the values this iterator yields.
 
-                There is a slight caveat, as a later scope of a signer could be preferred over an
-                earlier scope, but that isn't modelled here.
+                There is a slight caveat to the caller's ability to choose which transactions are
+                preferred, as a later scope of a signer could be preferred over an earlier scope,
+                but that isn't modeled here.
               */
               let Some(new_size) = self.signer_size.checked_add({
                 let Ok(size) = crate::serialized_len(next_transaction) else { continue };
@@ -433,7 +425,7 @@ impl<T: Transaction> UnSigned<T> {
         }
       }
     }
-    Filter { last: None, signer_size: 0, iter: self.iter(true) }
+    Filter { last: None, signer_size: 0, iter: self.iter::<true>() }
   }
 
   /// Censure a validator.

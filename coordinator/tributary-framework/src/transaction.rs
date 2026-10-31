@@ -79,7 +79,7 @@ impl Signed {
   /// This is beneficial for contexts where the numeric nonce can be inferred from the
   /// transaction's content, allowing optimizing the encoding and reducing malleability.
   ///
-  //// This has an incompatible wire format with `<Signed as ReadWrite>` and requires the `nonce`
+  /// This has an incompatible wire format with `<Signed as ReadWrite>::read` and requires `nonce`
   /// be specified as an argument.
   pub fn read_without_nonce(mut reader: impl io::Read, nonce: u64) -> io::Result<Self> {
     let signer = {
@@ -99,9 +99,10 @@ impl Signed {
 
   /// Write a `Signed` value _without its numeric nonce_.
   ///
-  /// This function is the compliment to [`Signed::read_without_nonce`].
+  /// This function is the complement to [`Signed::read_without_nonce`].
   ///
-  //// This has an incompatible wire format with `<Signed as ReadWrite>`.
+  /// This has an incompatible wire format with `<Signed as ReadWrite>::write` and omits `nonce`
+  /// from the serialization.
   pub fn write_without_nonce(&self, mut writer: impl io::Write) -> io::Result<()> {
     let Self { signer, nonce: _, signature } = self;
     writer.write_all(signer)?;
@@ -151,9 +152,9 @@ pub enum TransactionKind {
   Signed {
     /// The scope for this signed transaction.
     ///
-    /// The nonce with the `Signed` data is local to this scope.
+    /// The nonce within the [`Signed`] data is local to this scope.
     scope: Vec<u8>,
-    /// The `Signed` data associated with this.
+    /// The [`Signed`] data associated with this.
     signed: Signed,
   },
 }
@@ -176,6 +177,8 @@ pub trait Transaction: Clone + ReadWrite + Digestible {
   ///
   /// The Tributary will enforce no individual block exceeds this size.
   ///
+  /// This MUST be greater than the size of an empty block.
+  ///
   /// The default size limt is 4 MiB.
   const BLOCK_SIZE_LIMIT: Option<usize> = Some(4 * 1024 * 1024);
 
@@ -186,7 +189,7 @@ pub trait Transaction: Clone + ReadWrite + Digestible {
   ///
   /// This MUST be a context-free validation over the data within this transaction alone. This
   /// function is only required to apply application-specific verification rules, where the
-  /// Tributary will always apply its rules and any rules regarding the current ocntext.
+  /// Tributary will always apply its rules and any rules regarding the current context.
   fn verify(&self) -> Result<(), TransactionError>;
 
   /// Obtain the challenge for this transaction's signature.
@@ -195,7 +198,7 @@ pub trait Transaction: Clone + ReadWrite + Digestible {
   ///
   /// The provided implementation uses BLAKE2b-512, with a personalization of "tributary tx sig",
   /// for its hash function. It scopes to a specific Tributary via its genesis before digesting the
-  /// transaction and the present signature's nonce.
+  /// transaction and the present signature's nonce (its first `32` bytes).
   fn signature_challenge(&self, genesis: [u8; 32]) -> Option<<Ristretto as WrappedGroup>::F> {
     let TransactionKind::Signed { scope: _, signed: Signed { signature, .. } } = self.kind() else {
       None?
@@ -211,7 +214,7 @@ pub trait Transaction: Clone + ReadWrite + Digestible {
   /// Hash this transaction.
   ///
   /// The provided implementation uses BLAKE2b-256, with a personalization of "tributary tx", for
-  /// its hash function. The implementation MUST be binding to the entire value's digestible
+  /// its hash function. The implementation MUST be binding to the entire value's [`Digestible`]
   /// content.
   fn hash(&self) -> [u8; 32] {
     self.chain_update(Blake2b256::new_customized(b"tributary tx")).finalize().into()
