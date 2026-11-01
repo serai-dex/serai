@@ -79,3 +79,59 @@ impl<RW: ReadWrite> borsh::BorshDeserialize for ReadWriteAsBorsh<RW> {
     ReadWrite::read(reader).map(Self)
   }
 }
+
+mod fixed_write {
+  use core::mem::MaybeUninit;
+  use std::io;
+
+  pub struct FixedWrite<'buf>(&'buf mut [MaybeUninit<u8>]);
+  impl io::Write for FixedWrite<'_> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+      if self.0.is_empty() && (!buf.is_empty()) {
+        Err(io::Error::new(
+          io::ErrorKind::StorageFull,
+          "serialization's length exceeded fixed buffer's size",
+        ))?;
+      }
+
+      let len_to_copy = self.0.len().min(buf.len());
+      let dest = self.0.split_off_mut(.. len_to_copy).unwrap();
+      unsafe {
+        const {
+          assert!(core::mem::align_of::<u8>() == 1, "all `u8` pointers are inherently aligned");
+        }
+        dest
+          .as_mut_ptr()
+          .copy_from_nonoverlapping(buf.as_ptr().cast::<MaybeUninit<u8>>(), len_to_copy);
+      }
+      Ok(len_to_copy)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+      Ok(())
+    }
+  }
+  impl Drop for FixedWrite<'_> {
+    fn drop(&mut self) {
+      assert!(self.0.is_empty());
+    }
+  }
+
+  /// Write the value to a fixed-length buffer.
+  ///
+  /// The value's serialization MUST be exactly this length. The write function MUST only fail if
+  /// the writer is fallible.
+  #[doc(hidden)]
+  pub fn fixed_write<const LEN: usize>(
+    write: impl Fn(&mut FixedWrite<'_>) -> std::io::Result<()>,
+  ) -> [u8; LEN] {
+    let mut serialization = MaybeUninit::<[u8; LEN]>::uninit();
+    {
+      let mut serialization = FixedWrite(serialization.as_mut());
+      write(&mut serialization).unwrap();
+    }
+    // SAFETY: `FixedWrite` panics on drop if it doesn't write to the entire buffer
+    unsafe { serialization.assume_init() }
+  }
+}
+pub use fixed_write::fixed_write;

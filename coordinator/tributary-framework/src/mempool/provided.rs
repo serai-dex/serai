@@ -24,9 +24,7 @@ serai_db::schema!(TributaryProvided {
   Mempool: (genesis: [u8; 32]) -> Vec<[u8; 32]>,
 
   OnChainProvided: (genesis: [u8; 32], scope: &'static [u8]) -> u64,
-  OnChainProvidedTransaction: <T: ReadWrite>(
-    genesis: [u8; 32], scope: &'static [u8], index: u64
-  ) -> crate::ReadWriteAsBorsh<T>,
+  OnChainProvidedTransaction: (genesis: [u8; 32], scope: &'static [u8], index: u64) -> [u8; 32],
 });
 
 /// The mempool and view over the provided transactions.
@@ -119,11 +117,10 @@ impl<T: Transaction> Provided<T> {
     let add_to_mempool = {
       let on_chain_quantity = OnChainProvided::get(txn, self.genesis, scope).unwrap_or(0);
       if index < on_chain_quantity {
-        let transaction = OnChainProvidedTransaction::<T>::get(txn, self.genesis, scope, index)
-          .expect("on-chain provided transaction wasn't saved to disk")
-          .0;
+        let on_chain_transaction = OnChainProvidedTransaction::get(txn, self.genesis, scope, index)
+          .expect("on-chain provided transaction wasn't saved to disk");
 
-        if transaction.hash() != hash {
+        if on_chain_transaction != hash {
           Err(MempoolError::Conflict)?;
         }
 
@@ -166,7 +163,7 @@ impl<T: Transaction> Provided<T> {
 
       let index = OnChainProvided::get(txn, self.genesis, scope).unwrap_or(0);
       OnChainProvided::set(txn, self.genesis, scope, &(index + 1));
-      OnChainProvidedTransaction::<T>::set(txn, self.genesis, scope, index, transaction.into());
+      OnChainProvidedTransaction::set(txn, self.genesis, scope, index, &transaction.hash());
 
       let Some(scope_mempool) = self.transactions.get_mut(scope) else { continue };
       let mut local_index = LocallyProvided::get(txn, self.genesis, scope).unwrap_or(0) -
@@ -176,7 +173,7 @@ impl<T: Transaction> Provided<T> {
         let Some((_time_added, local)) = scope_mempool.pop_front() else {
           /*
             We do not remove the scope's entry in the map even if its mempool is now empty. While
-            this would premise a memleak, the scope is defined to be statically-allocated, so the
+            this would premise a memleak, the scope is defined to be statically allocated, so the
             creation of enough scopes to effect a memleak is inherently a memleak of its own and
             this is not _our_ problem.
           */
@@ -214,4 +211,98 @@ impl<T: Transaction> ProvidedReader<T> {
         .expect("locally provided transaction lacked `(scope, index) -> hash` index")
     })
   }
+}
+
+#[test]
+fn provided() {
+  use alloc::boxed::Box;
+  use serai_db::Db as _;
+  use crate::transaction::TestTransaction;
+
+  let mut db = serai_db::MemDb::new();
+  let genesis = [0xfe; 32];
+
+  let mut provided = Provided::<TestTransaction>::new(&db, genesis);
+  let tx = TestTransaction {
+    valid: true,
+    kind: TransactionKind::Provided { scope: "provided 0" },
+    salt: 0,
+  };
+
+  {
+    let mut txn = db.txn();
+    provided.provide(&mut txn, tx.clone()).unwrap();
+    txn.commit();
+    assert!(
+      provided
+        .transactions
+        .values()
+        .flatten()
+        .find(|(_time, transaction)| transaction.hash() == tx.hash())
+        .is_some()
+    );
+
+    assert_eq!(LocallyProvided::get(&db, genesis, b"provided 0"), Some(1));
+    assert_eq!(LocallyProvidedHash::get(&db, genesis, b"provided 0", 0), Some(tx.hash()));
+    assert_eq!(
+      LocallyProvidedTransaction::<TestTransaction>::get(&db, genesis, tx.hash())
+        .as_ref()
+        .map(|transaction| transaction.0.hash()),
+      Some(tx.hash())
+    );
+    assert_eq!(Mempool::get(&db, genesis), Some(alloc::vec![tx.hash()]));
+  }
+
+  {
+    let mut txn = db.txn();
+    assert!(matches!(provided.provide(&mut txn, tx.clone()), Err(MempoolError::AlreadyPresent)));
+  }
+
+  // Reloading the database should work
+  assert_eq!(
+    Provided::<TestTransaction>::new(&db, genesis)
+      .transactions
+      .values()
+      .flatten()
+      .map(|(_time, transaction)| transaction.hash())
+      .collect::<Box<[_]>>(),
+    provided
+      .transactions
+      .values()
+      .flatten()
+      .map(|(_time, transaction)| transaction.hash())
+      .collect::<Box<[_]>>()
+  );
+
+  // The `ProvidedReader` should work
+  assert_eq!(
+    ProvidedReader::<TestTransaction>::locally_provided(&db, genesis, "provided 0", 0)
+      .collect::<Box<[_]>>(),
+    Box::from(alloc::vec![tx.hash()])
+  );
+
+  // Supply a block with a conflicting transaction at the same spot
+  {
+    let conflict = TestTransaction {
+      valid: true,
+      kind: TransactionKind::Provided { scope: "provided 0" },
+      salt: 1,
+    };
+    let conflict_hash = conflict.hash();
+    let block =
+      Block::instantiate(genesis, genesis, 0, Box::default(), Box::from([conflict])).unwrap();
+    let mut txn = db.txn();
+    provided.block(&mut txn, &block);
+    txn.commit();
+
+    assert_eq!(OnChainProvided::get(&db, genesis, b"provided 0"), Some(1));
+    assert_eq!(
+      OnChainProvidedTransaction::get(&db, genesis, b"provided 0", 0),
+      Some(conflict_hash)
+    );
+  }
+  assert!(provided.transactions.values().flatten().next().is_none());
+  assert!(
+    Provided::<TestTransaction>::new(&db, genesis).transactions.values().flatten().next().is_none()
+  );
 }

@@ -203,7 +203,7 @@ impl<
   /// Instance a Tributary.
   ///
   /// This MUST be the only Tributary instanced with this `genesis` value. It will be reloaded from
-  /// the database if prior instanced. For further context on the limitations of this, please defer
+  /// the database if prior instanced. For further context on the limitations of this, please refer
   /// to the limitations placed upon [`::tendermint::Tendermint`].
   ///
   /// The `genesis` argument will be expanded to a 32-byte genesis by prefixing 16 `0`s.
@@ -214,16 +214,16 @@ impl<
   /// minimum spacing between blocks. It is optional as it is not strictly required, but it is
   /// practically required for resilience against a dishonest supermajority (who can compromise the
   /// integrity of the Tributary in general). Whatever value is set, it MUST be consistent across
-  /// participants.
+  /// participants AND reboots.
   ///
   /// `validators` represents the validators present in the Tributary (keyed by their Ristretto
   /// public keys, valued by their weight in the consensus process). It MUST be a valid value for
   /// the [`::tendermint::ValidatorSet`] trait.
   ///
-  /// `key` is the validator's Ristretto private key.
+  /// `key` is the validator's Ristretto private key. It MUST be consistent across reboots.
   ///
   /// `mempool_rate_limit` is the maximum amount of transactions each validator may have pending
-  /// within the mempool. It may be locally configured independently of other validators. It does
+  /// within the mempool. It MAY be locally configured independently of other validators. It does
   /// not apply to provided nor unsigned transactions which are privileged within the Tributary.
   #[expect(clippy::too_many_arguments)]
   pub async fn new<
@@ -301,7 +301,8 @@ impl<
     }
 
     let (validator_set, next_block_notification, (mut tendermint_handle, tendermint)) = {
-      let blockchain = Blockchain::new(&db, genesis, genesis_time, validators);
+      let blockchain =
+        Blockchain::new(&db, genesis, genesis_time, validators, signature_scheme.clone());
 
       let (tip, minimum_next_block_time) = {
         let tip = blockchain.tip(&db);
@@ -325,8 +326,8 @@ impl<
         async_channel::unbounded::<async_channel::Sender<()>>();
 
       let mut tendermint = Tendermint::<_, _, _, N>::new(
-        genesis,
         db.clone(),
+        genesis,
         blockchain,
         next_block_notification_recv,
         mempool_consumer,
@@ -353,7 +354,7 @@ impl<
 
     let inner_loop = async move {
       loop {
-        let result: Result<(), ::tendermint::ProcessTerminated> = match (or::Or {
+        if let Err(::tendermint::ProcessTerminated) = match (or::Or {
           f1: or::Or { f1: sync_recv.recv(), f2: message_recv.recv() },
           f2: blocks_behind_recv.recv(),
         })
@@ -378,9 +379,8 @@ impl<
           or::Either::L(or::Either::L(Err(_)) | or::Either::R(Err(_))) | or::Either::R(Err(_)) => {
             Err(::tendermint::ProcessTerminated)
           }
-        };
-
-        if let Err(::tendermint::ProcessTerminated) = result {
+        } {
+          // TODO: Never
           core::future::pending::<()>().await;
         }
       }
@@ -506,9 +506,9 @@ impl<D: Db, T: Transaction> TributaryHandle<D, T> {
   /// 2) The block is not ready to be added (due to missing parent blocks)
   /// 3) The block will be added
   ///
-  /// This function only queues the block to be added (if verified to be syntactically valid). This
-  /// function offers no inspection into when that queue is consumed or if the queued block was
-  /// valid.
+  /// This function only queues the block to be added (if verified to be syntactically valid, with
+  /// a valid commit). This function offers no inspection into when that queue is consumed or if
+  /// the queued block was entirely valid.
   pub async fn sync(
     &self,
     block: Block<T>,

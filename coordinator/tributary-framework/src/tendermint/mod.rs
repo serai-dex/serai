@@ -85,12 +85,10 @@ pub(super) fn db_commit(getter: &impl Get, genesis: [u8; 32], block: [u8; 32]) -
 pub(crate) struct Tendermint<D, T: Transaction, M, N> {
   genesis: [u8; 32],
 
-  signature_scheme: SignatureScheme,
   _network: PhantomData<N>,
 
   db: D,
   blockchain: Blockchain<T>,
-  validators: ValidatorSet,
   next_block_notification: async_channel::Receiver<async_channel::Sender<()>>,
 
   /// The mempool for slashes.
@@ -104,18 +102,15 @@ pub(crate) struct Tendermint<D, T: Transaction, M, N> {
 
 impl<D: Db, T: Transaction, M, N> Tendermint<D, T, M, N> {
   pub(crate) fn new(
-    genesis: [u8; 32],
     db: D,
+    genesis: [u8; 32],
     blockchain: Blockchain<T>,
     next_block_notification: async_channel::Receiver<async_channel::Sender<()>>,
     mempool: M,
   ) -> Self {
-    let signature_scheme = SignatureScheme::new(genesis, blockchain.validators().len());
-
-    let validators = ValidatorSet::new(blockchain.validators().clone());
-
     let slashes = blockchain
-      .validators()
+      .validator_set()
+      .as_ref()
       .keys()
       .copied()
       .filter_map(|validator| {
@@ -126,12 +121,10 @@ impl<D: Db, T: Transaction, M, N> Tendermint<D, T, M, N> {
     Self {
       genesis,
 
-      signature_scheme,
       _network: PhantomData,
 
       db,
       blockchain,
-      validators,
       next_block_notification,
 
       slashes,
@@ -147,6 +140,11 @@ impl<
   N: Network<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<T>>>,
 > Tendermint<D, T, M, N>
 {
+  /// An `Unpin` future for a proposal for the next block.
+  ///
+  /// If `minimum_time` is none, it's considered as not being representable, in which case no block
+  /// should be proposed to maintain the system's soundness. The resulting future will never yield
+  /// `Poll::Ready(block)`.
   pub(crate) fn block_proposal(
     &mut self,
     parent: [u8; 32],
@@ -198,11 +196,11 @@ impl<
   }
 
   fn validator_set(&self) -> &Self::ValidatorSet {
-    &self.validators
+    self.blockchain.validator_set()
   }
 
   fn signature_scheme(&self) -> &Self::SignatureScheme {
-    &self.signature_scheme
+    self.blockchain.signature_scheme()
   }
 
   fn validate(
@@ -288,18 +286,43 @@ impl<
           }
 
           // Actually add the block
-          let mut txn = self.db.txn();
-          for slash in block.slashes() {
-            if self.slashes.remove(slash.validator()).is_some() {
-              db::PendingSlash::del(&mut txn, self.genesis, *slash.validator());
+          {
+            let mut txn = self.db.txn();
+            for slash in block.slashes() {
+              if self.slashes.remove(slash.validator()).is_some() {
+                db::PendingSlash::del(&mut txn, self.genesis, *slash.validator());
+              }
             }
+            self.blockchain.add(&mut txn, &block);
+            db::Commit::set(&mut txn, self.genesis, hash, &commit);
+            txn.commit();
           }
-          self.blockchain.add(&mut txn, &block);
-          db::Commit::set(&mut txn, self.genesis, hash, &commit);
-          txn.commit();
 
           while let Ok(next_block_notification) = self.next_block_notification.try_recv() {
             let _ = next_block_notification.try_send(());
+          }
+
+          /*
+            Sleep until the next block's minimum time before yielding back to the Tendermint
+            consensus process.
+
+            This causes the Tendermint consensus process to only start working on the next block
+            _after_ the next block may be valid, preventing (or at least limiting) the initial
+            attempts from failing in the time between when this block is added and when the next
+            block can be added.
+
+            This block of code is _solely_ intended to limit the initial attempts to achieve
+            consensus on the next block from failing. The rate limiting of blocks, preventing a
+            malicious supermajority from performing a DoS by flooding blocks, is handled _before_
+            each block is added. The block proposal logic also performs its own handling of the
+            minimum time for the next block to ensure it only creates valid proposals.
+          */
+          if let Some(minimum_next_block_time) = minimum_next_block_time &&
+            let Some(minimum_next_block_time) =
+              SystemTime::UNIX_EPOCH.checked_add(Duration::from_millis(minimum_next_block_time)) &&
+            let Ok(time_remaining) = minimum_next_block_time.duration_since(SystemTime::now())
+          {
+            N::sleep(time_remaining).await;
           }
 
           self.block_proposal(hash, minimum_next_block_time, next_block_number)
@@ -348,6 +371,9 @@ impl<
       .and_then(|existing_slash| crate::serialized_len(existing_slash).ok());
 
     let mut txn = self.db.txn();
+    if existing_slash_size.is_none() {
+      self.mempool.censure(&mut txn, *slash.validator());
+    }
     // If this validator already has a slash pending, keep whichever is smaller
     if existing_slash_size.is_none_or(|existing_slash_size| existing_slash_size > slash_size) {
       db::PendingSlash::set(&mut txn, self.genesis, *slash.validator(), (&slash).into());

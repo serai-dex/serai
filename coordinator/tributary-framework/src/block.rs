@@ -1,5 +1,5 @@
 use core::time::Duration;
-use alloc::{boxed::Box, vec::Vec};
+use alloc::boxed::Box;
 use std::{io, time::SystemTime};
 
 use blake2::{digest::Digest as _, Blake2b256};
@@ -176,6 +176,7 @@ impl From<EphemeralError> for BlockError {
   Tributary Framework.
 */
 #[derive(Clone, Copy, Debug)]
+#[cfg_attr(test, derive(PartialEq, Eq))]
 pub struct BlockHeader {
   parent: [u8; 32],
   time: u64,
@@ -375,8 +376,8 @@ impl<T: Transaction> Block<T> {
   }
 
   fn verify_syntax_transactions<'block>(
-    transactions: impl IntoIterator<Item = &'block T>,
     genesis: [u8; 32],
+    transactions: impl IntoIterator<Item = &'block T>,
   ) -> Result<(), SyntacticError>
   where
     T: 'block,
@@ -392,7 +393,7 @@ impl<T: Transaction> Block<T> {
       u8,
       Option<&'static [u8]>,
       Option<[u8; 32]>,
-      Option<([u8; 32], Vec<u8>, u64)>,
+      Option<([u8; 32], Box<[u8]>, u64)>,
     ) = (0, None, None, None);
 
     for transaction in transactions {
@@ -406,7 +407,7 @@ impl<T: Transaction> Block<T> {
           */
           if let Some((prior_signer, ref prior_scope, prior_nonce)) = order.3 &&
             (prior_signer == signer) &&
-            (prior_scope == scope.as_slice()) &&
+            (prior_scope == &scope) &&
             (prior_nonce.checked_add(1) != Some(nonce))
           {
             Err(SyntacticError::IncorrectOrderOfContents)?;
@@ -416,7 +417,15 @@ impl<T: Transaction> Block<T> {
         }
       };
 
-      if new_order <= order {
+      // If this is a provided transaction...
+      if order.0 == 0 {
+        // Require scopes be sequential, but allow multiple transactions within a scope
+        // (which all have the same order from a syntactic perspective)
+        if new_order < order {
+          Err(SyntacticError::IncorrectOrderOfContents)?;
+        }
+      } else if new_order <= order {
+        // If this isn't a provided transaction, require strictly increasing orders
         Err(SyntacticError::IncorrectOrderOfContents)?;
       }
       order = new_order;
@@ -491,7 +500,7 @@ impl<T: Transaction> Block<T> {
     self.system_time()?;
 
     Self::verify_syntax_slashes(&self.slashes)?;
-    Self::verify_syntax_transactions(&self.transactions, genesis)?;
+    Self::verify_syntax_transactions(genesis, &self.transactions)?;
 
     Ok(())
   }
@@ -509,7 +518,7 @@ impl<T: Transaction> Block<T> {
     slashes: Box<[Slash]>,
     transactions: Box<[T]>,
   ) -> Result<Self, SyntacticError> {
-    let result = Block {
+    let block = Block {
       header: BlockHeader {
         parent,
         time,
@@ -519,8 +528,8 @@ impl<T: Transaction> Block<T> {
       slashes,
       transactions,
     };
-    result.verify_syntax(genesis)?;
-    Ok(result)
+    block.verify_syntax(genesis)?;
+    Ok(block)
   }
 
   /// This block's parent's hash.
@@ -550,5 +559,303 @@ impl<T: Transaction> Block<T> {
   /// The transactions within this block.
   pub fn transactions(&self) -> &[T] {
     &self.transactions
+  }
+}
+
+#[test]
+fn sizes() {
+  use crate::transaction::TestTransaction;
+
+  let header = BlockHeader {
+    parent: [0xaa; 32],
+    time: u64::MAX,
+    slashes: [0xbb; 32],
+    transactions: [0xcc; 32],
+  };
+  assert_eq!(header, BlockHeader::read(&mut header.serialize().as_slice()).unwrap());
+  assert_eq!(header.serialize().len(), BlockHeader::SIZE);
+  assert_eq!(
+    (Block::<TestTransaction> { header, slashes: Box::default(), transactions: Box::default() })
+      .serialize()
+      .len(),
+    Block::<TestTransaction>::EMPTY_BLOCK_SIZE
+  );
+}
+
+#[test]
+fn slashes() {
+  use crate::transaction::TestTransaction;
+
+  let slash = |validator: [u8; 32]| {
+    let mut slash = validator.to_vec();
+    loop {
+      if let Ok(slash) = Slash::read(&mut slash.as_slice()) {
+        return slash;
+      }
+      /*
+        Because this slash isn't verified and doesn't have to be valid, just to deserialize into a
+        valid instance of the literal data types, we just pad with non-zero bytes until it's the
+        correct length to deserialize.
+      */
+      slash.push(1);
+      assert!(slash.len() < (32 * 1_024), "32 KiB slash still couldn't be deserialized");
+    }
+  };
+
+  Block::<TestTransaction>::verify_syntax_slashes([&slash([0xaa; 32])]).expect("one slash");
+  Block::<TestTransaction>::verify_syntax_slashes([&slash([0xaa; 32]), &slash([0xbb; 32])])
+    .expect("sorted");
+  Block::<TestTransaction>::verify_syntax_slashes([&slash([0xaa; 32]), &slash([0xaa; 32])])
+    .expect_err("multiple inclusions");
+  Block::<TestTransaction>::verify_syntax_slashes([&slash([0xbb; 32]), &slash([0xaa; 32])])
+    .expect_err("not sorted");
+}
+
+#[test]
+fn transactions() {
+  use core::ops::Deref as _;
+
+  use zeroize::Zeroizing;
+  use rand::rngs::OsRng;
+
+  use ciphersuite::{
+    group::{ff::PrimeField as _, GroupEncoding as _},
+    WrappedGroup,
+  };
+  use dalek_ff_group::Ristretto;
+
+  use crate::transaction::TestTransaction;
+
+  let genesis = [0xfe; 32];
+
+  let (alice, bob) = {
+    let alice = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
+    let bob = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
+    if (<Ristretto as WrappedGroup>::generator() * alice.deref()).to_bytes() <
+      (<Ristretto as WrappedGroup>::generator() * bob.deref()).to_bytes()
+    {
+      (alice, bob)
+    } else {
+      (bob, alice)
+    }
+  };
+
+  let transaction = |(mut kind, salt)| {
+    let mut key = None;
+    let nonce = <Ristretto as WrappedGroup>::F::random(&mut OsRng);
+    if let TransactionKind::Signed { scope: _, signed: Signed { signer, nonce: _, signature } } =
+      &mut kind
+    {
+      let key_value = if *signer == [0xaa; 32] {
+        &alice
+      } else if *signer == [0xbb; 32] {
+        &bob
+      } else {
+        panic!()
+      };
+      *signer = (<Ristretto as WrappedGroup>::generator() * key_value.deref()).to_bytes();
+      key = Some(key_value);
+
+      signature[.. 32]
+        .copy_from_slice((<Ristretto as WrappedGroup>::generator() * nonce).to_bytes().as_ref());
+    }
+
+    let mut transaction = TestTransaction { valid: true, kind, salt };
+
+    if let Some(signature_challenge) = transaction.signature_challenge(genesis) {
+      let TransactionKind::Signed { scope: _, signed: Signed { signer: _, nonce: _, signature } } =
+        &mut transaction.kind
+      else {
+        panic!("signature challenge but not signed")
+      };
+      let s = nonce + (signature_challenge * key.unwrap().deref());
+      signature[32 ..].copy_from_slice(s.to_repr().as_ref());
+    }
+
+    transaction
+  };
+
+  // Provided transactions solely have to be ordered by scope
+  let provided = [
+    (TransactionKind::Provided { scope: "provided 0" }, 1),
+    (TransactionKind::Provided { scope: "provided 0" }, 0),
+    (TransactionKind::Provided { scope: "provided 1" }, 0),
+  ]
+  .into_iter()
+  .map(transaction)
+  .collect::<alloc::vec::Vec<_>>();
+
+  // Unsigned transactions are ordered by hash
+  let unsigned = {
+    let mut unsigned = [(TransactionKind::Unsigned, 0), (TransactionKind::Unsigned, 1)]
+      .into_iter()
+      .map(transaction)
+      .collect::<alloc::vec::Vec<_>>();
+    unsigned.sort_by_key(Transaction::hash);
+    unsigned
+  };
+
+  // Signed transactions are sorted by signer, then scope, then nonce
+  let signed = [
+    (TransactionKind::Signed {
+      scope: alloc::vec![1].into_boxed_slice(),
+      signed: Signed { signer: [0xaa; 32], nonce: 0, signature: [0; 64] },
+    }),
+    (TransactionKind::Signed {
+      scope: alloc::vec![1].into_boxed_slice(),
+      signed: Signed { signer: [0xaa; 32], nonce: 1, signature: [0; 64] },
+    }),
+    (TransactionKind::Signed {
+      scope: alloc::vec![1].into_boxed_slice(),
+      signed: Signed { signer: [0xaa; 32], nonce: 2, signature: [0; 64] },
+    }),
+    (TransactionKind::Signed {
+      scope: alloc::vec![2].into_boxed_slice(),
+      signed: Signed { signer: [0xaa; 32], nonce: 0, signature: [0; 64] },
+    }),
+    (TransactionKind::Signed {
+      scope: alloc::vec![3].into_boxed_slice(),
+      signed: Signed { signer: [0xaa; 32], nonce: 5, signature: [0; 64] },
+    }),
+    (TransactionKind::Signed {
+      scope: alloc::vec![0].into_boxed_slice(),
+      signed: Signed { signer: [0xbb; 32], nonce: 0, signature: [0; 64] },
+    }),
+  ]
+  .into_iter()
+  .map(|kind| transaction((kind, 0)))
+  .collect::<alloc::vec::Vec<_>>();
+
+  {
+    let transactions = provided.iter().chain(unsigned.iter()).chain(signed.iter());
+    Block::<TestTransaction>::verify_syntax_transactions(genesis, transactions).expect("sorted");
+  }
+
+  {
+    let transactions = unsigned.iter().chain(provided.iter());
+    Block::<TestTransaction>::verify_syntax_transactions(genesis, transactions)
+      .expect_err("unsigned before provided");
+  }
+
+  {
+    let transactions = signed.iter().chain(provided.iter());
+    Block::<TestTransaction>::verify_syntax_transactions(genesis, transactions)
+      .expect_err("signed before provided");
+  }
+
+  {
+    let transactions = signed.iter().chain(unsigned.iter());
+    Block::<TestTransaction>::verify_syntax_transactions(genesis, transactions)
+      .expect_err("signed before unsigned");
+  }
+
+  {
+    let transactions = provided.iter().rev();
+    Block::<TestTransaction>::verify_syntax_transactions(genesis, transactions)
+      .expect_err("provided with reversed scopes");
+  }
+
+  {
+    let transactions = unsigned.iter().rev();
+    Block::<TestTransaction>::verify_syntax_transactions(genesis, transactions)
+      .expect_err("unsigned with reversed hashes");
+  }
+
+  {
+    let transactions = unsigned.first().into_iter().chain(unsigned.iter());
+    Block::<TestTransaction>::verify_syntax_transactions(genesis, transactions)
+      .expect_err("unsigned with repeated transactions");
+  }
+
+  /*
+    Try every permutation of signed transactions, as they should only have a singular valid
+    ordering (the one they were defined in).
+
+    This generates every ordering via incrementing a
+    multi-digit value (the set of indexes, each digit one index),
+    exhausting its space of representable values. When the multi-digit value overflows, we're done.
+  */
+  {
+    fn increment(digits: &mut [usize], limit: usize) -> bool {
+      let mut carry = true;
+      for digit in digits {
+        *digit += usize::from(u8::from(carry));
+        carry = *digit == limit;
+        if carry {
+          *digit = 0;
+        }
+      }
+      !carry
+    }
+    let mut order = alloc::vec![0; signed.len()];
+    while increment(&mut order, signed.len()) {
+      if order != (0 .. signed.len()).collect::<alloc::vec::Vec<_>>() {
+        let transactions = order.iter().map(|i| &signed[*i]);
+        Block::<TestTransaction>::verify_syntax_transactions(genesis, transactions)
+          .expect_err("non-sorted signed transactions");
+      }
+    }
+  }
+
+  {
+    let transactions =
+      signed.iter().filter(|transaction| {
+        if let TransactionKind::Signed {
+          scope: _,
+          signed: Signed { signer: _, nonce, signature: _ },
+        } = transaction.kind() &&
+          (nonce == 1)
+        {
+          return false;
+        }
+        true
+      });
+    Block::<TestTransaction>::verify_syntax_transactions(genesis, transactions)
+      .expect_err("gap between nonces 0 and 2");
+  }
+
+  {
+    let transactions =
+      provided.iter().chain(unsigned.iter()).chain(signed.iter()).cloned().collect::<Box<_>>();
+    for i in 0 .. transactions.len() {
+      let mut transactions = transactions.clone();
+      transactions[i].valid = false;
+      Block::<TestTransaction>::verify_syntax_transactions(genesis, &transactions)
+        .expect_err("invalid transaction");
+    }
+  }
+
+  {
+    let transactions = signed.iter().cloned().collect::<Box<_>>();
+    for i in 0 .. transactions.len() {
+      let mut transactions = transactions.clone();
+      {
+        let TransactionKind::Signed { scope: _, signed: Signed { signer, .. } } =
+          &mut transactions[i].kind
+        else {
+          panic!("non-signed transaction in `signed`")
+        };
+        signer[0] ^= 1;
+      }
+      Block::<TestTransaction>::verify_syntax_transactions(genesis, &transactions)
+        .expect_err("malleated signer");
+    }
+  }
+
+  {
+    let transactions = signed.iter().cloned().collect::<Box<_>>();
+    for i in 0 .. transactions.len() {
+      let mut transactions = transactions.clone();
+      {
+        let TransactionKind::Signed { scope: _, signed: Signed { signature, .. } } =
+          &mut transactions[i].kind
+        else {
+          panic!("non-signed transaction in `signed`")
+        };
+        signature[0] ^= 1;
+      }
+      Block::<TestTransaction>::verify_syntax_transactions(genesis, &transactions)
+        .expect_err("malleated signature");
+    }
   }
 }

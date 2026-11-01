@@ -87,3 +87,35 @@ impl<Sleep: Future<Output = ()>> Future for MinimumBlockTime<Sleep> {
     Poll::Ready(block_time)
   }
 }
+
+#[cfg(test)]
+#[tokio::test]
+async fn minimum_block_time() {
+  let seconds = Duration::from_secs(10);
+  let now = || SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis();
+
+  {
+    let satisfied = MinimumBlockTime::<tokio::time::Sleep> { ms_since_epoch: 0, future: None };
+    assert!(
+      u128::from(satisfied.await).abs_diff(now()) < seconds.as_millis(),
+      "`MinimumBlockTime` didn't return the current time"
+    );
+  }
+
+  {
+    let not_satisfied =
+      MinimumBlockTime::<tokio::time::Sleep> { ms_since_epoch: u64::MAX, future: None };
+    assert_eq!(not_satisfied.await, u64::MAX, "`MinimumBlockTime` didn't return the minimum time");
+  }
+
+  {
+    let target = u64::try_from(now() + seconds.as_millis()).unwrap();
+    let mut until_target = alloc::boxed::Box::pin(MinimumBlockTime {
+      ms_since_epoch: target,
+      future: Some(tokio::time::sleep(seconds)),
+    });
+    assert!((&mut until_target).await >= target, "yielded time was less than target");
+    assert!(now() > u128::from(target), "future resolved prior to the sleep returning");
+    assert!((&mut until_target).await > target, "future couldn't be polled multiple times");
+  }
+}

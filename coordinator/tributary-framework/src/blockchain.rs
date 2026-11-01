@@ -3,10 +3,13 @@ use std::{collections::HashMap, time::SystemTime};
 
 use serai_db::{Get, Transaction as DbTxn};
 
+use ::tendermint::ValidatorSet as _;
+
 use crate::{
   ReadWrite,
   transaction::{Signed, TransactionKind, Transaction},
   block::{SemanticError, EphemeralError, BlockError, Block},
+  tendermint::{ValidatorSet, SignatureScheme},
   mempool::ProvidedReader,
 };
 
@@ -50,7 +53,8 @@ pub(crate) struct Blockchain<T: Transaction> {
 
   genesis: [u8; 32],
   genesis_time: u64,
-  validators: HashMap<[u8; 32], NonZero<u16>>,
+  validator_set: ValidatorSet,
+  signature_scheme: SignatureScheme,
 
   tip: [u8; 32],
 }
@@ -60,21 +64,27 @@ impl<T: Transaction> Blockchain<T> {
     getter: &impl Get,
     genesis: [u8; 32],
     genesis_time: u64,
-    validators: HashMap<[u8; 32], NonZero<u16>>,
+    validator_set: HashMap<[u8; 32], NonZero<u16>>,
+    signature_scheme: SignatureScheme,
   ) -> Self {
     Self {
       _T: PhantomData,
 
       genesis,
       genesis_time,
-      validators,
+      validator_set: ValidatorSet::new(validator_set),
+      signature_scheme,
 
       tip: db::Tip::get(getter, genesis).unwrap_or(genesis),
     }
   }
 
-  pub(crate) fn validators(&self) -> &HashMap<[u8; 32], NonZero<u16>> {
-    &self.validators
+  pub(crate) fn validator_set(&self) -> &ValidatorSet {
+    &self.validator_set
+  }
+
+  pub(crate) fn signature_scheme(&self) -> &SignatureScheme {
+    &self.signature_scheme
   }
 
   #[must_use]
@@ -138,6 +148,16 @@ impl<T: Transaction> Blockchain<T> {
       /*
         Calculate when this block will end, based approximately on the synchrony assumptions
         within the Tendermint consensus protocol.
+
+        Note this isn't checking that the system's clock is greater than the block's stated time
+        (ensuring it's in the past). Instead, it's the more lenient check that by the time this
+        round of Tendermint consensus will time out (in the worst case), the block's time will be
+        achieved.
+
+        The enforced minimum spacing of the blocks' literal timestamps ensures the safety of the
+        timing overall. This allowance smooths over when a peer's clock is slightly ahead of our
+        own, so they believe their proposal is timely when we would believe it's technically in the
+        future.
       */
       let end_of_block_time = {
         let target_block_time = Duration::from_millis(target_block_time);
@@ -211,7 +231,7 @@ impl<T: Transaction> Blockchain<T> {
 
     for slash in block.slashes() {
       let () = slash
-        .verify(self.genesis, &self.validators)
+        .verify(self.genesis, &self.validator_set, &self.signature_scheme)
         .map_err(|_| SemanticError::InvalidSlash { validator: *slash.validator() })?;
       if db::Slashed::get(getter, self.genesis, *slash.validator()).is_some() {
         Err(SemanticError::SlashAlreadyIncluded { validator: *slash.validator() })?;
@@ -266,10 +286,14 @@ impl<T: Transaction> Blockchain<T> {
             }
           }
           TransactionKind::Signed { scope, signed: Signed { signer, nonce, signature: _ } } => {
+            /*
+              If this signer is not the same as the last transaction's, check the signer is a
+              validator who hasn't been slashed, prior on-chain or within this block.
+            */
             if signed_scope
               .as_ref()
               .is_none_or(|(current_signer, _current_scope)| current_signer != &signer) &&
-              ((!self.validators.contains_key(&signer)) ||
+              (self.validator_set.weight(&signer).is_none() ||
                 db::Slashed::get(getter, self.genesis, signer).is_some() ||
                 block
                   .slashes()
@@ -279,6 +303,10 @@ impl<T: Transaction> Blockchain<T> {
               Err(SemanticError::InvalidSigner { signer })?;
             }
 
+            /*
+              If the `(signer, scope)` pair has changed, load the expected nonce for this
+              `(signer, scope)` from the database.
+            */
             if signed_scope.as_ref().is_none_or(|(current_signer, current_scope)| {
               (current_signer, current_scope) != (&signer, &scope)
             }) {
@@ -323,7 +351,7 @@ impl<T: Transaction> Blockchain<T> {
     db::BlockAfter::set(txn, self.genesis, block.parent(), &hash);
 
     for slash in block.slashes() {
-      db::Slashed::set(txn, self.genesis, slash.validator, &());
+      db::Slashed::set(txn, self.genesis, *slash.validator(), &());
     }
     for transaction in block.transactions() {
       match transaction.kind() {

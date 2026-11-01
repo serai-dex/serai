@@ -4,10 +4,13 @@ use alloc::{boxed::Box, vec::Vec, vec};
 use zeroize::Zeroizing;
 use rand::rngs::OsRng;
 
-use blake2::digest::{Digest as _, CustomizedInit as _};
+use blake2::{
+  digest::{Digest as _, CustomizedInit as _},
+  Blake2b512,
+};
 use ciphersuite::{
   group::{ff::PrimeField, GroupEncoding},
-  FromUniformBytes as _, WrappedGroup, GroupIo, WithPreferredHash,
+  FromUniformBytes as _, WrappedGroup, GroupIo,
 };
 use dalek_ff_group::Ristretto;
 use schnorr::{
@@ -33,7 +36,7 @@ const AGGREGATOR_DST: &[u8] = b"Tributary Tendermint Commit Aggregator";
 /// the message for each signer. This is safe, without a risk of collisions, as the length of the
 /// signer's key and nonce is constant.
 #[derive(Clone)]
-struct MessageScopedTranscript(<Ristretto as WithPreferredHash>::H);
+struct MessageScopedTranscript(Blake2b512);
 impl MessageScopedTranscript {
   fn challenge(self, key: [u8; 32], nonce: &[u8]) -> <Ristretto as WrappedGroup>::F {
     <Ristretto as WrappedGroup>::F::from_uniform_bytes(
@@ -44,7 +47,7 @@ impl MessageScopedTranscript {
 
 #[test]
 fn message_scoped_transcript() {
-  let transcript = MessageScopedTranscript(<Ristretto as WithPreferredHash>::H::new());
+  let transcript = MessageScopedTranscript(Blake2b512::new());
 
   let rand_bytes = || {
     use rand::RngCore as _;
@@ -89,7 +92,7 @@ fn message_scoped_transcript() {
 // validators here?
 #[derive(Clone)]
 pub(crate) struct SignatureScheme {
-  genesis_scoped_transcript: <Ristretto as WithPreferredHash>::H,
+  genesis_scoped_transcript: Blake2b512,
   validators: usize,
 }
 
@@ -105,18 +108,17 @@ pub(crate) struct Signer {
 
 impl SignatureScheme {
   /// Instance a new signature scheme for Tendermint, scoped to a specific Tributary.
-  pub fn new(genesis: [u8; 32], validators: usize) -> Self {
+  pub(crate) fn new(genesis: [u8; 32], validators: usize) -> Self {
     Self {
       // Initialize the transcripts for Tendermint with a customization of "tendermint", ensuring a
       // separate domain then the Tributary itself will use for its transcripts.
-      genesis_scoped_transcript: <Ristretto as WithPreferredHash>::H::new_customized(b"tendermint")
-        .chain_update(genesis),
+      genesis_scoped_transcript: Blake2b512::new_customized(b"tendermint").chain_update(genesis),
       validators,
     }
   }
 
   /// Instance a signer for this signature scheme.
-  pub fn signer(&self, private_key: Zeroizing<<Ristretto as WrappedGroup>::F>) -> Signer {
+  pub(crate) fn signer(&self, private_key: Zeroizing<<Ristretto as WrappedGroup>::F>) -> Signer {
     let public_key = (Ristretto::generator() * private_key.deref()).to_bytes();
     Signer { signature_scheme: self.clone(), private_key, public_key }
   }
@@ -166,8 +168,10 @@ fn genesis_scoped_transcript() {
 
 /// The type for an aggregate signature.
 ///
-/// This contains the _serialization_ of a `schnorr::SchnorrAggregate`. It may or may not be valid.
+/// This contains the _serialization_ of a [`schnorr::aggregate::SchnorrAggregate`]. It may or may
+/// not be valid.
 #[derive(Clone)]
+#[cfg_attr(test, derive(PartialEq, Eq, Debug))]
 pub struct AggregateSignature(Box<[u8]>);
 impl AsRef<[u8]> for AggregateSignature {
   fn as_ref(&self) -> &[u8] {
@@ -241,13 +245,6 @@ impl BorshDeserialize for AggregateSignature {
         || io::Error::other("length of aggregate signature overflowed platform's `usize`"),
       )?;
 
-    /*
-      TODO: This will presumably be optimized exactly as desired, but the `Vec` indirection could
-      technically have a performance penalty to it. We can use `Box<[MaybeUninit<u8>]>` as an
-      optimization, but then we'd have to write `unsafe` code. Additionally, `io::Read::read_exact`
-      isn't strictly required to write into the bytes before reading them, making reading into such
-      an object potentially unsafe. Is there a slightly better way to handle this?
-    */
     let mut result = vec![0; len].into_boxed_slice();
     reader.read_exact(&mut result)?;
     Ok(Self(result))
@@ -344,14 +341,8 @@ impl tendermint::SignatureScheme for SignatureScheme {
         panic!("multiple of `32` wasn't evenly divisible into chunks of length `32`")
       };
       // Ensure the validators were sorted, ensuring no validators were present multiple times
-      {
-        let mut last = None;
-        for validator in validators.iter().map(Some) {
-          if last >= validator {
-            Err(InvalidAggregateSignature)?;
-          }
-          last = validator;
-        }
+      if !validators.is_sorted() {
+        Err(InvalidAggregateSignature)?;
       }
 
       let aggregate_signature = {
@@ -401,7 +392,78 @@ impl tendermint::Signer for Signer {
       .challenge(self.public_key, (Ristretto::generator() * nonce.deref()).to_bytes().as_ref());
     let signature = SchnorrSignature::<Ristretto>::sign(&self.private_key, nonce, challenge);
 
-    // TODO: Write directly into a `[u8; 64]` to avoid the intermediary `Vec<u8>`
-    core::future::ready(signature.serialize().try_into().unwrap())
+    core::future::ready(crate::fixed_write::<{ 32 + 32 }>(|writer| signature.write(writer)))
   }
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn sign() {
+  use ::tendermint::{SignatureScheme as _, Signer as _};
+
+  let genesis = [0xfe; 32];
+  let signature_scheme = SignatureScheme::new(genesis, 4);
+  let key = Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng));
+  let signer = signature_scheme.signer(key);
+  const MESSAGE: [&[u8]; 1] = [b"abc"];
+  const OTHER_MESSAGE: [&[u8]; 1] = [b"def"];
+  let signature = signer.sign(MESSAGE).await;
+  assert!(signature_scheme.verify(&signer.validator(), MESSAGE, &signature));
+  assert!(!signature_scheme.verify(&signer.validator(), OTHER_MESSAGE, &signature));
+}
+
+#[cfg(test)]
+#[tokio::test]
+async fn aggregate() {
+  use ::tendermint::{SignatureScheme as _, Signer as _};
+
+  let genesis = [0xfe; 32];
+  let signature_scheme = SignatureScheme::new(genesis, 4);
+
+  let alice =
+    signature_scheme.signer(Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng)));
+  let bob =
+    signature_scheme.signer(Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut OsRng)));
+
+  const MESSAGE: [&[u8]; 1] = [b"abc"];
+  const OTHER_MESSAGE: [&[u8]; 1] = [b"def"];
+
+  let test = async move |signature_scheme: &SignatureScheme, signers: &[&Signer]| {
+    let mut aggregate = vec![];
+    for signer in signers {
+      aggregate.push((signer.validator(), signer.sign(MESSAGE).await));
+    }
+    let aggregate = signature_scheme
+      .aggregate(MESSAGE, aggregate.iter().map(|(signer, signature)| (signer, signature)));
+
+    assert_eq!(aggregate.validators(), signers.len());
+
+    {
+      let deserialized_aggregate = {
+        let aggregate = borsh::to_vec(&aggregate).unwrap();
+        let mut aggregate = aggregate.as_slice();
+        let deserialized_aggregate =
+          AggregateSignature::deserialize_reader(&mut aggregate).unwrap();
+        assert_eq!(aggregate, []);
+        deserialized_aggregate
+      };
+      assert_eq!(aggregate, deserialized_aggregate);
+    }
+
+    let mut validators = signers.iter().copied().map(Signer::validator).collect::<Vec<_>>();
+    validators.sort_unstable();
+    assert_eq!(
+      signature_scheme
+        .verify_aggregate(MESSAGE, &aggregate)
+        .unwrap()
+        .into_iter()
+        .collect::<Vec<_>>(),
+      validators
+    );
+    assert!(signature_scheme.verify_aggregate(OTHER_MESSAGE, &aggregate).is_err());
+  };
+
+  test(&signature_scheme, &[&alice]).await;
+  test(&signature_scheme, &[&bob]).await;
+  test(&signature_scheme, &[&alice, &bob]).await;
 }

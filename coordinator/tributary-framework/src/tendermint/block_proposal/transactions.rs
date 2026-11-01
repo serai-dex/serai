@@ -10,7 +10,9 @@ use super::Usize2;
 
 struct PerSigner<T> {
   signer: Option<[u8; 32]>,
+  /// The sum size of all transactions' sizes.
   size: usize,
+  /// Each transaction and its size.
   transactions: Vec<(usize, T)>,
 }
 
@@ -38,7 +40,7 @@ impl<T: Transaction> PerSigner<T> {
 
     let target_signer = signer(transactions.peek()?);
 
-    let mut result = Self { signer: target_signer, size: 0, transactions: alloc::vec![] };
+    let mut result = Self { signer: target_signer, size: 0, transactions: Vec::with_capacity(1) };
     let mut full = false;
 
     while let Some(transaction) =
@@ -120,7 +122,7 @@ impl<T: Transaction> Transactions<T> {
       .checked_sub(Block::<T>::EMPTY_BLOCK_SIZE)
       .and_then(|capacity| capacity.checked_sub(slashes_size))
     else {
-      // If the block's size limit is less thna an empty block's size, truncate all transactions
+      // If the size limit is less than a block with just its slashes, truncate all transactions
       return Self::EMPTY;
     };
 
@@ -158,7 +160,7 @@ impl<T: Transaction> Transactions<T> {
         - All transactions are less than the block's size limit
 
         This does not consider the block header's size, nor the size of the slashes. This isn't
-        meant to ensure the resulting block is less than the block's size limit, solely be a
+        meant to ensure the resulting block is less than the block's size limit, solely to be a
         rough first pass which does _most_ of the work in a sufficiently fair manner.
       */
       'outer: for per_signer in &mut per_signer {

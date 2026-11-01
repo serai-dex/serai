@@ -98,8 +98,8 @@ impl<
 > Future for BlockProposal<Sleep, TransactionsFuture>
 {
   type Output = ReadWriteAsBorsh<Block<T>>;
-  fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    let projection = match self.project() {
+  fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    let projection = match self.as_mut().project() {
       BlockProposalProjection::None => return Poll::Pending,
       BlockProposalProjection::Some { inner } => inner.project(),
     };
@@ -113,7 +113,10 @@ impl<
       return Poll::Pending;
     };
 
-    // Remove transactions from signers who have pending slashes
+    /*
+      Remove transactions from validators who have pending slashes, in case the mempool has yet to
+      censure those validators and remove their transactions from consideration.
+    */
     let transactions =
       transactions.into_iter().filter(|tx| {
         if let TransactionKind::Signed {
@@ -154,11 +157,6 @@ impl<
       ) {
         Ok(block) => break block,
         Err(err) => {
-          // If even an empty block is syntactically invalid, don't yield a proposal
-          if slashes.is_empty() && transactions.iter().next().is_none() {
-            return Poll::Pending;
-          }
-
           let mut size_to_trim = if let Some(block_size_limit) = T::BLOCK_SIZE_LIMIT &&
             let SyntacticError::ExceededSizeLimit { size: Some(size) } = err
           {
@@ -187,16 +185,21 @@ impl<
             let removed_len =
               removed_len.or_else(|| slashes.pop().map(|(slash_size, _slash)| slash_size));
 
-            if let Some(removed_len) = removed_len {
-              size_to_trim =
-                size_to_trim.and_then(|size_to_trim| size_to_trim.checked_sub(removed_len));
+            let Some(removed_len) = removed_len else {
+              /*
+                We couldn't remove a transaction nor a slash, so the block is empty but somehow
+                still invalid? We don't yield a proposal in this case, which should never occur, as
+                an unknown fault has occurred.
+              */
+              self.set(Self::None);
+              return Poll::Pending;
+            };
 
-              // Continue removing items while we know we should trim more
-              size_to_trim.is_some_and(|size_to_trim| size_to_trim > 0)
-            } else {
-              // We couldn't remove anything/we couldn't determine how much we should remove
-              false
-            }
+            size_to_trim =
+              size_to_trim.and_then(|size_to_trim| size_to_trim.checked_sub(removed_len));
+
+            // Continue removing items while we know we should trim more
+            size_to_trim.is_some_and(|size_to_trim| size_to_trim > 0)
           } {}
         }
       }

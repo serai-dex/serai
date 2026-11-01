@@ -239,20 +239,20 @@ impl TransactionTrait for Transaction {
   fn kind(&self) -> TransactionKind {
     match self {
       Transaction::RemoveParticipant { participant, signed } => TransactionKind::Signed {
-        scope: borsh::to_vec(&(b"RemoveParticipant".as_slice(), participant)).unwrap(),
+        scope: borsh::to_vec(&(b"RemoveParticipant".as_slice(), participant)).unwrap().into(),
         signed: signed.to_tributary_signed(0),
       },
 
       Transaction::DkgParticipation { signed, .. } => TransactionKind::Signed {
-        scope: borsh::to_vec(b"DkgParticipation".as_slice()).unwrap(),
+        scope: borsh::to_vec(b"DkgParticipation".as_slice()).unwrap().into(),
         signed: signed.to_tributary_signed(0),
       },
       Transaction::DkgConfirmationPreprocess { attempt, signed, .. } => TransactionKind::Signed {
-        scope: borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
+        scope: borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap().into(),
         signed: signed.to_tributary_signed(SigningProtocolRound::Preprocess.nonce()),
       },
       Transaction::DkgConfirmationShare { attempt, signed, .. } => TransactionKind::Signed {
-        scope: borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap(),
+        scope: borsh::to_vec(&(b"DkgConfirmation".as_slice(), attempt)).unwrap().into(),
         signed: signed.to_tributary_signed(SigningProtocolRound::Share.nonce()),
       },
 
@@ -262,12 +262,12 @@ impl TransactionTrait for Transaction {
       Transaction::Batch { .. } => TransactionKind::Provided { scope: "Batch" },
 
       Transaction::Sign { id, attempt, round, signed, .. } => TransactionKind::Signed {
-        scope: borsh::to_vec(&(b"Sign".as_slice(), id, attempt)).unwrap(),
+        scope: borsh::to_vec(&(b"Sign".as_slice(), id, attempt)).unwrap().into(),
         signed: signed.to_tributary_signed(round.nonce()),
       },
 
       Transaction::SlashReport { signed, .. } => TransactionKind::Signed {
-        scope: borsh::to_vec(b"SlashReport".as_slice()).unwrap(),
+        scope: borsh::to_vec(b"SlashReport".as_slice()).unwrap().into(),
         signed: signed.to_tributary_signed(0),
       },
     }

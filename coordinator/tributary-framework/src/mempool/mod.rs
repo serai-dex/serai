@@ -82,7 +82,7 @@ pin_project_lite::pin_project! {
   /// The mempool for a Tributary.
   ///
   /// This MUST be polled to respond to requests for block proposals.
-  pub struct Mempool<D: Db, T: Transaction, N: MempoolNetwork<T>> {
+  pub(crate) struct Mempool<D: Db, T: Transaction, N: MempoolNetwork<T>> {
     db: D,
     genesis: [u8; 32],
 
@@ -92,8 +92,8 @@ pin_project_lite::pin_project! {
 
     network: N,
     regossip: usize,
-    // Asynchronous censures.
 
+    // Asynchronous censures.
     #[pin]
     censure: async_channel::Receiver<([u8; 32], async_channel::Sender<()>)>,
     // The requests for block proposals.
@@ -287,20 +287,15 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Mempool<D, T, N> {
 
     let provided = Provided::new(&db, genesis);
 
-    let mut un_signed = {
+    let un_signed = {
       let mut txn = db.txn();
-      let un_signed = UnSigned::new(&mut txn, genesis, validators, rate_limit);
-      txn.commit();
-      un_signed
-    };
-
-    {
-      let mut txn = db.txn();
+      let mut un_signed = UnSigned::new(&mut txn, genesis, validators, rate_limit);
       while let Some(validator) = Censure::try_recv(&mut txn, genesis) {
         un_signed.censure(&mut txn, validator);
       }
       txn.commit();
-    }
+      un_signed
+    };
 
     let (request_send, request_recv) = async_channel::bounded(1);
     let resend_request = request_send.clone().downgrade();
@@ -327,8 +322,8 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Mempool<D, T, N> {
         /*
           This is a cache of validators which have been censured, yet this hasn't been reflected
           in the signed mempool's database yet. As we drained the `Censure` channel, ensuring all
-          censures _have_ been incorporated into the `signed` mempool, we can leave this cache
-          empty.
+          censures _have_ been incorporated into the `signed` mempool, we can initialize this cache
+          as empty.
         */
         censured: BTreeSet::new(),
 

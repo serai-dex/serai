@@ -1,5 +1,5 @@
 use core::fmt::Debug;
-use alloc::vec::Vec;
+use alloc::boxed::Box;
 use std::io;
 
 use blake2::{
@@ -123,7 +123,7 @@ pub enum TransactionKind {
   /// linear view once included on the agreed-upon blockchain.
   ///
   /// The only malleability SHOULD be when this transaction appears on chain. The block producer
-  /// will only include provided transactions, once locally provided, and validators will only vote
+  /// will only include provided transactions once locally provided, and validators will only vote
   /// for blocks with provided transactions if they were as locally provided.
   ///
   /// If a supermajority of validators produce a commit for a block with a provided transaction
@@ -132,7 +132,11 @@ pub enum TransactionKind {
   /// provided transactions are consistent with the local view.
   ///
   /// In order to ensure provided transactions aren't inadvertently provided multiple times, all
-  /// provided transactions MUST have a unique hash.
+  /// provided transactions MUST have a unique hash. This is solely enforced _by the mempool_,
+  /// where the literal blockchain solely requires a supermajority of validators agree on the
+  /// ordering within a scope. Under an honest-supermajority assumption, the lack of provided
+  /// transactions with identical hashes in local views (the mempools) will prevent such an
+  /// occurrence on-chain.
   Provided {
     /// The scope for this provided transaction.
     scope: &'static str,
@@ -153,7 +157,7 @@ pub enum TransactionKind {
     /// The scope for this signed transaction.
     ///
     /// The nonce within the [`Signed`] data is local to this scope.
-    scope: Vec<u8>,
+    scope: Box<[u8]>,
     /// The [`Signed`] data associated with this.
     signed: Signed,
   },
@@ -271,3 +275,95 @@ pub(crate) fn verify_syntax<T: Transaction>(
 
   Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[derive(Clone)]
+  pub(crate) struct TestTransaction {
+    pub(crate) valid: bool,
+    pub(crate) kind: TransactionKind,
+    pub(crate) salt: u8,
+  }
+
+  impl ReadWrite for TestTransaction {
+    fn read(mut reader: impl io::Read) -> io::Result<Self> {
+      let mut valid = [0xff; 1];
+      reader.read_exact(&mut valid)?;
+      let valid = valid[0] == 1;
+
+      let mut kind = [0xff];
+      reader.read_exact(&mut kind)?;
+      let kind = match kind[0] {
+        0xff => TransactionKind::Provided { scope: "provided 0" },
+        0xfe => TransactionKind::Provided { scope: "provided 1" },
+        1 => TransactionKind::Unsigned,
+        2 => TransactionKind::Signed {
+          scope: {
+            let mut scope = [0];
+            reader.read_exact(&mut scope)?;
+            let mut scope = alloc::vec![0; usize::from(scope[0])].into_boxed_slice();
+            reader.read_exact(&mut scope)?;
+            scope
+          },
+          signed: Signed::read(&mut reader)?,
+        },
+        _ => Err(io::Error::other("unrecognized transaction kind"))?,
+      };
+
+      let mut salt = [0xff];
+      reader.read_exact(&mut salt)?;
+      let salt = salt[0];
+
+      Ok(Self { valid, kind, salt })
+    }
+
+    fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
+      writer.write_all(&[u8::from(self.valid)])?;
+      match &self.kind {
+        TransactionKind::Provided { scope } => {
+          writer.write_all(&[match *scope {
+            "provided 0" => 0xff,
+            "provided 1" => 0xfe,
+            _ => panic!("unexpected scope"),
+          }])?;
+        }
+        TransactionKind::Unsigned => {
+          writer.write_all(&[1])?;
+        }
+        TransactionKind::Signed { scope, signed } => {
+          writer.write_all(&[2])?;
+          writer.write_all(&[u8::try_from(scope.len()).unwrap()])?;
+          writer.write_all(scope)?;
+          signed.write(&mut writer)?;
+        }
+      }
+      writer.write_all(&[self.salt])?;
+
+      Ok(())
+    }
+  }
+
+  impl crate::merkle::Digestible for TestTransaction {
+    fn update(&self, digest: &mut (impl ?Sized + blake2::digest::Update)) {
+      let serialization = self.serialize();
+      let mut serialization = serialization.as_slice();
+      if matches!(&self.kind, TransactionKind::Signed { .. }) {
+        serialization = &serialization[.. (serialization.len() - 64)];
+      }
+      digest.update(serialization);
+    }
+  }
+
+  impl Transaction for TestTransaction {
+    fn kind(&self) -> TransactionKind {
+      self.kind.clone()
+    }
+    fn verify(&self) -> Result<(), TransactionError> {
+      self.valid.ok_or(TransactionError::InvalidTransaction)
+    }
+  }
+}
+#[cfg(test)]
+pub(crate) use tests::TestTransaction;

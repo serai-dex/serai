@@ -3,10 +3,10 @@ use std::io;
 
 use borsh::{BorshSerialize as _, BorshDeserialize as _};
 
-use tendermint::{ValidatorSet, SlashReason};
+use tendermint::SlashReason;
 
 use crate::ReadWrite;
-use super::{AggregateSignature, SignatureScheme};
+use super::{ValidatorSet, AggregateSignature, SignatureScheme};
 
 type Signature = [u8; 64];
 type Hash = [u8; 32];
@@ -19,8 +19,8 @@ type Hash = [u8; 32];
 /// level.
 #[derive(Clone, Debug)]
 pub struct Slash {
-  pub(crate) validator: [u8; 32],
-  pub(crate) slash_reason: SlashReason<Signature, AggregateSignature, Hash>,
+  pub(super) validator: [u8; 32],
+  pub(super) slash_reason: SlashReason<Signature, AggregateSignature, Hash>,
 }
 
 impl Slash {
@@ -33,16 +33,10 @@ impl Slash {
   pub(crate) fn verify(
     &self,
     genesis: [u8; 32],
-    validator_set: &(impl ?Sized + ValidatorSet<Validator = [u8; 32]>),
+    validator_set: &ValidatorSet,
+    signature_scheme: &SignatureScheme,
   ) -> Result<(), ::tendermint::InvalidReason> {
-    // TODO: This runs in linear time. While trivial, we likely should have a O(1) method for this
-    let validators = validator_set.validators().into_iter().count();
-    self.slash_reason.verify(
-      genesis,
-      validator_set,
-      &SignatureScheme::new(genesis, validators),
-      self.validator,
-    )
+    self.slash_reason.verify(genesis, validator_set, signature_scheme, self.validator)
   }
 }
 

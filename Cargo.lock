@@ -9844,6 +9844,7 @@ dependencies = [
  "schnorr-signatures",
  "serai-db",
  "tendermint-consensus",
+ "tokio",
  "zeroize",
 ]
 

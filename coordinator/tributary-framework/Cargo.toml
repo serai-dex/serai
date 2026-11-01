@@ -34,3 +34,6 @@ serai-db = { path = "../../common/db", version = "0.2", default-features = false
 futures-core = { version = "0.3", default-features = false }
 async-channel = { version = "2", default-features = false }
 tendermint = { package = "tendermint-consensus", path = "./tendermint", version = "0.3", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["time", "rt-multi-thread", "macros"] }

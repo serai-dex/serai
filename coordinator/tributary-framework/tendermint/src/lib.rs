@@ -397,6 +397,9 @@ mod tendermint {
     /// 1) It is of no further use, and accordingly its state may be undefined
     /// 2) The process terminates, so that the Tendermint process will be re-initialized from the
     ///    disk before any further use
+    ///
+    /// This MAY exhibit undefined behavior if the `signer` is not consistent across instances, or
+    /// if multiple instances with the same `genesis` value are spawned at once.
     pub fn process<
       B: Send
         + Sync
