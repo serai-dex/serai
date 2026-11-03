@@ -25,7 +25,7 @@ runs:
       id: cache-cargo-install
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # 6.1.0
       with:
-        path: ~/.cargo/bin/${{ inputs.crate }}
+        path: ~/.cargo/bin/${{ inputs.crate }}*
         key: ${{ runner.os }}-${{ runner.arch }}-${{ inputs.crate }}-${{ inputs.version || inputs.revision }}
 
     - name: Install
@@ -48,13 +48,13 @@ runs:
 
           # Use `musl` for the `libc`
           export RUSTTARGET="$(cargo --version --verbose | grep '^host: ' | cut -f2 -d' ' | sed s/gnu/musl/)"
-          rustup +1.98.1 target add $RUSTTARGET
+          rustup +1.99 target add "$RUSTTARGET"
           export RUSTTARGET="--target $RUSTTARGET"
 
           export CC=clang
         fi
 
-        CARGO_JSON=$(cargo +1.98.1 $CARGOFLAGS install $RUSTTARGET --locked "${CRATE}" ${GIT} ${VERSION} --message-format=json)
+        CARGO_JSON=$(cargo +1.99 $CARGOFLAGS install "$RUSTTARGET" --locked "${CRATE}" "${GIT}" "${VERSION}" --message-format=json)
         BINARY=$(echo "$CARGO_JSON" | jq -r '.executable | select(. != null)')
         # Check this installed to the directory we expect for caching purposes
         if [ $CACHE -eq 1 ]; then
