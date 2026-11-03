@@ -287,4 +287,17 @@ mod tests {
     assert_eq!(amounts_result, vec![295, 595]);
     assert_eq!(addresses_result, vec![FakeAddress(111), FakeAddress(111)]);
   }
+
+  #[test]
+  fn dropped_payment_exceeding_shortfall_leaves_remainder() {
+    let input_value = 1002;
+    let leaves =
+      TreeTransaction::Leaves { payments: vec![payment(0, 12), payment(1, 1000)], value: 1012 };
+    let payments_result =
+      leaves.payments::<FakeFeed>(ExternalCoin::Monero, &FakeAddress(111), input_value).unwrap();
+    let (addresses_result, amounts_result) = get_addresses_and_amounts(&payments_result);
+
+    assert_eq!(amounts_result, vec![1000]); // Leaves a remainder of 2
+    assert_eq!(addresses_result, vec![FakeAddress(1)]);
+  }
 }
