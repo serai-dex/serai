@@ -113,7 +113,7 @@ impl Signed {
 /// The type of a transaction.
 ///
 /// This defines the transaction's required semantics for inclusion.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum TransactionKind {
   /// This transaction should be locally provided by every validator, in an exact order.
   ///

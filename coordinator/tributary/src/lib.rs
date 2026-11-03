@@ -2,6 +2,7 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
+use core::time::Duration;
 use std::collections::HashMap;
 
 use dkg::Participant;
@@ -17,7 +18,7 @@ use serai_task::ContinuallyRan;
 
 use tributary_framework::{
   transaction::{Signed as TributarySigned, TransactionKind, Transaction as _},
-  Block, TributaryHandle,
+  TributaryHandle,
 };
 
 use serai_cosign_types::CosignIntent;
@@ -32,10 +33,8 @@ mod db;
 use db::*;
 pub use db::Topic;
 
-/*
 #[cfg(test)]
 mod tests;
-*/
 
 /// Messages to send to the Processors.
 pub struct ProcessorMessages;
@@ -127,21 +126,15 @@ impl SubstrateBlockPlans {
   }
 }
 
-struct ScanBlock<
-  'a,
-  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  TDT: Send + DbTxn,
-> {
-  tributary: &'a TributaryHandle<TD, Transaction>,
+struct ScanBlock<'a, TDT: Send + DbTxn> {
+  tributary_block_time: Duration,
   tributary_txn: &'a mut TDT,
   set: &'a NewSetInformation,
   validators: &'a [SeraiAddress],
   total_weight: u16,
   validator_weights: &'a HashMap<SeraiAddress, u16>,
 }
-impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send + DbTxn>
-  ScanBlock<'_, TD, TDT>
-{
+impl<TDT: Send + DbTxn> ScanBlock<'_, TDT> {
   fn potentially_start_cosign(&mut self) {
     // Don't start a new cosigning instance if we're actively running one
     if TributaryDb::actively_cosigning(self.tributary_txn, self.set.set).is_some() {
@@ -186,7 +179,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
     );
   }
 
-  async fn accumulate_dkg_confirmation<D: AsRef<[u8]> + Borshy>(
+  fn accumulate_dkg_confirmation<D: AsRef<[u8]> + Borshy>(
     &mut self,
     block_number: u64,
     topic: Topic,
@@ -197,9 +190,9 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
       matches!(topic, Topic::DkgConfirmation { .. }),
       "`accumulate_dkg_confirmation` called with non-`DkgConfirmation` topic: {topic:?}"
     );
-    match TributaryDb::accumulate::<TD, D>(
+    match TributaryDb::accumulate::<D>(
       self.tributary_txn,
-      self.tributary,
+      self.tributary_block_time,
       self.set.set,
       self.validators,
       self.total_weight,
@@ -208,9 +201,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
       signer,
       self.validator_weights[&signer],
       data,
-    )
-    .await
-    {
+    ) {
       DataSet::None => None,
       DataSet::Participating(data_set) => {
         let id = topic.dkg_confirmation_sign_id(self.set.set).unwrap();
@@ -243,7 +234,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
     }
   }
 
-  async fn handle_application_tx(&mut self, block_number: u64, tx: Transaction) {
+  fn handle_application_tx(&mut self, block_number: u64, tx: Transaction) {
     let signer = |signed: Signed| SeraiAddress(signed.signer);
 
     if let TransactionKind::Signed { scope: _, signed: TributarySigned { signer, .. } } = tx.kind()
@@ -264,18 +255,16 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
         if !self.validators.contains(&participant) {
           TributaryDb::fatal_slash(
             self.tributary_txn,
-            self.tributary,
             self.set.set,
             signer,
             "voted to remove non-existent participant",
-          )
-          .await;
+          );
           return;
         }
 
         match TributaryDb::accumulate(
           self.tributary_txn,
-          self.tributary,
+          self.tributary_block_time,
           self.set.set,
           self.validators,
           self.total_weight,
@@ -284,19 +273,15 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
           signer,
           self.validator_weights[&signer],
           &(),
-        )
-        .await
-        {
+        ) {
           DataSet::None => {}
           DataSet::Participating(_) => {
             TributaryDb::fatal_slash(
               self.tributary_txn,
-              self.tributary,
               self.set.set,
               participant,
               "voted to remove",
-            )
-            .await;
+            );
           }
         }
       }
@@ -318,7 +303,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
         let signer = signer(signed);
 
         let Some((id, data_set)) =
-          self.accumulate_dkg_confirmation(block_number, topic, &preprocess, signer).await
+          self.accumulate_dkg_confirmation(block_number, topic, &preprocess, signer)
         else {
           return;
         };
@@ -334,7 +319,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
         let signer = signer(signed);
 
         let Some((id, data_set)) =
-          self.accumulate_dkg_confirmation(block_number, topic, &share, signer).await
+          self.accumulate_dkg_confirmation(block_number, topic, &share, signer)
         else {
           return;
         };
@@ -416,19 +401,17 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
         if slash_points.len() != self.validators.len() {
           TributaryDb::fatal_slash(
             self.tributary_txn,
-            self.tributary,
             self.set.set,
             signer,
             "slash report was for a distinct amount of signers",
-          )
-          .await;
+          );
           return;
         }
 
         // Accumulate, and if past the threshold, calculate *the* slash report and start signing it
         match TributaryDb::accumulate(
           self.tributary_txn,
-          self.tributary,
+          self.tributary_block_time,
           self.set.set,
           self.validators,
           self.total_weight,
@@ -437,9 +420,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
           signer,
           self.validator_weights[&signer],
           &slash_points,
-        )
-        .await
-        {
+        ) {
           DataSet::None => {}
           DataSet::Participating(data_set) => {
             // Find the median reported slashes for this validator
@@ -531,18 +512,16 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
         if data.len() != usize::from(self.validator_weights[&signer]) {
           TributaryDb::fatal_slash(
             self.tributary_txn,
-            self.tributary,
             self.set.set,
             signer,
             "signer signed with a distinct amount of key shares than they had key shares",
-          )
-          .await;
+          );
           return;
         }
 
         match TributaryDb::accumulate(
           self.tributary_txn,
-          self.tributary,
+          self.tributary_block_time,
           self.set.set,
           self.validators,
           self.total_weight,
@@ -551,9 +530,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
           signer,
           self.validator_weights[&signer],
           &data,
-        )
-        .await
-        {
+        ) {
           DataSet::None => {}
           DataSet::Participating(data_set) => {
             let id = topic.sign_id(self.set.set).expect("Topic::Sign didn't have SignId");
@@ -587,24 +564,27 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
     }
   }
 
-  async fn handle_block(mut self, block_number: u64, block: Block<Transaction>) {
+  fn handle_block(
+    mut self,
+    block_number: u64,
+    slashes: &[tributary_framework::Slash],
+    transactions: &[Transaction],
+  ) {
     TributaryDb::start_of_block(self.tributary_txn, self.set.set, block_number);
 
-    for slash in block.slashes() {
+    for slash in slashes {
       // Since anything with evidence is fundamentally faulty behavior, not just temporal
       // errors, mark the node as fatally slashed
       TributaryDb::fatal_slash(
         self.tributary_txn,
-        self.tributary,
         self.set.set,
         SeraiAddress(*slash.validator()),
         &format!("tributary slash: {slash:?}"),
-      )
-      .await;
+      );
     }
 
-    for tx in block.transactions() {
-      self.handle_application_tx(block_number, tx.clone()).await;
+    for tx in transactions {
+      self.handle_application_tx(block_number, tx.clone());
     }
   }
 }
@@ -699,17 +679,42 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Continuall
           *nonce.into_mut() += 1;
         }
 
+        // Build a list of each validator's fatal slash status
+        let mut was_fatally_slashed = self
+          .validators
+          .iter()
+          .map(|validator| {
+            (
+              *validator,
+              TributaryDb::is_fatally_slashed(&self.tributary_db, self.set.set, *validator),
+            )
+          })
+          .collect::<Box<[_]>>()
+          .into_iter();
+
         let mut tributary_txn = self.tributary_db.txn();
+
         (ScanBlock {
-          tributary: &self.tributary,
           tributary_txn: &mut tributary_txn,
+          tributary_block_time: self.tributary.block_time(),
           set: &self.set,
           validators: &self.validators,
           total_weight: self.total_weight,
           validator_weights: &self.validator_weights,
         })
-        .handle_block(block_number, block)
-        .await;
+        .handle_block(block_number, block.slashes(), block.transactions());
+
+        // If any validator was fatally slashed within this block, censure them now
+        for validator in &self.validators {
+          let (was_validator, slashed) = was_fatally_slashed.next().unwrap();
+          assert_eq!(*validator, was_validator);
+          if (!slashed) && TributaryDb::is_fatally_slashed(&tributary_txn, self.set.set, *validator)
+          {
+            self.tributary.censure(validator.0).await;
+          }
+        }
+        assert!(was_fatally_slashed.next().is_none());
+
         TributaryDb::set_last_handled_tributary_block(
           &mut tributary_txn,
           self.set.set,

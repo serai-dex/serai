@@ -33,7 +33,7 @@ pub enum SigningProtocolRound {
 }
 
 impl SigningProtocolRound {
-  pub(crate) fn nonce(self) -> u32 {
+  pub(crate) fn nonce(self) -> u64 {
     match self {
       SigningProtocolRound::Preprocess => 0,
       SigningProtocolRound::Share => 1,
@@ -54,8 +54,8 @@ pub struct Signed {
 
 impl Signed {
   /// Provide a nonce to convert a `Signed` into a `tributary::Signed`.
-  pub(crate) fn to_tributary_signed(self, nonce: u32) -> TributarySigned {
-    TributarySigned { signer: self.signer, nonce: u64::from(nonce), signature: self.signature }
+  pub(crate) fn to_tributary_signed(self, nonce: u64) -> TributarySigned {
+    TributarySigned { signer: self.signer, nonce, signature: self.signature }
   }
 }
 

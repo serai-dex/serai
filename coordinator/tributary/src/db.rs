@@ -9,13 +9,11 @@ use serai_primitives::{
   address::SeraiAddress,
 };
 
-use serai_db::{Get, Transaction as DbTxn, Db};
+use serai_db::{Get, Transaction as DbTxn};
 use serai_cosign_types::CosignIntent;
 use messages::sign::{VariantSignId, SignId};
 
-use tributary_framework::TributaryHandle;
-
-use crate::transaction::{SigningProtocolRound, Transaction};
+use crate::transaction::SigningProtocolRound;
 
 /// A topic within the database which the group participates in
 #[derive(Clone, Copy, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
@@ -445,17 +443,13 @@ impl TributaryDb {
     }
   }
 
-  pub(crate) async fn fatal_slash<
-    TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  >(
+  pub(crate) fn fatal_slash(
     txn: &mut (impl Send + DbTxn),
-    tributary: &TributaryHandle<TD, Transaction>,
     set: ExternalValidatorSet,
     validator: SeraiAddress,
     #[cfg_attr(coverage, allow(unused_variables))] reason: &str,
   ) {
     serai_env::warn!("{validator} fatally slashed: {reason}");
-    tributary.censure(validator.0).await;
     SlashPoints::set(txn, set, validator, &u32::MAX);
   }
 
@@ -468,12 +462,9 @@ impl TributaryDb {
   }
 
   #[expect(clippy::too_many_arguments)]
-  pub(crate) async fn accumulate<
-    TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-    D: Borshy,
-  >(
+  pub(crate) fn accumulate<D: Borshy>(
     txn: &mut (impl Send + DbTxn),
-    tributary: &TributaryHandle<TD, Transaction>,
+    tributary_block_time: Duration,
     set: ExternalValidatorSet,
     validators: &[SeraiAddress],
     total_weight: u16,
@@ -494,12 +485,10 @@ impl TributaryDb {
     if topic.requires_recognition() && accumulated_weight.is_none() {
       Self::fatal_slash(
         txn,
-        tributary,
         set,
         validator,
         "participated in unrecognized topic which requires recognition",
-      )
-      .await;
+      );
       return DataSet::None;
     }
     let mut accumulated_weight = accumulated_weight.unwrap_or(0);
@@ -513,12 +502,10 @@ impl TributaryDb {
     {
       Self::fatal_slash(
         txn,
-        tributary,
         set,
         validator,
         "participated in topic without participating in prior",
-      )
-      .await;
+      );
       return DataSet::None;
     }
 
@@ -558,7 +545,7 @@ impl TributaryDb {
           let delay = BASE_REATTEMPT_DELAY.saturating_mul(bounded_attempt);
           let delay_as_millis = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
           let block_time_as_millis =
-            u64::try_from(tributary.block_time().as_millis()).unwrap_or(u64::MAX);
+            u64::try_from(tributary_block_time.as_millis()).unwrap_or(u64::MAX);
           let blocks = delay_as_millis.checked_div(block_time_as_millis);
           blocks.unwrap_or(20)
         };
