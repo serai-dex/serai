@@ -11,9 +11,10 @@ the basis for a broadcast channel with agreement on the order of messages.
 
 ### Application Layer
 
-This library solely implements Tendermint, the protocol. It does not implement
-a blockchain or peer-to-peer network, using traits to model these external
-instantiations.
+This library solely implements Tendermint, the consensus protocol. It does not
+implement a blockchain or peer-to-peer network, using traits to model these
+external instantiations. For a blockchain framework built around this library,
+please check out [`tributary-framework`](https://docs.rs/tributary-framework).
 
 The blockchain is modeled with the [`Blockchain`] trait, with
 [`Blockchain::add_block`] being used to add any block with a verified commit
