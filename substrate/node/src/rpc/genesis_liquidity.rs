@@ -72,5 +72,19 @@ pub(crate) fn module(
     },
   )?;
 
+  module.register_method(
+    "genesis-liquidity/economic-security",
+    |params, client, _ext| -> Result<_, Error> {
+      let Some(block_hash) = block_hash(client, &params)? else {
+        Err(Error::InvalidStateReference)?
+      };
+
+      let Ok(time) = client.runtime_api().economic_security_time(block_hash) else {
+        Err(Error::Internal("couldn't fetch genesis period status"))?
+      };
+      Ok(time)
+    },
+  )?;
+
   Ok(module)
 }
