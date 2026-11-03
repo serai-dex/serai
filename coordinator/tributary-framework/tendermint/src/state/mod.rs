@@ -1,4 +1,5 @@
 use core::{
+  num::NonZero,
   sync::atomic::{Ordering, AtomicU64},
   time::Duration,
 };
@@ -761,6 +762,34 @@ impl<B: BorshyBlockchain> State<B> {
         (self.round_number < round)
     );
 
+    /*
+      If we're starting a _later_ round, backfill any messages we have yet to send in the current
+      round.
+
+      This prevents issues as documented in https://github.com/serai-dex/serai/issues/1272.
+
+      We do not propagate these messages to be broadcast as they're stale. We solely intend to
+      populate our own `our_latest_prevotes`, `our_latest_precommit` variables such that if
+      consensus does appear to stall, we are able to rebroadcast these messages _as needed_ in
+      order to be convincing of the current round.
+
+      Note because we are starting a later round, we have seen either:
+      A) `2 f + 1` precommits from the prior round
+      B) `2 f + 1` messages in this later round, implying the existence of `2 f + 1` precommits
+         from the prior round
+      The existence of `2 f + 1` precommits from the prior round implies the existence of `2 f + 1`
+      prevotes from the prior round. Such prevotes justify sending our own precommit, once the
+      necessary time has passed, which is assumed here as we're already starting a later round.
+    */
+    if self.round_number < round {
+      if matches!(self.step, Step::Propose) {
+        let _: MessageFor<B> = self.prevote_message::<N>(blockchain, signer, txn, None).await;
+      }
+      if matches!(self.step, Step::Prevote) {
+        let _: MessageFor<B> = self.precommit_message::<N>(blockchain, signer, txn, None).await;
+      }
+    }
+
     let genesis = blockchain.genesis();
     let genesis = genesis.as_ref();
 
@@ -1034,6 +1063,29 @@ impl<B: BorshyBlockchain> State<B> {
       if (message.round_number > self.round_number) &&
         self.round_messages.should_jump_ahead(blockchain.validator_set(), message.round_number)
       {
+        /*
+          If we're jumping more than one round, start the round immediately prior to the round
+          we're jumping to first.
+
+          Within `start_round`, as we jump ahead, we'll backfill any skipped messages for the
+          _current_ round _before_ we actually jump ahead. In reality, we want to backfill messages
+          for the round _prior to the round we're starting_.
+
+          To achieve this, we first jump ahead to the round prior to the round we're starting, so
+          that it is the current round, before jumping ahead to the actual round.
+        */
+        {
+          // `message.round_number > self.round_number` so `message.round_number >= 1`
+          let prior_round = u64::from(message.round_number) - 1;
+          if prior_round > u64::from(self.round_number) {
+            let prior_round = NonZero::new(prior_round)
+              .expect("`prior_round` > a `u64` value, so it cannot be `u64::MIN` (`0`)");
+            // We drop the messages for this as they're stale and we don't actually care for them
+            let _: RoundMessages<B> =
+              self.start_round::<N>(blockchain, signer, txn, RoundNumber(prior_round)).await;
+          }
+        }
+
         // Start the round we're jumping ahead to
         self.start_round::<N>(blockchain, signer, txn, message.round_number).await
       } else if message.round_number == self.round_number {
