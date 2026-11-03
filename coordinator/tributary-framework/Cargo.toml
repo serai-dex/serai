@@ -25,7 +25,7 @@ rand = { version = "0.8", default-features = false, features = ["std"] }
 blake2 = { version = "0.11", default-features = false, features = ["zeroize", "alloc"] }
 
 ciphersuite = { path = "../../crypto/ciphersuite", version = "0.4", default-features = false, features = ["std"] }
-dalek-ff-group = { path = "../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.5", default-features = false, features = ["std"] }
 schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", version = "0.5", default-features = false, features = ["std", "aggregate"] }
 
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
