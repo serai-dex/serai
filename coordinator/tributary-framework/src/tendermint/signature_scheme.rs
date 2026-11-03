@@ -341,7 +341,7 @@ impl tendermint::SignatureScheme for SignatureScheme {
         panic!("multiple of `32` wasn't evenly divisible into chunks of length `32`")
       };
       // Ensure the validators were sorted, ensuring no validators were present multiple times
-      if !validators.is_sorted() {
+      if !validators.is_sorted_by(|a, b| a < b) {
         Err(InvalidAggregateSignature)?;
       }
 
@@ -428,7 +428,7 @@ async fn aggregate() {
   const MESSAGE: [&[u8]; 1] = [b"abc"];
   const OTHER_MESSAGE: [&[u8]; 1] = [b"def"];
 
-  let test = async move |signature_scheme: &SignatureScheme, signers: &[&Signer]| {
+  let test = async move |signature_scheme: &SignatureScheme, signers: &[&Signer], valid| {
     let mut aggregate = vec![];
     for signer in signers {
       aggregate.push((signer.validator(), signer.sign(MESSAGE).await));
@@ -452,18 +452,23 @@ async fn aggregate() {
 
     let mut validators = signers.iter().copied().map(Signer::validator).collect::<Vec<_>>();
     validators.sort_unstable();
-    assert_eq!(
-      signature_scheme
-        .verify_aggregate(MESSAGE, &aggregate)
-        .unwrap()
-        .into_iter()
-        .collect::<Vec<_>>(),
-      validators
-    );
-    assert!(signature_scheme.verify_aggregate(OTHER_MESSAGE, &aggregate).is_err());
+    if valid {
+      assert_eq!(
+        signature_scheme
+          .verify_aggregate(MESSAGE, &aggregate)
+          .unwrap()
+          .into_iter()
+          .collect::<Vec<_>>(),
+        validators
+      );
+      assert!(signature_scheme.verify_aggregate(OTHER_MESSAGE, &aggregate).is_err());
+    } else {
+      signature_scheme.verify_aggregate(MESSAGE, &aggregate).map(|_| ()).unwrap_err();
+    }
   };
 
-  test(&signature_scheme, &[&alice]).await;
-  test(&signature_scheme, &[&bob]).await;
-  test(&signature_scheme, &[&alice, &bob]).await;
+  test(&signature_scheme, &[&alice], true).await;
+  test(&signature_scheme, &[&bob], true).await;
+  test(&signature_scheme, &[&alice, &bob], true).await;
+  test(&signature_scheme, &[&alice, &alice], false).await;
 }
