@@ -1,10 +1,9 @@
-use core::future::Future;
 use std::collections::HashMap;
 
 use zeroize::Zeroizing;
 use rand::{RngCore, CryptoRng, Rng, rngs::OsRng};
 
-use ciphersuite::WrappedGroup;
+use ciphersuite::{group::GroupEncoding as _, WrappedGroup};
 use dalek_ff_group::Ristretto;
 
 use serai_primitives::{
@@ -14,8 +13,6 @@ use serai_primitives::{
     random_bytes, random_block_hash, random_serai_address, random_vec_u8, random_validator_set,
   },
 };
-
-use tributary_sdk::P2p;
 
 use messages::sign::VariantSignId;
 use serai_coordinator_substrate::NewSetInformation;
@@ -27,15 +24,6 @@ mod db;
 mod scan_block;
 mod scan_tributary;
 mod tributary;
-
-/// A P2P implementation which is a NOP and does nothing.
-#[derive(Clone)]
-struct NopP2p;
-impl P2p for NopP2p {
-  fn broadcast(&self, _: [u8; 32], _: Vec<u8>) -> impl Send + Future<Output = ()> {
-    async {}
-  }
-}
 
 fn random_key<R: RngCore + CryptoRng>(rng: &mut R) -> Zeroizing<<Ristretto as WrappedGroup>::F> {
   Zeroizing::new(<Ristretto as WrappedGroup>::F::random(&mut *rng))
@@ -49,12 +37,14 @@ fn random_serai_address_and_key<R: RngCore + CryptoRng>(
 }
 
 fn random_signed<R: RngCore + CryptoRng>(rng: &mut R) -> Signed {
-  let signed = tributary_sdk::tests::random_signed(&mut *rng);
-  Signed { signer: signed.signer, signature: signed.signature }
+  let mut signer = [0; 32];
+  rng.fill_bytes(&mut signer);
+  let mut signature = [0; 64];
+  rng.fill_bytes(&mut signature);
+  Signed { signer, signature }
 }
 
 /// One of each signed transaction kind, and attempts: at 0 and a random attempt.
-#[expect(clippy::large_types_passed_by_value)]
 fn all_signed_transactions_and_attempts(signed: Signed) -> Vec<Transaction> {
   let random_attempt = OsRng.next_u64().saturating_add(1);
   vec![
@@ -205,40 +195,37 @@ fn make_signed_message_bytes(sender: [u8; 32]) -> Vec<u8> {
 fn assert_block_side_effects(
   txn: &mut (impl Send + serai_db::Transaction),
   set: ExternalValidatorSet,
-  transactions: &[tributary_sdk::Transaction<Transaction>],
+  transactions: &[Transaction],
 ) {
   for tx in transactions {
     // TODO: Expand from checking the message is `Some(_)` to the exact expected message
     match tx {
-      tributary_sdk::Transaction::Application(app_tx) => match app_tx {
-        Transaction::DkgParticipation { .. } => {
-          assert!(
-            crate::ProcessorMessages::try_recv(txn, set).is_some(),
-            "DkgParticipation should produce a processor message",
-          );
-        }
-        Transaction::Cosign { .. } => {
-          assert!(
-            crate::ProcessorMessages::try_recv(txn, set).is_some(),
-            "Cosign should produce a processor message",
-          );
-        }
-        Transaction::SlashReport { .. } => {
-          assert!(
-            RecognizedTopics::recognized(txn, set, Topic::SlashReport),
-            "SlashReport topic should be recognized",
-          );
-        }
-        // TODO: Some of these will cause effects, but only conditionally
-        Transaction::RemoveParticipant { .. } |
-        Transaction::DkgConfirmationPreprocess { .. } |
-        Transaction::DkgConfirmationShare { .. } |
-        Transaction::Cosigned { .. } |
-        Transaction::SubstrateBlock { .. } |
-        Transaction::Batch { .. } |
-        Transaction::Sign { .. } => {}
-      },
-      tributary_sdk::Transaction::Tendermint(_) => {}
+      Transaction::DkgParticipation { .. } => {
+        assert!(
+          crate::ProcessorMessages::try_recv(txn, set).is_some(),
+          "DkgParticipation should produce a processor message",
+        );
+      }
+      Transaction::Cosign { .. } => {
+        assert!(
+          crate::ProcessorMessages::try_recv(txn, set).is_some(),
+          "Cosign should produce a processor message",
+        );
+      }
+      Transaction::SlashReport { .. } => {
+        assert!(
+          RecognizedTopics::recognized(txn, set, Topic::SlashReport),
+          "SlashReport topic should be recognized",
+        );
+      }
+      // TODO: Some of these will cause effects, but only conditionally
+      Transaction::RemoveParticipant { .. } |
+      Transaction::DkgConfirmationPreprocess { .. } |
+      Transaction::DkgConfirmationShare { .. } |
+      Transaction::Cosigned { .. } |
+      Transaction::SubstrateBlock { .. } |
+      Transaction::Batch { .. } |
+      Transaction::Sign { .. } => {}
     }
   }
   assert_no_pending_messages(txn, set);
@@ -253,7 +240,7 @@ fn new_test_set_info(validators: &[(SeraiAddress, u16)]) -> NewSetInformation {
   .unwrap();
   let validators = validators.to_vec();
   let evrf_public_keys = vec![];
-  NewSetInformation::new(set, serai_block_hash, threshold, validators, evrf_public_keys)
+  NewSetInformation::new(set, serai_block_hash, 0, threshold, validators, evrf_public_keys)
 }
 
 type Setup = (

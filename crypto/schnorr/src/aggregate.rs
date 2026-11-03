@@ -31,13 +31,10 @@ pub struct SchnorrAggregate<C: GroupIo + WithPreferredHash> {
 
 impl<C: GroupIo + WithPreferredHash> SchnorrAggregate<C> {
   /// Read a SchnorrAggregate from something implementing Read.
-  pub fn read(mut reader: impl io::Read) -> io::Result<Self> {
-    let mut len = [0; 4];
-    reader.read_exact(&mut len)?;
-
+  pub fn read(mut reader: impl io::Read, len: usize) -> io::Result<Self> {
     #[expect(non_snake_case)]
     let mut Rs = vec![];
-    for _ in 0 .. u32::from_le_bytes(len) {
+    for _ in 0 .. len {
       Rs.push(C::read_G(&mut reader)?);
     }
 
@@ -45,14 +42,7 @@ impl<C: GroupIo + WithPreferredHash> SchnorrAggregate<C> {
   }
 
   /// Write a SchnorrAggregate to something implementing Write.
-  ///
-  /// This will panic if more than 4 billion signatures were aggregated.
   pub fn write(&self, mut writer: impl io::Write) -> io::Result<()> {
-    writer.write_all(
-      &u32::try_from(self.Rs.len())
-        .expect("more than 4 billion signatures in aggregate")
-        .to_le_bytes(),
-    )?;
     #[expect(non_snake_case)]
     for R in &self.Rs {
       writer.write_all(R.to_bytes().as_ref())?;

@@ -9,13 +9,13 @@ on:
     paths:
       - "common/**"
       - "crypto/**"
-      - "coordinator/tributary-sdk/tendermint/*"
+      - "coordinator/tributary-framework/tendermint/*"
 
   pull_request:
     paths:
       - "common/**"
       - "crypto/**"
-      - "coordinator/tributary-sdk/tendermint/*"
+      - "coordinator/tributary-framework/tendermint/*"
 
   workflow_dispatch:
 
@@ -61,7 +61,7 @@ jobs:
 
           redoxer toolchain
 
-          CRATES=$(find ./common ./crypto ./coordinator/tributary-sdk/tendermint -name "Cargo.toml")
+          CRATES=$(find ./common ./crypto ./coordinator/tributary-framework/tendermint -name "Cargo.toml")
           echo "$CRATES" | while IFS="\n" read -r manifest; do
             FEATURES="--all-features"
             if [ "$manifest" = "./common/db/Cargo.toml" ]; then

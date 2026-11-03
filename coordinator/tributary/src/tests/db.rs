@@ -102,6 +102,7 @@ where
     let data = make_data(i);
     result = TributaryDb::accumulate::<D>(
       txn,
+      Duration::from_secs(6),
       set,
       validators,
       total_weight,
@@ -343,7 +344,7 @@ mod tributary_db {
       let mut txn = db.txn();
       assert_eq!(ActivelyCosigning::get(&txn, set), Some(block_hash1));
 
-      let retry = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+      let retry = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
         let block_hash2 = random_block_hash(&mut OsRng);
         let block_number2 = OsRng.next_u64();
         TributaryDb::start_cosigning(&mut txn, set, block_hash2, block_number2);
@@ -511,6 +512,7 @@ mod tributary_db {
           // "participated in topic without participating in prior"
           let result = TributaryDb::accumulate::<[u8; 32]>(
             &mut txn,
+            Duration::from_secs(6),
             set,
             &validators,
             total_weight,
@@ -557,6 +559,7 @@ mod tributary_db {
           // The preceding check should find the key despite the type mismatch and NOT slash.
           let result = TributaryDb::accumulate::<[u8; 32]>(
             &mut txn,
+            Duration::from_secs(6),
             set,
             &validators,
             total_weight,
@@ -611,6 +614,7 @@ mod tributary_db {
           let share_data: Vec<Vec<u8>> = vec![random_vec_u8(&mut OsRng, 0 ..= 128)];
           let result = TributaryDb::accumulate::<Vec<Vec<u8>>>(
             &mut txn,
+            Duration::from_secs(6),
             set,
             &validators,
             total_weight,
@@ -713,6 +717,7 @@ mod tributary_db {
             let mut txn = db.txn();
             let result = TributaryDb::accumulate::<[u8; 32]>(
               &mut txn,
+              Duration::from_secs(6),
               set,
               &validators,
               total_weight,
@@ -737,6 +742,7 @@ mod tributary_db {
             }
             let result = TributaryDb::accumulate::<[u8; 32]>(
               &mut txn,
+              Duration::from_secs(6),
               set,
               &validators,
               total_weight,
@@ -830,7 +836,7 @@ mod tributary_db {
         let mut txn = db.txn();
         TributaryDb::recognize_topic(&mut txn, set, topic);
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let result = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
           accumulate_to_threshold(
             &mut txn,
             set,
@@ -902,6 +908,7 @@ mod tributary_db {
         // First call succeeds
         TributaryDb::accumulate::<Vec<u8>>(
           &mut txn,
+          Duration::from_secs(6),
           set,
           &validators,
           total_weight,
@@ -915,6 +922,7 @@ mod tributary_db {
         // Second call with same (validator, topic) should panic
         TributaryDb::accumulate::<Vec<u8>>(
           &mut txn,
+          Duration::from_secs(6),
           set,
           &validators,
           total_weight,
@@ -956,6 +964,7 @@ mod tributary_db {
         // Entries preserved for reattempt, duplicate panics
         TributaryDb::accumulate::<Vec<u8>>(
           &mut txn,
+          Duration::from_secs(6),
           set,
           &validators,
           total_weight,
@@ -1006,6 +1015,7 @@ mod tributary_db {
         // Falls through to the `accumulated_weight >= required_participation` NOP.
         let result = TributaryDb::accumulate::<Vec<u8>>(
           &mut txn,
+          Duration::from_secs(6),
           set,
           &validators,
           total_weight,
@@ -1110,12 +1120,18 @@ mod tributary_db {
 
           // Reattempt should be queued if topic is reattemptable.
           if let Some((reattempt_attempt, reattempt_topic)) = topic.reattempt_topic() {
-            let blocks_till = reattempt_attempt
-              .min(10)
-              .checked_mul(u64::from(BASE_REATTEMPT_DELAY))
-              .expect("reattempt delay overflowed u64");
-            let recognize_at =
-              block_number.checked_add(blocks_till).expect("reattempt block number overflowed u64");
+            let blocks_till_reattempt = {
+              let bounded_attempt = u32::try_from(reattempt_attempt).unwrap_or(u32::MAX).min(10);
+              let delay = BASE_REATTEMPT_DELAY.saturating_mul(bounded_attempt);
+              let delay_as_millis = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
+              let block_time_as_millis =
+                u64::try_from(Duration::from_secs(6).as_millis()).unwrap_or(u64::MAX);
+              let blocks = delay_as_millis.checked_div(block_time_as_millis);
+              blocks.unwrap_or(20)
+            };
+            let recognize_at = block_number
+              .checked_add(blocks_till_reattempt)
+              .expect("reattempt block number overflowed u64");
 
             let queued = Reattempt::get(db, set, recognize_at);
             assert!(queued.is_some(), "reattempt should be queued at block {recognize_at}");
@@ -1289,6 +1305,7 @@ mod tributary_db {
 
           let result = TributaryDb::accumulate::<Vec<u8>>(
             &mut txn,
+            Duration::from_secs(6),
             set,
             &validators,
             total_weight,

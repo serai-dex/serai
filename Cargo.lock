@@ -2907,10 +2907,7 @@ version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f78e10609fe0e0b3f4157ffab1876319b5b0db102a2c60dc4626306dc46b44ad"
 dependencies = [
- "fastrand",
  "futures-core",
- "futures-io",
- "parking",
  "pin-project-lite",
 ]
 
@@ -7453,7 +7450,7 @@ dependencies = [
  "serai-processor-messages",
  "serai-task",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
  "zalloc",
  "zeroize",
 ]
@@ -7474,8 +7471,9 @@ dependencies = [
  "serai-coordinator-p2p",
  "serai-cosign",
  "serai-task",
+ "tendermint-consensus",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
  "zeroize",
 ]
 
@@ -7484,24 +7482,25 @@ name = "serai-coordinator-p2p"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "futures-lite",
- "log",
+ "futures-util",
+ "getrandom 0.4.3",
  "serai-cosign",
  "serai-db",
  "serai-primitives",
  "serai-task",
+ "tendermint-consensus",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
 ]
 
 [[package]]
 name = "serai-coordinator-substrate"
 version = "0.1.0"
 dependencies = [
- "blake2 0.11.0",
  "borsh",
  "dkg",
  "futures",
+ "hex",
  "serai-client-serai",
  "serai-cosign",
  "serai-db",
@@ -7530,9 +7529,9 @@ dependencies = [
  "serai-processor-messages",
  "serai-substrate-tests",
  "serai-task",
- "tendermint-machine",
+ "tendermint-consensus",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
  "zeroize",
 ]
 
@@ -7906,7 +7905,7 @@ dependencies = [
  "serai-db",
  "short-weierstrass",
  "std-shims 0.1.5",
- "tendermint-machine",
+ "tendermint-consensus",
 ]
 
 [[package]]
@@ -9489,8 +9488,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "tendermint-machine"
-version = "0.3.0"
+name = "tendermint-consensus"
+version = "0.1.0"
 dependencies = [
  "async-channel",
  "borsh",
@@ -9830,22 +9829,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "tributary-sdk"
+name = "tributary-framework"
 version = "0.1.0"
 dependencies = [
+ "async-channel",
  "blake2 0.11.0",
  "borsh",
  "ciphersuite 0.4.2",
  "dalek-ff-group",
- "flexible-transcript",
- "hex",
- "log",
+ "futures-core",
+ "pin-project-lite",
  "rand 0.8.8",
  "schnorr-signatures",
  "serai-db",
- "subtle",
- "tendermint-machine",
- "thiserror 2.0.21",
+ "tendermint-consensus",
  "tokio",
  "zeroize",
 ]

@@ -1,0 +1,39 @@
+[package]
+name = "tributary-framework"
+version = "0.1.0"
+description = "A mini-blockchain framework, intended for being embedded into applications"
+license = "AGPL-3.0-only"
+repository = "https://github.com/serai-dex/serai/tree/develop/coordinator/tributary-framework"
+authors = ["Luke Parker <lukeparker5132@gmail.com>"]
+edition = "2024"
+rust-version = "1.98"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[lints]
+workspace = true
+
+[dependencies]
+pin-project-lite = { version = "0.2", default-features = false }
+
+zeroize = { version = "^1.5", default-features = false, features = ["std"] }
+
+rand = { version = "0.8", default-features = false, features = ["std"] }
+
+blake2 = { version = "0.11", default-features = false, features = ["zeroize", "alloc"] }
+
+ciphersuite = { path = "../../crypto/ciphersuite", version = "0.4", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../../crypto/dalek-ff-group", version = "0.5", default-features = false, features = ["std"] }
+schnorr = { package = "schnorr-signatures", path = "../../crypto/schnorr", version = "0.5", default-features = false, features = ["std", "aggregate"] }
+
+borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
+serai-db = { path = "../../common/db", version = "0.2", default-features = false, features = ["std", "schema"] }
+
+futures-core = { version = "0.3", default-features = false }
+async-channel = { version = "2.3", default-features = false }
+tendermint = { package = "tendermint-consensus", path = "./tendermint", version = "0.1", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["time", "rt-multi-thread", "macros"] }

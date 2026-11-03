@@ -1,11 +1,8 @@
-use core::marker::PhantomData;
-
 use schnorr::SchnorrSignature;
 
 use serai_primitives::test_helpers::{random_block_hash, random_vec_u8};
 
 use serai_db::{Transaction as DbTxn, MemDb};
-use tributary_sdk::{Transaction as TributaryTransaction, BlockHeader, Block};
 
 use serai_cosign_types::CosignIntent;
 use crate::{db::CosignIntents as DbCosignIntents, *};
@@ -17,11 +14,10 @@ fn new_scan_block<'a, TDT: Send + DbTxn>(
   validators: &'a [SeraiAddress],
   total_weight: u16,
   validator_weights: &'a HashMap<SeraiAddress, u16>,
-) -> ScanBlock<'a, MemDb, TDT, NopP2p> {
+) -> ScanBlock<'a, TDT> {
   ScanBlock {
-    _td: PhantomData,
-    _p2p: PhantomData,
     tributary_txn: txn,
+    tributary_block_time: Duration::from_secs(6),
     set: set_info,
     validators,
     total_weight,
@@ -32,11 +28,14 @@ fn new_scan_block<'a, TDT: Send + DbTxn>(
 /// Create a Signed with the given signer key and a random signature.
 fn random_signed_for_key(signer: <Ristretto as WrappedGroup>::G) -> Signed {
   Signed {
-    signer,
-    signature: SchnorrSignature {
+    signer: signer.to_bytes(),
+    signature: (SchnorrSignature::<Ristretto> {
       R: Ristretto::generator() * <Ristretto as WrappedGroup>::F::random(&mut OsRng),
       s: <Ristretto as WrappedGroup>::F::random(&mut OsRng),
-    },
+    })
+    .serialize()
+    .try_into()
+    .unwrap(),
   }
 }
 
@@ -183,7 +182,7 @@ fn accumulate_dkg_confirmation() {
     let mut db = MemDb::new();
     let mut txn = db.txn();
 
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    let result = std::panic::catch_unwind(core::panic::AssertUnwindSafe(|| {
       let mut scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
       scan_block.accumulate_dkg_confirmation(
         OsRng.next_u64(),
@@ -262,7 +261,7 @@ mod handle_application_tx {
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
     let set = set_info.set;
-    let default_signer = SeraiAddress(Signed::default().signer().to_bytes());
+    let default_signer = SeraiAddress([0u8; 32]);
 
     let mut db = MemDb::new();
 
@@ -295,7 +294,7 @@ mod handle_application_tx {
       setup_test_validators_and_weights_with_keys();
     let set_info = new_test_set_info(&validator_data);
     let set = set_info.set;
-    let default_signer = SeraiAddress(Signed::default().signer().to_bytes());
+    let default_signer = SeraiAddress([0; 32]);
 
     // The signer is fatally slashed if the participant voted to be removed is nonexistent
     {
@@ -1110,17 +1109,10 @@ fn handle_block() {
   {
     let mut db = MemDb::new();
     let mut txn = db.txn();
-    let block = Block {
-      header: BlockHeader {
-        parent: random_bytes(&mut OsRng),
-        transactions: random_bytes(&mut OsRng),
-      },
-      transactions: vec![],
-    };
 
     {
       let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(OsRng.next_u64(), block);
+      scan_block.handle_block(OsRng.next_u64(), &[], &[]);
     }
     assert_no_pending_messages(&mut txn, set);
   }
@@ -1132,18 +1124,10 @@ fn handle_block() {
     let mut db = MemDb::new();
     let mut txn = db.txn();
 
-    let block_txs = vec![TributaryTransaction::Application(tx)];
-    let block = Block {
-      header: BlockHeader {
-        parent: random_bytes(&mut OsRng),
-        transactions: random_bytes(&mut OsRng),
-      },
-      transactions: block_txs.clone(),
-    };
-
+    let block_txs = vec![tx];
     {
       let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(OsRng.next_u64(), block);
+      scan_block.handle_block(OsRng.next_u64(), &[], &block_txs);
     }
     assert_block_side_effects(&mut txn, set, &block_txs);
   }
@@ -1182,18 +1166,10 @@ fn handle_block() {
       Transaction::SlashReport { .. } => unreachable!(),
     }
 
-    let block_txs = vec![TributaryTransaction::Application(tx)];
-    let block = Block {
-      header: BlockHeader {
-        parent: random_bytes(&mut OsRng),
-        transactions: random_bytes(&mut OsRng),
-      },
-      transactions: block_txs.clone(),
-    };
-
+    let block_txs = vec![tx];
     {
       let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(OsRng.next_u64(), block);
+      scan_block.handle_block(OsRng.next_u64(), &[], &block_txs);
     }
     assert_block_side_effects(&mut txn, set, &block_txs);
   }
@@ -1219,12 +1195,12 @@ fn handle_block() {
           parent: random_bytes(&mut OsRng),
           transactions: random_bytes(&mut OsRng),
         },
-        transactions: vec![TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(evidence))],
+        transactions: vec![TributaryTransaction::Tendermint(Slash::SlashEvidence(evidence))],
       };
 
       {
         let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-        scan_block.handle_block(1, block);
+        scan_block.handle_block(1, slashes, &[]);
       }
       assert!(
         TributaryDb::is_fatally_slashed(&txn, set, addr0),
@@ -1259,28 +1235,20 @@ fn handle_block() {
             make_signed_message_bytes(addr0.0),
           ),
         };
-        transactions.push(TributaryTransaction::Tendermint(TendermintTx::SlashEvidence(evidence)));
+        transactions.push(TributaryTransaction::Tendermint(Slash::SlashEvidence(evidence)));
         has_evidence = true;
       } else */
       {
         // Random application transaction, use Batch so we can assert recognition
         let hash = random_bytes(&mut OsRng);
         batch_hashes.push(hash);
-        transactions.push(TributaryTransaction::Application(Transaction::Batch { hash }));
+        transactions.push(Transaction::Batch { hash });
       }
     }
 
-    let block = Block {
-      header: BlockHeader {
-        parent: random_bytes(&mut OsRng),
-        transactions: random_bytes(&mut OsRng),
-      },
-      transactions: transactions.clone(),
-    };
-
     {
       let scan_block = new_scan_block(&mut txn, &set_info, &validators, total_weight, &weights);
-      scan_block.handle_block(OsRng.next_u64(), block);
+      scan_block.handle_block(OsRng.next_u64(), &[], &transactions);
     }
 
     /* TODO

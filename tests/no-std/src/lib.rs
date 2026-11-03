@@ -17,7 +17,7 @@ pub use embedwards25519;
 
 pub use schnorr_signatures;
 
-pub use tendermint_machine;
+pub use tendermint_consensus;
 
 pub use ethereum_schnorr_contract;
 
