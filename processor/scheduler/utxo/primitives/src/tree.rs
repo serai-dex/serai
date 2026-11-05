@@ -146,24 +146,12 @@ impl<A: Address> TreeTransaction<A> {
 }
 
 #[cfg(test)]
-mod tests {
+mod tree_transaction {
   use super::*;
   use crate::tests::FakeAddress;
   use crate::tests::FakeFeed;
-
-  fn payment(address: u32, amount: u64) -> Payment<FakeAddress> {
-    Payment::new(
-      FakeAddress(address),
-      ExternalBalance { amount: Amount(amount), coin: ExternalCoin::Monero },
-    )
-  }
-
-  fn get_addresses_and_amounts(payments: &[Payment<FakeAddress>]) -> (Vec<FakeAddress>, Vec<u64>) {
-    let addresses = payments.iter().map(|p| p.address().clone()).collect();
-    let amounts = payments.iter().map(|p| p.balance().amount.0).collect();
-
-    (addresses, amounts)
-  }
+  use crate::tests::get_addresses_and_amounts;
+  use crate::tests::payment;
 
   fn fake_addresses(qty: u32) -> Vec<FakeAddress> {
     let mut fake_addresses: Vec<FakeAddress> = Vec::with_capacity(qty.try_into().unwrap());
