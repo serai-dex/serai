@@ -148,19 +148,19 @@ impl<A: Address> TreeTransaction<A> {
 #[cfg(test)]
 mod tree_transaction {
   use super::*;
-  use crate::tests::FakeAddress;
-  use crate::tests::FakeFeed;
+  use crate::tests::TestAddress;
+  use crate::tests::TestFeed;
   use crate::tests::get_addresses_and_amounts;
   use crate::tests::payment;
 
-  fn fake_addresses(qty: u32) -> Vec<FakeAddress> {
-    let mut fake_addresses: Vec<FakeAddress> = Vec::with_capacity(qty.try_into().unwrap());
+  fn test_addresses(qty: u32) -> Vec<TestAddress> {
+    let mut test_addresses: Vec<TestAddress> = Vec::with_capacity(qty.try_into().unwrap());
 
     for i in 0 .. qty {
-      fake_addresses.push(FakeAddress(i));
+      test_addresses.push(TestAddress(i));
     }
 
-    fake_addresses
+    test_addresses
   }
 
   #[test]
@@ -169,7 +169,7 @@ mod tree_transaction {
     let input_value = 101;
     let leaves =
       TreeTransaction::Leaves { payments: vec![payment(0, 90), payment(1, 10)], value: 100 };
-    let _ = leaves.payments::<FakeFeed>(ExternalCoin::Monero, &FakeAddress(111), input_value);
+    let _ = leaves.payments::<TestFeed>(ExternalCoin::Monero, &TestAddress(111), input_value);
   }
 
   #[test]
@@ -178,7 +178,7 @@ mod tree_transaction {
     let input_value = 100;
     let leaves =
       TreeTransaction::Leaves { payments: vec![payment(0, 90), payment(1, 10)], value: 100 };
-    let _ = leaves.payments::<FakeFeed>(ExternalCoin::Bitcoin, &FakeAddress(111), input_value);
+    let _ = leaves.payments::<TestFeed>(ExternalCoin::Bitcoin, &TestAddress(111), input_value);
   }
 
   #[test]
@@ -189,11 +189,11 @@ mod tree_transaction {
       value: 600,
     };
     let payments_result =
-      leaves.payments::<FakeFeed>(ExternalCoin::Monero, &FakeAddress(111), input_value).unwrap();
+      leaves.payments::<TestFeed>(ExternalCoin::Monero, &TestAddress(111), input_value).unwrap();
     let (addresses, amounts) = get_addresses_and_amounts(&payments_result);
 
     assert_eq!(amounts, vec![90, 190, 290]);
-    assert_eq!(addresses, fake_addresses(3));
+    assert_eq!(addresses, test_addresses(3));
   }
 
   #[test]
@@ -204,11 +204,11 @@ mod tree_transaction {
       value: 600,
     };
     let payments_result =
-      leaves.payments::<FakeFeed>(ExternalCoin::Monero, &FakeAddress(111), input_value).unwrap();
+      leaves.payments::<TestFeed>(ExternalCoin::Monero, &TestAddress(111), input_value).unwrap();
     let (addresses, amounts) = get_addresses_and_amounts(&payments_result);
 
     assert_eq!(amounts, vec![89, 190, 290]);
-    assert_eq!(addresses, fake_addresses(3));
+    assert_eq!(addresses, test_addresses(3));
   }
 
   #[test]
@@ -217,11 +217,11 @@ mod tree_transaction {
     let leaves =
       TreeTransaction::Leaves { payments: vec![payment(0, 20), payment(1, 200)], value: 220 };
     let payments_result =
-      leaves.payments::<FakeFeed>(ExternalCoin::Monero, &FakeAddress(111), input_value).unwrap();
+      leaves.payments::<TestFeed>(ExternalCoin::Monero, &TestAddress(111), input_value).unwrap();
     let (addresses_result, amounts_result) = get_addresses_and_amounts(&payments_result);
 
     assert_eq!(amounts_result, vec![10, 190]);
-    assert_eq!(addresses_result, fake_addresses(2));
+    assert_eq!(addresses_result, test_addresses(2));
   }
 
   #[test]
@@ -230,11 +230,11 @@ mod tree_transaction {
     let leaves =
       TreeTransaction::Leaves { payments: vec![payment(0, 20), payment(1, 200)], value: 220 };
     let payments_result =
-      leaves.payments::<FakeFeed>(ExternalCoin::Monero, &FakeAddress(111), input_value).unwrap();
+      leaves.payments::<TestFeed>(ExternalCoin::Monero, &TestAddress(111), input_value).unwrap();
     let (addresses_result, amounts_result) = get_addresses_and_amounts(&payments_result);
 
     assert_eq!(amounts_result, vec![199]);
-    assert_eq!(addresses_result, vec![FakeAddress(1)]);
+    assert_eq!(addresses_result, vec![TestAddress(1)]);
   }
 
   #[test]
@@ -243,11 +243,11 @@ mod tree_transaction {
     let payments = vec![payment(0, 15), payment(1, 200), payment(2, 300)];
     let leaves = TreeTransaction::Leaves { payments, value: 515 };
     let payments_result =
-      leaves.payments::<FakeFeed>(ExternalCoin::Monero, &FakeAddress(111), input_value).unwrap();
+      leaves.payments::<TestFeed>(ExternalCoin::Monero, &TestAddress(111), input_value).unwrap();
     let (addresses_result, amounts_result) = get_addresses_and_amounts(&payments_result);
 
     assert_eq!(amounts_result, vec![192, 293]);
-    assert_eq!(addresses_result, vec![FakeAddress(1), FakeAddress(2)]);
+    assert_eq!(addresses_result, vec![TestAddress(1), TestAddress(2)]);
   }
 
   #[test]
@@ -256,7 +256,7 @@ mod tree_transaction {
     let leaves =
       TreeTransaction::Leaves { payments: vec![payment(0, 12), payment(1, 12)], value: 24 };
     let payments_result =
-      leaves.payments::<FakeFeed>(ExternalCoin::Monero, &FakeAddress(111), input_value);
+      leaves.payments::<TestFeed>(ExternalCoin::Monero, &TestAddress(111), input_value);
 
     assert!(payments_result.is_none());
   }
@@ -269,11 +269,11 @@ mod tree_transaction {
     let leaves2 = TreeTransaction::Leaves { payments: vec![payment(2, 600)], value: 600 };
     let branch = TreeTransaction::Branch { children: vec![leaves1, leaves2], value: 900 };
     let payments_result =
-      branch.payments::<FakeFeed>(ExternalCoin::Monero, &FakeAddress(111), input_value).unwrap();
+      branch.payments::<TestFeed>(ExternalCoin::Monero, &TestAddress(111), input_value).unwrap();
     let (addresses_result, amounts_result) = get_addresses_and_amounts(&payments_result);
 
     assert_eq!(amounts_result, vec![295, 595]);
-    assert_eq!(addresses_result, vec![FakeAddress(111), FakeAddress(111)]);
+    assert_eq!(addresses_result, vec![TestAddress(111), TestAddress(111)]);
   }
 
   #[test]
@@ -282,10 +282,10 @@ mod tree_transaction {
     let leaves =
       TreeTransaction::Leaves { payments: vec![payment(0, 12), payment(1, 1000)], value: 1012 };
     let payments_result =
-      leaves.payments::<FakeFeed>(ExternalCoin::Monero, &FakeAddress(111), input_value).unwrap();
+      leaves.payments::<TestFeed>(ExternalCoin::Monero, &TestAddress(111), input_value).unwrap();
     let (addresses_result, amounts_result) = get_addresses_and_amounts(&payments_result);
 
     assert_eq!(amounts_result, vec![1000]); // Leaves a remainder of 2
-    assert_eq!(addresses_result, vec![FakeAddress(1)]);
+    assert_eq!(addresses_result, vec![TestAddress(1)]);
   }
 }

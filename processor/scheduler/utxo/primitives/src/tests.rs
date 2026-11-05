@@ -22,16 +22,16 @@ use serai_primitives::{
 
 use crate::{PlannedTransaction, TransactionPlanner};
 
-pub(crate) fn payment(address: u32, amount: u64) -> Payment<FakeAddress> {
+pub(crate) fn payment(address: u32, amount: u64) -> Payment<TestAddress> {
   Payment::new(
-    FakeAddress(address),
+    TestAddress(address),
     ExternalBalance { amount: Amount(amount), coin: ExternalCoin::Monero },
   )
 }
 
 pub(crate) fn get_addresses_and_amounts(
-  payments: &[Payment<FakeAddress>],
-) -> (Vec<FakeAddress>, Vec<u64>) {
+  payments: &[Payment<TestAddress>],
+) -> (Vec<TestAddress>, Vec<u64>) {
   let addresses = payments.iter().map(|p| p.address().clone()).collect();
   let amounts = payments.iter().map(|p| p.balance().amount.0).collect();
 
@@ -39,21 +39,21 @@ pub(crate) fn get_addresses_and_amounts(
 }
 
 #[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize)]
-pub(crate) struct FakeAddress(pub(crate) u32);
+pub(crate) struct TestAddress(pub(crate) u32);
 
-impl fmt::Display for FakeAddress {
+impl fmt::Display for TestAddress {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    write!(f, "fake-{}", self.0)
+    write!(f, "test-{}", self.0)
   }
 }
 
-impl From<FakeAddress> for ExternalAddress {
-  fn from(value: FakeAddress) -> Self {
+impl From<TestAddress> for ExternalAddress {
+  fn from(value: TestAddress) -> Self {
     Self::try_from(value.0.to_le_bytes().to_vec()).unwrap()
   }
 }
 
-impl TryFrom<ExternalAddress> for FakeAddress {
+impl TryFrom<ExternalAddress> for TestAddress {
   type Error = ();
   fn try_from(value: ExternalAddress) -> Result<Self, Self::Error> {
     let bytes = Vec::from(value);
@@ -66,9 +66,9 @@ impl TryFrom<ExternalAddress> for FakeAddress {
 type Key = <Ed25519 as WrappedGroup>::G;
 
 #[derive(Debug, Clone)]
-pub(crate) struct FakeHeader;
+pub(crate) struct TestHeader;
 
-impl primitives::BlockHeader for FakeHeader {
+impl primitives::BlockHeader for TestHeader {
   fn id(&self) -> [u8; 32] {
     todo!()
   }
@@ -79,9 +79,9 @@ impl primitives::BlockHeader for FakeHeader {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct FakeOutput;
+pub(crate) struct TestOutput;
 
-impl ReceivedOutput<Key, FakeAddress> for FakeOutput {
+impl ReceivedOutput<Key, TestAddress> for TestOutput {
   type Id = [u8; 32];
 
   type TransactionId = [u8; 32];
@@ -102,7 +102,7 @@ impl ReceivedOutput<Key, FakeAddress> for FakeOutput {
     todo!()
   }
 
-  fn presumed_origin(&self) -> Option<FakeAddress> {
+  fn presumed_origin(&self) -> Option<TestAddress> {
     todo!()
   }
 
@@ -124,9 +124,9 @@ impl ReceivedOutput<Key, FakeAddress> for FakeOutput {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct FakeEventuality;
+pub(crate) struct TestEventuality;
 
-impl primitives::Eventuality for FakeEventuality {
+impl primitives::Eventuality for TestEventuality {
   type OutputId = [u8; 32];
 
   fn id(&self) -> [u8; 32] {
@@ -151,18 +151,18 @@ impl primitives::Eventuality for FakeEventuality {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct FakeBlock;
+pub(crate) struct TestBlock;
 
-impl primitives::Block for FakeBlock {
-  type Header = FakeHeader;
+impl primitives::Block for TestBlock {
+  type Header = TestHeader;
 
   type Key = Key;
 
-  type Address = FakeAddress;
+  type Address = TestAddress;
 
-  type Output = FakeOutput;
+  type Output = TestOutput;
 
-  type Eventuality = FakeEventuality;
+  type Eventuality = TestEventuality;
 
   fn id(&self) -> [u8; 32] {
     todo!()
@@ -188,9 +188,9 @@ impl primitives::Block for FakeBlock {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct FakeFeed;
+pub(crate) struct TestFeed;
 
-impl ScannerFeed for FakeFeed {
+impl ScannerFeed for TestFeed {
   const NETWORK: ExternalNetworkId = ExternalNetworkId::Monero;
 
   const CONFIRMATIONS: u64 = 1;
@@ -199,7 +199,7 @@ impl ScannerFeed for FakeFeed {
 
   const TEN_MINUTES: u64 = 1;
 
-  type Block = FakeBlock;
+  type Block = TestBlock;
 
   type EphemeralError = ();
 
@@ -245,9 +245,9 @@ impl ScannerFeed for FakeFeed {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct FakeTransaction;
+pub(crate) struct TestTransaction;
 
-impl scheduler_primitives::Transaction for FakeTransaction {
+impl scheduler_primitives::Transaction for TestTransaction {
   fn read(_reader: &mut impl io::Read) -> io::Result<Self> {
     todo!()
   }
@@ -258,18 +258,18 @@ impl scheduler_primitives::Transaction for FakeTransaction {
 }
 
 #[derive(Clone)]
-pub(crate) struct FakeMessage;
+pub(crate) struct TestMessage;
 
-impl Writable for FakeMessage {
+impl Writable for TestMessage {
   fn write<W: io::Write>(&self, _writer: &mut W) -> io::Result<()> {
     todo!()
   }
 }
 
-pub(crate) struct FakeSignatureMachine;
+pub(crate) struct TestSignatureMachine;
 
-impl SignatureMachine<FakeTransaction> for FakeSignatureMachine {
-  type SignatureShare = FakeMessage;
+impl SignatureMachine<TestTransaction> for TestSignatureMachine {
+  type SignatureShare = TestMessage;
 
   fn read_share<R: io::Read>(&self, _reader: &mut R) -> io::Result<Self::SignatureShare> {
     todo!()
@@ -278,23 +278,23 @@ impl SignatureMachine<FakeTransaction> for FakeSignatureMachine {
   fn complete(
     self,
     _shares: HashMap<Participant, Self::SignatureShare>,
-  ) -> Result<FakeTransaction, FrostError> {
+  ) -> Result<TestTransaction, FrostError> {
     todo!()
   }
 }
 
-pub(crate) struct FakeSignMachine;
+pub(crate) struct TestSignMachine;
 
-impl SignMachine<FakeTransaction> for FakeSignMachine {
+impl SignMachine<TestTransaction> for TestSignMachine {
   type Params = ();
 
   type Keys = ();
 
-  type Preprocess = FakeMessage;
+  type Preprocess = TestMessage;
 
-  type SignatureShare = FakeMessage;
+  type SignatureShare = TestMessage;
 
-  type SignatureMachine = FakeSignatureMachine;
+  type SignatureMachine = TestSignatureMachine;
 
   fn cache(self) -> CachedPreprocess {
     todo!()
@@ -322,14 +322,14 @@ impl SignMachine<FakeTransaction> for FakeSignMachine {
 }
 
 #[derive(Clone)]
-pub(crate) struct FakePreprocessMachine;
+pub(crate) struct TestPreprocessMachine;
 
-impl PreprocessMachine for FakePreprocessMachine {
-  type Preprocess = FakeMessage;
+impl PreprocessMachine for TestPreprocessMachine {
+  type Preprocess = TestMessage;
 
-  type Signature = FakeTransaction;
+  type Signature = TestTransaction;
 
-  type SignMachine = FakeSignMachine;
+  type SignMachine = TestSignMachine;
 
   fn preprocess<R: RngCore + CryptoRng>(
     self,
@@ -340,14 +340,14 @@ impl PreprocessMachine for FakePreprocessMachine {
 }
 
 #[derive(Clone)]
-pub(crate) struct FakeSignableTransaction;
+pub(crate) struct TestSignableTransaction;
 
-impl SignableTransaction for FakeSignableTransaction {
-  type Transaction = FakeTransaction;
+impl SignableTransaction for TestSignableTransaction {
+  type Transaction = TestTransaction;
 
   type Ciphersuite = Ed25519;
 
-  type PreprocessMachine = FakePreprocessMachine;
+  type PreprocessMachine = TestPreprocessMachine;
 
   fn read(_reader: &mut impl io::Read) -> io::Result<Self> {
     todo!()
@@ -366,49 +366,49 @@ impl SignableTransaction for FakeSignableTransaction {
   }
 }
 
-pub(crate) struct FakePlanner;
+pub(crate) struct TestPlanner;
 
-impl TransactionPlanner<FakeFeed, ()> for FakePlanner {
+impl TransactionPlanner<TestFeed, ()> for TestPlanner {
   type EphemeralError = ();
 
-  type SignableTransaction = FakeSignableTransaction;
+  type SignableTransaction = TestSignableTransaction;
 
   const MAX_INPUTS: usize = 3;
 
   const MAX_OUTPUTS: usize = 3;
 
-  fn branch_address(_key: Key) -> FakeAddress {
+  fn branch_address(_key: Key) -> TestAddress {
     todo!()
   }
 
-  fn change_address(_key: Key) -> FakeAddress {
+  fn change_address(_key: Key) -> TestAddress {
     todo!()
   }
 
-  fn forwarding_address(_key: Key) -> FakeAddress {
+  fn forwarding_address(_key: Key) -> TestAddress {
     todo!()
   }
 
   fn calculate_fee(
     &self,
-    _reference_block: &BlockFor<FakeFeed>,
-    _inputs: Vec<OutputFor<FakeFeed>>,
-    _payments: Vec<Payment<FakeAddress>>,
-    _change: Option<KeyFor<FakeFeed>>,
+    _reference_block: &BlockFor<TestFeed>,
+    _inputs: Vec<OutputFor<TestFeed>>,
+    _payments: Vec<Payment<TestAddress>>,
+    _change: Option<KeyFor<TestFeed>>,
   ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>> {
     async { todo!() }
   }
 
   fn plan(
     &self,
-    _reference_block: &BlockFor<FakeFeed>,
-    _inputs: Vec<OutputFor<FakeFeed>>,
-    _payments: Vec<Payment<AddressFor<FakeFeed>>>,
-    _change: Option<KeyFor<FakeFeed>>,
+    _reference_block: &BlockFor<TestFeed>,
+    _inputs: Vec<OutputFor<TestFeed>>,
+    _payments: Vec<Payment<AddressFor<TestFeed>>>,
+    _change: Option<KeyFor<TestFeed>>,
   ) -> impl Send
   + Future<
     Output = Result<
-      PlannedTransaction<FakeFeed, Self::SignableTransaction, ()>,
+      PlannedTransaction<TestFeed, Self::SignableTransaction, ()>,
       Self::EphemeralError,
     >,
   > {
