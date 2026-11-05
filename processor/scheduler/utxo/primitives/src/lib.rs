@@ -13,6 +13,9 @@ use scheduler_primitives::*;
 mod tree;
 pub use tree::*;
 
+#[cfg(test)]
+mod tests;
+
 /// A planned transaction.
 pub struct PlannedTransaction<S: ScannerFeed, ST: SignableTransaction, A> {
   /// The signable transaction.
@@ -282,5 +285,148 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
     let tree_root = tree.remove(0);
     assert!((tree_root.children() + 1) <= Self::MAX_OUTPUTS);
     tree_root
+  }
+}
+
+#[cfg(test)]
+mod transaction_planner {
+  use serai_primitives::coin::ExternalCoin;
+
+  use crate::tests::{TestAddress, TestFeed, TestPlanner, get_addresses_and_amounts};
+
+  use super::*;
+
+  fn payment(address: u32, amount: u64) -> Payment<TestAddress> {
+    Payment::new(
+      TestAddress(address),
+      ExternalBalance { amount: Amount(amount), coin: ExternalCoin::Monero },
+    )
+  }
+
+  fn payments(qty: u32) -> Vec<Payment<TestAddress>> {
+    let mut payments = Vec::with_capacity(qty.try_into().unwrap());
+
+    for i in 0 .. qty {
+      payments.push(payment(i, (100 * (i + 1)).into()));
+    }
+
+    payments
+  }
+
+  // The amounts of every payment in the tree, left to right
+  fn get_leaf_amounts(tx: &TreeTransaction<TestAddress>) -> Vec<u64> {
+    match tx {
+      TreeTransaction::Leaves { payments, .. } => {
+        payments.iter().map(|payment| payment.balance().amount.0).collect()
+      }
+      TreeTransaction::Branch { children, .. } => {
+        children.iter().flat_map(get_leaf_amounts).collect()
+      }
+    }
+  }
+
+  // The tree's shape, eg `B[L3,L1]` for a branch of two leaves with 3 and 1 payments
+  fn tree_shape_to_string(tx: &TreeTransaction<TestAddress>) -> String {
+    match tx {
+      TreeTransaction::Leaves { payments, .. } => format!("L{}", payments.len()),
+      TreeTransaction::Branch { children, .. } => {
+        format!("B[{}]", children.iter().map(tree_shape_to_string).collect::<Vec<_>>().join(","))
+      }
+    }
+  }
+
+  // Assert every node's value is the sum of the payments under it
+  fn assert_node_values(tx: &TreeTransaction<TestAddress>) {
+    assert_eq!(tx.value(), get_leaf_amounts(tx).iter().sum::<u64>());
+    if let TreeTransaction::Branch { children, .. } = tx {
+      children.iter().for_each(assert_node_values);
+    }
+  }
+
+  #[test]
+  fn single_payment_is_a_leaves_root() {
+    let payments = payments(1);
+    let tree = TestPlanner::tree(&payments);
+    assert_eq!(tree_shape_to_string(&tree), "L1");
+    assert_eq!(get_leaf_amounts(&tree), [100]);
+    assert_eq!(tree.value(), 100);
+  }
+
+  #[test]
+  fn almost_full_single_leaves_dont_wrap_into_a_branch() {
+    let payments = payments(2);
+    let tree = TestPlanner::tree(&payments);
+    assert_eq!(tree_shape_to_string(&tree), "L2");
+    assert_eq!(get_leaf_amounts(&tree), [100, 200]);
+    assert_eq!(tree.value(), 300);
+  }
+
+  #[test]
+  fn full_single_leaves_wrap_into_a_branch() {
+    let payments = payments(3);
+    let tree = TestPlanner::tree(&payments);
+    assert_eq!(tree_shape_to_string(&tree), "B[L3]");
+    assert_eq!(get_leaf_amounts(&tree), [100, 200, 300]);
+    assert_eq!(tree.value(), 600);
+  }
+
+  #[test]
+  fn almost_full_single_branch_doesnt_wrap_into_another_branch() {
+    let payments = payments(6);
+    let tree = TestPlanner::tree(&payments);
+    assert_eq!(tree_shape_to_string(&tree), "B[L3,L3]");
+    assert_eq!(get_leaf_amounts(&tree), [100, 200, 300, 400, 500, 600]);
+    assert_eq!(tree.value(), 2100);
+  }
+
+  #[test]
+  fn full_single_branch_wraps_into_another_branch() {
+    let payments = payments(7);
+    let tree = TestPlanner::tree(&payments);
+    assert_eq!(tree_shape_to_string(&tree), "B[B[L3,L3,L1]]");
+    assert_eq!(get_leaf_amounts(&tree), [100, 200, 300, 400, 500, 600, 700]);
+    assert_eq!(tree.value(), 2800);
+  }
+
+  #[test]
+  fn overflowing_leaves_split_into_two_branches() {
+    let payments = payments(10);
+    let tree = TestPlanner::tree(&payments);
+    assert_eq!(tree_shape_to_string(&tree), "B[B[L3,L3,L3],B[L1]]");
+    assert_eq!(get_leaf_amounts(&tree), [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]);
+    assert_eq!(tree.value(), 5500);
+  }
+
+  #[test]
+  fn node_value_matches_amount_sum() {
+    let payments = payments(10);
+    let tree = TestPlanner::tree(&payments);
+    assert_node_values(&tree);
+  }
+
+  #[test]
+  fn leaves_root_at_full_value_keeps_its_payments() {
+    let payments = payments(2);
+    let tree = TestPlanner::tree(&payments);
+    let root_payments = tree
+      .payments::<TestFeed>(ExternalCoin::Monero, &TestAddress(111), tree.value())
+      .expect("payments were dropped despite a full-value input");
+
+    let (addresses, amounts) = get_addresses_and_amounts(&root_payments);
+    assert_eq!(addresses, vec![TestAddress(0), TestAddress(1)]);
+    assert_eq!(amounts, vec![100, 200]);
+  }
+
+  #[test]
+  fn branch_root_at_full_value_pays_its_children_to_the_branch_address() {
+    let payments = payments(7);
+    let tree = TestPlanner::tree(&payments);
+    let root_payments = tree
+      .payments::<TestFeed>(ExternalCoin::Monero, &TestAddress(111), tree.value())
+      .expect("payments were dropped despite a full-value input");
+
+    let (addresses, amounts) = get_addresses_and_amounts(&root_payments);
+    assert_eq!(addresses, vec![TestAddress(111)]);
+    assert_eq!(amounts, vec![2800]);
   }
 }
