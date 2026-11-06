@@ -4263,6 +4263,7 @@ dependencies = [
  "libc",
  "libz-sys",
  "rustflags",
+ "zstd-sys",
 ]
 
 [[package]]
@@ -7856,14 +7857,17 @@ dependencies = [
  "ciphersuite 0.4.2",
  "dalek-ff-group",
  "dkg-evrf",
+ "dockertest",
  "embedwards25519",
  "log",
  "modular-frost",
+ "monero-ed25519",
  "monero-simple-request-rpc",
  "monero-wallet",
  "rand_chacha 0.3.1",
  "rand_core 0.6.4",
  "serai-client-monero",
+ "serai-docker-tests",
  "serai-primitives",
  "serai-processor-bin",
  "serai-processor-key-gen",
@@ -8175,6 +8179,7 @@ dependencies = [
  "serai-processor-messages",
  "serai-processor-primitives",
  "serai-processor-scheduler-primitives",
+ "tempfile",
  "tokio",
 ]
 
@@ -10668,3 +10673,13 @@ name = "zmij"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+
+[[package]]
+name = "zstd-sys"
+version = "2.0.16+zstd.1.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"
+dependencies = [
+ "cc",
+ "pkg-config",
+]

@@ -6,14 +6,15 @@ use group::GroupEncoding;
 use serai_db::{Get, Transaction as DbTxn, Db};
 
 use primitives::{
-  task::ContinuallyRan, OutputType, ReceivedOutput as _, Eventuality as _, Block as _, Payment,
+  task::ContinuallyRan, OutputType, ReceivedOutput as _, EncodableG, Eventuality as _, Block as _,
+  Payment,
 };
 
 use crate::{
   lifetime::LifetimeStage,
   db::{
-    SeraiKey, OutputWithInInstruction, ReceiverScanData, ScannerGlobalDb, SubstrateToEventualityDb,
-    ScanToEventualityDb,
+    SeraiKey, OutputWithInInstruction, ReceiverScanData, RetireAt, ScannerGlobalDb,
+    SubstrateToEventualityDb, ScanToEventualityDb,
   },
   BlockExt as _, ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, SchedulerUpdate,
   Scheduler, CompletedEventualities, sort_outputs,
@@ -130,23 +131,12 @@ impl<
     block_number: u64,
   ) -> (Vec<SeraiKey<KeyFor<S>>>, Vec<(KeyFor<S>, LifetimeStage)>) {
     /*
-      This is proper as the keys for the next-to-scan block (at most `WINDOW_LENGTH` ahead) will be
-      the keys to use here, with only minor edge cases.
-
-      This may include a key which has yet to activate by our perception. We can simply drop
-      those.
-
-      This may not include a key which has retired by the next-to-scan block. This task is the
-      one which decides when to retire a key, and when it marks a key to be retired, it is done
-      with it. Accordingly, it's not an issue if such a key was dropped.
-
-      This also may include a key we've retired which has yet to officially retire. That's fine as
-      we'll do nothing with it, and the Scheduler traits document this behavior.
+      We use the block number that the eventuality task is currently handling here
+      to ensure that all validators are using the same set of keys at the same stage.
     */
-    let mut keys = ScannerGlobalDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&self.db)
+    let keys = ScannerGlobalDb::<S>::active_keys(&self.db, block_number)
       .expect("scanning for a blockchain without any keys set");
-    // Since the next-to-scan block is ahead of us, drop keys which have yet to actually activate
-    keys.retain(|key| key.activation_block_number <= block_number);
+    assert!(keys.iter().all(|key| key.activation_block_number <= block_number));
     let keys_with_stages = keys.iter().map(|key| (key.key, key.stage)).collect::<Vec<_>>();
 
     (keys, keys_with_stages)
@@ -289,9 +279,11 @@ impl<
         let (keys, keys_with_stages) = self.keys_and_keys_with_stages(b);
         let latest_active_key = {
           let mut keys_with_stages = keys_with_stages.clone();
+          let most_recent_key =
+            keys_with_stages.last().expect("checking eventualities with no active keys").0;
           loop {
             // Use the most recent key
-            let (key, stage) = keys_with_stages.pop().unwrap();
+            let Some((key, stage)) = keys_with_stages.pop() else { break most_recent_key };
             // Unless this key is active, but not yet reporting
             if stage == LifetimeStage::ActiveYetNotReporting {
               continue;
@@ -506,7 +498,9 @@ impl<
           }
 
           // Now that we've intaked any Eventualities caused, check if we're retiring any keys
-          if key.stage == LifetimeStage::Finishing {
+          if key.stage == LifetimeStage::Finishing &&
+            RetireAt::get(&txn, EncodableG(key.key)).is_none()
+          {
             let eventualities = EventualityDb::<S>::eventualities(&txn, key.key);
             if eventualities.active_eventualities.is_empty() {
               log::info!(
@@ -539,5 +533,387 @@ impl<
       // Run dependents if we successfully checked any blocks
       Ok(made_progress)
     }
+  }
+}
+
+/// Generic tests for the eventuality task. These should be plug-and-play with an implemented
+/// ScannerFeed.
+#[cfg(feature = "tests")]
+pub mod eventuality_tests {
+  use primitives::{EncodableG, task::ContinuallyRan as _};
+  use serai_db::{new_rocksdb, Db, Transaction as _};
+  use tempfile::TempDir;
+
+  use crate::{
+    DaemonHelper,
+    db::RetireAt,
+    ScannerFeed, ScannerGlobalDb,
+    eventuality::{EventualityTask, EventualityDb},
+    index::IndexTask,
+    KeyFor,
+    lifetime::{Lifetime, LifetimeStage},
+    scan::{next_to_scan_for_outputs_block, ScanTask},
+    Scheduler,
+  };
+
+  async fn init_tasks<
+    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    S: ScannerFeed,
+    Sch: Scheduler<S>,
+  >(
+    db: D,
+    feed: S,
+    scheduler: Sch,
+    start_block: u64,
+  ) -> (IndexTask<D, S>, ScanTask<D, S>, EventualityTask<D, S, Sch>) {
+    // 1. IndexTask
+    // The EventualityTask depends on the IndexTask for block_by_number.
+    let index_task = IndexTask::new(db.clone(), feed.clone(), start_block).await;
+    let res = feed.block_by_number(&db, start_block).await;
+    res.unwrap();
+
+    // 2. ScanTask
+    // The EventualityTask depends on the ScanTask for next_to_scan_for_outputs_block and
+    // recv_scan_data.
+    assert!(next_to_scan_for_outputs_block::<S>(&db).is_none());
+    let scan_task = ScanTask::new(db.clone(), feed.clone(), start_block);
+    assert_eq!(next_to_scan_for_outputs_block::<S>(&db).unwrap(), start_block);
+
+    // 3. EventualityTask
+    assert!(EventualityDb::<S>::next_to_check_for_eventualities_block(&db).is_none());
+    let eventuality_task =
+      EventualityTask::<_, _, _>::new(db.clone(), feed.clone(), scheduler, start_block);
+    assert_eq!(
+      EventualityDb::<S>::next_to_check_for_eventualities_block(&db).unwrap(),
+      start_block
+    );
+
+    (index_task, scan_task, eventuality_task)
+  }
+
+  async fn init_test<S: ScannerFeed, Sch: Scheduler<S>>(
+    feed: S,
+    scheduler: Sch,
+    start_key: KeyFor<S>,
+    next_key: KeyFor<S>,
+  ) -> (
+    TempDir,
+    impl 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    u64,
+    u64,
+    IndexTask<impl 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S>,
+    ScanTask<impl 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S>,
+    EventualityTask<impl 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S, Sch>,
+  ) {
+    let temp_dir = TempDir::new().unwrap();
+    let mut temp_db = new_rocksdb(temp_dir.path().to_str().unwrap());
+    let start_block = feed.latest_finalized_block_number().await.unwrap();
+
+    // Initialize the scanner (see Scanner::initialize), but don't start tasks yet.
+    // We want to control task iterations manually. This registers the start_key.
+    {
+      let mut txn = temp_db.txn();
+      ScannerGlobalDb::<S>::set_start_block(&mut txn, start_block);
+      ScannerGlobalDb::<S>::queue_key(&mut txn, start_block, start_key);
+      txn.commit();
+    }
+
+    // Initialize IndexTask, ScanTask, and EventualityTask.
+    let (index_task, scan_task, eventuality_task) =
+      init_tasks(temp_db.clone(), feed.clone(), scheduler, start_block).await;
+
+    // Establish a full lifetime cycle of the start_key.
+    let start_key_active_block = Lifetime::active_yet_not_reporting_end_block::<S>(start_block);
+    // We need to activate the next_keys once start_key is already active. Then start_key's
+    // lifecycle is determined by the activation block of the next key. See inside calculate
+    // assert!(next_keys_activation_block_number > active_yet_not_reporting_end_block).
+    let next_keys_activation_block_number = start_key_active_block + 1;
+    let new_active_yet_not_reporting_end_block =
+      Lifetime::active_yet_not_reporting_end_block::<S>(next_keys_activation_block_number);
+    let new_active_and_used_for_change_end_block =
+      Lifetime::using_for_change_end_block::<S>(new_active_yet_not_reporting_end_block);
+    let new_active_and_forwarded_to_end_block =
+      Lifetime::forwarding_end_block::<S>(new_active_and_used_for_change_end_block);
+
+    let expected_start_keys_lifetime = Lifetime {
+      stage: LifetimeStage::Finishing,
+      block_at_which_reporting_starts: start_key_active_block,
+      block_at_which_forwarding_starts: Some(new_active_and_used_for_change_end_block),
+    };
+    let start_keys_lifetime = Lifetime::calculate::<S>(
+      new_active_and_forwarded_to_end_block,
+      start_block,
+      Some(next_keys_activation_block_number),
+    );
+    assert_eq!(start_keys_lifetime, expected_start_keys_lifetime);
+
+    {
+      let mut txn = temp_db.txn();
+      // Register the next_key with its activation block number.
+      ScannerGlobalDb::<S>::queue_key(&mut txn, next_keys_activation_block_number, next_key);
+      // Set the highest acknowledged block to something high to allow the start_key to be retired
+      // In the Eventuality Task, see the read for highest_acknowledged_block and later call to
+      // retire_key. The highest ack'd block must be set at or past the retirement block to allow
+      // the Eventuality Task to handle it.
+      let retirement_block = new_active_and_forwarded_to_end_block + S::WINDOW_LENGTH;
+      let highest_ackd_block = retirement_block;
+      ScannerGlobalDb::<S>::set_highest_acknowledged_block(&mut txn, highest_ackd_block);
+      txn.commit();
+    }
+
+    (
+      temp_dir,
+      temp_db,
+      start_block,
+      new_active_and_forwarded_to_end_block,
+      index_task,
+      scan_task,
+      eventuality_task,
+    )
+  }
+
+  /// Ensure a key's retirement block is set by the Eventuality Task once the Eventuality
+  /// Task handles the key's Finishing block. This ensures the retirement block gets set
+  /// to the same value for all validators. This test iterates 1 block at a time around
+  /// the key's Finishing block.
+  ///
+  /// As a bonus, this test also continues advancing the chain and iterating Tasks until
+  /// the Eventuality Task handles the retirement block, and ensures state remains as
+  /// expected until then.
+  async fn deterministic_retirement_advance_one_block_at_a_time<
+    S: ScannerFeed,
+    D: DaemonHelper,
+    Sch: Scheduler<S>,
+  >(
+    feed: S,
+    daemon: D,
+    scheduler: Sch,
+    start_key: KeyFor<S>,
+    next_key: KeyFor<S>,
+  ) {
+    daemon.reset_chain().await;
+    daemon.setup_finalized_block().await;
+
+    let (
+      _temp_dir,
+      temp_db,
+      start_block,
+      starting_finishing_block,
+      mut index_task,
+      mut scan_task,
+      mut eventuality_task,
+    ) = init_test(feed.clone(), scheduler, start_key, next_key).await;
+
+    // Mine until 2 blocks before start_key enters the Finishing stage.
+    // We'll run the tasks up until that block, so we can then control
+    // and test expected behavior 1 block at a time.
+    let mine_up_to_retire_block = starting_finishing_block - 2;
+    let mine_n_blocks_up_to_retire = mine_up_to_retire_block - start_block;
+    daemon.add_blocks(mine_n_blocks_up_to_retire.try_into().unwrap()).await;
+
+    let mut run_all_tasks = async || {
+      index_task.run_iteration().await.unwrap();
+      scan_task.run_iteration().await.unwrap();
+      eventuality_task.run_iteration().await.unwrap();
+    };
+
+    // Run the tasks until the Eventuality Task has handled right up until retirement.
+    let mut next_to_check =
+      EventualityDb::<S>::next_to_check_for_eventualities_block(&temp_db).unwrap();
+    while next_to_check <= mine_up_to_retire_block {
+      run_all_tasks().await;
+      let new_next_to_check =
+        EventualityDb::<S>::next_to_check_for_eventualities_block(&temp_db).unwrap();
+      assert!(new_next_to_check > next_to_check);
+      next_to_check = new_next_to_check;
+    }
+    assert_eq!(next_to_check, starting_finishing_block - 1);
+
+    // We expect:
+    //   - start_key to be in the Forwarding stage (it's about to enter Finishing on next block)
+    //   - next_key to be activated (it activated once the Eventuality Task handled
+    //     next_keys_activation_block_number)
+    let activated_keys = ScannerGlobalDb::<S>::active_keys(&temp_db, next_to_check).unwrap();
+    assert_eq!(activated_keys.len(), 2);
+    let activated_start_key = activated_keys.iter().find(|k| k.key == start_key).unwrap();
+    let activated_next_key = activated_keys.iter().find(|k| k.key == next_key).unwrap();
+    assert_eq!(activated_start_key.stage, LifetimeStage::Forwarding);
+    assert_eq!(activated_next_key.stage, LifetimeStage::Active);
+
+    // Because of the Eventuality Task, we expect that the retirement block
+    // is not set yet. We don't expect it to be set until the Eventuality Task
+    // handles starting_finishing_block.
+    let retire_at = RetireAt::get(&temp_db, EncodableG(start_key));
+    assert!(retire_at.is_none());
+
+    // After 1 more iteration, the start_key should be Finishing as of
+    // the next block the Eventuality Task will handle, but the retirement
+    // block should not be set by the Eventuality Task yet.
+    // We don't want the scan state to drive retirement. We want retirement
+    // to happen when the Eventuality Task handles starting_finishing_block.
+    daemon.add_blocks(1).await;
+    run_all_tasks().await;
+    next_to_check = EventualityDb::<S>::next_to_check_for_eventualities_block(&temp_db).unwrap();
+    assert_eq!(next_to_check, starting_finishing_block);
+    let activated_keys = ScannerGlobalDb::<S>::active_keys(&temp_db, next_to_check).unwrap();
+    assert_eq!(activated_keys.len(), 2);
+      let activated_start_key = activated_keys.iter().find(|k| k.key == start_key).unwrap();
+    let activated_next_key = activated_keys.iter().find(|k| k.key == next_key).unwrap();
+    assert_eq!(activated_start_key.stage, LifetimeStage::Finishing);
+    assert_eq!(activated_next_key.stage, LifetimeStage::Active);
+    let retire_at = RetireAt::get(&temp_db, EncodableG(start_key));
+    assert!(retire_at.is_none());
+
+    // Now have the Eventuality Task set the start_key's retirement block by having it handle
+    // starting_finishing_block. We'll continue iterating until the retirement block just
+    // to make sure state remains as expected.
+    let expected_retire_at = starting_finishing_block + S::WINDOW_LENGTH;
+    assert!(next_to_check < expected_retire_at);
+    while next_to_check < expected_retire_at {
+      daemon.add_blocks(1).await;
+      run_all_tasks().await;
+
+      let new_next_to_check =
+        EventualityDb::<S>::next_to_check_for_eventualities_block(&temp_db).unwrap();
+      assert!(new_next_to_check > next_to_check);
+      next_to_check = new_next_to_check;
+      if next_to_check == expected_retire_at {
+        break;
+      }
+
+      // We expect start_key to be in the Finishing stage, and for the eventuality task to have set
+      // the key to retire.
+      let activated_keys = ScannerGlobalDb::<S>::active_keys(&temp_db, next_to_check).unwrap();
+      assert_eq!(activated_keys.len(), 2);
+      let activated_start_key = activated_keys.iter().find(|k| k.key == start_key).unwrap();
+      let activated_next_key = activated_keys.iter().find(|k| k.key == next_key).unwrap();
+      assert_eq!(activated_start_key.stage, LifetimeStage::Finishing);
+      assert_eq!(activated_next_key.stage, LifetimeStage::Active);
+      let retire_at = RetireAt::get(&temp_db, EncodableG(start_key)).unwrap();
+      assert_eq!(retire_at, expected_retire_at);
+    }
+
+    // The start_key is expected to have dropped out of the active keys since its retirement block
+    // has been set and next block to check is >= the retirement block. However, it's still
+    // expected to be set to retire in the db.
+    let final_state_check = || {
+      let activated_keys = ScannerGlobalDb::<S>::active_keys(&temp_db, next_to_check).unwrap();
+      assert_eq!(activated_keys.len(), 1);
+      let activated_next_key = activated_keys.iter().find(|k| k.key == next_key).unwrap();
+      assert_eq!(activated_next_key.stage, LifetimeStage::Active);
+      let retire_at = RetireAt::get(&temp_db, EncodableG(start_key)).unwrap();
+      assert_eq!(retire_at, expected_retire_at);
+    };
+    final_state_check();
+
+    // Iterate once more to make sure the Eventuality Task handles the retirement block smoothly.
+    assert_eq!(
+      EventualityDb::<S>::next_to_check_for_eventualities_block(&temp_db).unwrap(),
+      expected_retire_at
+    );
+    daemon.add_blocks(1).await;
+    run_all_tasks().await;
+    final_state_check();
+    assert_eq!(
+      EventualityDb::<S>::next_to_check_for_eventualities_block(&temp_db).unwrap(),
+      expected_retire_at + 1
+    );
+  }
+
+  /// Ensure a key's retirement block is set by the Eventuality Task once the Eventuality
+  /// Task handles the key's Finishing block. This ensures the retirement block gets set
+  /// to the same value for all validators. This test advances the chain first, and then
+  /// iterates the tasks after (Index -> Scan -> Eventuality).
+  async fn deterministic_retirement_advance_chain_first<
+    S: ScannerFeed,
+    D: DaemonHelper,
+    Sch: Scheduler<S>,
+  >(
+    feed: S,
+    daemon: D,
+    scheduler: Sch,
+    start_key: KeyFor<S>,
+    next_key: KeyFor<S>,
+  ) {
+    daemon.reset_chain().await;
+    daemon.setup_finalized_block().await;
+
+    let (
+      _temp_dir,
+      temp_db,
+      start_block,
+      starting_finishing_block,
+      mut index_task,
+      mut scan_task,
+      mut eventuality_task,
+    ) = init_test(feed.clone(), scheduler, start_key, next_key).await;
+
+    let mine_past_retirement_block = starting_finishing_block + (2 * S::WINDOW_LENGTH);
+    let mine_n_blocks_past_retirement_block = mine_past_retirement_block - start_block;
+    daemon.add_blocks(mine_n_blocks_past_retirement_block.try_into().unwrap()).await;
+
+    let mut run_all_tasks = async || {
+      index_task.run_iteration().await.unwrap();
+      scan_task.run_iteration().await.unwrap();
+      eventuality_task.run_iteration().await.unwrap();
+    };
+
+    // Run the tasks until the start_key's Finishing block (starting_finishing_block)
+    // has been handled by the Eventuality task.
+    let mut next_to_check =
+      EventualityDb::<S>::next_to_check_for_eventualities_block(&temp_db).unwrap();
+    while next_to_check <= starting_finishing_block {
+      run_all_tasks().await;
+      let new_next_to_check =
+        EventualityDb::<S>::next_to_check_for_eventualities_block(&temp_db).unwrap();
+      assert!(new_next_to_check > next_to_check);
+      if new_next_to_check > starting_finishing_block {
+        break;
+      }
+      next_to_check = new_next_to_check;
+
+      // The retirement block shouldn't have been set yet by the Eventuality task since
+      // it hasn't yet handled the Finishing block (starting_finishing_block).
+      let retire_at = RetireAt::get(&temp_db, EncodableG(start_key));
+      assert!(retire_at.is_none());
+    }
+
+    // At this point, retirement should have been set, since the Eventuality task has
+    // handled starting_finishing_block.
+    let retire_at = RetireAt::get(&temp_db, EncodableG(start_key)).unwrap();
+    let expected_retire_at = starting_finishing_block + S::WINDOW_LENGTH;
+    assert_eq!(retire_at, expected_retire_at);
+  }
+
+  /// Test the eventuality task manages various circumstances correctly.
+  pub async fn eventuality_task_tests<
+    S: ScannerFeed,
+    D: DaemonHelper,
+    Sch: Scheduler<S> + Clone,
+  >(
+    feed: S,
+    daemon: D,
+    scheduler: Sch,
+    start_key: KeyFor<S>,
+    next_key: KeyFor<S>,
+  ) {
+    println!("Executing eventuality task tests...");
+    deterministic_retirement_advance_one_block_at_a_time(
+      feed.clone(),
+      daemon.clone(),
+      scheduler.clone(),
+      start_key,
+      next_key,
+    )
+    .await;
+
+    deterministic_retirement_advance_chain_first(
+      feed.clone(),
+      daemon.clone(),
+      scheduler.clone(),
+      start_key,
+      next_key,
+    )
+    .await;
   }
 }
