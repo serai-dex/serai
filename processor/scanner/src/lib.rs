@@ -39,6 +39,24 @@ mod substrate;
 /// Check blocks for transactions expected to eventually occur.
 mod eventuality;
 
+#[cfg(feature = "tests")]
+pub use index::index_tests;
+#[cfg(feature = "tests")]
+pub use eventuality::eventuality_tests;
+
+#[cfg(feature = "tests")]
+/// A trait that defines fn's a caller should implement for each chain.
+pub trait DaemonHelper: 'static + Send + Sync + Clone {
+  /// Reset the blockchain state.
+  fn reset_chain(&self) -> impl Send + Future<Output = ()>;
+
+  /// Add n blocks to the chain.
+  fn add_blocks(&self, n: usize) -> impl Send + Future<Output = ()>;
+
+  /// There should be at least 1 finalized block in the chain after this executes.
+  fn setup_finalized_block(&self) -> impl Send + Future<Output = ()>;
+}
+
 pub(crate) fn sort_outputs<K: GroupEncoding, A: Address, O: ReceivedOutput<K, A>>(
   a: &O,
   b: &O,

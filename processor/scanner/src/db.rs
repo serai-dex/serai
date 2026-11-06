@@ -215,16 +215,16 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
 
     RetireAt::set(txn, EncodableG(key), &at_block);
   }
-  /// Fetch the active keys, as of the next-to-scan-for-outputs Block.
+  /// Fetch the active keys, as of the provided block.
   ///
-  /// This means the scan task should scan for all keys returned by this.
-  pub(crate) fn active_keys_as_of_next_to_scan_for_outputs_block(
+  /// The caller needs to be careful passing in a correct block number here.
+  /// Not all historical keys are kept in memory. If for example the scanner
+  /// has advanced to block ~1,000,000 across various tasks, we likely
+  /// won't have any active keys as of block 0.
+  pub(crate) fn active_keys(
     getter: &impl Get,
+    block_number: u64,
   ) -> Option<Vec<SeraiKey<KeyFor<S>>>> {
-    // We don't take this as an argument as we don't keep all historical keys in memory
-    // If we've scanned block 1,000,000, we can't answer the active keys as of block 0
-    let block_number = next_to_scan_for_outputs_block::<S>(getter)?;
-
     let raw_keys: Vec<SeraiKeyDbEntry<EncodableG<KeyFor<S>>>> = ActiveKeys::get(getter)?;
     let mut keys = Vec::with_capacity(2);
     for i in 0 .. raw_keys.len() {

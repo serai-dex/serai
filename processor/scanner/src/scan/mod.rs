@@ -123,7 +123,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, S: ScannerF
 
         assert_eq!(ScanDb::<S>::next_to_scan_for_outputs_block(&txn).unwrap(), b);
 
-        let keys = ScannerGlobalDb::<S>::active_keys_as_of_next_to_scan_for_outputs_block(&txn)
+        let keys = ScannerGlobalDb::<S>::active_keys(&txn, b)
           .expect("scanning for a blockchain without any keys set");
 
         let latest_active_key = {
