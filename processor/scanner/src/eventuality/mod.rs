@@ -289,9 +289,11 @@ impl<
         let (keys, keys_with_stages) = self.keys_and_keys_with_stages(b);
         let latest_active_key = {
           let mut keys_with_stages = keys_with_stages.clone();
+          let most_recent_key =
+            keys_with_stages.last().expect("checking eventualities with no active keys").0;
           loop {
             // Use the most recent key
-            let (key, stage) = keys_with_stages.pop().unwrap();
+            let Some((key, stage)) = keys_with_stages.pop() else { break most_recent_key };
             // Unless this key is active, but not yet reporting
             if stage == LifetimeStage::ActiveYetNotReporting {
               continue;
