@@ -29,6 +29,16 @@ pub(crate) fn payment(address: u32, amount: u64) -> Payment<TestAddress> {
   )
 }
 
+pub(crate) fn payments(qty: u32) -> Vec<Payment<TestAddress>> {
+  let mut payments = Vec::with_capacity(qty.try_into().unwrap());
+
+  for i in 0 .. qty {
+    payments.push(payment(i, (100 * (i + 1)).into()));
+  }
+
+  payments
+}
+
 pub(crate) fn get_addresses_and_amounts(
   payments: &[Payment<TestAddress>],
 ) -> (Vec<TestAddress>, Vec<u64>) {
@@ -79,7 +89,7 @@ impl primitives::BlockHeader for TestHeader {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct TestOutput;
+pub(crate) struct TestOutput(pub(crate) u64);
 
 impl ReceivedOutput<Key, TestAddress> for TestOutput {
   type Id = [u8; 32];
@@ -107,7 +117,7 @@ impl ReceivedOutput<Key, TestAddress> for TestOutput {
   }
 
   fn balance(&self) -> ExternalBalance {
-    todo!()
+    ExternalBalance { coin: ExternalCoin::Monero, amount: Amount(self.0) }
   }
 
   fn data(&self) -> &[u8] {
@@ -393,10 +403,13 @@ impl TransactionPlanner<TestFeed, ()> for TestPlanner {
     &self,
     _reference_block: &BlockFor<TestFeed>,
     _inputs: Vec<OutputFor<TestFeed>>,
-    _payments: Vec<Payment<TestAddress>>,
-    _change: Option<KeyFor<TestFeed>>,
+    payments: Vec<Payment<TestAddress>>,
+    change: Option<KeyFor<TestFeed>>,
   ) -> impl Send + Future<Output = Result<Amount, Self::EphemeralError>> {
-    async { todo!() }
+    let outputs_n = if change.is_some() { payments.len() + 1 } else { payments.len() };
+    let fee: u64 = (outputs_n * 5 + 10).try_into().unwrap();
+
+    async move { Ok(Amount(fee)) }
   }
 
   fn plan(
@@ -412,6 +425,12 @@ impl TransactionPlanner<TestFeed, ()> for TestPlanner {
       Self::EphemeralError,
     >,
   > {
-    async { todo!() }
+    async {
+      Ok(PlannedTransaction {
+        signable: TestSignableTransaction,
+        eventuality: TestEventuality,
+        auxilliary: (),
+      })
+    }
   }
 }

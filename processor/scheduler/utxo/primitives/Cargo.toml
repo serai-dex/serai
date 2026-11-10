@@ -30,3 +30,4 @@ ciphersuite = { path = "../../../../crypto/ciphersuite", default-features = fals
 dalek-ff-group = { path = "../../../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
 frost = { package = "modular-frost", path = "../../../../crypto/frost", default-features = false }
 rand_core = { version = "0.6", default-features = false }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros"] }

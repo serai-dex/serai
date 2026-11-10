@@ -8266,6 +8266,7 @@ dependencies = [
  "serai-processor-primitives",
  "serai-processor-scanner",
  "serai-processor-scheduler-primitives",
+ "tokio",
 ]
 
 [[package]]

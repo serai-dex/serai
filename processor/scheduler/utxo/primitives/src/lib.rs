@@ -4,7 +4,9 @@
 
 use core::{fmt::Debug, future::Future};
 
-use serai_primitives::balance::{Amount, ExternalBalance};
+use serai_primitives::{
+  balance::{Amount, ExternalBalance},
+};
 
 use primitives::{ReceivedOutput as _, Payment};
 use scanner::{ScannerFeed, KeyFor, AddressFor, OutputFor, EventualityFor, BlockFor};
@@ -289,29 +291,10 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
 }
 
 #[cfg(test)]
-mod transaction_planner {
-  use serai_primitives::coin::ExternalCoin;
-
-  use crate::tests::{TestAddress, TestFeed, TestPlanner, get_addresses_and_amounts};
-
+mod planner_tree {
   use super::*;
-
-  fn payment(address: u32, amount: u64) -> Payment<TestAddress> {
-    Payment::new(
-      TestAddress(address),
-      ExternalBalance { amount: Amount(amount), coin: ExternalCoin::Monero },
-    )
-  }
-
-  fn payments(qty: u32) -> Vec<Payment<TestAddress>> {
-    let mut payments = Vec::with_capacity(qty.try_into().unwrap());
-
-    for i in 0 .. qty {
-      payments.push(payment(i, (100 * (i + 1)).into()));
-    }
-
-    payments
-  }
+  use crate::tests::{TestAddress, TestFeed, TestPlanner, get_addresses_and_amounts, payments};
+  use serai_primitives::coin::ExternalCoin;
 
   // The amounts of every payment in the tree, left to right
   fn get_leaf_amounts(tx: &TreeTransaction<TestAddress>) -> Vec<u64> {
@@ -428,5 +411,142 @@ mod transaction_planner {
     let (addresses, amounts) = get_addresses_and_amounts(&root_payments);
     assert_eq!(addresses, vec![TestAddress(111)]);
     assert_eq!(amounts, vec![2800]);
+  }
+}
+
+#[cfg(test)]
+mod planner_plan_tx_with_fee_amortization {
+  use ciphersuite::WrappedGroup as _;
+  use dalek_ff_group::Ed25519;
+
+  use super::*;
+  use crate::tests::{
+    TestAddress, TestBlock, TestFeed, TestOutput, TestPlanner, TestSignableTransaction, payment,
+  };
+
+  async fn plan(
+    operating_costs: &mut u64,
+    input: u64,
+    payments: Vec<Payment<TestAddress>>,
+    change: bool,
+  ) -> Option<AmortizePlannedTransaction<TestFeed, TestSignableTransaction, ()>> {
+    TestPlanner
+      .plan_transaction_with_fee_amortization(
+        operating_costs,
+        &TestBlock,
+        vec![TestOutput(input)],
+        payments,
+        change.then(Ed25519::generator),
+      )
+      .await
+      .unwrap()
+  }
+
+  #[tokio::test]
+  async fn fee_is_amortized() {
+    let mut operating_costs = 0;
+    let payments = vec![payment(0, 200), payment(1, 100), payment(2, 50)];
+    let tx = plan(&mut operating_costs, 1000, payments, true).await.expect("Nothing was planned");
+
+    assert_eq!(tx.effected_payments, vec![Amount(190), Amount(90), Amount(40)]);
+    assert!(tx.has_change);
+    assert_eq!(operating_costs, 0);
+  }
+
+  #[tokio::test]
+  async fn smallest_payment_dropped_at_exact_dust() {
+    let mut operating_costs = 0;
+    let payments = vec![payment(0, 200), payment(1, 20), payment(2, 100)];
+    let tx = plan(&mut operating_costs, 1000, payments, true).await.expect("Nothing was planned");
+
+    assert_eq!(tx.effected_payments, vec![Amount(197), Amount(98)]);
+    assert!(tx.has_change);
+    assert_eq!(operating_costs, 0);
+  }
+
+  #[tokio::test]
+  async fn payment_not_dropped_right_above_dust() {
+    let mut operating_costs = 0;
+    let payments = vec![payment(0, 200), payment(1, 100), payment(2, 21)];
+    let tx = plan(&mut operating_costs, 1000, payments, true).await.expect("Nothing was planned");
+
+    assert_eq!(tx.effected_payments, vec![Amount(190), Amount(90), Amount(11)]);
+    assert!(tx.has_change);
+    assert_eq!(operating_costs, 0);
+  }
+
+  #[tokio::test]
+  async fn all_payments_dropped_without_change_plans_nothing() {
+    let mut operating_costs = 0;
+    let payments = vec![payment(0, 13), payment(1, 11)];
+    let tx = plan(&mut operating_costs, 100, payments, false).await;
+
+    assert!(tx.is_none());
+    assert_eq!(operating_costs, 0);
+  }
+
+  #[tokio::test]
+  async fn operating_costs_get_paid() {
+    let mut operating_costs = 30;
+    let payments = vec![payment(0, 200), payment(1, 50), payment(2, 100)];
+    let tx = plan(&mut operating_costs, 1000, payments, true).await.expect("Nothing was planned");
+
+    assert_eq!(tx.effected_payments, vec![Amount(180), Amount(80), Amount(30)]);
+    assert!(tx.has_change);
+    assert_eq!(operating_costs, 0);
+  }
+
+  #[tokio::test]
+  async fn operating_costs_not_paid_if_no_change() {
+    let mut operating_costs = 30;
+    let payments = vec![payment(0, 200), payment(1, 50), payment(2, 100)];
+    let tx = plan(&mut operating_costs, 350, payments, false).await.expect("Nothing was planned");
+
+    assert_eq!(tx.effected_payments, vec![Amount(191), Amount(92), Amount(42)]);
+    assert!(!tx.has_change);
+    assert_eq!(operating_costs, 30);
+  }
+
+  #[tokio::test]
+  async fn dust_change_becomes_operating_cost() {
+    let mut operating_costs = 0;
+    let payments = vec![payment(0, 200), payment(1, 50), payment(2, 100)];
+    let tx = plan(&mut operating_costs, 355, payments, true).await.expect("Nothing was planned");
+
+    assert_eq!(tx.effected_payments, vec![Amount(190), Amount(90), Amount(40)]);
+    assert!(!tx.has_change);
+    assert_eq!(operating_costs, 5);
+  }
+
+  #[tokio::test]
+  async fn excess_input_does_not_redistribute_if_no_change() {
+    let mut operating_costs = 0;
+    let payments = vec![payment(0, 200), payment(1, 50), payment(2, 100)];
+    let tx = plan(&mut operating_costs, 1000, payments, false).await.expect("Nothing was planned");
+
+    assert_eq!(tx.effected_payments, vec![Amount(191), Amount(92), Amount(42)]);
+    assert!(!tx.has_change);
+    assert_eq!(operating_costs, 0);
+  }
+
+  #[tokio::test]
+  async fn all_payments_dropped_if_below_operating_costs() {
+    let mut operating_costs = 1000;
+    let payments = vec![payment(0, 200), payment(1, 50), payment(2, 100)];
+    let tx = plan(&mut operating_costs, 1000, payments, true).await.expect("Nothing was planned");
+
+    assert!(tx.effected_payments.is_empty());
+    assert!(tx.has_change);
+    assert_eq!(operating_costs, 665);
+  }
+
+  #[tokio::test]
+  async fn change_only_tx_not_worth_making_plans_nothing() {
+    let mut operating_costs = 0;
+    let payments = vec![payment(0, 12)];
+    let tx = plan(&mut operating_costs, 20, payments, true).await;
+
+    assert!(tx.is_none());
+    assert_eq!(operating_costs, 8);
   }
 }
