@@ -66,6 +66,8 @@ pub(crate) trait Mempool<T> {
   /// If a validator has been censured.
   fn censured(&self, getter: &impl Get, validator: [u8; 32]) -> bool;
   /// Censure a validator.
+  ///
+  /// This MAY be called multiple times for a single validator.
   fn censure(&mut self, txn: &mut impl DbTxn, validator: [u8; 32]);
 }
 
@@ -352,19 +354,33 @@ impl<
     }
 
     let slash = Slash { validator, slash_reason };
-    let Ok(slash_size) = crate::serialized_len(&slash) else { return };
+    let existing_slash = self.slashes.get(slash.validator());
 
-    let existing_slash_size = self
-      .slashes
-      .get(slash.validator())
-      .and_then(|existing_slash| crate::serialized_len(existing_slash).ok());
+    let slash_size = |slash: &Slash| {
+      let slash_size = crate::serialized_len(slash).ok();
+      // If this slash wouldn't fit within a block's capacity, we consider its size unrepresentable
+      if let Some(block_size_limit) = T::BLOCK_SIZE_LIMIT {
+        let block_capacity = block_size_limit.saturating_sub(Block::<T>::EMPTY_BLOCK_SIZE);
+        slash_size.filter(|slash_size| (*slash_size) <= block_capacity)
+      } else {
+        slash_size
+      }
+    };
+    let existing_slash_size = existing_slash.and_then(slash_size);
+    let slash_size = slash_size(&slash);
 
     let mut txn = self.db.txn();
-    if existing_slash_size.is_none() {
+    if existing_slash.is_none() {
+      /*
+        This may be called multiple times, if we receive a slash and don't store it, before
+        receiving another slash, but we're allowed to censure a validator multiple times.
+      */
       self.mempool.censure(&mut txn, *slash.validator());
     }
     // If this validator already has a slash pending, keep whichever is smaller
-    if existing_slash_size.is_none_or(|existing_slash_size| existing_slash_size > slash_size) {
+    if let Some(slash_size) = slash_size &&
+      existing_slash_size.is_none_or(|existing_slash_size| slash_size < existing_slash_size)
+    {
       db::PendingSlash::set(&mut txn, self.genesis, *slash.validator(), (&slash).into());
       self.slashes.insert(*slash.validator(), slash);
     }

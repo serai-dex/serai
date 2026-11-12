@@ -467,6 +467,20 @@ impl<T: Transaction> Block<T> {
   /// an invalid block (assuming the gossip layer does not simply relay every message seen without
   /// any scrutiny).
   pub fn verify_syntax(&self, genesis: [u8; 32]) -> Result<(), SyntacticError> {
+    /*
+      The Tributary only supports up to `u16::MAX` validators, so if there's more slashes than
+      this, some MUST be either for non-validators _or_ duplicates.
+
+      We check this now as serialization of a block prefixes the slashes with their length, encoded
+      as a 16-bit integer. If this was violated, `ReadWrite::write` would return an error
+      _even when the writer was infallible_.
+
+      We return it as `ExceededSizeLimit` under the argument that the amount of slashes exceeds the
+      limit on the amount of slashes, and due to a lack of a more relevant error.
+    */
+    if self.slashes.len() > usize::from(u16::MAX) {
+      Err(SyntacticError::ExceededSizeLimit { size: None })?;
+    }
     // This length is serialized as a `u32`, so it must be less than or equal to `u32::MAX`
     if self.transactions.len() >
       const {

@@ -181,10 +181,11 @@ pub trait Transaction: Clone + ReadWrite + Digestible {
   ///
   /// The Tributary will enforce no individual block exceeds this size.
   ///
-  /// This MUST be greater than the size of an empty block.
+  /// This MUST be greater than the size of an empty block. This SHOULD be greater than the maximum
+  /// size of a slash, else some slashes may be impossible to record on-chain.
   ///
-  /// The default size limt is 4 MiB.
-  const BLOCK_SIZE_LIMIT: Option<usize> = Some(4 * 1024 * 1024);
+  /// The default size limt is 5 MiB.
+  const BLOCK_SIZE_LIMIT: Option<usize> = Some(5 * 1024 * 1024);
 
   /// The type of transaction this is.
   fn kind(&self) -> TransactionKind;
