@@ -204,12 +204,14 @@ impl<
     if self.blockchain.slashed(&self.db, proposer) {
       return core::future::ready(Err(InvalidBlock::Fatal));
     }
-    if self.slashes.contains_key(&proposer) || self.mempool.censured(&self.db, proposer) {
-      return core::future::ready(Err(InvalidBlock::Temporal));
-    }
 
     core::future::ready(match self.blockchain.verify::<N>(&self.db, &block.0) {
-      Ok(()) => Ok(()),
+      Ok(()) => {
+        if self.slashes.contains_key(&proposer) || self.mempool.censured(&self.db, proposer) {
+          return core::future::ready(Err(InvalidBlock::Temporal));
+        }
+        Ok(())
+      }
       Err(BlockError::Ephemeral(_)) => Err(InvalidBlock::Temporal),
       Err(BlockError::Syntactic(_) | BlockError::Semantic(_)) => {
         // If block is invalid for syntactic or semantic reasons, censure
