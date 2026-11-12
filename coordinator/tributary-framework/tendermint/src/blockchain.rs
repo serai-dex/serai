@@ -68,6 +68,11 @@ impl<H: Clone + Copy + PartialEq + Eq + AsRef<[u8]>> BlockHash for H {}
 pub enum InvalidBlock {
   /// This block is fatally invalid.
   ///
+  /// This MUST be consistently returned, if returned. A validation which yields
+  /// `InvalidBlock::Fatal` MUST have always yielded `InvalidBlock::Fatal` for all prior calls with
+  /// those arguments, and MUST yield `InvalidBlock::Fatal` for all future calls with those
+  /// arguments. Validators MUST NOT disagree on if a block is fatally invalid.
+  ///
   /// If a block proposal is received, yet the block is considered fatally invalid, the proposal
   /// will be dropped as if not received. The block proposal will not be voted for and received
   /// votes will be unrecognized.

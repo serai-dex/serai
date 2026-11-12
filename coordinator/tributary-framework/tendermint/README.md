@@ -30,7 +30,8 @@ accepted here. This is for two reasons:
    has been violated OR the local view is faulty. As either case would be a
    clear invariant, we instead say such behavior is valid so long as the
    consumer is aware of it. Note no machine will prevote for a block it
-   considers invalid, so for a network with soundness intact, this is a
+   considers invalid, unless the required supermajority of validators has
+   already voted for it, so for a network with soundness intact, this is a
    non-issue.
 
 Despite the intended modularity, [`borsh`](https://docs.rs/borsh) is currently

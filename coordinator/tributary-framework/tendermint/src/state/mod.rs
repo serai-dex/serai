@@ -444,41 +444,62 @@ impl<B: BorshyBlockchain> State<B> {
     let ObservedProposal { proposer, valid_round, proposal } =
       self.round_metrics.observed_proposal()?;
 
-    let block = ((Self::validate_block(&mut self.block_validity, blockchain, proposer, proposal)
-      .await
-      .is_ok()) &&
-      (match valid_round {
+    let block_validity =
+      Self::validate_block(&mut self.block_validity, blockchain, proposer, proposal).await;
+    /*
+      The block MUST NOT be considered fatally invalid. This clause SHOULD be unreachable as we
+      shouldn't have accumulated a fatally invalid block in the first place.
+    */
+    let block = ((match block_validity {
+      Ok(()) | Err(InvalidBlock::Temporal) => true,
+      Err(InvalidBlock::Fatal) => false,
+    }) && (match valid_round {
+      /*
+        L22-L23, where we've already checked:
+        - the step
+        - we have the proposal
+        - the metrics bound that we only accumulate proposals from the right proposer
+      */
+      None => match &self.locked {
         /*
-          L22-L23, where we've already checked:
-          - the step
-          - we have the proposal
-          - the metrics bound that we only accumulate proposals from the right proposer
-          - `valid(v)`
+          If we haven't locked this block to be finalized, and there isn't a valid round
+          certificate for this block, we require it be valid in every way.
         */
-        None => match &self.locked {
-          None => true,
-          Some((_locked_round, locked_value)) => proposal.proposal_hash() == (*locked_value),
-        },
-        /*
-          L28, where we've already checked:
-          - the step
-          - we have the proposal
-          - the metrics bound that we only accumulate proposals from the right proposer and with a
-            syntactically correct `valid_round`
-          - the `ValidRound` contains evidence of sufficient prevotes having existed for this
-            round, and block, and was already verified
-          leaving this with nothing further to check in order to correspond to this line.
-        */
-        Some(round_number) => {
-          // L29, where we've already checked `valid(v)`
-          match &self.locked {
-            Some((locked_round, locked_value)) => {
-              ((*locked_round) <= round_number) || (proposal.proposal_hash() == (*locked_value))
-            }
-            None => true,
+        None => block_validity.is_ok(),
+        // If this value was locked, we assume its temporal validity
+        Some((_locked_round, locked_value)) => proposal.proposal_hash() == (*locked_value),
+      },
+      /*
+        L28, where we've already checked:
+        - the step
+        - we have the proposal
+        - the metrics bound that we only accumulate proposals from the right proposer and with a
+          syntactically correct `valid_round`
+        - the `ValidRound` contains evidence of sufficient prevotes having existed for this
+          round, and block, and was already verified
+        leaving this with nothing further to check in order to correspond to this line.
+      */
+      Some(round_number) => {
+        // L29, where we assume the block's validity due to the valid round certificate
+        match &self.locked {
+          Some((locked_round, locked_value)) => {
+            ((*locked_round) <= round_number) || (proposal.proposal_hash() == (*locked_value))
           }
+          /*
+            Because this block has a valid round certificate:
+            - A supermajority of validators believed this block to be valid
+            - A supermajority of validators _may_ have locked this block
+            So we vote for it _even if we believe it to be temporally invalid_.
+
+            This is functionally equivalent to our stated policy, we won't vote for, but will
+            commit to, a block a supermajority of validators voted for. While this is technically
+            a "vote" of our own, the relevant vote has already occurred, and this is primarily
+            just a procedural step necessary to form a commit.
+          */
+          None => true,
         }
-      }))
+      }
+    }))
     .then(|| proposal.proposal_hash());
 
     // L24-L27, L30-L33
