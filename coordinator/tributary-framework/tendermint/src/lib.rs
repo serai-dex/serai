@@ -184,12 +184,23 @@ mod tendermint {
           We do this first in case the process was interrupted while prior attempting a commit.
         */
         if progress {
-          let messages =
-            self.state.attempt_commit::<N>(&mut self.blockchain, &self.signer, &mut self.db).await;
+          /*
+            We attempt to form commits for as long as we do form commits. This is signified by the
+            block number changing after attempting to form a commit.
+          */
+          let mut block_number;
+          while {
+            block_number = self.state.block_number();
 
-          for message in messages {
-            self.network.broadcast(self.blockchain.genesis(), message).await;
-          }
+            let messages =
+              self.state.attempt_commit::<N>(&mut self.blockchain, &self.signer, &mut self.db).await;
+
+            for message in messages {
+              self.network.broadcast(self.blockchain.genesis(), message).await;
+            }
+
+            self.state.block_number() != block_number
+          } {}
         }
         // Assume we made progress on each iteration of this loop
         progress = true;
