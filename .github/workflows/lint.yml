@@ -300,7 +300,7 @@ jobs:
             cargo +"${LOCKFILE_VERSION}" update -p fs-err@2.0.0 --precise 2.4.0 || true
 
             # Check this lockfile is actually adequate to build this crate
-            cargo +1.99.1 check
+            cargo +1.100 check
 
             # We then find the actual `rust-version` using `cargo-msrv` (again stripping to just the
             # major and minor version).

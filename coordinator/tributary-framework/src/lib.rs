@@ -380,8 +380,7 @@ impl<
             Err(::tendermint::ProcessTerminated)
           }
         } {
-          // TODO: Never
-          core::future::pending::<()>().await;
+          core::future::pending::<!>().await;
         }
       }
     };

@@ -166,15 +166,6 @@ impl<
   }
 }
 
-// TODO: Remove with Rust 1.100
-trait FnOutput {
-  type Output;
-}
-impl<R> FnOutput for fn() -> R {
-  type Output = R;
-}
-type Never = <fn() -> ! as FnOutput>::Output;
-
 type RWaB<T> = ReadWriteAsBorsh<T>;
 impl<
   D: Send + Db,
@@ -244,9 +235,7 @@ impl<
 
     #[expect(clippy::async_yields_async)]
     async move {
-      let Some(next_block_number) = next_block_number else {
-        core::future::pending::<Never>().await
-      };
+      let Some(next_block_number) = next_block_number else { core::future::pending::<!>().await };
 
       /*
         The Tendermint consensus process and the Tributary blockchain use independent transactions.
@@ -281,7 +270,7 @@ impl<
               }
             } else {
               // If the amount of time in the future isn't representable, stall
-              core::future::pending::<Never>().await;
+              core::future::pending::<!>().await;
             }
           }
 
@@ -347,7 +336,7 @@ impl<
           BlockError::Ephemeral(EphemeralError::UnexpectedParent),
         ) => {
           // Because an invalid block was added, stall the consensus process/block production
-          core::future::pending::<Never>().await
+          core::future::pending::<!>().await
         }
       }
     }

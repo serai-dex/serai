@@ -1,5 +1,6 @@
 #![no_std]
 
+pub use zalloc;
 pub use std_shims;
 pub use serai_db;
 

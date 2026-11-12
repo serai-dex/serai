@@ -17,6 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+zalloc = { path = "../../common/zalloc", default-features = false }
 std-shims = { path = "../../common/std-shims", default-features = false }
 serai-db = { path = "../../common/db", default-features = false }
 
@@ -56,6 +57,7 @@ serai-client-ethereum = { path = "../../substrate/client/ethereum", default-feat
 
 [features]
 alloc = [
+  "zalloc/alloc",
   "std-shims/alloc",
 
   "serai-db/alloc",

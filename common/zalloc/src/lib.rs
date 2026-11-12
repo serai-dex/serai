@@ -4,8 +4,9 @@
 #![no_std]
 
 use core::{
+  ptr::NonNull,
+  alloc::{Layout, AllocError, Allocator, GlobalAlloc},
   slice,
-  alloc::{Layout, GlobalAlloc},
 };
 
 use zeroize::Zeroize as _;
@@ -24,6 +25,21 @@ impl<A> ZeroizingAlloc<A> {
   }
 }
 
+unsafe impl<A: Allocator> Allocator for ZeroizingAlloc<A> {
+  fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+    self.0.allocate(layout)
+  }
+
+  unsafe fn deallocate(&self, mut ptr: NonNull<u8>, layout: Layout) {
+    slice::from_raw_parts_mut(ptr.as_mut(), layout.size()).zeroize();
+    self.0.deallocate(ptr, layout);
+  }
+
+  fn allocate_zeroed(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+    self.0.allocate_zeroed(layout)
+  }
+}
+
 unsafe impl<A: GlobalAlloc> GlobalAlloc for ZeroizingAlloc<A> {
   unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
     self.0.alloc(layout)
@@ -33,21 +49,8 @@ unsafe impl<A: GlobalAlloc> GlobalAlloc for ZeroizingAlloc<A> {
     slice::from_raw_parts_mut(ptr, layout.size()).zeroize();
     self.0.dealloc(ptr, layout);
   }
-}
 
-#[cfg(all(zalloc_rustc_nightly, feature = "allocator"))]
-use core::{
-  ptr::NonNull,
-  alloc::{AllocError, Allocator},
-};
-#[cfg(all(zalloc_rustc_nightly, feature = "allocator"))]
-unsafe impl<A: Allocator> Allocator for ZeroizingAlloc<A> {
-  fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
-    self.0.allocate(layout)
-  }
-
-  unsafe fn deallocate(&self, mut ptr: NonNull<u8>, layout: Layout) {
-    slice::from_raw_parts_mut(ptr.as_mut(), layout.size()).zeroize();
-    self.0.deallocate(ptr, layout);
+  unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+    self.0.alloc_zeroed(layout)
   }
 }
