@@ -1,7 +1,7 @@
 use core::time::Duration;
 use std::time::{Instant, SystemTime};
 
-use crate::{SignatureScheme, ValidRound};
+use crate::{SignatureScheme, ValidRound, CommitFor};
 
 use super::{Borshy, BorshyBlockchain};
 
@@ -22,6 +22,8 @@ serai_db::schema!(TendermintState {
 
   OurLatestPrevotes: <B: BorshyBlockchain>(genesis: &[u8]) -> [Option<crate::MessageFor<B>>; 2],
   OurLatestPrecommit: <B: BorshyBlockchain>(genesis: &[u8]) -> crate::MessageFor<B>,
+
+  CommitInProgress: <B: BorshyBlockchain>(genesis: &[u8]) -> (B::Block, CommitFor<B>),
 });
 
 pub(super) fn timeout_in_ms_since_epoch(timeout: Duration) -> u64 {

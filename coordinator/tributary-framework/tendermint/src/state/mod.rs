@@ -7,7 +7,7 @@ use alloc::{boxed::Box, sync::Arc};
 use std::time::Instant;
 
 use borsh::{BorshSerialize, BorshDeserialize};
-use serai_db::Transaction;
+use serai_db::{Db, Transaction};
 
 use crate::{
   SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, CommitFor, InvalidBlock,
@@ -906,7 +906,7 @@ impl<B: BorshyBlockchain> State<B> {
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >
      ),
-    txn: &mut impl Transaction,
+    db: &mut impl Db,
     proposal: B::BlockProposal,
   ) -> (Self, RoundMessages<B>) {
     let genesis = blockchain.genesis();
@@ -915,7 +915,7 @@ impl<B: BorshyBlockchain> State<B> {
     let (init, mut state) = {
       let validator_set = blockchain.validator_set();
 
-      let getter = &*txn;
+      let getter = &*db;
 
       let (init, block_number, round_number, step) = {
         let block_number = db::BlockNumber::get(getter, genesis);
@@ -984,12 +984,23 @@ impl<B: BorshyBlockchain> State<B> {
       (init, state)
     };
 
-    let messages = if init {
-      db::BlockNumber::set(txn, genesis, &BlockNumber::ONE);
-      state.start_round::<N>(blockchain, signer, txn, state.round_number).await
+    let mut messages = if init {
+      let mut txn = db.txn();
+      db::BlockNumber::set(&mut txn, genesis, &BlockNumber::ONE);
+      let messages = state.start_round::<N>(blockchain, signer, &mut txn, state.round_number).await;
+      txn.commit();
+      messages
     } else {
       RoundMessages::NONE
     };
+
+    // If we had a commit in progress which was interrupted, complete it now
+    let genesis = blockchain.genesis();
+    if let Some((block, commit)) = db::CommitInProgress::<B>::get(db, genesis.as_ref()) &&
+      (commit.block_number > state.block_number)
+    {
+      messages = state.commit::<N>(blockchain, signer, db, block, commit).await;
+    }
 
     (state, messages)
   }
@@ -1276,7 +1287,7 @@ impl<B: BorshyBlockchain> State<B> {
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >
      ),
-    txn: &mut impl Transaction,
+    db: &mut impl Db,
     block: B::Block,
     commit: CommitFor<B>,
   ) -> RoundMessages<B> {
@@ -1284,6 +1295,19 @@ impl<B: BorshyBlockchain> State<B> {
       // Stall if the block number is at the maximum, as we can't represent further blocks
       return RoundMessages::NONE;
     };
+
+    // Write this commit as in progress, so if we reboot, it's handled on reboot
+    {
+      let mut txn = db.txn();
+      db::CommitInProgress::<B>::set(
+        &mut txn,
+        blockchain.genesis().as_ref(),
+        &(block.clone(), commit.clone()),
+      );
+      txn.commit();
+    }
+
+    let mut txn = db.txn();
 
     {
       let Self {
@@ -1318,7 +1342,7 @@ impl<B: BorshyBlockchain> State<B> {
       let genesis = genesis.as_ref();
 
       *block_number = BlockNumber(next_block_number);
-      db::BlockNumber::set(txn, genesis, block_number);
+      db::BlockNumber::set(&mut txn, genesis, block_number);
       let _ = observed_block_number_ref.fetch_max(u64::from(*block_number), Ordering::SeqCst);
       block_number_ref.store(u64::from(*block_number), Ordering::SeqCst);
 
@@ -1334,20 +1358,22 @@ impl<B: BorshyBlockchain> State<B> {
       *rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(*round_number);
 
       *valid = None;
-      db::Valid::<B>::del(txn, genesis);
+      db::Valid::<B>::del(&mut txn, genesis);
       *locked = None;
-      db::Locked::<<B::Block as Block>::Hash>::del(txn, genesis);
+      db::Locked::<<B::Block as Block>::Hash>::del(&mut txn, genesis);
 
       round_messages.reset();
 
       // We expect the commit to be sent around to convince validator's of the current _block_
       *our_latest_prevotes = [const { None }; 2];
-      db::OurLatestPrevotes::<B>::del(txn, genesis);
+      db::OurLatestPrevotes::<B>::del(&mut txn, genesis);
       let _ = our_latest_precommit.take();
-      db::OurLatestPrecommit::<B>::del(txn, genesis);
+      db::OurLatestPrecommit::<B>::del(&mut txn, genesis);
     }
 
-    self.start_round::<N>(blockchain, signer, txn, RoundNumber::ONE).await
+    let messages = self.start_round::<N>(blockchain, signer, &mut txn, RoundNumber::ONE).await;
+    txn.commit();
+    messages
   }
 
   /// Attempt to create a commit.
@@ -1371,12 +1397,12 @@ impl<B: BorshyBlockchain> State<B> {
       Signature = <B::SignatureScheme as SignatureScheme>::Signature,
     >
      ),
-    txn: &mut impl Transaction,
+    db: &mut impl Db,
   ) -> RoundMessages<B> {
     let Some((block, commit)) = self.round_metrics.commit(blockchain) else {
       return RoundMessages::NONE;
     };
 
-    self.commit::<N>(blockchain, signer, txn, block, commit).await
+    self.commit::<N>(blockchain, signer, db, block, commit).await
   }
 }

@@ -184,10 +184,8 @@ mod tendermint {
           We do this first in case the process was interrupted while prior attempting a commit.
         */
         if progress {
-          let mut txn = self.db.txn();
           let messages =
-            self.state.attempt_commit::<N>(&mut self.blockchain, &self.signer, &mut txn).await;
-          txn.commit();
+            self.state.attempt_commit::<N>(&mut self.blockchain, &self.signer, &mut self.db).await;
 
           for message in messages {
             self.network.broadcast(self.blockchain.genesis(), message).await;
@@ -233,12 +231,10 @@ mod tendermint {
               continue;
             }
 
-            let mut txn = self.db.txn();
             let messages = self
               .state
-              .commit::<N>(&mut self.blockchain, &self.signer, &mut txn, block, commit)
+              .commit::<N>(&mut self.blockchain, &self.signer, &mut self.db, block, commit)
               .await;
-            txn.commit();
 
             for message in messages {
               self.network.broadcast(self.blockchain.genesis(), message).await;
@@ -361,9 +357,7 @@ mod tendermint {
       let (message_send, message_recv) =
         async_channel::bounded(2 * blockchain.validator_set().validators().into_iter().count());
 
-      let mut txn = db.txn();
-      let (state, messages) = State::new::<N>(&mut blockchain, &signer, &mut txn, proposal).await;
-      txn.commit();
+      let (state, messages) = State::new::<N>(&mut blockchain, &signer, &mut db, proposal).await;
 
       for message in messages {
         network.broadcast(blockchain.genesis(), message).await;
