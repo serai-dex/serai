@@ -39,6 +39,7 @@ pub use transaction::Transaction;
 /// The functionality for blocks.
 pub mod block;
 pub use block::Block;
+use block::BlockError;
 
 pub mod mempool;
 use mempool::{MempoolError, MempoolNetwork, Mempool, MempoolConsumer};
@@ -167,9 +168,15 @@ pub enum TributaryError {
 /// An error when syncing a block.
 pub enum SyncError {
   /// The block was syntactically invalid.
-  InvalidBlock(block::SyntacticError),
+  InvalidBlock(BlockError),
   /// The commit was invalid.
   InvalidCommit,
+}
+
+impl<E: Into<BlockError>> From<E> for SyncError {
+  fn from(error: E) -> Self {
+    Self::InvalidBlock(error.into())
+  }
 }
 
 /// A handle to an instanced Tributary.
@@ -497,10 +504,15 @@ impl<D: Db, T: Transaction> TributaryHandle<D, T> {
   /// This is intended to be used when a Tributary is behind, unable to simply observe blocks as
   /// they're produced by the consensus process.
   ///
-  /// The block's _syntax_ and the commit is immediately validated. Therefore, this block is either
-  /// valid, semantically invalid, or ephemerally invalid. Assuming honest behavior, this block
-  /// will be semantically valid (due to the commit by a supermajority of validators finalizing
-  /// it) though. This assumption allows simplifying that this function either returns an error or:
+  /// The block's _syntax_ and the commit are immediately validated. Additionally, the slashes are
+  /// validated _independently of the blockchain's state_. Therefore, this block is either:
+  /// - Valid
+  /// - Semantically invalid
+  /// - Ephemerally invalid
+  ///
+  /// Assuming honest behavior, this block will be semantically valid (due to the commit by a
+  /// supermajority of validators finalizing it) though. This assumption allows simplifying that
+  /// this function either returns an error or:
   /// 1) The block was already added
   /// 2) The block is not ready to be added (due to missing parent blocks)
   /// 3) The block will be added
@@ -516,7 +528,13 @@ impl<D: Db, T: Transaction> TributaryHandle<D, T> {
     if !commit.verify(&self.validator_set, &self.signature_scheme, &self.genesis, block.hash()) {
       Err(SyncError::InvalidCommit)?;
     }
-    let () = block.verify_syntax(self.genesis).map_err(SyncError::InvalidBlock)?;
+
+    let () = block.verify_syntax(self.genesis)?;
+    for slash in block.slashes() {
+      slash
+        .verify(self.genesis, &self.validator_set, &self.signature_scheme)
+        .map_err(|_| block::SemanticError::InvalidSlash { validator: *slash.validator() })?;
+    }
 
     /*
       Queueing into an open channel (with no observability into when the queue is consumed from) is
