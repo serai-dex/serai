@@ -282,9 +282,17 @@ unused_macro_rules = "warn"
 
 [workspace.lints.cargo]
 manual_readme = "warn"
+missing_lints_inheritance = "warn"
 non_kebab_case_bins = "warn"
 non_kebab_case_features = "warn"
 non_kebab_case_packages = "warn"
+redundant_homepage = "warn"
+redundant_readme = "warn"
+unknown_lints = "warn"
+unused_dependencies = "warn"
+unused_workspace_dependencies = "warn"
+unused_workspace_package_fields = "warn"
+# TODO: Lint for implicit features?
 
 [workspace.lints.clippy]
 # Manually verified with a GitHub workflow
@@ -357,19 +365,3 @@ suspicious_xor_used_as_pow = "warn"
 unnecessary_self_imports = "warn"
 unused_trait_names = "warn"
 wildcard_enum_match_arm = "warn"
-
-# TODO: https://github.com/rust-lang/rust-clippy/pull/17968
-new_instead_of_clear = "allow"
-
-# TODO: `-Zcargo-lints`: [workspace.lints.cargo]
-# TODO: `-Zcargo-lints`: missing_lints_inheritance = "warn"
-# TODO: `-Zcargo-lints`: non_kebab_case_bins = "warn"
-# TODO: `-Zcargo-lints`: non_kebab_case_features = "warn"
-# TODO: `-Zcargo-lints`: non_kebab_case_packages = "warn"
-# TODO: `-Zcargo-lints`: redundant_homepage = "warn"
-# TODO: `-Zcargo-lints`: redundant_readme = "warn"
-# TODO: `-Zcargo-lints`: unknown_lints = "warn"
-# TODO: `-Zcargo-lints`: unused_dependencies = "warn"
-# TODO: `-Zcargo-lints`: unused_workspace_dependencies = "warn"
-# TODO: `-Zcargo-lints`: unused_workspace_package_fields = "warn"
-# TODO: Lint for implicit features?
