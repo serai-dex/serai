@@ -46,7 +46,7 @@ impl<B: ::tendermint::Block>
 ///
 /// This returns the Tributary (kept alive so the Tendermint machine keeps running) and the
 /// validator's signing key.
-async fn make_tributary(
+fn make_tributary(
   db: MemDb,
   weights: &[u16],
 ) -> (NewSetInformation, TributaryHandle<MemDb, Transaction>) {
@@ -72,7 +72,6 @@ async fn make_tributary(
     key.unwrap(),
     100,
   )
-  .await
   .expect("Tributary::new returned `Err(_)`?");
   tokio::spawn(tributary);
   (set_info, tributary_handle)
@@ -83,7 +82,7 @@ async fn new_scan_tributary_task() {
   // Single validator with weight > 1
   {
     let db = MemDb::new();
-    let (set_info, tributary) = make_tributary(db.clone(), &[3]).await;
+    let (set_info, tributary) = make_tributary(db.clone(), &[3]);
 
     let task = ScanTributaryTask::<MemDb>::new(db.clone(), set_info.clone(), tributary);
 
@@ -98,7 +97,7 @@ async fn new_scan_tributary_task() {
   // Multiple validators with different weights
   {
     let db = MemDb::new();
-    let (set_info, tributary) = make_tributary(db.clone(), &[1, 2, 4]).await;
+    let (set_info, tributary) = make_tributary(db.clone(), &[1, 2, 4]);
     let task = ScanTributaryTask::<MemDb>::new(db.clone(), set_info.clone(), tributary);
 
     assert_eq!(task.set.set, set_info.set);
@@ -158,7 +157,7 @@ async fn scan_tributary_task_run_iteration() {
   // No blocks committed yet: returns false
   {
     let db = MemDb::new();
-    let (set_info, tributary) = make_tributary(db.clone(), &[1]).await;
+    let (set_info, tributary) = make_tributary(db.clone(), &[1]);
 
     let mut task = ScanTributaryTask::<MemDb>::new(db, set_info, tributary);
     TaskTest::task_runs_once_and_matches_progress(&mut task, false).await;
@@ -166,7 +165,7 @@ async fn scan_tributary_task_run_iteration() {
 
   {
     let mut db = MemDb::new();
-    let (set_info, tributary) = make_tributary(db.clone(), &[1]).await;
+    let (set_info, tributary) = make_tributary(db.clone(), &[1]);
     let genesis = {
       let genesis_16 = set_info.tributary_genesis();
       let mut genesis = [0; 32];
@@ -223,7 +222,7 @@ async fn scan_tributary_task_run_iteration() {
   // Errors when locally provided txs are missing
   {
     let mut db = MemDb::new();
-    let (set_info, tributary) = make_tributary(db.clone(), &[1]).await;
+    let (set_info, tributary) = make_tributary(db.clone(), &[1]);
     let genesis = {
       let genesis_16 = set_info.tributary_genesis();
       let mut genesis = [0; 32];

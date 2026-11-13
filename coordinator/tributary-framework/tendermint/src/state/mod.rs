@@ -159,6 +159,18 @@ pub(super) struct State<B: Blockchain> {
   our_latest_precommit: Option<MessageFor<B>>,
 }
 
+/// A struct for the asynchronous work required to obtain a usable [`State`].
+pub(super) struct StateFuture<B: Blockchain> {
+  first_init: bool,
+  state: State<B>,
+}
+
+impl<B: Blockchain> AsRef<State<B>> for StateFuture<B> {
+  fn as_ref(&self) -> &State<B> {
+    &self.state
+  }
+}
+
 fn new_rebroadcast_timeout<
   B: Blockchain,
   N: Network<
@@ -890,7 +902,8 @@ impl<B: BorshyBlockchain> State<B> {
   }
 
   // L01-L10
-  pub(super) async fn new<
+  #[expect(clippy::new_ret_no_self)]
+  pub(super) fn new<
     N: Network<
         B::Validator,
         <B::SignatureScheme as SignatureScheme>::Signature,
@@ -898,6 +911,89 @@ impl<B: BorshyBlockchain> State<B> {
         B::Block,
       >,
   >(
+    blockchain: &mut B,
+    db: &mut impl Db,
+    proposal: B::BlockProposal,
+  ) -> StateFuture<B> {
+    let genesis = blockchain.genesis();
+    let genesis = genesis.as_ref();
+
+    let validator_set = blockchain.validator_set();
+
+    let getter = &*db;
+
+    let (first_init, block_number, round_number, step) = {
+      let block_number = db::BlockNumber::get(getter, genesis);
+      let round_number = db::RoundNumber::get(getter, genesis);
+      let step = db::Step::get(getter, genesis);
+
+      // All of these should be `None` upon initialization or `Some` otherwise
+      debug_assert_eq!(block_number.is_some(), round_number.is_some());
+      debug_assert_eq!(block_number.is_some(), step.is_some());
+
+      let first_init = block_number.is_none();
+      // We consider the genesis block, a constant outside of consensus, as block #0
+      let block_number = block_number.unwrap_or(BlockNumber::ONE);
+      // As [`RoundNumber`] documents, we count from `1`, not `0`
+      let round_number = round_number.unwrap_or(RoundNumber::ONE);
+      (first_init, block_number, round_number, step.unwrap_or(Step::Propose))
+    };
+    let block_number_ref = Arc::new(AtomicU64::new(u64::from(block_number)));
+
+    let observed_block_number_ref = Arc::new(AtomicU64::new(u64::from(block_number)));
+
+    let validators = validator_set.validators().into_iter().count();
+    let state = Self {
+      block_number,
+      block_number_ref,
+
+      // This isn't DB backed as it's observational and will repopulate based on active messages
+      observed_block_numbers: ObservedBlockNumbers::new(validators),
+      observed_block_number_ref,
+
+      proposal: BlockProposal::Pending { future: proposal },
+
+      round_number,
+      pending_step_timeout: db::PendingStepTimeout::get(getter, genesis)
+        .map(db::timeout_from_ms_since_epoch),
+      pending_precommit_timeout: db::PendingPrecommitTimeout::get(getter, genesis)
+        .map(db::timeout_from_ms_since_epoch),
+      step,
+      rebroadcast_timeout: new_rebroadcast_timeout::<B, N>(round_number),
+
+      valid: db::Valid::<B>::get(getter, genesis),
+      locked: db::Locked::get(getter, genesis),
+
+      round_metrics: RoundMetrics::new(genesis, validator_set, getter, block_number, round_number),
+      block_validity: BlockValidityCache::<B>::with_capacity(validators),
+
+      /*
+        We do not save or reload `round_messages` as it's solely used for detecting equivocations
+        (not necessary) and for determining when to jump ahead to a future round. We expect our
+        fellow validators to rebroadcast their latest message however, meaning on reboot, we just
+        have to wait for them to do so for us to repopulate this (and jump ahead as desired).
+      */
+      round_messages: TrackedRounds::new(validators),
+
+      our_latest_prevotes: db::OurLatestPrevotes::<B>::get(getter, genesis)
+        .unwrap_or([const { None }; 2]),
+      our_latest_precommit: db::OurLatestPrecommit::<B>::get(getter, genesis),
+    };
+
+    StateFuture { first_init, state }
+  }
+}
+
+impl<B: BorshyBlockchain> StateFuture<B> {
+  pub(super) async fn finish<
+    N: Network<
+        B::Validator,
+        <B::SignatureScheme as SignatureScheme>::Signature,
+        <B::SignatureScheme as SignatureScheme>::AggregateSignature,
+        B::Block,
+      >,
+  >(
+    self,
     blockchain: &mut B,
     signer: &(
        impl ?Sized
@@ -907,86 +1003,12 @@ impl<B: BorshyBlockchain> State<B> {
     >
      ),
     db: &mut impl Db,
-    proposal: B::BlockProposal,
-  ) -> (Self, RoundMessages<B>) {
-    let genesis = blockchain.genesis();
-    let genesis = genesis.as_ref();
+  ) -> (State<B>, RoundMessages<B>) {
+    let Self { first_init, mut state } = self;
 
-    let (init, mut state) = {
-      let validator_set = blockchain.validator_set();
-
-      let getter = &*db;
-
-      let (init, block_number, round_number, step) = {
-        let block_number = db::BlockNumber::get(getter, genesis);
-        let round_number = db::RoundNumber::get(getter, genesis);
-        let step = db::Step::get(getter, genesis);
-
-        // All of these should be `None` upon initialization or `Some` otherwise
-        debug_assert_eq!(block_number.is_some(), round_number.is_some());
-        debug_assert_eq!(block_number.is_some(), step.is_some());
-
-        let init = block_number.is_none();
-        // We consider the genesis block, a constant outside of consensus, as block #0
-        let block_number = block_number.unwrap_or(BlockNumber::ONE);
-        // As [`RoundNumber`] documents, we count from `1`, not `0`
-        let round_number = round_number.unwrap_or(RoundNumber::ONE);
-        (init, block_number, round_number, step.unwrap_or(Step::Propose))
-      };
-      let block_number_ref = Arc::new(AtomicU64::new(u64::from(block_number)));
-
-      let observed_block_number_ref = Arc::new(AtomicU64::new(u64::from(block_number)));
-
-      let validators = validator_set.validators().into_iter().count();
-      let state = Self {
-        block_number,
-        block_number_ref,
-
-        // This isn't DB backed as it's observational and will repopulate based on active messages
-        observed_block_numbers: ObservedBlockNumbers::new(validators),
-        observed_block_number_ref,
-
-        proposal: BlockProposal::Pending { future: proposal },
-
-        round_number,
-        pending_step_timeout: db::PendingStepTimeout::get(getter, genesis)
-          .map(db::timeout_from_ms_since_epoch),
-        pending_precommit_timeout: db::PendingPrecommitTimeout::get(getter, genesis)
-          .map(db::timeout_from_ms_since_epoch),
-        step,
-        rebroadcast_timeout: new_rebroadcast_timeout::<B, N>(round_number),
-
-        valid: db::Valid::<B>::get(getter, genesis),
-        locked: db::Locked::get(getter, genesis),
-
-        round_metrics: RoundMetrics::new(
-          genesis,
-          validator_set,
-          getter,
-          block_number,
-          round_number,
-        ),
-        block_validity: BlockValidityCache::<B>::with_capacity(validators),
-
-        /*
-          We do not save or reload `round_messages` as it's solely used for detecting equivocations
-          (not necessary) and for determining when to jump ahead to a future round. We expect our
-          fellow validators to rebroadcast their latest message however, meaning on reboot, we just
-          have to wait for them to do so for us to repopulate this (and jump ahead as desired).
-        */
-        round_messages: TrackedRounds::new(validators),
-
-        our_latest_prevotes: db::OurLatestPrevotes::<B>::get(getter, genesis)
-          .unwrap_or([const { None }; 2]),
-        our_latest_precommit: db::OurLatestPrecommit::<B>::get(getter, genesis),
-      };
-
-      (init, state)
-    };
-
-    let mut messages = if init {
+    let mut messages = if first_init {
       let mut txn = db.txn();
-      db::BlockNumber::set(&mut txn, genesis, &BlockNumber::ONE);
+      db::BlockNumber::set(&mut txn, blockchain.genesis().as_ref(), &BlockNumber::ONE);
       let messages = state.start_round::<N>(blockchain, signer, &mut txn, state.round_number).await;
       txn.commit();
       messages
@@ -1004,7 +1026,9 @@ impl<B: BorshyBlockchain> State<B> {
 
     (state, messages)
   }
+}
 
+impl<B: BorshyBlockchain> State<B> {
   /// React to a message received over the network.
   ///
   /// This returns either an iterator of the messages created in response _or_ an error regarding

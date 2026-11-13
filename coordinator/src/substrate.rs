@@ -157,10 +157,9 @@ impl<P: P2p<Transaction>> ContinuallyRan for SubstrateTask<P> {
           self.message_queue.clone(),
           self.p2p.clone(),
           &self.p2p_add_tributary,
-          new_set,
+          &new_set,
           self.serai_key.clone(),
-        )
-        .await;
+        );
 
         made_progress = true;
       }

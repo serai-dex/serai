@@ -459,10 +459,9 @@ async fn main() {
       message_queue.clone(),
       p2p.clone(),
       &p2p_add_tributary_send,
-      tributary,
+      &tributary,
       serai_key.clone(),
-    )
-    .await;
+    );
   }
 
   // Handle the events from the Substrate scanner

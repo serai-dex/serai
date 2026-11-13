@@ -461,7 +461,7 @@ async fn scan_on_new_block<
 /// - Spawn the ConfirmDkgTask
 /// - Spawn the SignSlashReportTask
 /// - Iterate the scan task whenever a new block occurs (not just on the standard interval)
-pub(crate) async fn spawn_tributary<P: P2p<Transaction>>(
+pub(crate) fn spawn_tributary<P: P2p<Transaction>>(
   env: &Environment,
   db: Db,
   message_queue: Arc<MessageQueue>,
@@ -470,7 +470,7 @@ pub(crate) async fn spawn_tributary<P: P2p<Transaction>>(
     ExternalValidatorSet,
     TributaryHandle<Db, Transaction>,
   )>,
-  set: NewSetInformation,
+  set: &NewSetInformation,
   serai_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
 ) {
   // Don't spawn retired Tributaries
@@ -506,7 +506,6 @@ pub(crate) async fn spawn_tributary<P: P2p<Transaction>>(
     serai_key.clone(),
     MEMPOOL_RATE_LIMIT,
   )
-  .await
   .unwrap();
   // TODO: https://github.com/serai-dex/serai/issues/1257
   for task in tributary_task {

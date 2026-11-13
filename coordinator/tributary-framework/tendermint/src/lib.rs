@@ -8,7 +8,7 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
-use core::{time::Duration, future::Future};
+use core::time::Duration;
 
 mod or;
 use or::*;
@@ -104,7 +104,6 @@ pub trait Network<V: Validator, S: Signature, A: AggregateSignature, B: Block> {
 mod tendermint {
   use core::{
     sync::atomic::{Ordering, AtomicU64},
-    future::Future,
     num::NonZero,
   };
   use alloc::sync::Arc;
@@ -125,14 +124,23 @@ mod tendermint {
 
   use crate::{
     BlockNumber, ValidatorSet as _, SignatureScheme, Block, CommitFor, Blockchain, MessageFor,
-    MessageError, Signer, Network, State, Or,
+    MessageError, Signer, Network, State, StateFuture, Or,
   };
 
   /// The Tendermint process.
   ///
   /// This is expected to drive the underlying blockchain, adding blocks to it as produced by
   /// itself _and as received from an external sync loop_ (which is not implemented here).
-  pub struct Tendermint;
+  pub struct Tendermint<B: Blockchain, S, D, N> {
+    sync: Receiver<(B::Block, CommitFor<B>)>,
+    message: Receiver<MessageFor<B>>,
+
+    state: StateFuture<B>,
+    blockchain: B,
+    signer: S,
+    db: D,
+    network: N,
+  }
 
   /// The handle for the Tendermint process.
   pub struct TendermintHandle<B: Blockchain> {
@@ -142,16 +150,12 @@ mod tendermint {
     message: Sender<MessageFor<B>>,
   }
 
-  struct TendermintProcess<B: Blockchain, S, D, N> {
-    sync: Receiver<(B::Block, CommitFor<B>)>,
-    message: Receiver<MessageFor<B>>,
-
-    state: State<B>,
-    blockchain: B,
-    signer: S,
-    db: D,
-    network: N,
-  }
+  /// The Tendermint process was terminated.
+  ///
+  /// This occurs when the future terminates, either due to being itself dropped or due to its
+  /// handle being dropped.
+  #[derive(Debug)]
+  pub struct ProcessTerminated;
 
   impl<
     B: Blockchain<
@@ -173,9 +177,23 @@ mod tendermint {
         <B::SignatureScheme as SignatureScheme>::AggregateSignature,
         B::Block,
       >,
-  > TendermintProcess<B, S, D, N>
+  > Tendermint<B, S, D, N>
   {
-    async fn run(mut self) {
+    /// Run the Tendermint process.
+    ///
+    /// This future will run until its corresponding channels are closed. The future is NOT
+    /// cancel-safe, and will leave an undefined state in memory if cancelled. It MUST be polled
+    /// until either:
+    /// 1) It is of no further use, and accordingly its state may be undefined
+    /// 2) The process terminates, so that the Tendermint process will be re-initialized from the
+    ///    disk before any further use
+    pub async fn run(mut self) {
+      let (mut state, messages) =
+        self.state.finish::<N>(&mut self.blockchain, &self.signer, &mut self.db).await;
+      for message in messages {
+        self.network.broadcast(self.blockchain.genesis(), message).await;
+      }
+
       let mut progress = true;
       loop {
         /*
@@ -190,18 +208,16 @@ mod tendermint {
           */
           let mut block_number;
           while {
-            block_number = self.state.block_number();
+            block_number = state.block_number();
 
-            let messages = self
-              .state
-              .attempt_commit::<N>(&mut self.blockchain, &self.signer, &mut self.db)
-              .await;
+            let messages =
+              state.attempt_commit::<N>(&mut self.blockchain, &self.signer, &mut self.db).await;
 
             for message in messages {
               self.network.broadcast(self.blockchain.genesis(), message).await;
             }
 
-            self.state.block_number() != block_number
+            state.block_number() != block_number
           } {}
         }
         // Assume we made progress on each iteration of this loop
@@ -223,7 +239,7 @@ mod tendermint {
               We give this priority so if we reload from the database, this is consistently handled
               independent of any messages are available.
             */
-            f2: self.state.timeout::<N, _>(&mut self.blockchain, &self.signer),
+            f2: state.timeout::<N, _>(&mut self.blockchain, &self.signer),
           },
           // Check for a received message, which may advance this consensus process
           f2: self.message.recv(),
@@ -232,7 +248,7 @@ mod tendermint {
 
         match tick {
           crate::or::Either::L(crate::or::Either::L(Ok((block, commit)))) => {
-            if (commit.block_number != self.state.block_number()) ||
+            if (commit.block_number != state.block_number()) ||
               (!commit.verify(
                 self.blockchain.validator_set(),
                 self.blockchain.signature_scheme(),
@@ -244,8 +260,7 @@ mod tendermint {
               continue;
             }
 
-            let messages = self
-              .state
+            let messages = state
               .commit::<N>(&mut self.blockchain, &self.signer, &mut self.db, block, commit)
               .await;
 
@@ -272,11 +287,7 @@ mod tendermint {
           crate::or::Either::R(Ok(message)) => {
             let mut txn = self.db.txn();
             let validator = message.validator;
-            match self
-              .state
-              .message::<N>(&mut self.blockchain, &self.signer, &mut txn, message)
-              .await
-            {
+            match state.message::<N>(&mut self.blockchain, &self.signer, &mut txn, message).await {
               Ok(messages) => {
                 txn.commit();
                 for message in messages {
@@ -307,43 +318,19 @@ mod tendermint {
         }
       }
     }
-  }
 
-  /// The Tendermint process was terminated.
-  ///
-  /// This occurs when the future terminates, either due to being itself dropped or due to its
-  /// handle being dropped.
-  #[derive(Debug)]
-  pub struct ProcessTerminated;
-
-  impl Tendermint {
-    async fn internal<
-      B: Blockchain<
-          Validator: BorshSerialize + BorshDeserialize,
-          SignatureScheme: SignatureScheme<
-            Signature: BorshSerialize + BorshDeserialize,
-            AggregateSignature: BorshSerialize + BorshDeserialize,
-          >,
-          Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
-        >,
-      S: Signer<
-          Validator = B::Validator,
-          Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-        >,
-      D: Db,
-      N: Network<
-          B::Validator,
-          <B::SignatureScheme as SignatureScheme>::Signature,
-          <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-          B::Block,
-        >,
-    >(
+    /// Initialize the Tendermint process.
+    ///
+    /// This MAY exhibit undefined behavior if the `signer` is not consistent across
+    /// instantiations, or if multiple instances with the same `genesis` value are instanced at
+    /// once.
+    pub fn process(
       mut blockchain: B,
       signer: S,
       mut db: D,
-      mut network: N,
+      network: N,
       proposal: B::BlockProposal,
-    ) -> (TendermintHandle<B>, TendermintProcess<B, S, D, N>) {
+    ) -> (TendermintHandle<B>, Self) {
       // Sync blocks with a capacity of the amount of blocks per 5 minutes
       let (sync_send, sync_recv) = async_channel::bounded({
         use core::time::Duration;
@@ -370,126 +357,17 @@ mod tendermint {
       let (message_send, message_recv) =
         async_channel::bounded(2 * blockchain.validator_set().validators().into_iter().count());
 
-      let (state, messages) = State::new::<N>(&mut blockchain, &signer, &mut db, proposal).await;
-
-      for message in messages {
-        network.broadcast(blockchain.genesis(), message).await;
-      }
+      let state = State::new::<N>(&mut blockchain, &mut db, proposal);
 
       (
         TendermintHandle {
-          block_number: state.block_number_ref(),
-          observed_block_number: state.observed_block_number_ref(),
+          block_number: state.as_ref().block_number_ref(),
+          observed_block_number: state.as_ref().observed_block_number_ref(),
           sync: sync_send,
           message: message_send,
         },
-        (TendermintProcess {
-          sync: sync_recv,
-          message: message_recv,
-
-          state,
-          blockchain,
-          signer,
-          db,
-          network,
-        }),
+        (Self { sync: sync_recv, message: message_recv, state, blockchain, signer, db, network }),
       )
-    }
-
-    /// Initialize the Tendermint process.
-    ///
-    /// The returned future will run until its corresponding channels are closed. The future is NOT
-    /// cancel-safe, and will leave an undefined state in memory if cancelled. It MUST be polled
-    /// until either:
-    /// 1) It is of no further use, and accordingly its state may be undefined
-    /// 2) The process terminates, so that the Tendermint process will be re-initialized from the
-    ///    disk before any further use
-    ///
-    /// This MAY exhibit undefined behavior if the `signer` is not consistent across instances, or
-    /// if multiple instances with the same `genesis` value are spawned at once.
-    pub fn process<
-      B: Send
-        + Sync
-        + Blockchain<
-          Validator: Send + Sync + BorshSerialize + BorshDeserialize,
-          ValidatorSet: Sync,
-          SignatureScheme: SignatureScheme<
-            Signature: Send + BorshSerialize + BorshDeserialize,
-            AggregateSignature: Send + BorshSerialize + BorshDeserialize,
-          >,
-          Genesis: Sync,
-          Block: Send
-                   + Sync
-                   + BorshSerialize
-                   + BorshDeserialize
-                   + Block<Hash: Send + BorshSerialize + BorshDeserialize>,
-          BlockProposal: Send,
-        >,
-      S: Send
-        + Sync
-        + Signer<
-          Validator = B::Validator,
-          Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-          SignFuture: Send,
-        >,
-      D: Send + for<'db> Db<Transaction<'db>: Send>,
-      N: Send
-        + Network<
-          B::Validator,
-          <B::SignatureScheme as SignatureScheme>::Signature,
-          <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-          B::Block,
-          Sleep: Send,
-        >,
-    >(
-      blockchain: B,
-      signer: S,
-      db: D,
-      network: N,
-      proposal: B::BlockProposal,
-    ) -> impl Send + Future<Output = (TendermintHandle<B>, impl Send + Future<Output = ()>)> {
-      async move {
-        let (handle, process) = Self::internal(blockchain, signer, db, network, proposal).await;
-        (handle, process.run())
-      }
-    }
-
-    /// A variant of [`Tendermint::process`] which supports `!Send`, `!Sync` arguments.
-    ///
-    /// This is intended to enable support for single-threaded runtimes which do not require such
-    /// bounds.
-    #[expect(clippy::manual_async_fn)]
-    pub fn process_single_threaded<
-      B: Blockchain<
-          Validator: BorshSerialize + BorshDeserialize,
-          SignatureScheme: SignatureScheme<
-            Signature: BorshSerialize + BorshDeserialize,
-            AggregateSignature: BorshSerialize + BorshDeserialize,
-          >,
-          Block: BorshSerialize + BorshDeserialize + Block<Hash: BorshSerialize + BorshDeserialize>,
-        >,
-      S: Signer<
-          Validator = B::Validator,
-          Signature = <B::SignatureScheme as SignatureScheme>::Signature,
-        >,
-      D: Db,
-      N: Network<
-          B::Validator,
-          <B::SignatureScheme as SignatureScheme>::Signature,
-          <B::SignatureScheme as SignatureScheme>::AggregateSignature,
-          B::Block,
-        >,
-    >(
-      blockchain: B,
-      signer: S,
-      db: D,
-      network: N,
-      proposal: B::BlockProposal,
-    ) -> impl Future<Output = (TendermintHandle<B>, impl Future<Output = ()>)> {
-      async move {
-        let (handle, process) = Self::internal(blockchain, signer, db, network, proposal).await;
-        (handle, process.run())
-      }
     }
   }
 

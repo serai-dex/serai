@@ -263,9 +263,8 @@ impl TestNetwork {
         MemDb::new(),
         TestNetwork { validator_set: validator_set.clone(), all_validators: arc.clone() },
         core::future::ready(TestBlock { id: 1u32.to_le_bytes(), valid: true }),
-      )
-      .await;
-      tokio::spawn(process);
+      );
+      tokio::spawn(process.run());
       arc.write().await.push(handle);
     }
   }

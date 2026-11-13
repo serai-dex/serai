@@ -232,8 +232,8 @@ impl<
   /// `mempool_rate_limit` is the maximum amount of transactions each validator may have pending
   /// within the mempool. It MAY be locally configured independently of other validators. It does
   /// not apply to provided nor unsigned transactions which are privileged within the Tributary.
-  #[expect(clippy::too_many_arguments)]
-  pub async fn new<
+  #[expect(clippy::too_many_arguments, clippy::type_complexity)]
+  pub fn new<
     N: Send
       + Sync
       + Network<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<T>>, Sleep: Send>,
@@ -354,8 +354,7 @@ impl<
           db.clone(),
           tendermint_network,
           proposal,
-        )
-        .await,
+        ),
       )
     };
 
@@ -394,7 +393,7 @@ impl<
 
     Ok((
       Tributary {
-        tendermint,
+        tendermint: tendermint.run(),
         mempool: MempoolFuture { db: db.clone(), mempool, mempool_recv },
         inner_loop,
       },
