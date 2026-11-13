@@ -4,9 +4,13 @@ use std_shims::io;
 
 use zeroize::Zeroize;
 pub use ciphersuite::group;
-use group::{*, ff::*, prime::PrimeGroup};
+use group::{
+  ff::{PrimeField, PrimeFieldBits},
+  Group, GroupOps,
+  prime::PrimeGroup,
+};
 
-pub trait Ciphersuite: 'static + Send + Sync {
+pub trait Ciphersuite {
   type F: PrimeField + PrimeFieldBits + Zeroize;
   type G: Group<Scalar = Self::F> + GroupOps + PrimeGroup + Zeroize;
   #[cfg(feature = "alloc")]

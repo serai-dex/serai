@@ -27,19 +27,19 @@ impl WriteAddendum for () {
 }
 
 /// Trait alias for the requirements to be used as an addendum.
-pub trait Addendum: Send + Sync + Clone + WriteAddendum {}
-impl<A: Send + Sync + Clone + WriteAddendum> Addendum for A {}
+pub trait Addendum: Clone + WriteAddendum {}
+impl<A: Clone + WriteAddendum> Addendum for A {}
 
 /// Algorithm trait usable by the FROST signing machine to produce signatures.
 ///
 /// Implementations MAY expect to only be called by [`AlgorithmMachine`]
 /// (and associated structures) and MAY exhibit undefined behavior if directly invoked.
-pub trait Algorithm<C: Curve>: Send + Sync {
+pub trait Algorithm<C: Curve> {
   /// The transcript format this algorithm uses.
   ///
   /// This MUST NOT be the IRTF-compatible transcript included in this crate UNLESS this is an
   /// IRTF-specified ciphersuite.
-  type Transcript: Sync + Clone + Transcript;
+  type Transcript: Clone + Transcript;
   /// Serializable addendum, used in algorithms requiring more data than just the nonces.
   type Addendum: Addendum;
   /// The resulting type of the signatures this algorithm will produce.
@@ -143,7 +143,7 @@ mod sealed {
 pub(crate) use sealed::IrtfTranscript;
 
 /// HRAm usable by the included Schnorr signature algorithm to generate challenges.
-pub trait Hram<C: Curve>: Send + Sync + Clone {
+pub trait Hram<C: Curve>: Clone {
   /// HRAm function to generate a challenge.
   ///
   /// H2 from the IRTF standard, despite having a different argument set (not being pre-formatted).
@@ -155,7 +155,7 @@ pub trait Hram<C: Curve>: Send + Sync + Clone {
 ///
 /// `verify`, `verify_share` must be called after `sign_share` is called.
 #[derive(Clone)]
-pub struct Schnorr<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> {
+pub struct Schnorr<C: Curve, T: Clone + Debug + Transcript, H: Hram<C>> {
   transcript: T,
   c: Option<C::F>,
   _hram: PhantomData<H>,
@@ -172,7 +172,7 @@ pub struct Schnorr<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> {
 /// difference).
 pub type IrtfSchnorr<C, H> = Schnorr<C, IrtfTranscript, H>;
 
-impl<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> Schnorr<C, T, H> {
+impl<C: Curve, T: Clone + Debug + Transcript, H: Hram<C>> Schnorr<C, T, H> {
   /// Construct a Schnorr algorithm continuing the specified transcript.
   pub fn new(transcript: T) -> Schnorr<C, T, H> {
     Schnorr { transcript, c: None, _hram: PhantomData }
@@ -188,7 +188,7 @@ impl<C: Curve, H: Hram<C>> IrtfSchnorr<C, H> {
   }
 }
 
-impl<C: Curve, T: Sync + Clone + Debug + Transcript, H: Hram<C>> Algorithm<C> for Schnorr<C, T, H> {
+impl<C: Curve, T: Clone + Debug + Transcript, H: Hram<C>> Algorithm<C> for Schnorr<C, T, H> {
   type Transcript = T;
   type Addendum = ();
   type Signature = SchnorrSignature<C>;

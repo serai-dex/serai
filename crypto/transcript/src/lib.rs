@@ -17,9 +17,9 @@ pub use crate::merlin::MerlinTranscript;
 pub mod tests;
 
 /// A transcript trait valid over a variety of transcript formats.
-pub trait Transcript: Send + Clone {
+pub trait Transcript: Clone {
   /// A challenge sampled from the transcript.
-  type Challenge: Send + Sync + Clone + AsRef<[u8]>;
+  type Challenge: Clone + AsRef<[u8]>;
 
   /// Create a new transcript with the specified name.
   fn new(name: &'static [u8]) -> Self;
@@ -73,9 +73,9 @@ impl DigestTranscriptMember {
 
 /// A simple transcript format constructed around the specified hash algorithm.
 #[derive(Clone, Debug)]
-pub struct DigestTranscript<D: Send + Clone + Digest>(D);
+pub struct DigestTranscript<D: Clone + Digest>(D);
 
-impl<D: Send + Clone + Digest> DigestTranscript<D> {
+impl<D: Clone + Digest> DigestTranscript<D> {
   fn append(&mut self, kind: DigestTranscriptMember, value: &[u8]) {
     self.0.update([kind.as_u8()]);
     // Assumes messages don't exceed 16 exabytes
@@ -84,7 +84,7 @@ impl<D: Send + Clone + Digest> DigestTranscript<D> {
   }
 }
 
-impl<D: Send + Clone + Digest> Transcript for DigestTranscript<D> {
+impl<D: Clone + Digest> Transcript for DigestTranscript<D> {
   type Challenge = Output<D>;
 
   fn new(name: &'static [u8]) -> Self {
@@ -120,10 +120,7 @@ impl<D: Send + Clone + Digest> Transcript for DigestTranscript<D> {
   }
 }
 
-impl<D: Send + Clone + Digest + ZeroizeOnDrop + ZeroizeOnDrop> ZeroizeOnDrop
-  for DigestTranscript<D>
-{
-}
+impl<D: Clone + Digest + ZeroizeOnDrop + ZeroizeOnDrop> ZeroizeOnDrop for DigestTranscript<D> {}
 
 #[cfg(feature = "recommended")]
 mod recommended {

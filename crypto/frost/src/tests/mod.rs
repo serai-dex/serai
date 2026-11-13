@@ -1,4 +1,3 @@
-use core::fmt::Debug;
 use std_shims::{prelude::*, collections::HashMap};
 
 use rand_core::{RngCore, CryptoRng};
@@ -155,7 +154,7 @@ pub(crate) fn preprocess_and_shares<
 
 fn sign_internal<
   R: RngCore + CryptoRng,
-  M: PreprocessMachine<Signature: PartialEq + Debug>,
+  M: PreprocessMachine<Signature: PartialEq>,
   F: FnMut(&mut R, &mut HashMap<Participant, M::SignMachine>),
 >(
   rng: &mut R,
@@ -171,7 +170,7 @@ fn sign_internal<
     if signature.is_none() {
       signature = Some(sig.clone());
     }
-    assert_eq!(&sig, signature.as_ref().unwrap());
+    assert!(&sig == signature.as_ref().unwrap());
   }
   signature.unwrap()
 }
@@ -179,10 +178,7 @@ fn sign_internal<
 /// Execute the signing protocol, without caching any machines. This isn't as comprehensive at
 /// testing as sign, and accordingly isn't preferred, yet is usable for machines not supporting
 /// caching.
-pub fn sign_without_caching<
-  R: RngCore + CryptoRng,
-  M: PreprocessMachine<Signature: PartialEq + Debug>,
->(
+pub fn sign_without_caching<R: RngCore + CryptoRng, M: PreprocessMachine<Signature: PartialEq>>(
   rng: &mut R,
   machines: HashMap<Participant, M>,
   msg: &[u8],
@@ -192,10 +188,7 @@ pub fn sign_without_caching<
 
 /// Execute the signing protocol, randomly caching various machines to ensure they can cache
 /// successfully.
-pub fn sign_without_clone<
-  R: RngCore + CryptoRng,
-  M: PreprocessMachine<Signature: PartialEq + Debug>,
->(
+pub fn sign_without_clone<R: RngCore + CryptoRng, M: PreprocessMachine<Signature: PartialEq>>(
   rng: &mut R,
   mut keys: HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::Keys>,
   mut params: HashMap<Participant, <M::SignMachine as SignMachine<M::Signature>>::Params>,
@@ -227,10 +220,7 @@ pub fn sign_without_clone<
 /// successfully.
 pub fn sign<
   R: RngCore + CryptoRng,
-  M: PreprocessMachine<
-      SignMachine: SignMachine<M::Signature, Params: Clone>,
-      Signature: PartialEq + Debug,
-    >,
+  M: PreprocessMachine<SignMachine: SignMachine<M::Signature, Params: Clone>, Signature: PartialEq>,
 >(
   rng: &mut R,
   params: &<M::SignMachine as SignMachine<M::Signature>>::Params,

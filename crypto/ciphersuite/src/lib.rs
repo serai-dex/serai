@@ -3,7 +3,6 @@
 #![deny(missing_docs)]
 #![no_std]
 
-use core::fmt::Debug;
 use std_shims::io;
 
 use subtle::{CtOption, ConstantTimeEq, ConditionallySelectable};
@@ -56,8 +55,7 @@ impl<
 /// A `Group` type which has been wrapped into the current type.
 ///
 /// This avoids having to re-implement all of the `Group` traits on the wrapper.
-// TODO: Remove these bounds
-pub trait WrappedGroup: 'static + Send + Sync + Clone + Copy + Debug {
+pub trait WrappedGroup: Clone {
   /// Scalar field element type.
   // This is available via `G::Scalar` yet `WG::G::Scalar` is ambiguous, forcing horrific accesses
   type F: F;
@@ -90,7 +88,7 @@ pub trait WithPreferredHash:
   ///
   /// The output of this hash function MUST be of the necessary length to derive uniform scalar
   /// field elements.
-  type H: Send + Clone + Digest + HashMarker;
+  type H: Clone + Digest + HashMarker;
 
   /// Hash the specified `data` into a uniformly-distributed scalar field element.
   ///

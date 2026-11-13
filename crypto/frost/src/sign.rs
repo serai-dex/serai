@@ -104,7 +104,7 @@ impl<C: Curve, A: Addendum> Writable for Preprocess<C, A> {
 pub struct CachedPreprocess(pub Zeroizing<[u8; 32]>);
 
 /// Trait for the initial state machine of a two-round signing protocol.
-pub trait PreprocessMachine: Send {
+pub trait PreprocessMachine {
   /// Preprocess message for this machine.
   type Preprocess: Clone + Writable;
   /// Signature produced by this machine.
@@ -217,7 +217,7 @@ impl<C: Curve> SignatureShare<C> {
 }
 
 /// Trait for the second machine of a two-round signing protocol.
-pub trait SignMachine<S>: Send + Sync + Sized {
+pub trait SignMachine<S>: Sized {
   /// Params used to instantiate this machine which can be used to rebuild from a cache.
   type Params;
   /// Keys used for signing operations.
@@ -437,7 +437,7 @@ impl<C: Curve, A: Algorithm<C>> SignMachine<A::Signature> for AlgorithmSignMachi
 }
 
 /// Trait for the final machine of a two-round signing protocol.
-pub trait SignatureMachine<S>: Send + Sync {
+pub trait SignatureMachine<S> {
   /// SignatureShare message for this machine.
   type SignatureShare: Clone + Writable;
 
