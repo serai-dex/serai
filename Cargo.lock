@@ -8179,8 +8179,26 @@ version = "0.1.0"
 dependencies = [
  "borsh",
  "ciphersuite 0.4.2",
+ "dalek-ff-group",
  "modular-frost",
  "serai-db",
+ "serai-processor-scheduler-test-primitives",
+]
+
+[[package]]
+name = "serai-processor-scheduler-test-primitives"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "ciphersuite 0.4.2",
+ "dalek-ff-group",
+ "modular-frost",
+ "rand_core 0.6.4",
+ "serai-primitives",
+ "serai-processor-primitives",
+ "serai-processor-scanner",
+ "serai-processor-scheduler-primitives",
+ "serai-processor-utxo-scheduler-primitives",
 ]
 
 [[package]]
@@ -8253,10 +8271,14 @@ name = "serai-processor-utxo-scheduler-primitives"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "ciphersuite 0.4.2",
+ "dalek-ff-group",
  "serai-primitives",
  "serai-processor-primitives",
  "serai-processor-scanner",
  "serai-processor-scheduler-primitives",
+ "serai-processor-scheduler-test-primitives",
+ "tokio",
 ]
 
 [[package]]
