@@ -25,7 +25,7 @@ borsh = { version = "1", default-features = false, features = ["derive", "de_str
 
 # This is used to message the Tendermint process.
 # It was preferred over `futures-channel` as it had clearer commentary towards cancel safety.
-async-channel = { version = "2", default-features = false, optional = true }
+async-channel = { version = "2.3.1", default-features = false, optional = true }
 
 # An abstraction over the underlying database, allowing the application to choose the database used.
 serai-db = { path = "../../../common/db", version = "0.2", default-features = false, features = ["std", "schema"], optional = true }

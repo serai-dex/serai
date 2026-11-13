@@ -32,7 +32,7 @@ borsh = { version = "1", default-features = false, features = ["std", "derive", 
 serai-db = { path = "../../common/db", version = "0.2", default-features = false, features = ["std", "schema"] }
 
 futures-core = { version = "0.3", default-features = false }
-async-channel = { version = "2.3", default-features = false }
+async-channel = { version = "2.3.1", default-features = false }
 tendermint = { package = "tendermint-consensus", path = "./tendermint", version = "0.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]
