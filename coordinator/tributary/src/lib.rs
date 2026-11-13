@@ -1,12 +1,10 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
-#![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use core::{marker::PhantomData, future::Future};
+use core::time::Duration;
 use std::collections::HashMap;
 
-use ciphersuite::group::GroupEncoding as _;
 use dkg::Participant;
 
 use serai_primitives::{
@@ -18,9 +16,9 @@ use serai_primitives::{
 use serai_db::{Get, Transaction as DbTxn, Db};
 use serai_task::ContinuallyRan;
 
-use tributary_sdk::{
-  Signed as TributarySigned, TransactionKind, TransactionTrait as _,
-  Transaction as TributaryTransaction, Block, TributaryReader, P2p,
+use tributary_framework::{
+  transaction::{Signed as TributarySigned, TransactionKind, Transaction as _},
+  TributaryHandle,
 };
 
 use serai_cosign_types::CosignIntent;
@@ -128,23 +126,15 @@ impl SubstrateBlockPlans {
   }
 }
 
-struct ScanBlock<
-  'a,
-  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  TDT: Send + DbTxn,
-  P: P2p,
-> {
-  _td: PhantomData<TD>,
-  _p2p: PhantomData<P>,
+struct ScanBlock<'a, TDT: Send + DbTxn> {
+  tributary_block_time: Duration,
   tributary_txn: &'a mut TDT,
   set: &'a NewSetInformation,
   validators: &'a [SeraiAddress],
   total_weight: u16,
   validator_weights: &'a HashMap<SeraiAddress, u16>,
 }
-impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send + DbTxn, P: P2p>
-  ScanBlock<'_, TD, TDT, P>
-{
+impl<TDT: Send + DbTxn> ScanBlock<'_, TDT> {
   fn potentially_start_cosign(&mut self) {
     // Don't start a new cosigning instance if we're actively running one
     if TributaryDb::actively_cosigning(self.tributary_txn, self.set.set).is_some() {
@@ -202,6 +192,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
     );
     match TributaryDb::accumulate::<D>(
       self.tributary_txn,
+      self.tributary_block_time,
       self.set.set,
       self.validators,
       self.total_weight,
@@ -244,16 +235,12 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
   }
 
   fn handle_application_tx(&mut self, block_number: u64, tx: Transaction) {
-    let signer = |signed: Signed| SeraiAddress(signed.signer().to_bytes());
+    let signer = |signed: Signed| SeraiAddress(signed.signer);
 
-    if let TransactionKind::Signed(_, TributarySigned { signer, .. }) = tx.kind() {
+    if let TransactionKind::Signed { scope: _, signed: TributarySigned { signer, .. } } = tx.kind()
+    {
       // Don't handle transactions from those fatally slashed
-      // TODO: The fact they can publish these TXs makes this a notable spam vector
-      if TributaryDb::is_fatally_slashed(
-        self.tributary_txn,
-        self.set.set,
-        SeraiAddress(signer.to_bytes()),
-      ) {
+      if TributaryDb::is_fatally_slashed(self.tributary_txn, self.set.set, SeraiAddress(signer)) {
         return;
       }
     }
@@ -277,6 +264,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
 
         match TributaryDb::accumulate(
           self.tributary_txn,
+          self.tributary_block_time,
           self.set.set,
           self.validators,
           self.total_weight,
@@ -423,6 +411,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
         // Accumulate, and if past the threshold, calculate *the* slash report and start signing it
         match TributaryDb::accumulate(
           self.tributary_txn,
+          self.tributary_block_time,
           self.set.set,
           self.validators,
           self.total_weight,
@@ -532,6 +521,7 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
 
         match TributaryDb::accumulate(
           self.tributary_txn,
+          self.tributary_block_time,
           self.set.set,
           self.validators,
           self.total_weight,
@@ -574,57 +564,53 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, TDT: Send 
     }
   }
 
-  fn handle_block(mut self, block_number: u64, block: Block<Transaction>) {
+  fn handle_block(
+    mut self,
+    block_number: u64,
+    slashes: &[tributary_framework::Slash],
+    transactions: &[Transaction],
+  ) {
     TributaryDb::start_of_block(self.tributary_txn, self.set.set, block_number);
 
-    for tx in block.transactions {
-      match tx {
-        TributaryTransaction::Tendermint(tendermint_tx) => {
-          // Since anything with evidence is fundamentally faulty behavior, not just temporal
-          // errors, mark the node as fatally slashed
-          TributaryDb::fatal_slash(
-            self.tributary_txn,
-            self.set.set,
-            SeraiAddress(tendermint_tx.slashed()),
-            &format!("invalid tendermint messages: {tendermint_tx:?}"),
-          );
-        }
-        TributaryTransaction::Application(tx) => {
-          self.handle_application_tx(block_number, tx);
-        }
-      }
+    for slash in slashes {
+      // Since anything with evidence is fundamentally faulty behavior, not just temporal
+      // errors, mark the node as fatally slashed
+      TributaryDb::fatal_slash(
+        self.tributary_txn,
+        self.set.set,
+        SeraiAddress(*slash.validator()),
+        &format!("tributary slash: {slash:?}"),
+      );
+    }
+
+    for tx in transactions {
+      self.handle_application_tx(block_number, tx.clone());
     }
   }
 }
 
 /// The task to scan the Tributary, populating `ProcessorMessages`.
-pub struct ScanTributaryTask<
-  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  P: P2p,
-> {
+pub struct ScanTributaryTask<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
   tributary_db: TD,
   set: NewSetInformation,
   validators: Vec<SeraiAddress>,
   total_weight: u16,
   validator_weights: HashMap<SeraiAddress, u16>,
-  tributary: TributaryReader<TD, Transaction>,
-  _p2p: PhantomData<P>,
+  tributary: TributaryHandle<TD, Transaction>,
 }
 
-impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, P: P2p>
-  ScanTributaryTask<TD, P>
-{
+impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ScanTributaryTask<TD> {
   /// Create a new instance of this task.
   ///
   /// This will panic if the Tributary read does not correspond to the set.
   pub fn new(
     tributary_db: TD,
     set: NewSetInformation,
-    tributary: TributaryReader<TD, Transaction>,
+    tributary: TributaryHandle<TD, Transaction>,
   ) -> Self {
     assert_eq!(
       set.tributary_genesis(),
-      tributary.genesis(),
+      tributary.genesis()[16 ..],
       "set information is inconsistent with the tributary"
     );
 
@@ -637,20 +623,12 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, P: P2p>
       validator_weights.insert(validator, weight);
     }
 
-    ScanTributaryTask {
-      tributary_db,
-      set,
-      validators,
-      total_weight,
-      validator_weights,
-      tributary,
-      _p2p: PhantomData,
-    }
+    ScanTributaryTask { tributary_db, set, validators, total_weight, validator_weights, tributary }
   }
 }
 
-impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, P: P2p> ContinuallyRan
-  for ScanTributaryTask<TD, P>
+impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> ContinuallyRan
+  for ScanTributaryTask<TD>
 {
   type Error = String;
 
@@ -660,43 +638,97 @@ impl<TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, P: P2p> Co
         TributaryDb::last_handled_tributary_block(&self.tributary_db, self.set.set)
           .unwrap_or((0, self.tributary.genesis()));
 
+      let mut provided_nonces = HashMap::new();
       let mut made_progress = false;
-      while let Some(block_hash) = self.tributary.block_after(&last_block_hash) {
-        let block = self.tributary.block(&block_hash).unwrap();
+      while let Some(block_hash) = self.tributary.block_after(last_block_hash) {
+        let block = self.tributary.block(block_hash).unwrap();
         let block_number = last_block_number + 1;
 
         // Make sure we have all of the provided transactions for this block
-        for tx in &block.transactions {
-          let TransactionKind::Provided(order) = tx.kind() else {
+        for tx in block.transactions() {
+          let TransactionKind::Provided { scope } = tx.kind() else {
             continue;
           };
 
           // make sure we have all the provided txs in this block locally
-          if !self.tributary.locally_provided_txs_in_block(&block_hash, order) {
+          let nonce = match provided_nonces.entry(scope) {
+            std::collections::hash_map::Entry::Occupied(occupied) => occupied,
+            std::collections::hash_map::Entry::Vacant(vacant) => vacant.insert_entry(
+              TributaryDb::last_handled_provided_transaction(
+                &self.tributary_db,
+                self.set.set,
+                scope,
+              )
+              .unwrap_or(0),
+            ),
+          };
+          let locally_provided =
+            self.tributary.locally_provided_transactions(scope, *nonce.get()).next();
+          if locally_provided.is_none() {
             return Err(format!(
               "didn't have the provided Transactions on-chain for set (ephemeral error): {:?}",
               self.set.set
             ));
           }
+          if locally_provided != Some(tx.hash()) {
+            return Err(format!(
+              "didn't have the same provided Transactions as on-chain for set (fatal error): {:?}",
+              self.set.set
+            ));
+          }
+          *nonce.into_mut() += 1;
         }
 
+        // Build a list of each validator's fatal slash status
+        let mut was_fatally_slashed = self
+          .validators
+          .iter()
+          .map(|validator| {
+            (
+              *validator,
+              TributaryDb::is_fatally_slashed(&self.tributary_db, self.set.set, *validator),
+            )
+          })
+          .collect::<Box<[_]>>()
+          .into_iter();
+
         let mut tributary_txn = self.tributary_db.txn();
+
         (ScanBlock {
-          _td: PhantomData::<TD>,
-          _p2p: PhantomData::<P>,
           tributary_txn: &mut tributary_txn,
+          tributary_block_time: self.tributary.block_time(),
           set: &self.set,
           validators: &self.validators,
           total_weight: self.total_weight,
           validator_weights: &self.validator_weights,
         })
-        .handle_block(block_number, block);
+        .handle_block(block_number, block.slashes(), block.transactions());
+
+        // If any validator was fatally slashed within this block, censure them now
+        for validator in &self.validators {
+          let (was_validator, slashed) = was_fatally_slashed.next().unwrap();
+          assert_eq!(*validator, was_validator);
+          if (!slashed) && TributaryDb::is_fatally_slashed(&tributary_txn, self.set.set, *validator)
+          {
+            self.tributary.censure(validator.0).await;
+          }
+        }
+        assert!(was_fatally_slashed.next().is_none());
+
         TributaryDb::set_last_handled_tributary_block(
           &mut tributary_txn,
           self.set.set,
           block_number,
           block_hash,
         );
+        for (scope, nonce) in provided_nonces.drain() {
+          TributaryDb::set_last_handled_provided_transaction(
+            &mut tributary_txn,
+            self.set.set,
+            scope,
+            nonce,
+          );
+        }
         last_block_number = block_number;
         last_block_hash = block_hash;
         tributary_txn.commit();

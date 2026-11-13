@@ -44,12 +44,12 @@ Each portion of the Serai codebase (such as a "crate", in Rust terminology, but
 generally as organized within a folder) is expected to declare its license
 within its manifest and within its folder. For portions of the Serai codebase
 which may be _nested_ within each other, such as seen with
-`coordinator/tributary-sdk/tendermint`, the associated license is expected to
-be the one of closest proximity
+`coordinator/tributary-framework/tendermint`, the associated license is
+expected to be the one of closest proximity
 (e.g. `coordinator/LICENSE` is not expected to cover
-`coordinator/tributary-sdk/tendermint` as
-`coordinator/tributary-sdk/tendermint/LICENSE` exists and is immediate to
-`coordinator/tributary-sdk/tendermint`).
+`coordinator/tributary-framework/tendermint` as
+`coordinator/tributary-framework/tendermint/LICENSE` exists and is immediate to
+`coordinator/tributary-framework/tendermint`).
 
 If any files are of unclear licensing terms, or incorrectly licensed, please
 reach out as this is considered an error to be immediately corrected.

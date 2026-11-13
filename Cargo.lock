@@ -2907,10 +2907,7 @@ version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f78e10609fe0e0b3f4157ffab1876319b5b0db102a2c60dc4626306dc46b44ad"
 dependencies = [
- "fastrand",
  "futures-core",
- "futures-io",
- "parking",
  "pin-project-lite",
 ]
 
@@ -5334,12 +5331,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
-name = "pin-utils"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13bee6c73da26345c729282832b60b0363cf3dd9f4bfd81d8551b7a1c889a113"
-
-[[package]]
 name = "pkcs8"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7453,7 +7444,7 @@ dependencies = [
  "serai-processor-messages",
  "serai-task",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
  "zalloc",
  "zeroize",
 ]
@@ -7474,8 +7465,9 @@ dependencies = [
  "serai-coordinator-p2p",
  "serai-cosign",
  "serai-task",
+ "tendermint-consensus",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
  "zeroize",
 ]
 
@@ -7484,24 +7476,25 @@ name = "serai-coordinator-p2p"
 version = "0.1.0"
 dependencies = [
  "borsh",
- "futures-lite",
- "log",
+ "futures-util",
+ "getrandom 0.4.3",
  "serai-cosign",
  "serai-db",
  "serai-primitives",
  "serai-task",
+ "tendermint-consensus",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
 ]
 
 [[package]]
 name = "serai-coordinator-substrate"
 version = "0.1.0"
 dependencies = [
- "blake2 0.11.0",
  "borsh",
  "dkg",
  "futures",
+ "hex",
  "serai-client-serai",
  "serai-cosign",
  "serai-db",
@@ -7530,9 +7523,9 @@ dependencies = [
  "serai-processor-messages",
  "serai-substrate-tests",
  "serai-task",
- "tendermint-machine",
+ "tendermint-consensus",
  "tokio",
- "tributary-sdk",
+ "tributary-framework",
  "zeroize",
 ]
 
@@ -7906,7 +7899,8 @@ dependencies = [
  "serai-db",
  "short-weierstrass",
  "std-shims 0.1.5",
- "tendermint-machine",
+ "tendermint-consensus",
+ "zalloc",
 ]
 
 [[package]]
@@ -9489,8 +9483,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "tendermint-machine"
-version = "0.3.0"
+name = "tendermint-consensus"
+version = "0.1.0"
 dependencies = [
  "async-channel",
  "borsh",
@@ -9830,22 +9824,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "tributary-sdk"
+name = "tributary-framework"
 version = "0.1.0"
 dependencies = [
+ "async-channel",
  "blake2 0.11.0",
  "borsh",
  "ciphersuite 0.4.2",
  "dalek-ff-group",
- "flexible-transcript",
- "hex",
- "log",
+ "futures-core",
+ "pin-project-lite",
  "rand 0.8.8",
  "schnorr-signatures",
  "serai-db",
- "subtle",
- "tendermint-machine",
- "thiserror 2.0.21",
+ "tendermint-consensus",
  "tokio",
  "zeroize",
 ]
@@ -10293,14 +10285,14 @@ dependencies = [
 
 [[package]]
 name = "wasmtimer"
-version = "0.4.3"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c598d6b99ea013e35844697fc4670d08339d5cda15588f193c6beedd12f644b"
+checksum = "c62b7f338e4397a45d054c15a2b36a93d57cccdda7be11a7d7b045d47b5e70ce"
 dependencies = [
  "futures",
  "js-sys",
  "parking_lot",
- "pin-utils",
+ "pin-project-lite",
  "slab",
  "wasm-bindgen",
 ]

@@ -1,6 +1,9 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+// TODO: https://github.com/rust-lang/rust-clippy/pull/17968
+#![allow(unknown_lints)]
+#![allow(clippy::new_instead_of_clear)]
 
 use core::{marker::PhantomData, future::Future};
 use std::collections::HashMap;

@@ -78,7 +78,7 @@ exceptions = [
   { allow = ["AGPL-3.0-only"], name = "serai-ethereum-processor" },
   { allow = ["AGPL-3.0-only"], name = "serai-monero-processor" },
 
-  { allow = ["AGPL-3.0-only"], name = "tributary-sdk" },
+  { allow = ["AGPL-3.0-only"], name = "tributary-framework" },
   { allow = ["AGPL-3.0-only"], name = "serai-cosign-types" },
   { allow = ["AGPL-3.0-only"], name = "serai-cosign" },
   { allow = ["AGPL-3.0-only"], name = "serai-coordinator-substrate" },

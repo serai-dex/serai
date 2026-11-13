@@ -1,3 +1,7 @@
+// TODO: https://github.com/rust-lang/rust-clippy/pull/17968
+#![allow(unknown_lints)]
+#![allow(clippy::new_instead_of_clear)]
+
 use std::{
   sync::{Arc, OnceLock},
   collections::HashMap,

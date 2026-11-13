@@ -17,9 +17,9 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+hex = { version = "0.4", default-features = false, features = ["alloc"] }
 borsh = { version = "1", default-features = false, features = ["std", "derive", "de_strict_order"] }
 
-blake2 = { version = "0.11", default-features = false, features = ["alloc"] }
 dkg = { path = "../../crypto/dkg", default-features = false, features = ["std"] }
 
 serai-client-serai = { path = "../../substrate/client/serai", default-features = false }

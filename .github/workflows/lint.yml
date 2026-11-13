@@ -51,15 +51,11 @@ jobs:
           cargo clippy --locked --all-targets -p serai-abi -- -D warnings
 
           # nightly Rust
-          cp ./Cargo.toml ./Cargo.toml.bak
-          sed s/'# TODO: `-Zcargo-lints`: '//g ./Cargo.toml > ./Cargo.toml.cargo-lints
-          mv ./Cargo.toml.cargo-lints ./Cargo.toml
-          cargo +"${NIGHTLY_VERSION}" clippy --locked -Zcargo-lints --all-features --all-targets -- -D warnings
-          cargo +"${NIGHTLY_VERSION}" clippy --locked -Zcargo-lints --no-default-features --all-targets -p serai-primitives -- -D warnings
-          cargo +"${NIGHTLY_VERSION}" clippy --locked -Zcargo-lints --all-targets -p serai-primitives -- -D warnings
-          cargo +"${NIGHTLY_VERSION}" clippy --locked -Zcargo-lints --no-default-features --all-targets -p serai-abi -- -D warnings
-          cargo +"${NIGHTLY_VERSION}" clippy --locked -Zcargo-lints --all-targets -p serai-abi -- -D warnings
-          mv ./Cargo.toml.bak ./Cargo.toml
+          cargo +"${NIGHTLY_VERSION}" clippy --locked --all-features --all-targets -- -D warnings
+          cargo +"${NIGHTLY_VERSION}" clippy --locked --no-default-features --all-targets -p serai-primitives -- -D warnings
+          cargo +"${NIGHTLY_VERSION}" clippy --locked --all-targets -p serai-primitives -- -D warnings
+          cargo +"${NIGHTLY_VERSION}" clippy --locked --no-default-features --all-targets -p serai-abi -- -D warnings
+          cargo +"${NIGHTLY_VERSION}" clippy --locked --all-targets -p serai-abi -- -D warnings
 
       - name: Verify `pallet::hooks` is unused
         shell: bash
@@ -300,7 +296,7 @@ jobs:
             cargo +"${LOCKFILE_VERSION}" update -p fs-err@2.0.0 --precise 2.4.0 || true
 
             # Check this lockfile is actually adequate to build this crate
-            cargo +1.99 check
+            cargo +1.100 check
 
             # We then find the actual `rust-version` using `cargo-msrv` (again stripping to just the
             # major and minor version).

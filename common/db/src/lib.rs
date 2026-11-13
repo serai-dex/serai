@@ -77,7 +77,7 @@ pub trait Transaction: Get {
   /// If no value is stored to this key, this operation is effectively a NOP.
   ///
   /// This is considered as a write to this key, with properties as documented by
-  /// [`Transaction::put`].
+  /// [`Transaction::set`].
   ///
   /// The implementation MAY panic if the database is corrupt or would become corrupted. If the
   /// length of the key exceeds an internal limit on the length of keys, this may be considered as

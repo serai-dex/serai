@@ -3,10 +3,10 @@
 - [`tendermint`](/tributary/tendermint) is an implementation of the Tendermint
   BFT algorithm.
 
-- [`tributary-sdk`](./tributary-sdk) is a micro-blockchain framework. Instead
-  of a producing a blockchain daemon like the Polkadot SDK or Cosmos SDK intend
-  to, `tributary` is solely intended to be an embedded asynchronous task within
-  an application.
+- [`tributary-framework`](./tributary-framework) is a micro-blockchain
+  framework. Instead of a producing a blockchain daemon like the Polkadot SDK
+  or Cosmos SDK primarily intend to, a tributary is solely intended to be an
+  embedded asynchronous task within a larger application.
 
   The Serai coordinator spawns a tributary for each validator set it's
   coordinating. This allows the participating validators to communicate in a
@@ -18,9 +18,9 @@
 - [`substrate`](./substrate) contains a library to index the Substrate
   blockchain and handle its events.
 
-- [`tributary`](./tributary) is our instantiation of the Tributary SDK for the
-  Serai processor. It includes the `Transaction` definition and deferred
-  execution logic.
+- [`tributary`](./tributary) is our utilization of the Tributary framework for
+  the necessary agreement to service the Serai processor. It includes the
+  `Transaction` definition and deferred execution logic.
 
 - [`p2p`](./p2p) is our abstract P2P API to service the Coordinator.
 

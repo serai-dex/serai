@@ -1,0 +1,353 @@
+//! The mempool for a Tributary.
+//!
+//! This is distinguished into the mempool for provided transactions and the mempool for (un)signed
+//! transactions due to the difference in semantics between them.
+//!
+//! Both mempools are implemented with the same pattern.
+//! - Transactions may be added into the mempool by a mutable reference.
+//! - The mempool may be polled to respond to requests for block proposals and handle the addition
+//!   of new blocks.
+//!
+//! This avoids requiring any locks over the mempool's state between the application layer and the
+//! blockchain.
+
+use core::{
+  pin::Pin,
+  task::{Poll, Context},
+};
+use alloc::{boxed::Box, collections::BTreeSet};
+
+use futures_core::stream::{Stream as _, FusedStream as _};
+
+use serai_db::{Db, Get, Transaction as DbTxn};
+
+use crate::transaction::{TransactionError, TransactionKind, Transaction};
+
+serai_db::schema!(TributaryMempool {
+  // The last block this mempool has handled.
+  LastBlock: (genesis: [u8; 32]) -> [u8; 32],
+});
+
+serai_db::channel!(TributaryMempool {
+  // Validators to censure.
+  Censure: (genesis: [u8; 32]) -> [u8; 32],
+});
+
+/// An error within the mempool.
+#[derive(Clone, Debug)]
+pub enum MempoolError {
+  /// The transaction was invalid.
+  Invalid(TransactionError),
+  /// The transaction was already present within the mempool or on-chain.
+  AlreadyPresent,
+  /// The transaction conflicts with a transaction already present within the mempool or on-chain.
+  Conflict,
+  /// The signer has too many pre-existing transactions in the mempool.
+  RateLimit,
+}
+
+impl From<TransactionError> for MempoolError {
+  fn from(error: TransactionError) -> MempoolError {
+    MempoolError::Invalid(error)
+  }
+}
+
+/// The mempool for provided transactions.
+mod provided;
+use provided::*;
+pub(crate) use provided::ProvidedReader;
+
+/// The mempool for (un)signed transactions.
+mod un_signed;
+use un_signed::*;
+
+/// The network for the mempool.
+pub trait MempoolNetwork<T: Transaction> {
+  /// Gossip an (un)signed transaction.
+  ///
+  /// The mempool will automatically re-gossip transactions which have yet to be included on-chain.
+  /// Accordingly, this gossip layer SHOULD have some layer of intelligence, being able to
+  /// de-duplicate and rate-limit gossiped transactions (in case the mempool is over-eager).
+  fn gossip(&mut self, genesis: [u8; 32], transaction: T);
+}
+
+/// A stub implementation which does not implement any gossip functionality.
+///
+/// This likely SHOULD NOT be used.
+impl<T: Transaction> MempoolNetwork<T> for () {
+  fn gossip(&mut self, _genesis: [u8; 32], _transaction: T) {}
+}
+
+pin_project_lite::pin_project! {
+  /// The mempool for a Tributary.
+  ///
+  /// This MUST be polled to respond to requests for block proposals.
+  pub(crate) struct Mempool<D: Db, T: Transaction, N: MempoolNetwork<T>> {
+    db: D,
+    genesis: [u8; 32],
+
+    last_block: [u8; 32],
+    provided: Provided<T>,
+    un_signed: UnSigned<T>,
+
+    network: N,
+    regossip: usize,
+
+    // Asynchronous censures.
+    #[pin]
+    censure: async_channel::Receiver<([u8; 32], async_channel::Sender<()>)>,
+    // The requests for block proposals.
+    #[pin]
+    request: async_channel::Receiver<([u8; 32], async_channel::Sender<Box<[T]>>)>,
+    // A way to re-send requests for block proposals.
+    //
+    // `async_channel::Receiver` doesn't offer a `peek` function. If we aren't available to
+    // service a request, we simply re-send the request message to handle it later, using the
+    // channel itself as the buffer.
+    #[pin]
+    resend_request: async_channel::WeakSender<([u8; 32], async_channel::Sender<Box<[T]>>)>,
+  }
+}
+
+impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
+  type Output = ();
+  fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    let mut projection = self.project();
+
+    // Index the blocks added on-chain
+    if let Some(block) =
+      crate::Reader::<T>::block_after(projection.db, *projection.genesis, *projection.last_block)
+    {
+      let block = crate::Reader::<T>::block(projection.db, *projection.genesis, block)
+        .expect("block after last block wasn't saved to database");
+
+      let mut txn = projection.db.txn();
+      LastBlock::set(&mut txn, *projection.genesis, &block.hash());
+      projection.provided.block(&mut txn, &block);
+      projection.un_signed.block(&mut txn, &block);
+      txn.commit();
+
+      *projection.last_block = block.hash();
+
+      /*
+        If we have transactions which weren't included in this block, pick some to gossip again.
+
+        TODO: This is fine as a naïve solution, technically increasing the odds transactions only
+        in this mempool are eventually included in a block (without requiring this mempool itself
+        provide a block proposal). It's still an incredibly naïve solution which practically
+        requires the gossip layer de-duplicate and rate limit transactions. That leaves the
+        question of if it would be better to defer this out of the mempool entirely, leaving it to
+        the application.
+
+        The Tendermint module does have a `Mempool` trait intended to allow such modularity. That
+        design isn't exposed at this time however.
+      */
+      {
+        let outstanding_un_signed_transactions = projection.un_signed.block_proposal().count();
+        let transactions_to_regossip = outstanding_un_signed_transactions.isqrt().isqrt().max(1);
+        if let Some(start) = projection.regossip.checked_rem(outstanding_un_signed_transactions) {
+          let end = start.saturating_add(transactions_to_regossip);
+          let range = start .. end;
+          for (i, transaction) in projection.un_signed.block_proposal().enumerate() {
+            if range.contains(&i) ||
+              i.checked_add(outstanding_un_signed_transactions)
+                .is_some_and(|i| range.contains(&i))
+            {
+              projection.network.gossip(*projection.genesis, transaction.clone());
+            }
+          }
+          *projection.regossip = projection.regossip.wrapping_add(transactions_to_regossip);
+        }
+      }
+
+      /*
+        Yield after indexing a block.
+
+        In order to ensure this future is polled again, this task is immediately woken back up.
+        [`core::task::Waker::wake`] guarantees this call happens _before_ the following
+        [`Future::poll`] invocation, allowing a task to wake itself to implement a yield.
+      */
+      cx.waker().wake_by_ref();
+      return Poll::Pending;
+    }
+
+    // Handle asynchronous censures
+    while (!projection.censure.is_terminated()) &&
+      let Poll::Ready(Some((validator, response))) = projection.censure.as_mut().poll_next(cx)
+    {
+      let mut txn = projection.db.txn();
+      projection.un_signed.censure(&mut txn, validator);
+      txn.commit();
+      let _ = response.try_send(());
+    }
+    // Handle synchronous censures
+    {
+      let mut txn = projection.db.txn();
+      while let Some(validator) = Censure::try_recv(&mut txn, *projection.genesis) {
+        projection.un_signed.censure(&mut txn, validator);
+      }
+      txn.commit();
+    }
+
+    // Receive requests for block proposals
+    while (!projection.request.is_terminated()) &&
+      let Poll::Ready(Some((parent, response))) = projection.request.as_mut().poll_next(cx)
+    {
+      if parent == *projection.last_block {
+        // Respond to a request for a block proposal with all transactions in our mempool
+        let _ = response.try_send(
+          projection
+            .provided
+            .block_proposal()
+            .chain(projection.un_signed.block_proposal())
+            .cloned()
+            .collect::<Box<[_]>>(),
+        );
+      } else if let Some(resend_request) = projection.resend_request.upgrade() {
+        // If this proposal isn't building on our latest indexed block, try to re-queue the request
+        let _ = resend_request.try_send((parent, response));
+      }
+    }
+
+    Poll::Pending
+  }
+}
+
+pub(crate) struct MempoolConsumer<T> {
+  genesis: [u8; 32],
+  censured: BTreeSet<[u8; 32]>,
+  #[expect(clippy::type_complexity)]
+  request: async_channel::Sender<([u8; 32], async_channel::Sender<Box<[T]>>)>,
+}
+
+pin_project_lite::pin_project! {
+  pub(crate) struct MempoolRecv<T> {
+    #[pin]
+    receiver: Option<async_channel::Receiver<T>>
+  }
+}
+
+impl<T> Future for MempoolRecv<Box<[T]>> {
+  type Output = Box<[T]>;
+  fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    let message = if let Some(receiver) = self.project().receiver.as_pin_mut() {
+      let Poll::Ready(message) = receiver.poll_next(cx) else {
+        return Poll::Pending;
+      };
+      message
+    } else {
+      // If we don't have a receiver, it's because we couldn't send the request to the mempool
+      None
+    };
+
+    /*
+      Fallback to an empty list of transactions.
+
+      This uses [`Box::default`] which for `[T]`, creates a box to an empty slice
+      _without further bounds on `T`_. `Box::from([].as_slice())` would require `T: Clone`.
+      Unfortunately, it isn't available as `Box::new_empty_slice`
+      (or with any more descriptive name).
+    */
+    Poll::Ready(message.unwrap_or_else(Box::default))
+  }
+}
+
+impl<T: Transaction> crate::tendermint::Mempool<T> for MempoolConsumer<T> {
+  type Transactions = Box<[T]>;
+  type Future = MempoolRecv<Self::Transactions>;
+  fn transactions(&mut self, parent_block: [u8; 32]) -> Self::Future {
+    let (sender, receiver) = async_channel::bounded(1);
+    /*
+      We use `force_send`, replacing the existing message if there is one, as we only care for the
+      next block's proposal.
+    */
+    let sent_request = self.request.force_send((parent_block, sender));
+    MempoolRecv { receiver: sent_request.is_ok().then_some(receiver) }
+  }
+  fn censured(&self, getter: &impl Get, validator: [u8; 32]) -> bool {
+    self.censured.contains(&validator) || UnSigned::<T>::censured(getter, self.genesis, validator)
+  }
+  fn censure(&mut self, txn: &mut impl DbTxn, validator: [u8; 32]) {
+    if self.censured.insert(validator) {
+      Censure::send(txn, self.genesis, &validator);
+    }
+  }
+}
+
+impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Mempool<D, T, N> {
+  pub(super) fn new(
+    mut db: D,
+    genesis: [u8; 32],
+    validators: impl IntoIterator<Item = [u8; 32]>,
+    network: N,
+    censure: async_channel::Receiver<([u8; 32], async_channel::Sender<()>)>,
+    rate_limit: usize,
+  ) -> (Self, MempoolConsumer<T>) {
+    let last_block = LastBlock::get(&db, genesis).unwrap_or(genesis);
+
+    let provided = Provided::new(&db, genesis);
+
+    let un_signed = {
+      let mut txn = db.txn();
+      let mut un_signed = UnSigned::new(&mut txn, genesis, validators, rate_limit);
+      while let Some(validator) = Censure::try_recv(&mut txn, genesis) {
+        un_signed.censure(&mut txn, validator);
+      }
+      txn.commit();
+      un_signed
+    };
+
+    let (request_send, request_recv) = async_channel::bounded(1);
+    let resend_request = request_send.clone().downgrade();
+
+    (
+      Self {
+        db,
+        genesis,
+
+        last_block,
+        provided,
+        un_signed,
+
+        network,
+        regossip: 0,
+
+        censure,
+        request: request_recv,
+        resend_request,
+      },
+      MempoolConsumer {
+        genesis,
+
+        /*
+          This is a cache of validators which have been censured, yet this hasn't been reflected
+          in the signed mempool's database yet. As we drained the `Censure` channel, ensuring all
+          censures _have_ been incorporated into the `signed` mempool, we can initialize this cache
+          as empty.
+        */
+        censured: BTreeSet::new(),
+
+        request: request_send,
+      },
+    )
+  }
+
+  pub(crate) fn add(
+    self: Pin<&mut Self>,
+    txn: &mut impl DbTxn,
+    transaction: T,
+    bypass_rate_limit: bool,
+  ) -> Result<(), MempoolError> {
+    let projection = self.project();
+    match transaction.kind() {
+      TransactionKind::Provided { .. } => projection.provided.provide(txn, transaction),
+      TransactionKind::Unsigned | TransactionKind::Signed { .. } => {
+        let result = projection.un_signed.add(txn, transaction.clone(), bypass_rate_limit);
+        if result.is_ok() {
+          projection.network.gossip(*projection.genesis, transaction);
+        }
+        result
+      }
+    }
+  }
+}

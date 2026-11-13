@@ -674,7 +674,7 @@ first-party = true
 [policy."substrate-prometheus-endpoint:0.17.0@git:508ffd01619535943cb4e884ad208c901f29efc7"]
 first-party = false
 
-[policy.tendermint-machine]
+[policy.tendermint-consensus]
 audit-as-crates-io = false
 first-party = true
 
@@ -682,7 +682,7 @@ first-party = true
 first-party = false
 notes = "Member of `patches/`, but explicitly tracked as if third-party"
 
-[policy.tributary-sdk]
+[policy.tributary-framework]
 audit-as-crates-io = false
 first-party = true
 
@@ -2200,10 +2200,6 @@ criteria = "safe-to-deploy"
 version = "0.2.17"
 criteria = "safe-to-deploy"
 
-[[exemptions.pin-utils]]
-version = "0.1.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.pkcs8]]
 version = "0.10.2"
 criteria = "safe-to-deploy"
@@ -3303,7 +3299,7 @@ version = "0.2.128"
 criteria = "safe-to-deploy"
 
 [[exemptions.wasmtimer]]
-version = "0.4.3"
+version = "0.4.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.web-sys]]

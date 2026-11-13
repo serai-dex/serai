@@ -17,6 +17,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
+zalloc = { path = "../../common/zalloc", default-features = false }
 std-shims = { path = "../../common/std-shims", default-features = false }
 serai-db = { path = "../../common/db", default-features = false }
 
@@ -45,7 +46,7 @@ dkg-evrf = { path = "../../crypto/dkg/evrf", default-features = false, optional 
 modular-frost = { path = "../../crypto/frost", default-features = false, optional = true }
 frost-schnorrkel = { path = "../../crypto/schnorrkel", default-features = false, optional = true }
 
-tendermint-machine = { path = "../../coordinator/tributary-sdk/tendermint", default-features = false }
+tendermint-consensus = { path = "../../coordinator/tributary-framework/tendermint", default-features = false }
 
 bitcoin-serai = { path = "../../networks/bitcoin", default-features = false, optional = true }
 
@@ -56,6 +57,7 @@ serai-client-ethereum = { path = "../../substrate/client/ethereum", default-feat
 
 [features]
 alloc = [
+  "zalloc/alloc",
   "std-shims/alloc",
 
   "serai-db/alloc",
@@ -85,7 +87,7 @@ alloc = [
   "modular-frost",
   "frost-schnorrkel",
 
-  "tendermint-machine/alloc",
+  "tendermint-consensus/alloc",
 
   "bitcoin-serai",
 

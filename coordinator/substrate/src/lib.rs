@@ -7,10 +7,6 @@ use std::collections::HashMap;
 
 use borsh::{BorshSerialize, BorshDeserialize};
 
-use blake2::{
-  digest::{typenum::U32, Digest as _},
-  Blake2b,
-};
 use dkg::Participant;
 
 use serai_client_serai::abi::{
@@ -48,6 +44,10 @@ pub struct NewSetInformation {
   pub set: ExternalValidatorSet,
   /// The Serai block which declared it.
   pub serai_block: [u8; 32],
+  /// The time of the Serai block which declared it.
+  ///
+  /// This is in milliseconds since the epoch.
+  pub serai_block_time: u64,
   /// The threshold to use.
   pub threshold: u16,
   /// The validators, with the amount of key shares they have.
@@ -87,6 +87,7 @@ impl NewSetInformation {
   pub fn new(
     set: ExternalValidatorSet,
     serai_block: [u8; 32],
+    serai_block_time: u64,
     threshold: u16,
     validators: Vec<(SeraiAddress, u16)>,
     evrf_public_keys: Vec<([u8; 32], Vec<u8>)>,
@@ -94,6 +95,7 @@ impl NewSetInformation {
     let mut result = Self {
       set,
       serai_block,
+      serai_block_time,
       threshold,
       validators,
       evrf_public_keys,
@@ -106,10 +108,20 @@ impl NewSetInformation {
 }
 
 impl NewSetInformation {
-  /// The hash to use for the genesis of the corresponding Tributary.
-  pub fn tributary_genesis(&self) -> [u8; 32] {
-    // This MUST only hash data completely deterministic to the Substrate blockchain.
-    Blake2b::<U32>::digest(borsh::to_vec(self).unwrap()).into()
+  /// The genesis to use for the corresponding Tributary.
+  pub fn tributary_genesis(&self) -> [u8; 16] {
+    /*
+      This MUST only hash data completely deterministic to the Substrate blockchain, in order to
+      ensure the genesis is agreed upon.
+
+      With regards to the Tributary, this solely has to be unique for the set. No cryptographic
+      requirements are placed on it. This leaves us to use the `set`'s encoding as the genesis.
+    */
+    let mut result = [0; 16];
+    // TODO: Remove this intermediary allocation
+    let set = borsh::to_vec(&self.set).unwrap();
+    result[.. set.len()].copy_from_slice(&set);
+    result
   }
 }
 

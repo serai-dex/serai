@@ -9,13 +9,13 @@ A Rust allocator which zeroizes all memory on deallocation.
 
 ### Allocator
 
-On nightly, with the `allocator` feature enabled, [`ZeroizingAlloc`] also
-implements
-[`Allocator`](https://doc.rust-lang.org/1.96.0/alloc/alloc/trait.Allocator.html)
+[`ZeroizingAlloc`] implements
+[`Allocator`](https://doc.rust-lang.org/alloc/alloc/trait.Allocator.html)
 and can be used for individual values with
-[`Box`](https://doc.rust-lang.org/1.96.0/alloc/boxed/struct.Box.html). This is
-notable for effecting zeroize even for types which don't implement
-[`Zeroize`](https://docs.rs/zeroize/1.9.0/zeroize/trait.Zeroize.html).
+[`Box`](https://doc.rust-lang.org/alloc/boxed/struct.Box.html). This is
+notable for effecting zeroization even for types which don't implement
+[`Zeroize`](https://docs.rs/zeroize/1.9.0/zeroize/trait.Zeroize.html)
+_assuming in-place construction_.
 
 ### Safety
 

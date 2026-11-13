@@ -105,7 +105,9 @@ pub(crate) fn aggregate<C: GroupIo + WithPreferredHash>() {
   }
 
   let aggregate = aggregator.complete().unwrap();
-  let aggregate = SchnorrAggregate::<C>::read(&mut aggregate.serialize().as_slice()).unwrap();
+  let aggregate =
+    SchnorrAggregate::<C>::read(&mut aggregate.serialize().as_slice(), aggregate.Rs().len())
+      .unwrap();
   assert!(
     aggregate.verify(
       DST,

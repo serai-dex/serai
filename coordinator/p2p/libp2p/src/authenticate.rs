@@ -4,7 +4,7 @@ use std::io;
 use zeroize::Zeroizing;
 use rand_core::{RngCore as _, OsRng};
 
-use blake2::{Digest as _, Blake2s256};
+use blake2::{Digest as _, Blake2b256};
 use schnorrkel::{Keypair, PublicKey, Signature};
 
 use serai_client_serai::abi::primitives::crypto::Public;
@@ -41,7 +41,7 @@ impl OnlyValidators {
     OsRng.fill_bytes(&mut our_challenge);
 
     // Write the hash of our challenge
-    socket.write_all(&Blake2s256::digest(our_challenge)).await?;
+    socket.write_all(&Blake2b256::digest(our_challenge)).await?;
     socket.flush().await?;
 
     // Read the hash of their challenge
@@ -57,7 +57,7 @@ impl OnlyValidators {
     socket.read_exact(&mut their_challenge).await?;
 
     // Verify their challenge
-    if <[u8; 32]>::from(Blake2s256::digest(their_challenge)) != their_challenge_commitment {
+    if <[u8; 32]>::from(Blake2b256::digest(their_challenge)) != their_challenge_commitment {
       Err(io::Error::other("challenge didn't match challenge commitment"))?;
     }
 
