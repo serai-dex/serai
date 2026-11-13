@@ -1,3 +1,7 @@
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![doc = include_str!("../README.md")]
+#![deny(missing_docs)]
+
 use core::fmt;
 use std::{collections::HashMap, io};
 
@@ -20,16 +24,18 @@ use serai_primitives::{
   network_id::ExternalNetworkId,
 };
 
-use crate::{PlannedTransaction, TransactionPlanner};
+use utxo_scheduler_primitives::{PlannedTransaction, TransactionPlanner};
 
-pub(crate) fn payment(address: u32, amount: u64) -> Payment<TestAddress> {
+/// A Monero payment of `amount` to `TestAddress(address)`.
+pub fn payment(address: u32, amount: u64) -> Payment<TestAddress> {
   Payment::new(
     TestAddress(address),
     ExternalBalance { amount: Amount(amount), coin: ExternalCoin::Monero },
   )
 }
 
-pub(crate) fn payments(qty: u32) -> Vec<Payment<TestAddress>> {
+/// `qty` payments to addresses `0 .. qty`, worth `100 * (i + 1)`.
+pub fn payments(qty: u32) -> Vec<Payment<TestAddress>> {
   let mut payments = Vec::with_capacity(qty.try_into().unwrap());
 
   for i in 0 .. qty {
@@ -39,7 +45,8 @@ pub(crate) fn payments(qty: u32) -> Vec<Payment<TestAddress>> {
   payments
 }
 
-pub(crate) fn get_addresses_and_amounts(
+/// Split payments into their addresses and amounts.
+pub fn get_addresses_and_amounts(
   payments: &[Payment<TestAddress>],
 ) -> (Vec<TestAddress>, Vec<u64>) {
   let addresses = payments.iter().map(|p| p.address().clone()).collect();
@@ -48,8 +55,9 @@ pub(crate) fn get_addresses_and_amounts(
   (addresses, amounts)
 }
 
+/// An address identified by a number.
 #[derive(Clone, Debug, PartialEq, BorshSerialize, BorshDeserialize)]
-pub(crate) struct TestAddress(pub(crate) u32);
+pub struct TestAddress(pub u32);
 
 impl fmt::Display for TestAddress {
   fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -73,10 +81,12 @@ impl TryFrom<ExternalAddress> for TestAddress {
   }
 }
 
-type Key = <Ed25519 as WrappedGroup>::G;
+/// The key type used by the test primitives.
+pub type Key = <Ed25519 as WrappedGroup>::G;
 
+/// A test block header.
 #[derive(Debug, Clone)]
-pub(crate) struct TestHeader;
+pub struct TestHeader;
 
 impl primitives::BlockHeader for TestHeader {
   fn id(&self) -> [u8; 32] {
@@ -88,8 +98,9 @@ impl primitives::BlockHeader for TestHeader {
   }
 }
 
+/// A test output identified only by its amount.
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub(crate) struct TestOutput(pub(crate) u64);
+pub struct TestOutput(pub u64);
 
 impl ReceivedOutput<Key, TestAddress> for TestOutput {
   type Id = [u8; 32];
@@ -133,8 +144,9 @@ impl ReceivedOutput<Key, TestAddress> for TestOutput {
   }
 }
 
+/// A test Eventuality.
 #[derive(Debug, Clone)]
-pub(crate) struct TestEventuality;
+pub struct TestEventuality;
 
 impl primitives::Eventuality for TestEventuality {
   type OutputId = [u8; 32];
@@ -160,8 +172,9 @@ impl primitives::Eventuality for TestEventuality {
   }
 }
 
+/// A test block.
 #[derive(Debug, Clone)]
-pub(crate) struct TestBlock;
+pub struct TestBlock;
 
 impl primitives::Block for TestBlock {
   type Header = TestHeader;
@@ -197,8 +210,9 @@ impl primitives::Block for TestBlock {
   }
 }
 
+/// A test ScannerFeed with a dust of 10.
 #[derive(Debug, Clone)]
-pub(crate) struct TestFeed;
+pub struct TestFeed;
 
 impl ScannerFeed for TestFeed {
   const NETWORK: ExternalNetworkId = ExternalNetworkId::Monero;
@@ -254,8 +268,9 @@ impl ScannerFeed for TestFeed {
   }
 }
 
+/// A transaction which panics if used.
 #[derive(Debug, Clone)]
-pub(crate) struct TestTransaction;
+pub struct TestTransaction;
 
 impl scheduler_primitives::Transaction for TestTransaction {
   fn read(_reader: &mut impl io::Read) -> io::Result<Self> {
@@ -267,8 +282,9 @@ impl scheduler_primitives::Transaction for TestTransaction {
   }
 }
 
+/// A FROST message which panics if used.
 #[derive(Clone)]
-pub(crate) struct TestMessage;
+pub struct TestMessage;
 
 impl Writable for TestMessage {
   fn write<W: io::Write>(&self, _writer: &mut W) -> io::Result<()> {
@@ -276,7 +292,8 @@ impl Writable for TestMessage {
   }
 }
 
-pub(crate) struct TestSignatureMachine;
+/// A FROST signature machine which panics if used.
+pub struct TestSignatureMachine;
 
 impl SignatureMachine<TestTransaction> for TestSignatureMachine {
   type SignatureShare = TestMessage;
@@ -293,7 +310,8 @@ impl SignatureMachine<TestTransaction> for TestSignatureMachine {
   }
 }
 
-pub(crate) struct TestSignMachine;
+/// A test FROST sign machine.
+pub struct TestSignMachine;
 
 impl SignMachine<TestTransaction> for TestSignMachine {
   type Params = ();
@@ -331,8 +349,9 @@ impl SignMachine<TestTransaction> for TestSignMachine {
   }
 }
 
+/// A test FROST preprocess machine.
 #[derive(Clone)]
-pub(crate) struct TestPreprocessMachine;
+pub struct TestPreprocessMachine;
 
 impl PreprocessMachine for TestPreprocessMachine {
   type Preprocess = TestMessage;
@@ -349,8 +368,9 @@ impl PreprocessMachine for TestPreprocessMachine {
   }
 }
 
-#[derive(Clone)]
-pub(crate) struct TestSignableTransaction;
+/// A test signable transaction.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TestSignableTransaction(pub [u8; 32]);
 
 impl SignableTransaction for TestSignableTransaction {
   type Transaction = TestTransaction;
@@ -359,12 +379,15 @@ impl SignableTransaction for TestSignableTransaction {
 
   type PreprocessMachine = TestPreprocessMachine;
 
-  fn read(_reader: &mut impl io::Read) -> io::Result<Self> {
-    todo!()
+  fn read(reader: &mut impl io::Read) -> io::Result<Self> {
+    let mut buffer = [0u8; 32];
+    reader.read_exact(&mut buffer)?;
+
+    Ok(Self(buffer))
   }
 
-  fn write(&self, _writer: &mut impl io::Write) -> io::Result<()> {
-    todo!()
+  fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
+    writer.write_all(&self.0)
   }
 
   fn id(&self) -> [u8; 32] {
@@ -376,7 +399,8 @@ impl SignableTransaction for TestSignableTransaction {
   }
 }
 
-pub(crate) struct TestPlanner;
+/// A test planner with a fee of `10 + 5 * outputs`.
+pub struct TestPlanner;
 
 impl TransactionPlanner<TestFeed, ()> for TestPlanner {
   type EphemeralError = ();
@@ -427,7 +451,7 @@ impl TransactionPlanner<TestFeed, ()> for TestPlanner {
   > {
     async {
       Ok(PlannedTransaction {
-        signable: TestSignableTransaction,
+        signable: TestSignableTransaction([0; 32]),
         eventuality: TestEventuality,
         auxilliary: (),
       })

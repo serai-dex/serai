@@ -55,6 +55,7 @@ members = [
   "processor/primitives",
   "processor/scanner",
   "processor/scheduler/primitives",
+  "processor/scheduler/test-primitives",
   "processor/scheduler/utxo/primitives",
   "processor/scheduler/utxo/standard",
   "processor/scheduler/utxo/transaction-chaining",

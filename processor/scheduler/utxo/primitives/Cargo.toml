@@ -26,8 +26,7 @@ scanner = { package = "serai-processor-scanner", path = "../../../scanner" }
 scheduler-primitives = { package = "serai-processor-scheduler-primitives", path = "../../primitives" }
 
 [dev-dependencies]
+scheduler-test-primitives = { package = "serai-processor-scheduler-test-primitives", path = "../../test-primitives" }
 ciphersuite = { path = "../../../../crypto/ciphersuite", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../../../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
-frost = { package = "modular-frost", path = "../../../../crypto/frost", default-features = false }
-rand_core = { version = "0.6", default-features = false }
 tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros"] }
