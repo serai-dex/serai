@@ -60,6 +60,11 @@ historical blocks if the observed block number is only one greater than the
 local block number, as this may just be momentary latency rather than actually
 needing to explicitly sync historical blocks.
 
+The local process may be behind even if
+[`TendermintHandle::observed_block_number`] is equal to the local process's
+block number, if less than the necessary supermajority of validators have
+handled the latest block. Processes MUST occasionally check for this.
+
 ### Validators
 
 Validators are expected to be consistent throughout the execution of the

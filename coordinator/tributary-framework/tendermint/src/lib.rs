@@ -192,8 +192,10 @@ mod tendermint {
           while {
             block_number = self.state.block_number();
 
-            let messages =
-              self.state.attempt_commit::<N>(&mut self.blockchain, &self.signer, &mut self.db).await;
+            let messages = self
+              .state
+              .attempt_commit::<N>(&mut self.blockchain, &self.signer, &mut self.db)
+              .await;
 
             for message in messages {
               self.network.broadcast(self.blockchain.genesis(), message).await;

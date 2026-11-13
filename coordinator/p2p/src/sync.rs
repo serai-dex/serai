@@ -1,4 +1,7 @@
-use core::sync::atomic::{Ordering, AtomicBool};
+use core::{
+  sync::atomic::{Ordering, AtomicBool},
+  time::Duration,
+};
 use std::time::Instant;
 
 use serai_primitives::validator_sets::ExternalValidatorSet;
@@ -107,6 +110,10 @@ pub(crate) struct SyncTask<
   /// A handle to the peer-to-peer network.
   p2p: P,
 
+  /// The last observed tip.
+  tip: Option<[u8; 32]>,
+  /// The time since which we've not been behind.
+  behind_by_zero: Option<Instant>,
   /// The time since which we've been behind by one block.
   behind_by_one: Option<Instant>,
 }
@@ -118,7 +125,8 @@ impl<
 > SyncTask<TD, Tx, P>
 {
   pub(crate) fn new(set: ExternalValidatorSet, tributary: TributaryHandle<TD, Tx>, p2p: P) -> Self {
-    Self { set, tributary, p2p, behind_by_one: None }
+    let tip = tributary.tip();
+    Self { set, tributary, p2p, tip, behind_by_zero: None, behind_by_one: None }
   }
 }
 
@@ -133,14 +141,34 @@ impl<
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       {
+        // If we've made progress, clear these counters
+        if self.tip != self.tributary.tip() {
+          self.behind_by_zero = None;
+          self.behind_by_one = None;
+        }
+
         let blocks_behind = self.tributary.blocks_behind().await;
-        // If we're not behind, we return having made no progress (as there's none to make)
+        // If we're not behind, only send sync requests if it's been unusually long since a block
         if blocks_behind == 0 {
           self.behind_by_one = None;
-          return Ok(false);
+          match self.behind_by_zero {
+            Some(start) => {
+              let target_block_time = P::target_block_time().unwrap_or(Duration::from_secs(12));
+              let time_to_wait = target_block_time.checked_mul(5).unwrap_or(Duration::from_mins(1));
+              if Instant::now().duration_since(start) < time_to_wait {
+                return Ok(false);
+              }
+            }
+            None => {
+              // Note we're not behind in case this becomes unusually long
+              self.behind_by_zero = Some(Instant::now());
+              return Ok(false);
+            }
+          }
         }
         // If we're only one block behind, only start syncing if it's been the latency time
         if blocks_behind == 1 {
+          self.behind_by_zero = None;
           match self.behind_by_one {
             Some(start) => {
               if Instant::now().duration_since(start) < P::LATENCY_TIME {
@@ -156,7 +184,8 @@ impl<
         }
       }
 
-      // Clear this counter
+      // Clear these counters
+      self.behind_by_zero = None;
       self.behind_by_one = None;
       // Track if we've synced a block
       let synced_block = AtomicBool::new(false);
