@@ -190,8 +190,8 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
     }
 
     // Receive requests for block proposals
-    if (!projection.request.is_terminated()) &&
-      let Poll::Ready(Some((parent, response))) = projection.request.poll_next(cx)
+    while (!projection.request.is_terminated()) &&
+      let Poll::Ready(Some((parent, response))) = projection.request.as_mut().poll_next(cx)
     {
       if parent == *projection.last_block {
         // Respond to a request for a block proposal with all transactions in our mempool

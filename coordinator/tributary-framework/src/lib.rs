@@ -79,12 +79,12 @@ impl<D: Db, T: Transaction, MN: MempoolNetwork<T>> Future for MempoolFuture<D, T
     let mut projection = self.project();
 
     let _: Poll<()> = projection.mempool.as_mut().poll(cx);
-    if (!projection.mempool_recv.is_terminated()) &&
+    while (!projection.mempool_recv.is_terminated()) &&
       let Poll::Ready(Some(AsyncAddToMempool { transaction, bypass_rate_limit, response })) =
-        projection.mempool_recv.poll_next(cx)
+        projection.mempool_recv.as_mut().poll_next(cx)
     {
       let mut txn = projection.db.txn();
-      let result = projection.mempool.add(&mut txn, transaction, bypass_rate_limit);
+      let result = projection.mempool.as_mut().add(&mut txn, transaction, bypass_rate_limit);
       txn.commit();
 
       let _ = response.try_send(result);
