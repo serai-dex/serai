@@ -25,7 +25,11 @@ use serai_abi::{
   LazySubstrateBlock as LazyBlock,
 };
 
-use serai_coins_pallet::{CoinsInstance, LiquidityTokensInstance, GenesisLiquidityTokensInstance};
+use serai_coins_pallet::{
+  CoinsInstance, LiquidityTokensInstance, GenesisLiquidityTokensInstance, AllowMint as _,
+};
+
+use serai_economic_security_pallet::{CoinsInstanceAllowMint, LiquidityTokensInstanceAllowMint};
 
 /// Maps `serai_abi` types into the types expected within the Substrate runtime
 mod map;
@@ -106,7 +110,7 @@ impl serai_core_pallet::Config for Runtime {
 }
 
 impl serai_coins_pallet::Config<CoinsInstance> for Runtime {
-  type AllowMint = serai_economic_security_pallet::CoinsInstanceAllowMint<Self>;
+  type AllowMint = CoinsInstanceAllowMint<Self>;
   type AllowBurnWithInstruction = serai_signals_pallet::Pallet<Self>;
   type Weights = (); // TODO
 }
@@ -130,7 +134,7 @@ impl serai_abi::signals::Halted for NeverAllowBurnWithInstruction {
   }
 }
 impl serai_coins_pallet::Config<LiquidityTokensInstance> for Runtime {
-  type AllowMint = serai_economic_security_pallet::LiquidityTokensInstanceAllowMint<Self>;
+  type AllowMint = LiquidityTokensInstanceAllowMint<Self>;
   type AllowBurnWithInstruction = NeverAllowBurnWithInstruction;
   // This does not have weights actually set as its call isn't exposed
   type Weights = ();
@@ -536,6 +540,14 @@ sp_api::impl_runtime_apis! {
 
     fn economic_security_time() -> Option<u64> {
       GenesisLiquidity::economic_security_time()
+    }
+
+    fn allow_coin_mint(balance: Balance) -> bool {
+      CoinsInstanceAllowMint::<Self>::is_allowed(&balance)
+    }
+
+    fn allow_liquidity_mint(balance: Balance) -> bool {
+      LiquidityTokensInstanceAllowMint::<Self>::is_allowed(&balance)
     }
   }
 }

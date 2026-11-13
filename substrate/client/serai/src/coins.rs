@@ -1,6 +1,10 @@
 pub use serai_abi::coins::Event;
 
-use serai_abi::primitives::{address::SeraiAddress, balance::Amount, coin::Coin};
+use serai_abi::primitives::{
+  address::SeraiAddress,
+  balance::{Amount, Balance},
+  coin::Coin,
+};
 
 use crate::{Events, RpcError, State, rpc_coin};
 
@@ -57,5 +61,15 @@ impl State<'_> {
     Ok(Amount(
       self.call::<u64>("coins/supply", &format!(r#", "coin": {} "#, rpc_coin(coin))).await?,
     ))
+  }
+
+  /// Check whether Serai will allow minting of the given coin balance.
+  pub async fn allow_coin_mint(&self, balance: Balance) -> Result<bool, RpcError> {
+    self
+      .call::<bool>(
+        "coins/allow-mint",
+        &format!(r#", "coin": {}, "amount": {:?} "#, rpc_coin(balance.coin), balance.amount),
+      )
+      .await
   }
 }

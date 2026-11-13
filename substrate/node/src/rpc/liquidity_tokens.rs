@@ -56,5 +56,20 @@ pub(crate) fn module(
     },
   )?;
 
+  module.register_method(
+    "liquidity-tokens/allow-mint",
+    |params, client, _ext| -> Result<_, Error> {
+      let Some(block_hash) = block_hash(client, &params)? else {
+        Err(Error::InvalidStateReference)?
+      };
+
+      let balance = balance(&params)?;
+      let Ok(allowed) = client.runtime_api().allow_liquidity_mint(block_hash, balance) else {
+        Err(Error::Internal("couldn't fetch the supply for the coin"))?
+      };
+      Ok(allowed)
+    },
+  )?;
+
   Ok(module)
 }

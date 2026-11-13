@@ -1,5 +1,7 @@
 use jsonrpsee::types::error::ErrorObjectOwned;
 
+use serai_abi::primitives::balance::{Amount, Balance};
+
 use super::*;
 
 pub(super) enum Error {
@@ -110,6 +112,22 @@ pub(super) fn coin(params: &Params) -> Result<Coin, Error> {
   };
 
   coin_from_str(coin.coin)
+}
+
+pub(super) fn balance(params: &Params) -> Result<Balance, Error> {
+  #[derive(sp_core::serde::Deserialize)]
+  #[serde(crate = "sp_core::serde")]
+  struct BalanceJson {
+    coin: String,
+    amount: u64,
+  }
+
+  let Ok(balance) = params.parse::<BalanceJson>() else {
+    Err(Error::InvalidRequest(r#"missing `string` "coin" field"#))?
+  };
+
+  let coin = coin_from_str(balance.coin)?;
+  Ok(Balance { coin, amount: Amount(balance.amount) })
 }
 
 pub(super) fn set(params: &Params) -> Result<ValidatorSet, Error> {

@@ -85,5 +85,11 @@ sp_api::decl_runtime_apis! {
     /// Returns the time economic security was achieved, represented in milliseconds
     /// since the epoch. Returns `None` if it isn't achieved yet.
     fn economic_security_time() -> Option<u64>;
+
+    /// Check whether Serai will allow the minting of this coin.
+    fn allow_coin_mint(balance: Balance) -> bool;
+
+    /// Check whether Serai will allow the minting of this liquidity.
+    fn allow_liquidity_mint(balance: Balance) -> bool;
   }
 }
