@@ -142,7 +142,7 @@ mod underlying {
     pairs: &[(G::Scalar, G)],
   ) -> G {
     match algorithm(pairs.len()) {
-      Algorithm::Null => Group::identity(),
+      Algorithm::Null => G::identity(),
       Algorithm::Single => pairs[0].1 * pairs[0].0,
       // These functions panic if called without any pairs
       Algorithm::Straus(window) => straus(pairs, window),
@@ -154,7 +154,7 @@ mod underlying {
   /// based on the amount of pairs.
   pub fn multiexp_vartime<G: Group<Scalar: PrimeFieldBits>>(pairs: &[(G::Scalar, G)]) -> G {
     match algorithm(pairs.len()) {
-      Algorithm::Null => Group::identity(),
+      Algorithm::Null => G::identity(),
       Algorithm::Single => pairs[0].1 * pairs[0].0,
       Algorithm::Straus(window) => straus_vartime(pairs, window),
       Algorithm::Pippenger(window) => pippenger_vartime(pairs, window),

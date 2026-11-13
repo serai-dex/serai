@@ -6,14 +6,14 @@ use zeroize::{Zeroize, Zeroizing};
 use subtle::ConditionallySelectable;
 
 use ff::{Field as _, PrimeFieldBits};
-use group::Group;
+use group::prime::PrimeGroup;
 
 use crate::{multiexp, multiexp_vartime};
 
 // Flatten the contained statements to a single Vec.
 // Wrapped in Zeroizing in case any of the included statements contain private values.
 #[expect(clippy::type_complexity)]
-fn flat<Id: Copy + Zeroize, G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>(
+fn flat<Id: Copy + Zeroize, G: Zeroize + PrimeGroup<Scalar: Zeroize + PrimeFieldBits>>(
   slice: &[(Id, Vec<(G::Scalar, G)>)],
 ) -> Zeroizing<Vec<(G::Scalar, G)>> {
   Zeroizing::new(slice.iter().flat_map(|pairs| pairs.1.iter()).copied().collect::<Vec<_>>())
@@ -22,11 +22,12 @@ fn flat<Id: Copy + Zeroize, G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>
 /// A batch verifier intended to verify a series of statements are each equivalent to zero.
 #[expect(clippy::type_complexity)]
 #[derive(Clone, Zeroize)]
-pub struct BatchVerifier<Id: Copy + Zeroize, G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>(
-  Zeroizing<Vec<(Id, Vec<(G::Scalar, G)>)>>,
-);
+pub struct BatchVerifier<
+  Id: Copy + Zeroize,
+  G: Zeroize + PrimeGroup<Scalar: Zeroize + PrimeFieldBits>,
+>(Zeroizing<Vec<(Id, Vec<(G::Scalar, G)>)>>);
 
-impl<Id: Copy + Zeroize, G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>
+impl<Id: Copy + Zeroize, G: Zeroize + PrimeGroup<Scalar: Zeroize + PrimeFieldBits>>
   BatchVerifier<Id, G>
 {
   /// Create a new batch verifier, expected to verify the following amount of statements.
@@ -127,7 +128,7 @@ impl<Id: Copy + Zeroize, G: Zeroize + Group<Scalar: Zeroize + PrimeFieldBits>>
 
 impl<
   Id: Copy + Zeroize,
-  G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
+  G: Zeroize + ConditionallySelectable + PrimeGroup<Scalar: Zeroize + PrimeFieldBits>,
 > BatchVerifier<Id, G>
 {
   /// Perform batch verification, returning a boolean of if the statements equaled zero.

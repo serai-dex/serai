@@ -6,12 +6,12 @@ use zeroize::Zeroize;
 use subtle::ConditionallySelectable;
 
 use ff::{Field as _, PrimeFieldBits};
-use group::Group;
+use group::prime::PrimeGroup;
 
 use crate::BatchVerifier;
 
 pub(crate) fn test_batch<
-  G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
+  G: Zeroize + ConditionallySelectable + PrimeGroup<Scalar: Zeroize + PrimeFieldBits>,
 >() {
   let valid = |batch: BatchVerifier<_, G>| {
     assert!(batch.verify());
