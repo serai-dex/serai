@@ -16,7 +16,7 @@ runs:
         sudo apt install -y uidmap
 
     - name: Install rootless Docker (Linux)
-      uses: docker/setup-docker-action@2bf61fb9464cc67f0cbdeabed6aa0380accd1c70 # 5.5.0
+      uses: docker/setup-docker-action@3f1ab1ab0e29231562e4db4ca600c1a49653bac6 # 5.7.0
       if: runner.os == 'Linux'
       with:
         rootless: true
@@ -47,7 +47,7 @@ runs:
         fi
 
     - name: Install Docker (macOS)
-      uses: docker/setup-docker-action@2bf61fb9464cc67f0cbdeabed6aa0380accd1c70 # 5.5.0
+      uses: docker/setup-docker-action@3f1ab1ab0e29231562e4db4ca600c1a49653bac6 # 5.7.0
       if: runner.os == 'macOS'
       env:
         # m1 chips, as seen in the GitHub CI, don't support nested hardware virtualization.
@@ -101,7 +101,7 @@ runs:
       env:
         PODMAN_ARCH: ${{ runner.arch == 'X64' && 'amd64' || 'arm64' }}
       run: |
-        Invoke-WebRequest https://github.com/containers/podman/releases/download/v6.1.4/podman-installer-windows-${Env:PODMAN_ARCH}.msi -OutFile podman.msi
+        Invoke-WebRequest https://github.com/containers/podman/releases/download/v6.2.0/podman-installer-windows-${Env:PODMAN_ARCH}.msi -OutFile podman.msi
         Start-Process -Wait -PassThru 'msiexec' -ArgumentList "/package podman.msi /quiet /log podman-msi.log MACHINE_PROVIDER=wsl ALLUSERS=1"
         Get-Content podman-msi.log
 

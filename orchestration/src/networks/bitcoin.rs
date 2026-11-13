@@ -4,7 +4,7 @@ use std::path::Path;
 use crate::{Network, Os, mimalloc, os, write_dockerfile};
 
 pub fn bitcoin(orchestration_path: &Path, network: Network) {
-  const VERSION: &str = "31.0";
+  const VERSION: &str = "32.1";
   let file = format!("bitcoin-{VERSION}-$(uname -m)-linux-gnu.tar.gz");
   let url = format!("https://bitcoincore.org/bin/bitcoin-core-{VERSION}");
 
@@ -34,7 +34,7 @@ RUN <<'EOF'
   .to_owned();
 
   let signers = [
-    ("laanwj", "71A3B16735405025D447E8F274810B012346C9A6"),
+    ("sedited", "A8FC55F3B04BA3146F3492E79303B33A305224CB"),
     ("fanquake", "E777299FC265DD04793070EB944D35F9AC3DB76A"),
     ("achow101", "152812300785C96444D3334D17565732E08E5E41"),
   ];
