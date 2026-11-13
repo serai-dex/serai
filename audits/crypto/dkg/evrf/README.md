@@ -65,4 +65,6 @@ Note we do not use the originally premised DDH eVRF yet the one premised on
 elliptic curve divisors, the methodology of which is commented on
 [here](https://github.com/monero-oxide/monero-oxide/tree/fcmp%2B%2B/audits/divisors).
 
-Our implementation itself is unaudited at this time however.
+The implementation was [audited by Least Authority](./Audit.pdf) by July, 2026.
+For provenance, please see their posting
+[here](https://leastauthority.com/blog/audit-of-serai-distributed-key-generation/).

@@ -27,7 +27,7 @@ presented in section 4.2 is extended, with the following changes:
 
 For a gist of the verifiable encryption scheme, please see
 https://gist.github.com/kayabaNerve/cfbde74b0660dfdf8dd55326d6ec33d7. For more
-formal descriptions, security proofs, audit information, please see
+formal descriptions, security proofs, and audit information, please see
 [here](../../../audits/crypto/dkg/evrf).
 
 ---
