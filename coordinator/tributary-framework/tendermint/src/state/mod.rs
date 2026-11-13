@@ -7,7 +7,7 @@ use alloc::{boxed::Box, sync::Arc};
 use std::time::Instant;
 
 use borsh::{BorshSerialize, BorshDeserialize};
-use serai_db::{Db, Transaction};
+use serai_db::{Db, Get, Transaction};
 
 use crate::{
   SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, CommitFor, InvalidBlock,
@@ -160,6 +160,13 @@ pub(super) struct State<B: Blockchain> {
 }
 
 /// A struct for the asynchronous work required to obtain a usable [`State`].
+///
+/// This allows `Tendermint::process` to be synchronous, setting an expectation it completes in a
+/// reasonable amount of time, deferring the asynchronous work to the asynchronous
+/// `Tendermint::run`. It also means `Tendermint::process` doesn't poll any futures, whether the
+/// block proposal future or the future to broadcast a message over the P2P layer. This allows
+/// those futures to be reliant on tasks which have yet to be spawned, such as if they'll be
+/// spawned _with_ the Tendermint process, without blocking the creation of the Tendermint process.
 pub(super) struct StateFuture<B: Blockchain> {
   first_init: bool,
   state: State<B>,
@@ -901,7 +908,7 @@ impl<B: BorshyBlockchain> State<B> {
     round_messages
   }
 
-  // L01-L10
+  // L01-L09
   #[expect(clippy::new_ret_no_self)]
   pub(super) fn new<
     N: Network<
@@ -912,15 +919,13 @@ impl<B: BorshyBlockchain> State<B> {
       >,
   >(
     blockchain: &mut B,
-    db: &mut impl Db,
+    getter: &impl Get,
     proposal: B::BlockProposal,
   ) -> StateFuture<B> {
     let genesis = blockchain.genesis();
     let genesis = genesis.as_ref();
 
     let validator_set = blockchain.validator_set();
-
-    let getter = &*db;
 
     let (first_init, block_number, round_number, step) = {
       let block_number = db::BlockNumber::get(getter, genesis);
@@ -1006,23 +1011,24 @@ impl<B: BorshyBlockchain> StateFuture<B> {
   ) -> (State<B>, RoundMessages<B>) {
     let Self { first_init, mut state } = self;
 
-    let mut messages = if first_init {
+    let messages = if first_init {
+      // L10
       let mut txn = db.txn();
       db::BlockNumber::set(&mut txn, blockchain.genesis().as_ref(), &BlockNumber::ONE);
       let messages = state.start_round::<N>(blockchain, signer, &mut txn, state.round_number).await;
       txn.commit();
       messages
     } else {
-      RoundMessages::NONE
+      // If we had a commit in progress which was interrupted, complete it now
+      let genesis = blockchain.genesis();
+      if let Some((block, commit)) = db::CommitInProgress::<B>::get(db, genesis.as_ref()) &&
+        (commit.block_number > state.block_number)
+      {
+        state.commit::<N>(blockchain, signer, db, block, commit).await
+      } else {
+        RoundMessages::NONE
+      }
     };
-
-    // If we had a commit in progress which was interrupted, complete it now
-    let genesis = blockchain.genesis();
-    if let Some((block, commit)) = db::CommitInProgress::<B>::get(db, genesis.as_ref()) &&
-      (commit.block_number > state.block_number)
-    {
-      messages = state.commit::<N>(blockchain, signer, db, block, commit).await;
-    }
 
     (state, messages)
   }

@@ -327,7 +327,7 @@ mod tendermint {
     pub fn process(
       mut blockchain: B,
       signer: S,
-      mut db: D,
+      db: D,
       network: N,
       proposal: B::BlockProposal,
     ) -> (TendermintHandle<B>, Self) {
@@ -357,7 +357,7 @@ mod tendermint {
       let (message_send, message_recv) =
         async_channel::bounded(2 * blockchain.validator_set().validators().into_iter().count());
 
-      let state = State::new::<N>(&mut blockchain, &mut db, proposal);
+      let state = State::new::<N>(&mut blockchain, &db, proposal);
 
       (
         TendermintHandle {
