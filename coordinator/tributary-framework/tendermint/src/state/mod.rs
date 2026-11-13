@@ -1022,7 +1022,7 @@ impl<B: BorshyBlockchain> StateFuture<B> {
       // If we had a commit in progress which was interrupted, complete it now
       let genesis = blockchain.genesis();
       if let Some((block, commit)) = db::CommitInProgress::<B>::get(db, genesis.as_ref()) &&
-        (commit.block_number > state.block_number)
+        (commit.block_number == state.block_number)
       {
         state.commit::<N>(blockchain, signer, db, block, commit).await
       } else {
