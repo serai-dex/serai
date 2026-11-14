@@ -103,6 +103,8 @@ pub trait Network<V: Validator, S: Signature, A: AggregateSignature, B: Block> {
 #[cfg(feature = "std")]
 mod tendermint {
   use core::{
+    pin::Pin,
+    task::{Poll, Context},
     sync::atomic::{Ordering, AtomicU64},
     num::NonZero,
   };
@@ -401,7 +403,47 @@ mod tendermint {
           .expect("observed block number was corrupted"),
       )
     }
+  }
 
+  pin_project_lite::pin_project! {
+    /// A wrapper around `async_channel::Send` which maps `SendError` to `ProcessTerminated`.
+    ///
+    /// By giving this future a literal type, it can be named in other contexts, allow deferring
+    /// `Send`/`Sync` bounds.
+    #[doc(hidden)]
+    pub struct SendFuture<F> {
+      #[pin]
+      future: F,
+    }
+  }
+  impl<T, F: Future<Output = Result<(), async_channel::SendError<T>>>> Future for SendFuture<F> {
+    type Output = Result<(), ProcessTerminated>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+      match self.project().future.poll(cx) {
+        Poll::Ready(result) => Poll::Ready(result.map_err(|async_channel::SendError(value)| {
+          /*
+            `SendError` is returned when the channel was closed (giving back the message attempted
+            to be sent). If we can't communicate with the Tendermint process, it's because it was
+            dropped, and the process has been terminated.
+          */
+          let _: T = value;
+          ProcessTerminated
+        })),
+        Poll::Pending => Poll::Pending,
+      }
+    }
+  }
+  /// The future returned by [`TendermintHandle::sync`].
+  ///
+  /// The exact type this aliases is NOT covered by any stability guarantees.
+  pub type SyncFuture<'handle, B> =
+    SendFuture<async_channel::Send<'handle, (<B as Blockchain>::Block, CommitFor<B>)>>;
+  /// The future returned by [`TendermintHandle::message`].
+  ///
+  /// The exact type this aliases is NOT covered by any stability guarantees.
+  pub type MessageFuture<'handle, B> = SendFuture<async_channel::Send<'handle, MessageFor<B>>>;
+
+  impl<B: Blockchain> TendermintHandle<B> {
     /// Sync a block by its commit.
     ///
     /// The Tendermint implementation will validate the commit as necessary.
@@ -409,12 +451,10 @@ mod tendermint {
     /// This function returns `Ok(())` if the Tendermint process is still running and `Err(())`
     /// otherwise. This function implements backpressure and will wait until the process has the
     /// capacity to receive this.
-    pub async fn sync(
-      &mut self,
-      block: B::Block,
-      commit: CommitFor<B>,
-    ) -> Result<(), ProcessTerminated> {
-      self.sync.send((block, commit)).await.map_err(|_| ProcessTerminated)
+    ///
+    /// This future is cancel-safe.
+    pub fn sync(&mut self, block: B::Block, commit: CommitFor<B>) -> SyncFuture<'_, B> {
+      SendFuture { future: self.sync.send((block, commit)) }
     }
 
     /// Handle a message received from the network.
@@ -424,8 +464,10 @@ mod tendermint {
     /// This function returns `Ok(())` if the Tendermint process is still running and `Err(())`
     /// otherwise. This function implements backpressure and will wait until the process has the
     /// capacity to receive this.
-    pub async fn message(&mut self, message: MessageFor<B>) -> Result<(), ProcessTerminated> {
-      self.message.send(message).await.map_err(|_| ProcessTerminated)
+    ///
+    /// This future is cancel-safe.
+    pub fn message(&mut self, message: MessageFor<B>) -> MessageFuture<'_, B> {
+      SendFuture { future: self.message.send(message) }
     }
   }
 }
