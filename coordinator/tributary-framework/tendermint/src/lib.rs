@@ -190,8 +190,9 @@ mod tendermint {
     /// 2) The process terminates, so that the Tendermint process will be re-initialized from the
     ///    disk before any further use
     pub async fn run(mut self) {
+      let state = core::pin::pin!(self.state);
       let (mut state, messages) =
-        self.state.finish::<N>(&mut self.blockchain, &self.signer, &mut self.db).await;
+        state.finish::<N>(&mut self.blockchain, &self.signer, &mut self.db).await;
       for message in messages {
         self.network.broadcast(self.blockchain.genesis(), message).await;
       }

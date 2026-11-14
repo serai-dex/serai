@@ -1,5 +1,6 @@
 use core::{
   num::NonZero,
+  pin::Pin,
   sync::atomic::{Ordering, AtomicU64},
   time::Duration,
 };
@@ -62,114 +63,123 @@ type BlockValidityCache<B> = std::collections::HashMap<
   (<<B as Blockchain>::Block as Block>::Hash, Result<(), InvalidBlock>),
 >;
 
-/// The state for the Tendermint consensus protocol.
-///
-/// This is intertwined with participating in consensus and can not be used for third-party
-/// observation.
-pub(super) struct State<B: Blockchain> {
-  /// The current block number.
-  block_number: BlockNumber,
-  /// A public reference to the block number.
+pin_project_lite::pin_project! {
+  /// The state for the Tendermint consensus protocol.
   ///
-  /// This is updated approximately as the state's block number is.
-  block_number_ref: Arc<AtomicU64>,
+  /// This is intertwined with participating in consensus and can not be used for third-party
+  /// observation.
+  #[project = StateProjection]
+  pub(super) struct State<B: Blockchain> {
+    // The current block number.
+    block_number: BlockNumber,
+    // A public reference to the block number.
+    //
+    // This is updated approximately as the state's block number is.
+    block_number_ref: Arc<AtomicU64>,
 
-  /// A tracker for which block numbers we've observed validators attempting consensus for.
-  observed_block_numbers: ObservedBlockNumbers<B::Validator>,
-  /// A public reference to the greatest observed block number.
-  observed_block_number_ref: Arc<AtomicU64>,
+    // A tracker for which block numbers we've observed validators attempting consensus for.
+    observed_block_numbers: ObservedBlockNumbers<B::Validator>,
+    // A public reference to the greatest observed block number.
+    observed_block_number_ref: Arc<AtomicU64>,
 
-  /// Our proposal for this block.
-  proposal: BlockProposal<B::Block, B::BlockProposal>,
+    // Our proposal for this block.
+    #[pin]
+    proposal: BlockProposal<B::Block, B::BlockProposal>,
 
-  /// The current round number.
-  round_number: RoundNumber,
-  /// The pending timeout for the current step.
-  ///
-  /// This is represented as its start time and duration.
-  ///
-  /// This is only used for the proposal/prevote steps' timeouts as:
-  /// - The proposal timeout is only scheduled on L21, after assigning the step to propose
-  /// - The prevote timeout is only scheduled on L35, while the step is prevote
-  ///
-  /// and therefore the preposal/prevote timeouts are specific to the _current_ step.
-  pending_step_timeout: Option<(Instant, Duration)>,
-  /// The pending precommit timeout.
-  ///
-  /// This is represented as its start time and duration.
-  ///
-  /// This is explicitly used for the precommit step as the precommit timeout is scheduled on L48
-  /// _regardless of the current step_.
-  pending_precommit_timeout: Option<(Instant, Duration)>,
-  /// The current step.
-  step: Step,
-  /// The timeout to rebroadcast messages upon.
-  rebroadcast_timeout: (Instant, Duration),
+    // The current round number.
+    round_number: RoundNumber,
+    // The pending timeout for the current step.
+    //
+    // This is represented as its start time and duration.
+    //
+    // This is only used for the proposal/prevote steps' timeouts as:
+    // - The proposal timeout is only scheduled on L21, after assigning the step to propose
+    // - The prevote timeout is only scheduled on L35, while the step is prevote
+    //
+    // and therefore the preposal/prevote timeouts are specific to the _current_ step.
+    pending_step_timeout: Option<(Instant, Duration)>,
+    // The pending precommit timeout.
+    //
+    // This is represented as its start time and duration.
+    //
+    // This is explicitly used for the precommit step as the precommit timeout is scheduled on L48
+    // _regardless of the current step_.
+    pending_precommit_timeout: Option<(Instant, Duration)>,
+    // The current step.
+    step: Step,
+    // The timeout to rebroadcast messages upon.
+    rebroadcast_timeout: (Instant, Duration),
 
-  /// The valid value and round, if one has been decided.
-  ///
-  /// The formal description initializes this to `(-1, null)`, though we represent such a case as
-  /// `None`.
-  #[expect(clippy::type_complexity)]
-  valid:
-    Option<(ValidRound<<B::SignatureScheme as SignatureScheme>::AggregateSignature>, B::Block)>,
+    // The valid value and round, if one has been decided.
+    //
+    // The formal description initializes this to `(-1, null)`, though we represent such a case as
+    // `None`.
+    valid:
+      Option<(ValidRound<<B::SignatureScheme as SignatureScheme>::AggregateSignature>, B::Block)>,
 
-  /// The locked value and round, if one has been decided.
-  ///
-  /// The formal description initializes this to `(-1, null)`, though we represent such a case as
-  /// `None`. We additionally only store the locked block's ID, not the locked block in its entity,
-  /// as we solely need this to perform comparison checks with. Per the definition of
-  /// [`Block::id`], the equality of IDs is equal to the equality of the blocks themselves.
-  locked: Option<(RoundNumber, <B::Block as Block>::Hash)>,
+    // The locked value and round, if one has been decided.
+    //
+    // The formal description initializes this to `(-1, null)`, though we represent such a case as
+    // `None`. We additionally only store the locked block's ID, not the locked block in its
+    // entirety, as we solely need this to perform comparison checks with. Per the definition of
+    // [`Block::id`], the equality of IDs is equal to the equality of the blocks themselves.
+    locked: Option<(RoundNumber, <B::Block as Block>::Hash)>,
 
-  /// The metrics from this round.
-  round_metrics: RoundMetrics<B>,
+    // The metrics from this round.
+    round_metrics: RoundMetrics<B>,
 
-  /// The cache for a block's validity.
-  block_validity: BlockValidityCache<B>,
+    // The cache for a block's validity.
+    block_validity: BlockValidityCache<B>,
 
-  /// The messages from validators for the rounds we're actively tracking.
-  round_messages: TrackedRounds<B>,
+    // The messages from validators for the rounds we're actively tracking.
+    round_messages: TrackedRounds<B>,
 
-  /// Our latest prevote messages.
-  ///
-  /// We rebroadcast this with the assumption all other validators will be doing the same for their
-  /// own messages. This will cause a latent peer to jump to the current round, get past the
-  /// prevote phase, and send their own precommit.
-  ///
-  /// We keep the latest _two_ prevotes as if we send our own prevote for round #n+1, there may
-  /// only be `f` such validators doing so, while the remaining `f + 1` validators who have been
-  /// online may be stuck on round #n. If `f` of these validators then go offline, replaced by `f`
-  /// validators who have been offline the entire time, those validators will see `f+1` precommits
-  /// for round #n (which is insufficient to make progress, requiring observing `2 f + 1`). By
-  /// keeping our prevote for the prior round as well, the validators who were offline the entire
-  /// time may be handheld through the prevote step, then sending their own precommits, finally
-  /// achieving the necessary precommits for _everyone_ to move to the next round.
-  our_latest_prevotes: [Option<MessageFor<B>>; 2],
+    // Our latest prevote messages.
+    //
+    // We rebroadcast this with the assumption all other validators will be doing the same for
+    // their own messages. This will cause a latent peer to jump to the current round, get past the
+    // prevote phase, and send their own precommit.
+    //
+    // We keep the latest _two_ prevotes as if we send our own prevote for round #n+1, there may
+    // only be `f` such validators doing so, while the remaining `f + 1` validators who have been
+    // online may be stuck on round #`n`. If `f` of these validators then go offline, replaced by
+    // `f` validators who have been offline the entire time, those validators will see `f+1`
+    // precommits for round #`n` (which is insufficient to make progress, requiring observing
+    // `2 * f + 1`). By keeping our prevote for the prior round as well, the validators who were
+    // offline the entire  time may be handheld through the prevote step, then sending their own
+    // precommits, finally achieving the necessary precommits for _everyone_ to move to the next
+    // round.
+    our_latest_prevotes: [Option<MessageFor<B>>; 2],
 
-  /// Our latest precommit message.
-  ///
-  /// We rebroadcast this with the assumption all other validators will be doing the same for their
-  /// own messages. This will cause a latent peer to jump to the current round, and once we have
-  /// `2 f + 1` precommits, start the next round.
-  ///
-  /// We only store our latest precommit as this implies the existence of `2 f + 1` prevotes for
-  /// this round, as sufficient for everyone to jump to this round even if `f` validators are
-  /// substituted.
-  our_latest_precommit: Option<MessageFor<B>>,
+    // Our latest precommit message.
+    //
+    // We rebroadcast this with the assumption all other validators will be doing the same for
+    // their own messages. This will cause a latent peer to jump to the current round, and once we
+    // have `2 f + 1` precommits, start the next round.
+    //
+    // We only store our latest precommit as this implies the existence of `2 f + 1` prevotes for
+    // this round, as sufficient for everyone to jump to this round even if `f` validators are
+    // substituted.
+    our_latest_precommit: Option<MessageFor<B>>,
+  }
 }
 
-/// A struct for the asynchronous work required to obtain a usable [`State`].
-///
-/// This allows `Tendermint::process` to be synchronous, setting an expectation it completes in a
-/// reasonable amount of time, deferring the asynchronous work to the asynchronous
-/// `Tendermint::run`. It also means `Tendermint::process` doesn't poll any futures, whether the
-/// block proposal future or the future to broadcast a message over the P2P layer. This allows
-/// those futures to be reliant on tasks which have yet to be spawned, such as if they'll be
-/// spawned _with_ the Tendermint process, without blocking the creation of the Tendermint process.
-pub(super) struct StateFuture<B: Blockchain> {
-  first_init: bool,
-  state: State<B>,
+pin_project_lite::pin_project! {
+  /// A struct for the asynchronous work required to obtain a usable [`State`].
+  ///
+  /// This allows `Tendermint::process` to be synchronous, setting an expectation it completes in a
+  /// reasonable amount of time, deferring the asynchronous work to the asynchronous
+  /// `Tendermint::run`. It also means `Tendermint::process` doesn't poll any futures, whether the
+  /// block proposal future or the future to broadcast a message over the P2P layer. This allows
+  /// those futures to be reliant on tasks which have yet to be spawned, such as if they'll be
+  /// spawned _with_ the Tendermint process, without blocking the creation of the Tendermint
+  /// process.
+  #[project = StateFutureProjection]
+  pub(super) struct StateFuture<B: Blockchain> {
+    first_init: bool,
+    #[pin]
+    state: State<B>,
+  }
 }
 
 impl<B: Blockchain> AsRef<State<B>> for StateFuture<B> {
@@ -197,13 +207,15 @@ fn new_rebroadcast_timeout<
   )
 }
 
-impl<B: BorshyBlockchain> State<B> {
+impl<B: BorshyBlockchain> StateProjection<'_, B> {
   /// The current block number.
   #[must_use]
   pub(super) fn block_number(&self) -> BlockNumber {
-    self.block_number
+    *self.block_number
   }
+}
 
+impl<B: BorshyBlockchain> State<B> {
   /// Create a new reference to the number for the block we're currently attempting to achieve
   /// consensus over.
   ///
@@ -230,7 +242,9 @@ impl<B: BorshyBlockchain> State<B> {
   pub(super) fn observed_block_number_ref(&self) -> Arc<AtomicU64> {
     self.observed_block_number_ref.clone()
   }
+}
 
+impl<B: BorshyBlockchain> StateProjection<'_, B> {
   async fn validate_block(
     block_validity: &mut BlockValidityCache<B>,
     blockchain: &mut B,
@@ -272,8 +286,7 @@ impl<B: BorshyBlockchain> State<B> {
   ) -> Result<(), InvalidBlock> {
     // If this is a proposal, check the block isn't fatally invalid
     if let Data::Proposal { valid_round: _, proposal } = &message.data {
-      match Self::validate_block(&mut self.block_validity, blockchain, message.validator, proposal)
-        .await
+      match Self::validate_block(self.block_validity, blockchain, message.validator, proposal).await
       {
         Ok(()) | Err(InvalidBlock::Temporal) => {}
         Err(InvalidBlock::Fatal) => Err(InvalidBlock::Fatal)?,
@@ -310,12 +323,12 @@ impl<B: BorshyBlockchain> State<B> {
     txn: &mut impl Transaction,
   ) -> Option<MessageFor<B>> {
     // L14
-    let proposer = blockchain.validator_set().proposer(self.block_number, self.round_number);
+    let proposer = blockchain.validator_set().proposer(*self.block_number, *self.round_number);
     if proposer != signer.validator() {
       None?;
     }
 
-    let (valid_round, proposal) = match &self.valid {
+    let (valid_round, proposal) = match &*self.valid {
       // L15-L16
       Some((valid_round, block)) => (Some(valid_round.clone()), block.clone()),
       // L17-L18
@@ -336,13 +349,11 @@ impl<B: BorshyBlockchain> State<B> {
               of ensuring our own validator doesn't make an invalid proposal is worth the
               inefficiency.
             */
-            match Self::validate_block(&mut self.block_validity, blockchain, proposer, &proposal)
-              .await
-            {
+            match Self::validate_block(self.block_validity, blockchain, proposer, &proposal).await {
               Ok(()) => {}
               Err(InvalidBlock::Temporal) => None?,
               Err(InvalidBlock::Fatal) => {
-                self.proposal = BlockProposal::Invalid;
+                self.proposal.set(BlockProposal::Invalid);
                 None?;
               }
             }
@@ -370,8 +381,8 @@ impl<B: BorshyBlockchain> State<B> {
       MessageFor::<B>::sign(
         signer,
         genesis,
-        self.block_number,
-        self.round_number,
+        *self.block_number,
+        *self.round_number,
         Data::Proposal { valid_round, proposal },
       )
       .await,
@@ -407,8 +418,8 @@ impl<B: BorshyBlockchain> State<B> {
     let result = MessageFor::<B>::sign(
       signer,
       genesis,
-      self.block_number,
-      self.round_number,
+      *self.block_number,
+      *self.round_number,
       Data::Prevote { block },
     )
     .await;
@@ -424,12 +435,12 @@ impl<B: BorshyBlockchain> State<B> {
 
     let _ = self.pending_step_timeout.take();
     db::PendingStepTimeout::del(txn, genesis);
-    self.step = Step::Prevote;
-    db::Step::set(txn, genesis, &self.step);
-    self.rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(self.round_number);
+    *self.step = Step::Prevote;
+    db::Step::set(txn, genesis, &*self.step);
+    *self.rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(*self.round_number);
 
-    self.our_latest_prevotes = [self.our_latest_prevotes[1].take(), Some(result.clone())];
-    db::OurLatestPrevotes::<B>::set(txn, genesis, &self.our_latest_prevotes);
+    *self.our_latest_prevotes = [self.our_latest_prevotes[1].take(), Some(result.clone())];
+    db::OurLatestPrevotes::<B>::set(txn, genesis, &*self.our_latest_prevotes);
     result
   }
 
@@ -456,7 +467,7 @@ impl<B: BorshyBlockchain> State<B> {
      ),
     txn: &mut impl Transaction,
   ) -> Option<MessageFor<B>> {
-    if !matches!(self.step, Step::Propose) {
+    if !matches!(*self.step, Step::Propose) {
       None?;
     }
 
@@ -464,7 +475,7 @@ impl<B: BorshyBlockchain> State<B> {
       self.round_metrics.observed_proposal()?;
 
     let block_validity =
-      Self::validate_block(&mut self.block_validity, blockchain, proposer, proposal).await;
+      Self::validate_block(self.block_validity, blockchain, proposer, proposal).await;
     /*
       The block MUST NOT be considered fatally invalid. This clause SHOULD be unreachable as we
       shouldn't have accumulated a fatally invalid block in the first place.
@@ -479,7 +490,7 @@ impl<B: BorshyBlockchain> State<B> {
         - we have the proposal
         - the metrics bound that we only accumulate proposals from the right proposer
       */
-      None => match &self.locked {
+      None => match &*self.locked {
         /*
           If we haven't locked this block to be finalized, and there isn't a valid round
           certificate for this block, we require it be valid in every way.
@@ -500,7 +511,7 @@ impl<B: BorshyBlockchain> State<B> {
       */
       Some(round_number) => {
         // L29, where we assume the block's validity due to the valid round certificate
-        match &self.locked {
+        match &*self.locked {
           Some((locked_round, locked_value)) => {
             ((*locked_round) <= round_number) || (proposal.proposal_hash() == (*locked_value))
           }
@@ -562,15 +573,15 @@ impl<B: BorshyBlockchain> State<B> {
     ));
     let _ = self.pending_step_timeout.take();
     db::PendingStepTimeout::del(txn, genesis);
-    self.step = Step::Precommit;
-    db::Step::set(txn, genesis, &self.step);
-    self.rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(self.round_number);
+    *self.step = Step::Precommit;
+    db::Step::set(txn, genesis, &*self.step);
+    *self.rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(*self.round_number);
 
     let result = MessageFor::<B>::sign(
       signer,
       genesis,
-      self.block_number,
-      self.round_number,
+      *self.block_number,
+      *self.round_number,
       Data::Precommit { block_and_precommit_signature },
     )
     .await;
@@ -579,7 +590,7 @@ impl<B: BorshyBlockchain> State<B> {
       the prior round around to ensure every validator eventually participates in this round.
     */
     self.our_latest_prevotes[0] = None;
-    self.our_latest_precommit = Some(result.clone());
+    *self.our_latest_precommit = Some(result.clone());
     db::OurLatestPrecommit::<B>::set(txn, genesis, &result);
     result
   }
@@ -614,7 +625,7 @@ impl<B: BorshyBlockchain> State<B> {
       therefore believe this value is valid.
     */
     let (proposal, valid_round) = {
-      if !matches!(self.step, Step::Prevote | Step::Precommit) {
+      if !matches!(*self.step, Step::Prevote | Step::Precommit) {
         None?;
       }
 
@@ -624,7 +635,7 @@ impl<B: BorshyBlockchain> State<B> {
       */
       if self.valid.as_ref().is_some_and(
         |(ValidRound { round_number, aggregate_signature: _ }, _block)| {
-          (*round_number) >= self.round_number
+          (*round_number) >= (*self.round_number)
         },
       ) {
         None?;
@@ -646,19 +657,19 @@ impl<B: BorshyBlockchain> State<B> {
     {
       let valid = (valid_round, proposal.clone());
       db::Valid::<B>::set(txn, genesis, &valid);
-      self.valid = Some(valid);
+      *self.valid = Some(valid);
     }
 
     // L37
-    if !matches!(self.step, Step::Prevote) {
+    if !matches!(*self.step, Step::Prevote) {
       None?;
     }
 
     // L38-L39
     {
-      let locked = (self.round_number, proposal.proposal_hash());
+      let locked = (*self.round_number, proposal.proposal_hash());
       db::Locked::set(txn, genesis, &locked);
-      self.locked = Some(locked);
+      *self.locked = Some(locked);
     }
 
     // L40-L41
@@ -666,8 +677,8 @@ impl<B: BorshyBlockchain> State<B> {
     let precommit_signature = CommitFor::<B>::sign::<B::SignatureScheme>(
       signer,
       genesis,
-      self.block_number,
-      self.round_number,
+      *self.block_number,
+      *self.round_number,
       semantic_hash.as_ref(),
     )
     .await;
@@ -706,11 +717,11 @@ impl<B: BorshyBlockchain> State<B> {
         self.prevote_upon_proposal_message::<N>(blockchain, signer, txn).await;
 
       // L57-L60
-      let prevote_upon_timeout_message = if matches!(self.step, Step::Propose) &&
+      let prevote_upon_timeout_message = if matches!(*self.step, Step::Propose) &&
         self.pending_step_timeout.is_some_and(|(start, duration)| start.elapsed() >= duration)
       {
         blockchain.missed_proposal(
-          blockchain.validator_set().proposer(self.block_number, self.round_number),
+          blockchain.validator_set().proposer(*self.block_number, *self.round_number),
         );
         Some(self.prevote_message::<N>(blockchain, signer, txn, None).await)
       } else {
@@ -722,18 +733,18 @@ impl<B: BorshyBlockchain> State<B> {
     };
 
     // L34-L35
-    if matches!(self.step, Step::Prevote) &&
+    if matches!(*self.step, Step::Prevote) &&
       self.pending_step_timeout.is_none() &&
       (self.round_metrics.observed_prevotes() >= blockchain.validator_set().threshold())
     {
       let duration = N::LATENCY_TIME
-        .saturating_mul(u32::try_from(u64::from(self.round_number)).unwrap_or(u32::MAX));
+        .saturating_mul(u32::try_from(u64::from(*self.round_number)).unwrap_or(u32::MAX));
       db::PendingStepTimeout::set(
         txn,
         blockchain.genesis().as_ref(),
         &db::timeout_in_ms_since_epoch(duration),
       );
-      self.pending_step_timeout = Some((Instant::now(), duration));
+      *self.pending_step_timeout = Some((Instant::now(), duration));
     }
 
     let precommit_message = {
@@ -741,7 +752,7 @@ impl<B: BorshyBlockchain> State<B> {
       let precommit_some_message = self.precommit_some_message::<N>(blockchain, signer, txn).await;
 
       // L44-L46, L61-L64
-      let precommit_none_message = if matches!(self.step, Step::Prevote) &&
+      let precommit_none_message = if matches!(*self.step, Step::Prevote) &&
         ((self.round_metrics.observed_prevotes_for_none() >=
           blockchain.validator_set().threshold()) ||
           self
@@ -761,13 +772,13 @@ impl<B: BorshyBlockchain> State<B> {
       (self.round_metrics.observed_precommits() >= blockchain.validator_set().threshold())
     {
       let duration = N::LATENCY_TIME
-        .saturating_mul(u32::try_from(u64::from(self.round_number)).unwrap_or(u32::MAX));
+        .saturating_mul(u32::try_from(u64::from(*self.round_number)).unwrap_or(u32::MAX));
       db::PendingPrecommitTimeout::set(
         txn,
         blockchain.genesis().as_ref(),
         &db::timeout_in_ms_since_epoch(duration),
       );
-      self.pending_precommit_timeout = Some((Instant::now(), duration));
+      *self.pending_precommit_timeout = Some((Instant::now(), duration));
     }
 
     let mut round_messages = RoundMessages::NONE;
@@ -798,8 +809,8 @@ impl<B: BorshyBlockchain> State<B> {
     round: RoundNumber,
   ) -> RoundMessages<B> {
     debug_assert!(
-      ((self.round_number == RoundNumber::ONE) && (self.round_number == round)) ||
-        (self.round_number < round)
+      (((*self.round_number) == RoundNumber::ONE) && ((*self.round_number) == round)) ||
+        ((*self.round_number) < round)
     );
 
     /*
@@ -821,11 +832,11 @@ impl<B: BorshyBlockchain> State<B> {
       prevotes from the prior round. Such prevotes justify sending our own precommit, once the
       necessary time has passed, which is assumed here as we're already starting a later round.
     */
-    if self.round_number < round {
-      if matches!(self.step, Step::Propose) {
+    if (*self.round_number) < round {
+      if matches!(*self.step, Step::Propose) {
         let _: MessageFor<B> = self.prevote_message::<N>(blockchain, signer, txn, None).await;
       }
-      if matches!(self.step, Step::Prevote) {
+      if matches!(*self.step, Step::Prevote) {
         let _: MessageFor<B> = self.precommit_message::<N>(blockchain, signer, txn, None).await;
       }
     }
@@ -859,6 +870,20 @@ impl<B: BorshyBlockchain> State<B> {
         our_latest_prevotes: _,
         our_latest_precommit: _,
       } = self;
+
+      /*
+        We've expanded `let Self { .. } = self;` where `self: &mut StateProjection`. This causes us
+        to receive mutable references to each of the underlying fields, themselves mutable
+        references. We deref to a single mutable reference here.
+      */
+      let block_number: &mut BlockNumber = block_number;
+      let round_number: &mut RoundNumber = round_number;
+      let pending_step_timeout: &mut Option<_> = pending_step_timeout;
+      let pending_precommit_timeout: &mut Option<_> = pending_precommit_timeout;
+      let step: &mut Step = step;
+      let rebroadcast_timeout: &mut (_, _) = rebroadcast_timeout;
+      let round_metrics: &mut RoundMetrics<_> = round_metrics;
+
       // This is used to reset the `round_metrics` but is not mutated across rounds
       let block_number = *block_number;
 
@@ -866,7 +891,7 @@ impl<B: BorshyBlockchain> State<B> {
       *round_number = round;
       db::RoundNumber::set(txn, genesis, round_number);
       *step = Step::Propose;
-      db::Step::set(txn, genesis, &self.step);
+      db::Step::set(txn, genesis, &*step);
 
       // Reset the rebroadcast timeout
       *rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(round);
@@ -898,7 +923,7 @@ impl<B: BorshyBlockchain> State<B> {
 
     // Accumulate all messages we've already seen for this round
     let messages =
-      self.round_messages.messages_for_round(self.round_number).cloned().collect::<Box<[_]>>();
+      self.round_messages.messages_for_round(*self.round_number).cloned().collect::<Box<[_]>>();
     for message in messages {
       let _ = self.accumulate(blockchain, txn, message).await;
     }
@@ -907,7 +932,9 @@ impl<B: BorshyBlockchain> State<B> {
     round_messages.insert(proposal_message);
     round_messages
   }
+}
 
+impl<B: BorshyBlockchain> State<B> {
   // L01-L09
   #[expect(clippy::new_ret_no_self)]
   pub(super) fn new<
@@ -998,7 +1025,7 @@ impl<B: BorshyBlockchain> StateFuture<B> {
         B::Block,
       >,
   >(
-    self,
+    self: Pin<&mut Self>,
     blockchain: &mut B,
     signer: &(
        impl ?Sized
@@ -1008,21 +1035,23 @@ impl<B: BorshyBlockchain> StateFuture<B> {
     >
      ),
     db: &mut impl Db,
-  ) -> (State<B>, RoundMessages<B>) {
-    let Self { first_init, mut state } = self;
+  ) -> (StateProjection<'_, B>, RoundMessages<B>) {
+    let StateFutureProjection { first_init, state } = self.project();
+    let mut state = state.project();
 
-    let messages = if first_init {
+    let messages = if *first_init {
       // L10
       let mut txn = db.txn();
       db::BlockNumber::set(&mut txn, blockchain.genesis().as_ref(), &BlockNumber::ONE);
-      let messages = state.start_round::<N>(blockchain, signer, &mut txn, state.round_number).await;
+      let messages =
+        state.start_round::<N>(blockchain, signer, &mut txn, *state.round_number).await;
       txn.commit();
       messages
     } else {
       // If we had a commit in progress which was interrupted, complete it now
       let genesis = blockchain.genesis();
       if let Some((block, commit)) = db::CommitInProgress::<B>::get(db, genesis.as_ref()) &&
-        (commit.block_number == state.block_number)
+        (commit.block_number == (*state.block_number))
       {
         state.commit::<N>(blockchain, signer, db, block, commit).await
       } else {
@@ -1034,7 +1063,7 @@ impl<B: BorshyBlockchain> StateFuture<B> {
   }
 }
 
-impl<B: BorshyBlockchain> State<B> {
+impl<B: BorshyBlockchain> StateProjection<'_, B> {
   /// React to a message received over the network.
   ///
   /// This returns either an iterator of the messages created in response _or_ an error regarding
@@ -1073,8 +1102,9 @@ impl<B: BorshyBlockchain> State<B> {
     let validator_set = blockchain.validator_set();
 
     // If this message is historic, ignore it
-    if (message.block_number < self.block_number) ||
-      ((message.block_number == self.block_number) && (message.round_number < self.round_number))
+    if (message.block_number < (*self.block_number)) ||
+      ((message.block_number == (*self.block_number)) &&
+        (message.round_number < (*self.round_number)))
     {
       Err(MessageError::Stale)?;
     }
@@ -1087,7 +1117,7 @@ impl<B: BorshyBlockchain> State<B> {
     )?;
 
     // If this message is in the future, ignore it
-    if message.block_number > self.block_number {
+    if message.block_number > (*self.block_number) {
       if let Some(observed_block_number) =
         self.observed_block_numbers.update(validator_set, message.validator, message.block_number)
       {
@@ -1097,12 +1127,13 @@ impl<B: BorshyBlockchain> State<B> {
       }
       Err(MessageError::Future)?;
     }
-    debug_assert_eq!(message.block_number, self.block_number);
-    debug_assert!(message.round_number >= self.round_number);
+    debug_assert_eq!(message.block_number, *self.block_number);
+    debug_assert!(message.round_number >= (*self.round_number));
 
     // Update `round_messages`
-    match self.round_messages.update(validator_set, message.validator, self.round_number, &message)
-    {
+    match {
+      self.round_messages.update(validator_set, message.validator, *self.round_number, &message)
+    } {
       Updated::Fresh => {}
       /*
         This is for a round greater than or equal to the current round, but it's not the current
@@ -1122,7 +1153,7 @@ impl<B: BorshyBlockchain> State<B> {
     // If this message is for a future round, with sufficient participation, jump to this round
     // L55-L56
     Ok(
-      if (message.round_number > self.round_number) &&
+      if (message.round_number > (*self.round_number)) &&
         self.round_messages.should_jump_ahead(blockchain.validator_set(), message.round_number)
       {
         /*
@@ -1139,7 +1170,7 @@ impl<B: BorshyBlockchain> State<B> {
         {
           // `message.round_number > self.round_number` so `message.round_number >= 1`
           let prior_round = u64::from(message.round_number) - 1;
-          if prior_round > u64::from(self.round_number) {
+          if prior_round > u64::from(*self.round_number) {
             let prior_round = NonZero::new(prior_round)
               .expect("`prior_round` > a `u64` value, so it cannot be `u64::MIN` (`0`)");
             // We drop the messages for this as they're stale and we don't actually care for them
@@ -1150,7 +1181,7 @@ impl<B: BorshyBlockchain> State<B> {
 
         // Start the round we're jumping ahead to
         self.start_round::<N>(blockchain, signer, txn, message.round_number).await
-      } else if message.round_number == self.round_number {
+      } else if message.round_number == (*self.round_number) {
         match self.accumulate(blockchain, txn, message).await {
           Ok(()) | Err(InvalidBlock::Temporal) => {}
           Err(InvalidBlock::Fatal) => Err(MessageError::FatalProposal)?,
@@ -1164,8 +1195,15 @@ impl<B: BorshyBlockchain> State<B> {
   }
 }
 
-pub(super) struct TimeoutExpired<'state, 'blockchain, 'signer, B: Blockchain, S: ?Sized> {
-  state: &'state mut State<B>,
+pub(super) struct TimeoutExpired<
+  'state,
+  'state_borrow,
+  'blockchain,
+  'signer,
+  B: Blockchain,
+  S: ?Sized,
+> {
+  state: &'state_borrow mut StateProjection<'state, B>,
   blockchain: &'blockchain mut B,
   signer: &'signer S,
 }
@@ -1174,7 +1212,7 @@ type SignatureForBlockchain<B> = <<B as Blockchain>::SignatureScheme as Signatur
 impl<
   B: BorshyBlockchain,
   S: ?Sized + Signer<Validator = B::Validator, Signature = SignatureForBlockchain<B>>,
-> TimeoutExpired<'_, '_, '_, B, S>
+> TimeoutExpired<'_, '_, '_, '_, B, S>
 {
   /// This future is NOT cancel-safe.
   pub(super) async fn respond<
@@ -1198,18 +1236,18 @@ impl<
       */
 
       // Reset the rebroadcast timeout
-      state.rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(state.round_number);
+      *state.rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(*state.round_number);
 
       /*
         Except if we know _we_ are the ones behind, and therefore we know this won't be helpful and
         will instead just cause us to be marked as stale by our peers.
       */
-      if state.observed_block_numbers.observed_block_number() > Some(state.block_number) {
+      if state.observed_block_numbers.observed_block_number() > Some(*state.block_number) {
         return RoundMessages::<B>::NONE.into_iter();
       }
 
       let mut to_rebroadcast = {
-        let [prevote_0, prevote_1] = &state.our_latest_prevotes;
+        let [prevote_0, prevote_1] = &*state.our_latest_prevotes;
         [prevote_0.clone(), state.our_latest_precommit.clone(), prevote_1.clone()]
       };
 
@@ -1241,7 +1279,7 @@ impl<
   }
 }
 
-impl<B: BorshyBlockchain> State<B> {
+impl<'state, B: BorshyBlockchain> StateProjection<'state, B> {
   /// A future representing the current timeout.
   ///
   /// This function is cancel-safe, but has an output whose future is _not_ cancel-safe. It MUST be
@@ -1250,7 +1288,7 @@ impl<B: BorshyBlockchain> State<B> {
   /// This corresponds to L57-L67.
   #[must_use]
   pub(super) async fn timeout<
-    'state,
+    'state_borrow,
     'blockchain,
     'signer,
     N: Network<
@@ -1265,15 +1303,15 @@ impl<B: BorshyBlockchain> State<B> {
         Signature = <B::SignatureScheme as SignatureScheme>::Signature,
       >,
   >(
-    &'state mut self,
+    &'state_borrow mut self,
     blockchain: &'blockchain mut B,
     signer: &'signer S,
-  ) -> TimeoutExpired<'state, 'blockchain, 'signer, B, S> {
+  ) -> TimeoutExpired<'state, 'state_borrow, 'blockchain, 'signer, B, S> {
     let time_remaining = |(start, duration): (Instant, Duration)| {
       let time_elapsed = start.elapsed();
       duration.saturating_sub(time_elapsed)
     };
-    N::sleep(match (self.pending_step_timeout, self.pending_precommit_timeout) {
+    N::sleep(match (*self.pending_step_timeout, *self.pending_precommit_timeout) {
       (Some(step_timeout), Some(precommit_timeout)) => {
         time_remaining(step_timeout).min(time_remaining(precommit_timeout))
       }
@@ -1288,7 +1326,7 @@ impl<B: BorshyBlockchain> State<B> {
         mutable borrow, as necessary to have this state process a message.
       */
       (None, None) => {
-        let (start, duration) = self.rebroadcast_timeout;
+        let (start, duration) = *self.rebroadcast_timeout;
         let time_already_passed = Instant::now().duration_since(start);
         duration.saturating_sub(time_already_passed)
       }
@@ -1297,7 +1335,9 @@ impl<B: BorshyBlockchain> State<B> {
 
     TimeoutExpired::<B, S> { state: self, blockchain, signer }
   }
+}
 
+impl<B: BorshyBlockchain> StateProjection<'_, B> {
   /// Handle a commit.
   // L51-L54
   pub(super) async fn commit<
@@ -1340,7 +1380,7 @@ impl<B: BorshyBlockchain> State<B> {
     let mut txn = db.txn();
 
     {
-      let Self {
+      let StateProjection {
         block_number,
         block_number_ref,
 
@@ -1366,7 +1406,25 @@ impl<B: BorshyBlockchain> State<B> {
         our_latest_precommit,
       } = self;
 
-      *proposal = BlockProposal::new(blockchain.add_block(block, commit).await);
+      // Deref from `&mut &mut` to `&mut`
+      let block_number: &mut BlockNumber = block_number;
+      let block_number_ref: &mut Arc<_> = block_number_ref;
+      let observed_block_number_ref: &mut Arc<_> = observed_block_number_ref;
+      let proposal: &mut Pin<&mut BlockProposal<_, _>> = proposal;
+      let round_number: &mut RoundNumber = round_number;
+      let pending_step_timeout: &mut Option<_> = pending_step_timeout;
+      let pending_precommit_timeout: &mut Option<_> = pending_precommit_timeout;
+      let step: &mut Step = step;
+      let rebroadcast_timeout: &mut (_, _) = rebroadcast_timeout;
+      let round_metrics: &mut RoundMetrics<_> = round_metrics;
+      let block_validity: &mut BlockValidityCache<B> = block_validity;
+      let valid: &mut Option<_> = valid;
+      let locked: &mut Option<_> = locked;
+      let round_messages: &mut TrackedRounds<_> = round_messages;
+      let our_latest_prevotes: &mut [_; 2] = our_latest_prevotes;
+      let our_latest_precommit: &mut Option<_> = our_latest_precommit;
+
+      proposal.set(BlockProposal::new(blockchain.add_block(block, commit).await));
 
       let genesis = blockchain.genesis();
       let genesis = genesis.as_ref();

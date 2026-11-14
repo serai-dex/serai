@@ -5,8 +5,8 @@
 //! the necessary traits from `tendermint-consensus` for the two to work together, and defines the
 //! [`Slash`] type.
 
-use core::{marker::PhantomData, pin::Pin, time::Duration};
-use alloc::{boxed::Box, collections::BTreeMap};
+use core::{marker::PhantomData, time::Duration};
+use alloc::collections::BTreeMap;
 use std::time::SystemTime;
 
 use serai_db::{Get, Transaction as DbTxn, Db};
@@ -152,8 +152,8 @@ impl<
     parent: [u8; 32],
     minimum_time: Option<u64>,
     weak_entropy: u64,
-  ) -> Pin<Box<BlockProposal<N::Sleep, M::Future>>> {
-    Box::pin(match minimum_time {
+  ) -> BlockProposal<N::Sleep, M::Future> {
+    match minimum_time {
       Some(minimum_time) => BlockProposal::some::<T, N>(
         self.genesis,
         parent,
@@ -164,7 +164,7 @@ impl<
       ),
       // If we were unable to determine the minimum time for this proposal, don't yield anything
       None => BlockProposal::none(),
-    })
+    }
   }
 }
 
@@ -182,7 +182,7 @@ impl<
   type Genesis = [u8; 32];
   type Block = ReadWriteAsBorsh<Block<T>>;
 
-  type BlockProposal = Pin<Box<BlockProposal<N::Sleep, M::Future>>>;
+  type BlockProposal = BlockProposal<N::Sleep, M::Future>;
 
   fn genesis(&self) -> &Self::Genesis {
     &self.genesis
