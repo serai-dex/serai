@@ -245,33 +245,6 @@ impl<B: BorshyBlockchain> State<B> {
 }
 
 impl<B: BorshyBlockchain> StateProjection<'_, B> {
-  /// Accumulate a message into the round metrics.
-  ///
-  /// If this is a fatally invalid block proposal, no accumulation will occur, and
-  /// `Err(InvalidBlock::Fatal)` will be returned (as expected per the documentation of
-  /// [`InvalidBlock::Fatal`]).
-  ///
-  /// If the block is temporally invalid, `Ok(())` will be returned (dropping the
-  /// [`InvalidBlock::Temporal`] error).
-  async fn accumulate(
-    &mut self,
-    blockchain: &mut B,
-    txn: &mut impl Transaction,
-    message: MessageFor<B>,
-  ) -> Result<(), InvalidBlock> {
-    // If this is a proposal, check the block isn't fatally invalid
-    if let Data::Proposal { valid_round: _, proposal } = &message.data {
-      match Self::validate_block(self.block_validity, blockchain, message.validator, proposal).await
-      {
-        Ok(()) | Err(InvalidBlock::Temporal) => {}
-        Err(InvalidBlock::Fatal) => Err(InvalidBlock::Fatal)?,
-      }
-    }
-
-    self.round_metrics.accumulate(blockchain.genesis(), blockchain.validator_set(), txn, message);
-    Ok(())
-  }
-
   /// Yield a proposal message if we are the proposer.
   ///
   /// This MUST only be called once when the round starts.
@@ -897,10 +870,12 @@ impl<B: BorshyBlockchain> StateProjection<'_, B> {
     let proposal_message = self.proposal_message::<N>(blockchain, signer, txn).await;
 
     // Accumulate all messages we've already seen for this round
-    let messages =
-      self.round_messages.messages_for_round(*self.round_number).cloned().collect::<Box<[_]>>();
-    for message in messages {
-      let _ = self.accumulate(blockchain, txn, message).await;
+    for message in
+      self.round_messages.messages_for_round(*self.round_number).cloned().collect::<Box<[_]>>()
+    {
+      let _ =
+        Self::accumulate(self.block_validity_cache, self.round_metrics, blockchain, txn, message)
+          .await;
     }
 
     let mut round_messages = self.respond::<N>(blockchain, signer, txn).await;
@@ -1157,7 +1132,15 @@ impl<B: BorshyBlockchain> StateProjection<'_, B> {
         // Start the round we're jumping ahead to
         self.start_round::<N>(blockchain, signer, txn, message.round_number).await
       } else if message.round_number == (*self.round_number) {
-        match self.accumulate(blockchain, txn, message).await {
+        match Self::accumulate(
+          self.block_validity_cache,
+          self.round_metrics,
+          blockchain,
+          txn,
+          message,
+        )
+        .await
+        {
           Ok(()) | Err(InvalidBlock::Temporal) => {}
           Err(InvalidBlock::Fatal) => Err(MessageError::FatalProposal)?,
         }

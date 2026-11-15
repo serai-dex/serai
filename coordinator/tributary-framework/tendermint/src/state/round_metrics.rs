@@ -553,3 +553,79 @@ impl<B: BorshyBlockchain> RoundMetrics<B> {
     result
   }
 }
+
+use core::{
+  pin::Pin,
+  task::{Poll, Context},
+};
+
+use super::{InvalidBlock, BlockValidityCache, ValidateBlock, StateProjection};
+
+pin_project_lite::pin_project! {
+  pub(super) struct Accumulate<'state, 'blockchain, 'transaction, T: Transaction, B: Blockchain> {
+    #[pin]
+    validate_block: Option<ValidateBlock<'state, B>>,
+    round_metrics: &'state mut RoundMetrics<B>,
+    genesis: &'blockchain B::Genesis,
+    validator_set: &'blockchain B::ValidatorSet,
+    txn: &'transaction mut T,
+    message: Option<MessageFor<B>>,
+  }
+}
+
+impl<B: BorshyBlockchain> StateProjection<'_, B> {
+  /// Accumulate a message into the round metrics.
+  ///
+  /// If this is a fatally invalid block proposal, no accumulation will occur, and
+  /// `Err(InvalidBlock::Fatal)` will be returned (as expected per the documentation of
+  /// [`InvalidBlock::Fatal`]).
+  ///
+  /// If the block is temporally invalid, `Ok(())` will be returned (dropping the
+  /// [`InvalidBlock::Temporal`] error).
+  pub(super) fn accumulate<'state, 'blockchain, 'transaction, T: Transaction>(
+    block_validity_cache: &'state mut BlockValidityCache<B>,
+    round_metrics: &'state mut RoundMetrics<B>,
+    blockchain: &'blockchain mut B,
+    txn: &'transaction mut T,
+    message: MessageFor<B>,
+  ) -> Accumulate<'state, 'blockchain, 'transaction, T, B> {
+    // If this is a proposal, check the block isn't fatally invalid
+    let validate_block = if let Data::Proposal { valid_round: _, proposal } = &message.data {
+      Some(block_validity_cache.validate_block(blockchain, message.validator, proposal))
+    } else {
+      None
+    };
+
+    impl<T: Transaction, B: BorshyBlockchain> Future for Accumulate<'_, '_, '_, T, B> {
+      type Output = Result<(), InvalidBlock>;
+      fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let projection = self.project();
+        if let Some(future) = projection.validate_block.as_pin_mut() {
+          let Poll::Ready(result) = future.poll(cx) else { return Poll::Pending };
+          match result {
+            Ok(()) | Err(InvalidBlock::Temporal) => {}
+            Err(InvalidBlock::Fatal) => return Poll::Ready(Err(InvalidBlock::Fatal)),
+          }
+        }
+
+        (*projection.round_metrics).accumulate(
+          *projection.genesis,
+          *projection.validator_set,
+          *projection.txn,
+          projection.message.take().expect("`Accumulate` polled after `Poll::Ready`"),
+        );
+
+        Poll::Ready(Ok(()))
+      }
+    }
+
+    Accumulate {
+      validate_block,
+      round_metrics,
+      genesis: blockchain.genesis(),
+      validator_set: blockchain.validator_set(),
+      txn,
+      message: Some(message),
+    }
+  }
+}
