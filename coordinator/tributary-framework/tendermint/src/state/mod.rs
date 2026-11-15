@@ -280,38 +280,8 @@ impl<B: BorshyBlockchain> StateProjection<'_, B> {
       // L15-L16
       Some((valid_round, block)) => (Some(valid_round.clone()), block.clone()),
       // L17-L18
-      None => {
-        match crate::timeout::<crate::SleepForNetwork<_, _, _, _, N>, _>(
-          &mut self.proposal,
-          N::BLOCK_PROCESSING_TIME,
-        )
-        .await
-        {
-          // We did not have a valid round but we do have a proposal
-          Ok((true, proposal)) => {
-            /*
-              If this is the first time we've seen our own proposal, validate it so we won't
-              propose an invalid block ourselves.
-
-              This could be a debug assertion instead, but the safety (regardless of the profile)
-              of ensuring our own validator doesn't make an invalid proposal is worth the
-              inefficiency.
-            */
-            match Self::validate_block(self.block_validity, blockchain, proposer, &proposal).await {
-              Ok(()) => {}
-              Err(InvalidBlock::Temporal) => None?,
-              Err(InvalidBlock::Fatal) => {
-                self.proposal.set(BlockProposal::Invalid);
-                None?;
-              }
-            }
-            (None, proposal)
-          }
-          Ok((false, proposal)) => (None, proposal),
-          // We have no proposal and therefore cannot yield a proposal message
-          Err(crate::TimeoutExpired) => None?,
-        }
-      }
+      // We did not have a valid round but we may have a proposal
+      None => (None, self.our_block_proposal::<N>(blockchain, proposer).await?),
     };
 
     // L19

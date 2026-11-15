@@ -13,9 +13,6 @@ use core::time::Duration;
 mod or;
 use or::*;
 
-mod timeout;
-use timeout::*;
-
 mod validators;
 pub use validators::*;
 
