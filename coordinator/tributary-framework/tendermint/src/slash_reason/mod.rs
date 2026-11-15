@@ -76,7 +76,7 @@ impl<S: Signature, A: AggregateSignature, H: fmt::Debug + BlockHash> fmt::Debug
 /// The main thing we want to avoid is an inadvertent implementation of [`BorshSerialize`] or
 /// [`BorshDeserialize`], as this isn't guaranteed to have an equivalent [`borsh`] representation
 /// to the original type this fills in for.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(test, derive(Debug))]
 #[repr(transparent)]
 pub(crate) struct OpaqueBlockHash<'hash>(pub(crate) &'hash [u8]);

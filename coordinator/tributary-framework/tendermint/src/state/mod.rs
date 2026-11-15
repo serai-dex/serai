@@ -1,3 +1,5 @@
+#![expect(non_local_definitions)]
+
 use core::{
   num::NonZero,
   pin::Pin,
@@ -14,6 +16,9 @@ use crate::{
   SignatureScheme, ValidatorSet as _, BlockNumber, RoundNumber, Block, CommitFor, InvalidBlock,
   Blockchain, Signer, ValidRound, Data, MessageFor, MessageError, Network,
 };
+
+mod block_validity_cache;
+use block_validity_cache::*;
 
 mod block_proposal;
 use block_proposal::*;
@@ -57,11 +62,6 @@ pub(super) enum Step {
   Prevote,
   Precommit,
 }
-
-type BlockValidityCache<B> = std::collections::HashMap<
-  <B as Blockchain>::Validator,
-  (<<B as Blockchain>::Block as Block>::Hash, Result<(), InvalidBlock>),
->;
 
 pin_project_lite::pin_project! {
   /// The state for the Tendermint consensus protocol.
@@ -128,8 +128,8 @@ pin_project_lite::pin_project! {
     // The metrics from this round.
     round_metrics: RoundMetrics<B>,
 
-    // The cache for a block's validity.
-    block_validity: BlockValidityCache<B>,
+    // The cache for blocks' validity.
+    block_validity_cache: BlockValidityCache<B>,
 
     // The messages from validators for the rounds we're actively tracking.
     round_messages: TrackedRounds<B>,
@@ -245,31 +245,6 @@ impl<B: BorshyBlockchain> State<B> {
 }
 
 impl<B: BorshyBlockchain> StateProjection<'_, B> {
-  async fn validate_block(
-    block_validity: &mut BlockValidityCache<B>,
-    blockchain: &mut B,
-    proposer: B::Validator,
-    block: &B::Block,
-  ) -> Result<(), InvalidBlock> {
-    let proposal_hash = block.proposal_hash();
-    let entry = block_validity.entry(proposer);
-    if let std::collections::hash_map::Entry::Occupied(entry) = &entry {
-      let (block, validity) = entry.get();
-      // Check this cached block validity is actually for this block
-      if block == &proposal_hash {
-        match validity {
-          Ok(()) | Err(InvalidBlock::Fatal) => return *validity,
-          Err(InvalidBlock::Temporal) => {}
-        }
-      }
-    }
-
-    // Validate the block and cache the result
-    let result = blockchain.validate(proposer, block).await;
-    entry.insert_entry((proposal_hash, result));
-    result
-  }
-
   /// Accumulate a message into the round metrics.
   ///
   /// If this is a fatally invalid block proposal, no accumulation will occur, and
@@ -475,7 +450,7 @@ impl<B: BorshyBlockchain> StateProjection<'_, B> {
       self.round_metrics.observed_proposal()?;
 
     let block_validity =
-      Self::validate_block(self.block_validity, blockchain, proposer, proposal).await;
+      self.block_validity_cache.validate_block(blockchain, proposer, proposal).await;
     /*
       The block MUST NOT be considered fatally invalid. This clause SHOULD be unreachable as we
       shouldn't have accumulated a fatally invalid block in the first place.
@@ -862,7 +837,7 @@ impl<B: BorshyBlockchain> StateProjection<'_, B> {
         proposal: _,
         valid: _,
         locked: _,
-        block_validity: _,
+        block_validity_cache: _,
 
         // This is independent of the round, used for detecting equivocations and if we're behind
         round_messages: _,
@@ -997,7 +972,7 @@ impl<B: BorshyBlockchain> State<B> {
       locked: db::Locked::get(getter, genesis),
 
       round_metrics: RoundMetrics::new(genesis, validator_set, getter, block_number, round_number),
-      block_validity: BlockValidityCache::<B>::with_capacity(validators),
+      block_validity_cache: BlockValidityCache::<B>::with_capacity(validators),
 
       /*
         We do not save or reload `round_messages` as it's solely used for detecting equivocations
@@ -1397,7 +1372,7 @@ impl<B: BorshyBlockchain> StateProjection<'_, B> {
         rebroadcast_timeout,
 
         round_metrics,
-        block_validity,
+        block_validity_cache,
         valid,
         locked,
 
@@ -1417,7 +1392,7 @@ impl<B: BorshyBlockchain> StateProjection<'_, B> {
       let step: &mut Step = step;
       let rebroadcast_timeout: &mut (_, _) = rebroadcast_timeout;
       let round_metrics: &mut RoundMetrics<_> = round_metrics;
-      let block_validity: &mut BlockValidityCache<B> = block_validity;
+      let block_validity_cache: &mut BlockValidityCache<B> = block_validity_cache;
       let valid: &mut Option<_> = valid;
       let locked: &mut Option<_> = locked;
       let round_messages: &mut TrackedRounds<_> = round_messages;
@@ -1442,7 +1417,7 @@ impl<B: BorshyBlockchain> StateProjection<'_, B> {
       round_metrics.reset(*block_number, *round_number);
 
       // This isn't saved, being entirely local, and just has to be reset
-      block_validity.clear();
+      block_validity_cache.clear();
       *rebroadcast_timeout = new_rebroadcast_timeout::<B, N>(*round_number);
 
       *valid = None;

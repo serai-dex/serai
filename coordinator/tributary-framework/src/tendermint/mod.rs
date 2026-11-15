@@ -196,11 +196,8 @@ impl<
     self.blockchain.signature_scheme()
   }
 
-  fn validate(
-    &mut self,
-    proposer: Self::Validator,
-    block: &Self::Block,
-  ) -> impl Send + Future<Output = Result<(), InvalidBlock>> {
+  type Validate = core::future::Ready<Result<(), InvalidBlock>>;
+  fn validate(&mut self, proposer: Self::Validator, block: &Self::Block) -> Self::Validate {
     if self.blockchain.slashed(&self.db, proposer) {
       return core::future::ready(Err(InvalidBlock::Fatal));
     }

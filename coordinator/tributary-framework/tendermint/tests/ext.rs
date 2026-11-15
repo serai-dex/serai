@@ -174,11 +174,8 @@ impl Blockchain for TestNetwork {
     &TestSignatureScheme
   }
 
-  fn validate(
-    &mut self,
-    _proposer: Self::Validator,
-    block: &Self::Block,
-  ) -> impl Send + Future<Output = Result<(), InvalidBlock>> {
+  type Validate = core::future::Ready<Result<(), InvalidBlock>>;
+  fn validate(&mut self, _proposer: Self::Validator, block: &Self::Block) -> Self::Validate {
     core::future::ready(if block.valid { Ok(()) } else { Err(InvalidBlock::Fatal) })
   }
 

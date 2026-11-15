@@ -1,4 +1,4 @@
-use core::{future::Future, num::NonZero};
+use core::{hash::Hash, num::NonZero};
 
 use crate::{Validator, SignatureScheme, ValidatorSet, CommitFor, SlashReasonFor};
 
@@ -60,8 +60,8 @@ impl From<NonZero<u64>> for RoundNumber {
 /// The [`borsh::BorshSerialize`] implementation MUST be infallible if the underlying writer is
 /// infallible. The [`borsh::BorshDeserialize`] implementation MUST be infallible if it is
 /// value which was successfully serialized, from a well-formed reader.
-pub trait BlockHash: Clone + Copy + PartialEq + Eq + AsRef<[u8]> {}
-impl<H: Clone + Copy + PartialEq + Eq + AsRef<[u8]>> BlockHash for H {}
+pub trait BlockHash: Clone + Copy + PartialEq + Eq + AsRef<[u8]> + Hash {}
+impl<H: Clone + Copy + PartialEq + Eq + AsRef<[u8]> + Hash> BlockHash for H {}
 
 /// The block was invalid.
 #[derive(Clone, Copy, Debug)]
@@ -169,21 +169,26 @@ pub trait Blockchain {
   /// The signature scheme for this blockchain.
   fn signature_scheme(&self) -> &Self::SignatureScheme;
 
+  /// The future for a block's validation.
+  type Validate: Future<Output = Result<(), InvalidBlock>>;
+
   /// Validate a block.
   ///
   /// This SHOULD NOT cause any mutations to the blockchain. This solely validates a potential
-  /// candidate with minimal context passed and no call pattern guaranteed. The proposer is
-  /// specified in case the blockchain wishes to record a slash for this block, if it is
-  /// fundamentally invalid.
+  /// candidate with minimal context passed and no call pattern guaranteed.
+  ///
+  /// The proposer is specified to allow per-proposer filtering and in case a slash should be
+  /// recorded for the proposer, within the application layer. A block which is valid under one
+  /// proposer MAY be proposed by distinct proposers however. Applications MUST NOT have blocks
+  /// which are only valid when proposed by a group less than a supermajority of validators.
+  /// Additionally, applications MUST NOT assume every proposal will invoke this function. The
+  /// Tendermint consensus process MAY omit validation upon a supermajority of validators voting
+  /// for the block, or if it was prior validated, regardless of the original/current proposer.
   ///
   /// This DOES NOT have to be cancel-safe.
   // TODO: Don't just provide the proposer, but enough to build evidence sufficient to convince
   // someone else (the signed proposal message)?
-  fn validate(
-    &mut self,
-    proposer: Self::Validator,
-    block: &Self::Block,
-  ) -> impl Send + Future<Output = Result<(), InvalidBlock>>;
+  fn validate(&mut self, proposer: Self::Validator, block: &Self::Block) -> Self::Validate;
 
   /// Add a block, returning a future for the proposal for the next block.
   ///
