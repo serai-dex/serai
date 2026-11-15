@@ -78,7 +78,15 @@ impl<D: Db, T: Transaction, MN: MempoolNetwork<T>> Future for MempoolFuture<D, T
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
     let mut projection = self.project();
 
-    let _: Poll<()> = projection.mempool.as_mut().poll(cx);
+    match projection.mempool.as_mut().poll(cx) {
+      Poll::Pending => {}
+      Poll::Ready(()) => {
+        // If the underlying mempool future, and our channel, are done, we're done
+        if projection.mempool_recv.is_terminated() {
+          return Poll::Ready(());
+        }
+      }
+    }
     while (!projection.mempool_recv.is_terminated()) &&
       let Poll::Ready(Some(AsyncAddToMempool { transaction, bypass_rate_limit, response })) =
         projection.mempool_recv.as_mut().poll_next(cx)
@@ -129,9 +137,29 @@ impl<
   fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
     let projection = self.project();
 
-    let _: Poll<()> = projection.tendermint.poll(cx);
-    let _: Poll<()> = projection.mempool.poll(cx);
-    let _: Poll<()> = projection.inner_loop.poll(cx);
+    match projection.tendermint.poll(cx) {
+      Poll::Pending => {}
+      /*
+        The Tendermint process's future terminates once all handles to it have been dropped. In
+        that case, all Tributary handles have been dropped. These futures should no longer be
+        polled accordingly.
+      */
+      Poll::Ready(()) => return Poll::Ready(()),
+    }
+    match projection.mempool.poll(cx) {
+      Poll::Pending => {}
+      /*
+        The mempool future yields ready once the underlying mempool does, which happens when it
+        won't receive any more requests for block proposals, and when it will no longer receive any
+        transactions to add, which happens when all handles are dropped.
+      */
+      Poll::Ready(()) => return Poll::Ready(()),
+    }
+    match projection.inner_loop.poll(cx) {
+      Poll::Pending => {}
+      // The inner loop breaks once all Tributary handles have been dropped
+      Poll::Ready(()) => return Poll::Ready(()),
+    }
 
     Poll::Pending
   }
@@ -386,7 +414,7 @@ impl<
             Err(::tendermint::ProcessTerminated)
           }
         } {
-          core::future::pending::<!>().await;
+          break;
         }
       }
     };

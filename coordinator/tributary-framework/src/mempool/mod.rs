@@ -81,7 +81,9 @@ impl<T: Transaction> MempoolNetwork<T> for () {
 pin_project_lite::pin_project! {
   /// The mempool for a Tributary.
   ///
-  /// This MUST be polled to respond to requests for block proposals.
+  /// This MUST be polled to respond to requests for block proposals. It will complete once no more
+  /// requests for block proposals will be received, due to the channel being closed, but MAY
+  /// continue to be polled.
   pub(crate) struct Mempool<D: Db, T: Transaction, N: MempoolNetwork<T>> {
     db: D,
     genesis: [u8; 32],
@@ -190,9 +192,10 @@ impl<D: Db, T: Transaction, N: MempoolNetwork<T>> Future for Mempool<D, T, N> {
     }
 
     // Receive requests for block proposals
-    while (!projection.request.is_terminated()) &&
-      let Poll::Ready(Some((parent, response))) = projection.request.as_mut().poll_next(cx)
-    {
+    if projection.request.is_terminated() {
+      return Poll::Ready(());
+    }
+    while let Poll::Ready(Some((parent, response))) = projection.request.as_mut().poll_next(cx) {
       if parent == *projection.last_block {
         // Respond to a request for a block proposal with all transactions in our mempool
         let _ = response.try_send(
