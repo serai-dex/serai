@@ -3,16 +3,6 @@ mod tree_transaction {
   use serai_primitives::coin::ExternalCoin;
   use serai_processor_utxo_scheduler_primitives::TreeTransaction;
 
-  fn test_addresses(qty: u32) -> Vec<TestAddress> {
-    let mut test_addresses: Vec<TestAddress> = Vec::with_capacity(qty.try_into().unwrap());
-
-    for i in 0 .. qty {
-      test_addresses.push(TestAddress(i));
-    }
-
-    test_addresses
-  }
-
   #[test]
   #[should_panic(expected = "assertion failed: input_value <= self.value()")]
   fn input_gt_value_panics() {

@@ -45,6 +45,17 @@ pub fn payments(qty: u32) -> Vec<Payment<TestAddress>> {
   payments
 }
 
+/// `qty` addresses `0 .. qty`.
+pub fn test_addresses(qty: u32) -> Vec<TestAddress> {
+  let mut test_addresses: Vec<TestAddress> = Vec::with_capacity(qty.try_into().unwrap());
+
+  for i in 0 .. qty {
+    test_addresses.push(TestAddress(i));
+  }
+
+  test_addresses
+}
+
 /// Split payments into their addresses and amounts.
 pub fn get_addresses_and_amounts(
   payments: &[Payment<TestAddress>],

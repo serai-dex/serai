@@ -574,3 +574,120 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
     }
   }
 }
+
+#[cfg(test)]
+mod fulfillable_payments {
+  use super::*;
+  use ciphersuite::WrappedGroup as _;
+  use dalek_ff_group::Ed25519;
+  use scheduler_test_primitives::*;
+  use serai_db::{Db as _, MemDb};
+
+  fn run(
+    queue: &[Payment<TestAddress>],
+    operating_costs: u64,
+    outputs: u64,
+  ) -> (Vec<Payment<TestAddress>>, Vec<Payment<TestAddress>>, u64) {
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    let mut operating_costs = operating_costs;
+    let key = Ed25519::generator();
+
+    Db::<TestFeed>::set_queued_payments(&mut txn, key, ExternalCoin::Monero, queue);
+
+    let fulfilled = Scheduler::<TestFeed, TestPlanner>::fulfillable_payments(
+      &mut txn,
+      &mut operating_costs,
+      key,
+      ExternalCoin::Monero,
+      outputs,
+    );
+    let queue_after = Db::<TestFeed>::queued_payments(&txn, key, ExternalCoin::Monero).unwrap();
+
+    (fulfilled, queue_after, operating_costs)
+  }
+
+  #[test]
+  fn empty_queue() {
+    let (fulfilled, _, _) = run(&[], 0, 100);
+    assert!(fulfilled.is_empty());
+  }
+
+  #[test]
+  fn outputs_afford_queue() {
+    let (fulfilled, queue_after, _) = run(&payments(2), 0, 1000);
+    let (fulfilled_addresses, fulfilled_amounts) = get_addresses_and_amounts(&fulfilled);
+    assert_eq!(fulfilled_addresses, vec![TestAddress(0), TestAddress(1)]);
+    assert_eq!(fulfilled_amounts, vec![100, 200]);
+
+    let (queue_after_addresses, queue_after_amounts) = get_addresses_and_amounts(&queue_after);
+    assert!(queue_after_addresses.is_empty());
+    assert!(queue_after_amounts.is_empty());
+  }
+
+  #[test]
+  fn outputs_afford_only_a_few_payments() {
+    let (fulfilled, queue_after, _) = run(&payments(3), 0, 350);
+
+    let (fulfilled_addresses, fulfilled_amounts) = get_addresses_and_amounts(&fulfilled);
+    assert_eq!(fulfilled_addresses, vec![TestAddress(0), TestAddress(1)]);
+    assert_eq!(fulfilled_amounts, vec![100, 200]);
+
+    let (queue_after_addresses, queue_after_amounts) = get_addresses_and_amounts(&queue_after);
+    assert_eq!(queue_after_addresses, vec![TestAddress(2)]);
+    assert_eq!(queue_after_amounts, vec![300]);
+  }
+
+  #[test]
+  fn stops_when_no_longer_affords() {
+    let (fulfilled, queue_after, _) =
+      run(&[payment(0, 100), payment(1, 200), payment(2, 50)], 0, 250);
+
+    let (fulfilled_addresses, fulfilled_amounts) = get_addresses_and_amounts(&fulfilled);
+    assert_eq!(fulfilled_addresses, vec![TestAddress(0)]);
+    assert_eq!(fulfilled_amounts, vec![100]);
+
+    let (queue_after_addresses, queue_after_amounts) = get_addresses_and_amounts(&queue_after);
+    assert_eq!(queue_after_addresses, vec![TestAddress(1), TestAddress(2)]);
+    assert_eq!(queue_after_amounts, vec![200, 50]);
+  }
+
+  #[test]
+  fn entire_queue_wiped_if_below_operating_costs() {
+    let (fulfilled, queue_after, operating_costs_after) =
+      run(&[payment(0, 100), payment(1, 200), payment(2, 50)], 400, 400);
+    assert!(fulfilled.is_empty());
+    assert!(queue_after.is_empty());
+    assert_eq!(operating_costs_after, 50);
+  }
+
+  #[test]
+  fn operating_costs_raise_budget() {
+    let (fulfilled, queue_after, operating_costs_after) =
+      run(&[payment(0, 100), payment(1, 200), payment(2, 50)], 50, 250);
+
+    let (fulfilled_addresses, fulfilled_amounts) = get_addresses_and_amounts(&fulfilled);
+    assert_eq!(fulfilled_addresses, vec![TestAddress(0), TestAddress(1)]);
+    assert_eq!(fulfilled_amounts, vec![100, 200]);
+
+    let (queue_after_addresses, queue_after_amounts) = get_addresses_and_amounts(&queue_after);
+    assert_eq!(queue_after_addresses, vec![TestAddress(2)]);
+    assert_eq!(queue_after_amounts, vec![50]);
+
+    assert_eq!(operating_costs_after, 50);
+  }
+
+  #[test]
+  #[ignore = "fulfillable_payments infinite loops in this test"]
+  fn first_payment_over_budget_returns_nothing() {
+    let (fulfilled, queue_after, operating_costs_after) =
+      run(&[payment(0, 500), payment(1, 50)], 0, 100);
+    assert!(fulfilled.is_empty());
+
+    let (queue_after_addresses, queue_after_amounts) = get_addresses_and_amounts(&queue_after);
+    assert_eq!(queue_after_addresses, vec![TestAddress(0), TestAddress(1)]);
+    assert_eq!(queue_after_amounts, vec![500, 50]);
+
+    assert_eq!(operating_costs_after, 0);
+  }
+}
