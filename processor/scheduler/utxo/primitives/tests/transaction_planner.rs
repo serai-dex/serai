@@ -256,4 +256,15 @@ mod planner_plan_tx_with_fee_amortization {
     assert!(tx.is_none());
     assert_eq!(operating_costs, 8);
   }
+
+  #[tokio::test]
+  async fn uneven_fee_split_drops_payment_instead_of_pushing_below_dust() {
+    let mut operating_costs = 0;
+    let payments = vec![payment(0, 22), payment(1, 22)];
+    let tx = plan(&mut operating_costs, 1000, payments, true).await.expect("Nothing was planned");
+
+    assert_eq!(tx.effected_payments, vec![Amount(22)]);
+    assert!(tx.has_change);
+    assert_eq!(operating_costs, 0);
+  }
 }
