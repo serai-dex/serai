@@ -9,7 +9,7 @@ use sp_runtime::{
   traits::{
     Verify as _, ExtrinsicLike, ExtrinsicCall, Dispatchable, ValidateUnsigned, Checkable, Applyable,
   },
-  Weight,
+  Weight, DispatchError, ModuleError,
 };
 use frame_support::dispatch::{DispatchClass, Pays, DispatchInfo, GetDispatchInfo, PostDispatchInfo};
 use frame_system::RawOrigin;
@@ -80,6 +80,11 @@ pub trait TransactionContext: Send + Sync {
   ///
   /// This MUST NOT be called if the next nonce is `u32::MAX`. The function MAY panic in that case.
   fn consume_next_nonce(signer: &SeraiAddress);
+  /// Emit the result of the transaction currently being executed.
+  ///
+  /// This is called once per transaction, after its calls were executed yet before
+  /// `end_transaction`, so the result is committed to as one of the transaction's events.
+  fn emit_transaction_result(result: TransactionResult);
   /// End execution of a transaction.
   fn end_transaction(transaction_hash: [u8; 32]);
 }
@@ -94,6 +99,19 @@ pub trait TransactionFeeContext: Send + Sync {
 
   /// Have the transaction pay its fee.
   fn pay_fee(signer: &SeraiAddress, fee: Balance) -> Result<(), TransactionValidityError>;
+}
+
+impl From<&DispatchError> for TransactionError {
+  fn from(error: &DispatchError) -> Self {
+    #[expect(clippy::wildcard_enum_match_arm)]
+    match error {
+      DispatchError::BadOrigin => TransactionError::BadOrigin,
+      DispatchError::Module(ModuleError { index, error, message: _ }) => {
+        TransactionError::Module { index: *index, error: *error }
+      }
+      _ => TransactionError::Other,
+    }
+  }
 }
 
 /// A transaction with the context necessary to evaluate it within Substrate.
@@ -320,7 +338,10 @@ impl<Context: TransactionContext, FeeContext: TransactionFeeContext> Applyable
         let call = Context::RuntimeCall::from(call.0);
         V::pre_dispatch(&call)?;
         match call.dispatch(RawOrigin::None.into()) {
-          Ok(res) => Ok(Ok(res)),
+          Ok(res) => {
+            Context::emit_transaction_result(TransactionResult::Success);
+            Ok(Ok(res))
+          }
           // Unsigned transactions should only be included if valid in all regards
           Err(_err) => Err(TransactionValidityError::Invalid(InvalidTransaction::Custom(0))),
         }
@@ -341,7 +362,7 @@ impl<Context: TransactionContext, FeeContext: TransactionFeeContext> Applyable
           here.
         */
         let mut actual_weight = Context::SIGNATURE_VERIFICATION_WEIGHT;
-        let _res = frame_support::storage::transactional::with_storage_layer(|| {
+        let res = frame_support::storage::transactional::with_storage_layer(|| {
           for call in calls.0 {
             let call = Context::RuntimeCall::from(call);
             actual_weight = actual_weight.saturating_add(call.get_dispatch_info().call_weight);
@@ -353,6 +374,12 @@ impl<Context: TransactionContext, FeeContext: TransactionFeeContext> Applyable
           }
           debug_assert_eq!(actual_weight, info.total_weight());
           Ok(())
+        });
+
+        // emit the result
+        Context::emit_transaction_result(match res {
+          Ok(()) => TransactionResult::Success,
+          Err(e) => TransactionResult::Failure { error: TransactionError::from(&e.error) },
         });
 
         /*
