@@ -466,7 +466,7 @@ sp_api::impl_runtime_apis! {
         .map(|validator| {
           match ValidatorSets::auxiliary_keys(SeraiAddress(validator), NetworkId::Serai) {
             Some(EmbeddedEllipticCurveKeys::Serai(key)) => {
-              sp_authority_discovery::AuthorityId::from(serai_validator_sets_pallet::subkey(
+              sp_authority_discovery::AuthorityId::from(serai_abi::primitives::crypto::subkey(
                 &Public(key).into(),
                 sp_core::crypto::key_types::AUTHORITY_DISCOVERY,
               ))

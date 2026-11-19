@@ -106,8 +106,7 @@ mod keys;
 use keys::{KeysStorage, Keys as _};
 
 mod babe_grandpa;
-#[doc(hidden)]
-pub use babe_grandpa::*;
+use babe_grandpa::*;
 
 mod getters;
 mod economic_security;

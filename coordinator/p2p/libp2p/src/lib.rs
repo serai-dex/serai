@@ -16,7 +16,9 @@ use schnorrkel::Keypair;
 
 use serai_client_serai::{
   abi::primitives::{
-    crypto::Public, network_id::ExternalNetworkId, validator_sets::ExternalValidatorSet,
+    crypto::{Public, key_types, subpair},
+    network_id::ExternalNetworkId,
+    validator_sets::ExternalValidatorSet,
   },
   Serai,
 };
@@ -74,6 +76,10 @@ fn peer_id_from_public(public: Public) -> PeerId {
   // 0 represents the identity Multihash, that no hash was performed
   // It's an internal constant so we can't refer to the constant inside libp2p
   PeerId::from_multihash(Multihash::wrap(0, &public.0).unwrap()).unwrap()
+}
+
+fn identity_keypair(serai_key: &Keypair) -> Zeroizing<Keypair> {
+  Zeroizing::new(subpair(&serai_key.clone().into(), key_types::AUTHORITY_DISCOVERY).into())
 }
 
 /// The representation of a peer.
@@ -174,6 +180,7 @@ impl<Tx: 'static + Send + Sync + Transaction> Libp2p<Tx> {
     );
 
     let swarm = {
+      let serai_key = identity_keypair(serai_key);
       let new_only_validators = |noise_keypair: &identity::Keypair| -> Result<_, ()> {
         Ok(OnlyValidators { serai_key: serai_key.clone(), noise_keypair: noise_keypair.clone() })
       };

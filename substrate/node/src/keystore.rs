@@ -104,9 +104,9 @@ impl Keystore {
 
   /// The key pair for the specified context ([`KeyTypeId`]).
   ///
-  /// This follows the derivation schema employed by [`serai_validator_sets_pallet::subkey`]. It
+  /// This follows the derivation schema employed by [`serai_abi::primitives::crypto::subkey`]. It
   /// applies the scheme to a key pair however, not to a public key.
-  // TODO: Have `serai_validator_sets_pallet::subkey` take `T: Derive` so we can reuse it here?
+  // TODO: Have `serai_abi::primitives::crypto::subkey` take `T: Derive` so we can reuse it here?
   pub(super) fn pair(&self, id: KeyTypeId) -> sr25519::Pair {
     let mut junction = [0; 32];
     junction[28 ..].copy_from_slice(&id.0);
