@@ -161,23 +161,23 @@ mod planner_plan_tx_with_fee_amortization {
   }
 
   #[tokio::test]
-  async fn smallest_payment_dropped_at_exact_dust() {
+  async fn smallest_payment_dropped_at_exact_below_dust() {
     let mut operating_costs = 0;
-    let payments = vec![payment(0, 200), payment(1, 20), payment(2, 100)];
+    let payments = vec![payment(0, 200), payment(1, 19), payment(2, 100)];
     let tx = plan(&mut operating_costs, 1000, payments, true).await.expect("Nothing was planned");
 
-    assert_eq!(tx.effected_payments, vec![Amount(197), Amount(98)]);
+    assert_eq!(tx.effected_payments, vec![Amount(197), Amount(97)]);
     assert!(tx.has_change);
     assert_eq!(operating_costs, 0);
   }
 
   #[tokio::test]
-  async fn payment_not_dropped_right_above_dust() {
+  async fn payment_kept_at_exact_dust() {
     let mut operating_costs = 0;
-    let payments = vec![payment(0, 200), payment(1, 100), payment(2, 21)];
+    let payments = vec![payment(0, 200), payment(1, 100), payment(2, 20)];
     let tx = plan(&mut operating_costs, 1000, payments, true).await.expect("Nothing was planned");
 
-    assert_eq!(tx.effected_payments, vec![Amount(190), Amount(90), Amount(11)]);
+    assert_eq!(tx.effected_payments, vec![Amount(190), Amount(90), Amount(10)]);
     assert!(tx.has_change);
     assert_eq!(operating_costs, 0);
   }

@@ -169,8 +169,10 @@ pub trait TransactionPlanner<S: ScannerFeed, A>: 'static + Send + Sync {
             avoids this.
           */
           let per_payment_fee = adjusted_fee.div_ceil(u64::try_from(payments.len()).unwrap());
-          // Pop the last payment if it can't pay the fee, remaining about the dust limit as it does
-          if payments.last().unwrap().balance().amount.0 <= (per_payment_fee + S::dust(coin).0) {
+          // Pop the last payment if it can't pay the fee while remaining at or above the dust limit
+          // Caveat to using `<` here is that subtracting dust from a payment may result in a
+          // 0-value payment
+          if payments.last().unwrap().balance().amount.0 < (per_payment_fee + S::dust(coin).0) {
             amortized += payments.pop().unwrap().balance().amount.0;
             // Recalculate the fee and try again
             fee = self
