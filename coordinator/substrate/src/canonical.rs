@@ -107,7 +107,7 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Continually
       // it's fine.
       let mut set = FuturesOrdered::new();
       for block_number in
-        next_block ..= latest_finalized_block.min(next_block + BLOCKS_TO_SYNC_AT_ONCE)
+        next_block ..= latest_finalized_block.min(next_block + BLOCKS_TO_SYNC_AT_ONCE - 1)
       {
         set.push_back(scan(block_number));
       }

@@ -268,7 +268,13 @@ pub async fn main_loop<
           batch,
           mut burns,
         } => {
-          let scanner = scanner.as_mut().unwrap();
+          // we receive Block messages before the first key is set and therefore before we
+          // have a scanner. we just skip the block in this case.
+          let Some(scanner) = scanner.as_mut() else {
+            assert!(batch.is_none(), "received a batch before the scanner was initialized");
+            assert!(burns.is_empty(), "received burns before the scanner was initialized");
+            continue;
+          };
 
           if let Some(batch) = batch {
             let key_to_activate =
