@@ -1,6 +1,7 @@
-use core::{borrow::Borrow, future::Future, time::Duration};
+use core::{borrow::Borrow, time::Duration};
+use alloc::sync::Arc;
 use std::{
-  sync::Arc,
+  sync::RwLock,
   collections::{HashSet, HashMap},
 };
 
@@ -12,7 +13,6 @@ use serai_task::{Task, ContinuallyRan};
 use libp2p::PeerId;
 
 use futures_util::stream::{StreamExt as _, FuturesUnordered};
-use tokio::sync::{mpsc, RwLock};
 
 use crate::peer_id_from_public;
 
@@ -30,12 +30,12 @@ pub(crate) struct Validators {
   validators: HashMap<PeerId, HashSet<ExternalNetworkId>>,
 
   // The channel to send the changes down
-  changes: mpsc::UnboundedSender<Changes>,
+  changes: async_channel::Sender<Changes>,
 }
 
 impl Validators {
-  pub(crate) fn new(serai: Arc<Serai>) -> (Self, mpsc::UnboundedReceiver<Changes>) {
-    let (send, recv) = mpsc::unbounded_channel();
+  pub(crate) fn new(serai: Arc<Serai>) -> (Self, async_channel::Receiver<Changes>) {
+    let (send, recv) = async_channel::bounded(1);
     let validators =
       Validators { serai, by_network: HashMap::new(), validators: HashMap::new(), changes: send };
     (validators, recv)
@@ -91,7 +91,7 @@ impl Validators {
   fn incorporate_session_changes(
     &mut self,
     session_changes: Vec<(ExternalNetworkId, HashSet<PeerId>)>,
-  ) {
+  ) -> impl use<> + Send + Future<Output = ()> {
     let mut removed = HashSet::new();
     let mut added = HashSet::new();
 
@@ -132,13 +132,18 @@ impl Validators {
     removed.retain(|validator| !added.contains(validator));
     // Send the changes, dropping the error
     // This lets the caller opt-out of change notifications by dropping the receiver
-    let _: Result<_, _> = self.changes.send(Changes { removed, added });
+    {
+      let changes = self.changes.clone();
+      async move {
+        let _: Result<_, _> = changes.send(Changes { removed, added }).await;
+      }
+    }
   }
 
   /// Update the view of the validators.
   pub(crate) async fn update(&mut self) -> Result<(), RpcError> {
     let session_changes = Self::session_changes(&*self.serai, &self.by_network).await?;
-    self.incorporate_session_changes(session_changes);
+    self.incorporate_session_changes(session_changes).await;
     Ok(())
   }
 
@@ -165,7 +170,7 @@ impl UpdateValidatorsTask {
   /// This returns a reference to the Validators it updates after spawning itself.
   pub(crate) fn spawn(
     serai: Arc<Serai>,
-  ) -> (Arc<RwLock<Validators>>, mpsc::UnboundedReceiver<Changes>) {
+  ) -> (Arc<RwLock<Validators>>, async_channel::Receiver<Changes>) {
     // The validators which will be updated
     let (validators, changes) = Validators::new(serai);
     let validators = Arc::new(RwLock::new(validators));
@@ -194,10 +199,17 @@ impl ContinuallyRan for UpdateValidatorsTask {
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
       let session_changes = {
-        let validators = self.validators.read().await;
-        Validators::session_changes(validators.serai.clone(), validators.by_network.clone()).await?
+        let (serai, by_network) = {
+          let validators = self.validators.read().unwrap();
+          let serai = validators.serai.clone();
+          let by_network = validators.by_network.clone();
+          (serai, by_network)
+        };
+        Validators::session_changes(serai, by_network).await?
       };
-      self.validators.write().await.incorporate_session_changes(session_changes);
+      let send_channel =
+        self.validators.write().unwrap().incorporate_session_changes(session_changes);
+      send_channel.await;
       Ok(true)
     }
   }

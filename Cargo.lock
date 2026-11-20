@@ -7454,12 +7454,14 @@ dependencies = [
 name = "serai-coordinator-libp2p-p2p"
 version = "0.1.0"
 dependencies = [
+ "async-channel",
  "blake2 0.11.0",
  "borsh",
  "futures-util",
  "hex",
  "libp2p",
  "log",
+ "pin-project-lite",
  "rand_core 0.6.4",
  "schnorrkel",
  "serai-client-serai",
@@ -7477,6 +7479,7 @@ dependencies = [
 name = "serai-coordinator-p2p"
 version = "0.1.0"
 dependencies = [
+ "async-channel",
  "borsh",
  "futures-util",
  "getrandom 0.4.3",

@@ -3,8 +3,6 @@ use std::{sync::Arc, collections::HashSet};
 
 use rand_core::{RngCore as _, OsRng};
 
-use tokio::sync::mpsc;
-
 use serai_client_serai::{RpcError, Serai};
 
 use libp2p::{
@@ -32,14 +30,14 @@ pub(crate) struct DialTask {
   serai: Arc<Serai>,
   validators: Validators,
   peers: Peers,
-  to_dial: mpsc::UnboundedSender<DialOpts>,
+  to_dial: async_channel::Sender<DialOpts>,
 }
 
 impl DialTask {
   pub(crate) fn new(
     serai: Arc<Serai>,
     peers: Peers,
-    to_dial: mpsc::UnboundedSender<DialOpts>,
+    to_dial: async_channel::Sender<DialOpts>,
   ) -> Self {
     DialTask { serai: serai.clone(), validators: Validators::new(serai).0, peers, to_dial }
   }
@@ -62,7 +60,7 @@ impl ContinuallyRan for DialTask {
         .peers
         .peers
         .read()
-        .await
+        .unwrap()
         .iter()
         .map(|(network, peers)| (*network, peers.len()))
         .collect::<Vec<_>>();
@@ -128,10 +126,8 @@ impl ContinuallyRan for DialTask {
 
             log::debug!("mapped found peer: {mapped_peer}");
 
-            self
-              .to_dial
-              .send(DialOpts::unknown_peer_id().address(mapped_peer).build())
-              .expect("dial receiver closed?");
+            let _ =
+              self.to_dial.send(DialOpts::unknown_peer_id().address(mapped_peer).build()).await;
             dialed = true;
           }
         }

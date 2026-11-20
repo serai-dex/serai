@@ -8,7 +8,7 @@ use futures_util::{AsyncRead, AsyncReadExt as _, AsyncWrite, AsyncWriteExt as _}
 use libp2p::request_response::{
   self, Codec as CodecTrait, Event as GenericEvent, Config, Behaviour, ProtocolSupport,
 };
-pub use request_response::{InboundRequestId, Message};
+pub use request_response::Message;
 
 use serai_cosign::SignedCosign;
 
@@ -31,12 +31,12 @@ pub(crate) enum Request {
 
 /// Responses which can be received via the request-response protocol.
 #[derive(Clone, BorshSerialize, BorshDeserialize)]
-pub(crate) enum Response<Tx: 'static + Send + Sync + Transaction> {
+pub enum Response<Tx: Transaction> {
   None,
   Blocks(#[borsh(bound(serialize = "", deserialize = ""))] Vec<CommittedTributaryBlock<Tx>>),
   NotableCosigns(Vec<SignedCosign>),
 }
-impl<Tx: 'static + Send + Sync + Transaction> fmt::Debug for Response<Tx> {
+impl<Tx: Transaction> fmt::Debug for Response<Tx> {
   fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
     match self {
       Response::None => fmt.debug_struct("Response::None").finish(),
@@ -54,13 +54,13 @@ impl<Tx: 'static + Send + Sync + Transaction> fmt::Debug for Response<Tx> {
 /// ideally, we'd use borsh directly with the `io` traits defined here, they're async and there
 /// isn't an amenable API within borsh for incremental deserialization.
 #[derive(Clone, Copy, Debug)]
-pub(crate) struct Codec<Tx: 'static + Send + Sync + Transaction>(PhantomData<Tx>);
-impl<Tx: 'static + Send + Sync + Transaction> Default for Codec<Tx> {
+pub(crate) struct Codec<Tx: Transaction>(PhantomData<Tx>);
+impl<Tx: Transaction> Default for Codec<Tx> {
   fn default() -> Self {
     Self(PhantomData)
   }
 }
-impl<Tx: 'static + Send + Sync + Transaction> Codec<Tx> {
+impl<Tx: Transaction> Codec<Tx> {
   async fn read<M: BorshDeserialize>(io: &mut (impl Unpin + AsyncRead)) -> io::Result<M> {
     let mut len = [0; 4];
     io.read_exact(&mut len).await?;
@@ -84,13 +84,18 @@ impl<Tx: 'static + Send + Sync + Transaction> Codec<Tx> {
     }
     Ok(res)
   }
-  async fn write(io: &mut (impl Unpin + AsyncWrite), msg: &impl BorshSerialize) -> io::Result<()> {
+  fn write(
+    io: &mut (impl Unpin + AsyncWrite),
+    msg: &impl BorshSerialize,
+  ) -> impl Future<Output = io::Result<()>> {
     let msg = borsh::to_vec(msg).unwrap();
-    io.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await?;
-    io.write_all(&msg).await
+    async move {
+      io.write_all(&u32::try_from(msg.len()).unwrap().to_le_bytes()).await?;
+      io.write_all(&msg).await
+    }
   }
 }
-impl<Tx: 'static + Send + Sync + Transaction> CodecTrait for Codec<Tx> {
+impl<Tx: Send + Transaction> CodecTrait for Codec<Tx> {
   type Protocol = &'static str;
   type Request = Request;
   type Response = Response<Tx>;
@@ -130,7 +135,7 @@ impl<Tx: 'static + Send + Sync + Transaction> CodecTrait for Codec<Tx> {
 pub(crate) type Event<Tx> = GenericEvent<Request, Response<Tx>>;
 
 pub(crate) type Behavior<Tx> = Behaviour<Codec<Tx>>;
-pub(crate) fn new_behavior<Tx: 'static + Send + Sync + Transaction>() -> Behavior<Tx> {
+pub(crate) fn new_behavior<Tx: Send + Transaction>() -> Behavior<Tx> {
   let config = Config::default().with_request_timeout(Duration::from_secs(5));
   Behavior::new([(PROTOCOL, ProtocolSupport::Full)], config)
 }

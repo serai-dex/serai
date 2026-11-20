@@ -2,6 +2,10 @@
 #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
 
+use core::{
+  pin::Pin,
+  task::{Poll, Context},
+};
 use std::collections::HashMap;
 
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -17,7 +21,7 @@ use tributary_framework::{
 };
 use serai_cosign::{SignedCosign, Cosigning};
 
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 
 use serai_task::{Task, ContinuallyRan as _};
 
@@ -70,8 +74,8 @@ pub trait Peer<'p2p, Tx: Transaction>: Send {
   ) -> impl Send + Future<Output = Option<Vec<CommittedTributaryBlock<Tx>>>>;
 }
 
-/// The representation of the P2P network.
-pub trait P2p<Tx: Transaction>:
+/// The representation of the send half of the P2P network.
+pub trait P2pSend<Tx: Transaction>:
   Send
   + Sync
   + Clone
@@ -92,57 +96,59 @@ pub trait P2p<Tx: Transaction>:
 
   /// Broadcast a cosign.
   fn publish_cosign(&self, cosign: SignedCosign) -> impl Send + Future<Output = ()>;
-
-  /// A cancel-safe future for the next sync request received over the P2P network.
-  ///
-  /// This yields the sync request and a channel to respond with the descending blocks via.
-  /// This channel MUST NOT and will not have its receiver dropped before a message is sent.
-  fn sync_request(
-    &self,
-  ) -> impl Future<Output = (SyncRequest, oneshot::Sender<Vec<CommittedTributaryBlock<Tx>>>)>;
-
-  /// A cancel-safe future for the next request for the notable cosigns of a gloabl session.
-  ///
-  /// This yields the global session the request is for and a channel to return the notable
-  /// cosigns. This channel MUST NOT and will not have its receiver dropped before a message is
-  /// sent.
-  fn notable_cosigns_request(
-    &self,
-  ) -> impl Send + Future<Output = ([u8; 32], oneshot::Sender<Vec<SignedCosign>>)>;
-
-  /// A cancel-safe future for the next message regarding a Tributary.
-  ///
-  /// This yields the message's Tributary's genesis and the message.
-  fn tributary_message(&self) -> impl Send + Future<Output = ([u8; 32], Message<Tx>)>;
-
-  /// A cancel-safe future for the next transaction gossiped for a Tributary.
-  ///
-  /// This yields the relevant Tributary's genesis and the transaction.
-  fn tributary_transaction(&self) -> impl Send + Future<Output = ([u8; 32], Tx)>;
-
-  /// A cancel-safe future for the next cosign received.
-  fn cosign(&self) -> impl Send + Future<Output = SignedCosign>;
 }
 
-fn handle_notable_cosigns_request<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
->(
+/// A received message.
+pub enum Recv<Tx: Transaction, Response> {
+  /// A signed cosign.
+  SignedCosign(SignedCosign),
+  /// A request for a global session's notable cosigns.
+  NotableCosignsRequest([u8; 32], Response),
+  /// A message for a Tributary.
+  TributaryMessage([u8; 32], tributary_framework::Message<Tx>),
+  /// A transaction for a Tributary.
+  TributaryTransaction([u8; 32], Tx),
+  /// A sync request for a Tributary.
+  SyncRequest(SyncRequest, Response),
+}
+
+/// The representation of the receive half of the P2P network.
+pub trait P2pRecv<Tx: Transaction> {
+  /// The identifier to repond to a request with.
+  type Response;
+
+  /// Poll the P2P network for the next received message.
+  fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Recv<Tx, Self::Response>>;
+
+  /// Respond to a [`Recv::NotableCosignsRequest`] with the following cosigns.
+  fn notable_cosigns(
+    self: Pin<&mut Self>,
+    response: Self::Response,
+    notable_cosigns: Vec<SignedCosign>,
+  );
+
+  /// Respond to a [`Recv::SyncRequest`] with the following blocks.
+  fn sync(self: Pin<&mut Self>, response: Self::Response, blocks: Vec<CommittedTributaryBlock<Tx>>);
+}
+
+enum RecvResp<Tx: Transaction> {
+  SignedCosigns(Vec<SignedCosign>),
+  Sync(Vec<CommittedTributaryBlock<Tx>>),
+}
+
+fn handle_notable_cosigns_request<D: Db, Tx: Transaction, P: P2pRecv<Tx>>(
   db: &D,
   global_session: [u8; 32],
-  channel: oneshot::Sender<Vec<SignedCosign>>,
-) {
-  let cosigns = Cosigning::<D>::notable_or_latest_cosigns(db, global_session);
-  let _ = channel.send(cosigns);
+  response: P::Response,
+) -> (P::Response, RecvResp<Tx>) {
+  (response, RecvResp::SignedCosigns(Cosigning::<D>::notable_or_latest_cosigns(db, global_session)))
 }
 
-fn handle_sync_request<
-  D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  Tx: Send + Sync + Transaction,
->(
+fn handle_sync_request<D: Db, Tx: Transaction, P: P2pRecv<Tx>>(
   reader: &TributaryHandle<D, Tx>,
   mut latest_block_hash: [u8; 32],
-  channel: oneshot::Sender<Vec<CommittedTributaryBlock<Tx>>>,
-) {
+  response: P::Response,
+) -> (P::Response, RecvResp<Tx>) {
   let mut res = Vec::with_capacity(1);
   if let Ok(mut res_size) = borsh::object_length(&res) {
     while let Some(block_after) = reader.block_after(latest_block_hash) {
@@ -165,7 +171,7 @@ fn handle_sync_request<
       latest_block_hash = block_after;
     }
   }
-  let _ = channel.send(res);
+  (response, RecvResp::Sync(res))
 }
 
 /// Run the P2P instance.
@@ -174,20 +180,24 @@ fn handle_sync_request<
 /// never be dropped. `retire_tributary` is not required to only be instructed with added
 /// Tributaries.
 pub async fn run<
-  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  Tx: 'static + Send + Sync + Transaction,
-  P: P2p<Tx>,
+  TD: 'static + Send + Sync + Db,
+  Tx: 'static + Send + Transaction,
+  P: 'static + Send + P2pRecv<Tx, Response: Send>,
 >(
-  db: impl 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+  db: impl 'static + Send + Db,
+  p2p_send: impl 'static + P2pSend<Tx>,
   p2p: P,
   mut add_tributary: mpsc::UnboundedReceiver<(ExternalValidatorSet, TributaryHandle<TD, Tx>)>,
   mut retire_tributary: mpsc::UnboundedReceiver<ExternalValidatorSet>,
   send_cosigns: mpsc::UnboundedSender<SignedCosign>,
 ) {
   let mut readers = HashMap::<ExternalValidatorSet, TributaryHandle<TD, Tx>>::new();
-  let mut tributary_messages = HashMap::<[u8; 32], mpsc::UnboundedSender<Message<Tx>>>::new();
-  let mut tributary_transactions = HashMap::<[u8; 32], mpsc::UnboundedSender<Tx>>::new();
+  let mut tributary_messages = HashMap::<[u8; 32], async_channel::Sender<Message<Tx>>>::new();
+  let mut tributary_transactions = HashMap::<[u8; 32], async_channel::Sender<Tx>>::new();
   let mut sync_request_tasks = HashMap::<ExternalValidatorSet, _>::new();
+
+  let mut p2p = core::pin::pin!(p2p);
+  let mut join_set = tokio::task::JoinSet::new();
 
   loop {
     tokio::select! {
@@ -198,27 +208,26 @@ pub async fn run<
 
         let (sync_request_task_def, sync_request_task) = Task::new();
         tokio::spawn(
-          SyncTask::new(set, tributary.clone(), p2p.clone())
+          SyncTask::new(set, tributary.clone(), p2p_send.clone())
             .continually_run(sync_request_task_def, vec![])
         );
         sync_request_tasks.insert(set, sync_request_task);
 
-        let (tributary_message_send, mut tributary_message_recv) = mpsc::unbounded_channel();
+        let (tributary_message_send, tributary_message_recv) = async_channel::bounded(512);
         tributary_messages.insert(tributary.genesis(), tributary_message_send);
         // For as long as this sender exists, handle the messages from it on a dedicated task
         tokio::spawn({
           let tributary = tributary.clone();
           async move {
-            while let Some(message) = tributary_message_recv.recv().await {
+            while let Ok(message) = tributary_message_recv.recv().await {
               tributary.message(message).await;
             }
         }});
 
-        let (tributary_transaction_send, mut tributary_transaction_recv) =
-          mpsc::unbounded_channel();
+        let (tributary_transaction_send, tributary_transaction_recv) = async_channel::bounded(100);
         tributary_transactions.insert(tributary.genesis(), tributary_transaction_send);
         tokio::spawn(async move {
-          while let Some(transaction) = tributary_transaction_recv.recv().await {
+          while let Ok(transaction) = tributary_transaction_recv.recv().await {
             if matches!(transaction.kind(), TransactionKind::Provided { .. }) {
               // TODO: Disconnect this peer
               continue;
@@ -240,37 +249,61 @@ pub async fn run<
         sync_request_tasks.remove(&set).expect("tributary but no sync request task");
       }
 
-      (sync_request, channel) = p2p.sync_request() => {
-        if let Some(reader) = readers.get(&sync_request.set) {
-          let reader = reader.clone(); // This is a cheap clone
-          // We spawn this on a task due to the DB reads needed
-          // TODO: Ensure we have no more than one request per requester at a time
-          tokio::spawn(async move {
-            handle_sync_request(&reader, sync_request.latest_block_hash, channel);
-          });
+      p2p_recv = futures_util::future::poll_fn(|context| p2p.as_mut().poll(context)) => {
+        match p2p_recv {
+          Recv::SignedCosign(signed_cosign) => {
+            /*
+              We don't call `Cosigning::intake_cosign` here as that can only be called from a
+              single location. We also need to intake the cosigns we produce, which means we need
+              to merge these streams (signing, network) somehow. That's done with this `mpsc`
+              channel.
+            */
+            let _ = send_cosigns.send(signed_cosign);
+          }
+          Recv::NotableCosignsRequest(global_session, response) => {
+            let db = db.clone();
+            join_set.spawn_blocking(move || {
+              handle_notable_cosigns_request::<_, _, P>(&db, global_session, response)
+            });
+          }
+          Recv::TributaryMessage(tributary, message) => {
+            if let Some(tributary) = tributary_messages.get(&tributary) {
+              let _ = tributary.try_send(message);
+            }
+          }
+          Recv::TributaryTransaction(tributary, transaction) => {
+            if let Some(tributary) = tributary_transactions.get(&tributary) {
+              let _ = tributary.try_send(transaction);
+            }
+          }
+          Recv::SyncRequest(sync_request, response) => {
+            if let Some(reader) = readers.get(&sync_request.set) {
+              let reader = reader.clone(); // This is a cheap clone
+              // We spawn this on a task due to the DB reads needed
+              // TODO: Ensure we have no more than one request per requester at a time
+              join_set.spawn_blocking(move || {
+                handle_sync_request::<_, _, P>(&reader, sync_request.latest_block_hash, response)
+              });
+            }
+          }
         }
       }
-      (global_session, channel) = p2p.notable_cosigns_request() => {
-        tokio::spawn({
-          let db = db.clone();
-          async move { handle_notable_cosigns_request(&db, global_session, channel) }
-        });
-      }
-      (tributary, message) = p2p.tributary_message() => {
-        if let Some(tributary) = tributary_messages.get(&tributary) {
-          tributary.send(message).expect("tributary message recv was dropped?");
+
+      (response, value) = futures_util::future::poll_fn(|context| {
+        match join_set.poll_join_next(context) {
+          Poll::Ready(Some(Ok(value))) => Poll::Ready(value),
+          Poll::Ready(Some(Err(e))) => panic!("task panicked: {e:?}"),
+          Poll::Ready(None) | Poll::Pending => Poll::Pending,
         }
-      }
-      (tributary, transaction) = p2p.tributary_transaction() => {
-        if let Some(tributary) = tributary_transactions.get(&tributary) {
-          tributary.send(transaction).expect("tributary transaction recv was dropped?");
+      }) => {
+        match value {
+          RecvResp::SignedCosigns(signed_cosigns) => {
+            p2p.as_mut().notable_cosigns(response, signed_cosigns);
+          }
+          RecvResp::Sync(blocks) => {
+            p2p.as_mut().sync(response, blocks);
+          }
         }
-      }
-      cosign = p2p.cosign() => {
-        // We don't call `Cosigning::intake_cosign` here as that can only be called from a single
-        // location. We also need to intake the cosigns we produce, which means we need to merge
-        // these streams (signing, network) somehow. That's done with this mpsc channel
-        send_cosigns.send(cosign).expect("channel receiving cosigns was dropped");
       }
     }
   }

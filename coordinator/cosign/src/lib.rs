@@ -217,7 +217,7 @@ impl IntakeCosignError {
 }
 
 /// The interface to manage cosigning with.
-pub struct Cosigning<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> {
+pub struct Cosigning<D: Db> {
   db: D,
 }
 impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Cosigning<D> {
@@ -265,7 +265,9 @@ impl<D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>> Cosigning<D
 
     Self { db }
   }
+}
 
+impl<D: Db> Cosigning<D> {
   /// The latest cosigned block number.
   pub fn latest_cosigned_block_number(getter: &impl Get) -> Result<Option<u64>, Faulted> {
     if FaultedSession::get(getter).is_some() {

@@ -1,14 +1,15 @@
+use core::{
+  pin::Pin,
+  task::{Poll, Context},
+};
+use alloc::sync::Arc;
 use std::{
-  sync::Arc,
+  sync::RwLock,
   collections::{HashSet, HashMap},
   time::{Duration, Instant},
 };
 
-use borsh::BorshDeserialize as _;
-
-use serai_client_serai::abi::primitives::validator_sets::ExternalValidatorSet;
-
-use tokio::sync::{mpsc, oneshot, RwLock};
+use tokio::sync::oneshot;
 
 use serai_task::TaskHandle;
 
@@ -16,14 +17,14 @@ use serai_cosign::SignedCosign;
 
 use tributary_framework::{ReadWriteAsBorsh, Transaction};
 
-use futures_util::StreamExt as _;
+use futures_util::Stream as _;
 use libp2p::{
   identity::PeerId,
-  request_response::{InboundRequestId, OutboundRequestId, ResponseChannel},
+  request_response::OutboundRequestId,
   swarm::{dial_opts::DialOpts, SwarmEvent, Swarm},
 };
 
-use serai_coordinator_p2p::SyncRequest;
+use serai_coordinator_p2p::{SyncRequest, P2pRecv};
 
 use crate::{
   Peers, BehaviorEvent, Behavior,
@@ -34,6 +35,128 @@ use crate::{
 };
 
 const TIME_BETWEEN_REBUILD_PEERS: Duration = Duration::from_mins(10);
+pub(super) const MAX_OUTBOUND_REQUESTS: usize = 64;
+
+pub(super) type OutboundRequest<Tx> = (PeerId, Request, Option<oneshot::Sender<Response<Tx>>>);
+
+trait StaticSendTransaction: 'static + Send + Transaction {}
+impl<T: 'static + Send + Transaction> StaticSendTransaction for T {}
+
+pin_project_lite::pin_project! {
+  /// A funnel for all the following channels into the `Swarm`.
+  struct SwarmFunnel<Tx: StaticSendTransaction> {
+    swarm: Swarm<Behavior<Tx>>,
+
+    #[pin]
+    validator_changes: async_channel::Receiver<validators::Changes>,
+
+    #[pin]
+    to_dial: async_channel::Receiver<DialOpts>,
+
+    #[pin]
+    gossip: async_channel::Receiver<gossip::Message<Tx>>,
+
+    #[pin]
+    outbound_requests: async_channel::Receiver<OutboundRequest<Tx>>,
+    outbound_request_responses: HashMap<OutboundRequestId, oneshot::Sender<Response<Tx>>>,
+  }
+}
+
+impl<Tx: 'static + Send + Transaction> SwarmFunnel<Tx> {
+  /// The segment of the `poll` function which effectively just drains channels into the `Swarm`.
+  fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) {
+    let mut task = self.project();
+
+    // Update the allow list
+    while let Poll::Ready(Some(validator_changes)) = task.validator_changes.as_mut().poll_next(cx) {
+      let behavior = &mut task.swarm.behaviour_mut().allow_list;
+      for removed in validator_changes.removed {
+        behavior.disallow_peer(removed);
+      }
+      for added in validator_changes.added {
+        behavior.allow_peer(added);
+      }
+    }
+
+    // Dial the peers we're instructed to
+    while let Poll::Ready(Some(dial_opts)) = task.to_dial.as_mut().poll_next(cx) {
+      let _: Result<_, _> = task.swarm.dial(dial_opts);
+    }
+
+    // Send gossip out
+    while let Poll::Ready(Some(message)) = task.gossip.as_mut().poll_next(cx) {
+      let behavior = task.swarm.behaviour_mut();
+      let topic = message.topic();
+
+      enum GossipStep {
+        Subscribe,
+        Publish,
+      }
+      for step in [GossipStep::Subscribe, GossipStep::Publish] {
+        use libp2p::gossipsub::{PublishError, SubscriptionError};
+
+        let result = match step {
+          /*
+            If we're sending a message for this topic, it's because this topic is relevant to us.
+            Subscribe to it.
+
+            TODO: Unsubscribe from topics which we haven't sent on a message on within the last
+            day.
+          */
+          GossipStep::Subscribe => match behavior.gossip.subscribe(&topic) {
+            Ok(_newly_subscribed) => Ok(()),
+            Err(SubscriptionError::PublishError(err)) => Err(Some(err)),
+            Err(SubscriptionError::NotAllowed) => {
+              log::warn!("wasn't allowed to subscribe to {topic}");
+              Err(None)
+            }
+          },
+
+          // Once we're subscribed to the topic, publish our message for it
+          GossipStep::Publish => match borsh::to_vec(&message) {
+            Ok(message) => match behavior.gossip.publish(topic.hash(), message) {
+              Ok(_message_id) => Ok(()),
+              Err(err) => Err(Some(err)),
+            },
+            Err(err) => Err(Some(PublishError::TransformFailed(err))),
+          },
+        };
+
+        // If there was a `PublishError` with publishing our subscription/message, handle it
+        match &result {
+          Ok(()) | Err(None) => {}
+          Err(Some(err)) => match err {
+            // TODO: Poke `DialTask` to dial more peers for this if `NoPeersSubscribedToTopic`?
+            PublishError::Duplicate | PublishError::NoPeersSubscribedToTopic => {}
+            err @ (PublishError::MessageTooLarge |
+            PublishError::SigningError(_) |
+            PublishError::TransformFailed(_)) => {
+              log::warn!("couldn't gossip message due to internal error: {err:?}");
+            }
+            // TODO: Backpressure this instead of dropping the message
+            PublishError::AllQueuesFull(_attempted_peers) => {}
+          },
+        }
+
+        // If a step failed, don't continue
+        if result.is_err() {
+          break;
+        }
+      }
+    }
+
+    // Only begin more outbound requests if we have less than the maximum outstanding
+    while (task.outbound_request_responses.len() < MAX_OUTBOUND_REQUESTS) &&
+      let Poll::Ready(Some((peer, request, response_channel))) =
+        task.outbound_requests.as_mut().poll_next(cx)
+    {
+      let request_id = task.swarm.behaviour_mut().reqres.send_request(&peer, request);
+      if let Some(response_channel) = response_channel {
+        task.outbound_request_responses.insert(request_id, response_channel);
+      }
+    }
+  }
+}
 
 /*
   `SwarmTask` handles everything we need the `Swarm` object for. The goal is to minimize the
@@ -50,322 +173,324 @@ const TIME_BETWEEN_REBUILD_PEERS: Duration = Duration::from_mins(10);
   - Dispatching received requests
   - Sending responses
 */
-pub(crate) struct SwarmTask<Tx: 'static + Send + Sync + Transaction> {
-  dial_task: TaskHandle,
-  to_dial: mpsc::UnboundedReceiver<DialOpts>,
-  last_dial_task_run: Instant,
+pin_project_lite::pin_project! {
+  pub(super) struct SwarmTask<Tx: StaticSendTransaction> {
+    dial_task: TaskHandle,
+    last_dial_task_run: Instant,
 
-  validators: Arc<RwLock<Validators>>,
-  validator_changes: mpsc::UnboundedReceiver<validators::Changes>,
-  peers: Peers,
-  rebuild_peers_at: Instant,
+    validators: Arc<RwLock<Validators>>,
+    peers: Peers,
+    #[pin]
+    rebuild_peers: tokio::time::Sleep,
 
-  swarm: Swarm<Behavior<Tx>>,
+    #[pin]
+    funnel: SwarmFunnel<Tx>,
 
-  gossip: mpsc::UnboundedReceiver<gossip::Message<Tx>>,
-  signed_cosigns: mpsc::UnboundedSender<SignedCosign>,
-  tributary_messages: mpsc::UnboundedSender<([u8; 32], tributary_framework::Message<Tx>)>,
-  tributary_transactions: mpsc::UnboundedSender<([u8; 32], Tx)>,
-
-  outbound_requests: mpsc::UnboundedReceiver<(PeerId, Request, oneshot::Sender<Response<Tx>>)>,
-  outbound_request_responses: HashMap<OutboundRequestId, oneshot::Sender<Response<Tx>>>,
-
-  inbound_request_response_channels: HashMap<InboundRequestId, ResponseChannel<Response<Tx>>>,
-  heartbeat_requests: mpsc::UnboundedSender<(InboundRequestId, ExternalValidatorSet, [u8; 32])>,
-  notable_cosign_requests: mpsc::UnboundedSender<(InboundRequestId, [u8; 32])>,
-  inbound_request_responses: mpsc::UnboundedReceiver<(InboundRequestId, Response<Tx>)>,
+    outstanding_signed_cosigns: Vec<SignedCosign>,
+  }
 }
 
-impl<Tx: 'static + Send + Sync + Transaction> SwarmTask<Tx> {
-  fn handle_gossip(&mut self, event: gossip::Event) {
+impl<Tx: 'static + Send + Transaction> SwarmTask<Tx> {
+  fn handle_gossip(
+    swarm: &mut Swarm<Behavior<Tx>>,
+    event: gossip::Event,
+  ) -> Option<serai_coordinator_p2p::Recv<Tx, <Self as P2pRecv<Tx>>::Response>> {
     match event {
       gossip::Event::Message { message, .. } => {
-        let Ok(message) = gossip::Message::deserialize(&mut message.data.as_slice()) else {
+        let Some(message) = ({
+          let mut slice = message.data.as_slice();
+          let message =
+            <gossip::Message<Tx> as borsh::BorshDeserialize>::deserialize_reader(&mut slice);
+          message.ok().filter(|_| slice.is_empty())
+        }) else {
           // TODO: Penalize the PeerId which created this message, which requires authenticating
           // each message OR moving to explicit acknowledgement before re-gossiping
-          return;
+          None?
         };
-        match message {
+        Some(match message {
           gossip::Message::TributaryMessage { tributary, message } => {
-            let _: Result<_, _> = self.tributary_messages.send((tributary, message));
+            serai_coordinator_p2p::Recv::TributaryMessage(tributary, message)
           }
           gossip::Message::TributaryTransaction {
             tributary,
             transaction: ReadWriteAsBorsh(transaction),
-          } => {
-            let _: Result<_, _> = self.tributary_transactions.send((tributary, transaction));
-          }
+          } => serai_coordinator_p2p::Recv::TributaryTransaction(tributary, transaction),
           gossip::Message::Cosign(signed_cosign) => {
-            let _: Result<_, _> = self.signed_cosigns.send(signed_cosign);
+            serai_coordinator_p2p::Recv::SignedCosign(signed_cosign)
           }
-        }
+        })
       }
-      gossip::Event::Subscribed { .. } | gossip::Event::Unsubscribed { .. } => {}
+      gossip::Event::Subscribed { .. } | gossip::Event::Unsubscribed { .. } => None,
       gossip::Event::GossipsubNotSupported { peer_id } |
       gossip::Event::SlowPeer { peer_id, .. } => {
-        let _: Result<_, _> = self.swarm.disconnect_peer_id(peer_id);
+        let _: Result<_, _> = swarm.disconnect_peer_id(peer_id);
+        None
       }
     }
   }
 
-  fn handle_reqres(&mut self, event: reqres::Event<Tx>) {
-    match event {
+  fn handle_reqres(
+    cx: &mut Context<'_>,
+    outbound_request_responses: &mut HashMap<OutboundRequestId, oneshot::Sender<Response<Tx>>>,
+    outstanding_signed_cosigns: &mut Vec<SignedCosign>,
+    event: reqres::Event<Tx>,
+  ) -> Option<serai_coordinator_p2p::Recv<Tx, <Self as P2pRecv<Tx>>::Response>> {
+    let outstanding_requests_at_start = outbound_request_responses.len();
+
+    let result = match event {
       reqres::Event::Message { message, .. } => match message {
-        reqres::Message::Request { request_id, request, channel } => match request {
+        reqres::Message::Request { request_id: _, request, channel } => Some(match request {
           reqres::Request::SyncRequest(SyncRequest { set, latest_block_hash }) => {
-            self.inbound_request_response_channels.insert(request_id, channel);
-            let _: Result<_, _> =
-              self.heartbeat_requests.send((request_id, set, latest_block_hash));
+            serai_coordinator_p2p::Recv::SyncRequest(
+              SyncRequest { set, latest_block_hash },
+              channel,
+            )
           }
           reqres::Request::NotableCosigns { global_session } => {
-            self.inbound_request_response_channels.insert(request_id, channel);
-            let _: Result<_, _> = self.notable_cosign_requests.send((request_id, global_session));
+            serai_coordinator_p2p::Recv::NotableCosignsRequest(global_session, channel)
           }
-        },
+        }),
         reqres::Message::Response { request_id, response } => {
-          if let Some(channel) = self.outbound_request_responses.remove(&request_id) {
+          if let Some(channel) = outbound_request_responses.remove(&request_id) {
             let _: Result<_, _> = channel.send(response);
+            None
+          } else if let Response::NotableCosigns(signed_cosigns) = response {
+            *outstanding_signed_cosigns = signed_cosigns;
+            outstanding_signed_cosigns.pop().map(serai_coordinator_p2p::Recv::SignedCosign)
+          } else {
+            None
           }
         }
       },
       reqres::Event::OutboundFailure { request_id, .. } => {
         // Send None as the response for the request
-        if let Some(channel) = self.outbound_request_responses.remove(&request_id) {
+        if let Some(channel) = outbound_request_responses.remove(&request_id) {
           let _: Result<_, _> = channel.send(Response::None);
         }
+        None
       }
-      reqres::Event::InboundFailure { .. } | reqres::Event::ResponseSent { .. } => {}
+      reqres::Event::InboundFailure { .. } | reqres::Event::ResponseSent { .. } => None,
+    };
+
+    /*
+      If we've responded to an outstanding request, wake ourselves, in case the
+      `outbound_requests` channel is backpressured.
+    */
+    if (outstanding_requests_at_start == MAX_OUTBOUND_REQUESTS) &&
+      (outbound_request_responses.len() < outstanding_requests_at_start)
+    {
+      cx.waker().wake_by_ref();
     }
+
+    result
   }
+}
 
-  async fn run(mut self) {
-    loop {
-      let time_till_rebuild_peers = self.rebuild_peers_at.saturating_duration_since(Instant::now());
+impl<Tx: 'static + Send + Transaction> P2pRecv<Tx> for SwarmTask<Tx> {
+  type Response = libp2p::request_response::ResponseChannel<Response<Tx>>;
 
-      tokio::select! {
-        // If the validators have changed, update the allow list
-        validator_changes = self.validator_changes.recv() => {
-          let validator_changes = validator_changes.expect("validators update task shut down?");
-          let behavior = &mut self.swarm.behaviour_mut().allow_list;
-          for removed in validator_changes.removed {
-            behavior.disallow_peer(removed);
-          }
-          for added in validator_changes.added {
-            behavior.allow_peer(added);
+  fn poll(
+    self: Pin<&mut Self>,
+    cx: &mut Context<'_>,
+  ) -> Poll<serai_coordinator_p2p::Recv<Tx, Self::Response>> {
+    let mut task = self.project();
+    task.funnel.as_mut().poll(cx);
+    let funnel = task.funnel.project();
+
+    if let Some(signed_cosign) = task.outstanding_signed_cosigns.pop() {
+      cx.waker().wake_by_ref();
+      return Poll::Ready(serai_coordinator_p2p::Recv::SignedCosign(signed_cosign));
+    }
+
+    /*
+      Rebuild the peers every 10 minutes.
+
+      This protects against any race conditions/edge cases we have in our logic to track peers,
+      along with unrepresented behavior such as when a peer changes the networks they're active
+      in. This lets the peer tracking logic simply be 'good enough' to not become horribly
+      corrupt over the span of `TIME_BETWEEN_REBUILD_PEERS`.
+
+      We also use this to disconnect all peers who are no longer active in any network.
+    */
+    while let Poll::Ready(()) = task.rebuild_peers.as_mut().poll(cx) {
+      task.rebuild_peers.set(tokio::time::sleep(TIME_BETWEEN_REBUILD_PEERS));
+      let validators_by_network = task.validators.read().unwrap().by_network().clone();
+      let connected_peers = funnel.swarm.connected_peers().copied().collect::<HashSet<_>>();
+
+      // Build the new peers object
+      let mut peers = HashMap::new();
+      for (network, validators) in validators_by_network {
+        peers.insert(network, validators.intersection(&connected_peers).copied().collect());
+      }
+
+      // Write the new peers object
+      *task.peers.peers.write().unwrap() = peers;
+    }
+
+    // `Swarm: Unpin`
+    while let Poll::Ready(Some(event)) = Pin::new(&mut *funnel.swarm).poll_next(cx) {
+      match event {
+        // New connection, so update peers
+        SwarmEvent::ConnectionEstablished { peer_id, .. } => {
+          let Some(networks) = task.validators.read().unwrap().networks(&peer_id).cloned() else {
+            continue;
+          };
+          let mut peers = task.peers.peers.write().unwrap();
+          for network in networks {
+            peers.entry(network).or_insert_with(HashSet::new).insert(peer_id);
           }
         }
 
-        // Dial peers we're instructed to
-        dial_opts = self.to_dial.recv() => {
-          let dial_opts = dial_opts.expect("DialTask was closed?");
-          let _: Result<_, _> = self.swarm.dial(dial_opts);
-        }
-
-        /*
-          Rebuild the peers every 10 minutes.
-
-          This protects against any race conditions/edge cases we have in our logic to track peers,
-          along with unrepresented behavior such as when a peer changes the networks they're active
-          in. This lets the peer tracking logic simply be 'good enough' to not become horribly
-          corrupt over the span of `TIME_BETWEEN_REBUILD_PEERS`.
-
-          We also use this to disconnect all peers who are no longer active in any network.
-        */
-        () = tokio::time::sleep(time_till_rebuild_peers) => {
-          let validators_by_network = self.validators.read().await.by_network().clone();
-          let connected_peers = self.swarm.connected_peers().copied().collect::<HashSet<_>>();
-
-          // Build the new peers object
-          let mut peers = HashMap::new();
-          for (network, validators) in validators_by_network {
-            peers.insert(network, validators.intersection(&connected_peers).copied().collect());
+        // Connection closed, so update peers
+        SwarmEvent::ConnectionClosed { peer_id, .. } => {
+          let Some(networks) = task.validators.read().unwrap().networks(&peer_id).cloned() else {
+            continue;
+          };
+          let mut peers = task.peers.peers.write().unwrap();
+          for network in networks {
+            peers.entry(network).or_insert_with(HashSet::new).remove(&peer_id);
           }
 
-          // Write the new peers object
-          *self.peers.peers.write().await = peers;
-          self.rebuild_peers_at = Instant::now() + TIME_BETWEEN_REBUILD_PEERS;
+          /*
+            We want to re-run the dial task, since we lost a peer, in case we should find new
+            peers. This opens a DoS where a validator repeatedly opens/closes connections to
+            force iterations of the dial task. We prevent this by setting a minimum distance
+            since the last explicit iteration.
+
+            This is suboptimal. If we have several disconnects in immediate proximity, we'll
+            trigger the dial task upon the first (where we may still have enough peers we
+            shouldn't dial more) but not the last (where we may have so few peers left we
+            should dial more). This is accepted as the dial task will eventually run on its
+            natural timer.
+          */
+          const MINIMUM_TIME_SINCE_LAST_EXPLICIT_DIAL: Duration = Duration::from_mins(1);
+          let now = Instant::now();
+          if ((*task.last_dial_task_run) + MINIMUM_TIME_SINCE_LAST_EXPLICIT_DIAL) < now {
+            task.dial_task.run_now();
+            *task.last_dial_task_run = now;
+          }
         }
 
-        // Handle swarm events
-        event = self.swarm.next() => {
-          // `Swarm::next` will never return `Poll::Ready(None)`
-          // https://docs.rs/
-          //   libp2p/0.54.1/libp2p/struct.Swarm.html#impl-Stream-for-Swarm%3CTBehaviour%3E
-          let event = event.unwrap();
+        SwarmEvent::Behaviour(event) => {
           match event {
-            // New connection, so update peers
-            SwarmEvent::ConnectionEstablished { peer_id, .. } => {
-              let Some(networks) =
-                self.validators.read().await.networks(&peer_id).cloned() else { continue };
-              let mut peers = self.peers.peers.write().await;
-              for network in networks {
-                peers.entry(network).or_insert_with(HashSet::new).insert(peer_id);
+            BehaviorEvent::AllowList(event) | BehaviorEvent::ConnectionLimits(event) => {
+              // This *is* an exhaustive match as these events are empty enums
+              match event {}
+            }
+            BehaviorEvent::Ping(ping::Event { peer: _, connection, result }) => {
+              if result.is_err() {
+                funnel.swarm.close_connection(connection);
               }
             }
-
-            // Connection closed, so update peers
-            SwarmEvent::ConnectionClosed { peer_id, .. } => {
-              let Some(networks) =
-                self.validators.read().await.networks(&peer_id).cloned() else { continue };
-              let mut peers = self.peers.peers.write().await;
-              for network in networks {
-                peers.entry(network).or_insert_with(HashSet::new).remove(&peer_id);
-              }
-
-              /*
-                We want to re-run the dial task, since we lost a peer, in case we should find new
-                peers. This opens a DoS where a validator repeatedly opens/closes connections to
-                force iterations of the dial task. We prevent this by setting a minimum distance
-                since the last explicit iteration.
-
-                This is suboptimal. If we have several disconnects in immediate proximity, we'll
-                trigger the dial task upon the first (where we may still have enough peers we
-                shouldn't dial more) but not the last (where we may have so few peers left we
-                should dial more). This is accepted as the dial task will eventually run on its
-                natural timer.
-              */
-              const MINIMUM_TIME_SINCE_LAST_EXPLICIT_DIAL: Duration = Duration::from_mins(1);
-              let now = Instant::now();
-              if (self.last_dial_task_run + MINIMUM_TIME_SINCE_LAST_EXPLICIT_DIAL) < now {
-                self.dial_task.run_now();
-                self.last_dial_task_run = now;
+            BehaviorEvent::Reqres(event) => {
+              if let Some(resp) = Self::handle_reqres(
+                cx,
+                funnel.outbound_request_responses,
+                task.outstanding_signed_cosigns,
+                event,
+              ) {
+                cx.waker().wake_by_ref();
+                return Poll::Ready(resp);
               }
             }
-
-            SwarmEvent::Behaviour(event) => {
-              match event {
-                BehaviorEvent::AllowList(event) | BehaviorEvent::ConnectionLimits(event) => {
-                  // This *is* an exhaustive match as these events are empty enums
-                  match event {}
-                }
-                BehaviorEvent::Ping(ping::Event { peer: _, connection, result, }) => {
-                  if result.is_err() {
-                    self.swarm.close_connection(connection);
-                  }
-                }
-                BehaviorEvent::Reqres(event) => self.handle_reqres(event),
-                BehaviorEvent::Gossip(event) => self.handle_gossip(event),
+            BehaviorEvent::Gossip(event) => {
+              if let Some(resp) = Self::handle_gossip(funnel.swarm, event) {
+                cx.waker().wake_by_ref();
+                return Poll::Ready(resp);
               }
             }
-
-            // We don't handle any of these
-            SwarmEvent::IncomingConnection { .. } |
-            SwarmEvent::IncomingConnectionError { .. } |
-            SwarmEvent::OutgoingConnectionError { .. } |
-            SwarmEvent::NewListenAddr { .. } |
-            SwarmEvent::ExpiredListenAddr { .. } |
-            SwarmEvent::ListenerClosed { .. } |
-            SwarmEvent::ListenerError { .. } |
-            SwarmEvent::Dialing { .. } |
-            SwarmEvent::NewExternalAddrCandidate { .. } |
-            SwarmEvent::ExternalAddrConfirmed { .. } |
-            SwarmEvent::ExternalAddrExpired { .. } |
-            SwarmEvent::NewExternalAddrOfPeer { .. } => {}
-
-            // Requires as SwarmEvent is non-exhaustive
-            _ => log::warn!("unhandled SwarmEvent: {event:?}"),
           }
         }
 
-        message = self.gossip.recv() => {
-          let message = message.expect("channel for messages to gossip was closed?");
-          let topic = message.topic();
-          let message = borsh::to_vec(&message).unwrap();
+        // We don't handle any of these
+        SwarmEvent::IncomingConnection { .. } |
+        SwarmEvent::IncomingConnectionError { .. } |
+        SwarmEvent::OutgoingConnectionError { .. } |
+        SwarmEvent::NewListenAddr { .. } |
+        SwarmEvent::ExpiredListenAddr { .. } |
+        SwarmEvent::ListenerClosed { .. } |
+        SwarmEvent::ListenerError { .. } |
+        SwarmEvent::Dialing { .. } |
+        SwarmEvent::NewExternalAddrCandidate { .. } |
+        SwarmEvent::ExternalAddrConfirmed { .. } |
+        SwarmEvent::ExternalAddrExpired { .. } |
+        SwarmEvent::NewExternalAddrOfPeer { .. } => {}
 
-          /*
-            If we're sending a message for this topic, it's because this topic is relevant to us.
-            Subscribe to it.
-
-            We create topics roughly weekly, one per validator set/session. Once present in a
-            topic, we're interested in all messages for it until the validator set/session retires.
-            Then there should no longer be any messages for the topic as we should drop the
-            Tributary which creates the messages.
-
-            We use this as an argument to not bother implement unsubscribing from topics. They're
-            incredibly infrequently created and old topics shouldn't still have messages published
-            to them. Having the coordinator reboot being our method of unsubscribing is fine.
-
-            Alternatively, we could route an API to determine when a topic is retired, or retire
-            any topics we haven't sent messages on in the past hour.
-          */
-          let behavior = self.swarm.behaviour_mut();
-          let _: Result<_, _> = behavior.gossip.subscribe(&topic);
-          /*
-            This may be an error of `InsufficientPeers`. If so, we could ask DialTask to dial more
-            peers for this network. We don't as we assume DialTask will detect the lack of peers
-            for this network, and will already successfully handle this.
-          */
-          let _: Result<_, _> = behavior.gossip.publish(topic.hash(), message);
-        }
-
-        request = self.outbound_requests.recv() => {
-          let (peer, request, response_channel) =
-            request.expect("channel for requests was closed?");
-          let request_id = self.swarm.behaviour_mut().reqres.send_request(&peer, request);
-          self.outbound_request_responses.insert(request_id, response_channel);
-        }
-
-        response = self.inbound_request_responses.recv() => {
-          let (request_id, response) =
-            response.expect("channel for inbound request responses was closed?");
-          if let Some(channel) = self.inbound_request_response_channels.remove(&request_id) {
-            let _: Result<_, _> =
-              self.swarm.behaviour_mut().reqres.send_response(channel, response);
-          }
-        }
+        // Required as SwarmEvent is non-exhaustive
+        _ => log::warn!("unhandled `SwarmEvent`: {event:?}"),
       }
     }
+
+    Poll::Pending
   }
 
+  /// Respond to a [`Recv::NotableCosignsRequest`] with the following cosigns.
+  fn notable_cosigns(
+    self: Pin<&mut Self>,
+    response: Self::Response,
+    notable_cosigns: Vec<SignedCosign>,
+  ) {
+    let _: Result<(), _> = self
+      .project()
+      .funnel
+      .project()
+      .swarm
+      .behaviour_mut()
+      .reqres
+      .send_response(response, Response::NotableCosigns(notable_cosigns));
+  }
+
+  /// Respond to a [`Recv::SyncRequest`] with the following blocks.
+  fn sync(
+    self: Pin<&mut Self>,
+    response: Self::Response,
+    blocks: Vec<serai_coordinator_p2p::CommittedTributaryBlock<Tx>>,
+  ) {
+    let _: Result<(), _> = self
+      .project()
+      .funnel
+      .project()
+      .swarm
+      .behaviour_mut()
+      .reqres
+      .send_response(response, Response::Blocks(blocks));
+  }
+}
+
+impl<Tx: 'static + Send + Transaction> SwarmTask<Tx> {
   #[expect(clippy::too_many_arguments)]
-  pub(crate) fn spawn(
+  pub(super) fn new(
     dial_task: TaskHandle,
-    to_dial: mpsc::UnboundedReceiver<DialOpts>,
+    to_dial: async_channel::Receiver<DialOpts>,
 
     validators: Arc<RwLock<Validators>>,
-    validator_changes: mpsc::UnboundedReceiver<validators::Changes>,
+    validator_changes: async_channel::Receiver<validators::Changes>,
     peers: Peers,
 
     swarm: Swarm<Behavior<Tx>>,
 
-    gossip: mpsc::UnboundedReceiver<gossip::Message<Tx>>,
-    signed_cosigns: mpsc::UnboundedSender<SignedCosign>,
-    tributary_messages: mpsc::UnboundedSender<([u8; 32], tributary_framework::Message<Tx>)>,
-    tributary_transactions: mpsc::UnboundedSender<([u8; 32], Tx)>,
+    gossip: async_channel::Receiver<gossip::Message<Tx>>,
 
-    outbound_requests: mpsc::UnboundedReceiver<(PeerId, Request, oneshot::Sender<Response<Tx>>)>,
+    outbound_requests: async_channel::Receiver<OutboundRequest<Tx>>,
+  ) -> Self {
+    Self {
+      dial_task,
+      last_dial_task_run: Instant::now(),
 
-    heartbeat_requests: mpsc::UnboundedSender<(InboundRequestId, ExternalValidatorSet, [u8; 32])>,
-    notable_cosign_requests: mpsc::UnboundedSender<(InboundRequestId, [u8; 32])>,
-    inbound_request_responses: mpsc::UnboundedReceiver<(InboundRequestId, Response<Tx>)>,
-  ) {
-    tokio::spawn(
-      Self {
-        dial_task,
-        to_dial,
-        last_dial_task_run: Instant::now(),
+      validators,
+      peers,
+      rebuild_peers: tokio::time::sleep(TIME_BETWEEN_REBUILD_PEERS),
 
-        validators,
-        validator_changes,
-        peers,
-        rebuild_peers_at: Instant::now() + TIME_BETWEEN_REBUILD_PEERS,
-
+      funnel: SwarmFunnel {
         swarm,
-
+        validator_changes,
+        to_dial,
         gossip,
-        signed_cosigns,
-        tributary_messages,
-        tributary_transactions,
-
         outbound_requests,
-        outbound_request_responses: HashMap::new(),
+        outbound_request_responses: HashMap::with_capacity(MAX_OUTBOUND_REQUESTS),
+      },
 
-        inbound_request_response_channels: HashMap::new(),
-        heartbeat_requests,
-        notable_cosign_requests,
-        inbound_request_responses,
-      }
-      .run(),
-    );
+      outstanding_signed_cosigns: vec![],
+    }
   }
 }

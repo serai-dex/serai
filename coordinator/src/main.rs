@@ -50,7 +50,7 @@ use substrate::SubstrateTask;
 
 mod p2p {
   pub use serai_coordinator_p2p::*;
-  pub use serai_coordinator_libp2p_p2p::Libp2p;
+  pub use serai_coordinator_libp2p_p2p::Libp2pSend;
 }
 
 // Use a zeroizing allocator for this entire application
@@ -84,7 +84,7 @@ async fn serai(env: &Environment) -> Arc<Serai> {
 fn spawn_cosigning<D: 'static + Send + Sync + for<'db> serai_db::Db<Transaction<'db>: Send>>(
   mut db: D,
   serai: Arc<Serai>,
-  p2p: impl p2p::P2p<Transaction>,
+  p2p: impl p2p::P2pSend<Transaction>,
   tasks_to_run_upon_cosigning: Vec<TaskHandle>,
   mut p2p_cosigns: mpsc::UnboundedReceiver<SignedCosign>,
 ) {
@@ -413,15 +413,16 @@ async fn main() {
         schnorrkel::SecretKey::from_bytes(expanded_key.as_slice()).unwrap().to_keypair(),
       )
     };
-    let p2p = p2p::Libp2p::new(&serai_keypair, serai.clone());
+    let (p2p_send, p2p_recv) = p2p::Libp2pSend::new(&serai_keypair, serai.clone());
     tokio::spawn(p2p::run::<Db, Transaction, _>(
       db.clone(),
-      p2p.clone(),
+      p2p_send.clone(),
+      p2p_recv,
       p2p_add_tributary_recv,
       p2p_retire_tributary_recv,
       p2p_cosigns_send,
     ));
-    p2p
+    p2p_send
   };
 
   // Spawn the Substrate scanners

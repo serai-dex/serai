@@ -29,7 +29,7 @@ use serai_coordinator_substrate::{NewSetInformation, SignSlashReport};
 use serai_coordinator_tributary::{
   Topic, Transaction, ProcessorMessages, CosignIntents, RecognizedTopics, ScanTributaryTask,
 };
-use serai_coordinator_p2p::P2p;
+use serai_coordinator_p2p::P2pSend;
 
 use crate::{
   Db, TributaryTransactionsFromProcessorMessages, TributaryTransactionsFromDkgConfirmation,
@@ -461,7 +461,7 @@ async fn scan_on_new_block<
 /// - Spawn the ConfirmDkgTask
 /// - Spawn the SignSlashReportTask
 /// - Iterate the scan task whenever a new block occurs (not just on the standard interval)
-pub(crate) fn spawn_tributary<P: P2p<Transaction>>(
+pub(crate) fn spawn_tributary<P: P2pSend<Transaction>>(
   env: &Environment,
   db: Db,
   message_queue: Arc<MessageQueue>,

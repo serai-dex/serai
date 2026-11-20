@@ -23,7 +23,7 @@ fn topic_for_tributary(tributary: [u8; 32]) -> IdentTopic {
 
 #[expect(clippy::enum_variant_names)]
 #[derive(Clone, BorshSerialize, BorshDeserialize)]
-pub(crate) enum Message<Tx: 'static + Send + Sync + Transaction> {
+pub(crate) enum Message<Tx: Transaction> {
   TributaryMessage {
     tributary: [u8; 32],
     #[borsh(bound(serialize = "", deserialize = ""))]
@@ -37,7 +37,7 @@ pub(crate) enum Message<Tx: 'static + Send + Sync + Transaction> {
   Cosign(SignedCosign),
 }
 
-impl<Tx: 'static + Send + Sync + Transaction> Message<Tx> {
+impl<Tx: Transaction> Message<Tx> {
   pub(crate) fn topic(&self) -> IdentTopic {
     match self {
       Message::TributaryMessage { tributary, .. } |

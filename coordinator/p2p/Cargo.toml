@@ -28,6 +28,7 @@ tributary-framework = { path = "../tributary-framework" }
 
 getrandom = { version = "0.4", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+async-channel = { version = "2.3.1", default-features = false }
 tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
 
 serai-task = { path = "../../common/task", version = "0.1" }

@@ -33,7 +33,9 @@ serai-cosign = { path = "../../cosign" }
 tendermint = { package = "tendermint-consensus", path = "../../tributary-framework/tendermint" }
 tributary-framework = { path = "../../tributary-framework" }
 
+pin-project-lite = { version = "0.2", default-features = false }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
+async-channel = { version = "2.3.1", default-features = false }
 tokio = { version = "1", default-features = false, features = ["sync"] }
 libp2p = { version = "0.57", default-features = false, features = ["tokio", "tcp", "noise", "yamux", "ping", "request-response", "gossipsub", "macros"] }
 

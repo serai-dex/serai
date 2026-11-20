@@ -14,12 +14,12 @@ use serai_task::ContinuallyRan;
 
 use futures_util::StreamExt as _;
 
-use crate::{CommittedTributaryBlock, SyncRequest, Peer, P2p};
+use crate::{CommittedTributaryBlock, SyncRequest, Peer, P2pSend};
 
 async fn sync_from_peer<
   'p2p,
-  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  Tx: 'static + Send + Sync + Transaction,
+  TD: Db,
+  Tx: Transaction,
   P: tendermint::Network<[u8; 32], [u8; 64], AggregateSignature, ReadWriteAsBorsh<Block<Tx>>>,
 >(
   set: ExternalValidatorSet,
@@ -98,11 +98,7 @@ async fn sync_from_peer<
 }
 
 /// Sync Tributary blocks from other validators.
-pub(crate) struct SyncTask<
-  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  Tx: 'static + Send + Sync + Transaction,
-  P: P2p<Tx>,
-> {
+pub(crate) struct SyncTask<TD: Db, Tx: Transaction, P: P2pSend<Tx>> {
   /// The validator set whose Tributary this is syncing blocks for.
   set: ExternalValidatorSet,
   /// A handle to the Tributary.
@@ -118,23 +114,15 @@ pub(crate) struct SyncTask<
   behind_by_one: Option<Instant>,
 }
 
-impl<
-  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  Tx: 'static + Send + Sync + Transaction,
-  P: P2p<Tx>,
-> SyncTask<TD, Tx, P>
-{
+impl<TD: Db, Tx: Transaction, P: P2pSend<Tx>> SyncTask<TD, Tx, P> {
   pub(crate) fn new(set: ExternalValidatorSet, tributary: TributaryHandle<TD, Tx>, p2p: P) -> Self {
     let tip = tributary.tip();
     Self { set, tributary, p2p, tip, behind_by_zero: None, behind_by_one: None }
   }
 }
 
-impl<
-  TD: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
-  Tx: Send + Sync + Transaction,
-  P: P2p<Tx>,
-> ContinuallyRan for SyncTask<TD, Tx, P>
+impl<TD: Send + Sync + Db, Tx: Send + Transaction, P: P2pSend<Tx>> ContinuallyRan
+  for SyncTask<TD, Tx, P>
 {
   type Error = String;
 

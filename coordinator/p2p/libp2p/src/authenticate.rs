@@ -34,7 +34,7 @@ impl OnlyValidators {
   /// We don't immediately send the challenge. We only send a commitment to it. This prevents our
   /// remote peer from choosing their challenge in response to our challenge, in case there was any
   /// benefit to doing so.
-  async fn challenges<S: 'static + Send + Unpin + AsyncRead + AsyncWrite>(
+  async fn challenges<S: Unpin + AsyncRead + AsyncWrite>(
     socket: &mut noise::Output<S>,
   ) -> io::Result<([u8; 32], [u8; 32])> {
     let mut our_challenge = [0; 32];
@@ -74,7 +74,7 @@ impl OnlyValidators {
   // noise MAY prevent replays across sessions (even when the same key is used), and noise IDs
   // shouldn't be reused (so it should be fine to reuse an existing signature for these noise IDs),
   // it doesn't hurt.
-  async fn authenticate<S: 'static + Send + Unpin + AsyncRead + AsyncWrite>(
+  async fn authenticate<S: 'static + Unpin + AsyncRead + AsyncWrite>(
     &self,
     socket: &mut noise::Output<S>,
     dialer_peer_id: PeerId,

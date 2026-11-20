@@ -23,11 +23,11 @@ use serai_task::ContinuallyRan;
 use serai_env::Environment;
 
 use serai_coordinator_tributary::Transaction;
-use serai_coordinator_p2p::P2p;
+use serai_coordinator_p2p::P2pSend;
 
 use crate::{Db, KeySet};
 
-pub(crate) struct SubstrateTask<P: P2p<Transaction>> {
+pub(crate) struct SubstrateTask<P: P2pSend<Transaction>> {
   pub(crate) env: Environment,
   pub(crate) serai_key: Zeroizing<<Ristretto as WrappedGroup>::F>,
   pub(crate) db: Db,
@@ -38,7 +38,7 @@ pub(crate) struct SubstrateTask<P: P2p<Transaction>> {
   pub(crate) p2p_retire_tributary: mpsc::UnboundedSender<ExternalValidatorSet>,
 }
 
-impl<P: P2p<Transaction>> ContinuallyRan for SubstrateTask<P> {
+impl<P: P2pSend<Transaction>> ContinuallyRan for SubstrateTask<P> {
   type Error = String; // TODO
   fn run_iteration(&mut self) -> impl Send + Future<Output = Result<bool, Self::Error>> {
     async move {
