@@ -32,3 +32,9 @@ primitives = { package = "serai-processor-primitives", path = "../../../primitiv
 scanner = { package = "serai-processor-scanner", path = "../../../scanner" }
 scheduler-primitives = { package = "serai-processor-scheduler-primitives", path = "../../primitives" }
 utxo-scheduler-primitives = { package = "serai-processor-utxo-scheduler-primitives", path = "../primitives" }
+
+[dev-dependencies]
+ciphersuite = { path = "../../../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../../../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
+
+scheduler-test-primitives = { package = "serai-processor-scheduler-test-primitives", path = "../../test-primitives" }
