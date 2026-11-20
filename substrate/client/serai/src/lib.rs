@@ -17,6 +17,7 @@ use abi::{
   primitives::{
     BlockHash,
     network_id::ExternalNetworkId,
+    validator_sets::P2pValidator,
     coin::{Coin, ExternalCoin},
     address::SeraiAddress,
   },
@@ -232,10 +233,14 @@ impl Serai {
     Ok(State { serai: self, block: block.header.hash() })
   }
 
-  /// Return the P2P addresses for the validators of the specified network.
-  pub async fn p2p_validators(&self, network: ExternalNetworkId) -> Result<Vec<String>, RpcError> {
+  /// Return the validators to peer with for the specified network.
+  #[doc(hidden)]
+  pub async fn p2p_validators(
+    &self,
+    network: ExternalNetworkId,
+  ) -> Result<Vec<P2pValidator>, RpcError> {
     self
-      .call(
+      .call::<Vec<String>>(
         "p2p_validators",
         match network {
           ExternalNetworkId::Bitcoin => r#"["bitcoin"]"#,
@@ -243,7 +248,19 @@ impl Serai {
           ExternalNetworkId::Monero => r#"["monero"]"#,
         },
       )
-      .await
+      .await?
+      .into_iter()
+      .map(|validator| {
+        P2pValidator::deserialize(
+          &mut hex::decode(&validator)
+            .map_err(|_| {
+              RpcError::InvalidNode("node returned non-hex-encoded validator".to_owned())
+            })?
+            .as_slice(),
+        )
+        .map_err(|_| RpcError::InvalidNode("node returned invalid validator".to_owned()))
+      })
+      .collect()
   }
 }
 

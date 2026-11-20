@@ -1,23 +1,6 @@
-use sp_application_crypto::KeyTypeId;
-use sp_core::crypto::{DeriveJunction, Derive as _};
+use serai_abi::primitives::crypto::subkey;
 
 use crate::*;
-
-/// Derive a subkey for a validator.
-pub fn subkey(public: &SchnorrkelPublic, key_type: KeyTypeId) -> SchnorrkelPublic {
-  let key_type: [u8; 4] = key_type.0;
-  let mut derivation = [0; 32];
-  derivation[28 ..].copy_from_slice(&key_type);
-
-  /*
-    This is safe as `Derive::derive` is documented to return `None` when a hard junction (requiring
-    a private key) is used with a public key (without a private key). We explicitly use a soft
-    junction, as possible with solely the public key.
-
-    https://docs.rs/sp-core/39.0.0/sp_core/crypto/trait.Derive.html#method.derive
-  */
-  public.derive(core::iter::once(DeriveJunction::Soft(derivation))).unwrap()
-}
 
 pub(super) fn validators_to_babe_validators<KeyShares>(
   validators: &[(SeraiAddress, (SchnorrkelPublic, KeyShares))],

@@ -1,4 +1,4 @@
-use alloc::{vec, vec::Vec};
+use alloc::{vec, vec::Vec, string::String};
 
 use zeroize::Zeroize;
 use borsh::{BorshSerialize, BorshDeserialize};
@@ -139,6 +139,19 @@ pub enum DeallocationTimeline {
     /// The session the deallocation unlocks at and can be claimed.
     unlocks_at: Session,
   },
+}
+
+/// A validator to peer with.
+///
+/// This is not part of the Serai protocol itself. It's how a Serai node represents the validators
+/// which should peer with each other, for off-chain services.
+#[doc(hidden)]
+#[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
+pub struct P2pValidator {
+  /// The key this validator is identified by on Serai.
+  pub identity: Option<crate::crypto::Public>,
+  /// A P2P address this validator may be found at.
+  pub address: Option<String>,
 }
 
 #[test]

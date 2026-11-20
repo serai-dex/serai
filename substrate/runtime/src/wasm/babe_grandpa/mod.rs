@@ -55,5 +55,5 @@ pub(super) fn verify_serai_slash_reason(validator: SeraiAddress, mut reason: &[u
   .find_map(|(this_validator, aux_key)| (validator == this_validator).then_some(aux_key)) else {
     return false;
   };
-  serai_validator_sets_pallet::subkey(&aux_key, key_type) == expected_authority_id
+  serai_abi::primitives::crypto::subkey(&aux_key, key_type) == expected_authority_id
 }

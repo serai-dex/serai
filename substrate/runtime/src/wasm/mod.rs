@@ -466,10 +466,12 @@ sp_api::impl_runtime_apis! {
         .map(|validator| {
           match ValidatorSets::auxiliary_keys(SeraiAddress(validator), NetworkId::Serai) {
             Some(EmbeddedEllipticCurveKeys::Serai(key)) => {
-              sp_authority_discovery::AuthorityId::from(serai_validator_sets_pallet::subkey(
-                &Public(key).into(),
-                sp_core::crypto::key_types::AUTHORITY_DISCOVERY,
-              ))
+              sp_authority_discovery::AuthorityId::from(
+                serai_abi::primitives::crypto::subkey::<sp_core::sr25519::Public>(
+                  &Public(key).into(),
+                  sp_core::crypto::key_types::AUTHORITY_DISCOVERY,
+                )
+              )
             },
             Some(_) => panic!("`auxiliary_keys()` returned auxiliary keys for another network"),
             None => panic!("selected validator lacking Serai auxiliary key"),

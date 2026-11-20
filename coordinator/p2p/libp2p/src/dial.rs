@@ -85,7 +85,13 @@ impl ContinuallyRan for DialTask {
               .unwrap_or(0)
               .saturating_sub(1))
         {
-          let mut potential_peers = self.serai.p2p_validators(network).await?;
+          let mut potential_peers = self
+            .serai
+            .p2p_validators(network)
+            .await?
+            .into_iter()
+            .filter_map(|validator| validator.address)
+            .collect::<Vec<_>>();
           for _ in 0 .. (TARGET_PEERS_PER_NETWORK - peer_count) {
             if potential_peers.is_empty() {
               break;

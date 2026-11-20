@@ -347,7 +347,7 @@ pub(crate) fn submit_equivocation(equivocation_proof: EquivocationProof<Header>)
         session: inner_session,
       })
       .find_map(|(validator, aux_key)| {
-        (serai_validator_sets_pallet::subkey(&aux_key, key_types::BABE) == subkey)
+        (serai_abi::primitives::crypto::subkey(&aux_key, key_types::BABE) == subkey)
           .then_some(validator)
       })
     else {

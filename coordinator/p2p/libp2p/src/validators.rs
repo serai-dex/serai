@@ -4,7 +4,7 @@ use std::{
   collections::{HashSet, HashMap},
 };
 
-use serai_client_serai::abi::primitives::{network_id::ExternalNetworkId, validator_sets::Session};
+use serai_client_serai::abi::primitives::network_id::ExternalNetworkId;
 use serai_client_serai::{RpcError, Serai};
 
 use serai_task::{Task, ContinuallyRan};
@@ -24,8 +24,6 @@ pub(crate) struct Changes {
 pub(crate) struct Validators {
   serai: Arc<Serai>,
 
-  // A cache for which session we're populated with the validators of
-  sessions: HashMap<ExternalNetworkId, Session>,
   // The validators by network
   by_network: HashMap<ExternalNetworkId, HashSet<PeerId>>,
   // The validators and their networks
@@ -38,61 +36,46 @@ pub(crate) struct Validators {
 impl Validators {
   pub(crate) fn new(serai: Arc<Serai>) -> (Self, mpsc::UnboundedReceiver<Changes>) {
     let (send, recv) = mpsc::unbounded_channel();
-    let validators = Validators {
-      serai,
-      sessions: HashMap::new(),
-      by_network: HashMap::new(),
-      validators: HashMap::new(),
-      changes: send,
-    };
+    let validators =
+      Validators { serai, by_network: HashMap::new(), validators: HashMap::new(), changes: send };
     (validators, recv)
   }
 
   async fn session_changes(
     serai: impl Borrow<Serai>,
-    sessions: impl Borrow<HashMap<ExternalNetworkId, Session>>,
-  ) -> Result<Vec<(ExternalNetworkId, Session, HashSet<PeerId>)>, RpcError> {
+    by_network: impl Borrow<HashMap<ExternalNetworkId, HashSet<PeerId>>>,
+  ) -> Result<Vec<(ExternalNetworkId, HashSet<PeerId>)>, RpcError> {
     /*
-      This uses the latest finalized block, not the latest cosigned block, which should be fine as
-      in the worst case, we'd connect to unexpected validators. They still shouldn't be able to
-      bypass the cosign protocol unless a historical global session was malicious, in which case
-      the cosign protocol already breaks.
+      This uses the validators the Serai node says to peer with as of its latest block, not the
+      latest finalized block nor the latest cosigned block, which should be fine as in the worst
+      case, we'd connect to unexpected validators. They still shouldn't be able to bypass the
+      cosign protocol unless a historical global session was malicious, in which case the cosign
+      protocol already breaks.
 
-      Besides, we can't connect to historical validators, only the current validators.
+      These are the validators for the current session and for the latest decided session, as the
+      latter must be able to communicate in order to generate the keys which let it become the
+      current session. We can't connect to historical validators.
+
+      As there's no singular session these validators are for, we fetch them every time and only
+      yield the networks whose validators differ from the validators we're currently aware of.
     */
-    let serai = serai.borrow().state().await?;
-
     let mut session_changes = vec![];
     {
       // FuturesUnordered can be bad practice as it'll cause timeouts if infrequently polled, but
       // we poll it till it yields all futures with the most minimal processing possible
       let mut futures = FuturesUnordered::new();
       for network in ExternalNetworkId::all() {
-        let sessions = sessions.borrow();
+        let by_network = by_network.borrow();
         let serai = serai.borrow();
         futures.push(async move {
-          let session = match serai.current_session(network.into()).await {
-            Ok(Some(session)) => session,
-            Ok(None) => return Ok(None),
-            Err(e) => return Err(e),
-          };
+          let validators = serai
+            .p2p_validators(network)
+            .await?
+            .into_iter()
+            .filter_map(|validator| validator.identity.map(peer_id_from_public))
+            .collect::<HashSet<_>>();
 
-          if sessions.get(&network) == Some(&session) {
-            Ok(None)
-          } else {
-            match serai.current_validators(network.into()).await {
-              Ok(Some(validators)) => Ok(Some((
-                network,
-                session,
-                validators
-                  .into_iter()
-                  .map(|validator| peer_id_from_public(validator.into()))
-                  .collect(),
-              ))),
-              Ok(None) => panic!("network has session yet no validators"),
-              Err(e) => Err(e),
-            }
-          }
+          Ok((by_network.get(&network) != Some(&validators)).then_some((network, validators)))
         });
       }
       while let Some(session_change) = futures.next().await {
@@ -107,12 +90,12 @@ impl Validators {
 
   fn incorporate_session_changes(
     &mut self,
-    session_changes: Vec<(ExternalNetworkId, Session, HashSet<PeerId>)>,
+    session_changes: Vec<(ExternalNetworkId, HashSet<PeerId>)>,
   ) {
     let mut removed = HashSet::new();
     let mut added = HashSet::new();
 
-    for (network, session, validators) in session_changes {
+    for (network, validators) in session_changes {
       // Remove the existing validators
       for validator in self.by_network.remove(&network).unwrap_or_else(HashSet::new) {
         // Get all networks this validator is in
@@ -143,9 +126,6 @@ impl Validators {
         added.insert(validator);
       }
       self.by_network.insert(network, validators);
-
-      // Update the session we have populated
-      self.sessions.insert(network, session);
     }
 
     // Only flag validators for removal if they weren't simultaneously added by these changes
@@ -157,7 +137,7 @@ impl Validators {
 
   /// Update the view of the validators.
   pub(crate) async fn update(&mut self) -> Result<(), RpcError> {
-    let session_changes = Self::session_changes(&*self.serai, &self.sessions).await?;
+    let session_changes = Self::session_changes(&*self.serai, &self.by_network).await?;
     self.incorporate_session_changes(session_changes);
     Ok(())
   }
@@ -215,7 +195,7 @@ impl ContinuallyRan for UpdateValidatorsTask {
     async move {
       let session_changes = {
         let validators = self.validators.read().await;
-        Validators::session_changes(validators.serai.clone(), validators.sessions.clone()).await?
+        Validators::session_changes(validators.serai.clone(), validators.by_network.clone()).await?
       };
       self.validators.write().await.incorporate_session_changes(session_changes);
       Ok(true)
