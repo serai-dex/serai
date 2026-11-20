@@ -1,5 +1,3 @@
-use sp_core::ByteArray as _;
-
 use serai_abi::primitives::{crypto::Public, validator_sets::P2pValidator};
 
 use super::*;
@@ -36,16 +34,15 @@ pub(crate) fn module(
       .map_err(|_| Error::Internal("couldn't get validators from the latest block"))?;
     for validator in validators {
       // The key this validator is identified by when peering
-      let identity =
-        Public(validator.as_slice().try_into().expect("validator's key wasn't 32 bytes"));
+      let identity = Public(validator.clone().into_inner().0);
 
       let mut returned_addresses = authority_discovery
         .write()
         .await
         .get_addresses_by_authority_id(validator)
         .await
-        .unwrap_or_else(HashSet::new)
         .into_iter()
+        .flatten()
         .collect::<Vec<_>>();
 
       /*

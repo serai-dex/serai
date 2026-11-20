@@ -8,12 +8,7 @@ mod embedded_elliptic_curve_keys;
 pub use embedded_elliptic_curve_keys::*;
 
 pub use sp_core::crypto::{KeyTypeId, key_types};
-use sp_core::{
-  crypto::{DeriveJunction, Derive as _},
-  sr25519::Public as SchnorrkelPublic,
-};
-#[cfg(feature = "std")]
-use sp_core::sr25519::Pair as SchnorrkelPair;
+use sp_core::crypto::DeriveJunction;
 
 /// A Ristretto public key.
 ///
@@ -116,8 +111,27 @@ pub struct KeyPair(pub Public, pub ExternalKey);
 #[cfg(feature = "scale")]
 crate::borsh_as_scale!(KeyPair);
 
+mod sealed {
+  use super::*;
+
+  /// [`sp_crypto::core::Derive`], for public keys _and_ pairs.
+  pub trait Derive: Sized {
+    fn derive(&self, path: impl Iterator<Item = DeriveJunction>) -> Option<Self>;
+  }
+  impl Derive for sp_core::sr25519::Public {
+    fn derive(&self, path: impl Iterator<Item = DeriveJunction>) -> Option<Self> {
+      sp_core::crypto::Derive::derive(self, path)
+    }
+  }
+  impl Derive for sp_core::sr25519::Pair {
+    fn derive(&self, path: impl Iterator<Item = DeriveJunction>) -> Option<Self> {
+      sp_core::crypto::Pair::derive(self, path, None).map(|(pair, _seed)| pair).ok()
+    }
+  }
+}
+
 /// Derive a subkey for a validator.
-pub fn subkey(public: &SchnorrkelPublic, key_type: KeyTypeId) -> SchnorrkelPublic {
+pub fn subkey<K: sealed::Derive>(key: &K, key_type: KeyTypeId) -> K {
   let key_type: [u8; 4] = key_type.0;
   let mut derivation = [0; 32];
   derivation[28 ..].copy_from_slice(&key_type);
@@ -129,22 +143,7 @@ pub fn subkey(public: &SchnorrkelPublic, key_type: KeyTypeId) -> SchnorrkelPubli
 
     https://docs.rs/sp-core/39.0.0/sp_core/crypto/trait.Derive.html#method.derive
   */
-  public.derive(core::iter::once(DeriveJunction::Soft(derivation))).unwrap()
-}
-
-/// Derive a sub key pair for a validator.
-#[cfg(feature = "std")]
-pub fn subpair(pair: &SchnorrkelPair, key_type: KeyTypeId) -> SchnorrkelPair {
-  use sp_core::Pair as _;
-
-  let key_type: [u8; 4] = key_type.0;
-  let mut derivation = [0; 32];
-  derivation[28 ..].copy_from_slice(&key_type);
-
-  // derive the subpair
-  let (subpair, _seed) =
-    pair.derive(core::iter::once(DeriveJunction::Soft(derivation)), None).unwrap();
-  subpair
+  key.derive(core::iter::once(DeriveJunction::Soft(derivation))).unwrap()
 }
 
 #[test]
@@ -211,20 +210,19 @@ fn signature() {
   }
 }
 
+#[cfg(feature = "std")]
 #[test]
 fn subkeys() {
   use rand_core::OsRng;
 
   use sp_core::Pair as _;
 
-  let pair = SchnorrkelPair::from(schnorrkel::Keypair::generate_with(&mut OsRng));
+  let pair = sp_core::sr25519::Pair::from(schnorrkel::Keypair::generate_with(&mut OsRng));
   let public = pair.public();
 
   for key_type in [key_types::BABE, key_types::GRANDPA, key_types::AUTHORITY_DISCOVERY] {
-    let subkey = subkey(&public, key_type);
-
     // The subkey for a key pair should be the public key of the subpair.
-    assert_eq!(subpair(&pair, key_type).public(), subkey);
+    assert_eq!(subkey(&pair, key_type).public(), subkey(&public, key_type));
   }
 }
 

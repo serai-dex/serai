@@ -16,7 +16,7 @@ use schnorrkel::Keypair;
 
 use serai_client_serai::{
   abi::primitives::{
-    crypto::{Public, key_types, subpair},
+    crypto::{Public, key_types, subkey},
     network_id::ExternalNetworkId,
     validator_sets::ExternalValidatorSet,
   },
@@ -78,8 +78,12 @@ fn peer_id_from_public(public: Public) -> PeerId {
   PeerId::from_multihash(Multihash::wrap(0, &public.0).unwrap()).unwrap()
 }
 
+// TODO: Use our own Libp2p identity?
 fn identity_keypair(serai_key: &Keypair) -> Zeroizing<Keypair> {
-  Zeroizing::new(subpair(&serai_key.clone().into(), key_types::AUTHORITY_DISCOVERY).into())
+  Zeroizing::new(
+    subkey::<sp_core::sr25519::Pair>(&serai_key.clone().into(), key_types::AUTHORITY_DISCOVERY)
+      .into(),
+  )
 }
 
 /// The representation of a peer.

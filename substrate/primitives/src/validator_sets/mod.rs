@@ -145,6 +145,7 @@ pub enum DeallocationTimeline {
 ///
 /// This is not part of the Serai protocol itself. It's how a Serai node represents the validators
 /// which should peer with each other, for off-chain services.
+#[doc(hidden)]
 #[derive(Clone, PartialEq, Eq, Debug, BorshSerialize, BorshDeserialize)]
 pub struct P2pValidator {
   /// The key this validator is identified by on Serai.

@@ -234,6 +234,7 @@ impl Serai {
   }
 
   /// Return the validators to peer with for the specified network.
+  #[doc(hidden)]
   pub async fn p2p_validators(
     &self,
     network: ExternalNetworkId,
