@@ -273,6 +273,8 @@ pub async fn main_loop<
           let Some(scanner) = scanner.as_mut() else {
             assert!(batch.is_none(), "received a batch before the scanner was initialized");
             assert!(burns.is_empty(), "received burns before the scanner was initialized");
+            // mark this msg as handled, so it is not replayed.
+            txn.take().unwrap().commit();
             continue;
           };
 
