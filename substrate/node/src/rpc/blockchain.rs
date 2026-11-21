@@ -20,12 +20,18 @@ pub(crate) fn module(
       let Ok(Some(number)) = client.number(block_hash) else {
         return Ok(false);
       };
-      let Ok(status) = client.block_status(block_hash) else {
-        Err(Error::Internal("failed to fetch block's status"))?
-      };
       Ok(
-        matches!(status, BlockStatus::InChainWithState | BlockStatus::InChainPruned) &&
-          (number <= finalized),
+        (number <= finalized) &&
+          matches!(
+            client
+              .block_status(block_hash)
+              .map_err(|_| Error::Internal("failed to fetch block's status"))?,
+            BlockStatus::InChainWithState | BlockStatus::InChainPruned
+          ) &&
+          (client
+            .hash(number)
+            .map_err(|_| Error::Internal("failed to fetch block's hash by number"))? ==
+            Some(block_hash)),
       )
     },
   )?;
