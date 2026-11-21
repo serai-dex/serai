@@ -16,6 +16,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 [lints]
 workspace = true
 
-[dependencies]
+[dev-dependencies]
 rand_core = { version = "0.6", default-features = false, features = ["std"] }
 hex = { version = "0.4", default-features = false, features = ["std"] }

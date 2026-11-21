@@ -169,7 +169,6 @@ ignore = [
   "itoa",
   "num_cpus",
   "once_cell",
-  "pin-utils"
 ]
 
 [sources]

@@ -156,6 +156,6 @@ CMD ["/run.sh"]
   let res = setup + &run;
 
   let mut bitcoin_path = orchestration_path.to_path_buf();
-  bitcoin_path.extend(["networks", "bitcoin", "Dockerfile"]);
+  bitcoin_path.extend(["networks", "bitcoin", "Containerfile"]);
   write_dockerfile(bitcoin_path, &res);
 }

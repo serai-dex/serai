@@ -115,9 +115,9 @@ pub fn build(name: String) {
   }
   if name.contains("-processor") {
     dockerfile_path =
-      dockerfile_path.join("processor").join(name.split('-').next().unwrap()).join("Dockerfile");
+      dockerfile_path.join("processor").join(name.split('-').next().unwrap()).join("Containerfile");
   } else {
-    dockerfile_path = dockerfile_path.join(&name).join("Dockerfile");
+    dockerfile_path = dockerfile_path.join(&name).join("Containerfile");
   }
 
   // If this Docker image was created after this repo was last edited, return here
@@ -132,15 +132,16 @@ pub fn build(name: String) {
     let last_tag_time_buf = String::from_utf8(res.stdout).expect("docker had non-utf8 output");
     let last_tag_time = last_tag_time_buf.trim();
     if !last_tag_time.is_empty() {
-      let created_time = SystemTime::from(
-        chrono::DateTime::parse_and_remainder(last_tag_time, "%F %T.%f %z")
-          .unwrap_or_else(|_| {
-            panic!("docker formatted last tag time unexpectedly: {last_tag_time}")
-          })
-          .0,
-      );
+      let created_time =
+        jiff::Timestamp::strptime(b"%F %T%.f %Q", last_tag_time.trim_suffix(" UTC").as_bytes())
+          .unwrap_or_else(|e| {
+            panic!("docker formatted last tag time unexpectedly: {last_tag_time} {e:?}")
+          });
+      let created_time = SystemTime::try_from(created_time).unwrap_or_else(|e| {
+        panic!("docker last tag time not representable as a `SystemTime`: {created_time} {e:?}")
+      });
 
-      // For all services, if the Dockerfile was edited after the image was built we should rebuild
+      // For all services, if the Containerfile was edited after the image was last built, rebuild
       let mut last_modified =
         fs::metadata(&dockerfile_path).ok().and_then(|meta| meta.modified().ok());
 
@@ -186,8 +187,9 @@ pub fn build(name: String) {
           if metadata.is_file() {
             if let Ok(modified) = metadata.modified() &&
               (modified >
-                last_modified
-                  .expect("got when source was last modified yet not when the Dockerfile was"))
+                last_modified.expect(
+                  "got when source was last modified yet not when the Containerfile was",
+                ))
             {
               last_modified = Some(modified);
             }

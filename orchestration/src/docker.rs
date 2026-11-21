@@ -19,9 +19,9 @@ pub fn build(orchestration_path: &Path, network: Network, name: &str) {
   }
   if name.contains("-processor") {
     dockerfile_path =
-      dockerfile_path.join("processor").join(name.split('-').next().unwrap()).join("Dockerfile");
+      dockerfile_path.join("processor").join(name.split('-').next().unwrap()).join("Containerfile");
   } else {
-    dockerfile_path = dockerfile_path.join(name).join("Dockerfile");
+    dockerfile_path = dockerfile_path.join(name).join("Containerfile");
   }
 
   println!("Building {name}...");

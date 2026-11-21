@@ -18,7 +18,7 @@ jobs:
         uses: ./.github/actions/cargo-install
         with:
           crate: cargo-deny
-          version: 0.20.2
+          version: 0.22.0
 
       - name: Run `cargo deny`
         run: cargo deny -L error --all-features check --hide-inclusion-graph

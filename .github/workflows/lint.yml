@@ -126,7 +126,7 @@ jobs:
         uses: ./.github/actions/cargo-install
         with:
           crate: cargo-deny
-          version: 0.20.2
+          version: 0.22.0
 
       - name: Run cargo deny
         run: cargo deny -L error --all-features check --hide-inclusion-graph
@@ -160,7 +160,7 @@ jobs:
         with:
           crate: forge
           git: https://github.com/foundry-rs/foundry
-          revision: 6056c5845d34205a83cf7108042adb137325c9df # 1.9.0
+          revision: 083e22994195d6a7e3ad3104d0b57f478c9b9062 # 1.10.0
           no-cache: true
 
       - name: Run forge fmt
@@ -186,7 +186,7 @@ jobs:
         uses: ./.github/actions/cargo-install
         with:
           crate: cargo-machete
-          version: 0.9.2
+          version: 0.10.1
 
       - name: Verify all dependencies are in use
         run: cargo machete

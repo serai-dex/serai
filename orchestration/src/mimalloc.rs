@@ -1,7 +1,7 @@
 use crate::Os;
 
-const MIMALLOC_VERSION: &str = "56dc5eb80145f9a3ba7ca23d47c6a248b9d8586c"; // 3.6.1
-const HARDENING_FLAGS: &str = "-DMI_SECURE_FULL=ON -DMI_GUARDED=ON -DMI_XMALLOC=ON";
+const MIMALLOC_VERSION: &str = "1ed67b5156a763441d2ec3c20221a7b3cd866129"; // 3.7.0
+const HARDENING_FLAGS: &str = "-DMI_SECURE=FULL -DMI_GUARDED=ON -DMI_XMALLOC=ON";
 #[rustfmt::skip]
 const COMPILATION_FLAGS: &str =
   "-DCMAKE_BUILD_TYPE=Release -DMI_OPT_ARCH=ON -DMI_OVERRIDE=ON -DMI_STATS=OFF -DMI_PROFILE=OFF -DMI_BUILD_SHARED=ON -DMI_BUILD_STATIC=OFF -DMI_BUILD_OBJECT=OFF -DMI_BUILD_TESTS=OFF";
@@ -44,7 +44,7 @@ EOF
   };
 
   let alpine_build = build_script("CC=$(uname -m)-alpine-linux-musl-gcc", "-DMI_LIBC_MUSL=ON");
-  let debian_build = build_script("", if !release { "-DMI_TRACK_ASAN=ON" } else { "" });
+  let debian_build = build_script("", if !release { "-DMI_TRACK=ASAN" } else { "" });
 
   let alpine_mimalloc = format!(
     r#"

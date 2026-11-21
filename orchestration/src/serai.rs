@@ -44,6 +44,6 @@ CMD {env_vars_str} "/run.sh"
 
   let mut serai_path = orchestration_path.to_path_buf();
   serai_path.push("serai");
-  serai_path.push("Dockerfile");
+  serai_path.push("Containerfile");
   write_dockerfile(serai_path, &res);
 }

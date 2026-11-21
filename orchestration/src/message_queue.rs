@@ -53,7 +53,7 @@ CMD {env_vars_str} serai-message-queue-server
 
   let mut message_queue_path = orchestration_path.to_path_buf();
   message_queue_path.push("message-queue");
-  message_queue_path.push("Dockerfile");
+  message_queue_path.push("Containerfile");
 
   write_dockerfile(message_queue_path, &res);
 }

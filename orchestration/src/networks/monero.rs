@@ -112,6 +112,6 @@ CMD ["/run.sh"]
   let res = setup + &run;
 
   let mut monero_path = orchestration_path.to_path_buf();
-  monero_path.extend(["networks", "monero", "Dockerfile"]);
+  monero_path.extend(["networks", "monero", "Containerfile"]);
   write_dockerfile(monero_path, &res);
 }

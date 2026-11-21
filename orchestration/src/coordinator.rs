@@ -63,7 +63,7 @@ CMD {env_vars_str} serai-coordinator
 
   let mut coordinator_path = orchestration_path.to_path_buf();
   coordinator_path.push("coordinator");
-  coordinator_path.push("Dockerfile");
+  coordinator_path.push("Containerfile");
 
   write_dockerfile(coordinator_path, &res);
 }

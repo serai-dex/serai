@@ -37,7 +37,7 @@ CMD ["/run.sh"]
   let mut ethereum_path = orchestration_path.to_path_buf();
   ethereum_path.push("networks");
   ethereum_path.push("ethereum");
-  ethereum_path.push("Dockerfile");
+  ethereum_path.push("Containerfile");
 
   write_dockerfile(ethereum_path, &res);
 }

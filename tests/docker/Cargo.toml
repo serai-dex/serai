@@ -17,5 +17,5 @@ rustdoc-args = ["--cfg", "docsrs"]
 workspace = true
 
 [dependencies]
-chrono = "0.4"
+jiff = { version = "1", default-features = false, features = ["std"] }
 dockertest = "0.5"

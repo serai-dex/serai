@@ -834,7 +834,7 @@ Commands:
     Generate a key for the validator.
 
   setup *network*
-    Generate the Dockerfiles for every Serai service.
+    Generate the Containerfiles for every Serai service.
 
   start *network* [service1, service2...]
     Start the specified services for the specified network ("dev" or "testnet").

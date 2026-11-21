@@ -4,8 +4,8 @@ target
 Cargo.lock
 !/Cargo.lock
 
-# Don't commit any `Dockerfile`, as they're auto-generated, except the only one which isn't
-Dockerfile
+# Don't commit any `Containerfile`s, as they're auto-generated, except the only one which isn't
+Containerfile
 !orchestration/runtime/Containerfile
 
 .test-logs

@@ -29,7 +29,8 @@ bitvec = { version = "1", default-features = false, features = ["alloc"] }
 rustversion = { version = "1.0.6", default-features = false }
 scale = { package = "parity-scale-codec", version = "3", default-features = false, features = ["derive"], optional = true }
 sp-crypto-hashing = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
-sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+# TODO: `serde` is needed for `sp_core::crypto::Derive::derive`, for _some_ reason
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["serde"] }
 
 ciphersuite = { path = "../../crypto/ciphersuite", default-features = false, features = ["alloc"] }
 schnorr-signatures = { path = "../../crypto/schnorr", default-features = false, features = ["alloc"] }

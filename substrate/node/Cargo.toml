@@ -52,7 +52,7 @@ serai-abi = { path = "../abi", default-features = false, features = ["std", "sub
 serai-runtime = { path = "../runtime", default-features = false, features = ["std"] }
 
 clap = { version = "4", default-features = false, features = ["std", "derive", "help", "usage", "error-context"] }
-dirs = { version = "6", default-features = false }
+dirs = { version = "7", default-features = false }
 
 borsh = { version = "1", default-features = false, features = ["std"] }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }

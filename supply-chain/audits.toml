@@ -1359,6 +1359,11 @@ who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 version = "6.0.0"
 
+[[audits.dirs]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+delta = "6.0.0 -> 7.0.0"
+
 [[audits.dkg]]
 criteria = "audited"
 version = "0.3.0"
@@ -1420,6 +1425,11 @@ delta = "4.3.2 -> 4.4.1"
 who = "Luke Parker <lukeparker5132@gmail.com>"
 criteria = "safe-to-deploy"
 delta = "4.4.1 -> 4.4.2"
+
+[[audits.env_filter]]
+who = "Luke Parker <lukeparker5132@gmail.com>"
+criteria = "safe-to-deploy"
+version = "2.1.0"
 
 [[audits.equivalent]]
 who = "Luke Parker <lukeparker5132@gmail.com>"

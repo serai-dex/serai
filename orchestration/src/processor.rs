@@ -94,7 +94,7 @@ CMD {env_vars_str} serai-processor
   let mut processor_path = orchestration_path.to_path_buf();
   processor_path.push("processor");
   processor_path.push(coin);
-  processor_path.push("Dockerfile");
+  processor_path.push("Containerfile");
 
   write_dockerfile(processor_path, &res);
 }
