@@ -66,6 +66,7 @@ sc-client-db = { git = "https://github.com/serai-dex/patch-polkadot-sdk", defaul
 sc-executor = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sc-service = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sc-client-api = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
+sc-network-sync = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 sc-network = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 
 sc-consensus = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }

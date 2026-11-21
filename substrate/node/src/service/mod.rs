@@ -322,6 +322,9 @@ pub(crate) fn new_full(
       import_queue,
       block_announce_validator_builder: None,
       warp_sync_config: None,
+      gap_sync_body_policy: Some(Arc::new(|| {
+        Ok(sc_network_sync::strategy::chain_sync::GapSyncBodyPolicy::All)
+      })),
       block_relay: None,
       metrics,
     })?;

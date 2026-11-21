@@ -119,31 +119,31 @@ notes = "Member of `patches/`, but explicitly tracked as if third-party"
 audit-as-crates-io = false
 first-party = true
 
-[policy."fork-tree:12.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."fork-tree:12.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."frame-benchmarking:49.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."frame-benchmarking:50.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."frame-executive:48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."frame-executive:49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."frame-support-procedural-tools-derive:11.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."frame-support-procedural-tools-derive:11.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."frame-support-procedural-tools:10.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."frame-support-procedural-tools:10.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."frame-support-procedural:40.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."frame-support-procedural:41.0.1@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."frame-support:48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."frame-support:49.1.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."frame-system:48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."frame-system:49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."frame-try-runtime:0.54.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."frame-try-runtime:0.55.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
 [policy.frost-schnorrkel]
@@ -229,19 +229,19 @@ notes = "Member of `patches/`, but explicitly tracked as if third-party"
 [policy."p256:0.13.2@git:8293be3f9855eea0936523a9b100f1f69261ea4b"]
 first-party = false
 
-[policy."pallet-authorship:48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."pallet-authorship:49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."pallet-babe:49.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."pallet-babe:50.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."pallet-grandpa:49.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."pallet-grandpa:50.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."pallet-session:49.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."pallet-session:50.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."pallet-timestamp:48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."pallet-timestamp:49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
 [policy."prime-field:0.1.0"]
@@ -275,112 +275,112 @@ notes = "Member of `patches/`, but explicitly tracked as if third-party"
 first-party = false
 notes = "Member of `patches/`, but explicitly tracked as if third-party"
 
-[policy."sc-allocator:39.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-allocator:23.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-authority-discovery:0.59.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-authority-discovery:0.61.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-basic-authorship:0.56.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-basic-authorship:0.57.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-block-builder:0.51.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-block-builder:0.52.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-chain-spec:51.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-chain-spec:53.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-client-api:47.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-client-api:48.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-client-db:0.54.1@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-client-db:0.55.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-consensus-babe:0.58.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-consensus-babe:0.60.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-consensus-epochs:0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-consensus-epochs:0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-consensus-grandpa:0.43.1@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-consensus-grandpa:0.45.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-consensus-slots:0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-consensus-slots:0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-consensus:0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-consensus:0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-executor-common:0.47.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-executor-common:0.29.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-executor-wasmtime:0.47.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-executor-wasmtime:0.29.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-executor:0.50.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-executor:0.51.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-informant:0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-informant:0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-keystore:42.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-keystore:43.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-network-common:0.55.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-network-common:0.56.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-network-gossip:0.58.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-network-gossip:0.60.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-network-sync:0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-network-sync:0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-network-transactions:0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-network-transactions:0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-network-types:0.22.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-network-types:0.23.2@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-network:0.58.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-network:0.60.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-proposer-metrics:0.17.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-proposer-metrics:0.17.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-rpc-api:0.58.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-rpc-api:0.60.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-rpc-server:31.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-rpc-server:33.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-rpc:54.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-rpc:56.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-service:0.60.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-service:0.62.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-state-db:0.45.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-state-db:0.30.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-sysinfo:50.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-sysinfo:51.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-telemetry:33.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-telemetry:34.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-tracing-proc-macro:11.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-tracing-proc-macro:11.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-tracing:47.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-tracing:48.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-transaction-pool-api:46.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-transaction-pool-api:47.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-transaction-pool:47.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-transaction-pool:48.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sc-utils:23.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sc-utils:24.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
 [policy.schnorr-signatures]
@@ -551,112 +551,112 @@ first-party = true
 audit-as-crates-io = false
 first-party = true
 
-[policy."sp-api-proc-macro:29.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-api-proc-macro:15.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-api:43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-api:44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-application-crypto:48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-application-crypto:49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-arithmetic:23.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-arithmetic:29.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-authority-discovery:43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-authority-discovery:44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-block-builder:43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-block-builder:44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-blockchain:46.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-blockchain:47.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-consensus-babe:0.49.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-consensus-babe:0.50.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-consensus-grandpa:30.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-consensus-grandpa:31.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-consensus-slots:0.49.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-consensus-slots:0.50.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-consensus:0.49.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-consensus:0.50.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-core:43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-core:28.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-crypto-hashing-proc-macro:0.1.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-crypto-hashing-proc-macro:0.1.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-crypto-hashing:0.1.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-crypto-hashing:0.1.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-database:10.0.2@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-database:10.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-externalities:0.34.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-externalities:0.25.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-inherents:43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-inherents:44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-io:48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-io:49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-keyring:48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-keyring:49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-keystore:0.49.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-keystore:0.34.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-rpc:41.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-rpc:26.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-runtime-interface-proc-macro:17.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-runtime-interface-proc-macro:17.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-runtime-interface:37.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-runtime-interface:37.0.1@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-runtime:48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-runtime:49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-session:45.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-session:46.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-staking:45.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-staking:46.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-state-machine:0.53.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-state-machine:0.54.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-storage:25.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-storage:19.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-timestamp:43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-timestamp:44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-tracing:16.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-tracing:16.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-transaction-pool:43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-transaction-pool:44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-trie:46.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-trie:47.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-version-proc-macro:13.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-version-proc-macro:13.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-version:46.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-version:47.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-wasm-interface:27.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-wasm-interface:20.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
-[policy."sp-weights:36.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."sp-weights:37.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
 [policy."std-shims:0.1.5"]
@@ -671,7 +671,7 @@ notes = "Member of `patches/`, but explicitly tracked as if third-party"
 audit-as-crates-io = false
 first-party = true
 
-[policy."substrate-prometheus-endpoint:0.17.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"]
+[policy."substrate-prometheus-endpoint:0.17.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"]
 first-party = false
 
 [policy.tendermint-consensus]
@@ -1460,7 +1460,7 @@ version = "0.2.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.fork-tree]]
-version = "12.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "12.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.form_urlencoded]]
@@ -1472,35 +1472,35 @@ version = "0.1.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.frame-benchmarking]]
-version = "49.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "50.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.frame-executive]]
-version = "48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.frame-support]]
-version = "48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "49.1.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.frame-support-procedural]]
-version = "40.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "41.0.1@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.frame-support-procedural-tools]]
-version = "10.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "10.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.frame-support-procedural-tools-derive]]
-version = "11.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "11.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.frame-system]]
-version = "48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.frame-try-runtime]]
-version = "0.54.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.55.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.fs2]]
@@ -2121,23 +2121,23 @@ version = "0.13.2@git:8293be3f9855eea0936523a9b100f1f69261ea4b"
 criteria = "safe-to-deploy"
 
 [[exemptions.pallet-authorship]]
-version = "48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.pallet-babe]]
-version = "49.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "50.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.pallet-grandpa]]
-version = "49.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "50.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.pallet-session]]
-version = "49.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "50.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.pallet-timestamp]]
-version = "48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.parity-db]]
@@ -2521,147 +2521,147 @@ version = "0.4.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-allocator]]
-version = "39.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "23.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-authority-discovery]]
-version = "0.59.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.61.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-basic-authorship]]
-version = "0.56.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.57.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-block-builder]]
-version = "0.51.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.52.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-chain-spec]]
-version = "51.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "53.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-client-api]]
-version = "47.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "48.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-client-db]]
-version = "0.54.1@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.55.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-consensus]]
-version = "0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-consensus-babe]]
-version = "0.58.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.60.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-consensus-epochs]]
-version = "0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-consensus-grandpa]]
-version = "0.43.1@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.45.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-consensus-slots]]
-version = "0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-executor]]
-version = "0.50.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.51.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-executor-common]]
-version = "0.47.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.29.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-executor-wasmtime]]
-version = "0.47.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.29.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-informant]]
-version = "0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-keystore]]
-version = "42.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "43.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-network]]
-version = "0.58.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.60.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-network-common]]
-version = "0.55.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.56.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-network-gossip]]
-version = "0.58.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.60.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-network-sync]]
-version = "0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-network-transactions]]
-version = "0.57.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.59.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-network-types]]
-version = "0.22.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.23.2@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-proposer-metrics]]
-version = "0.17.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.17.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-rpc]]
-version = "54.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "56.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-rpc-api]]
-version = "0.58.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.60.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-rpc-server]]
-version = "31.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "33.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-service]]
-version = "0.60.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.62.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-state-db]]
-version = "0.45.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.30.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-sysinfo]]
-version = "50.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "51.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-telemetry]]
-version = "33.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "34.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-tracing]]
-version = "47.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "48.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-tracing-proc-macro]]
-version = "11.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "11.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-transaction-pool]]
-version = "47.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "48.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-transaction-pool-api]]
-version = "46.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "47.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sc-utils]]
-version = "23.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "24.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.scale-info]]
@@ -2829,147 +2829,147 @@ version = "0.8.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-api]]
-version = "43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-api-proc-macro]]
-version = "29.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "15.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-application-crypto]]
-version = "48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-arithmetic]]
-version = "23.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "29.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-authority-discovery]]
-version = "43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-block-builder]]
-version = "43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-blockchain]]
-version = "46.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "47.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-consensus]]
-version = "0.49.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.50.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-consensus-babe]]
-version = "0.49.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.50.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-consensus-grandpa]]
-version = "30.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "31.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-consensus-slots]]
-version = "0.49.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.50.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-core]]
-version = "43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "28.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-crypto-hashing]]
-version = "0.1.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.1.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-crypto-hashing-proc-macro]]
-version = "0.1.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.1.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-database]]
-version = "10.0.2@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "10.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-externalities]]
-version = "0.34.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.25.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-inherents]]
-version = "43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-io]]
-version = "48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-keyring]]
-version = "48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-keystore]]
-version = "0.49.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.34.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-rpc]]
-version = "41.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "26.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-runtime]]
-version = "48.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "49.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-runtime-interface]]
-version = "37.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "37.0.1@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-runtime-interface-proc-macro]]
-version = "17.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "17.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-session]]
-version = "45.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "46.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-staking]]
-version = "45.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "46.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-state-machine]]
-version = "0.53.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.54.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-storage]]
-version = "25.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "19.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-timestamp]]
-version = "43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-tracing]]
-version = "16.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "16.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-transaction-pool]]
-version = "43.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "44.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-trie]]
-version = "46.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "47.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-version]]
-version = "46.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "47.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-version-proc-macro]]
-version = "13.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "13.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-wasm-interface]]
-version = "27.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "20.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.sp-weights]]
-version = "36.0.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "37.0.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.spin]]
@@ -3014,7 +3014,7 @@ version = "0.28.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.substrate-prometheus-endpoint]]
-version = "0.17.0@git:6b272d6b4afacec608b9561686d562ee5cf4699d"
+version = "0.17.0@git:56b84bbe82ae708bb326c7f92a4e217b99cd03ab"
 criteria = "safe-to-deploy"
 
 [[exemptions.subtle]]
