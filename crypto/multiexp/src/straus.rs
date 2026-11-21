@@ -6,18 +6,18 @@ use subtle::{ConstantTimeEq as _, ConditionallySelectable};
 use ff::PrimeFieldBits;
 use group::Group;
 
-use crate::prep_bits;
+use crate::{prep_bits, split_digit};
 
-// Create tables for every included point of size 2^window
+// Create tables for every included point of size 2^(window - 1) + 1
 fn prep_tables<G: Group>(pairs: &[(G::Scalar, G)], window: u8) -> Vec<Vec<G>> {
   let mut tables = Vec::with_capacity(pairs.len());
   for pair in pairs {
     let p = tables.len();
-    tables.push(vec![G::identity(); 2_usize.pow(window.into())]);
-    let mut accum = G::identity();
-    for i in 1 .. tables[p].len() {
-      accum += pair.1;
-      tables[p][i] = accum;
+    tables.push(vec![G::identity(); 2_usize.pow((window - 1).into()) + 1]);
+    tables[p][1] = pair.1;
+    for i in 2 .. tables[p].len() {
+      tables[p][i] =
+        if (i % 2) == 0 { tables[p][i / 2].double() } else { tables[p][i - 1] + pair.1 };
     }
   }
   tables
@@ -41,10 +41,12 @@ pub(crate) fn straus<G: Zeroize + ConditionallySelectable + Group<Scalar: PrimeF
     }
 
     for s in 0 .. tables.len() {
+      let (magnitude, negative) = split_digit(groupings[s][b]);
       let mut elem_to_add = G::identity();
-      for (i, elem) in tables[s].iter().enumerate() {
-        elem_to_add.conditional_assign(elem, i.ct_eq(&usize::from(groupings[s][b])));
+      for (i, elem) in tables[s].iter().enumerate().skip(1) {
+        elem_to_add.conditional_assign(elem, i.ct_eq(&magnitude));
       }
+      elem_to_add.conditional_assign(&-elem_to_add, negative.ct_eq(&1));
       res += elem_to_add;
     }
   }
@@ -70,11 +72,13 @@ pub(crate) fn straus_vartime<G: Group<Scalar: PrimeFieldBits>>(
     }
 
     for s in 0 .. tables.len() {
-      if groupings[s][b] != 0 {
+      let (magnitude, negative) = split_digit(groupings[s][b]);
+      if magnitude != 0 {
+        let elem = if negative == 1 { -tables[s][magnitude] } else { tables[s][magnitude] };
         if let Some(res) = res.as_mut() {
-          *res += tables[s][usize::from(groupings[s][b])];
+          *res += elem;
         } else {
-          res = Some(tables[s][usize::from(groupings[s][b])]);
+          res = Some(elem);
         }
       }
     }

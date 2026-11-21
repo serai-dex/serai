@@ -11,7 +11,7 @@ use group::Group;
 use k256::ProjectivePoint;
 use dalek_ff_group::EdwardsPoint;
 
-use crate::{straus, straus_vartime, pippenger, pippenger_vartime, multiexp, multiexp_vartime};
+use crate::{straus, straus_vartime, pippenger_vartime, multiexp, multiexp_vartime};
 
 #[cfg(feature = "batch")]
 mod batch;
@@ -29,7 +29,8 @@ fn test_multiexp<G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + 
       for window in 1 .. 8 {
         assert_eq!(straus(pairs, window), sum);
         assert_eq!(straus_vartime(pairs, window), sum);
-        assert_eq!(pippenger(pairs, window), sum);
+      }
+      for window in 1 ..= 15 {
         assert_eq!(pippenger_vartime(pairs, window), sum);
       }
     }
@@ -41,6 +42,9 @@ fn test_multiexp<G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + 
   // Test an multiexp of identity/zero elements is identity
   test(&[(G::Scalar::ZERO, G::generator())], G::identity());
   test(&[(G::Scalar::ONE, G::identity())], G::identity());
+
+  // Test the largest scalar
+  test(&[(-G::Scalar::ONE, G::generator())], -G::generator());
 
   // Test a variety of multiexp sizes
   let mut pairs = Vec::with_capacity(1000);
@@ -123,7 +127,7 @@ fn benchmark() {
         if straus_bool {
           assert_eq!(straus(&pairs, current), sum);
         } else {
-          assert_eq!(pippenger(&pairs, current), sum);
+          assert_eq!(pippenger_vartime(&pairs, current), sum);
         }
       }
       let current_per = now.elapsed().as_micros() / u128::try_from(pairs.len()).unwrap();
@@ -133,7 +137,7 @@ fn benchmark() {
         if straus_bool {
           assert_eq!(straus(&pairs, current + 1), sum);
         } else {
-          assert_eq!(pippenger(&pairs, current + 1), sum);
+          assert_eq!(pippenger_vartime(&pairs, current + 1), sum);
         }
       }
       let next_per = now.elapsed().as_micros() / u128::try_from(pairs.len()).unwrap();
