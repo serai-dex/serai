@@ -14,6 +14,14 @@ pub(crate) fn block_id(getter: &impl Get, block_number: u64) -> [u8; 32] {
     .unwrap_or_else(|| panic!("requested block ID for unindexed block {block_number}"))
 }
 
+/// The latest indexed block number.
+///
+/// Only blocks up to and including this have had their IDs saved, so only these may have their
+/// block data requested.
+pub(crate) fn latest_finalized_block(getter: &impl Get) -> Option<u64> {
+  IndexDb::latest_finalized_block(getter)
+}
+
 /*
   This processor should build its own index of the blockchain, yet only for finalized blocks which
   are safe to process. For Proof of Work blockchains, which only have probabilistic finality, these
