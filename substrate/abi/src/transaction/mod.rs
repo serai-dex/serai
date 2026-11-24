@@ -8,6 +8,9 @@ use crate::Call;
 mod context;
 pub use context::*;
 
+mod result;
+pub use result::*;
+
 #[cfg(feature = "substrate")]
 mod substrate;
 #[cfg(feature = "substrate")]
