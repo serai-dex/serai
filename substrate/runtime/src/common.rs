@@ -82,6 +82,9 @@ sp_api::decl_runtime_apis! {
     /// Next nonce to be used for this account.
     fn account_nonce(of: SeraiAddress) -> u32;
 
+    /// The ID of the protocol this runtime implements.
+    fn protocol_id() -> [u8; 32];
+
     /// Returns the time economic security was achieved, represented in milliseconds
     /// since the epoch. Returns `None` if it isn't achieved yet.
     fn economic_security_time() -> Option<u64>;
