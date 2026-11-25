@@ -12,7 +12,7 @@ fn round_trip() {
   let mut db = MemDb::new();
   let mut db_txn = db.txn();
   let key = Ed25519::generator();
-  let tx = TestSignableTransaction([1; 32]);
+  let tx = TestSignableTransaction { payments: signable_transaction_payments(1), change: true };
   TransactionsToSign::<TestSignableTransaction>::send(&mut db_txn, &key, &tx);
   let received_tx =
     TransactionsToSign::<TestSignableTransaction>::try_recv(&mut db_txn, &key).unwrap();
@@ -37,14 +37,21 @@ fn fifo() {
   let key = Ed25519::generator();
 
   for i in 0 .. 10 {
-    let tx = TestSignableTransaction([i; 32]);
+    let tx = TestSignableTransaction {
+      payments: vec![(TestAddress(i), ((i + 1) * 100).into())],
+      change: true,
+    };
     TransactionsToSign::<TestSignableTransaction>::send(&mut db_txn, &key, &tx);
   }
 
   for i in 0 .. 10 {
+    let expected_tx = TestSignableTransaction {
+      payments: vec![(TestAddress(i), ((i + 1) * 100).into())],
+      change: true,
+    };
     let received_tx =
       TransactionsToSign::<TestSignableTransaction>::try_recv(&mut db_txn, &key).unwrap();
-    assert_eq!(TestSignableTransaction([i; 32]), received_tx);
+    assert_eq!(expected_tx, received_tx);
   }
 
   // queue should be empty
@@ -58,7 +65,7 @@ fn separate_keys_separate_queues() {
   let mut db_txn = db.txn();
   let key1 = Ed25519::generator();
   let key2 = key1 + key1;
-  let tx = TestSignableTransaction([1; 32]);
+  let tx = TestSignableTransaction { payments: signable_transaction_payments(1), change: true };
 
   TransactionsToSign::<TestSignableTransaction>::send(&mut db_txn, &key1, &tx);
 
@@ -77,7 +84,7 @@ fn read_consuming_wrong_length_of_bytes_panics() {
   let mut db = MemDb::new();
   let mut db_txn = db.txn();
   let key = Ed25519::generator();
-  let tx = TestSignableTransaction([1; 32]);
+  let tx = TestSignableTransaction { payments: signable_transaction_payments(3), change: true };
 
   TransactionsToSign::<TestSignableTransaction>::send(&mut db_txn, &key, &tx);
   TransactionsToSign::<TestSignableTransactionShortRead>::try_recv(&mut db_txn, &key).unwrap();
@@ -88,7 +95,7 @@ fn written_tx_survives_commit() {
   let mut db = MemDb::new();
   let mut db_txn = db.txn();
   let key = Ed25519::generator();
-  let tx = TestSignableTransaction([1; 32]);
+  let tx = TestSignableTransaction { payments: signable_transaction_payments(1), change: true };
   TransactionsToSign::<TestSignableTransaction>::send(&mut db_txn, &key, &tx);
   db_txn.commit();
 
@@ -103,7 +110,7 @@ fn written_tx_survives_commit() {
 fn received_tx_is_gone_after_commit() {
   let mut db = MemDb::new();
   let key = Ed25519::generator();
-  let tx = TestSignableTransaction([1; 32]);
+  let tx = TestSignableTransaction { payments: signable_transaction_payments(1), change: true };
 
   let mut db_txn = db.txn();
   TransactionsToSign::<TestSignableTransaction>::send(&mut db_txn, &key, &tx);
@@ -122,7 +129,7 @@ fn received_tx_is_gone_after_commit() {
 fn uncommitted_receive_keeps_tx() {
   let mut db = MemDb::new();
   let key = Ed25519::generator();
-  let tx = TestSignableTransaction([1; 32]);
+  let tx = TestSignableTransaction { payments: signable_transaction_payments(1), change: true };
 
   let mut db_txn = db.txn();
   TransactionsToSign::<TestSignableTransaction>::send(&mut db_txn, &key, &tx);
@@ -137,8 +144,7 @@ fn uncommitted_receive_keeps_tx() {
   assert_eq!(tx, received_tx);
 }
 
-/// A test signable transaction that reads only 30 bytes
-/// instead of TestSignableTransaction's 32 bytes.
+/// A test signable transaction that reads only 30 bytes.
 #[derive(Clone)]
 struct TestSignableTransactionShortRead(pub [u8; 30]);
 

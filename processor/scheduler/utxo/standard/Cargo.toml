@@ -36,5 +36,6 @@ utxo-scheduler-primitives = { package = "serai-processor-utxo-scheduler-primitiv
 [dev-dependencies]
 ciphersuite = { path = "../../../../crypto/ciphersuite", default-features = false, features = ["std"] }
 dalek-ff-group = { path = "../../../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros"] }
 
 scheduler-test-primitives = { package = "serai-processor-scheduler-test-primitives", path = "../../test-primitives" }

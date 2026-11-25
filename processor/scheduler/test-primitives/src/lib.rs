@@ -45,6 +45,17 @@ pub fn payments(qty: u32) -> Vec<Payment<TestAddress>> {
   payments
 }
 
+/// `qty` signable transaction payments to addresses `0 .. qty`, worth `100 * (i + 1)`.
+pub fn signable_transaction_payments(qty: u32) -> Vec<(TestAddress, u64)> {
+  let mut payments = Vec::with_capacity(qty.try_into().unwrap());
+
+  for i in 0 .. qty {
+    payments.push((TestAddress(i), (100 * (i + 1)).into()));
+  }
+
+  payments
+}
+
 /// `qty` addresses `0 .. qty`.
 pub fn test_addresses(qty: u32) -> Vec<TestAddress> {
   let mut test_addresses: Vec<TestAddress> = Vec::with_capacity(qty.try_into().unwrap());
@@ -146,12 +157,15 @@ impl ReceivedOutput<Key, TestAddress> for TestOutput {
     todo!()
   }
 
-  fn write<W: io::Write>(&self, _writer: &mut W) -> io::Result<()> {
-    todo!()
+  fn write<W: io::Write>(&self, writer: &mut W) -> io::Result<()> {
+    writer.write_all(&self.0.to_le_bytes())
   }
 
-  fn read<R: io::Read>(_reader: &mut R) -> io::Result<Self> {
-    todo!()
+  fn read<R: io::Read>(reader: &mut R) -> io::Result<Self> {
+    let mut buffer = [0u8; 8];
+    reader.read_exact(&mut buffer)?;
+
+    Ok(Self(u64::from_le_bytes(buffer)))
   }
 }
 
@@ -380,8 +394,13 @@ impl PreprocessMachine for TestPreprocessMachine {
 }
 
 /// A test signable transaction.
-#[derive(Debug, Clone, PartialEq)]
-pub struct TestSignableTransaction(pub [u8; 32]);
+#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+pub struct TestSignableTransaction {
+  /// The addresses and amounts this transaction pays to.
+  pub payments: Vec<(TestAddress, u64)>,
+  /// Whether or not this transaction has change.
+  pub change: bool,
+}
 
 impl SignableTransaction for TestSignableTransaction {
   type Transaction = TestTransaction;
@@ -391,14 +410,11 @@ impl SignableTransaction for TestSignableTransaction {
   type PreprocessMachine = TestPreprocessMachine;
 
   fn read(reader: &mut impl io::Read) -> io::Result<Self> {
-    let mut buffer = [0u8; 32];
-    reader.read_exact(&mut buffer)?;
-
-    Ok(Self(buffer))
+    Self::deserialize_reader(reader)
   }
 
   fn write(&self, writer: &mut impl io::Write) -> io::Result<()> {
-    writer.write_all(&self.0)
+    self.serialize(writer)
   }
 
   fn id(&self) -> [u8; 32] {
@@ -423,7 +439,7 @@ impl TransactionPlanner<TestFeed, ()> for TestPlanner {
   const MAX_OUTPUTS: usize = 3;
 
   fn branch_address(_key: Key) -> TestAddress {
-    todo!()
+    TestAddress(u32::MAX)
   }
 
   fn change_address(_key: Key) -> TestAddress {
@@ -451,8 +467,8 @@ impl TransactionPlanner<TestFeed, ()> for TestPlanner {
     &self,
     _reference_block: &BlockFor<TestFeed>,
     _inputs: Vec<OutputFor<TestFeed>>,
-    _payments: Vec<Payment<AddressFor<TestFeed>>>,
-    _change: Option<KeyFor<TestFeed>>,
+    payments: Vec<Payment<AddressFor<TestFeed>>>,
+    change: Option<KeyFor<TestFeed>>,
   ) -> impl Send
   + Future<
     Output = Result<
@@ -460,9 +476,12 @@ impl TransactionPlanner<TestFeed, ()> for TestPlanner {
       Self::EphemeralError,
     >,
   > {
-    async {
+    async move {
       Ok(PlannedTransaction {
-        signable: TestSignableTransaction([0; 32]),
+        signable: TestSignableTransaction {
+          payments: payments.iter().map(|p| (p.address().clone(), p.balance().amount.0)).collect(),
+          change: change.is_some(),
+        },
         eventuality: TestEventuality,
         auxilliary: (),
       })
