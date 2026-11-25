@@ -17,7 +17,7 @@ fn round_trip() {
   let received_tx =
     TransactionsToSign::<TestSignableTransaction>::try_recv(&mut db_txn, &key).unwrap();
 
-  assert_eq!(tx, received_tx);
+  assert_eq!(received_tx, tx);
 }
 
 #[test]
@@ -51,7 +51,7 @@ fn fifo() {
     };
     let received_tx =
       TransactionsToSign::<TestSignableTransaction>::try_recv(&mut db_txn, &key).unwrap();
-    assert_eq!(expected_tx, received_tx);
+    assert_eq!(received_tx, expected_tx);
   }
 
   // queue should be empty
@@ -75,7 +75,7 @@ fn separate_keys_separate_queues() {
 
   let received_tx_key1 =
     TransactionsToSign::<TestSignableTransaction>::try_recv(&mut db_txn, &key1).unwrap();
-  assert_eq!(tx, received_tx_key1);
+  assert_eq!(received_tx_key1, tx);
 }
 
 #[test]
@@ -102,7 +102,7 @@ fn written_tx_survives_commit() {
   db_txn = db.txn();
   let received_tx =
     TransactionsToSign::<TestSignableTransaction>::try_recv(&mut db_txn, &key).unwrap();
-  assert_eq!(tx, received_tx);
+  assert_eq!(received_tx, tx);
   db_txn.commit();
 }
 
@@ -141,7 +141,7 @@ fn uncommitted_receive_keeps_tx() {
   db_txn = db.txn();
   let received_tx =
     TransactionsToSign::<TestSignableTransaction>::try_recv(&mut db_txn, &key).unwrap();
-  assert_eq!(tx, received_tx);
+  assert_eq!(received_tx, tx);
 }
 
 /// A test signable transaction that reads only 30 bytes.
