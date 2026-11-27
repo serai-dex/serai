@@ -22,17 +22,34 @@ ADD tests /serai/tests
 ADD Cargo.toml /serai
 ADD Cargo.lock /serai
 ADD AGPL-3.0 /serai
+# `library/Cargo.lock` from rustc-1.94.0-src.tar.gz, checksums intact.
+# StageX 2026.03.0 builds pallet-rust from that tarball, then strips checksums.
+ADD orchestration/runtime/bootstrap/rustc-1.94.0-library.lock /serai/orchestration/runtime/bootstrap/rustc-1.94.0-library.lock
 
 FROM source AS vendor
 WORKDIR /serai
 RUN <<-'EOF'
   set -eux
 
-  # Fetch the runtime's dependencies
+  # StageX removes `checksum = "..."` from the sysroot's library Cargo.lock after
+  # deleting binaries in the Rust source tree. `cargo vendor --sync` would then
+  # fetch those crates with no lockfile checksum to compare to the index.
+  # Put the upstream lockfile back first (same rustc 1.94.0 tarball StageX used:
+  # sha256 b83f921cd3f321ff614f9c06a8b870d89299fc02888b48a5549683a36823474c).
+  # This copy is sha256 f14fb9ee9032ecb2610578650e071d106c7c34fe990878522914d30a15abbf79.
+  # Replace it when the pinned StageX Rust version changes.
+  sysroot_library="$(rustc --print sysroot)/lib/rustlib/src/rust/library"
+  test -f "$sysroot_library/Cargo.toml"
+  cp /serai/orchestration/runtime/bootstrap/rustc-1.94.0-library.lock \
+    "$sysroot_library/Cargo.lock"
+  grep -q '^checksum = "' "$sysroot_library/Cargo.lock"
+
+  # Fetch the runtime's dependencies. `--locked` refuses to rewrite either
+  # lockfile, so a StageX update that no longer matches this lockfile fails here.
   mkdir .cargo
-  RUSTC_BOOTSTRAP=1 cargo vendor --versioned-dirs \
+  RUSTC_BOOTSTRAP=1 cargo vendor --locked --versioned-dirs \
     --manifest-path ./substrate/runtime/Cargo.toml \
-    --sync $(rustc --print sysroot)/lib/rustlib/src/rust/library/Cargo.toml \
+    --sync "$sysroot_library/Cargo.toml" \
     $SERAI_RUNTIME_VENDOR > .cargo/config.toml
 
   # Remove all binary artifacts from the runtime's dependencies
