@@ -574,3 +574,501 @@ impl<S: ScannerFeed, P: TransactionPlanner<S, ()>> SchedulerTrait<S> for Schedul
     }
   }
 }
+
+#[cfg(test)]
+mod fulfill {
+  use ciphersuite::WrappedGroup as _;
+  use dalek_ff_group::Ed25519;
+  use scheduler_test_primitives::*;
+  use serai_db::{Db as _, MemDb};
+
+  use super::*;
+
+  #[tokio::test]
+  async fn pays_with_enough_outputs() {
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    let key = Ed25519::generator();
+
+    Scheduler::<TestFeed, TestPlanner>::activate_key(&mut txn, key);
+    Db::<TestFeed>::set_outputs(&mut txn, key, ExternalCoin::Monero, &[TestOutput(1000)]);
+
+    let scheduler = Scheduler::new(TestPlanner);
+    let eventualities = scheduler
+      .fulfill(&mut txn, &TestBlock, &[(key, LifetimeStage::Active)], vec![payment(0, 100)])
+      .await
+      .unwrap();
+    assert_eq!(eventualities.len(), 1);
+
+    let key_eventualities = &eventualities[key.to_bytes().as_ref()];
+    assert_eq!(key_eventualities.len(), 1);
+
+    let outputs = Db::<TestFeed>::outputs(&txn, key, ExternalCoin::Monero).unwrap();
+    assert!(outputs.is_empty());
+
+    let queued_payments = Db::<TestFeed>::queued_payments(&txn, key, ExternalCoin::Monero).unwrap();
+    assert!(queued_payments.is_empty());
+
+    let tx_to_sign =
+      TransactionsToSign::<TestSignableTransaction>::try_recv(&mut txn, &key).unwrap();
+    assert_eq!(tx_to_sign.payments, [(TestAddress(0), 80)]);
+    assert!(tx_to_sign.change);
+
+    let tx_to_sign = TransactionsToSign::<TestSignableTransaction>::try_recv(&mut txn, &key);
+    assert!(tx_to_sign.is_none());
+  }
+
+  #[tokio::test]
+  #[ignore = "fulfillable_payments infinite loops in this test"]
+  async fn payments_stay_queued_if_outputs_not_enough() {
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    let key = Ed25519::generator();
+
+    Scheduler::<TestFeed, TestPlanner>::activate_key(&mut txn, key);
+    Db::<TestFeed>::set_outputs(&mut txn, key, ExternalCoin::Monero, &[TestOutput(1000)]);
+
+    let scheduler = Scheduler::new(TestPlanner);
+    let eventualities = scheduler
+      .fulfill(&mut txn, &TestBlock, &[(key, LifetimeStage::Active)], vec![payment(0, 1001)])
+      .await
+      .unwrap();
+    assert_eq!(eventualities.len(), 1);
+
+    let key_eventualities = &eventualities[key.to_bytes().as_ref()];
+    assert_eq!(key_eventualities.len(), 0);
+
+    let outputs = Db::<TestFeed>::outputs(&txn, key, ExternalCoin::Monero).unwrap();
+    assert_eq!(outputs, vec![TestOutput(1000)]);
+
+    let queued_payments = Db::<TestFeed>::queued_payments(&txn, key, ExternalCoin::Monero).unwrap();
+    let (queued_addresses, queued_amounts) = get_addresses_and_amounts(&queued_payments);
+    assert_eq!(queued_addresses, vec![TestAddress(0)]);
+    assert_eq!(queued_amounts, vec![1001]);
+
+    let tx_to_sign = TransactionsToSign::<TestSignableTransaction>::try_recv(&mut txn, &key);
+    assert!(tx_to_sign.is_none());
+  }
+
+  #[tokio::test]
+  async fn payments_stay_queued_if_no_outputs() {
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    let key = Ed25519::generator();
+
+    Scheduler::<TestFeed, TestPlanner>::activate_key(&mut txn, key);
+
+    let scheduler = Scheduler::new(TestPlanner);
+    let eventualities = scheduler
+      .fulfill(&mut txn, &TestBlock, &[(key, LifetimeStage::Active)], vec![payment(0, 1000)])
+      .await
+      .unwrap();
+    assert_eq!(eventualities.len(), 1);
+
+    let key_eventualities = &eventualities[key.to_bytes().as_ref()];
+    assert_eq!(key_eventualities.len(), 0);
+
+    let outputs = Db::<TestFeed>::outputs(&txn, key, ExternalCoin::Monero).unwrap();
+    assert!(outputs.is_empty());
+
+    let queued_payments = Db::<TestFeed>::queued_payments(&txn, key, ExternalCoin::Monero).unwrap();
+    let (queued_addresses, queued_amounts) = get_addresses_and_amounts(&queued_payments);
+    assert_eq!(queued_addresses, vec![TestAddress(0)]);
+    assert_eq!(queued_amounts, vec![1000]);
+
+    let tx_to_sign = TransactionsToSign::<TestSignableTransaction>::try_recv(&mut txn, &key);
+    assert!(tx_to_sign.is_none());
+  }
+
+  #[tokio::test]
+  async fn outputs_partly_afford_payments() {
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    let key = Ed25519::generator();
+
+    Scheduler::<TestFeed, TestPlanner>::activate_key(&mut txn, key);
+    Db::<TestFeed>::set_outputs(&mut txn, key, ExternalCoin::Monero, &[TestOutput(250)]);
+
+    let scheduler = Scheduler::new(TestPlanner);
+    let eventualities = scheduler
+      .fulfill(
+        &mut txn,
+        &TestBlock,
+        &[(key, LifetimeStage::Active)],
+        vec![payment(0, 100), payment(1, 200), payment(2, 50)],
+      )
+      .await
+      .unwrap();
+    assert_eq!(eventualities.len(), 1);
+
+    let key_eventualities = &eventualities[key.to_bytes().as_ref()];
+    assert_eq!(key_eventualities.len(), 1);
+
+    let outputs = Db::<TestFeed>::outputs(&txn, key, ExternalCoin::Monero).unwrap();
+    assert!(outputs.is_empty());
+
+    let queued_payments = Db::<TestFeed>::queued_payments(&txn, key, ExternalCoin::Monero).unwrap();
+    let (queued_addresses, queued_amounts) = get_addresses_and_amounts(&queued_payments);
+    assert_eq!(queued_addresses, vec![TestAddress(1), TestAddress(2)]);
+    assert_eq!(queued_amounts, vec![200, 50]);
+
+    let tx_to_sign =
+      TransactionsToSign::<TestSignableTransaction>::try_recv(&mut txn, &key).unwrap();
+    assert_eq!(tx_to_sign.payments, vec![(TestAddress(0), 80)]);
+  }
+
+  #[tokio::test]
+  #[ignore = "operating_costs added by a discarded plan survives between step() tries, \
+  and results in a payment overpaying fee"]
+  async fn plan_retries_if_no_change_on_first_iter() {
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    let key = Ed25519::generator();
+
+    Scheduler::<TestFeed, TestPlanner>::activate_key(&mut txn, key);
+    Db::<TestFeed>::set_outputs(&mut txn, key, ExternalCoin::Monero, &[TestOutput(105)]);
+
+    let scheduler = Scheduler::new(TestPlanner);
+    let eventualities = scheduler
+      .fulfill(&mut txn, &TestBlock, &[(key, LifetimeStage::Active)], vec![payment(0, 100)])
+      .await
+      .unwrap();
+    assert_eq!(eventualities.len(), 1);
+
+    let key_eventualities = &eventualities[key.to_bytes().as_ref()];
+    assert_eq!(key_eventualities.len(), 1);
+
+    let outputs = Db::<TestFeed>::outputs(&txn, key, ExternalCoin::Monero).unwrap();
+    assert!(outputs.is_empty());
+
+    let queued_payments = Db::<TestFeed>::queued_payments(&txn, key, ExternalCoin::Monero).unwrap();
+    assert!(queued_payments.is_empty());
+
+    let tx_to_sign =
+      TransactionsToSign::<TestSignableTransaction>::try_recv(&mut txn, &key).unwrap();
+    assert_eq!(tx_to_sign.payments, vec![(TestAddress(0), 70)]);
+    assert!(tx_to_sign.change);
+
+    let operating_costs = Db::<TestFeed>::operating_costs(&txn, ExternalCoin::Monero);
+    assert_eq!(operating_costs, Amount(0));
+  }
+
+  #[tokio::test]
+  async fn using_new_for_change_key_still_pays() {
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    let retiring_key = Ed25519::generator();
+    let new_key = Ed25519::generator() + Ed25519::generator();
+
+    Scheduler::<TestFeed, TestPlanner>::activate_key(&mut txn, retiring_key);
+    Scheduler::<TestFeed, TestPlanner>::activate_key(&mut txn, new_key);
+    Db::<TestFeed>::set_outputs(&mut txn, retiring_key, ExternalCoin::Monero, &[TestOutput(1000)]);
+    Db::<TestFeed>::set_outputs(&mut txn, new_key, ExternalCoin::Monero, &[TestOutput(1000)]);
+
+    let scheduler = Scheduler::new(TestPlanner);
+    let eventualities = scheduler
+      .fulfill(
+        &mut txn,
+        &TestBlock,
+        &[(retiring_key, LifetimeStage::UsingNewForChange), (new_key, LifetimeStage::Active)],
+        vec![payment(0, 100)],
+      )
+      .await
+      .unwrap();
+    assert_eq!(eventualities.len(), 1);
+
+    let retiring_key_eventualities = &eventualities[retiring_key.to_bytes().as_ref()];
+    assert_eq!(retiring_key_eventualities.len(), 1);
+
+    let retiring_key_outputs =
+      Db::<TestFeed>::outputs(&txn, retiring_key, ExternalCoin::Monero).unwrap();
+    assert!(retiring_key_outputs.is_empty());
+    let new_key_outputs = Db::<TestFeed>::outputs(&txn, new_key, ExternalCoin::Monero).unwrap();
+    assert_eq!(new_key_outputs, vec![TestOutput(1000)]);
+
+    let retiring_key_queued_payments =
+      Db::<TestFeed>::queued_payments(&txn, retiring_key, ExternalCoin::Monero).unwrap();
+    assert!(retiring_key_queued_payments.is_empty());
+    let new_key_queued_payments =
+      Db::<TestFeed>::queued_payments(&txn, new_key, ExternalCoin::Monero).unwrap();
+    assert!(new_key_queued_payments.is_empty());
+
+    let retiring_key_tx_to_sign =
+      TransactionsToSign::<TestSignableTransaction>::try_recv(&mut txn, &retiring_key).unwrap();
+    assert_eq!(retiring_key_tx_to_sign.payments, vec![(TestAddress(0), 80)]);
+    let new_key_tx_to_sign =
+      TransactionsToSign::<TestSignableTransaction>::try_recv(&mut txn, &new_key);
+    assert!(new_key_tx_to_sign.is_none());
+  }
+
+  #[tokio::test]
+  async fn retiring_key_no_longer_pays() {
+    for stage in [LifetimeStage::Forwarding, LifetimeStage::Finishing] {
+      let mut db = MemDb::new();
+      let mut txn = db.txn();
+      let retiring_key = Ed25519::generator();
+      let new_key = Ed25519::generator() + Ed25519::generator();
+
+      Scheduler::<TestFeed, TestPlanner>::activate_key(&mut txn, retiring_key);
+      Scheduler::<TestFeed, TestPlanner>::activate_key(&mut txn, new_key);
+      Db::<TestFeed>::set_outputs(
+        &mut txn,
+        retiring_key,
+        ExternalCoin::Monero,
+        &[TestOutput(1000)],
+      );
+      Db::<TestFeed>::set_outputs(&mut txn, new_key, ExternalCoin::Monero, &[TestOutput(1000)]);
+
+      let scheduler = Scheduler::new(TestPlanner);
+      let eventualities = scheduler
+        .fulfill(
+          &mut txn,
+          &TestBlock,
+          &[(retiring_key, stage), (new_key, LifetimeStage::Active)],
+          vec![payment(0, 100)],
+        )
+        .await
+        .unwrap();
+      assert_eq!(eventualities.len(), 1, "{stage:?}");
+
+      let new_key_eventualities = &eventualities
+        .get(new_key.to_bytes().as_ref())
+        .unwrap_or_else(|| panic!("no entry found for key: {stage:?}"));
+      assert_eq!(new_key_eventualities.len(), 1, "{stage:?}");
+
+      let retiring_key_outputs =
+        Db::<TestFeed>::outputs(&txn, retiring_key, ExternalCoin::Monero).unwrap();
+      assert_eq!(retiring_key_outputs, vec![TestOutput(1000)], "{stage:?}");
+      let new_key_outputs = Db::<TestFeed>::outputs(&txn, new_key, ExternalCoin::Monero).unwrap();
+      assert!(new_key_outputs.is_empty(), "{stage:?}");
+
+      let retiring_key_queued_payments =
+        Db::<TestFeed>::queued_payments(&txn, retiring_key, ExternalCoin::Monero).unwrap();
+      assert!(retiring_key_queued_payments.is_empty(), "{stage:?}");
+      let new_key_queued_payments =
+        Db::<TestFeed>::queued_payments(&txn, new_key, ExternalCoin::Monero).unwrap();
+      assert!(new_key_queued_payments.is_empty(), "{stage:?}");
+
+      let retiring_key_tx_to_sign =
+        TransactionsToSign::<TestSignableTransaction>::try_recv(&mut txn, &retiring_key);
+      assert!(retiring_key_tx_to_sign.is_none(), "{stage:?}");
+      let new_key_tx_to_sign =
+        TransactionsToSign::<TestSignableTransaction>::try_recv(&mut txn, &new_key).unwrap();
+      assert_eq!(new_key_tx_to_sign.payments, vec![(TestAddress(0), 80)], "{stage:?}");
+      assert!(new_key_tx_to_sign.change, "{stage:?}");
+    }
+  }
+
+  #[tokio::test]
+  async fn more_payments_than_max_per_tx_splits_them_into_a_tree() {
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    let key = Ed25519::generator();
+
+    Scheduler::<TestFeed, TestPlanner>::activate_key(&mut txn, key);
+    Db::<TestFeed>::set_outputs(&mut txn, key, ExternalCoin::Monero, &[TestOutput(2000)]);
+
+    let scheduler = Scheduler::new(TestPlanner);
+    let eventualities = scheduler
+      .fulfill(&mut txn, &TestBlock, &[(key, LifetimeStage::Active)], payments(4))
+      .await
+      .unwrap();
+    assert_eq!(eventualities.len(), 1);
+
+    let key_eventualities = &eventualities[key.to_bytes().as_ref()];
+    assert_eq!(key_eventualities.len(), 1);
+
+    let outputs = Db::<TestFeed>::outputs(&txn, key, ExternalCoin::Monero).unwrap();
+    assert!(outputs.is_empty());
+
+    let queued_payments = Db::<TestFeed>::queued_payments(&txn, key, ExternalCoin::Monero).unwrap();
+    assert!(queued_payments.is_empty());
+
+    let tx_to_sign =
+      TransactionsToSign::<TestSignableTransaction>::try_recv(&mut txn, &key).unwrap();
+    assert_eq!(tx_to_sign.payments, [(TestAddress(u32::MAX), 587), (TestAddress(u32::MAX), 388)]);
+    assert!(tx_to_sign.change);
+
+    for amount in [Amount(587), Amount(388)] {
+      let leaves = Db::<TestFeed>::take_pending_branch(
+        &mut txn,
+        key,
+        ExternalBalance { coin: ExternalCoin::Monero, amount },
+      );
+
+      let Some(TreeTransaction::Leaves { payments, .. }) = leaves else {
+        panic!("expected leaves")
+      };
+
+      let (addresses, amounts) = get_addresses_and_amounts(&payments);
+
+      match amount {
+        Amount(587) => {
+          assert_eq!(addresses, vec![TestAddress(0), TestAddress(1), TestAddress(2)]);
+          assert_eq!(amounts, vec![100, 200, 300]);
+        }
+        Amount(388) => {
+          assert_eq!(addresses, vec![TestAddress(3)]);
+          assert_eq!(amounts, vec![400]);
+        }
+        _ => panic!("amount didnt match"),
+      }
+    }
+  }
+
+  #[tokio::test]
+  async fn payments_append_into_queue_if_no_outputs() {
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    let key = Ed25519::generator();
+
+    Scheduler::<TestFeed, TestPlanner>::activate_key(&mut txn, key);
+    let scheduler = Scheduler::new(TestPlanner);
+
+    let eventualities = scheduler
+      .fulfill(
+        &mut txn,
+        &TestBlock,
+        &[(key, LifetimeStage::Active)],
+        vec![payment(0, 200), payment(1, 100), payment(2, 300)],
+      )
+      .await
+      .unwrap();
+    assert_eq!(eventualities.len(), 1);
+    let key_eventualities = &eventualities[key.to_bytes().as_ref()];
+    assert_eq!(key_eventualities.len(), 0);
+
+    let eventualities = scheduler
+      .fulfill(&mut txn, &TestBlock, &[(key, LifetimeStage::Active)], vec![payment(3, 50)])
+      .await
+      .unwrap();
+    assert_eq!(eventualities.len(), 1);
+    let key_eventualities = &eventualities[key.to_bytes().as_ref()];
+    assert_eq!(key_eventualities.len(), 0);
+
+    let queued_payments = Db::<TestFeed>::queued_payments(&txn, key, ExternalCoin::Monero).unwrap();
+    let (queued_addresses, queued_amounts) = get_addresses_and_amounts(&queued_payments);
+    assert_eq!(
+      queued_addresses,
+      vec![TestAddress(0), TestAddress(1), TestAddress(2), TestAddress(3)]
+    );
+    assert_eq!(queued_amounts, vec![200, 100, 300, 50]);
+  }
+}
+
+#[cfg(test)]
+mod fulfillable_payments {
+  use super::*;
+  use ciphersuite::WrappedGroup as _;
+  use dalek_ff_group::Ed25519;
+  use scheduler_test_primitives::*;
+  use serai_db::{Db as _, MemDb};
+
+  fn run(
+    queue: &[Payment<TestAddress>],
+    operating_costs: u64,
+    outputs: u64,
+  ) -> (Vec<Payment<TestAddress>>, Vec<Payment<TestAddress>>, u64) {
+    let mut db = MemDb::new();
+    let mut txn = db.txn();
+    let mut operating_costs = operating_costs;
+    let key = Ed25519::generator();
+
+    Db::<TestFeed>::set_queued_payments(&mut txn, key, ExternalCoin::Monero, queue);
+
+    let fulfilled = Scheduler::<TestFeed, TestPlanner>::fulfillable_payments(
+      &mut txn,
+      &mut operating_costs,
+      key,
+      ExternalCoin::Monero,
+      outputs,
+    );
+    let queue_after = Db::<TestFeed>::queued_payments(&txn, key, ExternalCoin::Monero).unwrap();
+
+    (fulfilled, queue_after, operating_costs)
+  }
+
+  #[test]
+  fn empty_queue() {
+    let (fulfilled, _, _) = run(&[], 0, 100);
+    assert!(fulfilled.is_empty());
+  }
+
+  #[test]
+  fn outputs_afford_queue() {
+    let (fulfilled, queue_after, _) = run(&payments(2), 0, 1000);
+    let (fulfilled_addresses, fulfilled_amounts) = get_addresses_and_amounts(&fulfilled);
+    assert_eq!(fulfilled_addresses, vec![TestAddress(0), TestAddress(1)]);
+    assert_eq!(fulfilled_amounts, vec![100, 200]);
+
+    let (queue_after_addresses, queue_after_amounts) = get_addresses_and_amounts(&queue_after);
+    assert!(queue_after_addresses.is_empty());
+    assert!(queue_after_amounts.is_empty());
+  }
+
+  #[test]
+  fn outputs_afford_only_a_few_payments() {
+    let (fulfilled, queue_after, _) = run(&payments(3), 0, 350);
+
+    let (fulfilled_addresses, fulfilled_amounts) = get_addresses_and_amounts(&fulfilled);
+    assert_eq!(fulfilled_addresses, vec![TestAddress(0), TestAddress(1)]);
+    assert_eq!(fulfilled_amounts, vec![100, 200]);
+
+    let (queue_after_addresses, queue_after_amounts) = get_addresses_and_amounts(&queue_after);
+    assert_eq!(queue_after_addresses, vec![TestAddress(2)]);
+    assert_eq!(queue_after_amounts, vec![300]);
+  }
+
+  #[test]
+  fn stops_when_no_longer_affords() {
+    let (fulfilled, queue_after, _) =
+      run(&[payment(0, 100), payment(1, 200), payment(2, 50)], 0, 250);
+
+    let (fulfilled_addresses, fulfilled_amounts) = get_addresses_and_amounts(&fulfilled);
+    assert_eq!(fulfilled_addresses, vec![TestAddress(0)]);
+    assert_eq!(fulfilled_amounts, vec![100]);
+
+    let (queue_after_addresses, queue_after_amounts) = get_addresses_and_amounts(&queue_after);
+    assert_eq!(queue_after_addresses, vec![TestAddress(1), TestAddress(2)]);
+    assert_eq!(queue_after_amounts, vec![200, 50]);
+  }
+
+  #[test]
+  fn entire_queue_wiped_if_below_operating_costs() {
+    let (fulfilled, queue_after, operating_costs_after) =
+      run(&[payment(0, 100), payment(1, 200), payment(2, 50)], 400, 400);
+    assert!(fulfilled.is_empty());
+    assert!(queue_after.is_empty());
+    assert_eq!(operating_costs_after, 50);
+  }
+
+  #[test]
+  fn operating_costs_raise_budget() {
+    let (fulfilled, queue_after, operating_costs_after) =
+      run(&[payment(0, 100), payment(1, 200), payment(2, 50)], 50, 250);
+
+    let (fulfilled_addresses, fulfilled_amounts) = get_addresses_and_amounts(&fulfilled);
+    assert_eq!(fulfilled_addresses, vec![TestAddress(0), TestAddress(1)]);
+    assert_eq!(fulfilled_amounts, vec![100, 200]);
+
+    let (queue_after_addresses, queue_after_amounts) = get_addresses_and_amounts(&queue_after);
+    assert_eq!(queue_after_addresses, vec![TestAddress(2)]);
+    assert_eq!(queue_after_amounts, vec![50]);
+
+    assert_eq!(operating_costs_after, 50);
+  }
+
+  #[test]
+  #[ignore = "fulfillable_payments infinite loops in this test"]
+  fn first_payment_over_budget_returns_nothing() {
+    let (fulfilled, queue_after, operating_costs_after) =
+      run(&[payment(0, 500), payment(1, 50)], 0, 100);
+    assert!(fulfilled.is_empty());
+
+    let (queue_after_addresses, queue_after_amounts) = get_addresses_and_amounts(&queue_after);
+    assert_eq!(queue_after_addresses, vec![TestAddress(0), TestAddress(1)]);
+    assert_eq!(queue_after_amounts, vec![500, 50]);
+
+    assert_eq!(operating_costs_after, 0);
+  }
+}

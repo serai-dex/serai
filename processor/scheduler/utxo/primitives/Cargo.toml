@@ -24,3 +24,9 @@ serai-primitives = { path = "../../../../substrate/primitives", default-features
 primitives = { package = "serai-processor-primitives", path = "../../../primitives" }
 scanner = { package = "serai-processor-scanner", path = "../../../scanner" }
 scheduler-primitives = { package = "serai-processor-scheduler-primitives", path = "../../primitives" }
+
+[dev-dependencies]
+scheduler-test-primitives = { package = "serai-processor-scheduler-test-primitives", path = "../../test-primitives" }
+ciphersuite = { path = "../../../../crypto/ciphersuite", default-features = false, features = ["std"] }
+dalek-ff-group = { path = "../../../../crypto/dalek-ff-group", default-features = false, features = ["std"] }
+tokio = { version = "1", default-features = false, features = ["rt-multi-thread", "macros"] }
