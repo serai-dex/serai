@@ -395,18 +395,11 @@ impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> PrimeGroup for Projective<C> {
 
 #[cfg(feature = "alloc")]
 mod alloc {
-  use ff::{PrimeField, PrimeFieldBits};
+  use ff::PrimeFieldBits;
   use crate::{ShortWeierstrass, Affine, Projective};
 
   impl<C: ShortWeierstrass<Scalar: PrimeFieldBits>> ec_divisors::DivisorCurve for Projective<C> {
     type FieldElement = C::FieldElement;
-    type XyPoint = ec_divisors::Projective<Self>;
-
-    type BorrowedInterpolator = ec_divisors::Interpolator<C::FieldElement>;
-    fn interpolator_for_scalar_mul() -> Self::BorrowedInterpolator {
-      #[expect(clippy::as_conversions)]
-      ec_divisors::Interpolator::new((<C::Scalar as PrimeField>::NUM_BITS as usize).div_ceil(2) + 2)
-    }
 
     fn a() -> C::FieldElement {
       C::A

@@ -266,6 +266,60 @@ const DLOGS_PER_COEFFICIENT: usize = 2;
 const DLOGS_PER_ECDH: usize = 2;
 const ECDHS_PER_PARTICIPANT: usize = 2;
 
+struct DiscreteLogClaim<'dlog, C: Curves> {
+  dlog: &'dlog ScalarDecomposition<<<C as Curves>::EmbeddedCurve as WrappedGroup>::F>,
+  generator: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G,
+  divisor: Zeroizing<ec_divisors::Poly<<<C as Curves>::ToweringCurve as WrappedGroup>::F>>,
+}
+
+impl<'dlog, C: Curves> DiscreteLogClaim<'dlog, C> {
+  fn new(
+    dlog: &'dlog ScalarDecomposition<<<C as Curves>::EmbeddedCurve as WrappedGroup>::F>,
+    generator: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G,
+  ) -> Option<Self> {
+    let divisor = Zeroizing::new(dlog.scalar_mul_divisor(generator).normalize_x_coefficient()?);
+    Some(Self { dlog, generator, divisor })
+  }
+
+  /// Push a discrete-log claim onto the tape.
+  ///
+  /// This returns the point for which the claim was made, both as the point itself and as its
+  /// `x`, `y` coordinates.
+  #[expect(clippy::type_complexity)]
+  fn push_onto_tape(
+    self,
+    vector_commitment_tape: &mut Vec<<C::ToweringCurve as WrappedGroup>::F>,
+  ) -> (
+    <<C as Curves>::EmbeddedCurve as WrappedGroup>::G,
+    (<C::ToweringCurve as WrappedGroup>::F, <C::ToweringCurve as WrappedGroup>::F),
+  ) {
+    let Self { dlog, generator, divisor } = self;
+
+    {
+      vector_commitment_tape.push(divisor.zero_coefficient);
+      for coefficient in divisor.x_coefficients.iter().skip(1) {
+        vector_commitment_tape.push(*coefficient);
+      }
+      for coefficient in divisor.yx_coefficients.first().into_iter().flatten() {
+        vector_commitment_tape.push(*coefficient);
+      }
+      vector_commitment_tape.push(
+        divisor
+          .y_coefficients
+          .first()
+          .copied()
+          .unwrap_or(<C::ToweringCurve as WrappedGroup>::F::ZERO),
+      );
+    }
+
+    let dh = generator * dlog.scalar();
+    let (x, y) = <C::EmbeddedCurve as WrappedGroup>::G::to_xy(dh).unwrap();
+    vector_commitment_tape.push(x);
+    vector_commitment_tape.push(y);
+    (dh, (x, y))
+  }
+}
+
 pub(super) struct Proof<C>(PhantomData<C>);
 impl<C: Curves> Proof<C> {
   const fn discrete_log_claims(coefficients: usize, participants: usize) -> usize {
@@ -495,39 +549,6 @@ impl<C: Curves> Proof<C> {
         }
       };
 
-    // Push a discrete-log claim onto the tape.
-    //
-    // Returns the point for which the claim was made.
-    let discrete_log_claim =
-      |vector_commitment_tape: &mut Vec<_>,
-       dlog: &ScalarDecomposition<<<C as Curves>::EmbeddedCurve as WrappedGroup>::F>,
-       generator: <<C as Curves>::EmbeddedCurve as WrappedGroup>::G| {
-        {
-          let divisor =
-            Zeroizing::new(dlog.scalar_mul_divisor(generator).normalize_x_coefficient());
-          vector_commitment_tape.push(divisor.zero_coefficient);
-          for coefficient in divisor.x_coefficients.iter().skip(1) {
-            vector_commitment_tape.push(*coefficient);
-          }
-          for coefficient in divisor.yx_coefficients.first().unwrap_or(&vec![]) {
-            vector_commitment_tape.push(*coefficient);
-          }
-          vector_commitment_tape.push(
-            divisor
-              .y_coefficients
-              .first()
-              .copied()
-              .unwrap_or(<C::ToweringCurve as WrappedGroup>::F::ZERO),
-          );
-        }
-
-        let dh = generator * dlog.scalar();
-        let (x, y) = <C::EmbeddedCurve as WrappedGroup>::G::to_xy(dh).unwrap();
-        vector_commitment_tape.push(x);
-        vector_commitment_tape.push(y);
-        (dh, (x, y))
-      };
-
     let mut vector_commitment_tape = Zeroizing::new(Vec::with_capacity(
       Self::variables_in_vector_commitments(coefficients, participant_public_keys.len()),
     ));
@@ -542,11 +563,12 @@ impl<C: Curves> Proof<C> {
       discrete_log(&mut vector_commitment_tape, &evrf_private_key);
 
       // Push the divisor for proving that we're using the correct scalar
-      let evrf_public_key = discrete_log_claim(
-        &mut vector_commitment_tape,
+      let evrf_public_key = DiscreteLogClaim::<C>::new(
         &evrf_private_key,
         <<C as Curves>::EmbeddedCurve as WrappedGroup>::generator(),
-      );
+      )
+      .expect("eVRF private key is has a zero `y^0 x^1` coefficient with the generator")
+      .push_onto_tape(&mut vector_commitment_tape);
 
       // Push the divisor for each point we use in the eVRF
       for pair in coefficients_evrf_points.chunks(2) {
@@ -558,8 +580,11 @@ impl<C: Curves> Proof<C> {
         .into_iter()
         .zip(pair)
         {
-          let (_, (dh_x, _)) =
-            discrete_log_claim(&mut vector_commitment_tape, &evrf_private_key, *point);
+          let (_, (dh_x, _)) = DiscreteLogClaim::<C>::new(&evrf_private_key, *point)
+            .expect(
+              "eVRF private key has a zero `y^0 x^1` coefficient with a uniformly-sampled point",
+            )
+            .push_onto_tape(&mut vector_commitment_tape);
           *coefficient += weight * dh_x;
         }
         coefficients.push(coefficient);
@@ -585,36 +610,39 @@ impl<C: Curves> Proof<C> {
       .into_iter()
       .zip(&mut ecdh_commitments_xy_i)
       {
-        let mut ecdh_ephemeral_secret;
         loop {
-          ecdh_ephemeral_secret =
+          let ecdh_ephemeral_secret =
             Zeroizing::new(<C::EmbeddedCurve as WrappedGroup>::F::random(&mut *rng));
-          // 0 would produce the identity, which isn't representable within the discrete-log proof
-          if bool::from(!ecdh_ephemeral_secret.is_zero()) {
-            break;
-          }
+          let Some(ecdh_ephemeral_secret) = ScalarDecomposition::<
+            <C::EmbeddedCurve as WrappedGroup>::F,
+          >::new(*ecdh_ephemeral_secret) else {
+            continue;
+          };
+          let Some(generator_claim) = DiscreteLogClaim::<C>::new(
+            &ecdh_ephemeral_secret,
+            <<C as Curves>::EmbeddedCurve as WrappedGroup>::generator(),
+          ) else {
+            continue;
+          };
+          let Some(ecdh_claim) =
+            DiscreteLogClaim::<C>::new(&ecdh_ephemeral_secret, *participant_public_key)
+          else {
+            continue;
+          };
+
+          discrete_log(&mut vector_commitment_tape, &ecdh_ephemeral_secret);
+
+          // Push a divisor for proving that we're using the correct scalar for the commitment
+          let (ecdh_commitment, ecdh_commitment_xy_i_j) =
+            generator_claim.push_onto_tape(&mut vector_commitment_tape);
+          ecdh_commitments.push(ecdh_commitment);
+          *ecdh_commitments_xy_i_j_dest = ecdh_commitment_xy_i_j;
+          // Push a divisor for the key we're performing the ECDH with
+          let (_, (dh_x, _)) = ecdh_claim.push_onto_tape(&mut vector_commitment_tape);
+          *encryption_key += weight * dh_x;
+
+          break;
         }
-
-        let ecdh_ephemeral_secret =
-          ScalarDecomposition::<<C::EmbeddedCurve as WrappedGroup>::F>::new(*ecdh_ephemeral_secret)
-            .expect("ECDH ephemeral secret zero");
-        discrete_log(&mut vector_commitment_tape, &ecdh_ephemeral_secret);
-
-        // Push a divisor for proving that we're using the correct scalar for the commitment
-        let (ecdh_commitment, ecdh_commitment_xy_i_j) = discrete_log_claim(
-          &mut vector_commitment_tape,
-          &ecdh_ephemeral_secret,
-          <<C as Curves>::EmbeddedCurve as WrappedGroup>::generator(),
-        );
-        ecdh_commitments.push(ecdh_commitment);
-        *ecdh_commitments_xy_i_j_dest = ecdh_commitment_xy_i_j;
-        // Push a divisor for the key we're performing the ECDH with
-        let (_, (dh_x, _)) = discrete_log_claim(
-          &mut vector_commitment_tape,
-          &ecdh_ephemeral_secret,
-          *participant_public_key,
-        );
-        *encryption_key += weight * dh_x;
       }
       ecdh_commitments_xy.push(ecdh_commitments_xy_i);
       encryption_keys.push(encryption_key);

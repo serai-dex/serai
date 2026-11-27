@@ -25,7 +25,7 @@ prime-field = { path = "../prime-field", default-features = false }
 short-weierstrass = { path = "../short-weierstrass", default-features = false }
 
 ciphersuite = { path = "../ciphersuite", version = "0.4", default-features = false }
-generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "31c26d96eaadbba910ffe3613ad8b4cf9c598a93", default-features = false, optional = true }
+generalized-bulletproofs-ec-gadgets = { git = "https://github.com/monero-oxide/monero-oxide", rev = "46135ae638ecab6b168a53c9b315242d00386754", default-features = false, optional = true }
 
 [dev-dependencies]
 hex = "0.4"

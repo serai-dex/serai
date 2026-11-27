@@ -181,6 +181,10 @@ impl<C: Curves> Dkg<C> {
   ///
   /// `evrf_public_keys` is the eVRF public keys of the participants in the DKG protocol who are
   /// eligible to perform a secret-sharing and will also receive shares.
+  ///
+  /// This MAY panic if internally to the proof, a polynomial has a specific coefficient set to
+  /// zero when constructed from the eVRF private key and the elliptic curve generator/uniform
+  /// elliptic curve points sampled from a hash function. This is _assumed_ to happen negligibly.
   pub fn participate(
     rng: &mut (impl RngCore + CryptoRng),
     generators: &Generators<C>,

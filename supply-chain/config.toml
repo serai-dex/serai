@@ -88,7 +88,7 @@ first-party = true
 first-party = false
 notes = "Member of `patches/`, but explicitly tracked as if third-party"
 
-[policy."ec-divisors:0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"]
+[policy."ec-divisors:0.1.0@git:46135ae638ecab6b168a53c9b315242d00386754"]
 first-party = false
 
 [policy.embedwards25519]
@@ -154,13 +154,13 @@ first-party = true
 first-party = false
 notes = "Member of `patches/`, but explicitly tracked as if third-party"
 
-[policy."generalized-bulletproofs-circuit-abstraction:0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"]
+[policy."generalized-bulletproofs-circuit-abstraction:0.1.0@git:46135ae638ecab6b168a53c9b315242d00386754"]
 first-party = false
 
-[policy."generalized-bulletproofs-ec-gadgets:0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"]
+[policy."generalized-bulletproofs-ec-gadgets:0.1.0@git:46135ae638ecab6b168a53c9b315242d00386754"]
 first-party = false
 
-[policy."generalized-bulletproofs:0.1.0@git:31c26d96eaadbba910ffe3613ad8b4cf9c598a93"]
+[policy."generalized-bulletproofs:0.1.0@git:46135ae638ecab6b168a53c9b315242d00386754"]
 first-party = false
 
 [policy."getrandom:0.2.99"]
