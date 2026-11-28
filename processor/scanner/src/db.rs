@@ -122,12 +122,13 @@ impl<S: ScannerFeed> ScannerGlobalDb<S> {
       ActiveKeys::get(txn).expect("retiring key yet no active keys");
     let Some(key) = keys.first() else { return };
 
-    // Get the block we're scanning for next
-    let block_number = next_to_scan_for_outputs_block::<S>(txn).expect(
-      "tidying keys despite never setting the next to scan for block (done on initialization)",
-    );
     // If this key is scheduled for retiry...
     if let Some(retire_at) = RetireAt::get(txn, key.key) {
+      // Get the block we're scanning for next
+      let block_number = next_to_scan_for_outputs_block::<S>(txn).expect(
+        "tidying keys despite never setting the next to scan for block (done on initialization)",
+      );
+
       // And is retired by/at this block...
       if retire_at <= block_number {
         // Remove it from the list of keys
