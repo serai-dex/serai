@@ -540,6 +540,10 @@ sp_api::impl_runtime_apis! {
       Core::next_nonce(&of)
     }
 
+    fn protocol_id() -> [u8; 32] {
+      <Runtime as serai_core_pallet::Config>::PROTOCOL_ID
+    }
+
     fn economic_security_time() -> Option<u64> {
       GenesisLiquidity::economic_security_time()
     }

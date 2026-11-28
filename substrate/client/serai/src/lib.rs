@@ -3,7 +3,7 @@
 #![deny(missing_docs)]
 #![allow(clippy::std_instead_of_alloc, clippy::std_instead_of_core)]
 
-use core::future::Future;
+use core::{future::Future, num::NonZero};
 use std::{sync::Arc, io::Read as _};
 
 use thiserror::Error;
@@ -12,10 +12,15 @@ use core_json_derive::JsonDeserialize;
 use simple_request::{hyper, TokioClient};
 
 use borsh::BorshDeserialize as _;
+
+use sp_core::{sr25519::Pair, Pair as _};
+
 pub use serai_abi as abi;
 use abi::{
+  ContextualizedSignature, ExplicitContext, ImplicitContext, SignedCalls,
   primitives::{
     BlockHash,
+    balance::Balance,
     network_id::ExternalNetworkId,
     validator_sets::P2pValidator,
     coin::{Coin, ExternalCoin},
@@ -149,6 +154,20 @@ impl Serai {
     Ok(Serai { url, client })
   }
 
+  // TODO: cache this result and reuse instead of fetching per signing request?
+  /// Fetch the implicit context the transactions for this protocol should be using.
+  pub async fn implicit_context(&self) -> Result<ImplicitContext, RpcError> {
+    let implicit_context = self.call::<String>("core/implicit-context", "[]").await?;
+    ImplicitContext::deserialize(
+      &mut hex::decode(&implicit_context)
+        .map_err(|_| {
+          RpcError::InvalidNode("node returned non-hex-encoded implicit context".to_owned())
+        })?
+        .as_slice(),
+    )
+    .map_err(|_| RpcError::InvalidNode("node returned invalid implicit context".to_owned()))
+  }
+
   /// Fetch the latest finalized block number.
   pub async fn latest_finalized_block_number(&self) -> Result<u64, RpcError> {
     self.call("blockchain/latest_finalized_block_number", "[]").await
@@ -261,6 +280,39 @@ impl Serai {
         .map_err(|_| RpcError::InvalidNode("node returned invalid validator".to_owned()))
       })
       .collect()
+  }
+
+  /// Create a signed serai transaction for `calls`.
+  pub async fn sign_tx(
+    &self,
+    pair: &Pair,
+    calls: SignedCalls,
+    include_by: Option<NonZero<u64>>,
+    historic_block: BlockHash,
+    nonce: u32,
+    fee: Balance,
+  ) -> Result<Transaction, RpcError> {
+    let explicit_context = ExplicitContext {
+      signer: SeraiAddress::from(pair.public()),
+      historic_block,
+      include_by,
+      nonce,
+      fee,
+    };
+
+    let signature = pair.sign(&Transaction::signature_message(
+      &self.implicit_context().await?,
+      &calls,
+      &explicit_context,
+    ));
+
+    Ok(Transaction::Signed {
+      calls,
+      contextualized_signature: ContextualizedSignature {
+        explicit_context,
+        signature: signature.into(),
+      },
+    })
   }
 }
 

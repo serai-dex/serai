@@ -26,5 +26,17 @@ pub(crate) fn module(
     Ok(nonce)
   })?;
 
+  module.register_method("core/implicit-context", |_params, client, _ext| -> Result<_, Error> {
+    let info = client.info();
+
+    let Ok(protocol_id) = client.runtime_api().protocol_id(info.best_hash) else {
+      Err(Error::Internal("couldn't fetch the protocol ID"))?
+    };
+
+    let implicit_context =
+      serai_abi::ImplicitContext { genesis_block_hash: info.genesis_hash.into(), protocol_id };
+    Ok(hex::encode(borsh::to_vec(&implicit_context).unwrap()))
+  })?;
+
   Ok(module)
 }

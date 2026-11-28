@@ -26,6 +26,7 @@ hex = { version = "0.4", default-features = false, features = ["alloc"] }
 borsh = { version = "1", default-features = false, features = ["std"] }
 
 sp-crypto-hashing = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false, features = ["std"] }
+sp-core = { git = "https://github.com/serai-dex/patch-polkadot-sdk", default-features = false }
 serai-abi = { path = "../../abi", version = "0.1", default-features = false, features = ["std"] }
 
 [dev-dependencies]

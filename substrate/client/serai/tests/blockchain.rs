@@ -49,6 +49,15 @@ async fn blockchain() {
       };
 
       test_finalized_block(0).await;
+
+      // Check the implicit context is for this blockchain
+      let implicit_context = serai.implicit_context().await.unwrap();
+      assert_eq!(
+        implicit_context.genesis_block_hash,
+        serai.block_by_number(0).await.unwrap().unwrap().header.hash()
+      );
+      assert_eq!(implicit_context.protocol_id, [0u8; 32]);
+
       let finalized = serai.latest_finalized_block_number().await.unwrap();
       test_finalized_block(finalized).await;
 
