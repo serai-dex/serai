@@ -14,6 +14,14 @@ pub(crate) fn block_id(getter: &impl Get, block_number: u64) -> [u8; 32] {
     .unwrap_or_else(|| panic!("requested block ID for unindexed block {block_number}"))
 }
 
+/// The latest indexed block number.
+///
+/// Only blocks up to and including this have had their IDs saved, so only these may have their
+/// block data requested.
+pub(crate) fn latest_finalized_block(getter: &impl Get) -> Option<u64> {
+  IndexDb::latest_finalized_block(getter)
+}
+
 /*
   This processor should build its own index of the blockchain, yet only for finalized blocks which
   are safe to process. For Proof of Work blockchains, which only have probabilistic finality, these
@@ -34,15 +42,28 @@ impl<D: 'static + Send + Db, S: ScannerFeed> IndexTask<D, S> {
       let block = {
         let mut delay = Self::DELAY_BETWEEN_ITERATIONS;
         loop {
-          match feed.unchecked_block_header_by_number(start_block).await {
-            Ok(block) => break block,
+          // loop until the given start block is finalized
+          match feed.latest_finalized_block_number().await {
+            Ok(latest_finalized) => {
+              if latest_finalized >= start_block {
+                // Get the block from the chain
+                match feed.unchecked_block_header_by_number(start_block).await {
+                  Ok(block) => break block,
+                  Err(e) => {
+                    log::warn!("IndexTask couldn't fetch start block {start_block}: {e:?}");
+                  }
+                }
+              }
+              log::warn!("IndexTask start block {start_block} is not yet finalized");
+            }
             Err(e) => {
-              log::warn!("IndexTask couldn't fetch start block {start_block}: {e:?}");
-              tokio::time::sleep(delay).await;
-              delay += Self::DELAY_BETWEEN_ITERATIONS;
-              delay = delay.min(Self::MAX_DELAY_BETWEEN_ITERATIONS);
+              log::warn!("IndexTask couldn't fetch latest finalized block number: {e:?}");
             }
           }
+
+          tokio::time::sleep(delay).await;
+          delay += Self::DELAY_BETWEEN_ITERATIONS;
+          delay = delay.min(Self::MAX_DELAY_BETWEEN_ITERATIONS);
         }
       };
 
@@ -114,5 +135,123 @@ impl<D: 'static + Send + Db, S: ScannerFeed> ContinuallyRan for IndexTask<D, S> 
       // Have dependents run if we updated the latest finalized block
       Ok(our_latest_finalized != latest_finalized)
     }
+  }
+}
+
+/// Generic tests for the index task. These should be plug-and-play with an
+/// implemented ScannerFeed.
+#[cfg(feature = "tests")]
+pub mod index_tests {
+  use primitives::task::ContinuallyRan as _;
+  use serai_db::{new_rocksdb, Db};
+  use tempfile::TempDir;
+
+  use crate::{
+    DaemonHelper, ScannerFeed,
+    index::{IndexTask, db::IndexDb},
+  };
+
+  async fn init_task<
+    D: 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    S: ScannerFeed,
+  >(
+    db: D,
+    feed: S,
+    start_block: u64,
+  ) -> IndexTask<D, S> {
+    assert!(IndexDb::latest_finalized_block(&db).is_none());
+    assert!(IndexDb::block_id(&db, start_block).is_none());
+
+    let index_task = IndexTask::new(db.clone(), feed.clone(), start_block).await;
+
+    // Assert expected DB state after new
+    let our_latest_finalized =
+      IndexDb::latest_finalized_block(&db).expect("Expected latest finalized");
+    assert_eq!(our_latest_finalized, start_block);
+    let res = feed.block_by_number(&db, start_block).await;
+    res.unwrap();
+
+    index_task
+  }
+
+  async fn init_test(
+    feed: impl ScannerFeed,
+  ) -> (
+    TempDir,
+    impl 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>,
+    u64,
+    IndexTask<impl 'static + Send + Sync + for<'db> Db<Transaction<'db>: Send>, impl ScannerFeed>,
+  ) {
+    let temp_dir = TempDir::new().unwrap();
+    let temp_db = new_rocksdb(temp_dir.path().to_str().unwrap());
+    let start_block = feed.latest_finalized_block_number().await.unwrap();
+    let index_task = init_task(temp_db.clone(), feed.clone(), start_block).await;
+    (temp_dir, temp_db, start_block, index_task)
+  }
+
+  /// Test initializing a new scan task.
+  async fn new_index_task<S: ScannerFeed, D: DaemonHelper>(feed: S, daemon: D) {
+    daemon.reset_chain().await;
+    daemon.add_blocks(1).await;
+    init_test(feed).await;
+  }
+
+  /// Test an iteration of the index task without any change to the chain state.
+  async fn no_expected_change<S: ScannerFeed, D: DaemonHelper>(feed: S, daemon: D) {
+    daemon.reset_chain().await;
+    daemon.setup_finalized_block().await;
+
+    let (_temp_dir, _, _, mut index_task) = init_test(feed).await;
+
+    // We should be able to complete an iteration without erroring
+    let res = index_task.run_iteration().await;
+
+    // Since the chain did not change since we initialized our IndexTask,
+    // then the latest finalized block shouldn't have changed either
+    let latest_finalized_updated = res.unwrap();
+    assert!(!latest_finalized_updated);
+  }
+
+  /// Test an iteration of the index task after advancing the chain one block.
+  async fn advance_one_block<S: ScannerFeed, D: DaemonHelper>(feed: S, daemon: D) {
+    daemon.reset_chain().await;
+    daemon.setup_finalized_block().await;
+
+    let (_temp_dir, temp_db, start_block, mut index_task) = init_test(feed.clone()).await;
+
+    // Advance the chain 1 block so that the latest finalized advances by 1
+    daemon.add_blocks(1).await;
+
+    // We should be able to complete an iteration without erroring
+    let res = index_task.run_iteration().await;
+
+    // The latest finalized should have updated
+    let latest_finalized_updated = res.unwrap();
+    assert!(latest_finalized_updated);
+
+    // The latest finalized in the db should be expected
+    let new_latest_finalized = start_block + 1;
+    let our_latest_finalized =
+      IndexDb::latest_finalized_block(&temp_db).expect("Expected new latest finalized");
+    assert_eq!(our_latest_finalized, new_latest_finalized);
+
+    // The block id's should all match up with the chain
+    for b in start_block ..= new_latest_finalized {
+      let res = feed.clone().block_by_number(&temp_db, b).await;
+      res.unwrap();
+    }
+
+    // Next iteration there should be no change
+    let res = index_task.run_iteration().await;
+    let latest_finalized_updated = res.unwrap();
+    assert!(!latest_finalized_updated);
+  }
+
+  /// Test the index task manages various circumstances correctly.
+  pub async fn index_task_tests<S: ScannerFeed, D: DaemonHelper>(feed: S, daemon: D) {
+    println!("Executing index task tests...");
+    new_index_task(feed.clone(), daemon.clone()).await;
+    no_expected_change(feed.clone(), daemon.clone()).await;
+    advance_one_block(feed.clone(), daemon.clone()).await;
   }
 }

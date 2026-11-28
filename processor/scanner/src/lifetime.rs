@@ -36,6 +36,7 @@ pub enum LifetimeStage {
 }
 
 /// The lifetime of the multisig, including various block numbers.
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub(crate) struct Lifetime {
   pub(crate) stage: LifetimeStage,
   pub(crate) block_at_which_reporting_starts: u64,
@@ -45,6 +46,26 @@ pub(crate) struct Lifetime {
 }
 
 impl Lifetime {
+  /// Steps 1-3: ActiveYetNotReporting (also the block at which Active starts)
+  pub(crate) fn active_yet_not_reporting_end_block<S: ScannerFeed>(
+    activation_block_number: u64,
+  ) -> u64 {
+    activation_block_number + S::CONFIRMATIONS + S::TEN_MINUTES
+  }
+
+  /// Step 4: UsingNewForChange end block (also the block at which Forwarding starts)
+  pub(crate) fn using_for_change_end_block<S: ScannerFeed>(
+    active_yet_not_reporting_end_block: u64,
+  ) -> u64 {
+    active_yet_not_reporting_end_block + S::CONFIRMATIONS
+  }
+
+  /// Step 5: Forwarding end block (also the block at which Finishing starts)
+  /// Another 6 hours
+  pub(crate) fn forwarding_end_block<S: ScannerFeed>(using_for_change_end_block: u64) -> u64 {
+    using_for_change_end_block + (6 * 6 * S::TEN_MINUTES)
+  }
+
   /// Get the lifetime of this multisig.
   ///
   /// Panics if the multisig being calculated for isn't actually active and a variety of other
@@ -61,7 +82,7 @@ impl Lifetime {
     // This is exclusive, not inclusive, since we want a CONFIRMATIONS + 10 minutes window and the
     // activation block itself is the first block within this window
     let active_yet_not_reporting_end_block =
-      activation_block_number + S::CONFIRMATIONS + S::TEN_MINUTES;
+      Self::active_yet_not_reporting_end_block::<S>(activation_block_number);
     // The exclusive end block is the inclusive start block
     let block_at_which_reporting_starts = active_yet_not_reporting_end_block;
     if block_number < active_yet_not_reporting_end_block {
@@ -87,9 +108,9 @@ impl Lifetime {
     );
 
     let new_active_yet_not_reporting_end_block =
-      next_keys_activation_block_number + S::CONFIRMATIONS + S::TEN_MINUTES;
+      Self::active_yet_not_reporting_end_block::<S>(next_keys_activation_block_number);
     let new_active_and_used_for_change_end_block =
-      new_active_yet_not_reporting_end_block + S::CONFIRMATIONS;
+      Self::using_for_change_end_block::<S>(new_active_yet_not_reporting_end_block);
     // The exclusive end block is the inclusive start block
     let block_at_which_forwarding_starts = Some(new_active_and_used_for_change_end_block);
 
@@ -115,7 +136,7 @@ impl Lifetime {
     // Step 5 details a further 6 hours
     // 6 hours = 6 * 60 minutes = 6 * 6 * 10 minutes
     let new_active_and_forwarded_to_end_block =
-      new_active_and_used_for_change_end_block + (6 * 6 * S::TEN_MINUTES);
+      Self::forwarding_end_block::<S>(new_active_and_used_for_change_end_block);
     if block_number < new_active_and_forwarded_to_end_block {
       return Lifetime {
         stage: LifetimeStage::Forwarding,
