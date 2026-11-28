@@ -52,28 +52,55 @@ mod underlying {
     res
   }
 
-  // Convert scalars to `window`-sized bit groups, as needed to index a table
-  // This algorithm works for `window <= 8`
+  // Convert scalars to `window`-sized signed digits, as needed to index a table
+  // This algorithm works for `window <= 15`
   pub(crate) fn prep_bits<G: Group<Scalar: PrimeFieldBits>>(
     pairs: &[(G::Scalar, G)],
     window: u8,
-  ) -> Vec<Vec<u8>> {
+  ) -> Vec<Vec<u16>> {
     let w_usize = usize::from(window);
+    // The final carry needs one more bit than the scalar has
+    let digits =
+      (usize::try_from(<G::Scalar as ff::PrimeField>::NUM_BITS).unwrap() + 1).div_ceil(w_usize);
+    let half = 1 << (window - 1);
 
     let mut groupings = vec![];
     for pair in pairs {
       let p = groupings.len();
       let mut bits = pair.0.to_le_bits();
-      groupings.push(vec![0; bits.len().div_ceil(w_usize)]);
+      groupings.push(vec![0; digits]);
 
-      for (i, mut bit) in bits.iter_mut().enumerate() {
-        let mut bit = u8_from_bool(&mut bit);
-        groupings[p][i / w_usize] |= bit << (i % w_usize);
-        bit.zeroize();
+      // Bits at or above `NUM_BITS` are zero
+      let mut bits = bits.iter_mut();
+      for digit in &mut groupings[p] {
+        for (i, mut bit) in bits.by_ref().take(w_usize).enumerate() {
+          let mut bit = u16::from(u8_from_bool(&mut bit));
+          *digit |= bit << i;
+          bit.zeroize();
+        }
       }
+
+      let mut carry = 0;
+      for digit in &mut groupings[p] {
+        // If `value > half`, use `value - 2^window` and carry 1 into the next digit
+        let mut value = *digit + carry;
+        carry = (value + (half - 1)) >> window;
+        value = value.wrapping_sub(carry << window);
+        let mut negative = value >> 15;
+        value = (value ^ negative.wrapping_neg()) + negative;
+        *digit = (value << 1) | negative;
+        value.zeroize();
+        negative.zeroize();
+      }
+      debug_assert!(bool::from(carry.ct_eq(&0)));
     }
 
     groupings
+  }
+
+  // The magnitude of a digit from `prep_bits`, and `1` if it's negative
+  pub(crate) fn split_digit(digit: u16) -> (usize, u16) {
+    (usize::from(digit >> 1), digit & 1)
   }
 
   #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -84,78 +111,60 @@ mod underlying {
     Pippenger(u8),
   }
 
-  // These are rules of thumb obtained via benchmarking `k256` and `curve25519-dalek`
-  fn algorithm(len: usize) -> Algorithm {
-    #[cfg(not(debug_assertions))]
+  // Select the algorithm and window with the fewest group operations in the worst case
+  fn algorithm<F: PrimeFieldBits>(len: usize) -> Algorithm {
     if len == 0 {
       Algorithm::Null
     } else if len == 1 {
       Algorithm::Single
-    } else if len < 10 {
-      // Straus 2 never showed a performance benefit, even with just 2 elements
-      Algorithm::Straus(3)
-    } else if len < 20 {
-      Algorithm::Straus(4)
-    } else if len < 50 {
-      Algorithm::Straus(5)
-    } else if len < 100 {
-      Algorithm::Pippenger(4)
-    } else if len < 125 {
-      Algorithm::Pippenger(5)
-    } else if len < 275 {
-      Algorithm::Pippenger(6)
-    } else if len < 400 {
-      Algorithm::Pippenger(7)
     } else {
-      Algorithm::Pippenger(8)
-    }
+      let len = u64::try_from(len).unwrap();
+      let bits = u64::from(F::NUM_BITS);
+      (1 ..= 14)
+        .flat_map(|window| {
+          let digits = (bits + 1).div_ceil(u64::from(window));
+          let half = 1 << (window - 1);
+          let doublings = (digits - 1) * u64::from(window);
 
-    #[cfg(debug_assertions)]
-    if len == 0 {
-      Algorithm::Null
-    } else if len == 1 {
-      Algorithm::Single
-    } else if len < 10 {
-      Algorithm::Straus(3)
-    } else if len < 80 {
-      Algorithm::Straus(4)
-    } else if len < 100 {
-      Algorithm::Straus(5)
-    } else if len < 125 {
-      Algorithm::Pippenger(4)
-    } else if len < 275 {
-      Algorithm::Pippenger(5)
-    } else if len < 475 {
-      Algorithm::Pippenger(6)
-    } else if len < 750 {
-      Algorithm::Pippenger(7)
-    } else {
-      Algorithm::Pippenger(8)
+          // Straus builds `half - 1` table entries per point, then adds one per point per digit
+          let straus = (len * (half - 1 + digits)) - 1 + doublings;
+
+          // Per digit, Pippenger fills buckets and their running sum with `len - 1` additions
+          // It then adds the running sum to the result once per bucket, `half` times
+          // The most significant digit only needs `2^(NUM_BITS - doublings)` buckets
+          let top = 1 << (bits - doublings);
+          let pippenger = (digits * (len - 1)) + ((digits - 1) * half) + top + doublings;
+
+          [(straus, Algorithm::Straus(window)), (pippenger, Algorithm::Pippenger(window))]
+        })
+        .min_by_key(|(operations, _)| *operations)
+        .unwrap()
+        .1
     }
   }
 
-  /// Performs a multiexponentiation, automatically selecting the optimal algorithm based on the
-  /// amount of pairs.
+  /// Performs a multiexponentiation.
   pub fn multiexp<
     G: Zeroize + ConditionallySelectable + Group<Scalar: Zeroize + PrimeFieldBits>,
   >(
     pairs: &[(G::Scalar, G)],
   ) -> G {
-    match algorithm(pairs.len()) {
-      Algorithm::Null => G::identity(),
-      Algorithm::Single => pairs[0].1 * pairs[0].0,
-      // These functions panic if called without any pairs
-      Algorithm::Straus(window) => straus(pairs, window),
-      Algorithm::Pippenger(window) => pippenger(pairs, window),
+    match pairs.len() {
+      0 => G::identity(),
+      1 => pairs[0].1 * pairs[0].0,
+      // Constant-time Pippenger reads and writes every bucket for each pair, so Straus is faster
+      // Window 4 benchmarked fastest, or tied, for `k256`, `dalek-ff-group`, and `helioselene`
+      _ => straus(pairs, 4),
     }
   }
 
   /// Performs a multiexponentiation in variable time, automatically selecting the optimal algorithm
   /// based on the amount of pairs.
   pub fn multiexp_vartime<G: Group<Scalar: PrimeFieldBits>>(pairs: &[(G::Scalar, G)]) -> G {
-    match algorithm(pairs.len()) {
+    match algorithm::<G::Scalar>(pairs.len()) {
       Algorithm::Null => G::identity(),
       Algorithm::Single => pairs[0].1 * pairs[0].0,
+      // These functions panic if called without any pairs
       Algorithm::Straus(window) => straus_vartime(pairs, window),
       Algorithm::Pippenger(window) => pippenger_vartime(pairs, window),
     }
